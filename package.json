@@ -1,5 +1,5 @@
 {
-  "name": "valera_temp",
+  "name": "valera-app",
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
@@ -9,10 +9,18 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "^3.0.2",
+    "@supabase/supabase-js": "^2.100.1",
     "expo": "55.0.10-canary-20260327-0789fbc",
+    "expo-constants": "55.0.10-canary-20260327-0789fbc",
+    "expo-linking": "55.0.10-canary-20260327-0789fbc",
+    "expo-router": "55.0.9-canary-20260327-0789fbc",
     "expo-status-bar": "55.0.5-canary-20260327-0789fbc",
     "react": "19.2.0",
-    "react-native": "0.83.4"
+    "react-native": "0.83.4",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "react-native-url-polyfill": "^3.0.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
