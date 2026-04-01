@@ -1,0 +1,450 @@
+import { useState, useEffect } from 'react'
+import {
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Image,
+  View,
+  FlatList,
+} from 'react-native'
+import { router, useLocalSearchParams } from 'expo-router'
+import * as ImagePicker from 'expo-image-picker'
+import { supabase } from '../../lib/supabase'
+import PillSelector from '../../components/ui/PillSelector'
+import DropdownModal from '../../components/ui/DropdownModal'
+
+type ImagenExistente = { id: string; url: string; orden: number }
+
+const RECAMARAS_OPTIONS = [
+  { value: null, label: '—' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 3, label: '3' },
+  { value: 4, label: '4' },
+  { value: 5, label: '5+' },
+]
+const BANOS_OPTIONS = [
+  { value: null, label: '—' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 3, label: '3' },
+  { value: 4, label: '4+' },
+]
+const ESTACIONAMIENTOS_OPTIONS = [
+  { value: null, label: '—' },
+  { value: 0, label: '0' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 3, label: '3+' },
+]
+
+export default function EditarPropiedad() {
+  const { id } = useLocalSearchParams<{ id: string }>()
+
+  const [titulo, setTitulo] = useState('')
+  const [descripcion, setDescripcion] = useState('')
+  const [precio, setPrecio] = useState('')
+  const [direccion, setDireccion] = useState('')
+  const [operacion, setOperacion] = useState<'venta' | 'renta'>('venta')
+  const [tipo, setTipo] = useState<'casa' | 'departamento' | 'local'>('casa')
+  const [estado, setEstado] = useState<'disponible' | 'vendida'>('disponible')
+  const [recamaras, setRecamaras] = useState<number | null>(null)
+  const [banos, setBanos] = useState<number | null>(null)
+  const [m2, setM2] = useState('')
+  const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
+  const [imagenesExistentes, setImagenesExistentes] = useState<ImagenExistente[]>([])
+  const [imagenesEliminar, setImagenesEliminar] = useState<string[]>([])
+  const [imagenesNuevas, setImagenesNuevas] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [mejorando, setMejorando] = useState(false)
+
+  useEffect(() => { cargarPropiedad() }, [id])
+
+  async function cargarPropiedad() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('propiedades')
+      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, propiedad_imagenes(id, url, orden)')
+      .eq('id', id)
+      .single()
+
+    if (error || !data) {
+      Alert.alert('Error', 'No se pudo cargar la propiedad.')
+      router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')
+      return
+    }
+
+    setTitulo(data.titulo ?? '')
+    setDescripcion(data.descripcion ?? '')
+    setPrecio(data.precio != null ? String(data.precio) : '')
+    setDireccion(data.direccion ?? '')
+    setOperacion((data.operacion as 'venta' | 'renta') ?? 'venta')
+    setTipo((data.tipo as 'casa' | 'departamento' | 'local') ?? 'casa')
+    setEstado((data.estado as 'disponible' | 'vendida') ?? 'disponible')
+    setRecamaras(data.recamaras ?? null)
+    setBanos(data.banos ?? null)
+    setM2(data.m2 != null ? String(data.m2) : '')
+    setEstacionamientos(data.estacionamientos ?? null)
+    setImagenesExistentes(
+      ((data.propiedad_imagenes as ImagenExistente[]) ?? []).sort((a, b) => a.orden - b.orden)
+    )
+    setLoading(false)
+  }
+
+  function quitarImagenExistente(imagenId: string) {
+    setImagenesExistentes((prev) => prev.filter((img) => img.id !== imagenId))
+    setImagenesEliminar((prev) => [...prev, imagenId])
+  }
+
+  function quitarImagenNueva(uri: string) {
+    setImagenesNuevas((prev) => prev.filter((u) => u !== uri))
+  }
+
+  async function seleccionarImagenes() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.7,
+    })
+    if (!result.canceled) {
+      setImagenesNuevas((prev) => [...prev, ...result.assets.map((a) => a.uri)])
+    }
+  }
+
+  async function handleMejorarDescripcion() {
+    setMejorando(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('mejorar-descripcion', {
+        body: { titulo, direccion, precio, descripcion, tipo, operacion, recamaras, banos, m2 },
+      })
+      if (error) {
+        const body = await (error as any).context?.json?.().catch(() => null)
+        throw new Error(body?.error || error.message)
+      }
+      if (data?.texto) setDescripcion(data.texto)
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo mejorar la descripción.')
+    } finally {
+      setMejorando(false)
+    }
+  }
+
+  async function subirImagen(uri: string, propiedadId: string, orden: number): Promise<string> {
+    const response = await fetch(uri)
+    const blob = await response.blob()
+    const mimeType = blob.type || 'image/jpeg'
+    const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'jpg'
+    const filePath = `${propiedadId}/${Date.now()}_${orden}.${ext}`
+    const { error } = await supabase.storage
+      .from('propiedades')
+      .upload(filePath, blob, { contentType: mimeType, upsert: true })
+    if (error) throw error
+    const { data } = supabase.storage.from('propiedades').getPublicUrl(filePath)
+    return data.publicUrl
+  }
+
+  async function handleGuardar() {
+    if (!titulo.trim() || !direccion.trim()) {
+      Alert.alert('Error', 'El título y la dirección son obligatorios.')
+      return
+    }
+    const precioNum = precio ? parseFloat(precio) : null
+    if (precio && isNaN(precioNum!)) {
+      Alert.alert('Error', 'El precio debe ser un número válido.')
+      return
+    }
+    const m2Num = m2 ? parseFloat(m2) : null
+    if (m2 && isNaN(m2Num!)) {
+      Alert.alert('Error', 'Los m² deben ser un número válido.')
+      return
+    }
+
+    setGuardando(true)
+    try {
+      const { error: errorUpdate } = await supabase
+        .from('propiedades')
+        .update({
+          titulo: titulo.trim(),
+          descripcion: descripcion.trim() || null,
+          precio: precioNum,
+          direccion: direccion.trim(),
+          operacion,
+          tipo,
+          estado,
+          recamaras,
+          banos,
+          m2: m2Num,
+          estacionamientos,
+        })
+        .eq('id', id)
+      if (errorUpdate) throw errorUpdate
+
+      if (imagenesEliminar.length > 0) {
+        const { error } = await supabase.from('propiedad_imagenes').delete().in('id', imagenesEliminar)
+        if (error) throw error
+      }
+
+      if (imagenesNuevas.length > 0) {
+        const ordenBase = imagenesExistentes.length
+        const registros = await Promise.all(
+          imagenesNuevas.map(async (uri, index) => {
+            const url = await subirImagen(uri, id, ordenBase + index)
+            return { propiedad_id: id, url, orden: ordenBase + index }
+          })
+        )
+        const { error } = await supabase.from('propiedad_imagenes').insert(registros)
+        if (error) throw error
+      }
+
+      Alert.alert('Éxito', 'Propiedad actualizada.', [
+        { text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades') },
+      ])
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo actualizar la propiedad.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
+        <ActivityIndicator size="large" color="#1a1a2e" />
+      </View>
+    )
+  }
+
+  const todasImagenes = [
+    ...imagenesExistentes.map((img) => ({ key: img.id, uri: img.url, esExistente: true as const, id: img.id })),
+    ...imagenesNuevas.map((uri) => ({ key: uri, uri, esExistente: false as const, id: '' })),
+  ]
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+
+        <Text style={styles.screenTitle}>Editar propiedad</Text>
+
+        <Text style={styles.label}>Imágenes</Text>
+        {todasImagenes.length > 0 && (
+          <FlatList
+            data={todasImagenes}
+            horizontal
+            keyExtractor={(item) => item.key}
+            showsHorizontalScrollIndicator={false}
+            style={{ marginBottom: 10 }}
+            renderItem={({ item }) => (
+              <View style={styles.miniatura}>
+                <Image source={{ uri: item.uri }} style={styles.miniaturaImg} />
+                <TouchableOpacity
+                  style={styles.miniaturaQuitar}
+                  onPress={() => item.esExistente ? quitarImagenExistente(item.id) : quitarImagenNueva(item.uri)}
+                >
+                  <Text style={styles.miniaturaQuitarText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          />
+        )}
+        <TouchableOpacity style={styles.imagenPicker} onPress={seleccionarImagenes}>
+          <Text style={styles.imagenPickerText}>+ Agregar fotos</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.label}>Título *</Text>
+        <TextInput style={styles.input} value={titulo} onChangeText={setTitulo} maxLength={100} />
+
+        <Text style={styles.label}>Dirección *</Text>
+        <TextInput style={styles.input} value={direccion} onChangeText={setDireccion} maxLength={200} />
+
+        <Text style={styles.label}>Operación</Text>
+        <PillSelector
+          options={[{ value: 'venta', label: 'Venta' }, { value: 'renta', label: 'Renta' }]}
+          value={operacion}
+          onChange={setOperacion}
+        />
+
+        <Text style={styles.label}>Tipo</Text>
+        <PillSelector
+          options={[
+            { value: 'casa', label: 'Casa' },
+            { value: 'departamento', label: 'Departamento' },
+            { value: 'local', label: 'Local' },
+          ]}
+          value={tipo}
+          onChange={setTipo}
+        />
+
+        <Text style={styles.label}>Estado</Text>
+        <PillSelector
+          options={[{ value: 'disponible', label: 'Disponible' }, { value: 'vendida', label: 'Vendida' }]}
+          value={estado}
+          onChange={setEstado}
+        />
+
+        <View style={styles.dosColumnas}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Recámaras</Text>
+            <DropdownModal options={RECAMARAS_OPTIONS} value={recamaras} onChange={setRecamaras} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Baños</Text>
+            <DropdownModal options={BANOS_OPTIONS} value={banos} onChange={setBanos} />
+          </View>
+        </View>
+
+        <View style={styles.dosColumnas}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>M²</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Ej. 120"
+              value={m2}
+              onChangeText={setM2}
+              keyboardType="decimal-pad"
+              maxLength={10}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Estacionamientos</Text>
+            <DropdownModal options={ESTACIONAMIENTOS_OPTIONS} value={estacionamientos} onChange={setEstacionamientos} />
+          </View>
+        </View>
+
+        <Text style={styles.label}>Precio (MXN)</Text>
+        <TextInput
+          style={styles.input}
+          value={precio}
+          onChangeText={setPrecio}
+          keyboardType="numeric"
+          maxLength={15}
+        />
+
+        <View style={styles.labelRow}>
+          <Text style={[styles.label, { marginTop: 0, marginBottom: 0 }]}>Descripción</Text>
+          <TouchableOpacity style={styles.btnIA} onPress={handleMejorarDescripcion} disabled={mejorando}>
+            {mejorando
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={styles.btnIAText}>✦ Mejorar con IA</Text>
+            }
+          </TouchableOpacity>
+        </View>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={descripcion}
+          onChangeText={setDescripcion}
+          multiline
+          numberOfLines={4}
+          maxLength={1000}
+          textAlignVertical="top"
+        />
+
+        <TouchableOpacity
+          style={[styles.button, guardando && styles.buttonDisabled]}
+          onPress={handleGuardar}
+          disabled={guardando}
+        >
+          {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Guardar cambios</Text>}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.cancelButton}
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}
+          disabled={guardando}
+        >
+          <Text style={styles.cancelText}>Cancelar</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 24, backgroundColor: '#f5f5f5' },
+  screenTitle: { fontSize: 24, fontWeight: 'bold', color: '#1a1a2e', marginTop: 16, marginBottom: 8 },
+  label: { fontSize: 14, fontWeight: '600', color: '#1a1a2e', marginBottom: 6, marginTop: 16 },
+  input: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#1a1a2e',
+  },
+  textArea: { height: 100, paddingTop: 12 },
+  imagenPicker: {
+    backgroundColor: '#e8e8e8',
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderStyle: 'dashed',
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  imagenPickerText: { color: '#888', fontSize: 15 },
+  miniatura: { position: 'relative', marginRight: 10 },
+  miniaturaImg: { width: 100, height: 100, borderRadius: 10 },
+  miniaturaQuitar: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniaturaQuitarText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  dosColumnas: { flexDirection: 'row', gap: 12 },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  btnIA: {
+    backgroundColor: '#4a4a8a',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 36,
+  },
+  btnIAText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  button: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 32,
+  },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  cancelButton: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 40,
+  },
+  cancelText: { color: '#666', fontSize: 16 },
+})
