@@ -1,33 +1,318 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
+import { useState, useCallback } from 'react'
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  TouchableOpacity,
+} from 'react-native'
+import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
+type Propiedad = {
+  id: string
+  codigo: string
+  titulo: string
+  precio: number | null
+  direccion: string
+  operacion: string | null
+  tipo: string | null
+  estado: string | null
+  recamaras: number | null
+  banos: number | null
+  m2: number | null
+  estacionamientos: number | null
+  descripcion: string | null
+  propiedad_imagenes: { url: string; orden: number }[]
+}
+
+type FiltroOperacion = 'venta' | 'renta' | null
+type FiltroTipo = 'casa' | 'departamento' | 'local' | null
+type OrdenPrecio = 'asc' | 'desc' | null
+
+function FiltroChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  )
+}
+
+function formatPrecio(precio: number | null) {
+  if (precio == null) return 'Precio a consultar'
+  return `$${precio.toLocaleString('es-MX')} MXN`
+}
+
 export default function ProspectadorPropiedades() {
-  async function handleLogout() {
-    await supabase.auth.signOut()
+  const [propiedades, setPropiedades] = useState<Propiedad[]>([])
+  const [busqueda, setBusqueda] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [mostrarFiltros, setMostrarFiltros] = useState(false)
+
+  const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
+  const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
+  const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
+
+  async function cargarPropiedades() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('propiedades')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
+      .eq('estado', 'disponible')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      Alert.alert('Error', 'No se pudieron cargar las propiedades.')
+    } else {
+      setPropiedades(data ?? [])
+    }
+    setLoading(false)
+  }
+
+  useFocusEffect(useCallback(() => { cargarPropiedades() }, []))
+
+  const filtrosActivos = [filtroOperacion, filtroTipo, ordenPrecio].filter(Boolean).length
+
+  let propiedadesFiltradas = propiedades
+
+  if (busqueda.trim()) {
+    const q = busqueda.trim().toLowerCase()
+    propiedadesFiltradas = propiedadesFiltradas.filter((p) =>
+      p.codigo?.toLowerCase().includes(q) ||
+      p.direccion?.toLowerCase().includes(q) ||
+      p.titulo?.toLowerCase().includes(q)
+    )
+  }
+  if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
+  if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
+  if (ordenPrecio) {
+    propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
+      ordenPrecio === 'asc'
+        ? (a.precio ?? Infinity) - (b.precio ?? Infinity)
+        : (b.precio ?? -Infinity) - (a.precio ?? -Infinity)
+    )
+  }
+
+  function limpiarFiltros() {
+    setFiltroOperacion(null)
+    setFiltroTipo(null)
+    setOrdenPrecio(null)
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Propiedades</Text>
-      <Text style={styles.subtitle}>Aquí verás las propiedades disponibles</Text>
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Buscar por título, código o dirección..."
+        value={busqueda}
+        onChangeText={setBusqueda}
+        autoCapitalize="none"
+        autoCorrect={false}
+        clearButtonMode="while-editing"
+      />
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutText}>Cerrar sesión</Text>
+      <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
+        <Text style={styles.filtrosToggleText}>
+          Filtros{filtrosActivos > 0 ? ` (${filtrosActivos})` : ''} {mostrarFiltros ? '▲' : '▼'}
+        </Text>
       </TouchableOpacity>
+
+      {mostrarFiltros && (
+        <View style={styles.filtrosPanel}>
+          <Text style={styles.filtroLabel}>Operación</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="Todas" active={filtroOperacion === null} onPress={() => setFiltroOperacion(null)} />
+            <FiltroChip label="Venta" active={filtroOperacion === 'venta'} onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')} />
+            <FiltroChip label="Renta" active={filtroOperacion === 'renta'} onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')} />
+          </ScrollView>
+
+          <Text style={styles.filtroLabel}>Tipo</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)} />
+            <FiltroChip label="Casa" active={filtroTipo === 'casa'} onPress={() => setFiltroTipo(filtroTipo === 'casa' ? null : 'casa')} />
+            <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')} />
+            <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')} />
+          </ScrollView>
+
+          <Text style={styles.filtroLabel}>Precio</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)} />
+            <FiltroChip label="Menor precio" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} />
+            <FiltroChip label="Mayor precio" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} />
+          </ScrollView>
+
+          {filtrosActivos > 0 && (
+            <TouchableOpacity style={styles.limpiarBtn} onPress={limpiarFiltros}>
+              <Text style={styles.limpiarText}>Limpiar filtros</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#1a1a2e" style={{ marginTop: 40 }} />
+      ) : propiedadesFiltradas.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>
+            {busqueda.trim() || filtrosActivos > 0
+              ? 'Sin resultados para tu búsqueda.'
+              : 'No hay propiedades disponibles.'}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={propiedadesFiltradas}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          renderItem={({ item }) => {
+            const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+            const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
+            return (
+              <View style={styles.card}>
+                {primera?.url && (
+                  <Image source={{ uri: primera.url }} style={styles.cardImagen} resizeMode="cover" />
+                )}
+                <View style={styles.cardBody}>
+                  <View style={styles.cardHeaderRow}>
+                    <Text style={styles.codigo}>{item.codigo ?? '—'}</Text>
+                    {item.tipo && (
+                      <Text style={styles.tipoBadge}>
+                        {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
+                        {item.operacion ? ` · ${item.operacion}` : ''}
+                      </Text>
+                    )}
+                  </View>
+
+                  <Text style={styles.cardTitulo}>{item.titulo}</Text>
+                  <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
+
+                  {item.descripcion ? (
+                    <Text style={styles.cardDescripcion} numberOfLines={2}>{item.descripcion}</Text>
+                  ) : null}
+
+                  {tieneMeta && (
+                    <View style={styles.metaRow}>
+                      {item.recamaras != null && <Text style={styles.metaItem}>Rec {item.recamaras}</Text>}
+                      {item.banos != null && <Text style={styles.metaItem}>Ba {item.banos}</Text>}
+                      {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m²</Text>}
+                      {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
+                    </View>
+                  )}
+
+                  <Text style={styles.precio}>{formatPrecio(item.precio)}</Text>
+                </View>
+              </View>
+            )
+          }}
+        />
+      )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#f5f5f5' },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#1a1a2e', marginTop: 16 },
-  subtitle: { fontSize: 16, color: '#666', marginTop: 8, marginBottom: 32 },
-  logoutButton: {
+  container: { flex: 1, padding: 16, backgroundColor: '#f5f5f5' },
+  searchInput: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
+    borderColor: '#ddd',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 15,
+    marginBottom: 8,
+    color: '#1a1a2e',
   },
-  logoutText: { color: '#666', fontSize: 16 },
+  filtrosToggle: {
+    alignSelf: 'flex-end',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  filtrosToggleText: { color: '#1a1a2e', fontSize: 14, fontWeight: '600' },
+  filtrosPanel: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  filtroLabel: { fontSize: 12, fontWeight: '700', color: '#888', marginBottom: 6, marginTop: 8 },
+  chipRow: { flexDirection: 'row', marginBottom: 2 },
+  chip: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginRight: 8,
+    backgroundColor: '#fff',
+  },
+  chipActive: { backgroundColor: '#1a1a2e', borderColor: '#1a1a2e' },
+  chipText: { fontSize: 12, color: '#555' },
+  chipTextActive: { color: '#fff', fontWeight: '600' },
+  limpiarBtn: { marginTop: 10, alignSelf: 'flex-end' },
+  limpiarText: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
+  emptyContainer: { flex: 1, alignItems: 'center', marginTop: 60 },
+  emptyText: { color: '#aaa', fontSize: 15, textAlign: 'center' },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#eee',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardImagen: { width: '100%', height: 180 },
+  cardBody: { padding: 14 },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+    flexWrap: 'wrap',
+  },
+  codigo: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+    backgroundColor: '#1a1a2e',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  tipoBadge: {
+    fontSize: 11,
+    color: '#555',
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    textTransform: 'capitalize',
+  },
+  cardTitulo: { fontSize: 16, fontWeight: '700', color: '#1a1a2e', marginBottom: 3 },
+  cardDireccion: { fontSize: 13, color: '#888', marginBottom: 6 },
+  cardDescripcion: { fontSize: 13, color: '#666', lineHeight: 19, marginBottom: 8 },
+  metaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 10 },
+  metaItem: {
+    fontSize: 12,
+    color: '#555',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  precio: { fontSize: 16, fontWeight: '700', color: '#1a1a2e', marginTop: 4 },
 })
