@@ -196,6 +196,9 @@ export default function AdminPropiedades() {
         <TouchableOpacity style={styles.buttonActividad} onPress={() => router.push('/(admin)/estadisticas')}>
           <Text style={styles.buttonActividadText}>Estadísticas</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonActividad} onPress={() => router.push('/(admin)/prospectadores')}>
+          <Text style={styles.buttonActividadText}>Usuarios</Text>
+        </TouchableOpacity>
       </View>
 
       <TextInput
