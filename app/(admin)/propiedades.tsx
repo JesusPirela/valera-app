@@ -11,6 +11,7 @@ import {
   Image,
   Platform,
   ScrollView,
+  Modal,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -24,6 +25,8 @@ type Propiedad = {
   operacion: string | null
   tipo: string | null
   estado: string | null
+  destacada: boolean
+  destacada_mensaje: string | null
   recamaras: number | null
   banos: number | null
   m2: number | null
@@ -47,11 +50,17 @@ export default function AdminPropiedades() {
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
 
+  // Modal destacar
+  const [modalVisible, setModalVisible] = useState(false)
+  const [propSeleccionada, setPropSeleccionada] = useState<Propiedad | null>(null)
+  const [mensajeDestacado, setMensajeDestacado] = useState('')
+  const [guardandoDestacado, setGuardandoDestacado] = useState(false)
+
   async function cargarPropiedades() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, recamaras, banos, m2, estacionamientos, propiedad_imagenes(url, orden)')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -111,6 +120,43 @@ export default function AdminPropiedades() {
     }
   }
 
+  function abrirModalDestacar(prop: Propiedad) {
+    setPropSeleccionada(prop)
+    setMensajeDestacado('')
+    setModalVisible(true)
+  }
+
+  async function confirmarDestacar() {
+    if (!propSeleccionada) return
+    setGuardandoDestacado(true)
+    const { error } = await supabase.rpc('destacar_propiedad_manual', {
+      p_id: propSeleccionada.id,
+      p_mensaje: mensajeDestacado.trim() || null,
+    })
+    setGuardandoDestacado(false)
+    setModalVisible(false)
+    if (error) {
+      Alert.alert('Error', 'No se pudo destacar la propiedad.')
+    } else {
+      setPropiedades((prev) =>
+        prev.map((p) =>
+          p.id === propSeleccionada.id
+            ? { ...p, destacada: true, destacada_mensaje: mensajeDestacado.trim() || 'El administrador ha destacado esta propiedad como una oportunidad especial.' }
+            : p
+        )
+      )
+    }
+  }
+
+  async function quitarDestacada(id: string) {
+    const { error } = await supabase.rpc('quitar_destacada', { p_id: id })
+    if (!error) {
+      setPropiedades((prev) =>
+        prev.map((p) => p.id === id ? { ...p, destacada: false, destacada_mensaje: null } : p)
+      )
+    }
+  }
+
   function formatPrecio(precio: number | null) {
     if (precio == null) return 'Sin precio'
     return `$${precio.toLocaleString('es-MX')} MXN`
@@ -140,9 +186,17 @@ export default function AdminPropiedades() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.buttonNueva} onPress={() => router.push('/(admin)/nueva-propiedad')}>
-        <Text style={styles.buttonText}>+ Nueva propiedad</Text>
-      </TouchableOpacity>
+      <View style={styles.botonesTop}>
+        <TouchableOpacity style={styles.buttonNueva} onPress={() => router.push('/(admin)/nueva-propiedad')}>
+          <Text style={styles.buttonText}>+ Nueva propiedad</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonActividad} onPress={() => router.push('/(admin)/actividad')}>
+          <Text style={styles.buttonActividadText}>Actividad</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonActividad} onPress={() => router.push('/(admin)/estadisticas')}>
+          <Text style={styles.buttonActividadText}>Estadísticas</Text>
+        </TouchableOpacity>
+      </View>
 
       <TextInput
         style={styles.searchInput}
@@ -216,13 +270,16 @@ export default function AdminPropiedades() {
             const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
             const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
             return (
-              <View style={styles.card}>
+              <View style={[styles.card, item.destacada && styles.cardDestacada]}>
                 {primera?.url && (
                   <Image source={{ uri: primera.url }} style={styles.cardImagen} />
                 )}
                 <View style={styles.cardBody}>
                   <View style={styles.cardHeaderRow}>
                     <Text style={styles.codigo}>{item.codigo ?? '—'}</Text>
+                    {item.destacada && (
+                      <Text style={styles.destacadaBadge}>★ Destacada</Text>
+                    )}
                     <View style={[styles.estadoBadge, item.estado === 'vendida' && styles.estadoVendida]}>
                       <Text style={[styles.estadoText, item.estado === 'vendida' && styles.estadoTextVendida]}>
                         {item.estado === 'vendida' ? 'Vendida' : 'Disponible'}
@@ -230,6 +287,10 @@ export default function AdminPropiedades() {
                     </View>
                     <Text style={styles.precio}>{formatPrecio(item.precio)}</Text>
                   </View>
+
+                  {item.destacada && item.destacada_mensaje ? (
+                    <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
+                  ) : null}
 
                   {item.tipo && (
                     <Text style={styles.cardTipo}>
@@ -257,6 +318,15 @@ export default function AdminPropiedades() {
                     >
                       <Text style={styles.btnEditarText}>Editar</Text>
                     </TouchableOpacity>
+                    {item.destacada ? (
+                      <TouchableOpacity style={styles.btnQuitarDestacada} onPress={() => quitarDestacada(item.id)}>
+                        <Text style={styles.btnQuitarDestacadaText}>Quitar destacado</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={styles.btnDestacar} onPress={() => abrirModalDestacar(item)}>
+                        <Text style={styles.btnDestacarText}>★ Destacar</Text>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity style={styles.btnBorrar} onPress={() => handleBorrar(item.id, item.titulo)}>
                       <Text style={styles.btnBorrarText}>Borrar</Text>
                     </TouchableOpacity>
@@ -267,6 +337,51 @@ export default function AdminPropiedades() {
           }}
         />
       )}
+
+      {/* Modal para destacar propiedad */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitulo}>Destacar propiedad</Text>
+            <Text style={styles.modalSubtitulo}>
+              {propSeleccionada?.codigo} – {propSeleccionada?.titulo}
+            </Text>
+            <Text style={styles.modalLabel}>Mensaje para los prospectadores (opcional)</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ej: Se están agendando muchas citas en esta propiedad..."
+              value={mensajeDestacado}
+              onChangeText={setMensajeDestacado}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            <Text style={styles.modalHint}>
+              Si lo dejas vacío se usará el mensaje por defecto. Se enviará una notificación a todos los prospectadores.
+            </Text>
+            <View style={styles.modalAcciones}>
+              <TouchableOpacity style={styles.modalCancelar} onPress={() => setModalVisible(false)}>
+                <Text style={styles.modalCancelarText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmar, guardandoDestacado && { opacity: 0.6 }]}
+                onPress={confirmarDestacar}
+                disabled={guardandoDestacado}
+              >
+                {guardandoDestacado
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.modalConfirmarText}>Destacar y notificar</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -283,13 +398,24 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: 'bold', color: '#1a1a2e' },
   logoutText: { color: '#999', fontSize: 14 },
   buttonNueva: {
+    flex: 1,
     backgroundColor: '#1a1a2e',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
-    marginBottom: 16,
   },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  botonesTop: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  buttonActividad: {
+    borderWidth: 1,
+    borderColor: '#1a1a2e',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonActividadText: { color: '#1a1a2e', fontSize: 15, fontWeight: '600' },
   searchInput: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -342,6 +468,10 @@ const styles = StyleSheet.create({
     borderColor: '#eee',
     overflow: 'hidden',
   },
+  cardDestacada: {
+    borderColor: '#f5c518',
+    borderWidth: 2,
+  },
   cardImagen: { width: '100%', height: 160 },
   cardBody: { padding: 14 },
   cardHeaderRow: {
@@ -360,6 +490,26 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     overflow: 'hidden',
+  },
+  destacadaBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7a5500',
+    backgroundColor: '#fff3c4',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  destacadaMensaje: {
+    fontSize: 12,
+    color: '#7a5500',
+    backgroundColor: '#fffbe6',
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#f5e07a',
   },
   estadoBadge: {
     backgroundColor: '#e8f5e9',
@@ -383,7 +533,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  cardAcciones: { flexDirection: 'row', gap: 8 },
+  cardAcciones: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   btnEditar: {
     flex: 1,
     borderWidth: 1,
@@ -393,6 +543,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnEditarText: { color: '#1a1a2e', fontSize: 14, fontWeight: '600' },
+  btnDestacar: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#c8960c',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: '#fffbe6',
+  },
+  btnDestacarText: { color: '#7a5500', fontSize: 13, fontWeight: '700' },
+  btnQuitarDestacada: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#aaa',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  btnQuitarDestacadaText: { color: '#888', fontSize: 12, fontWeight: '600' },
   btnBorrar: {
     flex: 1,
     borderWidth: 1,
@@ -402,4 +571,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnBorrarText: { color: '#c0392b', fontSize: 14, fontWeight: '600' },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalBox: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 480,
+  },
+  modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 4 },
+  modalSubtitulo: { fontSize: 13, color: '#888', marginBottom: 16 },
+  modalLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 8 },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1a1a2e',
+    minHeight: 80,
+    marginBottom: 8,
+  },
+  modalHint: { fontSize: 12, color: '#aaa', marginBottom: 20, lineHeight: 17 },
+  modalAcciones: { flexDirection: 'row', gap: 10 },
+  modalCancelar: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalCancelarText: { color: '#888', fontSize: 14, fontWeight: '600' },
+  modalConfirmar: {
+    flex: 2,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalConfirmarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 })

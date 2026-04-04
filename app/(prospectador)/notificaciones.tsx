@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
-  Platform,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -19,6 +18,7 @@ type Notificacion = {
   leida: boolean
   created_at: string
   propiedad_id: string | null
+  tipo: 'nueva_propiedad' | 'destacada'
 }
 
 function tiempoRelativo(fechaISO: string): string {
@@ -49,7 +49,7 @@ export default function Notificaciones() {
 
     const { data, error } = await supabase
       .from('notificaciones')
-      .select('id, titulo, mensaje, leida, created_at, propiedad_id')
+      .select('id, titulo, mensaje, leida, created_at, propiedad_id, tipo')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -126,29 +126,45 @@ export default function Notificaciones() {
           data={notificaciones}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.card, !item.leida && styles.cardNoLeida]}
-              onPress={() => { if (!item.leida) marcarLeida(item.id) }}
-              activeOpacity={item.leida ? 1 : 0.7}
-            >
-              <View style={styles.cardTop}>
-                <View style={styles.cardTituloCont}>
-                  {!item.leida && <View style={styles.puntito} />}
-                  <Text style={[styles.cardTitulo, !item.leida && styles.cardTituloNoLeido]}>
-                    {item.titulo}
-                  </Text>
+          renderItem={({ item }) => {
+            const esDestacada = item.tipo === 'destacada'
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.card,
+                  !item.leida && styles.cardNoLeida,
+                  esDestacada && styles.cardDestacada,
+                  esDestacada && !item.leida && styles.cardDestacadaNoLeida,
+                ]}
+                onPress={() => { if (!item.leida) marcarLeida(item.id) }}
+                activeOpacity={item.leida ? 1 : 0.7}
+              >
+                <View style={styles.cardTop}>
+                  <View style={styles.cardTituloCont}>
+                    {!item.leida && (
+                      <View style={[styles.puntito, esDestacada && styles.puntitoDestacada]} />
+                    )}
+                    <Text style={[
+                      styles.cardTitulo,
+                      !item.leida && styles.cardTituloNoLeido,
+                      esDestacada && styles.cardTituloDestacada,
+                    ]}>
+                      {esDestacada ? '★ ' : ''}{item.titulo}
+                    </Text>
+                  </View>
+                  <Text style={styles.tiempo}>{tiempoRelativo(item.created_at)}</Text>
                 </View>
-                <Text style={styles.tiempo}>{tiempoRelativo(item.created_at)}</Text>
-              </View>
-              <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido]}>
-                {item.mensaje}
-              </Text>
-              {!item.leida && (
-                <Text style={styles.tapHint}>Toca para marcar como leída</Text>
-              )}
-            </TouchableOpacity>
-          )}
+                <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido]}>
+                  {item.mensaje}
+                </Text>
+                {!item.leida && (
+                  <Text style={[styles.tapHint, esDestacada && styles.tapHintDestacada]}>
+                    Toca para marcar como leída
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )
+          }}
         />
       )}
     </View>
@@ -207,4 +223,16 @@ const styles = StyleSheet.create({
   cardMensaje: { fontSize: 14, color: '#888', lineHeight: 20 },
   cardMensajeNoLeido: { color: '#333' },
   tapHint: { fontSize: 11, color: '#7a9ee8', marginTop: 6 },
+  cardDestacada: {
+    borderColor: '#f5c518',
+    borderWidth: 2,
+    backgroundColor: '#fffdf0',
+  },
+  cardDestacadaNoLeida: {
+    backgroundColor: '#fff8d6',
+    borderColor: '#f5c518',
+  },
+  puntitoDestacada: { backgroundColor: '#c8960c' },
+  cardTituloDestacada: { color: '#7a5500' },
+  tapHintDestacada: { color: '#c8960c' },
 })

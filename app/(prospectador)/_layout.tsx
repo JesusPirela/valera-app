@@ -57,6 +57,10 @@ export default function ProspectadorLayout() {
         options={{ title: 'Propiedades' }}
       />
       <Tabs.Screen
+        name="detalle-propiedad"
+        options={{ href: null, title: 'Detalle' }}
+      />
+      <Tabs.Screen
         name="notificaciones"
         options={{
           title: 'Notificaciones',

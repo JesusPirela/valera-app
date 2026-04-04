@@ -11,7 +11,7 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
 type Propiedad = {
@@ -23,6 +23,8 @@ type Propiedad = {
   operacion: string | null
   tipo: string | null
   estado: string | null
+  destacada: boolean
+  destacada_mensaje: string | null
   recamaras: number | null
   banos: number | null
   m2: number | null
@@ -62,7 +64,7 @@ export default function ProspectadorPropiedades() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
       .eq('estado', 'disponible')
       .order('created_at', { ascending: false })
 
@@ -173,11 +175,23 @@ export default function ProspectadorPropiedades() {
             const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
             const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
             return (
-              <View style={styles.card}>
+              <TouchableOpacity
+                style={[styles.card, item.destacada && styles.cardDestacada]}
+                activeOpacity={0.85}
+                onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.id}`)}
+              >
                 {primera?.url && (
                   <Image source={{ uri: primera.url }} style={styles.cardImagen} resizeMode="cover" />
                 )}
+                {item.destacada && (
+                  <View style={styles.destacadaBanner}>
+                    <Text style={styles.destacadaBannerText}>★ Propiedad destacada</Text>
+                  </View>
+                )}
                 <View style={styles.cardBody}>
+                  {item.destacada && item.destacada_mensaje ? (
+                    <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
+                  ) : null}
                   <View style={styles.cardHeaderRow}>
                     <Text style={styles.codigo}>{item.codigo ?? '—'}</Text>
                     {item.tipo && (
@@ -206,7 +220,7 @@ export default function ProspectadorPropiedades() {
 
                   <Text style={styles.precio}>{formatPrecio(item.precio)}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             )
           }}
         />
@@ -273,6 +287,30 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+  },
+  cardDestacada: {
+    borderColor: '#f5c518',
+    borderWidth: 2,
+  },
+  destacadaBanner: {
+    backgroundColor: '#fff3c4',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  destacadaBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#7a5500',
+  },
+  destacadaMensaje: {
+    fontSize: 12,
+    color: '#7a5500',
+    backgroundColor: '#fffbe6',
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#f5e07a',
   },
   cardImagen: { width: '100%', height: 180 },
   cardBody: { padding: 14 },
