@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Text, TouchableOpacity } from 'react-native'
+import { Text, TouchableOpacity, Image } from 'react-native'
 import { Tabs } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+
+const LOGO_URI = 'https://valerarealestate.com/images/logo.png'
 
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
@@ -36,18 +38,25 @@ export default function ProspectadorLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#1a1a2e',
+        tabBarActiveTintColor: '#1a6470',
         tabBarInactiveTintColor: '#aaa',
-        tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#eee' },
-        headerStyle: { backgroundColor: '#1a1a2e' },
-        headerTintColor: '#fff',
+        tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#dde8e9' },
+        headerStyle: { backgroundColor: '#1a6470' },
+        headerTintColor: '#c9a84c',
         headerTitleStyle: { fontWeight: 'bold' },
+        headerTitle: () => (
+          <Image
+            source={{ uri: LOGO_URI }}
+            style={{ width: 80, height: 40 }}
+            resizeMode="contain"
+          />
+        ),
         headerRight: () => (
           <TouchableOpacity
             onPress={() => supabase.auth.signOut()}
             style={{ marginRight: 16 }}
           >
-            <Text style={{ color: '#fff', fontSize: 14 }}>Salir</Text>
+            <Text style={{ color: '#c9a84c', fontSize: 14, fontWeight: '600' }}>Salir</Text>
           </TouchableOpacity>
         ),
       }}

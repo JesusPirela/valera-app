@@ -9,9 +9,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native'
 import { router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+
+const LOGO_URI = 'https://valerarealestate.com/images/logo.png'
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
@@ -20,7 +23,8 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (!email || !password) {
-      Alert.alert('Error', 'Por favor ingresa tu correo y contraseña')
+      if (Platform.OS === 'web') window.alert('Por favor ingresa tu correo y contraseña')
+      else Alert.alert('Error', 'Por favor ingresa tu correo y contraseña')
       return
     }
 
@@ -29,11 +33,11 @@ export default function LoginScreen() {
     setLoading(false)
 
     if (error) {
-      Alert.alert('Error al iniciar sesión', error.message)
+      if (Platform.OS === 'web') window.alert(error.message)
+      else Alert.alert('Error al iniciar sesión', error.message)
       return
     }
 
-    // Obtener rol del perfil
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -52,24 +56,35 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.inner}>
-        <Text style={styles.title}>Valera App</Text>
-        <Text style={styles.subtitle}>Inmobiliaria</Text>
+      {/* Sección superior — teal con logo */}
+      <View style={styles.topSection}>
+        <Image
+          source={{ uri: LOGO_URI }}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <Text style={styles.tagline}>Deja que nos preocupemos por ti</Text>
+      </View>
+
+      {/* Tarjeta de login */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Iniciar sesión</Text>
 
         <TextInput
           style={styles.input}
           placeholder="Correo electrónico"
-          placeholderTextColor="#999"
+          placeholderTextColor="#aaa"
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          autoCorrect={false}
         />
 
         <TextInput
           style={styles.input}
           placeholder="Contraseña"
-          placeholderTextColor="#999"
+          placeholderTextColor="#aaa"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -81,9 +96,9 @@ export default function LoginScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color="#1a6470" />
           ) : (
-            <Text style={styles.buttonText}>Iniciar sesión</Text>
+            <Text style={styles.buttonText}>Entrar</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -94,39 +109,62 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#1a6470',
   },
-  inner: {
+  topSection: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 40,
     paddingHorizontal: 32,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a2e',
-    textAlign: 'center',
-    marginBottom: 4,
+  logo: {
+    width: 200,
+    height: 200,
+    borderRadius: 16,
+    marginBottom: 16,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
+  tagline: {
+    color: '#c9a84c',
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 0.5,
     textAlign: 'center',
-    marginBottom: 48,
+    fontStyle: 'italic',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 32,
+    paddingTop: 32,
+    paddingBottom: 48,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1a6470',
+    marginBottom: 24,
+    textAlign: 'center',
+    letterSpacing: 0.3,
   },
   input: {
-    backgroundColor: '#fff',
+    backgroundColor: '#f4f8f8',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#dde8e9',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
-    marginBottom: 16,
-    color: '#333',
+    fontSize: 15,
+    marginBottom: 14,
+    color: '#1a2e30',
   },
   button: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#c9a84c',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -138,6 +176,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 })

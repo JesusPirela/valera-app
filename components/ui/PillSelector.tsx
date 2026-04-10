@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     backgroundColor: '#fff',
   },
-  pillActive: { backgroundColor: '#1a1a2e', borderColor: '#1a1a2e' },
+  pillActive: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   pillText: { fontSize: 14, color: '#555' },
   pillTextActive: { color: '#fff', fontWeight: '600' },
 })

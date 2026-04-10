@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
 type Registro = {
@@ -89,6 +89,9 @@ export default function ActividadAdmin() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
+        <Text style={styles.backBtnText}>← Volver</Text>
+      </TouchableOpacity>
       {/* Resumen estadísticas */}
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
@@ -117,7 +120,7 @@ export default function ActividadAdmin() {
       </ScrollView>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#1a1a2e" style={{ marginTop: 40 }} />
+        <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : registrosFiltrados.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>Sin actividad registrada</Text>
@@ -165,6 +168,8 @@ export default function ActividadAdmin() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5', padding: 16 },
+  backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
+  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
 
   statsRow: {
     flexDirection: 'row',
@@ -183,10 +188,10 @@ const styles = StyleSheet.create({
   statNum: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#1a1a2e',
+    color: '#1a6470',
   },
   statNumDescarga: { color: '#c8960c' },
-  statNumVista: { color: '#1a6b9e' },
+  statNumVista: { color: '#1a6470' },
   statLabel: {
     fontSize: 10,
     color: '#999',
@@ -208,7 +213,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor: '#fff',
   },
-  chipActive: { backgroundColor: '#1a1a2e', borderColor: '#1a1a2e' },
+  chipActive: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   chipText: { fontSize: 13, color: '#555' },
   chipTextActive: { color: '#fff', fontWeight: '600' },
 
@@ -218,7 +223,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a2e', marginBottom: 8 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a6470', marginBottom: 8 },
   emptySubtitle: { fontSize: 14, color: '#999', textAlign: 'center', lineHeight: 20 },
 
   row: {
@@ -231,7 +236,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   rowLeft: { flex: 1, marginRight: 12 },
-  email: { fontSize: 13, fontWeight: '700', color: '#1a1a2e', marginBottom: 3 },
+  email: { fontSize: 13, fontWeight: '700', color: '#1a6470', marginBottom: 3 },
   propiedad: { fontSize: 12, color: '#888' },
 
   rowRight: { alignItems: 'flex-end', gap: 4 },
@@ -244,7 +249,7 @@ const styles = StyleSheet.create({
   tipoBadgeVista: { backgroundColor: '#dbeeff' },
   tipoText: { fontSize: 11, fontWeight: '700' },
   tipoTextDescarga: { color: '#7a5500' },
-  tipoTextVista: { color: '#1a5f9e' },
+  tipoTextVista: { color: '#1a6470' },
   tiempo: { fontSize: 11, color: '#bbb' },
 
   separator: {

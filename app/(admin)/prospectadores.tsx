@@ -10,13 +10,16 @@ import {
   TextInput,
   Modal,
   Platform,
+  Switch,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
 type Prospectador = {
   id: string
   email: string
+  role: string
+  nombre: string | null
   created_at: string
 }
 
@@ -66,9 +69,11 @@ export default function Prospectadores() {
 
   // Modal crear
   const [modalVisible, setModalVisible] = useState(false)
+  const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [verPassword, setVerPassword] = useState(false)
+  const [plus, setPlus] = useState(false)
   const [creando, setCreando] = useState(false)
 
   // Panel de credenciales tras crear
@@ -84,25 +89,42 @@ export default function Prospectadores() {
   useFocusEffect(useCallback(() => { cargar() }, []))
 
   function abrirModal() {
+    setNombre('')
     setEmail('')
     setPassword(generarPassword())
     setVerPassword(false)
+    setPlus(false)
     setCredenciales(null)
     setModalVisible(true)
   }
 
+  function mostrarError(msg: string) {
+    if (Platform.OS === 'web') window.alert(msg)
+    else Alert.alert('Error', msg)
+  }
+
   async function crearProspectador() {
-    if (!email.trim()) { Alert.alert('Error', 'Ingresa un email.'); return }
-    if (!password.trim()) { Alert.alert('Error', 'Ingresa una contraseña.'); return }
+    if (!nombre.trim()) { mostrarError('Ingresa el nombre del prospectador.'); return }
+    if (!email.trim()) { mostrarError('Ingresa un email.'); return }
+    if (!password.trim()) { mostrarError('Ingresa una contraseña.'); return }
 
     setCreando(true)
     const { data, error } = await supabase.functions.invoke('crear-prospectador', {
-      body: { email: email.trim().toLowerCase(), password },
+      body: { email: email.trim().toLowerCase(), password, plus, nombre },
     })
     setCreando(false)
 
     if (error || data?.error) {
-      Alert.alert('Error', data?.error ?? 'No se pudo crear el usuario.')
+      let msg = data?.error ?? ''
+      if (!msg && error) {
+        try {
+          const body = await (error as any).context.json()
+          msg = body?.error ?? ''
+        } catch { }
+        if (!msg) msg = (error as any).message ?? 'Error desconocido'
+      }
+      if (!msg) msg = 'No se pudo crear el usuario.'
+      mostrarError(msg)
       return
     }
 
@@ -118,12 +140,15 @@ export default function Prospectadores() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
+        <Text style={styles.backBtnText}>← Volver</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.btnNuevo} onPress={abrirModal}>
         <Text style={styles.btnNuevoText}>+ Nuevo prospectador</Text>
       </TouchableOpacity>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#1a1a2e" style={{ marginTop: 40 }} />
+        <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : lista.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>Sin prospectadores</Text>
@@ -137,14 +162,17 @@ export default function Prospectadores() {
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={styles.cardIcon}>
-                <Text style={styles.cardIconText}>{item.email[0].toUpperCase()}</Text>
+                <Text style={styles.cardIconText}>{(item.nombre || item.email)[0].toUpperCase()}</Text>
               </View>
               <View style={styles.cardInfo}>
+                {item.nombre ? <Text style={styles.cardNombre}>{item.nombre}</Text> : null}
                 <Text style={styles.cardEmail}>{item.email}</Text>
                 <Text style={styles.cardFecha}>Alta: {tiempoRelativo(item.created_at)}</Text>
               </View>
-              <View style={styles.rolBadge}>
-                <Text style={styles.rolText}>Prospectador</Text>
+              <View style={[styles.rolBadge, item.role === 'prospectador_plus' && styles.rolBadgePlus]}>
+                <Text style={[styles.rolText, item.role === 'prospectador_plus' && styles.rolTextPlus]}>
+                  {item.role === 'prospectador_plus' ? 'Plus' : 'Prospectador'}
+                </Text>
               </View>
             </View>
           )}
@@ -204,6 +232,16 @@ export default function Prospectadores() {
                   Se creará la cuenta y podrás darle las credenciales.
                 </Text>
 
+                <Text style={styles.inputLabel}>Nombre</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nombre completo"
+                  value={nombre}
+                  onChangeText={setNombre}
+                  autoCorrect={false}
+                  maxLength={80}
+                />
+
                 <Text style={styles.inputLabel}>Email</Text>
                 <TextInput
                   style={styles.input}
@@ -241,6 +279,19 @@ export default function Prospectadores() {
                   <Text style={styles.generarText}>Generar contraseña segura</Text>
                 </TouchableOpacity>
 
+                <View style={styles.plusRow}>
+                  <View>
+                    <Text style={styles.plusLabel}>Prospectador Plus</Text>
+                    <Text style={styles.plusDesc}>Acceso a propiedades exclusivas</Text>
+                  </View>
+                  <Switch
+                    value={plus}
+                    onValueChange={setPlus}
+                    trackColor={{ false: '#ddd', true: '#c0392b' }}
+                    thumbColor={plus ? '#fff' : '#f4f3f4'}
+                  />
+                </View>
+
                 <View style={styles.modalAcciones}>
                   <TouchableOpacity style={styles.btnCancelar} onPress={cerrarModal}>
                     <Text style={styles.btnCancelarText}>Cancelar</Text>
@@ -268,9 +319,11 @@ export default function Prospectadores() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5', padding: 16 },
+  backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
+  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
 
   btnNuevo: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -279,7 +332,7 @@ const styles = StyleSheet.create({
   btnNuevoText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a2e', marginBottom: 6 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a6470', marginBottom: 6 },
   emptySubtitle: { fontSize: 13, color: '#aaa' },
 
   card: {
@@ -296,13 +349,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cardIconText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cardInfo: { flex: 1 },
-  cardEmail: { fontSize: 14, fontWeight: '600', color: '#1a1a2e' },
+  cardEmail: { fontSize: 14, fontWeight: '600', color: '#1a6470' },
   cardFecha: { fontSize: 11, color: '#aaa', marginTop: 2 },
   rolBadge: {
     backgroundColor: '#e8f5e9',
@@ -327,7 +380,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 480,
   },
-  modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 4 },
+  modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a6470', marginBottom: 4 },
   modalSubtitulo: { fontSize: 13, color: '#888', marginBottom: 20, lineHeight: 18 },
 
   inputLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
@@ -338,7 +391,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 11,
     fontSize: 14,
-    color: '#1a1a2e',
+    color: '#1a6470',
     marginBottom: 14,
     backgroundColor: '#fafafa',
   },
@@ -352,7 +405,7 @@ const styles = StyleSheet.create({
   },
   verBtnText: { fontSize: 13, color: '#555' },
   generarBtn: { alignSelf: 'flex-start', marginBottom: 20 },
-  generarText: { fontSize: 12, color: '#1a6b9e', fontWeight: '600' },
+  generarText: { fontSize: 12, color: '#c9a84c', fontWeight: '600' },
 
   modalAcciones: { flexDirection: 'row', gap: 10 },
   btnCancelar: {
@@ -366,7 +419,7 @@ const styles = StyleSheet.create({
   btnCancelarText: { color: '#888', fontSize: 14, fontWeight: '600' },
   btnCrear: {
     flex: 2,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     borderRadius: 10,
     paddingVertical: 13,
     alignItems: 'center',
@@ -384,15 +437,32 @@ const styles = StyleSheet.create({
   },
   credRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   credLabel: { fontSize: 11, fontWeight: '700', color: '#888', width: 80 },
-  credValor: { flex: 1, fontSize: 13, color: '#1a1a2e', fontWeight: '600' },
-  copiarBtn: { fontSize: 12, color: '#1a6b9e', fontWeight: '700' },
+  credValor: { flex: 1, fontSize: 13, color: '#1a6470', fontWeight: '600' },
+  copiarBtn: { fontSize: 12, color: '#c9a84c', fontWeight: '700' },
   credSeparator: { height: 1, backgroundColor: '#e0e8ff', marginVertical: 10 },
   credHint: { fontSize: 12, color: '#aaa', marginBottom: 20, lineHeight: 17 },
   btnCerrar: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     borderRadius: 10,
     paddingVertical: 13,
     alignItems: 'center',
   },
   btnCerrarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  plusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fafafa',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 20,
+  },
+  plusLabel: { fontSize: 13, fontWeight: '600', color: '#1a6470' },
+  plusDesc: { fontSize: 11, color: '#888', marginTop: 2 },
+  rolBadgePlus: { backgroundColor: '#fdecea' },
+  rolTextPlus: { color: '#c0392b' },
+  cardNombre: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
 })

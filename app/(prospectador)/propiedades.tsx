@@ -10,6 +10,7 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
+  Linking,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -25,6 +26,7 @@ type Propiedad = {
   estado: string | null
   destacada: boolean
   destacada_mensaje: string | null
+  exclusiva: boolean
   recamaras: number | null
   banos: number | null
   m2: number | null
@@ -55,6 +57,8 @@ export default function ProspectadorPropiedades() {
   const [busqueda, setBusqueda] = useState('')
   const [loading, setLoading] = useState(true)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
+  const [rol, setRol] = useState<string | null>(null)
+  const [nombreUsuario, setNombreUsuario] = useState<string | null>(null)
 
   const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
@@ -62,11 +66,27 @@ export default function ProspectadorPropiedades() {
 
   async function cargarPropiedades() {
     setLoading(true)
-    const { data, error } = await supabase
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, nombre')
+      .eq('id', user!.id)
+      .single()
+    const rolActual = profile?.role ?? null
+    setRol(rolActual)
+    setNombreUsuario(profile?.nombre ?? null)
+
+    let query = supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, exclusiva, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
       .eq('estado', 'disponible')
       .order('created_at', { ascending: false })
+
+    if (rolActual !== 'prospectador_plus') {
+      query = query.eq('exclusiva', false)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       Alert.alert('Error', 'No se pudieron cargar las propiedades.')
@@ -100,6 +120,12 @@ export default function ProspectadorPropiedades() {
     )
   }
 
+  function agendarValera() {
+    const nombre = nombreUsuario ?? 'Un usuario'
+    const mensaje = `${nombre} quiere agendar cita con Valera Estudios.`
+    Linking.openURL(`https://wa.me/524428251381?text=${encodeURIComponent(mensaje)}`)
+  }
+
   function limpiarFiltros() {
     setFiltroOperacion(null)
     setFiltroTipo(null)
@@ -108,6 +134,10 @@ export default function ProspectadorPropiedades() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.btnValera} onPress={agendarValera}>
+        <Text style={styles.btnValeraText}>🏢 Agendar cita con Valera Estudios</Text>
+      </TouchableOpacity>
+
       <TextInput
         style={styles.searchInput}
         placeholder="Buscar por título, código o dirección..."
@@ -157,7 +187,7 @@ export default function ProspectadorPropiedades() {
       )}
 
       {loading ? (
-        <ActivityIndicator size="large" color="#1a1a2e" style={{ marginTop: 40 }} />
+        <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : propiedadesFiltradas.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>
@@ -176,14 +206,19 @@ export default function ProspectadorPropiedades() {
             const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
             return (
               <TouchableOpacity
-                style={[styles.card, item.destacada && styles.cardDestacada]}
+                style={[styles.card, item.exclusiva && styles.cardExclusiva, item.destacada && !item.exclusiva && styles.cardDestacada]}
                 activeOpacity={0.85}
                 onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.id}`)}
               >
                 {primera?.url && (
                   <Image source={{ uri: primera.url }} style={styles.cardImagen} resizeMode="cover" />
                 )}
-                {item.destacada && (
+                {item.exclusiva && (
+                  <View style={styles.exclusivaBanner}>
+                    <Text style={styles.exclusivaBannerText}>★ Propiedad exclusiva</Text>
+                  </View>
+                )}
+                {item.destacada && !item.exclusiva && (
                   <View style={styles.destacadaBanner}>
                     <Text style={styles.destacadaBannerText}>★ Propiedad destacada</Text>
                   </View>
@@ -240,7 +275,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     fontSize: 15,
     marginBottom: 8,
-    color: '#1a1a2e',
+    color: '#1a6470',
   },
   filtrosToggle: {
     alignSelf: 'flex-end',
@@ -248,7 +283,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: 8,
   },
-  filtrosToggleText: { color: '#1a1a2e', fontSize: 14, fontWeight: '600' },
+  filtrosToggleText: { color: '#1a6470', fontSize: 14, fontWeight: '600' },
   filtrosPanel: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -268,7 +303,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor: '#fff',
   },
-  chipActive: { backgroundColor: '#1a1a2e', borderColor: '#1a1a2e' },
+  chipActive: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   chipText: { fontSize: 12, color: '#555' },
   chipTextActive: { color: '#fff', fontWeight: '600' },
   limpiarBtn: { marginTop: 10, alignSelf: 'flex-end' },
@@ -292,6 +327,10 @@ const styles = StyleSheet.create({
     borderColor: '#f5c518',
     borderWidth: 2,
   },
+  cardExclusiva: {
+    borderColor: '#c0392b',
+    borderWidth: 2,
+  },
   destacadaBanner: {
     backgroundColor: '#fff3c4',
     paddingHorizontal: 14,
@@ -301,6 +340,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#7a5500',
+  },
+  exclusivaBanner: {
+    backgroundColor: '#c0392b',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  exclusivaBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
   },
   destacadaMensaje: {
     fontSize: 12,
@@ -325,7 +374,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#fff',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -340,7 +389,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     textTransform: 'capitalize',
   },
-  cardTitulo: { fontSize: 16, fontWeight: '700', color: '#1a1a2e', marginBottom: 3 },
+  cardTitulo: { fontSize: 16, fontWeight: '700', color: '#1a6470', marginBottom: 3 },
   cardDireccion: { fontSize: 13, color: '#888', marginBottom: 6 },
   cardDescripcion: { fontSize: 13, color: '#666', lineHeight: 19, marginBottom: 8 },
   metaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 10 },
@@ -352,5 +401,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  precio: { fontSize: 16, fontWeight: '700', color: '#1a1a2e', marginTop: 4 },
+  precio: { fontSize: 16, fontWeight: '700', color: '#1a6470', marginTop: 4 },
+  btnValera: {
+    backgroundColor: '#4a4a8a',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  btnValeraText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 })

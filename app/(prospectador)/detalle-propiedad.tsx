@@ -22,6 +22,12 @@ import * as Sharing from 'expo-sharing'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 
+const COORDINADORES = [
+  { nombre: 'Chucho', telefono: '527821954946' },
+  { nombre: 'Alexis', telefono: '527822433928' },
+]
+
+
 type Propiedad = {
   id: string
   codigo: string
@@ -131,6 +137,32 @@ export default function DetallePropiedad() {
 
     if (!error && data) setPropiedad(data)
     setLoading(false)
+  }
+
+  function coordinarCita(telefono: string) {
+    if (!propiedad) return
+    const mensaje = `Hola, quiero agendar una cita para la propiedad ${propiedad.codigo}.`
+    const url = `https://wa.me/${telefono}?text=${encodeURIComponent(mensaje)}`
+    Linking.openURL(url)
+  }
+
+  function abrirSelectorCoordinador() {
+    if (Platform.OS === 'web') {
+      const opciones = COORDINADORES.map((c, i) => `${i + 1}. ${c.nombre}`).join('\n')
+      const eleccion = window.prompt(`¿Con qué coordinador deseas hablar?\n\n${opciones}\n\nEscribe 1 o 2:`)
+      if (eleccion === '1') coordinarCita(COORDINADORES[0].telefono)
+      else if (eleccion === '2') coordinarCita(COORDINADORES[1].telefono)
+    } else {
+      Alert.alert(
+        'Coordinar cita',
+        '¿Con qué coordinador deseas hablar?',
+        [
+          { text: COORDINADORES[0].nombre, onPress: () => coordinarCita(COORDINADORES[0].telefono) },
+          { text: COORDINADORES[1].nombre, onPress: () => coordinarCita(COORDINADORES[1].telefono) },
+          { text: 'Cancelar', style: 'cancel' },
+        ]
+      )
+    }
   }
 
   async function compartirEnWhatsApp() {
@@ -297,7 +329,7 @@ export default function DetallePropiedad() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1a1a2e" />
+        <ActivityIndicator size="large" color="#1a6470" />
       </View>
     )
   }
@@ -319,6 +351,9 @@ export default function DetallePropiedad() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(prospectador)/propiedades')}>
+        <Text style={styles.backBtnText}>← Volver</Text>
+      </TouchableOpacity>
       {/* Galería de imágenes */}
       {imagenes.length > 0 ? (
         <View>
@@ -471,6 +506,11 @@ export default function DetallePropiedad() {
           </TouchableOpacity>
         )}
 
+        {/* Botón coordinar cita */}
+        <TouchableOpacity style={styles.btnCita} onPress={abrirSelectorCoordinador}>
+          <Text style={styles.btnCitaText}>📅 Coordinar cita</Text>
+        </TouchableOpacity>
+
         {/* Botón compartir en WhatsApp */}
         <TouchableOpacity
           style={[styles.btnWhatsapp, compartiendoFotos && styles.btnDisabled]}
@@ -511,6 +551,8 @@ export default function DetallePropiedad() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
+  backBtn: { alignSelf: 'flex-start', margin: 16, marginBottom: 0, paddingVertical: 4 },
+  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: '#aaa', fontSize: 15 },
 
@@ -530,7 +572,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     gap: 6,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
   },
   punto: {
     width: 7,
@@ -551,7 +593,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#fff',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -576,7 +618,7 @@ const styles = StyleSheet.create({
   },
   estadoBadge: {
     fontSize: 12,
-    color: '#1a5f9e',
+    color: '#1a6470',
     backgroundColor: '#d4e8f5',
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -588,8 +630,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5d4d4',
   },
 
-  titulo: { fontSize: 22, fontWeight: '800', color: '#1a1a2e', marginBottom: 6 },
-  precio: { fontSize: 20, fontWeight: '700', color: '#1a1a2e', marginBottom: 6 },
+  titulo: { fontSize: 22, fontWeight: '800', color: '#1a6470', marginBottom: 6 },
+  precio: { fontSize: 20, fontWeight: '700', color: '#1a6470', marginBottom: 6 },
   direccion: { fontSize: 14, color: '#888', marginBottom: 20 },
 
   seccion: {
@@ -622,7 +664,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     minWidth: 80,
   },
-  carValor: { fontSize: 22, fontWeight: '800', color: '#1a1a2e' },
+  carValor: { fontSize: 22, fontWeight: '800', color: '#1a6470' },
   carLabel: { fontSize: 12, color: '#888', marginTop: 2 },
 
   descripcion: { fontSize: 15, color: '#444', lineHeight: 23 },
@@ -655,7 +697,7 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.6 },
 
   descargarBtn: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -664,7 +706,7 @@ const styles = StyleSheet.create({
   descargarText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
   volverBtn: { marginTop: 8 },
-  volverText: { fontSize: 14, color: '#1a1a2e', fontWeight: '600' },
+  volverText: { fontSize: 14, color: '#1a6470', fontWeight: '600' },
 
   notaInput: {
     borderWidth: 1,
@@ -673,16 +715,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#1a1a2e',
+    color: '#1a6470',
     minHeight: 90,
     backgroundColor: '#fafafa',
   },
   notaGuardarBtn: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
     marginTop: 10,
   },
   notaGuardarText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  btnCita: {
+    backgroundColor: '#1a6b3a',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  btnCitaText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 })

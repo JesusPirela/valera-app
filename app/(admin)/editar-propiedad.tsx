@@ -12,6 +12,7 @@ import {
   Image,
   View,
   FlatList,
+  Switch,
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
@@ -58,6 +59,7 @@ export default function EditarPropiedad() {
   const [banos, setBanos] = useState<number | null>(null)
   const [m2, setM2] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
+  const [exclusiva, setExclusiva] = useState(false)
   const [imagenesExistentes, setImagenesExistentes] = useState<ImagenExistente[]>([])
   const [imagenesEliminar, setImagenesEliminar] = useState<string[]>([])
   const [imagenesNuevas, setImagenesNuevas] = useState<string[]>([])
@@ -71,7 +73,7 @@ export default function EditarPropiedad() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, propiedad_imagenes(id, url, orden)')
+      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, exclusiva, propiedad_imagenes(id, url, orden)')
       .eq('id', id)
       .single()
 
@@ -92,6 +94,7 @@ export default function EditarPropiedad() {
     setBanos(data.banos ?? null)
     setM2(data.m2 != null ? String(data.m2) : '')
     setEstacionamientos(data.estacionamientos ?? null)
+    setExclusiva(data.exclusiva ?? false)
     setImagenesExistentes(
       ((data.propiedad_imagenes as ImagenExistente[]) ?? []).sort((a, b) => a.orden - b.orden)
     )
@@ -187,6 +190,7 @@ export default function EditarPropiedad() {
           banos,
           m2: m2Num,
           estacionamientos,
+          exclusiva,
         })
         .eq('id', id)
       if (errorUpdate) throw errorUpdate
@@ -221,7 +225,7 @@ export default function EditarPropiedad() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
-        <ActivityIndicator size="large" color="#1a1a2e" />
+        <ActivityIndicator size="large" color="#1a6470" />
       </View>
     )
   }
@@ -234,6 +238,9 @@ export default function EditarPropiedad() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
+          <Text style={styles.backBtnText}>← Volver</Text>
+        </TouchableOpacity>
 
         <Text style={styles.screenTitle}>Editar propiedad</Text>
 
@@ -350,6 +357,19 @@ export default function EditarPropiedad() {
           textAlignVertical="top"
         />
 
+        <View style={styles.exclusivaRow}>
+          <View>
+            <Text style={styles.exclusivaLabel}>Propiedad exclusiva</Text>
+            <Text style={styles.exclusivaDesc}>Solo visible para Prospectadores Plus</Text>
+          </View>
+          <Switch
+            value={exclusiva}
+            onValueChange={setExclusiva}
+            trackColor={{ false: '#ddd', true: '#c0392b' }}
+            thumbColor={exclusiva ? '#fff' : '#f4f3f4'}
+          />
+        </View>
+
         <TouchableOpacity
           style={[styles.button, guardando && styles.buttonDisabled]}
           onPress={handleGuardar}
@@ -372,8 +392,10 @@ export default function EditarPropiedad() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, backgroundColor: '#f5f5f5' },
-  screenTitle: { fontSize: 24, fontWeight: 'bold', color: '#1a1a2e', marginTop: 16, marginBottom: 8 },
-  label: { fontSize: 14, fontWeight: '600', color: '#1a1a2e', marginBottom: 6, marginTop: 16 },
+  backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
+  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
+  screenTitle: { fontSize: 24, fontWeight: 'bold', color: '#1a6470', marginTop: 16, marginBottom: 8 },
+  label: { fontSize: 14, fontWeight: '600', color: '#1a6470', marginBottom: 6, marginTop: 16 },
   input: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -382,7 +404,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#1a1a2e',
+    color: '#1a6470',
   },
   textArea: { height: 100, paddingTop: 12 },
   imagenPicker: {
@@ -429,7 +451,7 @@ const styles = StyleSheet.create({
   },
   btnIAText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   button: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -447,4 +469,18 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   cancelText: { color: '#666', fontSize: 16 },
+  exclusivaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 16,
+  },
+  exclusivaLabel: { fontSize: 14, fontWeight: '600', color: '#1a6470' },
+  exclusivaDesc: { fontSize: 12, color: '#888', marginTop: 2 },
 })

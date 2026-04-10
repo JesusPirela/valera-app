@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  triggerText: { fontSize: 15, color: '#1a1a2e' },
+  triggerText: { fontSize: 15, color: '#1a6470' },
   placeholder: { color: '#aaa' },
   arrow: { fontSize: 14, color: '#888' },
   backdrop: {
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  optionText: { fontSize: 15, color: '#1a1a2e' },
+  optionText: { fontSize: 15, color: '#1a6470' },
   optionSelected: { fontWeight: '700' },
-  check: { color: '#1a1a2e', fontSize: 14, fontWeight: '700' },
+  check: { color: '#1a6470', fontSize: 14, fontWeight: '700' },
 })

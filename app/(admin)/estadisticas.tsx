@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
 type Resumen = {
@@ -102,7 +102,7 @@ export default function Estadisticas() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1a1a2e" />
+        <ActivityIndicator size="large" color="#1a6470" />
       </View>
     )
   }
@@ -126,10 +126,13 @@ export default function Estadisticas() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
+        <Text style={styles.backBtnText}>← Volver</Text>
+      </TouchableOpacity>
 
       {/* Tarjetas de resumen */}
       <View style={styles.resumenGrid}>
-        <View style={[styles.resumenCard, { borderTopColor: '#1a1a2e' }]}>
+        <View style={[styles.resumenCard, { borderTopColor: '#1a6470' }]}>
           <Text style={styles.resumenNum}>{resumen.total_propiedades}</Text>
           <Text style={styles.resumenLabel}>Propiedades</Text>
         </View>
@@ -137,8 +140,8 @@ export default function Estadisticas() {
           <Text style={[styles.resumenNum, { color: '#2e7d32' }]}>{resumen.total_prospectadores}</Text>
           <Text style={styles.resumenLabel}>Prospectadores</Text>
         </View>
-        <View style={[styles.resumenCard, { borderTopColor: '#1a5f9e' }]}>
-          <Text style={[styles.resumenNum, { color: '#1a5f9e' }]}>{resumen.total_vistas}</Text>
+        <View style={[styles.resumenCard, { borderTopColor: '#1a6470' }]}>
+          <Text style={[styles.resumenNum, { color: '#1a6470' }]}>{resumen.total_vistas}</Text>
           <Text style={styles.resumenLabel}>Vistas</Text>
         </View>
         <View style={[styles.resumenCard, { borderTopColor: '#c8960c' }]}>
@@ -158,7 +161,7 @@ export default function Estadisticas() {
               label={d.dia}
               valor={d.total}
               max={maxActividad}
-              colorPrincipal="#1a1a2e"
+              colorPrincipal="#1a6470"
             />
           ))
         )}
@@ -176,7 +179,7 @@ export default function Estadisticas() {
               sublabel={`${p.vistas} vistas · ${p.descargas} descargas`}
               valor={p.total}
               max={maxPropiedad}
-              colorPrincipal="#1a5f9e"
+              colorPrincipal="#1a6470"
             />
           ))
         )}
@@ -206,16 +209,18 @@ export default function Estadisticas() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5', padding: 16 },
+  backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
+  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   errorText: { color: '#aaa', fontSize: 15, marginBottom: 16 },
   reintentarBtn: {
     borderWidth: 1,
-    borderColor: '#1a1a2e',
+    borderColor: '#1a6470',
     borderRadius: 8,
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
-  reintentarText: { color: '#1a1a2e', fontWeight: '600' },
+  reintentarText: { color: '#1a6470', fontWeight: '600' },
 
   resumenGrid: {
     flexDirection: 'row',
@@ -234,7 +239,7 @@ const styles = StyleSheet.create({
     borderColor: '#eee',
     borderTopWidth: 3,
   },
-  resumenNum: { fontSize: 28, fontWeight: '800', color: '#1a1a2e' },
+  resumenNum: { fontSize: 28, fontWeight: '800', color: '#1a6470' },
   resumenLabel: { fontSize: 12, color: '#999', marginTop: 2 },
 
   seccion: {
@@ -262,7 +267,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   barraInfo: { width: 72 },
-  barraLabel: { fontSize: 12, fontWeight: '700', color: '#1a1a2e' },
+  barraLabel: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
   barraSubLabel: { fontSize: 10, color: '#aaa', marginTop: 1 },
   barraTrack: {
     flex: 1,

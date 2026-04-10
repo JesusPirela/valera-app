@@ -39,6 +39,13 @@ type FiltroEstado = 'disponible' | 'vendida' | null
 type FiltroTipo = 'casa' | 'departamento' | 'local' | null
 type OrdenPrecio = 'asc' | 'desc' | null
 
+const NAV_ITEMS = [
+  { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1a6470' },
+  { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#2a8a7a' },
+  { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#1a7060' },
+  { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#145560' },
+]
+
 export default function AdminPropiedades() {
   const [propiedades, setPropiedades] = useState<Propiedad[]>([])
   const [busqueda, setBusqueda] = useState('')
@@ -50,7 +57,6 @@ export default function AdminPropiedades() {
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
 
-  // Modal destacar
   const [modalVisible, setModalVisible] = useState(false)
   const [propSeleccionada, setPropSeleccionada] = useState<Propiedad | null>(null)
   const [mensajeDestacado, setMensajeDestacado] = useState('')
@@ -62,12 +68,8 @@ export default function AdminPropiedades() {
       .from('propiedades')
       .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, recamaras, banos, m2, estacionamientos, propiedad_imagenes(url, orden)')
       .order('created_at', { ascending: false })
-
-    if (error) {
-      Alert.alert('Error', 'No se pudieron cargar las propiedades.')
-    } else {
-      setPropiedades(data ?? [])
-    }
+    if (error) Alert.alert('Error', 'No se pudieron cargar las propiedades.')
+    else setPropiedades(data ?? [])
     setLoading(false)
   }
 
@@ -76,7 +78,6 @@ export default function AdminPropiedades() {
   const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio].filter(Boolean).length
 
   let propiedadesFiltradas = propiedades
-
   if (busqueda.trim()) {
     const q = busqueda.trim().toLowerCase()
     propiedadesFiltradas = propiedadesFiltradas.filter((p) =>
@@ -94,17 +95,13 @@ export default function AdminPropiedades() {
     )
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
-  }
-
   function ejecutarBorrado(id: string) {
     const run = async () => {
       const { error: errorImagenes } = await supabase.from('propiedad_imagenes').delete().eq('propiedad_id', id)
       if (errorImagenes) { Alert.alert('Error', `No se pudieron borrar las imágenes: ${errorImagenes.message}`); return }
       const { error } = await supabase.from('propiedades').delete().eq('id', id)
-      if (error) { Alert.alert('Error', `No se pudo borrar la propiedad: ${error.message}`) }
-      else { setPropiedades((prev) => prev.filter((p) => p.id !== id)) }
+      if (error) Alert.alert('Error', `No se pudo borrar la propiedad: ${error.message}`)
+      else setPropiedades((prev) => prev.filter((p) => p.id !== id))
     }
     run()
   }
@@ -113,7 +110,7 @@ export default function AdminPropiedades() {
     if (Platform.OS === 'web') {
       if (window.confirm(`¿Eliminar "${titulo}"? Esta acción no se puede deshacer.`)) ejecutarBorrado(id)
     } else {
-      Alert.alert('Borrar propiedad', `¿Eliminar "${titulo}"? Esta acción no se puede deshacer.`, [
+      Alert.alert('Borrar propiedad', `¿Eliminar "${titulo}"?`, [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Borrar', style: 'destructive', onPress: () => ejecutarBorrado(id) },
       ])
@@ -150,11 +147,7 @@ export default function AdminPropiedades() {
 
   async function quitarDestacada(id: string) {
     const { error } = await supabase.rpc('quitar_destacada', { p_id: id })
-    if (!error) {
-      setPropiedades((prev) =>
-        prev.map((p) => p.id === id ? { ...p, destacada: false, destacada_mensaje: null } : p)
-      )
-    }
+    if (!error) setPropiedades((prev) => prev.map((p) => p.id === id ? { ...p, destacada: false, destacada_mensaje: null } : p))
   }
 
   function formatPrecio(precio: number | null) {
@@ -179,41 +172,45 @@ export default function AdminPropiedades() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Panel Admin</Text>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text style={styles.logoutText}>Salir</Text>
-        </TouchableOpacity>
+
+      {/* Grid de navegación */}
+      <View style={styles.navGrid}>
+        {NAV_ITEMS.map((item) => (
+          <TouchableOpacity
+            key={item.route}
+            style={[styles.navCard, { backgroundColor: item.color }]}
+            onPress={() => router.push(item.route as any)}
+          >
+            <Text style={styles.navIcon}>{item.icon}</Text>
+            <Text style={styles.navLabel}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      <View style={styles.botonesTop}>
-        <TouchableOpacity style={styles.buttonNueva} onPress={() => router.push('/(admin)/nueva-propiedad')}>
-          <Text style={styles.buttonText}>+ Nueva propiedad</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonActividad} onPress={() => router.push('/(admin)/actividad')}>
-          <Text style={styles.buttonActividadText}>Actividad</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonActividad} onPress={() => router.push('/(admin)/estadisticas')}>
-          <Text style={styles.buttonActividadText}>Estadísticas</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonActividad} onPress={() => router.push('/(admin)/prospectadores')}>
-          <Text style={styles.buttonActividadText}>Usuarios</Text>
-        </TouchableOpacity>
+      {/* Barra de búsqueda con ícono */}
+      <View style={styles.searchRow}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar por código o dirección..."
+          placeholderTextColor="#aaa"
+          value={busqueda}
+          onChangeText={setBusqueda}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {busqueda.length > 0 && (
+          <TouchableOpacity onPress={() => setBusqueda('')} style={styles.clearBtn}>
+            <Text style={styles.clearBtnText}>✕</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Buscar por código o dirección..."
-        value={busqueda}
-        onChangeText={setBusqueda}
-        autoCapitalize="none"
-        autoCorrect={false}
-        clearButtonMode="while-editing"
-      />
-
+      {/* Toggle de filtros */}
       <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
         <Text style={styles.filtrosToggleText}>
-          Filtros{filtrosActivos > 0 ? ` (${filtrosActivos})` : ''} {mostrarFiltros ? '▲' : '▼'}
+          {filtrosActivos > 0 ? `Filtros (${filtrosActivos}) ` : 'Filtros '}
+          {mostrarFiltros ? '▲' : '▼'}
         </Text>
       </TouchableOpacity>
 
@@ -225,14 +222,12 @@ export default function AdminPropiedades() {
             <FiltroChip label="Venta" active={filtroOperacion === 'venta'} onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')} />
             <FiltroChip label="Renta" active={filtroOperacion === 'renta'} onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')} />
           </ScrollView>
-
           <Text style={styles.filtroLabel}>Estado</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <FiltroChip label="Todos" active={filtroEstado === null} onPress={() => setFiltroEstado(null)} />
             <FiltroChip label="Disponible" active={filtroEstado === 'disponible'} onPress={() => setFiltroEstado(filtroEstado === 'disponible' ? null : 'disponible')} />
             <FiltroChip label="Vendida" active={filtroEstado === 'vendida'} onPress={() => setFiltroEstado(filtroEstado === 'vendida' ? null : 'vendida')} />
           </ScrollView>
-
           <Text style={styles.filtroLabel}>Tipo</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)} />
@@ -240,14 +235,12 @@ export default function AdminPropiedades() {
             <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')} />
             <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')} />
           </ScrollView>
-
           <Text style={styles.filtroLabel}>Precio</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)} />
-            <FiltroChip label="Menor precio" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} />
-            <FiltroChip label="Mayor precio" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} />
+            <FiltroChip label="↑ Menor" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} />
+            <FiltroChip label="↓ Mayor" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} />
           </ScrollView>
-
           {filtrosActivos > 0 && (
             <TouchableOpacity style={styles.limpiarBtn} onPress={limpiarFiltros}>
               <Text style={styles.limpiarText}>Limpiar filtros</Text>
@@ -257,11 +250,12 @@ export default function AdminPropiedades() {
       )}
 
       {loading ? (
-        <ActivityIndicator size="large" color="#1a1a2e" style={{ marginTop: 40 }} />
+        <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : propiedadesFiltradas.length === 0 ? (
         <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>🏠</Text>
           <Text style={styles.emptyText}>
-            {busqueda.trim() || filtrosActivos > 0 ? 'Sin resultados.' : 'No hay propiedades aún.'}
+            {busqueda.trim() || filtrosActivos > 0 ? 'Sin resultados para esa búsqueda.' : 'No hay propiedades aún.'}
           </Text>
         </View>
       ) : (
@@ -274,23 +268,37 @@ export default function AdminPropiedades() {
             const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
             return (
               <View style={[styles.card, item.destacada && styles.cardDestacada]}>
-                {primera?.url && (
-                  <Image source={{ uri: primera.url }} style={styles.cardImagen} />
-                )}
-                <View style={styles.cardBody}>
-                  <View style={styles.cardHeaderRow}>
-                    <Text style={styles.codigo}>{item.codigo ?? '—'}</Text>
-                    {item.destacada && (
-                      <Text style={styles.destacadaBadge}>★ Destacada</Text>
-                    )}
+                {/* Imagen con badges superpuestos */}
+                <View style={styles.imagenWrapper}>
+                  {primera?.url ? (
+                    <Image source={{ uri: primera.url }} style={styles.cardImagen} />
+                  ) : (
+                    <View style={styles.cardImagenPlaceholder}>
+                      <Text style={styles.cardImagenPlaceholderText}>🏠</Text>
+                    </View>
+                  )}
+                  {/* Overlay oscuro sutil en la parte inferior */}
+                  <View style={styles.imagenOverlay} />
+
+                  {/* Badges flotantes — esquina superior izquierda */}
+                  <View style={styles.badgesTop}>
+                    <Text style={styles.codigoBadge}>{item.codigo ?? '—'}</Text>
+                    {item.destacada && <Text style={styles.destacadaBadge}>★ Destacada</Text>}
                     <View style={[styles.estadoBadge, item.estado === 'vendida' && styles.estadoVendida]}>
                       <Text style={[styles.estadoText, item.estado === 'vendida' && styles.estadoTextVendida]}>
                         {item.estado === 'vendida' ? 'Vendida' : 'Disponible'}
                       </Text>
                     </View>
-                    <Text style={styles.precio}>{formatPrecio(item.precio)}</Text>
                   </View>
 
+                  {/* Precio flotante — esquina inferior derecha */}
+                  <View style={styles.precioBadge}>
+                    <Text style={styles.precioText}>{formatPrecio(item.precio)}</Text>
+                  </View>
+                </View>
+
+                {/* Cuerpo de la tarjeta */}
+                <View style={styles.cardBody}>
                   {item.destacada && item.destacada_mensaje ? (
                     <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
                   ) : null}
@@ -303,27 +311,28 @@ export default function AdminPropiedades() {
                   )}
 
                   <Text style={styles.cardTitulo}>{item.titulo}</Text>
-                  <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
+                  <Text style={styles.cardDireccion} numberOfLines={1}>📍 {item.direccion}</Text>
 
                   {tieneMeta && (
                     <View style={styles.metaRow}>
-                      {item.recamaras != null && <Text style={styles.metaItem}>Rec {item.recamaras}</Text>}
-                      {item.banos != null && <Text style={styles.metaItem}>Ba {item.banos}</Text>}
-                      {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m²</Text>}
-                      {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
+                      {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
+                      {item.banos != null && <Text style={styles.metaItem}>🚿 {item.banos}</Text>}
+                      {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m²</Text>}
+                      {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
                     </View>
                   )}
 
+                  {/* Botones de acción compactos */}
                   <View style={styles.cardAcciones}>
                     <TouchableOpacity
                       style={styles.btnEditar}
                       onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: item.id } })}
                     >
-                      <Text style={styles.btnEditarText}>Editar</Text>
+                      <Text style={styles.btnEditarText}>✏️ Editar</Text>
                     </TouchableOpacity>
                     {item.destacada ? (
                       <TouchableOpacity style={styles.btnQuitarDestacada} onPress={() => quitarDestacada(item.id)}>
-                        <Text style={styles.btnQuitarDestacadaText}>Quitar destacado</Text>
+                        <Text style={styles.btnQuitarDestacadaText}>✕ Destacado</Text>
                       </TouchableOpacity>
                     ) : (
                       <TouchableOpacity style={styles.btnDestacar} onPress={() => abrirModalDestacar(item)}>
@@ -331,7 +340,7 @@ export default function AdminPropiedades() {
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity style={styles.btnBorrar} onPress={() => handleBorrar(item.id, item.titulo)}>
-                      <Text style={styles.btnBorrarText}>Borrar</Text>
+                      <Text style={styles.btnBorrarText}>🗑</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -341,13 +350,8 @@ export default function AdminPropiedades() {
         />
       )}
 
-      {/* Modal para destacar propiedad */}
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
+      {/* Modal destacar */}
+      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitulo}>Destacar propiedad</Text>
@@ -390,62 +394,73 @@ export default function AdminPropiedades() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#f5f5f5' },
-  header: {
+  container: { flex: 1, paddingHorizontal: 16, paddingTop: 16, backgroundColor: '#f0f5f5' },
+
+  // Grid de navegación 2x2
+  navGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 20,
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 16,
   },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#1a1a2e' },
-  logoutText: { color: '#999', fontSize: 14 },
-  buttonNueva: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  botonesTop: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  buttonActividad: {
-    borderWidth: 1,
-    borderColor: '#1a1a2e',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonActividadText: { color: '#1a1a2e', fontSize: 15, fontWeight: '600' },
-  searchInput: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
+  navCard: {
+    width: '47%',
+    borderRadius: 14,
+    paddingVertical: 16,
     paddingHorizontal: 14,
-    paddingVertical: 11,
-    fontSize: 15,
-    marginBottom: 8,
-    color: '#1a1a2e',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
+  navIcon: { fontSize: 22 },
+  navLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // Búsqueda
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dde8e9',
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  searchIcon: { fontSize: 16, marginRight: 8 },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#1a2e30',
+  },
+  clearBtn: { padding: 4 },
+  clearBtnText: { color: '#aaa', fontSize: 16 },
+
+  // Filtros
   filtrosToggle: {
     alignSelf: 'flex-end',
     paddingVertical: 6,
     paddingHorizontal: 12,
     marginBottom: 8,
   },
-  filtrosToggleText: { color: '#1a1a2e', fontSize: 14, fontWeight: '600' },
+  filtrosToggleText: { color: '#1a6470', fontSize: 14, fontWeight: '600' },
   filtrosPanel: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: '#dde8e9',
   },
-  filtroLabel: { fontSize: 12, fontWeight: '700', color: '#888', marginBottom: 6, marginTop: 8 },
+  filtroLabel: { fontSize: 11, fontWeight: '700', color: '#888', marginBottom: 6, marginTop: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   chipRow: { flexDirection: 'row', marginBottom: 2 },
   chip: {
     borderWidth: 1,
@@ -456,54 +471,102 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor: '#fff',
   },
-  chipActive: { backgroundColor: '#1a1a2e', borderColor: '#1a1a2e' },
+  chipActive: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   chipText: { fontSize: 12, color: '#555' },
   chipTextActive: { color: '#fff', fontWeight: '600' },
   limpiarBtn: { marginTop: 10, alignSelf: 'flex-end' },
   limpiarText: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
-  emptyContainer: { flex: 1, alignItems: 'center', marginTop: 60 },
-  emptyText: { color: '#aaa', fontSize: 15 },
+
+  // Empty
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 60 },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyText: { color: '#aaa', fontSize: 15, textAlign: 'center' },
+
+  // Card
   card: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#eee',
+    borderRadius: 16,
+    marginBottom: 14,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
   },
   cardDestacada: {
-    borderColor: '#f5c518',
     borderWidth: 2,
+    borderColor: '#c9a84c',
   },
-  cardImagen: { width: '100%', height: 160 },
-  cardBody: { padding: 14 },
-  cardHeaderRow: {
-    flexDirection: 'row',
+
+  // Imagen con badges superpuestos
+  imagenWrapper: { position: 'relative' },
+  cardImagen: { width: '100%', height: 180 },
+  cardImagenPlaceholder: {
+    width: '100%',
+    height: 120,
+    backgroundColor: '#e8f0f0',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
-  codigo: {
-    fontSize: 12,
-    fontWeight: '700',
+  cardImagenPlaceholderText: { fontSize: 40 },
+  imagenOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  badgesTop: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  codigoBadge: {
+    fontSize: 11,
+    fontWeight: '800',
     color: '#fff',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
     overflow: 'hidden',
   },
   destacadaBadge: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#7a5500',
-    backgroundColor: '#fff3c4',
+    color: '#1a2e00',
+    backgroundColor: '#c9a84c',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
     overflow: 'hidden',
   },
+  estadoBadge: {
+    backgroundColor: 'rgba(46,125,50,0.85)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  estadoVendida: { backgroundColor: 'rgba(198,40,40,0.85)' },
+  estadoText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  estadoTextVendida: { color: '#fff' },
+  precioBadge: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  precioText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+
+  // Cuerpo
+  cardBody: { padding: 14 },
   destacadaMensaje: {
     fontSize: 12,
     color: '#7a5500',
@@ -514,93 +577,84 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f5e07a',
   },
-  estadoBadge: {
-    backgroundColor: '#e8f5e9',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  estadoVendida: { backgroundColor: '#fce4ec' },
-  estadoText: { fontSize: 11, fontWeight: '600', color: '#2e7d32' },
-  estadoTextVendida: { color: '#c62828' },
-  precio: { fontSize: 13, color: '#555', marginLeft: 'auto' },
-  cardTipo: { fontSize: 12, color: '#888', marginBottom: 4, textTransform: 'capitalize' },
-  cardTitulo: { fontSize: 15, fontWeight: '600', color: '#1a1a2e', marginBottom: 2 },
-  cardDireccion: { fontSize: 13, color: '#888', marginBottom: 8 },
-  metaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 10 },
+  cardTipo: { fontSize: 11, color: '#888', marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '600' },
+  cardTitulo: { fontSize: 16, fontWeight: '700', color: '#1a2e30', marginBottom: 4 },
+  cardDireccion: { fontSize: 13, color: '#888', marginBottom: 10 },
+  metaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 12 },
   metaItem: {
     fontSize: 12,
-    color: '#555',
-    backgroundColor: '#f0f0f0',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    color: '#1a6470',
+    backgroundColor: '#e8f4f4',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontWeight: '600',
   },
-  cardAcciones: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+
+  // Botones de acción
+  cardAcciones: { flexDirection: 'row', gap: 8 },
   btnEditar: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#1a1a2e',
-    borderRadius: 8,
-    paddingVertical: 8,
+    flex: 2,
+    borderWidth: 1.5,
+    borderColor: '#1a6470',
+    borderRadius: 10,
+    paddingVertical: 9,
     alignItems: 'center',
   },
-  btnEditarText: { color: '#1a1a2e', fontSize: 14, fontWeight: '600' },
+  btnEditarText: { color: '#1a6470', fontSize: 13, fontWeight: '700' },
   btnDestacar: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#c8960c',
-    borderRadius: 8,
-    paddingVertical: 8,
+    flex: 2,
+    borderRadius: 10,
+    paddingVertical: 9,
     alignItems: 'center',
-    backgroundColor: '#fffbe6',
+    backgroundColor: '#c9a84c',
   },
-  btnDestacarText: { color: '#7a5500', fontSize: 13, fontWeight: '700' },
+  btnDestacarText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   btnQuitarDestacada: {
-    flex: 1,
+    flex: 2,
     borderWidth: 1,
-    borderColor: '#aaa',
-    borderRadius: 8,
-    paddingVertical: 8,
+    borderColor: '#ccc',
+    borderRadius: 10,
+    paddingVertical: 9,
     alignItems: 'center',
   },
   btnQuitarDestacadaText: { color: '#888', fontSize: 12, fontWeight: '600' },
   btnBorrar: {
     flex: 1,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#c0392b',
-    borderRadius: 8,
-    paddingVertical: 8,
+    borderRadius: 10,
+    paddingVertical: 9,
     alignItems: 'center',
   },
-  btnBorrarText: { color: '#c0392b', fontSize: 14, fontWeight: '600' },
+  btnBorrarText: { fontSize: 16 },
 
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   modalBox: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 24,
     width: '100%',
     maxWidth: 480,
   },
-  modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 4 },
+  modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a6470', marginBottom: 4 },
   modalSubtitulo: { fontSize: 13, color: '#888', marginBottom: 16 },
   modalLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 8 },
   modalInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#dde8e9',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#1a1a2e',
+    color: '#1a2e30',
     minHeight: 80,
     marginBottom: 8,
   },
@@ -611,15 +665,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: 'center',
   },
   modalCancelarText: { color: '#888', fontSize: 14, fontWeight: '600' },
   modalConfirmar: {
     flex: 2,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: 'center',
   },
   modalConfirmarText: { color: '#fff', fontSize: 14, fontWeight: '700' },

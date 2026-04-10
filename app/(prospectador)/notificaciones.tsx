@@ -18,7 +18,7 @@ type Notificacion = {
   leida: boolean
   created_at: string
   propiedad_id: string | null
-  tipo: 'nueva_propiedad' | 'destacada'
+  tipo: 'nueva_propiedad' | 'destacada' | 'exclusiva'
 }
 
 function tiempoRelativo(fechaISO: string): string {
@@ -113,7 +113,7 @@ export default function Notificaciones() {
       )}
 
       {loading ? (
-        <ActivityIndicator size="large" color="#1a1a2e" style={{ marginTop: 40 }} />
+        <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : notificaciones.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>Sin notificaciones</Text>
@@ -128,6 +128,7 @@ export default function Notificaciones() {
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => {
             const esDestacada = item.tipo === 'destacada'
+            const esExclusiva = item.tipo === 'exclusiva'
             return (
               <TouchableOpacity
                 style={[
@@ -135,6 +136,8 @@ export default function Notificaciones() {
                   !item.leida && styles.cardNoLeida,
                   esDestacada && styles.cardDestacada,
                   esDestacada && !item.leida && styles.cardDestacadaNoLeida,
+                  esExclusiva && styles.cardExclusiva,
+                  esExclusiva && !item.leida && styles.cardExclusivaNoLeida,
                 ]}
                 onPress={() => { if (!item.leida) marcarLeida(item.id) }}
                 activeOpacity={item.leida ? 1 : 0.7}
@@ -142,14 +145,19 @@ export default function Notificaciones() {
                 <View style={styles.cardTop}>
                   <View style={styles.cardTituloCont}>
                     {!item.leida && (
-                      <View style={[styles.puntito, esDestacada && styles.puntitoDestacada]} />
+                      <View style={[
+                        styles.puntito,
+                        esDestacada && styles.puntitoDestacada,
+                        esExclusiva && styles.puntitoExclusiva,
+                      ]} />
                     )}
                     <Text style={[
                       styles.cardTitulo,
                       !item.leida && styles.cardTituloNoLeido,
                       esDestacada && styles.cardTituloDestacada,
+                      esExclusiva && styles.cardTituloExclusiva,
                     ]}>
-                      {esDestacada ? '★ ' : ''}{item.titulo}
+                      {item.titulo}
                     </Text>
                   </View>
                   <Text style={styles.tiempo}>{tiempoRelativo(item.created_at)}</Text>
@@ -158,7 +166,11 @@ export default function Notificaciones() {
                   {item.mensaje}
                 </Text>
                 {!item.leida && (
-                  <Text style={[styles.tapHint, esDestacada && styles.tapHintDestacada]}>
+                  <Text style={[
+                    styles.tapHint,
+                    esDestacada && styles.tapHintDestacada,
+                    esExclusiva && styles.tapHintExclusiva,
+                  ]}>
                     Toca para marcar como leída
                   </Text>
                 )}
@@ -180,11 +192,11 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1a1a2e',
+    borderColor: '#1a6470',
   },
-  marcarTodasText: { fontSize: 13, color: '#1a1a2e', fontWeight: '600' },
+  marcarTodasText: { fontSize: 13, color: '#1a6470', fontWeight: '600' },
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a2e', marginBottom: 8, textAlign: 'center' },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1a6470', marginBottom: 8, textAlign: 'center' },
   emptySubtitle: { fontSize: 14, color: '#999', textAlign: 'center', lineHeight: 20 },
   card: {
     backgroundColor: '#fff',
@@ -214,11 +226,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a6470',
     flexShrink: 0,
   },
   cardTitulo: { fontSize: 14, fontWeight: '600', color: '#555', flex: 1 },
-  cardTituloNoLeido: { color: '#1a1a2e' },
+  cardTituloNoLeido: { color: '#1a6470' },
   tiempo: { fontSize: 11, color: '#aaa', marginLeft: 8, flexShrink: 0 },
   cardMensaje: { fontSize: 14, color: '#888', lineHeight: 20 },
   cardMensajeNoLeido: { color: '#333' },
@@ -235,4 +247,16 @@ const styles = StyleSheet.create({
   puntitoDestacada: { backgroundColor: '#c8960c' },
   cardTituloDestacada: { color: '#7a5500' },
   tapHintDestacada: { color: '#c8960c' },
+  cardExclusiva: {
+    borderColor: '#c0392b',
+    borderWidth: 2,
+    backgroundColor: '#fff5f5',
+  },
+  cardExclusivaNoLeida: {
+    backgroundColor: '#fde8e8',
+    borderColor: '#c0392b',
+  },
+  puntitoExclusiva: { backgroundColor: '#c0392b' },
+  cardTituloExclusiva: { color: '#c0392b' },
+  tapHintExclusiva: { color: '#c0392b' },
 })
