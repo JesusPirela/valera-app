@@ -41,6 +41,7 @@ type OrdenPrecio = 'asc' | 'desc' | null
 
 const NAV_ITEMS = [
   { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1a6470' },
+  { label: 'CRM', icon: '👤', route: '/(admin)/crm', color: '#0f4c5c' },
   { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#2a8a7a' },
   { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#1a7060' },
   { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#145560' },

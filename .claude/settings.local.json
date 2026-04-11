@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(git --version)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(cat -n f:/github/valera-app/app/\\\\\\(prospectador\\\\\\)/_layout.tsx)",
+      "Bash(cat -n f:/github/valera-app/app/\\\\\\(admin\\\\\\)/_layout.tsx)",
+      "Bash(ls f:/github/valera-app/app/\\\\\\(admin\\\\\\)/)",
+      "Bash(supabase --version)",
+      "WebFetch(domain:ystxicgrryyzhrxinsbq.supabase.co)"
     ]
   }
 }
