@@ -3,6 +3,11 @@ import {
   View, Text, TextInput, StyleSheet, ScrollView,
   TouchableOpacity, ActivityIndicator, Alert, Modal, Platform,
 } from 'react-native'
+
+function mostrarError(titulo: string, msg: string) {
+  if (Platform.OS === 'web') window.alert(`${titulo}: ${msg}`)
+  else Alert.alert(titulo, msg)
+}
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { ESTADOS } from './crm'
@@ -218,62 +223,67 @@ export default function ClienteForm() {
   }, [])
 
   async function guardar() {
-    if (!nombre.trim()) { Alert.alert('Campo requerido', 'El nombre es obligatorio.'); return }
-    if (!telefono.trim()) { Alert.alert('Campo requerido', 'El teléfono es obligatorio.'); return }
+    if (!nombre.trim()) { mostrarError('Campo requerido', 'El nombre es obligatorio.'); return }
+    if (!telefono.trim()) { mostrarError('Campo requerido', 'El teléfono es obligatorio.'); return }
 
     setGuardando(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: perfil } = await supabase.from('profiles').select('nombre').eq('id', user!.id).single()
-    const nombreProspectador = perfil?.nombre ?? 'Un prospectador'
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { mostrarError('Error', 'Sesión expirada, vuelve a iniciar sesión.'); return }
 
-    const payload = {
-      nombre: nombre.trim(),
-      telefono: telefono.trim(),
-      email: email.trim() || null,
-      empresa: empresa.trim() || null,
-      fuente_lead: fuente,
-      estado,
-      notas: notas.trim() || null,
-      proximo_contacto: proximoContacto?.toISOString() ?? null,
-    }
+      const { data: perfil } = await supabase.from('profiles').select('nombre').eq('id', user.id).single()
+      const nombreProspectador = perfil?.nombre ?? 'Un prospectador'
 
-    if (esEdicion) {
-      const { error } = await supabase.from('clientes').update(payload).eq('id', params.id!)
-      if (error) { Alert.alert('Error', error.message); setGuardando(false); return }
-
-      // Registrar en historial
-      await supabase.from('interacciones').insert({
-        cliente_id: params.id!,
-        user_id: user!.id,
-        tipo: 'nota',
-        descripcion: 'Información del cliente actualizada.',
-      })
-    } else {
-      const { data, error } = await supabase
-        .from('clientes')
-        .insert({ ...payload, responsable_id: user!.id })
-        .select('id')
-        .single()
-      if (error) { Alert.alert('Error', error.message); setGuardando(false); return }
-
-      // Registrar creación en historial + notificar a admins
-      if (data) {
-        await supabase.from('interacciones').insert({
-          cliente_id: data.id,
-          user_id: user!.id,
-          tipo: 'nota',
-          descripcion: 'Cliente registrado en el CRM.',
-        })
-        await supabase.rpc('notificar_admins_nuevo_cliente', {
-          p_cliente_nombre: nombre.trim(),
-          p_cliente_id: data.id,
-          p_prospectador_nombre: nombreProspectador,
-        })
+      const payload = {
+        nombre: nombre.trim(),
+        telefono: telefono.trim(),
+        email: email.trim() || null,
+        empresa: empresa.trim() || null,
+        fuente_lead: fuente,
+        estado,
+        notas: notas.trim() || null,
+        proximo_contacto: proximoContacto?.toISOString() ?? null,
       }
-    }
 
-    setGuardando(false)
-    router.back()
+      if (esEdicion) {
+        const { error } = await supabase.from('clientes').update(payload).eq('id', params.id!)
+        if (error) { mostrarError('Error al guardar', error.message); return }
+
+        await supabase.from('interacciones').insert({
+          cliente_id: params.id!,
+          user_id: user.id,
+          tipo: 'nota',
+          descripcion: 'Información del cliente actualizada.',
+        })
+      } else {
+        const { data, error } = await supabase
+          .from('clientes')
+          .insert({ ...payload, responsable_id: user.id })
+          .select('id')
+          .single()
+        if (error) { mostrarError('Error al registrar', error.message); return }
+
+        if (data) {
+          await supabase.from('interacciones').insert({
+            cliente_id: data.id,
+            user_id: user.id,
+            tipo: 'nota',
+            descripcion: 'Cliente registrado en el CRM.',
+          })
+          await supabase.rpc('notificar_admins_nuevo_cliente', {
+            p_cliente_nombre: nombre.trim(),
+            p_cliente_id: data.id,
+            p_prospectador_nombre: nombreProspectador,
+          })
+        }
+      }
+
+      router.replace('/(prospectador)/crm')
+    } catch (e: any) {
+      mostrarError('Error inesperado', e?.message ?? 'Intenta de nuevo.')
+    } finally {
+      setGuardando(false)
+    }
   }
 
   if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />

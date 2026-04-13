@@ -40,13 +40,17 @@ export default function LoginScreen() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, nombre')
       .eq('id', data.user.id)
       .single()
 
     if (profile?.role === 'admin') {
       router.replace('/(admin)/propiedades')
     } else {
+      // Notificar a los admins que el prospectador inició sesión
+      await supabase.rpc('notificar_admins_login_prospectador', {
+        p_prospectador_nombre: profile?.nombre ?? 'Un prospectador',
+      })
       router.replace('/(prospectador)/propiedades')
     }
   }
