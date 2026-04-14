@@ -18,7 +18,7 @@ type Notificacion = {
   leida: boolean
   created_at: string
   propiedad_id: string | null
-  tipo: 'nueva_propiedad' | 'destacada' | 'exclusiva'
+  tipo: 'nueva_propiedad' | 'destacada' | 'exclusiva' | 'recordatorio' | string
 }
 
 function tiempoRelativo(fechaISO: string): string {
@@ -35,6 +35,13 @@ function tiempoRelativo(fechaISO: string): string {
   if (diffDias === 1) return 'Ayer'
   if (diffDias < 7) return `Hace ${diffDias} días`
   return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+}
+
+function iconoPorTipo(tipo: string) {
+  if (tipo === 'recordatorio') return '⏰'
+  if (tipo === 'destacada')    return '⭐'
+  if (tipo === 'exclusiva')    return '🔴'
+  return '🔔'
 }
 
 export default function Notificaciones() {
@@ -118,7 +125,7 @@ export default function Notificaciones() {
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>Sin notificaciones</Text>
           <Text style={styles.emptySubtitle}>
-            Aquí aparecerán los avisos cuando se publique una nueva propiedad.
+            Aquí aparecerán avisos de nuevas propiedades y tus recordatorios de seguimiento.
           </Text>
         </View>
       ) : (
@@ -127,13 +134,17 @@ export default function Notificaciones() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => {
-            const esDestacada = item.tipo === 'destacada'
-            const esExclusiva = item.tipo === 'exclusiva'
+            const esRecordatorio = item.tipo === 'recordatorio'
+            const esDestacada    = item.tipo === 'destacada'
+            const esExclusiva    = item.tipo === 'exclusiva'
+
             return (
               <TouchableOpacity
                 style={[
                   styles.card,
                   !item.leida && styles.cardNoLeida,
+                  esRecordatorio && styles.cardRecordatorio,
+                  esRecordatorio && !item.leida && styles.cardRecordatorioNoLeida,
                   esDestacada && styles.cardDestacada,
                   esDestacada && !item.leida && styles.cardDestacadaNoLeida,
                   esExclusiva && styles.cardExclusiva,
@@ -144,9 +155,11 @@ export default function Notificaciones() {
               >
                 <View style={styles.cardTop}>
                   <View style={styles.cardTituloCont}>
+                    <Text style={styles.icono}>{iconoPorTipo(item.tipo)}</Text>
                     {!item.leida && (
                       <View style={[
                         styles.puntito,
+                        esRecordatorio && styles.puntitoRecordatorio,
                         esDestacada && styles.puntitoDestacada,
                         esExclusiva && styles.puntitoExclusiva,
                       ]} />
@@ -154,6 +167,7 @@ export default function Notificaciones() {
                     <Text style={[
                       styles.cardTitulo,
                       !item.leida && styles.cardTituloNoLeido,
+                      esRecordatorio && styles.cardTituloRecordatorio,
                       esDestacada && styles.cardTituloDestacada,
                       esExclusiva && styles.cardTituloExclusiva,
                     ]}>
@@ -162,12 +176,15 @@ export default function Notificaciones() {
                   </View>
                   <Text style={styles.tiempo}>{tiempoRelativo(item.created_at)}</Text>
                 </View>
+
                 <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido]}>
                   {item.mensaje}
                 </Text>
+
                 {!item.leida && (
                   <Text style={[
                     styles.tapHint,
+                    esRecordatorio && styles.tapHintRecordatorio,
                     esDestacada && styles.tapHintDestacada,
                     esExclusiva && styles.tapHintExclusiva,
                   ]}>
@@ -198,6 +215,7 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1a6470', marginBottom: 8, textAlign: 'center' },
   emptySubtitle: { fontSize: 14, color: '#999', textAlign: 'center', lineHeight: 20 },
+
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -222,6 +240,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
+  icono: { fontSize: 16, flexShrink: 0 },
   puntito: {
     width: 8,
     height: 8,
@@ -235,6 +254,22 @@ const styles = StyleSheet.create({
   cardMensaje: { fontSize: 14, color: '#888', lineHeight: 20 },
   cardMensajeNoLeido: { color: '#333' },
   tapHint: { fontSize: 11, color: '#7a9ee8', marginTop: 6 },
+
+  // Recordatorio — naranja/ámbar
+  cardRecordatorio: {
+    borderColor: '#e67e22',
+    borderWidth: 1.5,
+    backgroundColor: '#fffaf5',
+  },
+  cardRecordatorioNoLeida: {
+    backgroundColor: '#fff3e0',
+    borderColor: '#e67e22',
+  },
+  puntitoRecordatorio: { backgroundColor: '#e67e22' },
+  cardTituloRecordatorio: { color: '#b94d00' },
+  tapHintRecordatorio: { color: '#e67e22' },
+
+  // Destacada — amarillo
   cardDestacada: {
     borderColor: '#f5c518',
     borderWidth: 2,
@@ -247,6 +282,8 @@ const styles = StyleSheet.create({
   puntitoDestacada: { backgroundColor: '#c8960c' },
   cardTituloDestacada: { color: '#7a5500' },
   tapHintDestacada: { color: '#c8960c' },
+
+  // Exclusiva — rojo
   cardExclusiva: {
     borderColor: '#c0392b',
     borderWidth: 2,

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import {
-  View, Text, StyleSheet, FlatList, TextInput,
+  View, Text, StyleSheet, TextInput,
   ActivityIndicator, TouchableOpacity, ScrollView,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
@@ -43,7 +43,7 @@ function tiempoRelativo(fechaISO: string) {
   const dias = Math.floor(diff / 86400000)
   if (dias === 0) return 'Hoy'
   if (dias === 1) return 'Ayer'
-  if (dias < 7) return `Hace ${dias} días`
+  if (dias < 7) return `Hace ${dias}d`
   return new Date(fechaISO).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
 
@@ -54,11 +54,23 @@ function proximoRecordatorio(recordatorios: Cliente['recordatorios']) {
   return pendientes[0] ?? null
 }
 
+// Anchos de columnas
+const COL = {
+  nombre:   150,
+  estado:   130,
+  telefono: 120,
+  empresa:  110,
+  rec:      170,
+  fecha:    80,
+}
+
 export default function CRM() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null)
+  const [sortCol, setSortCol] = useState<string>('created_at')
+  const [sortAsc, setSortAsc] = useState(false)
 
   async function cargarClientes() {
     setLoading(true)
@@ -73,7 +85,6 @@ export default function CRM() {
 
   useFocusEffect(useCallback(() => { cargarClientes() }, []))
 
-  // Conteos por estado
   const conteos = ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
     acc[e] = clientes.filter((c) => c.estado === e).length
     return acc
@@ -89,9 +100,41 @@ export default function CRM() {
   }
   if (estadoFiltro) filtrados = filtrados.filter((c) => c.estado === estadoFiltro)
 
+  // Ordenamiento por columna
+  filtrados = [...filtrados].sort((a, b) => {
+    let va: string, vb: string
+    if (sortCol === 'nombre') { va = a.nombre; vb = b.nombre }
+    else if (sortCol === 'estado') { va = a.estado; vb = b.estado }
+    else if (sortCol === 'telefono') { va = a.telefono; vb = b.telefono }
+    else if (sortCol === 'empresa') { va = a.empresa ?? ''; vb = b.empresa ?? '' }
+    else { va = a.created_at; vb = b.created_at }
+    return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va)
+  })
+
+  function toggleSort(col: string) {
+    if (sortCol === col) setSortAsc(!sortAsc)
+    else { setSortCol(col); setSortAsc(true) }
+  }
+
+  function sortIcon(col: string) {
+    if (sortCol !== col) return ' ↕'
+    return sortAsc ? ' ↑' : ' ↓'
+  }
+
+  const COLS = [
+    { key: 'nombre',   label: 'Nombre',       width: COL.nombre,   sortable: true },
+    { key: 'estado',   label: 'Estado',        width: COL.estado,   sortable: true },
+    { key: 'telefono', label: 'Teléfono',      width: COL.telefono, sortable: false },
+    { key: 'empresa',  label: 'Empresa',       width: COL.empresa,  sortable: true },
+    { key: 'rec',      label: 'Recordatorio',  width: COL.rec,      sortable: false },
+    { key: 'fecha',    label: 'Agregado',      width: COL.fecha,    sortable: true },
+  ]
+
+  const totalWidth = COLS.reduce((s, c) => s + c.width, 0) + COLS.length + 1
+
   return (
     <View style={styles.container}>
-      {/* Pipeline counters */}
+      {/* Pipeline chips */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -162,125 +205,198 @@ export default function CRM() {
           )}
         </View>
       ) : (
-        <FlatList
-          data={filtrados}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 24 }}
-          renderItem={({ item }) => {
-            const info = estadoInfo(item.estado)
-            const recProximo = proximoRecordatorio(item.recordatorios ?? [])
-            const ahora = new Date()
-            const recVencido = recProximo && new Date(recProximo.fecha_hora) < ahora
-
-            return (
-              <TouchableOpacity
-                style={styles.card}
-                onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cardNombre}>{item.nombre}</Text>
-                    {item.empresa ? (
-                      <Text style={styles.cardEmpresa}>{item.empresa}</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          bounces={false}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+        >
+          <View style={{ width: totalWidth }}>
+            {/* Encabezado de tabla */}
+            <View style={styles.tableHeader}>
+              {COLS.map((col, i) => (
+                <TouchableOpacity
+                  key={col.key}
+                  style={[
+                    styles.headerCell,
+                    { width: col.width },
+                    i < COLS.length - 1 && styles.cellBorderRight,
+                  ]}
+                  onPress={() => col.sortable && toggleSort(col.key)}
+                  disabled={!col.sortable}
+                >
+                  <Text style={styles.headerCellText}>
+                    {col.label}
+                    {col.sortable ? (
+                      <Text style={styles.sortIcon}>{sortIcon(col.key)}</Text>
                     ) : null}
-                  </View>
-                  <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
-                    <Text style={[styles.estadoText, { color: info.color }]}>{info.label}</Text>
-                  </View>
-                </View>
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-                <Text style={styles.cardTel}>{item.telefono}</Text>
+            {/* Filas */}
+            <ScrollView
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              contentContainerStyle={{ paddingBottom: 24 }}
+            >
+              {filtrados.map((item, idx) => {
+                const info = estadoInfo(item.estado)
+                const recProximo = proximoRecordatorio(item.recordatorios ?? [])
+                const ahora = new Date()
+                const recVencido = recProximo && new Date(recProximo.fecha_hora) < ahora
+                const isEven = idx % 2 === 0
 
-                <View style={styles.cardFooter}>
-                  <Text style={styles.cardFecha}>{tiempoRelativo(item.created_at)}</Text>
-                  {recProximo && (
-                    <View style={[styles.recBadge, recVencido && styles.recBadgeVencido]}>
-                      <Text style={[styles.recText, recVencido && styles.recTextVencido]}>
-                        {recVencido ? 'Recordatorio vencido' : `Rec: ${new Date(recProximo.fecha_hora).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
-                      </Text>
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.tableRow, isEven ? styles.rowEven : styles.rowOdd]}
+                    onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
+                    activeOpacity={0.75}
+                  >
+                    {/* Nombre */}
+                    <View style={[styles.cell, { width: COL.nombre }, styles.cellBorderRight]}>
+                      <Text style={styles.cellNombre} numberOfLines={1}>{item.nombre}</Text>
+                      {item.empresa ? (
+                        <Text style={styles.cellSub} numberOfLines={1}>{item.empresa}</Text>
+                      ) : null}
                     </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            )
-          }}
-        />
+
+                    {/* Estado */}
+                    <View style={[styles.cell, { width: COL.estado }, styles.cellBorderRight, styles.cellCenter]}>
+                      <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
+                        <Text style={[styles.estadoText, { color: info.color }]} numberOfLines={1}>
+                          {info.label}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Teléfono */}
+                    <View style={[styles.cell, { width: COL.telefono }, styles.cellBorderRight]}>
+                      <Text style={styles.cellText} numberOfLines={1}>{item.telefono}</Text>
+                    </View>
+
+                    {/* Empresa */}
+                    <View style={[styles.cell, { width: COL.empresa }, styles.cellBorderRight]}>
+                      <Text style={styles.cellText} numberOfLines={1}>{item.empresa ?? '—'}</Text>
+                    </View>
+
+                    {/* Recordatorio */}
+                    <View style={[styles.cell, { width: COL.rec }, styles.cellBorderRight]}>
+                      {recProximo ? (
+                        <View style={[styles.recChip, recVencido && styles.recChipVencido]}>
+                          <Text style={[styles.recChipText, recVencido && styles.recChipTextVencido]} numberOfLines={1}>
+                            {recVencido
+                              ? '⚠ Vencido'
+                              : new Date(recProximo.fecha_hora).toLocaleDateString('es-MX', {
+                                  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                                })}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.cellNone}>—</Text>
+                      )}
+                    </View>
+
+                    {/* Fecha */}
+                    <View style={[styles.cell, { width: COL.fecha }]}>
+                      <Text style={styles.cellFecha}>{tiempoRelativo(item.created_at)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+          </View>
+        </ScrollView>
       )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f0f2f5' },
+
+  // Pipeline
   pipeline: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
   pipelineContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, flexDirection: 'row' },
   pipelineChip: {
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    backgroundColor: '#fafafa',
-    minWidth: 70,
+    alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 10, borderWidth: 1, borderColor: '#e0e0e0',
+    backgroundColor: '#fafafa', minWidth: 70,
   },
   pipelineChipAll: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   pipelineCount: { fontSize: 18, fontWeight: '700', color: '#555' },
   pipelineCountAll: { color: '#fff' },
   pipelineLabel: { fontSize: 10, color: '#888', textAlign: 'center', marginTop: 1 },
   pipelineLabelAll: { color: '#c9a84c' },
+
+  // Search
   searchRow: { flexDirection: 'row', gap: 10, padding: 12, alignItems: 'center' },
   searchInput: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#1a1a2e',
+    flex: 1, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1,
+    borderColor: '#ddd', paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, color: '#1a1a2e',
   },
-  btnNuevo: {
-    backgroundColor: '#1a6470',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
+  btnNuevo: { backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
   btnNuevoText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+
+  // Empty
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a6470', marginBottom: 8 },
   emptySubtitle: { fontSize: 14, color: '#aaa', textAlign: 'center' },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginHorizontal: 12,
-    marginBottom: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#eee',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+
+  // Table header
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#1a6470',
+    borderBottomWidth: 2,
+    borderBottomColor: '#c9a84c',
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 4, gap: 8 },
-  cardNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
-  cardEmpresa: { fontSize: 12, color: '#888', marginTop: 1 },
-  estadoBadge: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 3, flexShrink: 0 },
-  estadoText: { fontSize: 11, fontWeight: '600' },
-  cardTel: { fontSize: 13, color: '#555', marginBottom: 8 },
-  cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardFecha: { fontSize: 11, color: '#bbb' },
-  recBadge: {
-    backgroundColor: '#e0f4f5',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  headerCell: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
   },
-  recBadgeVencido: { backgroundColor: '#fde8e8' },
-  recText: { fontSize: 11, color: '#1a6470', fontWeight: '500' },
-  recTextVencido: { color: '#c0392b' },
+  headerCellText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  sortIcon: { color: '#c9a84c', fontWeight: '400' },
+  cellBorderRight: { borderRightWidth: 1, borderRightColor: '#dde3e7' },
+
+  // Rows
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e8ecef',
+    minHeight: 48,
+  },
+  rowEven: { backgroundColor: '#ffffff' },
+  rowOdd:  { backgroundColor: '#f7f9fb' },
+
+  // Cells
+  cell: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+  },
+  cellCenter: { alignItems: 'center' },
+  cellNombre: { fontSize: 13, fontWeight: '700', color: '#1a1a2e' },
+  cellSub:    { fontSize: 11, color: '#999', marginTop: 1 },
+  cellText:   { fontSize: 13, color: '#444' },
+  cellFecha:  { fontSize: 12, color: '#888', textAlign: 'center' },
+  cellNone:   { fontSize: 13, color: '#ccc', textAlign: 'center' },
+
+  // Estado badge
+  estadoBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+  estadoText:  { fontSize: 11, fontWeight: '600' },
+
+  // Recordatorio chip
+  recChip: { backgroundColor: '#e0f4f5', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+  recChipVencido: { backgroundColor: '#fde8e8' },
+  recChipText: { fontSize: 11, color: '#1a6470', fontWeight: '500' },
+  recChipTextVencido: { color: '#c0392b', fontWeight: '700' },
 })

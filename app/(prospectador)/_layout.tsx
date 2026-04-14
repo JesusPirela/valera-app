@@ -33,7 +33,7 @@ export default function ProspectadorLayout() {
 
     const { data: pendientes } = await supabase
       .from('recordatorios')
-      .select('id, titulo, descripcion, cliente_id, clientes(nombre)')
+      .select('id, titulo, descripcion, fecha_hora, cliente_id, clientes(nombre)')
       .eq('user_id', user.id)
       .eq('completado', false)
       .eq('notificado', false)
@@ -41,20 +41,30 @@ export default function ProspectadorLayout() {
 
     if (!pendientes || pendientes.length === 0) return
 
+    let huboNuevas = false
     for (const r of pendientes) {
       if (!mountedRef.current) break
       const cliente = r.clientes as any
       const nombreCliente = cliente?.nombre ?? 'Cliente'
+      const fechaHora = new Date(r.fecha_hora).toLocaleString('es-MX', {
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+      })
 
-      await supabase.from('notificaciones').insert({
+      const { error } = await supabase.from('notificaciones').insert({
         user_id: user.id,
         titulo: `Recordatorio: ${r.titulo}`,
-        mensaje: `Seguimiento pendiente con ${nombreCliente}${r.descripcion ? `. ${r.descripcion}` : ''}`,
+        mensaje: `Tienes un seguimiento pendiente con ${nombreCliente} programado para el ${fechaHora}.${r.descripcion ? ` Nota: ${r.descripcion}` : ''}`,
         tipo: 'recordatorio',
       })
 
-      await supabase.from('recordatorios').update({ notificado: true }).eq('id', r.id)
+      if (!error) {
+        await supabase.from('recordatorios').update({ notificado: true }).eq('id', r.id)
+        huboNuevas = true
+      }
     }
+
+    // Actualizar el badge si se crearon nuevas notificaciones
+    if (huboNuevas && mountedRef.current) cargarNoLeidas()
   }
 
   useEffect(() => {
