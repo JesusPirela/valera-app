@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, FlatList,
   ActivityIndicator, TouchableOpacity, Alert,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
 type Notificacion = {
@@ -69,6 +69,10 @@ export default function AdminNotificaciones() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
+        <Text style={styles.backBtnText}>← Volver</Text>
+      </TouchableOpacity>
+
       {hayNoLeidas && (
         <TouchableOpacity
           style={styles.marcarTodasBtn}
@@ -124,6 +128,8 @@ export default function AdminNotificaciones() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: '#f5f5f5' },
+  backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
+  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
   marcarTodasBtn: {
     alignSelf: 'flex-end', marginBottom: 12,
     paddingHorizontal: 14, paddingVertical: 7,

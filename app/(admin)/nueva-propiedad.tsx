@@ -128,9 +128,16 @@ export default function NuevaPropiedad() {
     setLoading(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      const { count } = await supabase.from('propiedades').select('*', { count: 'exact', head: true })
-      const num = (count ?? 0) + 1
-      const codigo = `VR-${String(num).padStart(3, '0')}`
+      const { data: codigos } = await supabase.from('propiedades').select('codigo')
+      let maxNum = 0
+      for (const p of codigos ?? []) {
+        const match = p.codigo?.match(/VR-(\d+)/)
+        if (match) {
+          const n = parseInt(match[1], 10)
+          if (n > maxNum) maxNum = n
+        }
+      }
+      const codigo = `VR-${String(maxNum + 1).padStart(3, '0')}`
 
       const { data: propiedad, error: errorPropiedad } = await supabase
         .from('propiedades')
