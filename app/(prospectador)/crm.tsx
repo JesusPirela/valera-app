@@ -14,6 +14,7 @@ type Cliente = {
   empresa: string | null
   fuente_lead: string
   estado: string
+  tipo_operacion: string | null
   proximo_contacto: string | null
   created_at: string
   recordatorios: { id: string; titulo: string; fecha_hora: string; completado: boolean }[]
@@ -69,6 +70,7 @@ export default function CRM() {
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null)
+  const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
   const [sortCol, setSortCol] = useState<string>('created_at')
   const [sortAsc, setSortAsc] = useState(false)
 
@@ -76,7 +78,7 @@ export default function CRM() {
     setLoading(true)
     const { data, error } = await supabase
       .from('clientes')
-      .select('id, nombre, telefono, email, empresa, fuente_lead, estado, proximo_contacto, created_at, recordatorios(id, titulo, fecha_hora, completado)')
+      .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, recordatorios(id, titulo, fecha_hora, completado)')
       .order('updated_at', { ascending: false })
 
     if (!error) setClientes(data ?? [])
@@ -99,6 +101,7 @@ export default function CRM() {
     )
   }
   if (estadoFiltro) filtrados = filtrados.filter((c) => c.estado === estadoFiltro)
+  if (operacionFiltro) filtrados = filtrados.filter((c) => c.tipo_operacion === operacionFiltro)
 
   // Ordenamiento por columna
   filtrados = [...filtrados].sort((a, b) => {
@@ -134,6 +137,25 @@ export default function CRM() {
 
   return (
     <View style={styles.container}>
+      {/* Filtro Venta / Renta */}
+      <View style={styles.operacionRow}>
+        {([null, 'venta', 'renta'] as const).map((op) => {
+          const activo = operacionFiltro === op
+          const label = op === null ? 'Todos' : op === 'venta' ? 'Venta' : 'Renta'
+          return (
+            <TouchableOpacity
+              key={label}
+              style={[styles.operacionTab, activo && styles.operacionTabActivo]}
+              onPress={() => setOperacionFiltro(op)}
+            >
+              <Text style={[styles.operacionTabText, activo && styles.operacionTabTextActivo]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+
       {/* Pipeline chips */}
       <ScrollView
         horizontal
@@ -316,6 +338,21 @@ export default function CRM() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f5' },
+
+  // Operacion tabs
+  operacionRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  operacionTab: {
+    flex: 1, paddingVertical: 10, alignItems: 'center',
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  operacionTabActivo: { borderBottomColor: '#1a6470' },
+  operacionTabText: { fontSize: 13, fontWeight: '600', color: '#aaa' },
+  operacionTabTextActivo: { color: '#1a6470' },
 
   // Pipeline
   pipeline: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },

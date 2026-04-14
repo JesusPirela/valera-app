@@ -14,6 +14,7 @@ type ClienteAdmin = {
   email: string | null
   empresa: string | null
   estado: string
+  tipo_operacion: string | null
   created_at: string
   responsable_id: string
   prospectador_nombre: string
@@ -64,15 +65,20 @@ export default function AdminCRM() {
   const [sortCol, setSortCol] = useState('created_at')
   const [sortAsc, setSortAsc] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
 
   async function cargarClientes() {
     setLoading(true)
     setErrorMsg(null)
 
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) setCurrentUserId(user.id)
+
     // 1. Traer todos los clientes
     const { data: clientesData, error: errorClientes } = await supabase
       .from('clientes')
-      .select('id, nombre, telefono, email, empresa, estado, created_at, responsable_id')
+      .select('id, nombre, telefono, email, empresa, estado, tipo_operacion, created_at, responsable_id')
       .order('created_at', { ascending: false })
 
     if (errorClientes) {
@@ -107,6 +113,7 @@ export default function AdminCRM() {
         email: c.email,
         empresa: c.empresa,
         estado: c.estado,
+        tipo_operacion: c.tipo_operacion ?? null,
         created_at: c.created_at,
         responsable_id: c.responsable_id,
         prospectador_nombre: perfil?.nombre ?? 'Sin asignar',
@@ -185,12 +192,32 @@ export default function AdminCRM() {
         )
       }
       if (estadoFiltro) clientes = clientes.filter((c) => c.estado === estadoFiltro)
+      if (operacionFiltro) clientes = clientes.filter((c) => c.tipo_operacion === operacionFiltro)
       return { ...sec, data: clientes }
     })
     .filter((sec) => sec.data.length > 0)
 
   return (
     <View style={styles.container}>
+      {/* Filtro Venta / Renta */}
+      <View style={styles.operacionRow}>
+        {([null, 'venta', 'renta'] as const).map((op) => {
+          const activo = operacionFiltro === op
+          const label = op === null ? 'Todos' : op === 'venta' ? 'Venta' : 'Renta'
+          return (
+            <TouchableOpacity
+              key={label}
+              style={[styles.operacionTab, activo && styles.operacionTabActivo]}
+              onPress={() => setOperacionFiltro(op)}
+            >
+              <Text style={[styles.operacionTabText, activo && styles.operacionTabTextActivo]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+
       {/* Resumen global por estado */}
       <ScrollView
         horizontal
@@ -229,7 +256,7 @@ export default function AdminCRM() {
         })}
       </ScrollView>
 
-      {/* Búsqueda */}
+      {/* Búsqueda + botón nuevo */}
       <View style={styles.searchRow}>
         <TextInput
           style={styles.searchInput}
@@ -240,6 +267,12 @@ export default function AdminCRM() {
           autoCorrect={false}
           clearButtonMode="while-editing"
         />
+        <TouchableOpacity
+          style={styles.btnNuevo}
+          onPress={() => router.push('/(prospectador)/cliente-form?fromAdmin=1')}
+        >
+          <Text style={styles.btnNuevoText}>+ Nuevo</Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -325,7 +358,11 @@ export default function AdminCRM() {
                           <TouchableOpacity
                             key={item.id}
                             style={[styles.tableRow, isEven ? styles.rowEven : styles.rowOdd]}
-                            onPress={() => router.push(`/(admin)/detalle-cliente?id=${item.id}`)}
+                            onPress={() =>
+                            item.responsable_id === currentUserId
+                              ? router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)
+                              : router.push(`/(admin)/detalle-cliente?id=${item.id}`)
+                          }
                             activeOpacity={0.75}
                           >
                             {/* Nombre */}
@@ -377,6 +414,21 @@ export default function AdminCRM() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f4f5' },
 
+  // Operacion tabs
+  operacionRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  operacionTab: {
+    flex: 1, paddingVertical: 10, alignItems: 'center',
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  operacionTabActivo: { borderBottomColor: '#1a6470' },
+  operacionTabText: { fontSize: 13, fontWeight: '600', color: '#aaa' },
+  operacionTabTextActivo: { color: '#1a6470' },
+
   // Resumen
   resumenScroll: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
   resumenContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, flexDirection: 'row' },
@@ -392,11 +444,13 @@ const styles = StyleSheet.create({
   resumenLabelAll: { color: '#c9a84c' },
 
   // Search
-  searchRow: { padding: 12 },
+  searchRow: { flexDirection: 'row', gap: 10, padding: 12, alignItems: 'center' },
   searchInput: {
-    backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#ddd',
+    flex: 1, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#ddd',
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1a1a2e',
   },
+  btnNuevo: { backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
+  btnNuevoText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   // Empty
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },

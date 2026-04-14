@@ -14,12 +14,19 @@ import { ESTADOS } from './crm'
 
 // ── Fuentes de lead ──────────────────────────────────────
 const FUENTES = [
-  { value: 'referido',       label: 'Referido' },
-  { value: 'redes_sociales', label: 'Redes sociales' },
-  { value: 'sitio_web',      label: 'Sitio web' },
-  { value: 'llamada_fria',   label: 'Llamada fría' },
-  { value: 'evento',         label: 'Evento' },
-  { value: 'otro',           label: 'Otro' },
+  { value: 'marketplace',  label: 'Marketplace' },
+  { value: 'tokko',        label: 'Tokko' },
+  { value: 'campana_fb',   label: 'Campaña FB' },
+  { value: 'grupo_fb',     label: 'Grupo FB' },
+  { value: 'otro',         label: 'Otro' },
+]
+
+const TIPOS_CREDITO = [
+  { value: 'infonavit', label: 'Infonavit' },
+  { value: 'fovisste',  label: 'Fovisste' },
+  { value: 'bancario',  label: 'Bancario' },
+  { value: 'contado',   label: 'Contado' },
+  { value: 'otro',      label: 'Otro' },
 ]
 
 const ORDEN_ESTADOS = [
@@ -185,20 +192,37 @@ function ChipSelector<T extends string>({
 
 // ── Pantalla principal ───────────────────────────────────
 export default function ClienteForm() {
-  const params = useLocalSearchParams<{ id?: string }>()
+  const params = useLocalSearchParams<{ id?: string; fromAdmin?: string }>()
   const esEdicion = !!params.id
+  const fromAdmin = params.fromAdmin === '1'
 
   const [loading, setLoading] = useState(esEdicion)
   const [guardando, setGuardando] = useState(false)
 
+  // Común
+  const [tipoOperacion, setTipoOperacion] = useState<'venta' | 'renta' | null>(null)
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
-  const [email, setEmail] = useState('')
-  const [empresa, setEmpresa] = useState('')
   const [fuente, setFuente] = useState<string>('otro')
   const [estado, setEstado] = useState<string>('por_perfilar')
   const [notas, setNotas] = useState('')
   const [proximoContacto, setProximoContacto] = useState<Date | null>(null)
+
+  // Solo Venta
+  const [email, setEmail] = useState('')
+  const [empresa, setEmpresa] = useState('')
+  const [tipoCredito, setTipoCredito] = useState<string | null>(null)
+  const [presupuesto, setPresupuesto] = useState('')
+  const [zonaBusqueda, setZonaBusqueda] = useState('')
+
+  // Solo Renta
+  const [numPersonas, setNumPersonas] = useState('')
+  const [tieneMascotas, setTieneMascotas] = useState<boolean | null>(null)
+  const [detalleMascotas, setDetalleMascotas] = useState('')
+  const [fechaMudanza, setFechaMudanza] = useState('')
+  const [presupuestoRenta, setPresupuestoRenta] = useState('')
+  const [zonasInteres, setZonasInteres] = useState('')
+  const [problemasPoliza, setProblemasPoliza] = useState<boolean | null>(null)
 
   useEffect(() => {
     if (!esEdicion) return
@@ -209,12 +233,23 @@ export default function ClienteForm() {
       .single()
       .then(({ data }) => {
         if (data) {
+          setTipoOperacion(data.tipo_operacion ?? null)
           setNombre(data.nombre ?? '')
           setTelefono(data.telefono ?? '')
           setEmail(data.email ?? '')
           setEmpresa(data.empresa ?? '')
           setFuente(data.fuente_lead ?? 'otro')
           setEstado(data.estado ?? 'por_perfilar')
+          setTipoCredito(data.tipo_credito ?? null)
+          setPresupuesto(data.presupuesto ?? '')
+          setZonaBusqueda(data.zona_busqueda ?? '')
+          setNumPersonas(data.num_personas ?? '')
+          setTieneMascotas(data.tiene_mascotas ?? null)
+          setDetalleMascotas(data.detalle_mascotas ?? '')
+          setFechaMudanza(data.fecha_mudanza ?? '')
+          setPresupuestoRenta(data.presupuesto ?? '')
+          setZonasInteres(data.zona_busqueda ?? '')
+          setProblemasPoliza(data.problemas_poliza ?? null)
           setNotas(data.notas ?? '')
           setProximoContacto(data.proximo_contacto ? new Date(data.proximo_contacto) : null)
         }
@@ -234,26 +269,40 @@ export default function ClienteForm() {
       const { data: perfil } = await supabase.from('profiles').select('nombre').eq('id', user.id).single()
       const nombreProspectador = perfil?.nombre ?? 'Un prospectador'
 
+      const esRenta = tipoOperacion === 'renta'
+
       const payload = {
         nombre: nombre.trim(),
         telefono: telefono.trim(),
-        email: email.trim() || null,
-        empresa: empresa.trim() || null,
         fuente_lead: fuente,
         estado,
+        tipo_operacion: tipoOperacion,
         notas: notas.trim() || null,
         proximo_contacto: proximoContacto?.toISOString() ?? null,
+        // Venta
+        email: !esRenta ? email.trim() || null : null,
+        empresa: !esRenta ? empresa.trim() || null : null,
+        tipo_credito: !esRenta ? tipoCredito : null,
+        presupuesto: !esRenta
+          ? presupuesto.trim() || null
+          : presupuestoRenta.trim() || null,
+        zona_busqueda: !esRenta
+          ? zonaBusqueda.trim() || null
+          : zonasInteres.trim() || null,
+        // Renta
+        num_personas: esRenta ? numPersonas.trim() || null : null,
+        tiene_mascotas: esRenta ? tieneMascotas : null,
+        detalle_mascotas: esRenta && tieneMascotas ? detalleMascotas.trim() || null : null,
+        fecha_mudanza: esRenta ? fechaMudanza.trim() || null : null,
+        problemas_poliza: esRenta ? problemasPoliza : null,
       }
 
       if (esEdicion) {
         const { error } = await supabase.from('clientes').update(payload).eq('id', params.id!)
         if (error) { mostrarError('Error al guardar', error.message); return }
-
         await supabase.from('interacciones').insert({
-          cliente_id: params.id!,
-          user_id: user.id,
-          tipo: 'nota',
-          descripcion: 'Información del cliente actualizada.',
+          cliente_id: params.id!, user_id: user.id,
+          tipo: 'nota', descripcion: 'Información del cliente actualizada.',
         })
       } else {
         const { data, error } = await supabase
@@ -262,13 +311,10 @@ export default function ClienteForm() {
           .select('id')
           .single()
         if (error) { mostrarError('Error al registrar', error.message); return }
-
         if (data) {
           await supabase.from('interacciones').insert({
-            cliente_id: data.id,
-            user_id: user.id,
-            tipo: 'nota',
-            descripcion: 'Cliente registrado en el CRM.',
+            cliente_id: data.id, user_id: user.id,
+            tipo: 'nota', descripcion: 'Cliente registrado en el CRM.',
           })
           await supabase.rpc('notificar_admins_nuevo_cliente', {
             p_cliente_nombre: nombre.trim(),
@@ -278,7 +324,7 @@ export default function ClienteForm() {
         }
       }
 
-      router.replace('/(prospectador)/crm')
+      router.replace(fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm')
     } catch (e: any) {
       mostrarError('Error inesperado', e?.message ?? 'Intenta de nuevo.')
     } finally {
@@ -292,102 +338,204 @@ export default function ClienteForm() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.screenTitle}>{esEdicion ? 'Editar cliente' : 'Nuevo cliente'}</Text>
 
-      {/* Datos básicos */}
-      <Text style={styles.sectionTitle}>Datos de contacto</Text>
+      {/* ── 1. Tipo de operación (siempre primero) ── */}
+      <Text style={styles.sectionTitle}>Tipo de operación</Text>
+      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 24 }}>
+        {([{ value: 'venta', label: 'Venta' }, { value: 'renta', label: 'Renta' }] as const).map((op) => {
+          const activo = tipoOperacion === op.value
+          return (
+            <TouchableOpacity
+              key={op.value}
+              style={[styles.chip, activo && styles.chipActivo, { flex: 1, justifyContent: 'center', paddingVertical: 12 }]}
+              onPress={() => setTipoOperacion(op.value)}
+            >
+              <Text style={[styles.chipText, activo && styles.chipTextActivo, { fontSize: 15 }]}>
+                {op.label}
+              </Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
 
-      <Text style={styles.fieldLabel}>Nombre *</Text>
-      <TextInput
-        style={styles.input}
-        value={nombre}
-        onChangeText={setNombre}
-        placeholder="Nombre completo"
-        autoCapitalize="words"
-      />
+      {/* ── Si no hay selección, mostrar aviso ── */}
+      {!tipoOperacion && (
+        <View style={styles.sinTipoBox}>
+          <Text style={styles.sinTipoText}>Selecciona el tipo de operación para continuar</Text>
+        </View>
+      )}
 
-      <Text style={styles.fieldLabel}>Teléfono *</Text>
-      <TextInput
-        style={styles.input}
-        value={telefono}
-        onChangeText={setTelefono}
-        placeholder="442 000 0000"
-        keyboardType="phone-pad"
-      />
+      {/* ══════════ CAMPOS VENTA ══════════ */}
+      {tipoOperacion === 'venta' && (
+        <>
+          <Text style={styles.sectionTitle}>Datos de contacto</Text>
 
-      <Text style={styles.fieldLabel}>Email</Text>
-      <TextInput
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-        placeholder="correo@ejemplo.com"
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
+          <Text style={styles.fieldLabel}>Nombre completo *</Text>
+          <TextInput style={styles.input} value={nombre} onChangeText={setNombre}
+            placeholder="Nombre completo" autoCapitalize="words" />
 
-      <Text style={styles.fieldLabel}>Empresa</Text>
-      <TextInput
-        style={styles.input}
-        value={empresa}
-        onChangeText={setEmpresa}
-        placeholder="Nombre de la empresa (opcional)"
-        autoCapitalize="words"
-      />
+          <Text style={styles.fieldLabel}>Teléfono *</Text>
+          <TextInput style={styles.input} value={telefono} onChangeText={setTelefono}
+            placeholder="442 000 0000" keyboardType="phone-pad" />
 
-      {/* Estado */}
-      <Text style={styles.sectionTitle}>Etapa de venta</Text>
-      <ChipSelector
-        label="Estado"
-        options={ORDEN_ESTADOS.map((e) => ({
-          value: e,
-          label: ESTADOS[e]?.label ?? e,
-          color: ESTADOS[e]?.color,
-          bg: ESTADOS[e]?.bg,
-        }))}
-        value={estado}
-        onChange={setEstado}
-      />
+          <Text style={styles.fieldLabel}>Email</Text>
+          <TextInput style={styles.input} value={email} onChangeText={setEmail}
+            placeholder="correo@ejemplo.com" keyboardType="email-address" autoCapitalize="none" />
 
-      {/* Fuente */}
-      <Text style={styles.sectionTitle}>Origen del lead</Text>
-      <ChipSelector
-        label="Fuente"
-        options={FUENTES.map((f) => ({ value: f.value, label: f.label }))}
-        value={fuente}
-        onChange={setFuente}
-      />
+          <Text style={styles.fieldLabel}>Empresa</Text>
+          <TextInput style={styles.input} value={empresa} onChangeText={setEmpresa}
+            placeholder="Nombre de la empresa (opcional)" autoCapitalize="words" />
 
-      {/* Próxima acción */}
-      <Text style={styles.sectionTitle}>Seguimiento</Text>
-      <DateTimePicker
-        label="Próxima acción"
-        value={proximoContacto}
-        onChange={setProximoContacto}
-      />
+          <Text style={styles.sectionTitle}>Búsqueda</Text>
+          <Text style={styles.fieldLabel}>Zona en la que busca</Text>
+          <TextInput style={styles.input} value={zonaBusqueda} onChangeText={setZonaBusqueda}
+            placeholder="Ej: Centro, Juriquilla, Cumbres..." autoCapitalize="words" />
 
-      {/* Notas */}
-      <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Notas</Text>
-      <TextInput
-        style={[styles.input, styles.inputMulti]}
-        value={notas}
-        onChangeText={setNotas}
-        placeholder="Observaciones sobre este cliente..."
-        multiline
-        numberOfLines={4}
-        textAlignVertical="top"
-      />
+          <Text style={styles.sectionTitle}>Presupuesto</Text>
+          <Text style={styles.fieldLabel}>Tipo de crédito</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: tipoCredito ? 12 : 18 }}>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {TIPOS_CREDITO.map((tc) => {
+                const activo = tipoCredito === tc.value
+                return (
+                  <TouchableOpacity key={tc.value}
+                    style={[styles.chip, activo && styles.chipActivo]}
+                    onPress={() => setTipoCredito(activo ? null : tc.value)}
+                  >
+                    <Text style={[styles.chipText, activo && styles.chipTextActivo]}>{tc.label}</Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          </ScrollView>
+          {tipoCredito && (
+            <>
+              <Text style={styles.fieldLabel}>Monto / detalle</Text>
+              <TextInput style={styles.input} value={presupuesto} onChangeText={setPresupuesto}
+                placeholder="Ej: $1,500,000 o hasta $800k" />
+            </>
+          )}
+        </>
+      )}
 
-      {/* Guardar */}
-      <TouchableOpacity
-        style={[styles.btnGuardar, guardando && styles.btnGuardarDisabled]}
-        onPress={guardar}
-        disabled={guardando}
-      >
-        {guardando
-          ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.btnGuardarText}>{esEdicion ? 'Guardar cambios' : 'Registrar cliente'}</Text>
-        }
-      </TouchableOpacity>
+      {/* ══════════ CAMPOS RENTA ══════════ */}
+      {tipoOperacion === 'renta' && (
+        <>
+          <Text style={styles.sectionTitle}>Datos de contacto</Text>
 
-      <TouchableOpacity style={styles.btnCancelar} onPress={() => router.back()}>
+          <Text style={styles.fieldLabel}>Nombre completo *</Text>
+          <TextInput style={styles.input} value={nombre} onChangeText={setNombre}
+            placeholder="Nombre completo" autoCapitalize="words" />
+
+          <Text style={styles.fieldLabel}>Teléfono *</Text>
+          <TextInput style={styles.input} value={telefono} onChangeText={setTelefono}
+            placeholder="442 000 0000" keyboardType="phone-pad" />
+
+          <Text style={styles.sectionTitle}>Perfil de renta</Text>
+
+          <Text style={styles.fieldLabel}>¿Cuántas personas serían?</Text>
+          <TextInput style={styles.input} value={numPersonas} onChangeText={setNumPersonas}
+            placeholder="Ej: 2 adultos, 1 niño" autoCapitalize="sentences" />
+
+          <Text style={styles.fieldLabel}>¿Tiene mascotas?</Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: tieneMascotas ? 12 : 18 }}>
+            {[{ value: true, label: 'Sí' }, { value: false, label: 'No' }].map((op) => {
+              const activo = tieneMascotas === op.value
+              return (
+                <TouchableOpacity key={String(op.value)}
+                  style={[styles.chip, activo && styles.chipActivo, { flex: 1, justifyContent: 'center' }]}
+                  onPress={() => setTieneMascotas(op.value)}
+                >
+                  <Text style={[styles.chipText, activo && styles.chipTextActivo]}>{op.label}</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+          {tieneMascotas && (
+            <>
+              <Text style={styles.fieldLabel}>Detalle de mascotas</Text>
+              <TextInput style={[styles.input, styles.inputMulti]}
+                value={detalleMascotas} onChangeText={setDetalleMascotas}
+                placeholder="Ej: 1 perro mediano, 2 gatos..."
+                multiline numberOfLines={3} textAlignVertical="top" />
+            </>
+          )}
+
+          <Text style={styles.fieldLabel}>¿Cuándo tiene pensado mudarse?</Text>
+          <TextInput style={styles.input} value={fechaMudanza} onChangeText={setFechaMudanza}
+            placeholder="Ej: Inmediatamente, en 2 meses..." autoCapitalize="sentences" />
+
+          <Text style={styles.fieldLabel}>Presupuesto máximo</Text>
+          <TextInput style={styles.input} value={presupuestoRenta} onChangeText={setPresupuestoRenta}
+            placeholder="Ej: $8,000 / mes" />
+
+          <Text style={styles.fieldLabel}>Zonas de interés</Text>
+          <TextInput style={styles.input} value={zonasInteres} onChangeText={setZonasInteres}
+            placeholder="Ej: Juriquilla, Cumbres, Centro..." autoCapitalize="words" />
+
+          <Text style={styles.fieldLabel}>¿Tiene problemas con los requisitos de la póliza?</Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 18 }}>
+            {[{ value: true, label: 'Sí' }, { value: false, label: 'No' }].map((op) => {
+              const activo = problemasPoliza === op.value
+              return (
+                <TouchableOpacity key={String(op.value)}
+                  style={[styles.chip, activo && (op.value ? styles.chipPeligro : styles.chipActivo), { flex: 1, justifyContent: 'center' }]}
+                  onPress={() => setProblemasPoliza(op.value)}
+                >
+                  <Text style={[styles.chipText, activo && styles.chipTextActivo]}>{op.label}</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        </>
+      )}
+
+      {/* ── Campos comunes (solo si hay tipo seleccionado) ── */}
+      {tipoOperacion && (
+        <>
+          <Text style={styles.sectionTitle}>Etapa de venta</Text>
+          <ChipSelector
+            label="Estado"
+            options={ORDEN_ESTADOS.map((e) => ({
+              value: e, label: ESTADOS[e]?.label ?? e,
+              color: ESTADOS[e]?.color, bg: ESTADOS[e]?.bg,
+            }))}
+            value={estado}
+            onChange={setEstado}
+          />
+
+          <Text style={styles.sectionTitle}>Origen del lead</Text>
+          <ChipSelector
+            label="Fuente"
+            options={FUENTES.map((f) => ({ value: f.value, label: f.label }))}
+            value={fuente}
+            onChange={setFuente}
+          />
+
+          <Text style={styles.sectionTitle}>Seguimiento</Text>
+          <DateTimePicker label="Próxima acción" value={proximoContacto} onChange={setProximoContacto} />
+
+          <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Notas</Text>
+          <TextInput
+            style={[styles.input, styles.inputMulti]}
+            value={notas} onChangeText={setNotas}
+            placeholder="Observaciones sobre este cliente..."
+            multiline numberOfLines={4} textAlignVertical="top"
+          />
+
+          <TouchableOpacity
+            style={[styles.btnGuardar, guardando && styles.btnGuardarDisabled]}
+            onPress={guardar}
+            disabled={guardando}
+          >
+            {guardando
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.btnGuardarText}>{esEdicion ? 'Guardar cambios' : 'Registrar cliente'}</Text>
+            }
+          </TouchableOpacity>
+        </>
+      )}
+
+      <TouchableOpacity style={styles.btnCancelar} onPress={() => router.replace(fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm')}>
         <Text style={styles.btnCancelarText}>Cancelar</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -469,8 +617,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   chipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  chipPeligro: { backgroundColor: '#c0392b', borderColor: '#c0392b' },
   chipText: { fontSize: 13, color: '#555' },
   chipTextActivo: { color: '#fff', fontWeight: '700' },
+  sinTipoBox: {
+    backgroundColor: '#f0f4f5', borderRadius: 12, padding: 20,
+    alignItems: 'center', marginBottom: 24,
+    borderWidth: 1, borderColor: '#dde8e9', borderStyle: 'dashed',
+  },
+  sinTipoText: { fontSize: 14, color: '#aaa', textAlign: 'center' },
   btnGuardar: {
     backgroundColor: '#1a6470',
     borderRadius: 12,

@@ -22,12 +22,6 @@ import * as Sharing from 'expo-sharing'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 
-const COORDINADORES = [
-  { nombre: 'Chucho', telefono: '527821954946' },
-  { nombre: 'Alexis', telefono: '527822433928' },
-]
-
-
 type Propiedad = {
   id: string
   codigo: string
@@ -42,8 +36,12 @@ type Propiedad = {
   m2: number | null
   estacionamientos: number | null
   descripcion: string | null
+  created_by: string | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
+
+type SubidoPor = { nombre: string; telefono: string | null }
+
 
 function formatPrecio(precio: number | null) {
   if (precio == null) return 'Precio a consultar'
@@ -87,6 +85,7 @@ export default function DetallePropiedad() {
   const [nota, setNota] = useState('')
   const [notaGuardada, setNotaGuardada] = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
+  const [subidoPor, setSubidoPor] = useState<SubidoPor | null>(null)
   const scrollRef = useRef<ScrollView>(null)
 
   useEffect(() => {
@@ -131,38 +130,31 @@ export default function DetallePropiedad() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, propiedad_imagenes(url, orden)')
       .eq('id', id)
       .single()
 
-    if (!error && data) setPropiedad(data)
+    if (!error && data) {
+      setPropiedad(data)
+      if (data.created_by) {
+        const { data: perfil } = await supabase
+          .from('profiles')
+          .select('nombre, telefono')
+          .eq('id', data.created_by)
+          .maybeSingle()
+        if (perfil) {
+          setSubidoPor({ nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null })
+        }
+      }
+    }
     setLoading(false)
   }
 
-  function coordinarCita(telefono: string) {
-    if (!propiedad) return
+  function coordinarCita() {
+    if (!propiedad || !subidoPor?.telefono) return
     const mensaje = `Hola, quiero agendar una cita para la propiedad ${propiedad.codigo}.`
-    const url = `https://wa.me/${telefono}?text=${encodeURIComponent(mensaje)}`
+    const url = `https://wa.me/${subidoPor.telefono}?text=${encodeURIComponent(mensaje)}`
     Linking.openURL(url)
-  }
-
-  function abrirSelectorCoordinador() {
-    if (Platform.OS === 'web') {
-      const opciones = COORDINADORES.map((c, i) => `${i + 1}. ${c.nombre}`).join('\n')
-      const eleccion = window.prompt(`¿Con qué coordinador deseas hablar?\n\n${opciones}\n\nEscribe 1 o 2:`)
-      if (eleccion === '1') coordinarCita(COORDINADORES[0].telefono)
-      else if (eleccion === '2') coordinarCita(COORDINADORES[1].telefono)
-    } else {
-      Alert.alert(
-        'Coordinar cita',
-        '¿Con qué coordinador deseas hablar?',
-        [
-          { text: COORDINADORES[0].nombre, onPress: () => coordinarCita(COORDINADORES[0].telefono) },
-          { text: COORDINADORES[1].nombre, onPress: () => coordinarCita(COORDINADORES[1].telefono) },
-          { text: 'Cancelar', style: 'cancel' },
-        ]
-      )
-    }
   }
 
   async function compartirEnWhatsApp() {
@@ -412,6 +404,9 @@ export default function DetallePropiedad() {
               {capitalize(propiedad.estado)}
             </Text>
           )}
+          {subidoPor && (
+            <Text style={styles.asesorBadge}>👤 {subidoPor.nombre}</Text>
+          )}
         </View>
 
         {/* Título y precio */}
@@ -507,8 +502,14 @@ export default function DetallePropiedad() {
         )}
 
         {/* Botón coordinar cita */}
-        <TouchableOpacity style={styles.btnCita} onPress={abrirSelectorCoordinador}>
-          <Text style={styles.btnCitaText}>📅 Coordinar cita</Text>
+        <TouchableOpacity
+          style={[styles.btnCita, !subidoPor?.telefono && styles.btnDisabled]}
+          onPress={coordinarCita}
+          disabled={!subidoPor?.telefono}
+        >
+          <Text style={styles.btnCitaText}>
+            📅 Coordinar cita{subidoPor ? ` con ${subidoPor.nombre}` : ''}
+          </Text>
         </TouchableOpacity>
 
         {/* Botón compartir en WhatsApp */}
@@ -735,4 +736,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   btnCitaText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  asesorBadge: {
+    fontSize: 12,
+    color: '#5a3e00',
+    backgroundColor: '#fff3cd',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontWeight: '600',
+  },
 })

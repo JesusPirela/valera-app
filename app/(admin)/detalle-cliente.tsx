@@ -15,6 +15,10 @@ type Cliente = {
   empresa: string | null
   fuente_lead: string
   estado: string
+  tipo_operacion: string | null
+  tipo_credito: string | null
+  presupuesto: string | null
+  zona_busqueda: string | null
   notas: string | null
   proximo_contacto: string | null
   created_at: string
@@ -36,8 +40,16 @@ type Recordatorio = {
 }
 
 const FUENTE_LABELS: Record<string, string> = {
+  marketplace: 'Marketplace', tokko: 'Tokko',
+  campana_fb: 'Campaña FB', grupo_fb: 'Grupo FB', otro: 'Otro',
+  // legacy
   referido: 'Referido', redes_sociales: 'Redes sociales', sitio_web: 'Sitio web',
-  llamada_fria: 'Llamada fría', evento: 'Evento', otro: 'Otro',
+  llamada_fria: 'Llamada fría', evento: 'Evento',
+}
+
+const CREDITO_LABELS: Record<string, string> = {
+  infonavit: 'Infonavit', fovisste: 'Fovisste',
+  bancario: 'Bancario', contado: 'Contado', otro: 'Otro',
 }
 
 const TIPO_ICON: Record<string, string> = {
@@ -131,6 +143,30 @@ export default function AdminDetalleCliente() {
           <Text style={styles.infoLabel}>Fuente</Text>
           <Text style={styles.infoValue}>{FUENTE_LABELS[cliente.fuente_lead] ?? cliente.fuente_lead}</Text>
         </View>
+        {cliente.tipo_operacion ? (
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Busca en</Text>
+            <Text style={styles.infoValue}>{cliente.tipo_operacion === 'venta' ? 'Venta' : 'Renta'}</Text>
+          </View>
+        ) : null}
+        {cliente.zona_busqueda ? (
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Zona</Text>
+            <Text style={styles.infoValue}>{cliente.zona_busqueda}</Text>
+          </View>
+        ) : null}
+        {cliente.tipo_credito ? (
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Crédito</Text>
+            <Text style={styles.infoValue}>{CREDITO_LABELS[cliente.tipo_credito] ?? cliente.tipo_credito}</Text>
+          </View>
+        ) : null}
+        {cliente.presupuesto ? (
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Presupuesto</Text>
+            <Text style={styles.infoValue}>{cliente.presupuesto}</Text>
+          </View>
+        ) : null}
         {cliente.proximo_contacto ? (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Próx. contacto</Text>
