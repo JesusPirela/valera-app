@@ -59,6 +59,7 @@ export default function NuevaPropiedad() {
   const [imagenes, setImagenes] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [mejorando, setMejorando] = useState(false)
+  const [guardado, setGuardado] = useState(false)
 
   async function seleccionarImagenes() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -173,9 +174,8 @@ export default function NuevaPropiedad() {
         if (errorImagenes) throw errorImagenes
       }
 
-      Alert.alert('Éxito', 'Propiedad agregada correctamente.', [
-        { text: 'OK', onPress: () => router.back() },
-      ])
+      setGuardado(true)
+      setTimeout(() => router.replace('/(admin)/propiedades'), 1500)
     } catch (err: any) {
       Alert.alert('Error', err.message || 'No se pudo guardar la propiedad.')
     } finally {
@@ -327,6 +327,12 @@ export default function NuevaPropiedad() {
           />
         </View>
 
+        {guardado && (
+          <View style={styles.successBanner}>
+            <Text style={styles.successText}>✓ Propiedad guardada correctamente</Text>
+          </View>
+        )}
+
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleGuardar}
@@ -435,4 +441,10 @@ const styles = StyleSheet.create({
   },
   exclusivaLabel: { fontSize: 14, fontWeight: '600', color: '#1a6470' },
   exclusivaDesc: { fontSize: 12, color: '#888', marginTop: 2 },
+  successBanner: {
+    backgroundColor: '#e8f5e9', borderRadius: 10, borderWidth: 1,
+    borderColor: '#a5d6a7', paddingHorizontal: 16, paddingVertical: 12,
+    alignItems: 'center', marginTop: 24,
+  },
+  successText: { color: '#2e7d32', fontSize: 15, fontWeight: '700' },
 })
