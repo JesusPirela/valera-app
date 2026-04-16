@@ -13,6 +13,8 @@ import {
   Linking,
   Share,
   TextInput,
+  Modal,
+  FlatList,
 } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -41,6 +43,23 @@ type Propiedad = {
 }
 
 type SubidoPor = { nombre: string; telefono: string | null }
+
+type ClienteCRM = {
+  id: string
+  nombre: string
+  telefono: string
+  estado: string
+}
+
+const ESTADOS_LABEL: Record<string, string> = {
+  por_perfilar: 'Por perfilar',
+  no_contesta: 'No contesta',
+  cita_por_agendar: 'Cita por agendar',
+  cita_agendada: 'Cita agendada',
+  seguimiento_cierre: 'Seg. de cierre',
+  compro: 'Apartó / Compró',
+  descartado: 'Descartado',
+}
 
 
 function formatPrecio(precio: number | null) {
@@ -88,6 +107,18 @@ export default function DetallePropiedad() {
   const [subidoPor, setSubidoPor] = useState<SubidoPor | null>(null)
   const scrollRef = useRef<ScrollView>(null)
 
+  const [nombreUsuario, setNombreUsuario] = useState<string | null>(null)
+
+  // Modal selección de cliente para cita
+  const [modalCitaVisible, setModalCitaVisible] = useState(false)
+  const [clientesCRM, setClientesCRM] = useState<ClienteCRM[]>([])
+  const [busquedaCliente, setBusquedaCliente] = useState('')
+  const [loadingClientes, setLoadingClientes] = useState(false)
+  const [mostrarFormNuevo, setMostrarFormNuevo] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevoTelefono, setNuevoTelefono] = useState('')
+  const [guardandoCliente, setGuardandoCliente] = useState(false)
+
   useEffect(() => {
     if (!id) return
     cargarPropiedad()
@@ -128,6 +159,16 @@ export default function DetallePropiedad() {
 
   async function cargarPropiedad() {
     setLoading(true)
+    setSubidoPor(null)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: miPerfil } = await supabase
+        .from('profiles')
+        .select('nombre')
+        .eq('id', user.id)
+        .maybeSingle()
+      setNombreUsuario(miPerfil?.nombre ?? null)
+    }
     const { data, error } = await supabase
       .from('propiedades')
       .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, propiedad_imagenes(url, orden)')
@@ -150,11 +191,75 @@ export default function DetallePropiedad() {
     setLoading(false)
   }
 
-  function coordinarCita() {
-    if (!propiedad || !subidoPor?.telefono) return
-    const mensaje = `Hola, quiero agendar una cita para la propiedad ${propiedad.codigo}.`
-    const url = `https://wa.me/${subidoPor.telefono}?text=${encodeURIComponent(mensaje)}`
-    Linking.openURL(url)
+  function agendarValera() {
+    if (!propiedad) return
+    const nombre = nombreUsuario ?? 'Un prospectador'
+    const mensaje = `Hola, ${nombre} quiere agendar una cita para la propiedad *${propiedad.codigo}* con Valera Estudios.`
+    Linking.openURL(`https://wa.me/524428251381?text=${encodeURIComponent(mensaje)}`)
+  }
+
+  async function abrirModalCita() {
+    if (!propiedad) return
+    setBusquedaCliente('')
+    setMostrarFormNuevo(false)
+    setNuevoNombre('')
+    setNuevoTelefono('')
+    setModalCitaVisible(true)
+    setLoadingClientes(true)
+    const { data } = await supabase
+      .from('clientes')
+      .select('id, nombre, telefono, estado')
+      .order('nombre', { ascending: true })
+    setClientesCRM(data ?? [])
+    setLoadingClientes(false)
+  }
+
+  async function seleccionarClienteYCoordinar(cliente: ClienteCRM) {
+    if (!propiedad) return
+    await supabase
+      .from('clientes')
+      .update({ estado: 'cita_agendada', updated_at: new Date().toISOString() })
+      .eq('id', cliente.id)
+    setModalCitaVisible(false)
+    const mensaje = `Hola, quiero coordinar una cita para *${cliente.nombre}* (${cliente.telefono}) para la propiedad *${propiedad.codigo}*.`
+    if (subidoPor?.telefono) {
+      Linking.openURL(`https://wa.me/${subidoPor.telefono}?text=${encodeURIComponent(mensaje)}`)
+    } else {
+      Linking.openURL(`https://wa.me/524428251381?text=${encodeURIComponent(mensaje)}`)
+    }
+  }
+
+  async function guardarNuevoClienteYCoordinar() {
+    if (!nuevoNombre.trim()) {
+      if (Platform.OS === 'web') window.alert('El nombre es requerido')
+      else Alert.alert('Error', 'El nombre es requerido')
+      return
+    }
+    if (!nuevoTelefono.trim()) {
+      if (Platform.OS === 'web') window.alert('El teléfono es requerido')
+      else Alert.alert('Error', 'El teléfono es requerido')
+      return
+    }
+    setGuardandoCliente(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data, error } = await supabase
+      .from('clientes')
+      .insert({
+        nombre: nuevoNombre.trim(),
+        telefono: nuevoTelefono.trim(),
+        fuente_lead: 'otro',
+        estado: 'cita_por_agendar',
+        user_id: user?.id,
+      })
+      .select('id, nombre, telefono, estado')
+      .single()
+    setGuardandoCliente(false)
+    if (!error && data) {
+      await seleccionarClienteYCoordinar(data)
+    } else {
+      if (Platform.OS === 'web') window.alert('No se pudo guardar el cliente')
+      else Alert.alert('Error', 'No se pudo guardar el cliente')
+    }
   }
 
   async function compartirEnWhatsApp() {
@@ -503,13 +608,22 @@ export default function DetallePropiedad() {
 
         {/* Botón coordinar cita */}
         <TouchableOpacity
-          style={[styles.btnCita, !subidoPor?.telefono && styles.btnDisabled]}
-          onPress={coordinarCita}
-          disabled={!subidoPor?.telefono}
+          style={[styles.btnCita, !propiedad && styles.btnDisabled]}
+          onPress={abrirModalCita}
+          disabled={!propiedad}
         >
           <Text style={styles.btnCitaText}>
             📅 Coordinar cita{subidoPor ? ` con ${subidoPor.nombre}` : ''}
           </Text>
+        </TouchableOpacity>
+
+        {/* Botón agendar con Valera */}
+        <TouchableOpacity
+          style={[styles.btnValera, !propiedad && styles.btnDisabled]}
+          onPress={agendarValera}
+          disabled={!propiedad}
+        >
+          <Text style={styles.btnValeraText}>🏢 Agendar cita con Valera Estudios</Text>
         </TouchableOpacity>
 
         {/* Botón compartir en WhatsApp */}
@@ -546,6 +660,113 @@ export default function DetallePropiedad() {
           <Text style={styles.volverText}>← Volver a propiedades</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Modal selección de cliente */}
+      <Modal
+        visible={modalCitaVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setModalCitaVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitulo}>Seleccionar cliente</Text>
+              <TouchableOpacity onPress={() => setModalCitaVisible(false)}>
+                <Text style={styles.modalCerrar}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.modalBusqueda}
+              placeholder="Buscar por nombre o teléfono..."
+              value={busquedaCliente}
+              onChangeText={setBusquedaCliente}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            {loadingClientes ? (
+              <ActivityIndicator color="#1a6470" style={{ marginVertical: 24 }} />
+            ) : (
+              <FlatList
+                data={clientesCRM.filter((c) => {
+                  const q = busquedaCliente.trim().toLowerCase()
+                  if (!q) return true
+                  return c.nombre.toLowerCase().includes(q) || c.telefono.includes(q)
+                })}
+                keyExtractor={(item) => item.id}
+                style={{ maxHeight: 320 }}
+                ListEmptyComponent={
+                  <Text style={styles.modalVacio}>
+                    {busquedaCliente.trim() ? 'Sin resultados.' : 'No hay clientes en el CRM.'}
+                  </Text>
+                }
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.clienteRow}
+                    onPress={() => seleccionarClienteYCoordinar(item)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.clienteNombre}>{item.nombre}</Text>
+                      <Text style={styles.clienteTelefono}>{item.telefono}</Text>
+                    </View>
+                    <Text style={styles.clienteEstado}>
+                      {ESTADOS_LABEL[item.estado] ?? item.estado}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+
+            {/* Formulario nuevo cliente */}
+            {mostrarFormNuevo ? (
+              <View style={styles.formNuevo}>
+                <Text style={styles.formNuevoTitulo}>Nuevo cliente</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Nombre *"
+                  value={nuevoNombre}
+                  onChangeText={setNuevoNombre}
+                  autoCapitalize="words"
+                />
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Teléfono *"
+                  value={nuevoTelefono}
+                  onChangeText={setNuevoTelefono}
+                  keyboardType="phone-pad"
+                />
+                <View style={styles.formNuevoBtns}>
+                  <TouchableOpacity
+                    style={styles.formBtnCancelar}
+                    onPress={() => setMostrarFormNuevo(false)}
+                  >
+                    <Text style={styles.formBtnCancelarText}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.formBtnGuardar, guardandoCliente && styles.btnDisabled]}
+                    onPress={guardarNuevoClienteYCoordinar}
+                    disabled={guardandoCliente}
+                  >
+                    {guardandoCliente
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={styles.formBtnGuardarText}>Guardar y agendar</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.btnNuevoCliente}
+                onPress={() => setMostrarFormNuevo(true)}
+              >
+                <Text style={styles.btnNuevoClienteText}>+ Agregar nuevo cliente</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   )
 }
@@ -728,6 +949,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   notaGuardarText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  btnValera: {
+    backgroundColor: '#4a4a8a',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  btnValeraText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   btnCita: {
     backgroundColor: '#1a6b3a',
     borderRadius: 12,
@@ -744,5 +973,149 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
     fontWeight: '600',
+  },
+
+  // Modal selección de cliente
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 36,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  modalTitulo: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1a6470',
+  },
+  modalCerrar: {
+    fontSize: 18,
+    color: '#888',
+    paddingHorizontal: 6,
+  },
+  modalBusqueda: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 14,
+    color: '#1a6470',
+    marginBottom: 10,
+    backgroundColor: '#fafafa',
+  },
+  modalVacio: {
+    textAlign: 'center',
+    color: '#aaa',
+    fontSize: 14,
+    paddingVertical: 20,
+  },
+  clienteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    gap: 8,
+  },
+  clienteNombre: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1a6470',
+  },
+  clienteTelefono: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+  },
+  clienteEstado: {
+    fontSize: 11,
+    color: '#555',
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    flexShrink: 0,
+  },
+  btnNuevoCliente: {
+    marginTop: 14,
+    borderWidth: 1.5,
+    borderColor: '#1a6470',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  btnNuevoClienteText: {
+    color: '#1a6470',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  formNuevo: {
+    marginTop: 14,
+    backgroundColor: '#f8fafb',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#dde8ea',
+  },
+  formNuevoTitulo: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a6470',
+    marginBottom: 10,
+  },
+  formInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 14,
+    color: '#1a6470',
+    backgroundColor: '#fff',
+    marginBottom: 8,
+  },
+  formNuevoBtns: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  formBtnCancelar: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  formBtnCancelarText: {
+    color: '#666',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  formBtnGuardar: {
+    flex: 2,
+    backgroundColor: '#1a6470',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  formBtnGuardarText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
 })

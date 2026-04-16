@@ -120,12 +120,6 @@ export default function ProspectadorPropiedades() {
     )
   }
 
-  function agendarValera() {
-    const nombre = nombreUsuario ?? 'Un usuario'
-    const mensaje = `${nombre} quiere agendar cita con Valera Estudios.`
-    Linking.openURL(`https://wa.me/524428251381?text=${encodeURIComponent(mensaje)}`)
-  }
-
   function limpiarFiltros() {
     setFiltroOperacion(null)
     setFiltroTipo(null)
@@ -134,10 +128,6 @@ export default function ProspectadorPropiedades() {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.btnValera} onPress={agendarValera}>
-        <Text style={styles.btnValeraText}>🏢 Agendar cita con Valera Estudios</Text>
-      </TouchableOpacity>
-
       <TextInput
         style={styles.searchInput}
         placeholder="Buscar por título, código o dirección..."
@@ -402,12 +392,4 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   precio: { fontSize: 16, fontWeight: '700', color: '#1a6470', marginTop: 4 },
-  btnValera: {
-    backgroundColor: '#4a4a8a',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  btnValeraText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 })
