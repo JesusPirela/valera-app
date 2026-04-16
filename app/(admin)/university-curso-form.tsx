@@ -1,0 +1,400 @@
+import { useState, useEffect } from 'react'
+import {
+  View, Text, StyleSheet, ScrollView, TextInput,
+  TouchableOpacity, ActivityIndicator, Switch, Platform, Alert,
+} from 'react-native'
+import { router, useLocalSearchParams } from 'expo-router'
+import { supabase } from '../../lib/supabase'
+
+type LeccionDraft = {
+  _key: string
+  id?: string
+  titulo: string
+  descripcion: string
+  youtube_url: string
+  contenido: string
+  orden: number
+  _borrar?: boolean
+}
+
+const NIVELES = ['basico', 'intermedio', 'avanzado'] as const
+const CATEGORIAS = ['Fundamentos', 'Ventas', 'CRM', 'Producto', 'Soft skills', 'Otro']
+
+function alerta(titulo: string, msg: string) {
+  if (Platform.OS === 'web') window.alert(`${titulo}: ${msg}`)
+  else Alert.alert(titulo, msg)
+}
+
+let keyCounter = 0
+function nuevaKey() { return String(++keyCounter) }
+
+export default function UniversityCursoForm() {
+  const { id: cursoId } = useLocalSearchParams<{ id?: string }>()
+  const esEdicion = !!cursoId
+
+  const [loading, setLoading] = useState(esEdicion)
+  const [guardando, setGuardando] = useState(false)
+
+  const [titulo, setTitulo] = useState('')
+  const [descripcion, setDescripcion] = useState('')
+  const [descripcionCorta, setDescripcionCorta] = useState('')
+  const [imagenUrl, setImagenUrl] = useState('')
+  const [instructor, setInstructor] = useState('Valera University')
+  const [duracionTexto, setDuracionTexto] = useState('')
+  const [categoria, setCategoria] = useState('Fundamentos')
+  const [nivel, setNivel] = useState<typeof NIVELES[number]>('basico')
+  const [publicado, setPublicado] = useState(false)
+  const [lecciones, setLecciones] = useState<LeccionDraft[]>([])
+
+  useEffect(() => {
+    if (!esEdicion) return
+    cargarCurso()
+  }, [cursoId])
+
+  async function cargarCurso() {
+    const [{ data: curso }, { data: lecsData }] = await Promise.all([
+      supabase.from('vu_cursos').select('*').eq('id', cursoId!).single(),
+      supabase.from('vu_lecciones').select('*').eq('curso_id', cursoId!).order('orden'),
+    ])
+    if (curso) {
+      setTitulo(curso.titulo ?? '')
+      setDescripcion(curso.descripcion ?? '')
+      setDescripcionCorta(curso.descripcion_corta ?? '')
+      setImagenUrl(curso.imagen_url ?? '')
+      setInstructor(curso.instructor ?? 'Valera University')
+      setDuracionTexto(curso.duracion_texto ?? '')
+      setCategoria(curso.categoria ?? 'Fundamentos')
+      setNivel(curso.nivel ?? 'basico')
+      setPublicado(curso.publicado ?? false)
+    }
+    setLecciones(
+      (lecsData ?? []).map((l: any) => ({
+        _key: nuevaKey(),
+        id: l.id,
+        titulo: l.titulo ?? '',
+        descripcion: l.descripcion ?? '',
+        youtube_url: l.youtube_url ?? '',
+        contenido: l.contenido ?? '',
+        orden: l.orden,
+      }))
+    )
+    setLoading(false)
+  }
+
+  function agregarLeccion() {
+    setLecciones((prev) => [
+      ...prev,
+      {
+        _key: nuevaKey(),
+        titulo: '',
+        descripcion: '',
+        youtube_url: '',
+        contenido: '',
+        orden: prev.filter((l) => !l._borrar).length + 1,
+      },
+    ])
+  }
+
+  function actualizarLeccion(key: string, campo: keyof LeccionDraft, valor: string) {
+    setLecciones((prev) => prev.map((l) => l._key === key ? { ...l, [campo]: valor } : l))
+  }
+
+  function marcarBorrar(key: string) {
+    setLecciones((prev) => prev.map((l) => l._key === key ? { ...l, _borrar: true } : l))
+  }
+
+  function moverLeccion(key: string, dir: -1 | 1) {
+    setLecciones((prev) => {
+      const visibles = prev.filter((l) => !l._borrar)
+      const idx = visibles.findIndex((l) => l._key === key)
+      const nuevoIdx = idx + dir
+      if (nuevoIdx < 0 || nuevoIdx >= visibles.length) return prev
+      const arr = [...visibles]
+      ;[arr[idx], arr[nuevoIdx]] = [arr[nuevoIdx], arr[idx]]
+      const reordenadas = arr.map((l, i) => ({ ...l, orden: i + 1 }))
+      return reordenadas
+    })
+  }
+
+  async function guardar() {
+    if (!titulo.trim()) { alerta('Campo requerido', 'El título del curso es obligatorio.'); return }
+
+    setGuardando(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      const payload = {
+        titulo: titulo.trim(),
+        descripcion: descripcion.trim() || null,
+        descripcion_corta: descripcionCorta.trim() || null,
+        imagen_url: imagenUrl.trim() || null,
+        instructor: instructor.trim() || 'Valera University',
+        duracion_texto: duracionTexto.trim() || null,
+        categoria,
+        nivel,
+        publicado,
+        created_by: user?.id,
+      }
+
+      let idFinal = cursoId
+      if (esEdicion) {
+        const { error } = await supabase.from('vu_cursos').update(payload).eq('id', cursoId!)
+        if (error) { alerta('Error al guardar', error.message); return }
+      } else {
+        const { data, error } = await supabase.from('vu_cursos').insert(payload).select('id').single()
+        if (error || !data) { alerta('Error al crear', error?.message ?? 'Error desconocido'); return }
+        idFinal = data.id
+      }
+
+      // Sincronizar lecciones
+      const visibles = lecciones.filter((l) => !l._borrar)
+      const aEliminar = lecciones.filter((l) => l._borrar && l.id)
+      const aInsertar = visibles.filter((l) => !l.id)
+      const aActualizar = visibles.filter((l) => !!l.id)
+
+      await Promise.all([
+        ...aEliminar.map((l) => supabase.from('vu_lecciones').delete().eq('id', l.id!)),
+        ...aActualizar.map((l) => supabase.from('vu_lecciones').update({
+          titulo: l.titulo.trim(),
+          descripcion: l.descripcion.trim() || null,
+          youtube_url: l.youtube_url.trim() || null,
+          contenido: l.contenido.trim() || null,
+          orden: l.orden,
+        }).eq('id', l.id!)),
+        aInsertar.length > 0
+          ? supabase.from('vu_lecciones').insert(aInsertar.map((l) => ({
+              curso_id: idFinal,
+              titulo: l.titulo.trim() || 'Sin título',
+              descripcion: l.descripcion.trim() || null,
+              youtube_url: l.youtube_url.trim() || null,
+              contenido: l.contenido.trim() || null,
+              orden: l.orden,
+            })))
+          : Promise.resolve(),
+      ])
+
+      router.replace('/(admin)/university')
+    } catch (e: any) {
+      alerta('Error inesperado', e?.message ?? 'Intenta de nuevo.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
+
+  const leccionesVisibles = lecciones.filter((l) => !l._borrar)
+
+  return (
+    <ScrollView style={estilos.container} contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
+      {/* Header */}
+      <View style={estilos.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={estilos.backText}>← Volver</Text>
+        </TouchableOpacity>
+        <Text style={estilos.titulo}>{esEdicion ? 'Editar curso' : 'Nuevo curso'}</Text>
+      </View>
+
+      <View style={estilos.body}>
+        {/* Datos del curso */}
+        <Text style={estilos.seccion}>DATOS DEL CURSO</Text>
+
+        <Text style={estilos.label}>Título *</Text>
+        <TextInput style={estilos.input} value={titulo} onChangeText={setTitulo} placeholder="Ej. Introducción a Valera Real Estate" />
+
+        <Text style={estilos.label}>Descripción corta</Text>
+        <TextInput style={estilos.input} value={descripcionCorta} onChangeText={setDescripcionCorta} placeholder="Descripción visible en la tarjeta del curso" />
+
+        <Text style={estilos.label}>Descripción completa</Text>
+        <TextInput style={[estilos.input, estilos.inputMulti]} value={descripcion} onChangeText={setDescripcion} placeholder="Qué aprenderán los prospectadores..." multiline numberOfLines={4} textAlignVertical="top" />
+
+        <Text style={estilos.label}>Instructor</Text>
+        <TextInput style={estilos.input} value={instructor} onChangeText={setInstructor} placeholder="Valera University" />
+
+        <Text style={estilos.label}>Duración estimada</Text>
+        <TextInput style={estilos.input} value={duracionTexto} onChangeText={setDuracionTexto} placeholder="Ej. ~60 min · 4 lecciones" />
+
+        <Text style={estilos.label}>URL portada (imagen)</Text>
+        <TextInput style={estilos.input} value={imagenUrl} onChangeText={setImagenUrl} placeholder="https://..." autoCapitalize="none" />
+
+        {/* Categoría */}
+        <Text style={estilos.label}>Categoría</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {CATEGORIAS.map((c) => (
+              <TouchableOpacity
+                key={c}
+                style={[estilos.chip, categoria === c && estilos.chipActivo]}
+                onPress={() => setCategoria(c)}
+              >
+                <Text style={[estilos.chipText, categoria === c && estilos.chipTextActivo]}>{c}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+
+        {/* Nivel */}
+        <Text style={estilos.label}>Nivel</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+          {NIVELES.map((n) => (
+            <TouchableOpacity
+              key={n}
+              style={[estilos.chip, nivel === n && estilos.chipActivo, { flex: 1 }]}
+              onPress={() => setNivel(n)}
+            >
+              <Text style={[estilos.chipText, nivel === n && estilos.chipTextActivo, { textAlign: 'center' }]}>
+                {n.charAt(0).toUpperCase() + n.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Publicado */}
+        <View style={estilos.publishRow}>
+          <View>
+            <Text style={estilos.label}>Publicar curso</Text>
+            <Text style={estilos.publishSub}>
+              {publicado ? 'Visible para todos los prospectadores' : 'Solo visible para admins (borrador)'}
+            </Text>
+          </View>
+          <Switch
+            value={publicado}
+            onValueChange={setPublicado}
+            trackColor={{ false: '#ddd', true: '#1a6470' }}
+            thumbColor={publicado ? '#c9a84c' : '#fff'}
+          />
+        </View>
+
+        {/* Lecciones */}
+        <View style={estilos.seccionHeader}>
+          <Text style={estilos.seccion}>LECCIONES ({leccionesVisibles.length})</Text>
+          <TouchableOpacity style={estilos.btnAgregar} onPress={agregarLeccion}>
+            <Text style={estilos.btnAgregarText}>+ Agregar</Text>
+          </TouchableOpacity>
+        </View>
+
+        {leccionesVisibles.length === 0 && (
+          <Text style={estilos.leccionesEmpty}>Agrega al menos una lección al curso</Text>
+        )}
+
+        {leccionesVisibles.map((lec, idx) => (
+          <View key={lec._key} style={estilos.leccionCard}>
+            <View style={estilos.leccionCardHeader}>
+              <View style={estilos.leccionNum}>
+                <Text style={estilos.leccionNumText}>{idx + 1}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={estilos.leccionLabel}>Lección {idx + 1}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 4 }}>
+                {idx > 0 && (
+                  <TouchableOpacity style={estilos.ordenBtn} onPress={() => moverLeccion(lec._key, -1)}>
+                    <Text style={estilos.ordenBtnText}>↑</Text>
+                  </TouchableOpacity>
+                )}
+                {idx < leccionesVisibles.length - 1 && (
+                  <TouchableOpacity style={estilos.ordenBtn} onPress={() => moverLeccion(lec._key, 1)}>
+                    <Text style={estilos.ordenBtnText}>↓</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={estilos.borrarBtn} onPress={() => marcarBorrar(lec._key)}>
+                  <Text style={estilos.borrarBtnText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TextInput
+              style={estilos.lecInput}
+              value={lec.titulo}
+              onChangeText={(v) => actualizarLeccion(lec._key, 'titulo', v)}
+              placeholder="Título de la lección *"
+            />
+            <TextInput
+              style={estilos.lecInput}
+              value={lec.descripcion}
+              onChangeText={(v) => actualizarLeccion(lec._key, 'descripcion', v)}
+              placeholder="Descripción corta (opcional)"
+            />
+            <TextInput
+              style={estilos.lecInput}
+              value={lec.youtube_url}
+              onChangeText={(v) => actualizarLeccion(lec._key, 'youtube_url', v)}
+              placeholder="URL de YouTube (https://youtu.be/...)"
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={[estilos.lecInput, { height: 80 }]}
+              value={lec.contenido}
+              onChangeText={(v) => actualizarLeccion(lec._key, 'contenido', v)}
+              placeholder="Notas o texto explicativo de la lección (opcional)"
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </View>
+        ))}
+
+        {/* Acciones */}
+        <TouchableOpacity
+          style={[estilos.btnGuardar, guardando && { opacity: 0.6 }]}
+          onPress={guardar}
+          disabled={guardando}
+        >
+          {guardando
+            ? <ActivityIndicator color="#fff" />
+            : <Text style={estilos.btnGuardarText}>{esEdicion ? '💾 Guardar cambios' : '🚀 Crear curso'}</Text>
+          }
+        </TouchableOpacity>
+
+        <TouchableOpacity style={estilos.btnCancelar} onPress={() => router.back()}>
+          <Text style={estilos.btnCancelarText}>Cancelar</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  )
+}
+
+const estilos = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f0f4f5' },
+  header: { backgroundColor: '#1a6470', padding: 20, paddingTop: 16, gap: 8 },
+  backText: { color: '#c9a84c', fontSize: 14, fontWeight: '600' },
+  titulo: { color: '#fff', fontSize: 20, fontWeight: '800' },
+  body: { padding: 20 },
+  seccion: { fontSize: 11, fontWeight: '700', color: '#1a6470', letterSpacing: 1, marginBottom: 12, marginTop: 8 },
+  seccionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 8 },
+  label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
+  input: {
+    backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#ddd',
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1a1a2e', marginBottom: 14,
+  },
+  inputMulti: { height: 100, textAlignVertical: 'top' },
+  chip: {
+    borderWidth: 1, borderColor: '#ddd', borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 7, backgroundColor: '#fff',
+  },
+  chipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  chipText: { fontSize: 13, color: '#555' },
+  chipTextActivo: { color: '#fff', fontWeight: '700' },
+  publishRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 24, borderWidth: 1, borderColor: '#ddd' },
+  publishSub: { fontSize: 11, color: '#888', marginTop: 2 },
+  btnAgregar: { backgroundColor: '#1a6470', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  btnAgregarText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  leccionesEmpty: { color: '#aaa', textAlign: 'center', paddingVertical: 24, fontSize: 13 },
+  leccionCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#dde8e9' },
+  leccionCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
+  leccionNum: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#1a6470', alignItems: 'center', justifyContent: 'center' },
+  leccionNumText: { color: '#c9a84c', fontSize: 12, fontWeight: '800' },
+  leccionLabel: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
+  ordenBtn: { padding: 6, backgroundColor: '#f0f4f5', borderRadius: 6 },
+  ordenBtnText: { fontSize: 13, color: '#1a6470', fontWeight: '700' },
+  borrarBtn: { padding: 6, backgroundColor: '#fde8e8', borderRadius: 6 },
+  borrarBtnText: { fontSize: 13, color: '#c0392b', fontWeight: '700' },
+  lecInput: {
+    backgroundColor: '#f9fafb', borderRadius: 8, borderWidth: 1, borderColor: '#e8eef0',
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#1a1a2e', marginBottom: 10,
+  },
+  btnGuardar: { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
+  btnGuardarText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  btnCancelar: { alignItems: 'center', paddingVertical: 14 },
+  btnCancelarText: { color: '#aaa', fontSize: 14 },
+})

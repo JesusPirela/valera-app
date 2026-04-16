@@ -120,6 +120,7 @@ export default function ProspectadorLayout() {
     >
       <Tabs.Screen name="propiedades" options={{ title: 'Propiedades' }} />
       <Tabs.Screen name="crm" options={{ title: 'Clientes' }} />
+      <Tabs.Screen name="university" options={{ title: 'Universidad', tabBarLabel: '🎓 Universidad' }} />
       <Tabs.Screen
         name="notificaciones"
         options={{
@@ -128,9 +129,11 @@ export default function ProspectadorLayout() {
         }}
       />
       {/* Pantallas de detalle — ocultas del tab bar */}
-      <Tabs.Screen name="detalle-propiedad"  options={{ href: null, title: 'Detalle' }} />
-      <Tabs.Screen name="cliente-form"       options={{ href: null, title: 'Cliente' }} />
-      <Tabs.Screen name="detalle-cliente"    options={{ href: null, title: 'Cliente' }} />
+      <Tabs.Screen name="detalle-propiedad"    options={{ href: null, title: 'Detalle' }} />
+      <Tabs.Screen name="cliente-form"         options={{ href: null, title: 'Cliente' }} />
+      <Tabs.Screen name="detalle-cliente"      options={{ href: null, title: 'Cliente' }} />
+      <Tabs.Screen name="university-curso"     options={{ href: null, title: 'Curso' }} />
+      <Tabs.Screen name="university-leccion"   options={{ href: null, title: 'Lección' }} />
     </Tabs>
   )
 }

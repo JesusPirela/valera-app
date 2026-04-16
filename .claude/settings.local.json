@@ -7,7 +7,9 @@
       "Bash(cat -n f:/github/valera-app/app/\\\\\\(admin\\\\\\)/_layout.tsx)",
       "Bash(ls f:/github/valera-app/app/\\\\\\(admin\\\\\\)/)",
       "Bash(supabase --version)",
-      "WebFetch(domain:ystxicgrryyzhrxinsbq.supabase.co)"
+      "WebFetch(domain:ystxicgrryyzhrxinsbq.supabase.co)",
+      "Bash(node -e ' *)",
+      "Bash(npx expo *)"
     ]
   }
 }
