@@ -9,7 +9,10 @@
       "Bash(supabase --version)",
       "WebFetch(domain:ystxicgrryyzhrxinsbq.supabase.co)",
       "Bash(node -e ' *)",
-      "Bash(npx expo *)"
+      "Bash(npx expo *)",
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('jspdf'\\); console.log\\('jspdf ok'\\)\")",
+      "Bash(netstat -ano)"
     ]
   }
 }
