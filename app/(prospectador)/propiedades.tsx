@@ -59,6 +59,8 @@ export default function ProspectadorPropiedades() {
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [rol, setRol] = useState<string | null>(null)
   const [nombreUsuario, setNombreUsuario] = useState<string | null>(null)
+  const [publicadas, setPublicadas] = useState<Set<string>>(new Set())
+  const [toggling, setToggling] = useState<Set<string>>(new Set())
 
   const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
@@ -93,7 +95,42 @@ export default function ProspectadorPropiedades() {
     } else {
       setPropiedades(data ?? [])
     }
+
+    // Cargar cuáles ya publicó el usuario
+    if (user) {
+      const { data: pub } = await supabase
+        .from('propiedad_publicada')
+        .select('propiedad_id')
+        .eq('user_id', user.id)
+      setPublicadas(new Set((pub ?? []).map((r: { propiedad_id: string }) => r.propiedad_id)))
+    }
+
     setLoading(false)
+  }
+
+  async function togglePublicada(propiedadId: string) {
+    if (toggling.has(propiedadId)) return
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    setToggling((prev) => new Set(prev).add(propiedadId))
+
+    const yaPublicada = publicadas.has(propiedadId)
+    if (yaPublicada) {
+      await supabase
+        .from('propiedad_publicada')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('propiedad_id', propiedadId)
+      setPublicadas((prev) => { const s = new Set(prev); s.delete(propiedadId); return s })
+    } else {
+      await supabase
+        .from('propiedad_publicada')
+        .insert({ user_id: user.id, propiedad_id: propiedadId })
+      setPublicadas((prev) => new Set(prev).add(propiedadId))
+    }
+
+    setToggling((prev) => { const s = new Set(prev); s.delete(propiedadId); return s })
   }
 
   useFocusEffect(useCallback(() => { cargarPropiedades() }, []))
@@ -243,7 +280,23 @@ export default function ProspectadorPropiedades() {
                     </View>
                   )}
 
-                  <Text style={styles.precio}>{formatPrecio(item.precio)}</Text>
+                  <View style={styles.cardFooter}>
+                    <Text style={styles.precio}>{formatPrecio(item.precio)}</Text>
+                    <TouchableOpacity
+                      style={[styles.publicadaBtn, publicadas.has(item.id) && styles.publicadaBtnActive]}
+                      onPress={(e) => { e.stopPropagation(); togglePublicada(item.id) }}
+                      disabled={toggling.has(item.id)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {toggling.has(item.id) ? (
+                        <ActivityIndicator size="small" color={publicadas.has(item.id) ? '#fff' : '#1a6470'} />
+                      ) : (
+                        <Text style={[styles.publicadaBtnText, publicadas.has(item.id) && styles.publicadaBtnTextActive]}>
+                          {publicadas.has(item.id) ? '✓ Publicada' : 'Publicar'}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </TouchableOpacity>
             )
@@ -391,5 +444,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  precio: { fontSize: 16, fontWeight: '700', color: '#1a6470', marginTop: 4 },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  precio: { fontSize: 16, fontWeight: '700', color: '#1a6470' },
+  publicadaBtn: {
+    borderWidth: 1.5,
+    borderColor: '#1a6470',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  publicadaBtnActive: {
+    backgroundColor: '#1a6470',
+    borderColor: '#1a6470',
+  },
+  publicadaBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1a6470',
+  },
+  publicadaBtnTextActive: {
+    color: '#fff',
+  },
 })

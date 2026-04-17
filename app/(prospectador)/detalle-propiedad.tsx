@@ -225,7 +225,12 @@ export default function DetallePropiedad() {
     if (subidoPor?.telefono) {
       Linking.openURL(`https://wa.me/${subidoPor.telefono}?text=${encodeURIComponent(mensaje)}`)
     } else {
-      Linking.openURL(`https://wa.me/524428251381?text=${encodeURIComponent(mensaje)}`)
+      const nombre = subidoPor?.nombre ?? 'El asesor que subió esta propiedad'
+      if (Platform.OS === 'web') {
+        window.alert(`${nombre} no tiene un número de WhatsApp configurado en su perfil.`)
+      } else {
+        Alert.alert('Sin teléfono', `${nombre} no tiene un número de WhatsApp configurado en su perfil.`)
+      }
     }
   }
 
