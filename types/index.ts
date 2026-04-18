@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'prospectador'
+export type UserRole = 'admin' | 'prospectador' | 'prospectador_plus' | 'nuevo'
 
 export type PropertyType = 'casa' | 'depa' | 'terreno' | 'local'
 export type PropertyModality = 'venta' | 'renta'

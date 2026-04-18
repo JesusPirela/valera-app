@@ -39,6 +39,8 @@ type Propiedad = {
   estacionamientos: number | null
   descripcion: string | null
   created_by: string | null
+  es_constructora: boolean | null
+  nombre_constructora: string | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
@@ -118,6 +120,17 @@ export default function DetallePropiedad() {
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoTelefono, setNuevoTelefono] = useState('')
   const [guardandoCliente, setGuardandoCliente] = useState(false)
+  const [solicitandoDiseno, setSolicitandoDiseno] = useState(false)
+
+  // Paso 2: selección de fecha/hora de la cita
+  const [clienteParaCita, setClienteParaCita] = useState<ClienteCRM | null>(null)
+  const [pasoCita, setPasoCita] = useState<'seleccion' | 'fecha'>('seleccion')
+  const [fechaCita, setFechaCita] = useState<Date>(new Date())
+
+  function cerrarModalCita() {
+    setModalCitaVisible(false)
+    setPasoCita('seleccion')
+  }
 
   useEffect(() => {
     if (!id) return
@@ -171,12 +184,12 @@ export default function DetallePropiedad() {
     }
     const { data, error } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, es_constructora, nombre_constructora, propiedad_imagenes(url, orden)')
       .eq('id', id)
       .single()
 
     if (!error && data) {
-      setPropiedad(data)
+      setPropiedad(data as Propiedad)
       if (data.created_by) {
         const { data: perfil } = await supabase
           .from('profiles')
@@ -189,6 +202,43 @@ export default function DetallePropiedad() {
       }
     }
     setLoading(false)
+  }
+
+  async function pedirDiseno() {
+    if (!propiedad) return
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const hoyInicio = new Date()
+    hoyInicio.setHours(0, 0, 0, 0)
+
+    const { count } = await supabase
+      .from('propiedad_actividad')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('tipo', 'solicitud_diseno')
+      .gte('created_at', hoyInicio.toISOString())
+
+    if ((count ?? 0) > 0) {
+      if (Platform.OS === 'web') {
+        window.alert('Ya solicitaste un diseño hoy. Solo puedes pedir 1 diseño por día.')
+      } else {
+        Alert.alert('Límite alcanzado', 'Ya solicitaste un diseño hoy. Solo puedes pedir 1 diseño por día.')
+      }
+      return
+    }
+
+    setSolicitandoDiseno(true)
+    await supabase.from('propiedad_actividad').insert({
+      propiedad_id: propiedad.id,
+      user_id: user.id,
+      tipo: 'solicitud_diseno',
+    })
+    setSolicitandoDiseno(false)
+
+    const nombre = nombreUsuario ?? 'Un prospectador'
+    const mensaje = `Hola André, soy *${nombre}* y quisiera solicitar un diseño para la propiedad *${propiedad.codigo}* (ID: ${propiedad.id}). ¿Me puedes ayudar?`
+    Linking.openURL(`https://wa.me/524428790740?text=${encodeURIComponent(mensaje)}`)
   }
 
   function agendarValera() {
@@ -214,24 +264,13 @@ export default function DetallePropiedad() {
     setLoadingClientes(false)
   }
 
-  async function seleccionarClienteYCoordinar(cliente: ClienteCRM) {
-    if (!propiedad) return
-    await supabase
-      .from('clientes')
-      .update({ estado: 'cita_agendada', updated_at: new Date().toISOString() })
-      .eq('id', cliente.id)
-    setModalCitaVisible(false)
-    const mensaje = `Hola, quiero coordinar una cita para *${cliente.nombre}* (${cliente.telefono}) para la propiedad *${propiedad.codigo}*.`
-    if (subidoPor?.telefono) {
-      Linking.openURL(`https://wa.me/${subidoPor.telefono}?text=${encodeURIComponent(mensaje)}`)
-    } else {
-      const nombre = subidoPor?.nombre ?? 'El asesor que subió esta propiedad'
-      if (Platform.OS === 'web') {
-        window.alert(`${nombre} no tiene un número de WhatsApp configurado en su perfil.`)
-      } else {
-        Alert.alert('Sin teléfono', `${nombre} no tiene un número de WhatsApp configurado en su perfil.`)
-      }
-    }
+  function seleccionarClienteYCoordinar(cliente: ClienteCRM) {
+    const manana = new Date()
+    manana.setDate(manana.getDate() + 1)
+    manana.setHours(10, 0, 0, 0)
+    setClienteParaCita(cliente)
+    setFechaCita(manana)
+    setPasoCita('fecha')
   }
 
   async function guardarNuevoClienteYCoordinar() {
@@ -264,6 +303,51 @@ export default function DetallePropiedad() {
     } else {
       if (Platform.OS === 'web') window.alert('No se pudo guardar el cliente')
       else Alert.alert('Error', 'No se pudo guardar el cliente')
+    }
+  }
+
+  async function confirmarCitaConFecha() {
+    if (!propiedad || !clienteParaCita) return
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    await supabase
+      .from('clientes')
+      .update({
+        estado: 'cita_agendada',
+        proximo_contacto: fechaCita.toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', clienteParaCita.id)
+
+    const recordatorioFecha = new Date(fechaCita.getTime() - 60 * 60 * 1000)
+    const horaStr = fechaCita.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    await supabase.from('recordatorios').insert({
+      cliente_id: clienteParaCita.id,
+      user_id: user.id,
+      titulo: `Confirmar cita con ${clienteParaCita.nombre}`,
+      descripcion: `Cita para ${propiedad.codigo} a las ${horaStr}. ¿Ya la confirmaste?`,
+      fecha_hora: recordatorioFecha.toISOString(),
+    })
+
+    cerrarModalCita()
+
+    const fechaStr = fechaCita.toLocaleString('es-MX', {
+      weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+    })
+    const constructoraStr = propiedad.es_constructora && propiedad.nombre_constructora
+      ? ` (${propiedad.nombre_constructora})`
+      : ''
+    const mensaje = `Hola, quiero coordinar una cita para *${clienteParaCita.nombre}* (${clienteParaCita.telefono}) para la propiedad *${propiedad.codigo}*${constructoraStr} el *${fechaStr}*.`
+    if (subidoPor?.telefono) {
+      Linking.openURL(`https://wa.me/${subidoPor.telefono}?text=${encodeURIComponent(mensaje)}`)
+    } else {
+      const nombre = subidoPor?.nombre ?? 'El asesor que subió esta propiedad'
+      if (Platform.OS === 'web') {
+        window.alert(`${nombre} no tiene un número de WhatsApp configurado en su perfil.`)
+      } else {
+        Alert.alert('Sin teléfono', `${nombre} no tiene un número de WhatsApp configurado en su perfil.`)
+      }
     }
   }
 
@@ -514,6 +598,11 @@ export default function DetallePropiedad() {
               {capitalize(propiedad.estado)}
             </Text>
           )}
+          {propiedad.es_constructora && (
+            <Text style={styles.constructoraBadge}>
+              🏗 {propiedad.nombre_constructora ?? 'Constructora'}
+            </Text>
+          )}
           {subidoPor && (
             <Text style={styles.asesorBadge}>👤 {subidoPor.nombre}</Text>
           )}
@@ -622,13 +711,26 @@ export default function DetallePropiedad() {
           </Text>
         </TouchableOpacity>
 
+        {/* Botón solicitar diseño con André */}
+        <TouchableOpacity
+          style={[styles.btnDiseno, (!propiedad || solicitandoDiseno) && styles.btnDisabled]}
+          onPress={pedirDiseno}
+          disabled={!propiedad || solicitandoDiseno}
+        >
+          {solicitandoDiseno
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <Text style={styles.btnDisenoText}>🎨 Solicitar diseño con André</Text>
+          }
+        </TouchableOpacity>
+        <Text style={styles.btnDisenoHint}>Puedes solicitar 1 diseño por día</Text>
+
         {/* Botón agendar con Valera */}
         <TouchableOpacity
           style={[styles.btnValera, !propiedad && styles.btnDisabled]}
           onPress={agendarValera}
           disabled={!propiedad}
         >
-          <Text style={styles.btnValeraText}>🏢 Agendar cita con Valera Estudios</Text>
+          <Text style={styles.btnValeraText}>📣 Impulsar la promoción de la propiedad mediante una campaña</Text>
         </TouchableOpacity>
 
         {/* Botón compartir en WhatsApp */}
@@ -666,108 +768,184 @@ export default function DetallePropiedad() {
         </TouchableOpacity>
       </View>
 
-      {/* Modal selección de cliente */}
+      {/* Modal selección de cliente / fecha de cita */}
       <Modal
         visible={modalCitaVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setModalCitaVisible(false)}
+        onRequestClose={cerrarModalCita}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitulo}>Seleccionar cliente</Text>
-              <TouchableOpacity onPress={() => setModalCitaVisible(false)}>
+              <Text style={styles.modalTitulo}>
+                {pasoCita === 'seleccion' ? 'Seleccionar cliente' : '¿Cuándo es la cita?'}
+              </Text>
+              <TouchableOpacity onPress={cerrarModalCita}>
                 <Text style={styles.modalCerrar}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <TextInput
-              style={styles.modalBusqueda}
-              placeholder="Buscar por nombre o teléfono..."
-              value={busquedaCliente}
-              onChangeText={setBusquedaCliente}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+            {pasoCita === 'seleccion' && (
+              <>
+                <TextInput
+                  style={styles.modalBusqueda}
+                  placeholder="Buscar por nombre o teléfono..."
+                  value={busquedaCliente}
+                  onChangeText={setBusquedaCliente}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
 
-            {loadingClientes ? (
-              <ActivityIndicator color="#1a6470" style={{ marginVertical: 24 }} />
-            ) : (
-              <FlatList
-                data={clientesCRM.filter((c) => {
-                  const q = busquedaCliente.trim().toLowerCase()
-                  if (!q) return true
-                  return c.nombre.toLowerCase().includes(q) || c.telefono.includes(q)
-                })}
-                keyExtractor={(item) => item.id}
-                style={{ maxHeight: 320 }}
-                ListEmptyComponent={
-                  <Text style={styles.modalVacio}>
-                    {busquedaCliente.trim() ? 'Sin resultados.' : 'No hay clientes en el CRM.'}
-                  </Text>
-                }
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.clienteRow}
-                    onPress={() => seleccionarClienteYCoordinar(item)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.clienteNombre}>{item.nombre}</Text>
-                      <Text style={styles.clienteTelefono}>{item.telefono}</Text>
+                {loadingClientes ? (
+                  <ActivityIndicator color="#1a6470" style={{ marginVertical: 24 }} />
+                ) : (
+                  <FlatList
+                    data={clientesCRM.filter((c) => {
+                      const q = busquedaCliente.trim().toLowerCase()
+                      if (!q) return true
+                      return c.nombre.toLowerCase().includes(q) || c.telefono.includes(q)
+                    })}
+                    keyExtractor={(item) => item.id}
+                    style={{ maxHeight: 320 }}
+                    ListEmptyComponent={
+                      <Text style={styles.modalVacio}>
+                        {busquedaCliente.trim() ? 'Sin resultados.' : 'No hay clientes en el CRM.'}
+                      </Text>
+                    }
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.clienteRow}
+                        onPress={() => seleccionarClienteYCoordinar(item)}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.clienteNombre}>{item.nombre}</Text>
+                          <Text style={styles.clienteTelefono}>{item.telefono}</Text>
+                        </View>
+                        <Text style={styles.clienteEstado}>
+                          {ESTADOS_LABEL[item.estado] ?? item.estado}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  />
+                )}
+
+                {/* Formulario nuevo cliente */}
+                {mostrarFormNuevo ? (
+                  <View style={styles.formNuevo}>
+                    <Text style={styles.formNuevoTitulo}>Nuevo cliente</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Nombre *"
+                      value={nuevoNombre}
+                      onChangeText={setNuevoNombre}
+                      autoCapitalize="words"
+                    />
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Teléfono *"
+                      value={nuevoTelefono}
+                      onChangeText={setNuevoTelefono}
+                      keyboardType="phone-pad"
+                    />
+                    <View style={styles.formNuevoBtns}>
+                      <TouchableOpacity
+                        style={styles.formBtnCancelar}
+                        onPress={() => setMostrarFormNuevo(false)}
+                      >
+                        <Text style={styles.formBtnCancelarText}>Cancelar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.formBtnGuardar, guardandoCliente && styles.btnDisabled]}
+                        onPress={guardarNuevoClienteYCoordinar}
+                        disabled={guardandoCliente}
+                      >
+                        {guardandoCliente
+                          ? <ActivityIndicator color="#fff" size="small" />
+                          : <Text style={styles.formBtnGuardarText}>Guardar y agendar</Text>
+                        }
+                      </TouchableOpacity>
                     </View>
-                    <Text style={styles.clienteEstado}>
-                      {ESTADOS_LABEL[item.estado] ?? item.estado}
-                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.btnNuevoCliente}
+                    onPress={() => setMostrarFormNuevo(true)}
+                  >
+                    <Text style={styles.btnNuevoClienteText}>+ Agregar nuevo cliente</Text>
                   </TouchableOpacity>
                 )}
-              />
+              </>
             )}
 
-            {/* Formulario nuevo cliente */}
-            {mostrarFormNuevo ? (
-              <View style={styles.formNuevo}>
-                <Text style={styles.formNuevoTitulo}>Nuevo cliente</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="Nombre *"
-                  value={nuevoNombre}
-                  onChangeText={setNuevoNombre}
-                  autoCapitalize="words"
-                />
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="Teléfono *"
-                  value={nuevoTelefono}
-                  onChangeText={setNuevoTelefono}
-                  keyboardType="phone-pad"
-                />
-                <View style={styles.formNuevoBtns}>
+            {pasoCita === 'fecha' && clienteParaCita && (
+              <View style={styles.pickerFechaContainer}>
+                <Text style={styles.pickerSubtitulo}>{clienteParaCita.nombre}</Text>
+
+                <View style={styles.pickerRow}>
                   <TouchableOpacity
-                    style={styles.formBtnCancelar}
-                    onPress={() => setMostrarFormNuevo(false)}
+                    style={styles.pickerArrow}
+                    onPress={() => {
+                      const d = new Date(fechaCita)
+                      d.setDate(d.getDate() - 1)
+                      setFechaCita(d)
+                    }}
                   >
-                    <Text style={styles.formBtnCancelarText}>Cancelar</Text>
+                    <Text style={styles.pickerArrowText}>◀</Text>
                   </TouchableOpacity>
+                  <Text style={styles.pickerValor}>
+                    {fechaCita.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  </Text>
                   <TouchableOpacity
-                    style={[styles.formBtnGuardar, guardandoCliente && styles.btnDisabled]}
-                    onPress={guardarNuevoClienteYCoordinar}
-                    disabled={guardandoCliente}
+                    style={styles.pickerArrow}
+                    onPress={() => {
+                      const d = new Date(fechaCita)
+                      d.setDate(d.getDate() + 1)
+                      setFechaCita(d)
+                    }}
                   >
-                    {guardandoCliente
-                      ? <ActivityIndicator color="#fff" size="small" />
-                      : <Text style={styles.formBtnGuardarText}>Guardar y agendar</Text>
-                    }
+                    <Text style={styles.pickerArrowText}>▶</Text>
                   </TouchableOpacity>
                 </View>
+
+                <View style={styles.pickerRow}>
+                  <TouchableOpacity
+                    style={styles.pickerArrow}
+                    onPress={() => {
+                      const d = new Date(fechaCita)
+                      d.setMinutes(d.getMinutes() - 30)
+                      setFechaCita(d)
+                    }}
+                  >
+                    <Text style={styles.pickerArrowText}>◀</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.pickerValor}>
+                    {fechaCita.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.pickerArrow}
+                    onPress={() => {
+                      const d = new Date(fechaCita)
+                      d.setMinutes(d.getMinutes() + 30)
+                      setFechaCita(d)
+                    }}
+                  >
+                    <Text style={styles.pickerArrowText}>▶</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.pickerHint}>
+                  Recibirás un recordatorio 1 hora antes de la cita.
+                </Text>
+
+                <TouchableOpacity style={styles.btnConfirmarCita} onPress={confirmarCitaConFecha}>
+                  <Text style={styles.btnConfirmarCitaText}>Coordinar por WhatsApp</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.btnVolverPaso} onPress={() => setPasoCita('seleccion')}>
+                  <Text style={styles.btnVolverPasoText}>← Cambiar cliente</Text>
+                </TouchableOpacity>
               </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.btnNuevoCliente}
-                onPress={() => setMostrarFormNuevo(true)}
-              >
-                <Text style={styles.btnNuevoClienteText}>+ Agregar nuevo cliente</Text>
-              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -1122,5 +1300,93 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 14,
+  },
+
+  // Picker fecha/hora cita
+  pickerFechaContainer: {
+    paddingTop: 8,
+  },
+  pickerSubtitulo: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 20,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f5f9fa',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    marginBottom: 12,
+  },
+  pickerArrow: {
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  pickerArrowText: {
+    fontSize: 18,
+    color: '#1a6470',
+  },
+  pickerValor: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a6470',
+  },
+  pickerHint: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
+    marginBottom: 20,
+  },
+  btnConfirmarCita: {
+    backgroundColor: '#25D366',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  btnConfirmarCitaText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  btnVolverPaso: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  btnVolverPasoText: {
+    color: '#1a6470',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  btnDiseno: {
+    backgroundColor: '#c9a84c',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  btnDisenoText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  btnDisenoHint: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 10,
+  },
+  constructoraBadge: {
+    fontSize: 12,
+    color: '#1a4a6b',
+    backgroundColor: '#d4e8f5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontWeight: '600' as const,
   },
 })

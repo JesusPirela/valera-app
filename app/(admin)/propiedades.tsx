@@ -36,7 +36,7 @@ type Propiedad = {
 
 type FiltroOperacion = 'venta' | 'renta' | null
 type FiltroEstado = 'disponible' | 'vendida' | null
-type FiltroTipo = 'casa' | 'departamento' | 'local' | null
+type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
 
 const NAV_ITEMS = [
@@ -236,6 +236,7 @@ export default function AdminPropiedades() {
             <FiltroChip label="Casa" active={filtroTipo === 'casa'} onPress={() => setFiltroTipo(filtroTipo === 'casa' ? null : 'casa')} />
             <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')} />
             <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')} />
+            <FiltroChip label="Terreno" active={filtroTipo === 'terreno'} onPress={() => setFiltroTipo(filtroTipo === 'terreno' ? null : 'terreno')} />
           </ScrollView>
           <Text style={styles.filtroLabel}>Precio</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>

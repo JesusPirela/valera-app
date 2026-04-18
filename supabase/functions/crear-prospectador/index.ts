@@ -41,11 +41,12 @@ serve(async (req) => {
     if (profile?.role !== 'admin') return json({ error: 'Acceso denegado' }, 403)
 
     // 3. Validar body
-    const { email, password, plus, nombre } = await req.json()
+    const { email, password, plus, nombre, role: roleParam } = await req.json()
     if (!email || !password) return json({ error: 'Email y contraseña son requeridos' }, 400)
     if (!nombre?.trim()) return json({ error: 'El nombre es requerido' }, 400)
     if (password.length < 8) return json({ error: 'La contraseña debe tener al menos 8 caracteres' }, 400)
-    const role = plus === true ? 'prospectador_plus' : 'prospectador'
+    const ROLES_VALIDOS = ['nuevo', 'prospectador', 'prospectador_plus']
+    const role = ROLES_VALIDOS.includes(roleParam) ? roleParam : (plus === true ? 'prospectador_plus' : 'prospectador')
 
     // 4. Crear usuario con service_role (puede crear usuarios sin confirmación de email)
     const supabaseAdmin = createClient(

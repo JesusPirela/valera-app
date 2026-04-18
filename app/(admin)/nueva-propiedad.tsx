@@ -49,13 +49,15 @@ export default function NuevaPropiedad() {
   const [precio, setPrecio] = useState('')
   const [direccion, setDireccion] = useState('')
   const [operacion, setOperacion] = useState<'venta' | 'renta'>('venta')
-  const [tipo, setTipo] = useState<'casa' | 'departamento' | 'local'>('casa')
+  const [tipo, setTipo] = useState<'casa' | 'departamento' | 'local' | 'terreno'>('casa')
   const [estado, setEstado] = useState<'disponible' | 'vendida'>('disponible')
   const [recamaras, setRecamaras] = useState<number | null>(null)
   const [banos, setBanos] = useState<number | null>(null)
   const [m2, setM2] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
+  const [esConstructora, setEsConstructora] = useState(false)
+  const [nombreConstructora, setNombreConstructora] = useState('')
   const [imagenes, setImagenes] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [mejorando, setMejorando] = useState(false)
@@ -156,6 +158,8 @@ export default function NuevaPropiedad() {
           m2: m2Num,
           estacionamientos,
           exclusiva,
+          es_constructora: esConstructora,
+          nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
           created_by: user!.id,
         })
         .select('id')
@@ -243,6 +247,7 @@ export default function NuevaPropiedad() {
             { value: 'casa', label: 'Casa' },
             { value: 'departamento', label: 'Departamento' },
             { value: 'local', label: 'Local' },
+            { value: 'terreno', label: 'Terreno' },
           ]}
           value={tipo}
           onChange={setTipo}
@@ -326,6 +331,28 @@ export default function NuevaPropiedad() {
             thumbColor={exclusiva ? '#fff' : '#f4f3f4'}
           />
         </View>
+
+        <View style={styles.exclusivaRow}>
+          <View>
+            <Text style={styles.exclusivaLabel}>Propiedad de constructora</Text>
+            <Text style={styles.exclusivaDesc}>Desarrollo en construcción o con unidades nuevas</Text>
+          </View>
+          <Switch
+            value={esConstructora}
+            onValueChange={setEsConstructora}
+            trackColor={{ false: '#ddd', true: '#1a6470' }}
+            thumbColor={esConstructora ? '#fff' : '#f4f3f4'}
+          />
+        </View>
+        {esConstructora && (
+          <TextInput
+            style={styles.input}
+            placeholder="Nombre de la constructora"
+            value={nombreConstructora}
+            onChangeText={setNombreConstructora}
+            autoCapitalize="words"
+          />
+        )}
 
         {guardado && (
           <View style={styles.successBanner}>

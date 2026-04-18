@@ -10,10 +10,11 @@ import {
   TextInput,
   Modal,
   Platform,
-  Switch,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+
+type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus'
 
 type Prospectador = {
   id: string
@@ -27,6 +28,30 @@ type Credenciales = {
   email: string
   password: string
 }
+
+const ROL_LABEL: Record<string, string> = {
+  nuevo:             'Nuevo',
+  prospectador:      'Prospectador',
+  prospectador_plus: 'Plus',
+}
+
+const ROL_BADGE: Record<string, object> = {
+  nuevo:             { backgroundColor: '#fff3cd' },
+  prospectador:      { backgroundColor: '#e8f5e9' },
+  prospectador_plus: { backgroundColor: '#fdecea' },
+}
+
+const ROL_TEXT: Record<string, object> = {
+  nuevo:             { color: '#856404' },
+  prospectador:      { color: '#2e7d32' },
+  prospectador_plus: { color: '#c0392b' },
+}
+
+const ROLES_SELECTOR: { value: RolUsuario; label: string }[] = [
+  { value: 'nuevo',             label: 'Nuevo' },
+  { value: 'prospectador',      label: 'Prospectador' },
+  { value: 'prospectador_plus', label: 'Plus' },
+]
 
 function tiempoRelativo(fechaISO: string): string {
   const ahora = new Date()
@@ -44,7 +69,6 @@ function generarPassword(): string {
   const nums  = '23456789'
   const esp   = '!@#%'
   const todos = mayus + minus + nums + esp
-  // Garantizar al menos uno de cada tipo
   let pwd =
     mayus[Math.floor(Math.random() * mayus.length)] +
     minus[Math.floor(Math.random() * minus.length)] +
@@ -53,7 +77,6 @@ function generarPassword(): string {
   for (let i = 4; i < 12; i++) {
     pwd += todos[Math.floor(Math.random() * todos.length)]
   }
-  // Mezclar
   return pwd.split('').sort(() => Math.random() - 0.5).join('')
 }
 
@@ -67,13 +90,17 @@ export default function Prospectadores() {
   const [lista, setLista] = useState<Prospectador[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Selector de rol inline
+  const [editandoRolId, setEditandoRolId] = useState<string | null>(null)
+  const [cambiandoRol, setCambiandoRol] = useState(false)
+
   // Modal crear
   const [modalVisible, setModalVisible] = useState(false)
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [verPassword, setVerPassword] = useState(false)
-  const [plus, setPlus] = useState(false)
+  const [rolCreacion, setRolCreacion] = useState<RolUsuario>('prospectador')
   const [creando, setCreando] = useState(false)
 
   // Panel de credenciales tras crear
@@ -93,7 +120,7 @@ export default function Prospectadores() {
     setEmail('')
     setPassword(generarPassword())
     setVerPassword(false)
-    setPlus(false)
+    setRolCreacion('prospectador')
     setCredenciales(null)
     setModalVisible(true)
   }
@@ -103,6 +130,24 @@ export default function Prospectadores() {
     else Alert.alert('Error', msg)
   }
 
+  async function cambiarRol(userId: string, nuevoRol: RolUsuario) {
+    setCambiandoRol(true)
+    const { data, error } = await supabase.functions.invoke('cambiar-rol', {
+      body: { userId, role: nuevoRol },
+    })
+    setCambiandoRol(false)
+
+    if (error || data?.error) {
+      mostrarError(data?.error ?? 'No se pudo cambiar el rol.')
+      return
+    }
+
+    setLista(prev =>
+      prev.map(p => p.id === userId ? { ...p, role: nuevoRol } : p)
+    )
+    setEditandoRolId(null)
+  }
+
   async function crearProspectador() {
     if (!nombre.trim()) { mostrarError('Ingresa el nombre del prospectador.'); return }
     if (!email.trim()) { mostrarError('Ingresa un email.'); return }
@@ -110,7 +155,7 @@ export default function Prospectadores() {
 
     setCreando(true)
     const { data, error } = await supabase.functions.invoke('crear-prospectador', {
-      body: { email: email.trim().toLowerCase(), password, plus, nombre },
+      body: { email: email.trim().toLowerCase(), password, nombre, role: rolCreacion },
     })
     setCreando(false)
 
@@ -128,7 +173,6 @@ export default function Prospectadores() {
       return
     }
 
-    // Mostrar credenciales y actualizar lista
     setCredenciales({ email: email.trim().toLowerCase(), password })
     await cargar()
   }
@@ -161,19 +205,55 @@ export default function Prospectadores() {
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => (
             <View style={styles.card}>
-              <View style={styles.cardIcon}>
-                <Text style={styles.cardIconText}>{(item.nombre || item.email)[0].toUpperCase()}</Text>
+              <View style={styles.cardMainRow}>
+                <View style={styles.cardIcon}>
+                  <Text style={styles.cardIconText}>{(item.nombre || item.email)[0].toUpperCase()}</Text>
+                </View>
+                <View style={styles.cardInfo}>
+                  {item.nombre ? <Text style={styles.cardNombre}>{item.nombre}</Text> : null}
+                  <Text style={styles.cardEmail}>{item.email}</Text>
+                  <Text style={styles.cardFecha}>Alta: {tiempoRelativo(item.created_at)}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.rolBadge, ROL_BADGE[item.role] ?? ROL_BADGE.prospectador]}
+                  onPress={() => setEditandoRolId(editandoRolId === item.id ? null : item.id)}
+                >
+                  <Text style={[styles.rolText, ROL_TEXT[item.role] ?? ROL_TEXT.prospectador]}>
+                    {ROL_LABEL[item.role] ?? item.role} ✎
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.cardInfo}>
-                {item.nombre ? <Text style={styles.cardNombre}>{item.nombre}</Text> : null}
-                <Text style={styles.cardEmail}>{item.email}</Text>
-                <Text style={styles.cardFecha}>Alta: {tiempoRelativo(item.created_at)}</Text>
-              </View>
-              <View style={[styles.rolBadge, item.role === 'prospectador_plus' && styles.rolBadgePlus]}>
-                <Text style={[styles.rolText, item.role === 'prospectador_plus' && styles.rolTextPlus]}>
-                  {item.role === 'prospectador_plus' ? 'Plus' : 'Prospectador'}
-                </Text>
-              </View>
+
+              {editandoRolId === item.id && (
+                <View style={styles.rolPickerContainer}>
+                  <Text style={styles.rolPickerLabel}>Cambiar rol:</Text>
+                  <View style={styles.rolPickerPills}>
+                    {ROLES_SELECTOR.map(r => {
+                      const activo = item.role === r.value
+                      return (
+                        <TouchableOpacity
+                          key={r.value}
+                          style={[
+                            styles.rolPill,
+                            ROL_BADGE[r.value],
+                            activo && styles.rolPillActivo,
+                            cambiandoRol && styles.rolPillDisabled,
+                          ]}
+                          onPress={() => !activo && cambiarRol(item.id, r.value)}
+                          disabled={cambiandoRol || activo}
+                        >
+                          {cambiandoRol && activo
+                            ? <ActivityIndicator size="small" color="#888" />
+                            : <Text style={[styles.rolPillText, ROL_TEXT[r.value], activo && { fontWeight: '700' }]}>
+                                {r.label}
+                              </Text>
+                          }
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+                </View>
+              )}
             </View>
           )}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
@@ -191,7 +271,6 @@ export default function Prospectadores() {
           <View style={styles.modalBox}>
 
             {credenciales ? (
-              /* ── Panel de credenciales creadas ── */
               <>
                 <Text style={styles.modalTitulo}>Usuario creado</Text>
                 <Text style={styles.modalSubtitulo}>
@@ -225,7 +304,6 @@ export default function Prospectadores() {
                 </TouchableOpacity>
               </>
             ) : (
-              /* ── Formulario de creación ── */
               <>
                 <Text style={styles.modalTitulo}>Nuevo prospectador</Text>
                 <Text style={styles.modalSubtitulo}>
@@ -279,18 +357,30 @@ export default function Prospectadores() {
                   <Text style={styles.generarText}>Generar contraseña segura</Text>
                 </TouchableOpacity>
 
-                <View style={styles.plusRow}>
-                  <View>
-                    <Text style={styles.plusLabel}>Prospectador Plus</Text>
-                    <Text style={styles.plusDesc}>Acceso a propiedades exclusivas</Text>
-                  </View>
-                  <Switch
-                    value={plus}
-                    onValueChange={setPlus}
-                    trackColor={{ false: '#ddd', true: '#c0392b' }}
-                    thumbColor={plus ? '#fff' : '#f4f3f4'}
-                  />
+                <Text style={styles.inputLabel}>Rol</Text>
+                <View style={styles.rolCreacionRow}>
+                  {ROLES_SELECTOR.map(r => {
+                    const activo = rolCreacion === r.value
+                    return (
+                      <TouchableOpacity
+                        key={r.value}
+                        style={[styles.rolCreacionPill, ROL_BADGE[r.value], activo && styles.rolPillActivo]}
+                        onPress={() => setRolCreacion(r.value)}
+                      >
+                        <Text style={[styles.rolPillText, ROL_TEXT[r.value], activo && { fontWeight: '700' }]}>
+                          {r.label}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  })}
                 </View>
+                <Text style={styles.rolCreacionDesc}>
+                  {rolCreacion === 'nuevo'
+                    ? 'Acceso limitado. Puedes cambiar el rol después.'
+                    : rolCreacion === 'prospectador_plus'
+                    ? 'Acceso a propiedades exclusivas.'
+                    : 'Acceso estándar al sistema.'}
+                </Text>
 
                 <View style={styles.modalAcciones}>
                   <TouchableOpacity style={styles.btnCancelar} onPress={cerrarModal}>
@@ -336,13 +426,15 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 13, color: '#aaa' },
 
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
     borderColor: '#eee',
+  },
+  cardMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
   cardIcon: {
@@ -355,15 +447,67 @@ const styles = StyleSheet.create({
   },
   cardIconText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cardInfo: { flex: 1 },
+  cardNombre: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
   cardEmail: { fontSize: 14, fontWeight: '600', color: '#1a6470' },
   cardFecha: { fontSize: 11, color: '#aaa', marginTop: 2 },
+
   rolBadge: {
-    backgroundColor: '#e8f5e9',
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
   },
-  rolText: { fontSize: 11, fontWeight: '600', color: '#2e7d32' },
+  rolText: { fontSize: 11, fontWeight: '600' },
+
+  // Selector de rol inline
+  rolPickerContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  rolPickerLabel: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 8,
+  },
+  rolPickerPills: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  rolPill: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  rolPillActivo: {
+    borderColor: '#1a6470',
+  },
+  rolPillDisabled: { opacity: 0.5 },
+  rolPillText: { fontSize: 12, fontWeight: '600' },
+
+  // Rol en creación
+  rolCreacionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  rolCreacionPill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  rolCreacionDesc: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 20,
+    fontStyle: 'italic',
+  },
 
   // Modal
   modalOverlay: {
@@ -448,21 +592,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnCerrarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  plusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fafafa',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 20,
-  },
-  plusLabel: { fontSize: 13, fontWeight: '600', color: '#1a6470' },
-  plusDesc: { fontSize: 11, color: '#888', marginTop: 2 },
-  rolBadgePlus: { backgroundColor: '#fdecea' },
-  rolTextPlus: { color: '#c0392b' },
-  cardNombre: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
 })

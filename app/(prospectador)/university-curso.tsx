@@ -32,6 +32,8 @@ const NIVEL_LABEL: Record<string, string> = {
 async function generarCertificadoPDF(nombreCompleto: string, cursoTitulo: string) {
   try {
     // Dynamic import so it only loads on web
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     const { jsPDF } = await import('jspdf')
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
@@ -284,21 +286,29 @@ export default function UniversityCurso() {
                   : 'Genera tu certificado oficial PDF'}
               </Text>
             </View>
-            <TouchableOpacity
-              style={estilos.btnCertAccion}
-              onPress={() => {
-                if (nombreGuardado) {
-                  generarCertificadoPDF(nombreGuardado, curso.titulo)
-                } else {
-                  setNombreForm('')
-                  setModalCert(true)
-                }
-              }}
-            >
-              <Text style={estilos.btnCertAccionText}>
-                {nombreGuardado ? '⬇ Descargar PDF' : '📄 Generar certificado'}
-              </Text>
-            </TouchableOpacity>
+            {Platform.OS === 'web' ? (
+              <TouchableOpacity
+                style={estilos.btnCertAccion}
+                onPress={() => {
+                  if (nombreGuardado) {
+                    generarCertificadoPDF(nombreGuardado, curso.titulo)
+                  } else {
+                    setNombreForm('')
+                    setModalCert(true)
+                  }
+                }}
+              >
+                <Text style={estilos.btnCertAccionText}>
+                  {nombreGuardado ? '⬇ Descargar PDF' : '📄 Generar certificado'}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={estilos.btnCertAccionMobile}>
+                <Text style={estilos.btnCertAccionMobileText}>
+                  🖥️ Descarga tu certificado entrando desde la web
+                </Text>
+              </View>
+            )}
           </View>
         ) : cursoCompleto ? (
           <View style={estilos.certBanner}>
@@ -389,16 +399,22 @@ export default function UniversityCurso() {
             <Text style={estilos.modalHint}>
               Este nombre aparecerá exactamente en el certificado PDF.
             </Text>
-            <TouchableOpacity
-              style={[estilos.modalBtn, (!nombreForm.trim() || generando) && { opacity: 0.5 }]}
-              onPress={handleGenerarCertificado}
-              disabled={!nombreForm.trim() || generando}
-            >
-              {generando
-                ? <ActivityIndicator color="#000" />
-                : <Text style={estilos.modalBtnText}>📄 Generar y descargar PDF</Text>
-              }
-            </TouchableOpacity>
+            {Platform.OS === 'web' ? (
+              <TouchableOpacity
+                style={[estilos.modalBtn, (!nombreForm.trim() || generando) && { opacity: 0.5 }]}
+                onPress={handleGenerarCertificado}
+                disabled={!nombreForm.trim() || generando}
+              >
+                {generando
+                  ? <ActivityIndicator color="#000" />
+                  : <Text style={estilos.modalBtnText}>📄 Generar y descargar PDF</Text>
+                }
+              </TouchableOpacity>
+            ) : (
+              <Text style={{ color: '#888', fontSize: 13, textAlign: 'center', marginBottom: 8 }}>
+                La descarga de certificados solo está disponible desde la versión web.
+              </Text>
+            )}
             <TouchableOpacity onPress={() => setModalCert(false)} style={{ marginTop: 12 }}>
               <Text style={{ color: '#888', fontSize: 13 }}>Cancelar</Text>
             </TouchableOpacity>
@@ -445,6 +461,14 @@ const estilos = StyleSheet.create({
     paddingVertical: 10, alignItems: 'center',
   },
   btnCertAccionText: { color: '#000', fontWeight: '700', fontSize: 13 },
+  btnCertAccionMobile: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  btnCertAccionMobileText: { color: 'rgba(255,255,255,0.75)', fontSize: 12, textAlign: 'center' },
   btnContinuar: { backgroundColor: '#1a6470', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   btnContinuarText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   descCard: { backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 16, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e8eef0' },

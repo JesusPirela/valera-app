@@ -231,13 +231,14 @@ export default function Estadisticas() {
   const { resumen, top_propiedades, top_prospectadores, actividad_7dias } = stats
 
   // ── Distribución propiedades ──
-  const tipoCount = { casa: 0, departamento: 0, local: 0, otro: 0 }
+  const tipoCount = { casa: 0, departamento: 0, local: 0, terreno: 0, otro: 0 }
   const opCount   = { venta: 0, renta: 0 }
   const estCount  = { disponible: 0, vendida: 0 }
   for (const p of propDist) {
     if (p.tipo === 'casa') tipoCount.casa++
     else if (p.tipo === 'departamento') tipoCount.departamento++
     else if (p.tipo === 'local') tipoCount.local++
+    else if (p.tipo === 'terreno') tipoCount.terreno++
     else tipoCount.otro++
 
     if (p.operacion === 'venta') opCount.venta++
@@ -251,6 +252,7 @@ export default function Estadisticas() {
     { label: 'Casa', value: tipoCount.casa, color: C.teal },
     { label: 'Departamento', value: tipoCount.departamento, color: C.green },
     { label: 'Local', value: tipoCount.local, color: C.amber },
+    { label: 'Terreno', value: tipoCount.terreno, color: '#8b5e3c' },
     ...(tipoCount.otro > 0 ? [{ label: 'Otro', value: tipoCount.otro, color: C.gray }] : []),
   ].filter(s => s.value > 0)
 

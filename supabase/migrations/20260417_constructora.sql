@@ -1,0 +1,3 @@
+ALTER TABLE propiedades
+  ADD COLUMN IF NOT EXISTS es_constructora    BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS nombre_constructora TEXT;
