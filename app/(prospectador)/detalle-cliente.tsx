@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Modal, Platform, FlatList,
+  ActivityIndicator, Alert, TextInput, Modal, Platform, FlatList, Linking,
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -355,6 +355,67 @@ export default function DetalleCliente() {
         ) : null}
       </View>
 
+      {/* Botones de acción rápida WhatsApp / Llamada */}
+      <View style={styles.accionesRow}>
+        <TouchableOpacity
+          style={[styles.accionBtn, styles.accionBtnWA]}
+          onPress={() => {
+            const tel = cliente.telefono.replace(/\D/g, '')
+            const msg = encodeURIComponent(
+              `Hola ${cliente.nombre}, soy tu asesor de Valera Real Estate. Te contacto para dar seguimiento a tu búsqueda de propiedad. ¿Tienes un momento para platicar?`
+            )
+            const url = `https://wa.me/52${tel}?text=${msg}`
+            if (Platform.OS === 'web') window.open(url, '_blank')
+            else Linking.openURL(url)
+          }}
+        >
+          <Text style={styles.accionBtnText}>📱 WhatsApp</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.accionBtn, styles.accionBtnCall]}
+          onPress={() => Linking.openURL(`tel:${cliente.telefono}`)}
+        >
+          <Text style={styles.accionBtnText}>📞 Llamar</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Mensajes predefinidos WA */}
+      <View style={styles.waTemplatesCard}>
+        <Text style={styles.waTemplatesTitle}>💬 Mensajes rápidos por WhatsApp</Text>
+        {[
+          {
+            label: '🔔 Recordatorio de cita',
+            msg: `Hola ${cliente.nombre}, te recuerdo que tenemos una cita agendada. ¿Sigue en pie? Con gusto te confirmo los detalles.`,
+          },
+          {
+            label: '🏠 Compartir propiedad',
+            msg: `Hola ${cliente.nombre}, encontré una propiedad que puede interesarte. ¿Tienes unos minutos para que te cuente los detalles?`,
+          },
+          {
+            label: '📋 Solicitar documentos',
+            msg: `Hola ${cliente.nombre}, para avanzar con tu proceso necesitamos algunos documentos. ¿Puedes enviarlos cuando puedas?`,
+          },
+          {
+            label: '✅ Seguimiento post-visita',
+            msg: `Hola ${cliente.nombre}, ¿qué te pareció la propiedad que visitamos? Quedo a tus órdenes para cualquier duda o para agendar otra visita.`,
+          },
+        ].map((t) => (
+          <TouchableOpacity
+            key={t.label}
+            style={styles.waTemplateBtn}
+            onPress={() => {
+              const tel = cliente.telefono.replace(/\D/g, '')
+              const url = `https://wa.me/52${tel}?text=${encodeURIComponent(t.msg)}`
+              if (Platform.OS === 'web') window.open(url, '_blank')
+              else Linking.openURL(url)
+            }}
+          >
+            <Text style={styles.waTemplateBtnText}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* Pipeline — cambio de estado */}
       <Text style={styles.secTitle}>Etapa de venta</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.estadosScroll}>
@@ -583,6 +644,21 @@ const dpStyles = StyleSheet.create({
 // ── Estilos pantalla ─────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
+  accionesRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  accionBtn: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
+  accionBtnWA: { backgroundColor: '#25d366' },
+  accionBtnCall: { backgroundColor: '#1a6470' },
+  accionBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  waTemplatesCard: {
+    backgroundColor: '#fff', borderRadius: 14, padding: 14,
+    marginBottom: 16, borderWidth: 1, borderColor: '#eee',
+  },
+  waTemplatesTitle: { fontSize: 13, fontWeight: '700', color: '#1a1a2e', marginBottom: 10 },
+  waTemplateBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
+  },
+  waTemplateBtnText: { color: '#1a6470', fontSize: 13, fontWeight: '600' },
   content: { padding: 16, paddingBottom: 48 },
   clienteCard: {
     backgroundColor: '#fff', borderRadius: 14, padding: 16,

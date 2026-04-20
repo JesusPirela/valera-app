@@ -62,6 +62,17 @@ export default function NuevaPropiedad() {
   const [loading, setLoading] = useState(false)
   const [mejorando, setMejorando] = useState(false)
   const [guardado, setGuardado] = useState(false)
+  const [asesores, setAsesores] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
+  const [inmobiliarias, setInmobiliarias] = useState<{ id: string; nombre: string }[]>([])
+  const [asesorId, setAsesorId] = useState<string | null>(null)
+  const [inmobiliariaId, setInmobiliariaId] = useState<string | null>(null)
+
+  useState(() => {
+    supabase.from('profiles').select('id, nombre, telefono').eq('role', 'prospectador').order('nombre')
+      .then(({ data }) => setAsesores(data ?? []))
+    supabase.from('inmobiliarias').select('id, nombre').order('nombre')
+      .then(({ data }) => setInmobiliarias(data ?? []))
+  })
 
   async function seleccionarImagenes() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -160,6 +171,8 @@ export default function NuevaPropiedad() {
           exclusiva,
           es_constructora: esConstructora,
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
+          asesor_id: asesorId || null,
+          inmobiliaria_id: inmobiliariaId || null,
           created_by: user!.id,
         })
         .select('id')
@@ -353,6 +366,22 @@ export default function NuevaPropiedad() {
             autoCapitalize="words"
           />
         )}
+
+        {/* Asesor responsable */}
+        <Text style={styles.label}>Asesor responsable</Text>
+        <DropdownModal
+          options={[{ value: null, label: '— Sin asignar —' }, ...asesores.map(a => ({ value: a.id, label: a.nombre }))]}
+          value={asesorId}
+          onChange={setAsesorId}
+        />
+
+        {/* Inmobiliaria */}
+        <Text style={styles.label}>Inmobiliaria / Empresa</Text>
+        <DropdownModal
+          options={[{ value: null, label: '— Sin asignar —' }, ...inmobiliarias.map(i => ({ value: i.id, label: i.nombre }))]}
+          value={inmobiliariaId}
+          onChange={setInmobiliariaId}
+        />
 
         {guardado && (
           <View style={styles.successBanner}>

@@ -613,6 +613,31 @@ export default function DetallePropiedad() {
         <Text style={styles.precio}>{formatPrecio(propiedad.precio)}</Text>
         <Text style={styles.direccion}>{propiedad.direccion}</Text>
 
+        {/* Contactar asesor + Generar flyer */}
+        <View style={styles.accionesRapidas}>
+          {subidoPor?.telefono && (
+            <>
+              <TouchableOpacity
+                style={[styles.accionBtn, { backgroundColor: '#25d366' }]}
+                onPress={() => {
+                  const tel = subidoPor.telefono!.replace(/\D/g, '')
+                  const url = `https://wa.me/52${tel}?text=${encodeURIComponent(`Hola, te contacto sobre la propiedad ${propiedad.codigo}: ${propiedad.titulo}`)}`
+                  if (Platform.OS === 'web') window.open(url, '_blank')
+                  else Linking.openURL(url)
+                }}
+              >
+                <Text style={styles.accionBtnText}>📱 WhatsApp asesor</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.accionBtn, { backgroundColor: '#1a6470' }]}
+                onPress={() => Linking.openURL(`tel:${subidoPor.telefono}`)}
+              >
+                <Text style={styles.accionBtnText}>📞 Llamar</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
         {/* Características */}
         {(propiedad.recamaras != null || propiedad.banos != null || propiedad.m2 != null || propiedad.estacionamientos != null) && (
           <View style={styles.seccion}>
@@ -1157,6 +1182,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     fontWeight: '600',
   },
+  accionesRapidas: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginVertical: 12 },
+  accionBtn: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center' },
+  accionBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   // Modal selección de cliente
   modalOverlay: {
