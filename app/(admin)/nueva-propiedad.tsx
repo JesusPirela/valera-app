@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
+import AsesorPicker from '../../components/ui/AsesorPicker'
 
 const RECAMARAS_OPTIONS = [
   { value: null, label: '—' },
@@ -55,6 +56,7 @@ export default function NuevaPropiedad() {
   const [banos, setBanos] = useState<number | null>(null)
   const [m2, setM2] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
+  const [asesorId, setAsesorId] = useState<string | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
@@ -157,6 +159,7 @@ export default function NuevaPropiedad() {
           banos,
           m2: m2Num,
           estacionamientos,
+          asesor_id: asesorId,
           exclusiva,
           es_constructora: esConstructora,
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
@@ -318,6 +321,9 @@ export default function NuevaPropiedad() {
           maxLength={1000}
           textAlignVertical="top"
         />
+
+        <Text style={styles.label}>Asesor de contacto</Text>
+        <AsesorPicker value={asesorId} onChange={setAsesorId} />
 
         <View style={styles.exclusivaRow}>
           <View>

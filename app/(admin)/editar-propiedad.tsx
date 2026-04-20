@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
+import AsesorPicker from '../../components/ui/AsesorPicker'
 
 type ImagenExistente = { id: string; url: string; orden: number }
 
@@ -59,6 +60,7 @@ export default function EditarPropiedad() {
   const [banos, setBanos] = useState<number | null>(null)
   const [m2, setM2] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
+  const [asesorId, setAsesorId] = useState<string | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
@@ -75,7 +77,7 @@ export default function EditarPropiedad() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
+      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, asesor_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
       .eq('id', id)
       .single()
 
@@ -96,6 +98,7 @@ export default function EditarPropiedad() {
     setBanos(data.banos ?? null)
     setM2(data.m2 != null ? String(data.m2) : '')
     setEstacionamientos(data.estacionamientos ?? null)
+    setAsesorId(data.asesor_id ?? null)
     setExclusiva(data.exclusiva ?? false)
     setEsConstructora(data.es_constructora ?? false)
     setNombreConstructora(data.nombre_constructora ?? '')
@@ -194,6 +197,7 @@ export default function EditarPropiedad() {
           banos,
           m2: m2Num,
           estacionamientos,
+          asesor_id: asesorId,
           exclusiva,
           es_constructora: esConstructora,
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
@@ -363,6 +367,9 @@ export default function EditarPropiedad() {
           maxLength={1000}
           textAlignVertical="top"
         />
+
+        <Text style={styles.label}>Asesor de contacto</Text>
+        <AsesorPicker value={asesorId} onChange={setAsesorId} />
 
         <View style={styles.exclusivaRow}>
           <View>
