@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef } from 'react'
 import { Text, TouchableOpacity, Image } from 'react-native'
-import { Tabs } from 'expo-router'
+import { Tabs, usePathname } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
 const LOGO_URI = 'https://valerarealestate.com/images/logo.png'
 
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
+  const [colorAcento, setColorAcento] = useState('#1a6470')
+  const pathname = usePathname()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(false)
 
@@ -14,6 +16,17 @@ export default function ProspectadorLayout() {
     mountedRef.current = true
     return () => { mountedRef.current = false }
   }, [])
+
+  async function cargarPerfil() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || !mountedRef.current) return
+    const { data } = await supabase
+      .from('profiles')
+      .select('color_acento')
+      .eq('id', user.id)
+      .single()
+    if (data?.color_acento && mountedRef.current) setColorAcento(data.color_acento)
+  }
 
   async function cargarNoLeidas() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -67,7 +80,11 @@ export default function ProspectadorLayout() {
     if (huboNuevas && mountedRef.current) cargarNoLeidas()
   }
 
+  // Recarga el color cada vez que el usuario navega (ej. al salir de perfil)
+  useEffect(() => { cargarPerfil() }, [pathname])
+
   useEffect(() => {
+    cargarPerfil()
     cargarNoLeidas()
     verificarRecordatorios()
 
@@ -95,10 +112,10 @@ export default function ProspectadorLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#1a6470',
+        tabBarActiveTintColor: colorAcento,
         tabBarInactiveTintColor: '#aaa',
         tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#dde8e9' },
-        headerStyle: { backgroundColor: '#1a6470' },
+        headerStyle: { backgroundColor: colorAcento },
         headerTintColor: '#c9a84c',
         headerTitleStyle: { fontWeight: 'bold' },
         headerTitle: () => (
@@ -128,6 +145,7 @@ export default function ProspectadorLayout() {
           tabBarBadge: noLeidas > 0 ? noLeidas : undefined,
         }}
       />
+      <Tabs.Screen name="perfil" options={{ title: 'Mi Perfil', tabBarLabel: '👤 Perfil' }} />
       {/* Pantallas de detalle — ocultas del tab bar */}
       <Tabs.Screen name="detalle-propiedad"    options={{ href: null, title: 'Detalle' }} />
       <Tabs.Screen name="cliente-form"         options={{ href: null, title: 'Cliente' }} />

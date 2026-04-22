@@ -360,6 +360,7 @@ export default function NuevaPropiedad() {
           />
         )}
 
+
         {guardado && (
           <View style={styles.successBanner}>
             <Text style={styles.successText}>✓ Propiedad guardada correctamente</Text>

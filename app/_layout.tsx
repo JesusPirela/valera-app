@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Stack, router } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { Session } from '@supabase/supabase-js'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { queryClient, persister } from '../lib/queryClient'
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null)
@@ -16,6 +18,7 @@ export default function RootLayout() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       if (!session) {
+        queryClient.clear()
         router.replace('/(auth)/login')
       }
     })
@@ -31,10 +34,12 @@ export default function RootLayout() {
   }, [session, loading])
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(admin)" />
-      <Stack.Screen name="(prospectador)" />
-    </Stack>
+    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(admin)" />
+        <Stack.Screen name="(prospectador)" />
+      </Stack>
+    </PersistQueryClientProvider>
   )
 }

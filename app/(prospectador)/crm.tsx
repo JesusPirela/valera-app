@@ -1,10 +1,12 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, TextInput,
   ActivityIndicator, TouchableOpacity, ScrollView,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { OfflineBanner } from '../../components/OfflineBanner'
 
 type Cliente = {
   id: string
@@ -55,7 +57,6 @@ function proximoRecordatorio(recordatorios: Cliente['recordatorios']) {
   return pendientes[0] ?? null
 }
 
-// Anchos de columnas
 const COL = {
   nombre:   150,
   estado:   130,
@@ -66,26 +67,43 @@ const COL = {
 }
 
 export default function CRM() {
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [busqueda, setBusqueda] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null)
   const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
   const [sortCol, setSortCol] = useState<string>('created_at')
   const [sortAsc, setSortAsc] = useState(false)
 
-  async function cargarClientes() {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('clientes')
-      .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, recordatorios(id, titulo, fecha_hora, completado)')
-      .order('updated_at', { ascending: false })
+  const { data: clientes = [], isLoading, refetch } = useQuery<Cliente[]>({
+    queryKey: ['clientes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, recordatorios(id, titulo, fecha_hora, completado)')
+        .order('updated_at', { ascending: false })
+      if (error) throw error
+      return data ?? []
+    },
+    networkMode: 'offlineFirst',
+    staleTime: 1000 * 60 * 5,
+  })
 
-    if (!error) setClientes(data ?? [])
-    setLoading(false)
-  }
+  useFocusEffect(useCallback(() => { refetch() }, [refetch]))
 
-  useFocusEffect(useCallback(() => { cargarClientes() }, []))
+  // Sembrar el caché de cada detalle con los datos de la lista (sin requests extra)
+  useEffect(() => {
+    if (!clientes.length) return
+    for (const c of clientes) {
+      queryClient.setQueryData(
+        ['detalle-cliente', c.id],
+        (old: unknown) => old ?? {
+          cliente: c,
+          interacciones: [],
+          recordatorios: c.recordatorios ?? [],
+        }
+      )
+    }
+  }, [clientes])
 
   const conteos = ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
     acc[e] = clientes.filter((c) => c.estado === e).length
@@ -103,7 +121,6 @@ export default function CRM() {
   if (estadoFiltro) filtrados = filtrados.filter((c) => c.estado === estadoFiltro)
   if (operacionFiltro) filtrados = filtrados.filter((c) => c.tipo_operacion === operacionFiltro)
 
-  // Ordenamiento por columna
   filtrados = [...filtrados].sort((a, b) => {
     let va: string, vb: string
     if (sortCol === 'nombre') { va = a.nombre; vb = b.nombre }
@@ -136,210 +153,204 @@ export default function CRM() {
   const totalWidth = COLS.reduce((s, c) => s + c.width, 0) + COLS.length + 1
 
   return (
-    <View style={styles.container}>
-      {/* Filtro Venta / Renta */}
-      <View style={styles.operacionRow}>
-        {([null, 'venta', 'renta'] as const).map((op) => {
-          const activo = operacionFiltro === op
-          const label = op === null ? 'Todos' : op === 'venta' ? 'Venta' : 'Renta'
-          return (
-            <TouchableOpacity
-              key={label}
-              style={[styles.operacionTab, activo && styles.operacionTabActivo]}
-              onPress={() => setOperacionFiltro(op)}
-            >
-              <Text style={[styles.operacionTabText, activo && styles.operacionTabTextActivo]}>
-                {label}
-              </Text>
-            </TouchableOpacity>
-          )
-        })}
-      </View>
-
-      {/* Pipeline chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.pipeline}
-        contentContainerStyle={styles.pipelineContent}
-      >
-        <TouchableOpacity
-          style={[styles.pipelineChip, estadoFiltro === null && styles.pipelineChipAll]}
-          onPress={() => setEstadoFiltro(null)}
-        >
-          <Text style={[styles.pipelineCount, estadoFiltro === null && styles.pipelineCountAll]}>
-            {clientes.length}
-          </Text>
-          <Text style={[styles.pipelineLabel, estadoFiltro === null && styles.pipelineLabelAll]}>
-            Todos
-          </Text>
-        </TouchableOpacity>
-        {ORDEN_ESTADOS.map((e) => {
-          const info = estadoInfo(e)
-          const activo = estadoFiltro === e
-          return (
-            <TouchableOpacity
-              key={e}
-              style={[styles.pipelineChip, activo && { backgroundColor: info.bg, borderColor: info.color }]}
-              onPress={() => setEstadoFiltro(activo ? null : e)}
-            >
-              <Text style={[styles.pipelineCount, activo && { color: info.color }]}>
-                {conteos[e]}
-              </Text>
-              <Text style={[styles.pipelineLabel, activo && { color: info.color, fontWeight: '600' }]}>
-                {info.label}
-              </Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
-
-      {/* Búsqueda + botón nuevo */}
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar por nombre, teléfono..."
-          value={busqueda}
-          onChangeText={setBusqueda}
-          autoCapitalize="none"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-        />
-        <TouchableOpacity
-          style={styles.btnNuevo}
-          onPress={() => router.push('/(prospectador)/cliente-form')}
-        >
-          <Text style={styles.btnNuevoText}>+ Nuevo</Text>
-        </TouchableOpacity>
-      </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
-      ) : filtrados.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>
-            {busqueda || estadoFiltro ? 'Sin resultados' : 'Sin clientes aún'}
-          </Text>
-          {!busqueda && !estadoFiltro && (
-            <Text style={styles.emptySubtitle}>
-              Agrega tu primer cliente con el botón "+ Nuevo"
-            </Text>
-          )}
+    <>
+      <OfflineBanner />
+      <View style={styles.container}>
+        {/* Filtro Venta / Renta */}
+        <View style={styles.operacionRow}>
+          {([null, 'venta', 'renta'] as const).map((op) => {
+            const activo = operacionFiltro === op
+            const label = op === null ? 'Todos' : op === 'venta' ? 'Venta' : 'Renta'
+            return (
+              <TouchableOpacity
+                key={label}
+                style={[styles.operacionTab, activo && styles.operacionTabActivo]}
+                onPress={() => setOperacionFiltro(op)}
+              >
+                <Text style={[styles.operacionTabText, activo && styles.operacionTabTextActivo]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
         </View>
-      ) : (
+
+        {/* Pipeline chips */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          bounces={false}
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+          style={styles.pipeline}
+          contentContainerStyle={styles.pipelineContent}
         >
-          <View style={{ width: totalWidth }}>
-            {/* Encabezado de tabla */}
-            <View style={styles.tableHeader}>
-              {COLS.map((col, i) => (
-                <TouchableOpacity
-                  key={col.key}
-                  style={[
-                    styles.headerCell,
-                    { width: col.width },
-                    i < COLS.length - 1 && styles.cellBorderRight,
-                  ]}
-                  onPress={() => col.sortable && toggleSort(col.key)}
-                  disabled={!col.sortable}
-                >
-                  <Text style={styles.headerCellText}>
-                    {col.label}
-                    {col.sortable ? (
-                      <Text style={styles.sortIcon}>{sortIcon(col.key)}</Text>
-                    ) : null}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          <TouchableOpacity
+            style={[styles.pipelineChip, estadoFiltro === null && styles.pipelineChipAll]}
+            onPress={() => setEstadoFiltro(null)}
+          >
+            <Text style={[styles.pipelineCount, estadoFiltro === null && styles.pipelineCountAll]}>
+              {clientes.length}
+            </Text>
+            <Text style={[styles.pipelineLabel, estadoFiltro === null && styles.pipelineLabelAll]}>
+              Todos
+            </Text>
+          </TouchableOpacity>
+          {ORDEN_ESTADOS.map((e) => {
+            const info = estadoInfo(e)
+            const activo = estadoFiltro === e
+            return (
+              <TouchableOpacity
+                key={e}
+                style={[styles.pipelineChip, activo && { backgroundColor: info.bg, borderColor: info.color }]}
+                onPress={() => setEstadoFiltro(activo ? null : e)}
+              >
+                <Text style={[styles.pipelineCount, activo && { color: info.color }]}>
+                  {conteos[e]}
+                </Text>
+                <Text style={[styles.pipelineLabel, activo && { color: info.color, fontWeight: '600' }]}>
+                  {info.label}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
 
-            {/* Filas */}
-            <ScrollView
-              nestedScrollEnabled
-              showsVerticalScrollIndicator
-              contentContainerStyle={{ paddingBottom: 24 }}
-            >
-              {filtrados.map((item, idx) => {
-                const info = estadoInfo(item.estado)
-                const recProximo = proximoRecordatorio(item.recordatorios ?? [])
-                const ahora = new Date()
-                const recVencido = recProximo && new Date(recProximo.fecha_hora) < ahora
-                const isEven = idx % 2 === 0
+        {/* Búsqueda + botón nuevo */}
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar por nombre, teléfono..."
+            value={busqueda}
+            onChangeText={setBusqueda}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
+          <TouchableOpacity
+            style={styles.btnNuevo}
+            onPress={() => router.push('/(prospectador)/cliente-form')}
+          >
+            <Text style={styles.btnNuevoText}>+ Nuevo</Text>
+          </TouchableOpacity>
+        </View>
 
-                return (
+        {isLoading ? (
+          <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
+        ) : filtrados.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>
+              {busqueda || estadoFiltro ? 'Sin resultados' : 'Sin clientes aún'}
+            </Text>
+            {!busqueda && !estadoFiltro && (
+              <Text style={styles.emptySubtitle}>
+                Agrega tu primer cliente con el botón "+ Nuevo"
+              </Text>
+            )}
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            bounces={false}
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+          >
+            <View style={{ width: totalWidth }}>
+              <View style={styles.tableHeader}>
+                {COLS.map((col, i) => (
                   <TouchableOpacity
-                    key={item.id}
-                    style={[styles.tableRow, isEven ? styles.rowEven : styles.rowOdd]}
-                    onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
-                    activeOpacity={0.75}
+                    key={col.key}
+                    style={[
+                      styles.headerCell,
+                      { width: col.width },
+                      i < COLS.length - 1 && styles.cellBorderRight,
+                    ]}
+                    onPress={() => col.sortable && toggleSort(col.key)}
+                    disabled={!col.sortable}
                   >
-                    {/* Nombre */}
-                    <View style={[styles.cell, { width: COL.nombre }, styles.cellBorderRight]}>
-                      <Text style={styles.cellNombre} numberOfLines={1}>{item.nombre}</Text>
-                      {item.empresa ? (
-                        <Text style={styles.cellSub} numberOfLines={1}>{item.empresa}</Text>
+                    <Text style={styles.headerCellText}>
+                      {col.label}
+                      {col.sortable ? (
+                        <Text style={styles.sortIcon}>{sortIcon(col.key)}</Text>
                       ) : null}
-                    </View>
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-                    {/* Estado */}
-                    <View style={[styles.cell, { width: COL.estado }, styles.cellBorderRight, styles.cellCenter]}>
-                      <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
-                        <Text style={[styles.estadoText, { color: info.color }]} numberOfLines={1}>
-                          {info.label}
-                        </Text>
+              <ScrollView
+                nestedScrollEnabled
+                showsVerticalScrollIndicator
+                contentContainerStyle={{ paddingBottom: 24 }}
+              >
+                {filtrados.map((item, idx) => {
+                  const info = estadoInfo(item.estado)
+                  const recProximo = proximoRecordatorio(item.recordatorios ?? [])
+                  const ahora = new Date()
+                  const recVencido = recProximo && new Date(recProximo.fecha_hora) < ahora
+                  const isEven = idx % 2 === 0
+
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[styles.tableRow, isEven ? styles.rowEven : styles.rowOdd]}
+                      onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={[styles.cell, { width: COL.nombre }, styles.cellBorderRight]}>
+                        <Text style={styles.cellNombre} numberOfLines={1}>{item.nombre}</Text>
+                        {item.empresa ? (
+                          <Text style={styles.cellSub} numberOfLines={1}>{item.empresa}</Text>
+                        ) : null}
                       </View>
-                    </View>
 
-                    {/* Teléfono */}
-                    <View style={[styles.cell, { width: COL.telefono }, styles.cellBorderRight]}>
-                      <Text style={styles.cellText} numberOfLines={1}>{item.telefono}</Text>
-                    </View>
-
-                    {/* Empresa */}
-                    <View style={[styles.cell, { width: COL.empresa }, styles.cellBorderRight]}>
-                      <Text style={styles.cellText} numberOfLines={1}>{item.empresa ?? '—'}</Text>
-                    </View>
-
-                    {/* Recordatorio */}
-                    <View style={[styles.cell, { width: COL.rec }, styles.cellBorderRight]}>
-                      {recProximo ? (
-                        <View style={[styles.recChip, recVencido && styles.recChipVencido]}>
-                          <Text style={[styles.recChipText, recVencido && styles.recChipTextVencido]} numberOfLines={1}>
-                            {recVencido
-                              ? '⚠ Vencido'
-                              : new Date(recProximo.fecha_hora).toLocaleDateString('es-MX', {
-                                  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                                })}
+                      <View style={[styles.cell, { width: COL.estado }, styles.cellBorderRight, styles.cellCenter]}>
+                        <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
+                          <Text style={[styles.estadoText, { color: info.color }]} numberOfLines={1}>
+                            {info.label}
                           </Text>
                         </View>
-                      ) : (
-                        <Text style={styles.cellNone}>—</Text>
-                      )}
-                    </View>
+                      </View>
 
-                    {/* Fecha */}
-                    <View style={[styles.cell, { width: COL.fecha }]}>
-                      <Text style={styles.cellFecha}>{tiempoRelativo(item.created_at)}</Text>
-                    </View>
-                  </TouchableOpacity>
-                )
-              })}
-            </ScrollView>
-          </View>
-        </ScrollView>
-      )}
-    </View>
+                      <View style={[styles.cell, { width: COL.telefono }, styles.cellBorderRight]}>
+                        <Text style={styles.cellText} numberOfLines={1}>{item.telefono}</Text>
+                      </View>
+
+                      <View style={[styles.cell, { width: COL.empresa }, styles.cellBorderRight]}>
+                        <Text style={styles.cellText} numberOfLines={1}>{item.empresa ?? '—'}</Text>
+                      </View>
+
+                      <View style={[styles.cell, { width: COL.rec }, styles.cellBorderRight]}>
+                        {recProximo ? (
+                          <View style={[styles.recChip, recVencido && styles.recChipVencido]}>
+                            <Text style={[styles.recChipText, recVencido && styles.recChipTextVencido]} numberOfLines={1}>
+                              {recVencido
+                                ? '⚠ Vencido'
+                                : new Date(recProximo.fecha_hora).toLocaleDateString('es-MX', {
+                                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                                  })}
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.cellNone}>—</Text>
+                        )}
+                      </View>
+
+                      <View style={[styles.cell, { width: COL.fecha }]}>
+                        <Text style={styles.cellFecha}>{tiempoRelativo(item.created_at)}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
+            </View>
+          </ScrollView>
+        )}
+      </View>
+    </>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f5' },
 
-  // Operacion tabs
   operacionRow: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -354,7 +365,6 @@ const styles = StyleSheet.create({
   operacionTabText: { fontSize: 13, fontWeight: '600', color: '#aaa' },
   operacionTabTextActivo: { color: '#1a6470' },
 
-  // Pipeline
   pipeline: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
   pipelineContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, flexDirection: 'row' },
   pipelineChip: {
@@ -368,7 +378,6 @@ const styles = StyleSheet.create({
   pipelineLabel: { fontSize: 10, color: '#888', textAlign: 'center', marginTop: 1 },
   pipelineLabelAll: { color: '#c9a84c' },
 
-  // Search
   searchRow: { flexDirection: 'row', gap: 10, padding: 12, alignItems: 'center' },
   searchInput: {
     flex: 1, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1,
@@ -378,12 +387,10 @@ const styles = StyleSheet.create({
   btnNuevo: { backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
   btnNuevoText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  // Empty
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a6470', marginBottom: 8 },
   emptySubtitle: { fontSize: 14, color: '#aaa', textAlign: 'center' },
 
-  // Table header
   tableHeader: {
     flexDirection: 'row',
     backgroundColor: '#1a6470',
@@ -404,7 +411,6 @@ const styles = StyleSheet.create({
   sortIcon: { color: '#c9a84c', fontWeight: '400' },
   cellBorderRight: { borderRightWidth: 1, borderRightColor: '#dde3e7' },
 
-  // Rows
   tableRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -414,7 +420,6 @@ const styles = StyleSheet.create({
   rowEven: { backgroundColor: '#ffffff' },
   rowOdd:  { backgroundColor: '#f7f9fb' },
 
-  // Cells
   cell: {
     paddingVertical: 10,
     paddingHorizontal: 10,
@@ -427,11 +432,9 @@ const styles = StyleSheet.create({
   cellFecha:  { fontSize: 12, color: '#888', textAlign: 'center' },
   cellNone:   { fontSize: 13, color: '#ccc', textAlign: 'center' },
 
-  // Estado badge
   estadoBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
   estadoText:  { fontSize: 11, fontWeight: '600' },
 
-  // Recordatorio chip
   recChip: { backgroundColor: '#e0f4f5', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
   recChipVencido: { backgroundColor: '#fde8e8' },
   recChipText: { fontSize: 11, color: '#1a6470', fontWeight: '500' },

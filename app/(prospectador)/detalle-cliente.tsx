@@ -1,11 +1,13 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Modal, Platform, FlatList,
+  ActivityIndicator, Alert, TextInput, Modal, Platform, FlatList, Linking,
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { ESTADOS } from './crm'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { OfflineBanner } from '../../components/OfflineBanner'
 
 type Cliente = {
   id: string
@@ -163,11 +165,29 @@ function Spin({ label, value, onUp, onDown }: { label: string; value: string | n
 // ── Pantalla principal ───────────────────────────────────
 export default function DetalleCliente() {
   const { id } = useLocalSearchParams<{ id: string }>()
+  const queryClient = useQueryClient()
 
-  const [cliente, setCliente] = useState<Cliente | null>(null)
-  const [interacciones, setInteracciones] = useState<Interaccion[]>([])
-  const [recordatorios, setRecordatorios] = useState<Recordatorio[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['detalle-cliente', id],
+    queryFn: async () => {
+      const [{ data: c }, { data: i }, { data: r }] = await Promise.all([
+        supabase.from('clientes').select('*').eq('id', id).single(),
+        supabase.from('interacciones').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
+        supabase.from('recordatorios').select('*').eq('cliente_id', id).order('fecha_hora', { ascending: true }),
+      ])
+      if (!c) throw new Error('Cliente no encontrado')
+      return { cliente: c as Cliente, interacciones: (i ?? []) as Interaccion[], recordatorios: (r ?? []) as Recordatorio[] }
+    },
+    enabled: !!id,
+    networkMode: 'offlineFirst',
+    staleTime: 1000 * 60 * 5,
+  })
+
+  useFocusEffect(useCallback(() => { refetch() }, [refetch]))
+
+  const cliente = data?.cliente ?? null
+  const interacciones = data?.interacciones ?? []
+  const recordatorios = data?.recordatorios ?? []
 
   // Modal agregar interacción
   const [modalInteraccion, setModalInteraccion] = useState(false)
@@ -181,21 +201,6 @@ export default function DetalleCliente() {
   const [descRec, setDescRec] = useState('')
   const [fechaRec, setFechaRec] = useState<Date | null>(null)
   const [guardandoRec, setGuardandoRec] = useState(false)
-
-  async function cargar() {
-    setLoading(true)
-    const [{ data: c }, { data: i }, { data: r }] = await Promise.all([
-      supabase.from('clientes').select('*').eq('id', id).single(),
-      supabase.from('interacciones').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
-      supabase.from('recordatorios').select('*').eq('cliente_id', id).order('fecha_hora', { ascending: true }),
-    ])
-    if (c) setCliente(c)
-    setInteracciones(i ?? [])
-    setRecordatorios(r ?? [])
-    setLoading(false)
-  }
-
-  useFocusEffect(useCallback(() => { cargar() }, [id]))
 
   async function cambiarEstado(nuevoEstado: string) {
     if (!cliente || nuevoEstado === cliente.estado) return
@@ -213,8 +218,7 @@ export default function DetalleCliente() {
       descripcion: `Estado cambiado de "${estadoAnterior}" a "${estadoNuevo}".`,
     })
 
-    setCliente((prev) => prev ? { ...prev, estado: nuevoEstado } : prev)
-    cargar()
+    refetch()
   }
 
   async function agregarInteraccion() {
@@ -232,7 +236,7 @@ export default function DetalleCliente() {
     setTextoInteraccion('')
     setTipoInteraccion('nota')
     setModalInteraccion(false)
-    cargar()
+    refetch()
   }
 
   async function agregarRecordatorio() {
@@ -253,12 +257,15 @@ export default function DetalleCliente() {
     setDescRec('')
     setFechaRec(null)
     setModalRecordatorio(false)
-    cargar()
+    refetch()
   }
 
   async function completarRecordatorio(recId: string) {
     await supabase.from('recordatorios').update({ completado: true }).eq('id', recId)
-    setRecordatorios((prev) => prev.map((r) => r.id === recId ? { ...r, completado: true } : r))
+    queryClient.setQueryData(['detalle-cliente', id], (old: typeof data) => {
+      if (!old) return old
+      return { ...old, recordatorios: old.recordatorios.map(r => r.id === recId ? { ...r, completado: true } : r) }
+    })
   }
 
   async function eliminarCliente() {
@@ -280,7 +287,7 @@ export default function DetalleCliente() {
     }
   }
 
-  if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
+  if (isLoading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
   if (!cliente) return <View style={styles.container}><Text style={{ padding: 24, color: '#aaa' }}>Cliente no encontrado.</Text></View>
 
   const info = ESTADOS[cliente.estado] ?? { label: cliente.estado, color: '#555', bg: '#eee' }
@@ -289,6 +296,7 @@ export default function DetalleCliente() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <OfflineBanner />
       {/* Header cliente */}
       <View style={styles.clienteCard}>
         <View style={styles.clienteTop}>
@@ -353,6 +361,67 @@ export default function DetalleCliente() {
             <Text style={styles.notas}>{cliente.notas}</Text>
           </View>
         ) : null}
+      </View>
+
+      {/* Botones de acción rápida WhatsApp / Llamada */}
+      <View style={styles.accionesRow}>
+        <TouchableOpacity
+          style={[styles.accionBtn, styles.accionBtnWA]}
+          onPress={() => {
+            const tel = cliente.telefono.replace(/\D/g, '')
+            const msg = encodeURIComponent(
+              `Hola ${cliente.nombre}, soy tu asesor de Valera Real Estate. Te contacto para dar seguimiento a tu búsqueda de propiedad. ¿Tienes un momento para platicar?`
+            )
+            const url = `https://wa.me/52${tel}?text=${msg}`
+            if (Platform.OS === 'web') window.open(url, '_blank')
+            else Linking.openURL(url)
+          }}
+        >
+          <Text style={styles.accionBtnText}>📱 WhatsApp</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.accionBtn, styles.accionBtnCall]}
+          onPress={() => Linking.openURL(`tel:${cliente.telefono}`)}
+        >
+          <Text style={styles.accionBtnText}>📞 Llamar</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Mensajes predefinidos WA */}
+      <View style={styles.waTemplatesCard}>
+        <Text style={styles.waTemplatesTitle}>💬 Mensajes rápidos por WhatsApp</Text>
+        {[
+          {
+            label: '🔔 Recordatorio de cita',
+            msg: `Hola ${cliente.nombre}, te recuerdo que tenemos una cita agendada. ¿Sigue en pie? Con gusto te confirmo los detalles.`,
+          },
+          {
+            label: '🏠 Compartir propiedad',
+            msg: `Hola ${cliente.nombre}, encontré una propiedad que puede interesarte. ¿Tienes unos minutos para que te cuente los detalles?`,
+          },
+          {
+            label: '📋 Solicitar documentos',
+            msg: `Hola ${cliente.nombre}, para avanzar con tu proceso necesitamos algunos documentos. ¿Puedes enviarlos cuando puedas?`,
+          },
+          {
+            label: '✅ Seguimiento post-visita',
+            msg: `Hola ${cliente.nombre}, ¿qué te pareció la propiedad que visitamos? Quedo a tus órdenes para cualquier duda o para agendar otra visita.`,
+          },
+        ].map((t) => (
+          <TouchableOpacity
+            key={t.label}
+            style={styles.waTemplateBtn}
+            onPress={() => {
+              const tel = cliente.telefono.replace(/\D/g, '')
+              const url = `https://wa.me/52${tel}?text=${encodeURIComponent(t.msg)}`
+              if (Platform.OS === 'web') window.open(url, '_blank')
+              else Linking.openURL(url)
+            }}
+          >
+            <Text style={styles.waTemplateBtnText}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* Pipeline — cambio de estado */}
@@ -583,6 +652,21 @@ const dpStyles = StyleSheet.create({
 // ── Estilos pantalla ─────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
+  accionesRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  accionBtn: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
+  accionBtnWA: { backgroundColor: '#25d366' },
+  accionBtnCall: { backgroundColor: '#1a6470' },
+  accionBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  waTemplatesCard: {
+    backgroundColor: '#fff', borderRadius: 14, padding: 14,
+    marginBottom: 16, borderWidth: 1, borderColor: '#eee',
+  },
+  waTemplatesTitle: { fontSize: 13, fontWeight: '700', color: '#1a1a2e', marginBottom: 10 },
+  waTemplateBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
+  },
+  waTemplateBtnText: { color: '#1a6470', fontSize: 13, fontWeight: '600' },
   content: { padding: 16, paddingBottom: 48 },
   clienteCard: {
     backgroundColor: '#fff', borderRadius: 14, padding: 16,

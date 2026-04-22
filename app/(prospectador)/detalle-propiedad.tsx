@@ -21,6 +21,9 @@ import { supabase } from '../../lib/supabase'
 import { File, Paths } from 'expo-file-system'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
+import { useQuery } from '@tanstack/react-query'
+import { useNetworkStatus } from '../../hooks/useNetworkStatus'
+import { OfflineBanner } from '../../components/OfflineBanner'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 
@@ -98,18 +101,77 @@ function formatearFichaWhatsApp(p: Propiedad): string {
 
 export default function DetallePropiedad() {
   const { id } = useLocalSearchParams<{ id: string }>()
-  const [propiedad, setPropiedad] = useState<Propiedad | null>(null)
-  const [loading, setLoading] = useState(true)
+  const isOnline = useNetworkStatus()
   const [imagenActual, setImagenActual] = useState(0)
   const [descargando, setDescargando] = useState(false)
   const [compartiendoFotos, setCompartiendoFotos] = useState(false)
   const [nota, setNota] = useState('')
   const [notaGuardada, setNotaGuardada] = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
-  const [subidoPor, setSubidoPor] = useState<SubidoPor | null>(null)
   const scrollRef = useRef<ScrollView>(null)
 
-  const [nombreUsuario, setNombreUsuario] = useState<string | null>(null)
+  const { data: detalle, isLoading } = useQuery({
+    queryKey: ['detalle-propiedad', id],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const userId = session?.user?.id
+
+      let nombreUsuario: string | null = null
+      if (userId) {
+        const { data: miPerfil } = await supabase
+          .from('profiles').select('nombre').eq('id', userId).maybeSingle()
+        nombreUsuario = miPerfil?.nombre ?? null
+      }
+
+      const { data, error } = await supabase
+        .from('propiedades')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, es_constructora, nombre_constructora, propiedad_imagenes(url, orden)')
+        .eq('id', id)
+        .single()
+
+      if (error) throw error
+
+      let subidoPor: SubidoPor | null = null
+      if (data.created_by) {
+        const { data: perfil } = await supabase
+          .from('profiles').select('nombre, telefono').eq('id', data.created_by).maybeSingle()
+        if (perfil) subidoPor = { nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null }
+      }
+
+      return { propiedad: data as Propiedad, subidoPor, nombreUsuario }
+    },
+    enabled: !!id,
+    networkMode: 'offlineFirst',
+    staleTime: 1000 * 60 * 5,
+  })
+
+  const { data: notaData } = useQuery({
+    queryKey: ['nota-propiedad', id],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const userId = session?.user?.id
+      if (!userId) return { contenido: '' }
+      const { data } = await supabase
+        .from('notas_propiedad').select('contenido')
+        .eq('propiedad_id', id).eq('user_id', userId).maybeSingle()
+      return { contenido: data?.contenido ?? '' }
+    },
+    enabled: !!id,
+    networkMode: 'offlineFirst',
+    staleTime: 1000 * 60 * 5,
+  })
+
+  const propiedad = detalle?.propiedad ?? null
+  const subidoPor = detalle?.subidoPor ?? null
+  const nombreUsuario = detalle?.nombreUsuario ?? null
+
+  // Sincronizar nota desde caché cuando carga
+  useEffect(() => {
+    if (notaData?.contenido !== undefined) {
+      setNota(notaData.contenido)
+      setNotaGuardada(notaData.contenido)
+    }
+  }, [notaData?.contenido])
 
   // Modal selección de cliente para cita
   const [modalCitaVisible, setModalCitaVisible] = useState(false)
@@ -133,25 +195,9 @@ export default function DetallePropiedad() {
   }
 
   useEffect(() => {
-    if (!id) return
-    cargarPropiedad()
-    cargarNota()
+    if (!id || !isOnline) return
     registrarActividad('vista')
   }, [id])
-
-  async function cargarNota() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase
-      .from('notas_propiedad')
-      .select('contenido')
-      .eq('propiedad_id', id)
-      .eq('user_id', user.id)
-      .maybeSingle()
-    const texto = data?.contenido ?? ''
-    setNota(texto)
-    setNotaGuardada(texto)
-  }
 
   async function guardarNota() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -168,40 +214,6 @@ export default function DetallePropiedad() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     await supabase.from('propiedad_actividad').insert({ propiedad_id: id, user_id: user.id, tipo })
-  }
-
-  async function cargarPropiedad() {
-    setLoading(true)
-    setSubidoPor(null)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data: miPerfil } = await supabase
-        .from('profiles')
-        .select('nombre')
-        .eq('id', user.id)
-        .maybeSingle()
-      setNombreUsuario(miPerfil?.nombre ?? null)
-    }
-    const { data, error } = await supabase
-      .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, es_constructora, nombre_constructora, propiedad_imagenes(url, orden)')
-      .eq('id', id)
-      .single()
-
-    if (!error && data) {
-      setPropiedad(data as Propiedad)
-      if (data.created_by) {
-        const { data: perfil } = await supabase
-          .from('profiles')
-          .select('nombre, telefono')
-          .eq('id', data.created_by)
-          .maybeSingle()
-        if (perfil) {
-          setSubidoPor({ nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null })
-        }
-      }
-    }
-    setLoading(false)
   }
 
   async function pedirDiseno() {
@@ -512,7 +524,7 @@ export default function DetallePropiedad() {
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#1a6470" />
@@ -537,6 +549,7 @@ export default function DetallePropiedad() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      <OfflineBanner />
       <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(prospectador)/propiedades')}>
         <Text style={styles.backBtnText}>← Volver</Text>
       </TouchableOpacity>
@@ -612,6 +625,31 @@ export default function DetallePropiedad() {
         <Text style={styles.titulo}>{propiedad.titulo}</Text>
         <Text style={styles.precio}>{formatPrecio(propiedad.precio)}</Text>
         <Text style={styles.direccion}>{propiedad.direccion}</Text>
+
+        {/* Contactar asesor + Generar flyer */}
+        <View style={styles.accionesRapidas}>
+          {subidoPor?.telefono && (
+            <>
+              <TouchableOpacity
+                style={[styles.accionBtn, { backgroundColor: '#25d366' }]}
+                onPress={() => {
+                  const tel = subidoPor.telefono!.replace(/\D/g, '')
+                  const url = `https://wa.me/52${tel}?text=${encodeURIComponent(`Hola, te contacto sobre la propiedad ${propiedad.codigo}: ${propiedad.titulo}`)}`
+                  if (Platform.OS === 'web') window.open(url, '_blank')
+                  else Linking.openURL(url)
+                }}
+              >
+                <Text style={styles.accionBtnText}>📱 WhatsApp asesor</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.accionBtn, { backgroundColor: '#1a6470' }]}
+                onPress={() => Linking.openURL(`tel:${subidoPor.telefono}`)}
+              >
+                <Text style={styles.accionBtnText}>📞 Llamar</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
 
         {/* Características */}
         {(propiedad.recamaras != null || propiedad.banos != null || propiedad.m2 != null || propiedad.estacionamientos != null) && (
@@ -1157,6 +1195,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     fontWeight: '600',
   },
+  accionesRapidas: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginVertical: 12 },
+  accionBtn: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center' },
+  accionBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   // Modal selección de cliente
   modalOverlay: {
