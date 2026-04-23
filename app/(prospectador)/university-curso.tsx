@@ -1,10 +1,12 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Modal, TextInput, Platform,
+  ActivityIndicator, Modal, TextInput, Platform, Alert,
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import * as Print from 'expo-print'
+import * as Sharing from 'expo-sharing'
 
 type Curso = {
   id: string
@@ -28,38 +30,114 @@ const NIVEL_LABEL: Record<string, string> = {
   basico: 'Básico', intermedio: 'Intermedio', avanzado: 'Avanzado',
 }
 
-// ── PDF generator (web-only via jspdf) ────────────────────
+function certificadoHTML(nombreCompleto: string, cursoTitulo: string): string {
+  const fecha = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+  const cursoEscapado = cursoTitulo.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const nombreEscapado = nombreCompleto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:297mm; height:210mm; background:#fff; }
+  .page {
+    width:297mm; height:210mm; position:relative;
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:center; font-family:Helvetica,Arial,sans-serif;
+  }
+  .border-outer {
+    position:absolute; top:8mm; left:8mm; right:8mm; bottom:8mm;
+    border:4px solid #c9a84c; pointer-events:none;
+  }
+  .border-inner {
+    position:absolute; top:13mm; left:13mm; right:13mm; bottom:13mm;
+    border:1px solid #c9a84c; pointer-events:none;
+  }
+  .corner { position:absolute; width:6mm; height:6mm; background:#c9a84c; border-radius:50%; }
+  .tl { top:5mm; left:5mm; } .tr { top:5mm; right:5mm; }
+  .bl { bottom:5mm; left:5mm; } .br { bottom:5mm; right:5mm; }
+  .content { display:flex; flex-direction:column; align-items:center; padding:18mm 20mm 10mm; width:100%; }
+  .logo { max-height:22mm; max-width:55mm; margin-bottom:4mm; }
+  .title { font-size:22pt; font-weight:bold; color:#1a6470; letter-spacing:2px; text-align:center; margin-bottom:3mm; }
+  .divider { width:140mm; height:1.5px; background:#c9a84c; margin:2mm 0; }
+  .se-certifica { font-size:11pt; color:#888; margin:4mm 0 2mm; }
+  .nombre { font-size:28pt; font-weight:bold; font-style:italic; color:#c9a84c; margin:2mm 0; text-align:center; max-width:240mm; }
+  .name-line { width:120mm; height:1px; background:#c9a84c; margin:1mm 0 4mm; }
+  .ha-completado { font-size:11pt; color:#888; margin-bottom:2mm; }
+  .curso { font-size:17pt; font-weight:bold; color:#1a1a2e; text-align:center; max-width:220mm; margin:1mm 0 4mm; }
+  .fecha { font-size:9pt; color:#aaa; margin-bottom:6mm; }
+  .firma-area { display:flex; flex-direction:column; align-items:center; margin-top:2mm; }
+  .firma-line { width:90mm; height:1px; background:#1a6470; margin-bottom:2mm; }
+  .firma-nombre { font-size:10pt; font-weight:bold; color:#1a6470; }
+  .firma-sub { font-size:8pt; color:#aaa; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="border-outer"></div>
+  <div class="border-inner"></div>
+  <div class="corner tl"></div><div class="corner tr"></div>
+  <div class="corner bl"></div><div class="corner br"></div>
+  <div class="content">
+    <img src="https://valerarealestate.com/images/logo.png" class="logo"
+         onerror="this.outerHTML='<p style=\\"font-size:13pt;color:#c9a84c;font-weight:bold;margin-bottom:4mm;\\">VALERA REAL ESTATE</p>'" />
+    <div class="title">CERTIFICADO DE FINALIZACIÓN</div>
+    <div class="divider"></div>
+    <div class="se-certifica">Se certifica que:</div>
+    <div class="nombre">${nombreEscapado}</div>
+    <div class="name-line"></div>
+    <div class="ha-completado">Ha completado satisfactoriamente el curso:</div>
+    <div class="curso">${cursoEscapado}</div>
+    <div class="fecha">${fecha}</div>
+    <div class="firma-area">
+      <div class="firma-line"></div>
+      <div class="firma-nombre">Valera Real Estate</div>
+      <div class="firma-sub">Valera University</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`
+}
+
 async function generarCertificadoPDF(nombreCompleto: string, cursoTitulo: string) {
   try {
-    // Dynamic import so it only loads on web
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    if (Platform.OS !== 'web') {
+      const html = certificadoHTML(nombreCompleto, cursoTitulo)
+      const { uri } = await Print.printToFileAsync({ html, width: 842, height: 595 })
+      const canShare = await Sharing.isAvailableAsync()
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: `Certificado – ${cursoTitulo}`,
+          UTI: 'com.adobe.pdf',
+        })
+      } else {
+        Alert.alert('Certificado generado', 'El PDF fue creado pero no se puede compartir en este dispositivo.')
+      }
+      return true
+    }
+
+    // Web: usar jsPDF
     // @ts-ignore
     const { jsPDF } = await import('jspdf')
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+    const W = 297, H = 210
 
-    const W = 297
-    const H = 210
-
-    // ── Fondo blanco ──
     doc.setFillColor(255, 255, 255)
     doc.rect(0, 0, W, H, 'F')
-
-    // ── Borde dorado doble ──
     doc.setDrawColor(201, 168, 76)
     doc.setLineWidth(4)
     doc.rect(8, 8, W - 16, H - 16)
     doc.setLineWidth(1)
     doc.rect(13, 13, W - 26, H - 26)
-
-    // ── Esquinas decorativas ──
     const corner = (x: number, y: number, rx: number, ry: number) => {
-      doc.setFillColor(201, 168, 76)
-      doc.ellipse(x, y, rx, ry, 'F')
+      doc.setFillColor(201, 168, 76); doc.ellipse(x, y, rx, ry, 'F')
     }
     corner(8, 8, 3, 3); corner(W - 8, 8, 3, 3)
     corner(8, H - 8, 3, 3); corner(W - 8, H - 8, 3, 3)
 
-    // ── Logo (fetch como base64) ──
     try {
       const resp = await fetch('https://valerarealestate.com/images/logo.png')
       const blob = await resp.blob()
@@ -70,73 +148,33 @@ async function generarCertificadoPDF(nombreCompleto: string, cursoTitulo: string
       })
       doc.addImage(b64, 'PNG', W / 2 - 28, 18, 56, 28)
     } catch {
-      // Si el logo falla, poner texto en su lugar
-      doc.setFontSize(14)
-      doc.setTextColor(201, 168, 76)
+      doc.setFontSize(14); doc.setTextColor(201, 168, 76)
       doc.text('VALERA REAL ESTATE', W / 2, 35, { align: 'center' })
     }
 
-    // ── Título principal ──
-    doc.setFontSize(28)
-    doc.setTextColor(26, 100, 112)
-    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(28); doc.setTextColor(26, 100, 112); doc.setFont('helvetica', 'bold')
     doc.text('CERTIFICADO DE FINALIZACIÓN', W / 2, 65, { align: 'center' })
-
-    // ── Línea decorativa bajo título ──
-    doc.setDrawColor(201, 168, 76)
-    doc.setLineWidth(0.8)
+    doc.setDrawColor(201, 168, 76); doc.setLineWidth(0.8)
     doc.line(W / 2 - 70, 70, W / 2 + 70, 70)
-
-    // ── Texto "se certifica" ──
-    doc.setFontSize(13)
-    doc.setTextColor(100, 100, 100)
-    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(13); doc.setTextColor(100, 100, 100); doc.setFont('helvetica', 'normal')
     doc.text('Se certifica que:', W / 2, 83, { align: 'center' })
-
-    // ── Nombre del alumno ──
-    doc.setFontSize(32)
-    doc.setTextColor(201, 168, 76)
-    doc.setFont('helvetica', 'bolditalic')
+    doc.setFontSize(32); doc.setTextColor(201, 168, 76); doc.setFont('helvetica', 'bolditalic')
     doc.text(nombreCompleto, W / 2, 102, { align: 'center' })
-
-    // ── Línea bajo nombre ──
-    doc.setDrawColor(201, 168, 76)
-    doc.setLineWidth(0.5)
+    doc.setDrawColor(201, 168, 76); doc.setLineWidth(0.5)
     const nameW = Math.min(doc.getTextWidth(nombreCompleto) + 20, 180)
     doc.line(W / 2 - nameW / 2, 107, W / 2 + nameW / 2, 107)
-
-    // ── Texto "ha completado" ──
-    doc.setFontSize(13)
-    doc.setTextColor(100, 100, 100)
-    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(13); doc.setTextColor(100, 100, 100); doc.setFont('helvetica', 'normal')
     doc.text('Ha completado satisfactoriamente el curso:', W / 2, 120, { align: 'center' })
-
-    // ── Nombre del curso ──
-    doc.setFontSize(20)
-    doc.setTextColor(26, 26, 46)
-    doc.setFont('helvetica', 'bold')
-    // Wrap si es muy largo
-    const cursoLines = doc.splitTextToSize(cursoTitulo, 220)
-    doc.text(cursoLines, W / 2, 132, { align: 'center' })
-
-    // ── Fecha ──
+    doc.setFontSize(20); doc.setTextColor(26, 26, 46); doc.setFont('helvetica', 'bold')
+    doc.text(doc.splitTextToSize(cursoTitulo, 220), W / 2, 132, { align: 'center' })
     const fecha = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
-    doc.setFontSize(11)
-    doc.setTextColor(130, 130, 130)
-    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(11); doc.setTextColor(130, 130, 130); doc.setFont('helvetica', 'normal')
     doc.text(fecha, W / 2, 152, { align: 'center' })
-
-    // ── Firma ──
-    doc.setDrawColor(26, 100, 112)
-    doc.setLineWidth(0.5)
+    doc.setDrawColor(26, 100, 112); doc.setLineWidth(0.5)
     doc.line(W / 2 - 45, 170, W / 2 + 45, 170)
-    doc.setFontSize(11)
-    doc.setTextColor(26, 100, 112)
-    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11); doc.setTextColor(26, 100, 112); doc.setFont('helvetica', 'bold')
     doc.text('Valera Real Estate', W / 2, 177, { align: 'center' })
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(150, 150, 150)
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(150, 150, 150)
     doc.text('Valera University', W / 2, 183, { align: 'center' })
 
     const nombreArchivo = `Certificado_${nombreCompleto.replace(/\s+/g, '_')}_${cursoTitulo.substring(0, 30).replace(/\s+/g, '_')}.pdf`
@@ -218,6 +256,7 @@ export default function UniversityCurso() {
         setModalCert(false)
       } else {
         if (Platform.OS === 'web') window.alert('Error al generar el PDF. Intenta de nuevo.')
+        else Alert.alert('Error', 'No se pudo generar el certificado. Intenta de nuevo.')
       }
     } finally {
       setGenerando(false)
@@ -286,29 +325,21 @@ export default function UniversityCurso() {
                   : 'Genera tu certificado oficial PDF'}
               </Text>
             </View>
-            {Platform.OS === 'web' ? (
-              <TouchableOpacity
-                style={estilos.btnCertAccion}
-                onPress={() => {
-                  if (nombreGuardado) {
-                    generarCertificadoPDF(nombreGuardado, curso.titulo)
-                  } else {
-                    setNombreForm('')
-                    setModalCert(true)
-                  }
-                }}
-              >
-                <Text style={estilos.btnCertAccionText}>
-                  {nombreGuardado ? '⬇ Descargar PDF' : '📄 Generar certificado'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={estilos.btnCertAccionMobile}>
-                <Text style={estilos.btnCertAccionMobileText}>
-                  🖥️ Descarga tu certificado entrando desde la web
-                </Text>
-              </View>
-            )}
+            <TouchableOpacity
+              style={estilos.btnCertAccion}
+              onPress={() => {
+                if (nombreGuardado) {
+                  generarCertificadoPDF(nombreGuardado, curso.titulo)
+                } else {
+                  setNombreForm('')
+                  setModalCert(true)
+                }
+              }}
+            >
+              <Text style={estilos.btnCertAccionText}>
+                {nombreGuardado ? '⬇ Descargar PDF' : '📄 Generar certificado'}
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : cursoCompleto ? (
           <View style={estilos.certBanner}>
@@ -399,22 +430,16 @@ export default function UniversityCurso() {
             <Text style={estilos.modalHint}>
               Este nombre aparecerá exactamente en el certificado PDF.
             </Text>
-            {Platform.OS === 'web' ? (
-              <TouchableOpacity
-                style={[estilos.modalBtn, (!nombreForm.trim() || generando) && { opacity: 0.5 }]}
-                onPress={handleGenerarCertificado}
-                disabled={!nombreForm.trim() || generando}
-              >
-                {generando
-                  ? <ActivityIndicator color="#000" />
-                  : <Text style={estilos.modalBtnText}>📄 Generar y descargar PDF</Text>
-                }
-              </TouchableOpacity>
-            ) : (
-              <Text style={{ color: '#888', fontSize: 13, textAlign: 'center', marginBottom: 8 }}>
-                La descarga de certificados solo está disponible desde la versión web.
-              </Text>
-            )}
+            <TouchableOpacity
+              style={[estilos.modalBtn, (!nombreForm.trim() || generando) && { opacity: 0.5 }]}
+              onPress={handleGenerarCertificado}
+              disabled={!nombreForm.trim() || generando}
+            >
+              {generando
+                ? <ActivityIndicator color="#000" />
+                : <Text style={estilos.modalBtnText}>📄 Generar y descargar PDF</Text>
+              }
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => setModalCert(false)} style={{ marginTop: 12 }}>
               <Text style={{ color: '#888', fontSize: 13 }}>Cancelar</Text>
             </TouchableOpacity>
@@ -461,14 +486,6 @@ const estilos = StyleSheet.create({
     paddingVertical: 10, alignItems: 'center',
   },
   btnCertAccionText: { color: '#000', fontWeight: '700', fontSize: 13 },
-  btnCertAccionMobile: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  btnCertAccionMobileText: { color: 'rgba(255,255,255,0.75)', fontSize: 12, textAlign: 'center' },
   btnContinuar: { backgroundColor: '#1a6470', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   btnContinuarText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   descCard: { backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 16, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e8eef0' },

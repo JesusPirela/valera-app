@@ -368,11 +368,12 @@ export default function DetalleCliente() {
         <TouchableOpacity
           style={[styles.accionBtn, styles.accionBtnWA]}
           onPress={() => {
-            const tel = cliente.telefono.replace(/\D/g, '')
+            const raw = cliente.telefono.replace(/\D/g, '')
+            const tel = raw.startsWith('52') && raw.length === 12 ? raw : `52${raw}`
             const msg = encodeURIComponent(
               `Hola ${cliente.nombre}, soy tu asesor de Valera Real Estate. Te contacto para dar seguimiento a tu búsqueda de propiedad. ¿Tienes un momento para platicar?`
             )
-            const url = `https://wa.me/52${tel}?text=${msg}`
+            const url = `https://wa.me/${tel}?text=${msg}`
             if (Platform.OS === 'web') window.open(url, '_blank')
             else Linking.openURL(url)
           }}
@@ -413,8 +414,9 @@ export default function DetalleCliente() {
             key={t.label}
             style={styles.waTemplateBtn}
             onPress={() => {
-              const tel = cliente.telefono.replace(/\D/g, '')
-              const url = `https://wa.me/52${tel}?text=${encodeURIComponent(t.msg)}`
+              const raw = cliente.telefono.replace(/\D/g, '')
+              const tel = raw.startsWith('52') && raw.length === 12 ? raw : `52${raw}`
+              const url = `https://wa.me/${tel}?text=${encodeURIComponent(t.msg)}`
               if (Platform.OS === 'web') window.open(url, '_blank')
               else Linking.openURL(url)
             }}

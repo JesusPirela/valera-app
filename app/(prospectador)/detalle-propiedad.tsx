@@ -18,7 +18,7 @@ import {
 } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { File, Paths } from 'expo-file-system'
+import { File, Paths } from 'expo-file-system/next'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
 import { useQuery } from '@tanstack/react-query'
@@ -311,7 +311,7 @@ export default function DetallePropiedad() {
       .single()
     setGuardandoCliente(false)
     if (!error && data) {
-      await seleccionarClienteYCoordinar(data)
+      seleccionarClienteYCoordinar(data)
     } else {
       if (Platform.OS === 'web') window.alert('No se pudo guardar el cliente')
       else Alert.alert('Error', 'No se pudo guardar el cliente')
@@ -352,7 +352,9 @@ export default function DetallePropiedad() {
       : ''
     const mensaje = `Hola, quiero coordinar una cita para *${clienteParaCita.nombre}* (${clienteParaCita.telefono}) para la propiedad *${propiedad.codigo}*${constructoraStr} el *${fechaStr}*.`
     if (subidoPor?.telefono) {
-      Linking.openURL(`https://wa.me/${subidoPor.telefono}?text=${encodeURIComponent(mensaje)}`)
+      const raw = subidoPor.telefono.replace(/\D/g, '')
+      const tel = raw.startsWith('52') && raw.length === 12 ? raw : `52${raw}`
+      Linking.openURL(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`)
     } else {
       const nombre = subidoPor?.nombre ?? 'El asesor que subió esta propiedad'
       if (Platform.OS === 'web') {
@@ -550,7 +552,7 @@ export default function DetallePropiedad() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
       <OfflineBanner />
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(prospectador)/propiedades')}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(prospectador)/propiedades')}>
         <Text style={styles.backBtnText}>← Volver</Text>
       </TouchableOpacity>
       {/* Galería de imágenes */}
@@ -633,8 +635,9 @@ export default function DetallePropiedad() {
               <TouchableOpacity
                 style={[styles.accionBtn, { backgroundColor: '#25d366' }]}
                 onPress={() => {
-                  const tel = subidoPor.telefono!.replace(/\D/g, '')
-                  const url = `https://wa.me/52${tel}?text=${encodeURIComponent(`Hola, te contacto sobre la propiedad ${propiedad.codigo}: ${propiedad.titulo}`)}`
+                  const raw = subidoPor.telefono!.replace(/\D/g, '')
+                  const tel = raw.startsWith('52') && raw.length === 12 ? raw : `52${raw}`
+                  const url = `https://wa.me/${tel}?text=${encodeURIComponent(`Hola, te contacto sobre la propiedad ${propiedad.codigo}: ${propiedad.titulo}`)}`
                   if (Platform.OS === 'web') window.open(url, '_blank')
                   else Linking.openURL(url)
                 }}
