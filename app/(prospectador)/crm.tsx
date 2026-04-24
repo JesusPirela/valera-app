@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, TextInput,
-  ActivityIndicator, TouchableOpacity, ScrollView,
+  ActivityIndicator, TouchableOpacity, ScrollView, FlatList,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -23,13 +24,13 @@ type Cliente = {
 }
 
 export const ESTADOS: Record<string, { label: string; color: string; bg: string }> = {
-  por_perfilar:       { label: 'Por perfilar',       color: '#1565c0', bg: '#e3f2fd' },
-  no_contesta:        { label: 'No contesta',         color: '#757575', bg: '#f5f5f5' },
-  cita_por_agendar:   { label: 'Cita por agendar',   color: '#e65100', bg: '#fff3e0' },
-  cita_agendada:      { label: 'Cita agendada',       color: '#1a6470', bg: '#e0f4f5' },
-  seguimiento_cierre: { label: 'Seg. de cierre',      color: '#6a1b9a', bg: '#f3e5f5' },
-  compro:             { label: 'Apartó / Compró',     color: '#2e7d32', bg: '#e8f5e9' },
-  descartado:         { label: 'Descartado',           color: '#c0392b', bg: '#fde8e8' },
+  por_perfilar:       { label: 'Por perfilar',      color: '#1565c0', bg: '#e3f2fd' },
+  no_contesta:        { label: 'No contesta',        color: '#757575', bg: '#f5f5f5' },
+  cita_por_agendar:   { label: 'Cita por agendar',  color: '#e65100', bg: '#fff3e0' },
+  cita_agendada:      { label: 'Cita agendada',      color: '#1a6470', bg: '#e0f4f5' },
+  seguimiento_cierre: { label: 'Seg. de cierre',     color: '#6a1b9a', bg: '#f3e5f5' },
+  compro:             { label: 'Apartó / Compró',    color: '#2e7d32', bg: '#e8f5e9' },
+  descartado:         { label: 'Descartado',          color: '#c0392b', bg: '#fde8e8' },
 }
 
 const ORDEN_ESTADOS = [
@@ -57,13 +58,12 @@ function proximoRecordatorio(recordatorios: Cliente['recordatorios']) {
   return pendientes[0] ?? null
 }
 
-const COL = {
-  nombre:   150,
-  estado:   130,
-  telefono: 120,
-  empresa:  110,
-  rec:      170,
-  fecha:    80,
+function iniciales(nombre: string) {
+  return nombre
+    .split(' ')
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('')
 }
 
 export default function CRM() {
@@ -71,8 +71,6 @@ export default function CRM() {
   const [busqueda, setBusqueda] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null)
   const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
-  const [sortCol, setSortCol] = useState<string>('created_at')
-  const [sortAsc, setSortAsc] = useState(false)
 
   const { data: clientes = [], isLoading, refetch } = useQuery<Cliente[]>({
     queryKey: ['clientes'],
@@ -90,7 +88,6 @@ export default function CRM() {
 
   useFocusEffect(useCallback(() => { refetch() }, [refetch]))
 
-  // Sembrar el caché de cada detalle con los datos de la lista (sin requests extra)
   useEffect(() => {
     if (!clientes.length) return
     for (const c of clientes) {
@@ -121,41 +118,11 @@ export default function CRM() {
   if (estadoFiltro) filtrados = filtrados.filter((c) => c.estado === estadoFiltro)
   if (operacionFiltro) filtrados = filtrados.filter((c) => c.tipo_operacion === operacionFiltro)
 
-  filtrados = [...filtrados].sort((a, b) => {
-    let va: string, vb: string
-    if (sortCol === 'nombre') { va = a.nombre; vb = b.nombre }
-    else if (sortCol === 'estado') { va = a.estado; vb = b.estado }
-    else if (sortCol === 'telefono') { va = a.telefono; vb = b.telefono }
-    else if (sortCol === 'empresa') { va = a.empresa ?? ''; vb = b.empresa ?? '' }
-    else { va = a.created_at; vb = b.created_at }
-    return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va)
-  })
-
-  function toggleSort(col: string) {
-    if (sortCol === col) setSortAsc(!sortAsc)
-    else { setSortCol(col); setSortAsc(true) }
-  }
-
-  function sortIcon(col: string) {
-    if (sortCol !== col) return ' ↕'
-    return sortAsc ? ' ↑' : ' ↓'
-  }
-
-  const COLS = [
-    { key: 'nombre',   label: 'Nombre',       width: COL.nombre,   sortable: true },
-    { key: 'estado',   label: 'Estado',        width: COL.estado,   sortable: true },
-    { key: 'telefono', label: 'Teléfono',      width: COL.telefono, sortable: false },
-    { key: 'empresa',  label: 'Empresa',       width: COL.empresa,  sortable: true },
-    { key: 'rec',      label: 'Recordatorio',  width: COL.rec,      sortable: false },
-    { key: 'fecha',    label: 'Agregado',      width: COL.fecha,    sortable: true },
-  ]
-
-  const totalWidth = COLS.reduce((s, c) => s + c.width, 0) + COLS.length + 1
-
   return (
     <>
       <OfflineBanner />
       <View style={styles.container}>
+
         {/* Filtro Venta / Renta */}
         <View style={styles.operacionRow}>
           {([null, 'venta', 'renta'] as const).map((op) => {
@@ -215,20 +182,25 @@ export default function CRM() {
 
         {/* Búsqueda + botón nuevo */}
         <View style={styles.searchRow}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar por nombre, teléfono..."
-            value={busqueda}
-            onChangeText={setBusqueda}
-            autoCapitalize="none"
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-          />
+          <View style={styles.searchInputWrap}>
+            <Ionicons name="search-outline" size={16} color="#9eafb2" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar por nombre, teléfono..."
+              placeholderTextColor="#bbb"
+              value={busqueda}
+              onChangeText={setBusqueda}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+          </View>
           <TouchableOpacity
             style={styles.btnNuevo}
             onPress={() => router.push('/(prospectador)/cliente-form')}
           >
-            <Text style={styles.btnNuevoText}>+ Nuevo</Text>
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.btnNuevoText}>Nuevo</Text>
           </TouchableOpacity>
         </View>
 
@@ -236,6 +208,7 @@ export default function CRM() {
           <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
         ) : filtrados.length === 0 ? (
           <View style={styles.emptyContainer}>
+            <Ionicons name="people-outline" size={52} color="#d0dfe1" />
             <Text style={styles.emptyTitle}>
               {busqueda || estadoFiltro ? 'Sin resultados' : 'Sin clientes aún'}
             </Text>
@@ -246,102 +219,82 @@ export default function CRM() {
             )}
           </View>
         ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            bounces={false}
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
-          >
-            <View style={{ width: totalWidth }}>
-              <View style={styles.tableHeader}>
-                {COLS.map((col, i) => (
-                  <TouchableOpacity
-                    key={col.key}
-                    style={[
-                      styles.headerCell,
-                      { width: col.width },
-                      i < COLS.length - 1 && styles.cellBorderRight,
-                    ]}
-                    onPress={() => col.sortable && toggleSort(col.key)}
-                    disabled={!col.sortable}
-                  >
-                    <Text style={styles.headerCellText}>
-                      {col.label}
-                      {col.sortable ? (
-                        <Text style={styles.sortIcon}>{sortIcon(col.key)}</Text>
+          <FlatList
+            data={filtrados}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 24, paddingTop: 4 }}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const info = estadoInfo(item.estado)
+              const recProximo = proximoRecordatorio(item.recordatorios ?? [])
+              const recVencido = recProximo && new Date(recProximo.fecha_hora) < new Date()
+              const initials = iniciales(item.nombre)
+
+              return (
+                <TouchableOpacity
+                  style={styles.card}
+                  onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
+                  activeOpacity={0.78}
+                >
+                  {/* Avatar + nombre + estado + chevron */}
+                  <View style={styles.cardTop}>
+                    <View style={[styles.avatar, { backgroundColor: info.color + '22' }]}>
+                      <Text style={[styles.avatarText, { color: info.color }]}>{initials}</Text>
+                    </View>
+                    <View style={styles.cardTopInfo}>
+                      <Text style={styles.cardNombre} numberOfLines={1}>{item.nombre}</Text>
+                      {item.empresa ? (
+                        <Text style={styles.cardEmpresa} numberOfLines={1}>{item.empresa}</Text>
                       ) : null}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <ScrollView
-                nestedScrollEnabled
-                showsVerticalScrollIndicator
-                contentContainerStyle={{ paddingBottom: 24 }}
-              >
-                {filtrados.map((item, idx) => {
-                  const info = estadoInfo(item.estado)
-                  const recProximo = proximoRecordatorio(item.recordatorios ?? [])
-                  const ahora = new Date()
-                  const recVencido = recProximo && new Date(recProximo.fecha_hora) < ahora
-                  const isEven = idx % 2 === 0
-
-                  return (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[styles.tableRow, isEven ? styles.rowEven : styles.rowOdd]}
-                      onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
-                      activeOpacity={0.75}
-                    >
-                      <View style={[styles.cell, { width: COL.nombre }, styles.cellBorderRight]}>
-                        <Text style={styles.cellNombre} numberOfLines={1}>{item.nombre}</Text>
-                        {item.empresa ? (
-                          <Text style={styles.cellSub} numberOfLines={1}>{item.empresa}</Text>
-                        ) : null}
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
+                        <Text style={[styles.estadoText, { color: info.color }]}>{info.label}</Text>
                       </View>
+                      <Ionicons name="chevron-forward" size={14} color="#cdd8da" />
+                    </View>
+                  </View>
 
-                      <View style={[styles.cell, { width: COL.estado }, styles.cellBorderRight, styles.cellCenter]}>
-                        <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
-                          <Text style={[styles.estadoText, { color: info.color }]} numberOfLines={1}>
-                            {info.label}
-                          </Text>
-                        </View>
+                  {/* Detalles secundarios */}
+                  <View style={styles.cardMeta}>
+                    <View style={styles.metaItem}>
+                      <Ionicons name="call-outline" size={13} color="#9eafb2" />
+                      <Text style={styles.metaText}>{item.telefono}</Text>
+                    </View>
+                    {item.tipo_operacion && (
+                      <View style={styles.metaItem}>
+                        <Ionicons name="home-outline" size={13} color="#9eafb2" />
+                        <Text style={styles.metaText}>{item.tipo_operacion}</Text>
                       </View>
+                    )}
+                    <View style={styles.metaItem}>
+                      <Ionicons name="time-outline" size={13} color="#9eafb2" />
+                      <Text style={styles.metaText}>{tiempoRelativo(item.created_at)}</Text>
+                    </View>
+                  </View>
 
-                      <View style={[styles.cell, { width: COL.telefono }, styles.cellBorderRight]}>
-                        <Text style={styles.cellText} numberOfLines={1}>{item.telefono}</Text>
-                      </View>
+                  {/* Recordatorio próximo */}
+                  {recProximo && (
+                    <View style={[styles.recRow, recVencido && styles.recRowVencido]}>
+                      <Ionicons
+                        name={recVencido ? 'warning-outline' : 'alarm-outline'}
+                        size={13}
+                        color={recVencido ? '#c0392b' : '#1a6470'}
+                      />
+                      <Text style={[styles.recText, recVencido && styles.recTextVencido]} numberOfLines={1}>
+                        {recVencido
+                          ? `Vencido: ${recProximo.titulo}`
+                          : new Date(recProximo.fecha_hora).toLocaleDateString('es-MX', {
+                              day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                            }) + ` · ${recProximo.titulo}`}
+                      </Text>
+                    </View>
+                  )}
 
-                      <View style={[styles.cell, { width: COL.empresa }, styles.cellBorderRight]}>
-                        <Text style={styles.cellText} numberOfLines={1}>{item.empresa ?? '—'}</Text>
-                      </View>
-
-                      <View style={[styles.cell, { width: COL.rec }, styles.cellBorderRight]}>
-                        {recProximo ? (
-                          <View style={[styles.recChip, recVencido && styles.recChipVencido]}>
-                            <Text style={[styles.recChipText, recVencido && styles.recChipTextVencido]} numberOfLines={1}>
-                              {recVencido
-                                ? '⚠ Vencido'
-                                : new Date(recProximo.fecha_hora).toLocaleDateString('es-MX', {
-                                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                                  })}
-                            </Text>
-                          </View>
-                        ) : (
-                          <Text style={styles.cellNone}>—</Text>
-                        )}
-                      </View>
-
-                      <View style={[styles.cell, { width: COL.fecha }]}>
-                        <Text style={styles.cellFecha}>{tiempoRelativo(item.created_at)}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  )
-                })}
-              </ScrollView>
-            </View>
-          </ScrollView>
+                </TouchableOpacity>
+              )
+            }}
+          />
         )}
       </View>
     </>
@@ -358,7 +311,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
   },
   operacionTab: {
-    flex: 1, paddingVertical: 10, alignItems: 'center',
+    flex: 1, paddingVertical: 12, alignItems: 'center',
     borderBottomWidth: 2, borderBottomColor: 'transparent',
   },
   operacionTabActivo: { borderBottomColor: '#1a6470' },
@@ -378,65 +331,75 @@ const styles = StyleSheet.create({
   pipelineLabel: { fontSize: 10, color: '#888', textAlign: 'center', marginTop: 1 },
   pipelineLabelAll: { color: '#c9a84c' },
 
-  searchRow: { flexDirection: 'row', gap: 10, padding: 12, alignItems: 'center' },
-  searchInput: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1,
-    borderColor: '#ddd', paddingHorizontal: 12, paddingVertical: 10,
-    fontSize: 14, color: '#1a1a2e',
+  searchRow: { flexDirection: 'row', gap: 8, padding: 12, alignItems: 'center' },
+  searchInputWrap: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 12, borderWidth: 1,
+    borderColor: '#e0e8ea', paddingHorizontal: 10,
   },
-  btnNuevo: { backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
-  btnNuevoText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  searchIcon: { marginRight: 6 },
+  searchInput: {
+    flex: 1, paddingVertical: 11, fontSize: 14, color: '#1a1a2e',
+  },
+  btnNuevo: {
+    backgroundColor: '#1a6470', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 11,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+  },
+  btnNuevoText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
-  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a6470', marginBottom: 8 },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a6470' },
   emptySubtitle: { fontSize: 14, color: '#aaa', textAlign: 'center' },
 
-  tableHeader: {
+  // Card
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    marginBottom: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e8eef0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardTop: {
     flexDirection: 'row',
-    backgroundColor: '#1a6470',
-    borderBottomWidth: 2,
-    borderBottomColor: '#c9a84c',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
   },
-  headerCell: {
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    justifyContent: 'center',
+  avatar: {
+    width: 42, height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
   },
-  headerCellText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 0.3,
-  },
-  sortIcon: { color: '#c9a84c', fontWeight: '400' },
-  cellBorderRight: { borderRightWidth: 1, borderRightColor: '#dde3e7' },
+  avatarText: { fontSize: 15, fontWeight: '700' },
+  cardTopInfo: { flex: 1, minWidth: 0 },
+  cardNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
+  cardEmpresa: { fontSize: 12, color: '#999', marginTop: 1 },
+  estadoBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 0 },
+  estadoText: { fontSize: 11, fontWeight: '700' },
 
-  tableRow: {
+  cardMeta: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e8ecef',
-    minHeight: 48,
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 6,
   },
-  rowEven: { backgroundColor: '#ffffff' },
-  rowOdd:  { backgroundColor: '#f7f9fb' },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: 12, color: '#7a8e91' },
 
-  cell: {
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    justifyContent: 'center',
+  recRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#e8f4f5', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 5, marginTop: 2,
   },
-  cellCenter: { alignItems: 'center' },
-  cellNombre: { fontSize: 13, fontWeight: '700', color: '#1a1a2e' },
-  cellSub:    { fontSize: 11, color: '#999', marginTop: 1 },
-  cellText:   { fontSize: 13, color: '#444' },
-  cellFecha:  { fontSize: 12, color: '#888', textAlign: 'center' },
-  cellNone:   { fontSize: 13, color: '#ccc', textAlign: 'center' },
+  recRowVencido: { backgroundColor: '#fde8e8' },
+  recText: { fontSize: 12, color: '#1a6470', flex: 1 },
+  recTextVencido: { color: '#c0392b', fontWeight: '600' },
 
-  estadoBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
-  estadoText:  { fontSize: 11, fontWeight: '600' },
-
-  recChip: { backgroundColor: '#e0f4f5', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
-  recChipVencido: { backgroundColor: '#fde8e8' },
-  recChipText: { fontSize: 11, color: '#1a6470', fontWeight: '500' },
-  recChipTextVencido: { color: '#c0392b', fontWeight: '700' },
 })

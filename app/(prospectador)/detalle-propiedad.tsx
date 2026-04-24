@@ -448,8 +448,16 @@ export default function DetallePropiedad() {
         return
       }
 
+<<<<<<< HEAD
       // Descargar todas las imágenes al caché
       const { File: FSFile, Paths } = await import('expo-file-system/next')
+=======
+      // Descargar todas las imágenes al caché (native only)
+      const { File, Paths } = await import('expo-file-system/next')
+      const MediaLibrary = await import('expo-media-library')
+      const Sharing = await import('expo-sharing')
+
+>>>>>>> e94db1e95f9a13f3c4badb33d95dc996ccc7a3f2
       const uris: string[] = []
       for (let i = 0; i < imagenes.length; i++) {
         try {
@@ -469,14 +477,12 @@ export default function DetallePropiedad() {
       }
 
       if (guardadas > 0) {
-        // Texto va directo en WhatsApp, fotos en galería listas para adjuntar
         Alert.alert(
           'Listo para enviar',
           `${guardadas} foto${guardadas > 1 ? 's guardadas' : ' guardada'} en tu galería.\n\nAl abrir WhatsApp el texto ya estará escrito — adjunta las fotos tocando el clip (📎).`,
           [{ text: 'Abrir WhatsApp', onPress: abrirWhatsApp }]
         )
       } else {
-        // Sin permiso de galería: abrir WhatsApp con texto y compartir fotos una a una
         await abrirWhatsApp()
         for (const uri of uris) {
           await Sharing.shareAsync(uri, { mimeType: 'image/jpeg' })
@@ -512,6 +518,9 @@ export default function DetallePropiedad() {
       }
       setDescargando(false)
     } else {
+      const { File, Paths } = await import('expo-file-system/next')
+      const MediaLibrary = await import('expo-media-library')
+
       const { status } = await MediaLibrary.requestPermissionsAsync()
       if (status !== 'granted') {
         Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería para guardar las imágenes.')
