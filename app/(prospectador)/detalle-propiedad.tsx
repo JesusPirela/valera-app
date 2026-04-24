@@ -17,7 +17,6 @@ import {
 } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { File, Paths } from 'expo-file-system/next'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
 import { useQuery } from '@tanstack/react-query'
@@ -450,11 +449,12 @@ export default function DetallePropiedad() {
       }
 
       // Descargar todas las imágenes al caché
+      const { File: FSFile, Paths } = await import('expo-file-system/next')
       const uris: string[] = []
       for (let i = 0; i < imagenes.length; i++) {
         try {
-          const dest = new File(Paths.cache, `${propiedad.codigo ?? 'prop'}-wa-${i}.jpg`)
-          const dl = await File.downloadFileAsync(imagenes[i].url, dest)
+          const dest = new FSFile(Paths.cache, `${propiedad.codigo ?? 'prop'}-wa-${i}.jpg`)
+          const dl = await FSFile.downloadFileAsync(imagenes[i].url, dest)
           uris.push(dl.uri)
         } catch { /* continuar con las demás */ }
       }
@@ -519,11 +519,12 @@ export default function DetallePropiedad() {
         return
       }
 
+      const { File: FSFile, Paths } = await import('expo-file-system/next')
       let guardadas = 0
       for (let i = 0; i < imagenes.length; i++) {
         try {
-          const dest = new File(Paths.cache, `${propiedad.codigo ?? 'prop'}-${i + 1}.jpg`)
-          const downloaded = await File.downloadFileAsync(imagenes[i].url, dest)
+          const dest = new FSFile(Paths.cache, `${propiedad.codigo ?? 'prop'}-${i + 1}.jpg`)
+          const downloaded = await FSFile.downloadFileAsync(imagenes[i].url, dest)
           await MediaLibrary.saveToLibraryAsync(downloaded.uri)
           guardadas++
         } catch {

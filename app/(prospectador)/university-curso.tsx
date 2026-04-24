@@ -5,7 +5,6 @@ import {
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import * as Print from 'expo-print'
 import * as Sharing from 'expo-sharing'
 
 type Curso = {
@@ -104,6 +103,7 @@ function certificadoHTML(nombreCompleto: string, cursoTitulo: string): string {
 async function generarCertificadoPDF(nombreCompleto: string, cursoTitulo: string) {
   try {
     if (Platform.OS !== 'web') {
+      const Print = await import('expo-print')
       const html = certificadoHTML(nombreCompleto, cursoTitulo)
       const { uri } = await Print.printToFileAsync({ html, width: 842, height: 595 })
       const canShare = await Sharing.isAvailableAsync()

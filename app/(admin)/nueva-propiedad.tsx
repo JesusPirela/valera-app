@@ -66,10 +66,12 @@ export default function NuevaPropiedad() {
   const [guardado, setGuardado] = useState(false)
 
   async function seleccionarImagenes() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería.')
-      return
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería.')
+        return
+      }
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
