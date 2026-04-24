@@ -11,7 +11,6 @@ import {
   Platform,
   Alert,
   Linking,
-  Share,
   TextInput,
   Modal,
   FlatList,
@@ -42,6 +41,7 @@ type Propiedad = {
   estacionamientos: number | null
   descripcion: string | null
   created_by: string | null
+  asesor_id: string | null
   es_constructora: boolean | null
   nombre_constructora: string | null
   propiedad_imagenes: { url: string; orden: number }[]
@@ -125,14 +125,21 @@ export default function DetallePropiedad() {
 
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, es_constructora, nombre_constructora, propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, asesor_id, es_constructora, nombre_constructora, propiedad_imagenes(url, orden)')
         .eq('id', id)
         .single()
 
       if (error) throw error
 
       let subidoPor: SubidoPor | null = null
-      if (data.created_by) {
+      if (data.asesor_id) {
+        // Primero buscar en tabla asesores (asesor asignado a la propiedad)
+        const { data: asesor } = await supabase
+          .from('asesores').select('nombre, telefono').eq('id', data.asesor_id).maybeSingle()
+        if (asesor) subidoPor = { nombre: asesor.nombre ?? 'Asesor', telefono: asesor.telefono ?? null }
+      }
+      if (!subidoPor && data.created_by) {
+        // Fallback: perfil de quien subió la propiedad
         const { data: perfil } = await supabase
           .from('profiles').select('nombre, telefono').eq('id', data.created_by).maybeSingle()
         if (perfil) subidoPor = { nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null }
@@ -356,12 +363,8 @@ export default function DetallePropiedad() {
       const tel = raw.startsWith('52') && raw.length === 12 ? raw : `52${raw}`
       Linking.openURL(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`)
     } else {
-      const nombre = subidoPor?.nombre ?? 'El asesor que subió esta propiedad'
-      if (Platform.OS === 'web') {
-        window.alert(`${nombre} no tiene un número de WhatsApp configurado en su perfil.`)
-      } else {
-        Alert.alert('Sin teléfono', `${nombre} no tiene un número de WhatsApp configurado en su perfil.`)
-      }
+      // Sin teléfono del asesor: abrir WhatsApp sin destinatario, el prospectador elige a quién enviar
+      Linking.openURL(`https://wa.me/?text=${encodeURIComponent(mensaje)}`)
     }
   }
 
@@ -435,11 +438,13 @@ export default function DetallePropiedad() {
         return
       }
 
+      const encoded = encodeURIComponent(texto)
+      const canOpenWA = await Linking.canOpenURL('whatsapp://')
+      const abrirWhatsApp = () =>
+        Linking.openURL(canOpenWA ? `whatsapp://send?text=${encoded}` : `https://wa.me/?text=${encoded}`)
+
       if (imagenes.length === 0) {
-        // Sin imágenes: abrir WhatsApp solo con texto
-        const encoded = encodeURIComponent(texto)
-        const canOpen = await Linking.canOpenURL('whatsapp://')
-        await Linking.openURL(canOpen ? `whatsapp://send?text=${encoded}` : `https://wa.me/?text=${encoded}`)
+        await abrirWhatsApp()
         setCompartiendoFotos(false)
         return
       }
@@ -447,30 +452,34 @@ export default function DetallePropiedad() {
       // Descargar todas las imágenes al caché
       const uris: string[] = []
       for (let i = 0; i < imagenes.length; i++) {
-        const dest = new File(Paths.cache, `${propiedad.codigo ?? 'prop'}-wa-${i}.jpg`)
-        const dl = await File.downloadFileAsync(imagenes[i].url, dest)
-        uris.push(dl.uri)
+        try {
+          const dest = new File(Paths.cache, `${propiedad.codigo ?? 'prop'}-wa-${i}.jpg`)
+          const dl = await File.downloadFileAsync(imagenes[i].url, dest)
+          uris.push(dl.uri)
+        } catch { /* continuar con las demás */ }
       }
 
-      if (Platform.OS === 'ios') {
-        // iOS: Share.share combina texto + imagen en el share sheet.
-        // El usuario elige WhatsApp y llega todo junto (texto como caption).
-        await Share.share({ message: texto, url: uris[0] })
-        // Imágenes adicionales se comparten por separado
-        for (let i = 1; i < uris.length; i++) {
-          await Sharing.shareAsync(uris[i], {
-            mimeType: 'image/jpeg',
-            dialogTitle: `${propiedad.codigo} – foto ${i + 1}`,
-          })
+      // Guardar todas en galería para que el usuario las adjunte desde WhatsApp
+      let guardadas = 0
+      const { status } = await MediaLibrary.requestPermissionsAsync()
+      if (status === 'granted') {
+        for (const uri of uris) {
+          try { await MediaLibrary.saveToLibraryAsync(uri); guardadas++ } catch { /* skip */ }
         }
+      }
+
+      if (guardadas > 0) {
+        // Texto va directo en WhatsApp, fotos en galería listas para adjuntar
+        Alert.alert(
+          'Listo para enviar',
+          `${guardadas} foto${guardadas > 1 ? 's guardadas' : ' guardada'} en tu galería.\n\nAl abrir WhatsApp el texto ya estará escrito — adjunta las fotos tocando el clip (📎).`,
+          [{ text: 'Abrir WhatsApp', onPress: abrirWhatsApp }]
+        )
       } else {
-        // Android: el share sheet nativo adjunta la imagen;
-        // el texto va en la descripción del share intent
-        for (let i = 0; i < uris.length; i++) {
-          await Sharing.shareAsync(uris[i], {
-            mimeType: 'image/jpeg',
-            dialogTitle: i === 0 ? texto : `${propiedad.codigo} – foto ${i + 1}`,
-          })
+        // Sin permiso de galería: abrir WhatsApp con texto y compartir fotos una a una
+        await abrirWhatsApp()
+        for (const uri of uris) {
+          await Sharing.shareAsync(uri, { mimeType: 'image/jpeg' })
         }
       }
     } catch {

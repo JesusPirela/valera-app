@@ -17,7 +17,8 @@
       "bundleIdentifier": "com.valerarealestate.app",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Valera necesita acceso a tu galería para guardar imágenes de propiedades.",
-        "NSPhotoLibraryAddUsageDescription": "Valera necesita permiso para guardar imágenes en tu galería."
+        "NSPhotoLibraryAddUsageDescription": "Valera necesita permiso para guardar imágenes en tu galería.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
