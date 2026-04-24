@@ -12,7 +12,10 @@
       "Bash(npx expo *)",
       "Bash(npm install *)",
       "Bash(node -e \"require\\('jspdf'\\); console.log\\('jspdf ok'\\)\")",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(curl -s http://localhost:8081)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8081)",
+      "Bash(npx tsc *)"
     ]
   }
 }

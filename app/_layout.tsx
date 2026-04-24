@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { View, ActivityIndicator } from 'react-native'
 import { Stack, router } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { Session } from '@supabase/supabase-js'
@@ -10,14 +11,16 @@ export default function RootLayout() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Restore persisted session from AsyncStorage on app open
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setLoading(false)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
-      if (!session) {
+      // Only redirect to login on an explicit sign-out, not on token refresh or initial load
+      if (event === 'SIGNED_OUT') {
         queryClient.clear()
         router.replace('/(auth)/login')
       }
@@ -26,12 +29,21 @@ export default function RootLayout() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Single redirect check once the initial session restore completes
   useEffect(() => {
     if (loading) return
     if (!session) {
       router.replace('/(auth)/login')
     }
-  }, [session, loading])
+  }, [loading])
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a6470' }}>
+        <ActivityIndicator size="large" color="#c9a84c" />
+      </View>
+    )
+  }
 
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>

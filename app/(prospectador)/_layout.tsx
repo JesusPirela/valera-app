@@ -1,9 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
-import { Text, TouchableOpacity, Image } from 'react-native'
+import { Text, TouchableOpacity, Image, View, Platform } from 'react-native'
 import { Tabs, usePathname } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 
 const LOGO_URI = 'https://valerarealestate.com/images/logo.png'
+
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name']
 
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
@@ -39,7 +42,6 @@ export default function ProspectadorLayout() {
     if (mountedRef.current) setNoLeidas(count ?? 0)
   }
 
-  // Revisa recordatorios vencidos y los convierte en notificaciones
   async function verificarRecordatorios() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || !mountedRef.current) return
@@ -76,11 +78,9 @@ export default function ProspectadorLayout() {
       }
     }
 
-    // Actualizar el badge si se crearon nuevas notificaciones
     if (huboNuevas && mountedRef.current) cargarNoLeidas()
   }
 
-  // Recarga el color cada vez que el usuario navega (ej. al salir de perfil)
   useEffect(() => { cargarPerfil() }, [pathname])
 
   useEffect(() => {
@@ -88,7 +88,6 @@ export default function ProspectadorLayout() {
     cargarNoLeidas()
     verificarRecordatorios()
 
-    // Polling cada 60 segundos para recordatorios
     pollingRef.current = setInterval(() => {
       verificarRecordatorios()
     }, 60_000)
@@ -109,12 +108,37 @@ export default function ProspectadorLayout() {
     }
   }, [])
 
+  function tabIcon(name: IoniconsName, nameFocused: IoniconsName) {
+    return ({ color, focused }: { color: string; focused: boolean }) => (
+      <Ionicons name={focused ? nameFocused : name} size={24} color={color} />
+    )
+  }
+
+  const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : 64
+
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colorAcento,
-        tabBarInactiveTintColor: '#aaa',
-        tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#dde8e9' },
+        tabBarInactiveTintColor: '#9eafb2',
+        tabBarStyle: {
+          backgroundColor: '#fff',
+          borderTopColor: '#e8eef0',
+          borderTopWidth: 1,
+          height: TAB_BAR_HEIGHT,
+          paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+          paddingTop: 6,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          elevation: 12,
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '600',
+          marginTop: 2,
+        },
         headerStyle: { backgroundColor: colorAcento },
         headerTintColor: '#c9a84c',
         headerTitleStyle: { fontWeight: 'bold' },
@@ -128,30 +152,57 @@ export default function ProspectadorLayout() {
         headerRight: () => (
           <TouchableOpacity
             onPress={() => supabase.auth.signOut()}
-            style={{ marginRight: 16 }}
+            style={{ marginRight: 16, flexDirection: 'row', alignItems: 'center', gap: 4 }}
           >
-            <Text style={{ color: '#c9a84c', fontSize: 14, fontWeight: '600' }}>Salir</Text>
+            <Ionicons name="log-out-outline" size={18} color="#c9a84c" />
+            <Text style={{ color: '#c9a84c', fontSize: 13, fontWeight: '600' }}>Salir</Text>
           </TouchableOpacity>
         ),
       }}
     >
-      <Tabs.Screen name="propiedades" options={{ title: 'Propiedades' }} />
-      <Tabs.Screen name="crm" options={{ title: 'Clientes' }} />
-      <Tabs.Screen name="university" options={{ title: 'Universidad', tabBarLabel: '🎓 Universidad' }} />
+      <Tabs.Screen
+        name="propiedades"
+        options={{
+          title: 'Propiedades',
+          tabBarIcon: tabIcon('home-outline', 'home'),
+        }}
+      />
+      <Tabs.Screen
+        name="crm"
+        options={{
+          title: 'Clientes',
+          tabBarIcon: tabIcon('people-outline', 'people'),
+        }}
+      />
+      <Tabs.Screen
+        name="university"
+        options={{
+          title: 'Universidad',
+          tabBarIcon: tabIcon('school-outline', 'school'),
+        }}
+      />
       <Tabs.Screen
         name="notificaciones"
         options={{
-          title: 'Notificaciones',
+          title: 'Avisos',
           tabBarBadge: noLeidas > 0 ? noLeidas : undefined,
+          tabBarBadgeStyle: { backgroundColor: '#e53935', fontSize: 10, minWidth: 16, height: 16 },
+          tabBarIcon: tabIcon('notifications-outline', 'notifications'),
         }}
       />
-      <Tabs.Screen name="perfil" options={{ title: 'Mi Perfil', tabBarLabel: '👤 Perfil' }} />
+      <Tabs.Screen
+        name="perfil"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: tabIcon('person-outline', 'person'),
+        }}
+      />
       {/* Pantallas de detalle — ocultas del tab bar */}
-      <Tabs.Screen name="detalle-propiedad"    options={{ href: null, title: 'Detalle' }} />
-      <Tabs.Screen name="cliente-form"         options={{ href: null, title: 'Cliente' }} />
-      <Tabs.Screen name="detalle-cliente"      options={{ href: null, title: 'Cliente' }} />
-      <Tabs.Screen name="university-curso"     options={{ href: null, title: 'Curso' }} />
-      <Tabs.Screen name="university-leccion"   options={{ href: null, title: 'Lección' }} />
+      <Tabs.Screen name="detalle-propiedad"  options={{ href: null, title: 'Detalle' }} />
+      <Tabs.Screen name="cliente-form"       options={{ href: null, title: 'Cliente' }} />
+      <Tabs.Screen name="detalle-cliente"    options={{ href: null, title: 'Cliente' }} />
+      <Tabs.Screen name="university-curso"   options={{ href: null, title: 'Curso' }} />
+      <Tabs.Screen name="university-leccion" options={{ href: null, title: 'Lección' }} />
     </Tabs>
   )
 }
