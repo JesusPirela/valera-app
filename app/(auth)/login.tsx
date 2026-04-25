@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Image,
@@ -24,8 +23,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [emailFocused, setEmailFocused] = useState(false)
-  const [passwordFocused, setPasswordFocused] = useState(false)
 
   async function handleLogin() {
     if (!email || !password) {
@@ -61,9 +58,12 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
+    <ScrollView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      bounces={false}
     >
       <StatusBar barStyle="light-content" backgroundColor="#1a6470" />
 
@@ -78,83 +78,73 @@ export default function LoginScreen() {
       </View>
 
       {/* Login card */}
-      <ScrollView
-        contentContainerStyle={styles.cardScroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Iniciar sesión</Text>
-          <Text style={styles.cardSubtitle}>Accede a tu cuenta Valera</Text>
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Iniciar sesión</Text>
+        <Text style={styles.cardSubtitle}>Accede a tu cuenta Valera</Text>
 
-          {/* Email input */}
-          <View style={[styles.inputWrapper, emailFocused && styles.inputWrapperFocused]}>
-            <Ionicons
-              name="mail-outline"
-              size={18}
-              color={emailFocused ? '#1a6470' : '#bbb'}
-              style={styles.inputIcon}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Correo electrónico"
-              placeholderTextColor="#bbb"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              onFocus={() => setEmailFocused(true)}
-              onBlur={() => setEmailFocused(false)}
-            />
-          </View>
-
-          {/* Password input */}
-          <View style={[styles.inputWrapper, passwordFocused && styles.inputWrapperFocused]}>
-            <Ionicons
-              name="lock-closed-outline"
-              size={18}
-              color={passwordFocused ? '#1a6470' : '#bbb'}
-              style={styles.inputIcon}
-            />
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              placeholder="Contraseña"
-              placeholderTextColor="#bbb"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              onFocus={() => setPasswordFocused(true)}
-              onBlur={() => setPasswordFocused(false)}
-            />
-            <TouchableOpacity onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn}>
-              <Ionicons
-                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                size={18}
-                color="#bbb"
-              />
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Entrar</Text>
-            )}
-          </TouchableOpacity>
-
-          <Text style={styles.footerNote}>
-            Plataforma exclusiva para asesores Valera Real Estate
-          </Text>
+        {/* Email input */}
+        <View style={styles.inputWrapper}>
+          <Ionicons
+            name="mail-outline"
+            size={18}
+            color="#bbb"
+            style={styles.inputIcon}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Correo electrónico"
+            placeholderTextColor="#bbb"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+        {/* Password input */}
+        <View style={styles.inputWrapper}>
+          <Ionicons
+            name="lock-closed-outline"
+            size={18}
+            color="#bbb"
+            style={styles.inputIcon}
+          />
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="Contraseña"
+            placeholderTextColor="#bbb"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+          />
+          <TouchableOpacity onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn}>
+            <Ionicons
+              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              size={18}
+              color="#bbb"
+            />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleLogin}
+          disabled={loading}
+          activeOpacity={0.85}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Entrar</Text>
+          )}
+        </TouchableOpacity>
+
+        <Text style={styles.footerNote}>
+          Plataforma exclusiva para asesores Valera Real Estate
+        </Text>
+      </View>
+    </ScrollView>
   )
 }
 
@@ -163,17 +153,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1a6470',
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   topSection: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 40,
+    paddingTop: 60,
+    paddingBottom: 24,
     paddingHorizontal: 32,
-    minHeight: 220,
   },
   logo: {
-    width: 180,
-    height: 180,
+    width: 160,
+    height: 160,
     borderRadius: 20,
     marginBottom: 12,
   },
@@ -185,16 +177,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
-  cardScroll: {
-    flexGrow: 0,
-  },
   card: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 28,
     paddingTop: 32,
-    paddingBottom: 48,
+    paddingBottom: 60,
+    flex: 1,
     shadowColor: '#000',
     shadowOpacity: 0.15,
     shadowRadius: 20,
@@ -221,15 +211,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 14,
     marginBottom: 14,
-  },
-  inputWrapperFocused: {
-    borderColor: '#1a6470',
-    backgroundColor: '#fff',
-    shadowColor: '#1a6470',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 2,
   },
   inputIcon: {
     marginRight: 10,

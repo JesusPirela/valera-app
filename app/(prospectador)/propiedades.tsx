@@ -28,6 +28,8 @@ type Propiedad = {
   destacada: boolean
   destacada_mensaje: string | null
   exclusiva: boolean
+  es_constructora: boolean | null
+  nombre_constructora: string | null
   recamaras: number | null
   banos: number | null
   m2: number | null
@@ -83,7 +85,7 @@ export default function ProspectadorPropiedades() {
         supabase.from('profiles').select('role, nombre').eq('id', userId).single(),
         supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, exclusiva, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .order('created_at', { ascending: false }),
         supabase.from('propiedad_publicada').select('propiedad_id').eq('user_id', userId),
@@ -286,6 +288,12 @@ export default function ProspectadorPropiedades() {
                       )}
                     </View>
 
+                    {item.es_constructora && (
+                      <Text style={styles.constructoraBadge}>
+                        🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
+                      </Text>
+                    )}
+
                     <Text style={styles.cardTitulo}>{item.titulo}</Text>
                     <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
 
@@ -454,6 +462,18 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     textTransform: 'capitalize',
+  },
+  constructoraBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e8f4fd',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+    fontSize: 12,
+    color: '#1a4a6b',
+    fontWeight: '600',
+    overflow: 'hidden',
   },
   cardTitulo: { fontSize: 16, fontWeight: '700', color: '#1a6470', marginBottom: 3 },
   cardDireccion: { fontSize: 13, color: '#888', marginBottom: 6 },

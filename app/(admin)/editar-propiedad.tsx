@@ -207,6 +207,18 @@ export default function EditarPropiedad() {
         .eq('id', id)
       if (errorUpdate) throw errorUpdate
 
+      // Verificar que el asesor se guardó realmente (Supabase silencia fallos de RLS en UPDATE)
+      const { data: verificacion, error: errorVerif } = await supabase
+        .from('propiedades')
+        .select('asesor_id')
+        .eq('id', id)
+        .single()
+      if (!errorVerif && verificacion?.asesor_id !== asesorId) {
+        throw new Error(
+          'El asesor no se guardó. Revisa los permisos (RLS) de la tabla propiedades en Supabase para permitir actualizar el campo asesor_id.'
+        )
+      }
+
       if (imagenesEliminar.length > 0) {
         const { error } = await supabase.from('propiedad_imagenes').delete().in('id', imagenesEliminar)
         if (error) throw error

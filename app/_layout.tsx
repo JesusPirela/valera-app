@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { View, ActivityIndicator } from 'react-native'
+import { View, ActivityIndicator, AppState } from 'react-native'
 import { Stack, router } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { Session } from '@supabase/supabase-js'
@@ -11,6 +11,15 @@ export default function RootLayout() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Reiniciar el auto-refresh del token cuando la app vuelve al frente
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        supabase.auth.startAutoRefresh()
+      } else {
+        supabase.auth.stopAutoRefresh()
+      }
+    })
+
     // Restore persisted session from AsyncStorage on app open
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
@@ -26,7 +35,10 @@ export default function RootLayout() {
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      appStateSub.remove()
+      subscription.unsubscribe()
+    }
   }, [])
 
   // Single redirect check once the initial session restore completes

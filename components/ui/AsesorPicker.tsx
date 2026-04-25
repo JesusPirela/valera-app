@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native'
 import { supabase } from '../../lib/supabase'
 
@@ -78,8 +79,8 @@ export default function AsesorPicker({ value, onChange }: Props) {
       setAsesores((prev) => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)))
       onChange(data.id)
       setOpen(false)
-    } catch {
-      // silenciar — el usuario verá que no se cerró el modal
+    } catch (err: any) {
+      Alert.alert('Error al crear asesor', err?.message || 'No se pudo guardar el asesor. Intenta de nuevo.')
     } finally {
       setCreando(false)
     }

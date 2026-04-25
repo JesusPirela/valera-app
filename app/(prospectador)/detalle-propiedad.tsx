@@ -19,6 +19,7 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
+import * as Clipboard from 'expo-clipboard'
 import { useQuery } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -189,6 +190,7 @@ export default function DetallePropiedad() {
   const [nuevoTelefono, setNuevoTelefono] = useState('')
   const [guardandoCliente, setGuardandoCliente] = useState(false)
   const [solicitandoDiseno, setSolicitandoDiseno] = useState(false)
+  const [descripcionCopiada, setDescripcionCopiada] = useState(false)
 
   // Paso 2: selección de fecha/hora de la cita
   const [clienteParaCita, setClienteParaCita] = useState<ClienteCRM | null>(null)
@@ -220,6 +222,17 @@ export default function DetallePropiedad() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     await supabase.from('propiedad_actividad').insert({ propiedad_id: id, user_id: user.id, tipo })
+  }
+
+  async function copiarDescripcion() {
+    if (!propiedad?.descripcion) return
+    if (Platform.OS === 'web') {
+      try { await navigator.clipboard.writeText(propiedad.descripcion) } catch { /* ignorar */ }
+    } else {
+      await Clipboard.setStringAsync(propiedad.descripcion)
+    }
+    setDescripcionCopiada(true)
+    setTimeout(() => setDescripcionCopiada(false), 2000)
   }
 
   async function pedirDiseno() {
@@ -448,16 +461,9 @@ export default function DetallePropiedad() {
         return
       }
 
-<<<<<<< HEAD
       // Descargar todas las imágenes al caché
       const { File: FSFile, Paths } = await import('expo-file-system/next')
-=======
-      // Descargar todas las imágenes al caché (native only)
-      const { File, Paths } = await import('expo-file-system/next')
-      const MediaLibrary = await import('expo-media-library')
-      const Sharing = await import('expo-sharing')
 
->>>>>>> e94db1e95f9a13f3c4badb33d95dc996ccc7a3f2
       const uris: string[] = []
       for (let i = 0; i < imagenes.length; i++) {
         try {
@@ -518,9 +524,6 @@ export default function DetallePropiedad() {
       }
       setDescargando(false)
     } else {
-      const { File, Paths } = await import('expo-file-system/next')
-      const MediaLibrary = await import('expo-media-library')
-
       const { status } = await MediaLibrary.requestPermissionsAsync()
       if (status !== 'granted') {
         Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería para guardar las imágenes.')
@@ -709,7 +712,17 @@ export default function DetallePropiedad() {
         {/* Descripción */}
         {propiedad.descripcion ? (
           <View style={styles.seccion}>
-            <Text style={styles.seccionTitulo}>Descripción</Text>
+            <View style={styles.seccionHeader}>
+              <Text style={styles.seccionTitulo}>Descripción</Text>
+              <TouchableOpacity
+                style={[styles.copiarBtn, descripcionCopiada && styles.copiarBtnActivo]}
+                onPress={copiarDescripcion}
+              >
+                <Text style={[styles.copiarBtnText, descripcionCopiada && styles.copiarBtnTextActivo]}>
+                  {descripcionCopiada ? '✓ Copiado' : '📋 Copiar'}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.descripcion}>{propiedad.descripcion}</Text>
           </View>
         ) : null}
@@ -1107,13 +1120,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eee',
   },
+  seccionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   seccionTitulo: {
     fontSize: 13,
     fontWeight: '700',
     color: '#888',
-    marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  copiarBtn: {
+    borderWidth: 1,
+    borderColor: '#1a6470',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  copiarBtnActivo: {
+    backgroundColor: '#1a6470',
+    borderColor: '#1a6470',
+  },
+  copiarBtnText: {
+    fontSize: 12,
+    color: '#1a6470',
+    fontWeight: '600',
+  },
+  copiarBtnTextActivo: {
+    color: '#fff',
   },
 
   caracteristicasGrid: {

@@ -21,6 +21,13 @@ import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
 import AsesorPicker from '../../components/ui/AsesorPicker'
 
+function generarUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
+  })
+}
+
 const RECAMARAS_OPTIONS = [
   { value: null, label: '—' },
   { value: 1, label: '1' },
@@ -135,7 +142,11 @@ export default function NuevaPropiedad() {
     setLoading(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      const { data: codigos } = await supabase.from('propiedades').select('codigo')
+      if (!user) throw new Error('Sesión no válida. Vuelve a iniciar sesión.')
+
+      const { data: codigos, error: errorCodigos } = await supabase.from('propiedades').select('codigo')
+      if (errorCodigos) throw new Error(`Error leyendo códigos: ${errorCodigos.message}`)
+
       let maxNum = 0
       for (const p of codigos ?? []) {
         const match = p.codigo?.match(/VR-(\d+)/)
@@ -145,10 +156,14 @@ export default function NuevaPropiedad() {
         }
       }
       const codigo = `VR-${String(maxNum + 1).padStart(3, '0')}`
+      const propiedadId = generarUUID()
 
-      const { data: propiedad, error: errorPropiedad } = await supabase
+      console.log('[nueva-propiedad] insertando con asesor_id:', asesorId)
+
+      const { error: errorPropiedad } = await supabase
         .from('propiedades')
         .insert({
+          id: propiedadId,
           codigo,
           titulo: titulo.trim(),
           descripcion: descripcion.trim() || null,
@@ -165,18 +180,18 @@ export default function NuevaPropiedad() {
           exclusiva,
           es_constructora: esConstructora,
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
-          created_by: user!.id,
+          created_by: user.id,
         })
-        .select('id')
-        .single()
 
-      if (errorPropiedad) throw errorPropiedad
+      console.log('[nueva-propiedad] resultado insert — error:', errorPropiedad)
+
+      if (errorPropiedad) throw new Error(`${errorPropiedad.message} (code: ${errorPropiedad.code}, details: ${errorPropiedad.details}, hint: ${errorPropiedad.hint})`)
 
       if (imagenes.length > 0) {
         const registros = await Promise.all(
           imagenes.map(async (uri, index) => {
-            const url = await subirImagen(uri, propiedad.id, index)
-            return { propiedad_id: propiedad.id, url, orden: index }
+            const url = await subirImagen(uri, propiedadId, index)
+            return { propiedad_id: propiedadId, url, orden: index }
           })
         )
         const { error: errorImagenes } = await supabase.from('propiedad_imagenes').insert(registros)
@@ -186,7 +201,9 @@ export default function NuevaPropiedad() {
       setGuardado(true)
       setTimeout(() => router.replace('/(admin)/propiedades'), 1500)
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'No se pudo guardar la propiedad.')
+      console.error('[nueva-propiedad] error completo:', err)
+      if (Platform.OS === 'web') window.alert(`Error al guardar: ${err.message}`)
+      else Alert.alert('Error al guardar', err.message || 'No se pudo guardar la propiedad.')
     } finally {
       setLoading(false)
     }

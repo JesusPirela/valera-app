@@ -27,6 +27,8 @@ type Propiedad = {
   estado: string | null
   destacada: boolean
   destacada_mensaje: string | null
+  es_constructora: boolean | null
+  nombre_constructora: string | null
   recamaras: number | null
   banos: number | null
   m2: number | null
@@ -68,7 +70,7 @@ export default function AdminPropiedades() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, recamaras, banos, m2, estacionamientos, propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, propiedad_imagenes(url, orden)')
       .order('created_at', { ascending: false })
     if (error) Alert.alert('Error', 'No se pudieron cargar las propiedades.')
     else setPropiedades(data ?? [])
@@ -310,6 +312,12 @@ export default function AdminPropiedades() {
                     <Text style={styles.cardTipo}>
                       {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
                       {item.operacion ? ` · ${item.operacion}` : ''}
+                    </Text>
+                  )}
+
+                  {item.es_constructora && (
+                    <Text style={styles.constructoraBadge}>
+                      🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
                     </Text>
                   )}
 
@@ -581,6 +589,18 @@ const styles = StyleSheet.create({
     borderColor: '#f5e07a',
   },
   cardTipo: { fontSize: 11, color: '#888', marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '600' },
+  constructoraBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e8f4fd',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+    fontSize: 12,
+    color: '#1a4a6b',
+    fontWeight: '600',
+    overflow: 'hidden',
+  },
   cardTitulo: { fontSize: 16, fontWeight: '700', color: '#1a2e30', marginBottom: 4 },
   cardDireccion: { fontSize: 13, color: '#888', marginBottom: 10 },
   metaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 12 },
