@@ -34,6 +34,9 @@
       "permissions": [
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
@@ -52,6 +55,12 @@
         "projectId": "c8a64954-8c24-4d51-829d-55ede1f5fb6d"
       }
     },
-    "owner": "valerarealestate"
+    "owner": "valerarealestate",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c8a64954-8c24-4d51-829d-55ede1f5fb6d"
+    }
   }
 }

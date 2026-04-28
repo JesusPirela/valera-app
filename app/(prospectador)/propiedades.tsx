@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View,
   Text,
@@ -70,6 +70,8 @@ export default function ProspectadorPropiedades() {
   const [busqueda, setBusqueda] = useState('')
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [toggling, setToggling] = useState<Set<string>>(new Set())
+  const togglingRef = useRef<Set<string>>(new Set())
+  togglingRef.current = toggling
   const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
@@ -112,7 +114,9 @@ export default function ProspectadorPropiedades() {
     staleTime: 1000 * 60 * 5,
   })
 
-  useFocusEffect(useCallback(() => { refetch() }, [refetch]))
+  useFocusEffect(useCallback(() => {
+    if (togglingRef.current.size === 0) refetch()
+  }, [refetch]))
 
   // Sembrar el caché de cada detalle con los datos de la lista (sin requests extra)
   useEffect(() => {
@@ -146,14 +150,24 @@ export default function ProspectadorPropiedades() {
       }
     })
 
-    if (yaPublicada) {
-      await supabase.from('propiedad_publicada').delete()
-        .eq('user_id', userId).eq('propiedad_id', propiedadId)
-    } else {
-      await supabase.from('propiedad_publicada').insert({ user_id: userId, propiedad_id: propiedadId })
+    const { error } = yaPublicada
+      ? await supabase.from('propiedad_publicada').delete().eq('user_id', userId).eq('propiedad_id', propiedadId)
+      : await supabase.from('propiedad_publicada').insert({ user_id: userId, propiedad_id: propiedadId })
+
+    if (error) {
+      queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades'], old => {
+        if (!old) return old
+        return {
+          ...old,
+          publicadasIds: yaPublicada
+            ? [...old.publicadasIds, propiedadId]
+            : old.publicadasIds.filter(id => id !== propiedadId),
+        }
+      })
     }
 
     setToggling(prev => { const s = new Set(prev); s.delete(propiedadId); return s })
+    queryClient.invalidateQueries({ queryKey: ['prospectador-propiedades'] })
   }
 
   const filtrosActivos = [filtroOperacion, filtroTipo, ordenPrecio].filter(Boolean).length
@@ -184,23 +198,48 @@ export default function ProspectadorPropiedades() {
     setOrdenPrecio(null)
   }
 
+  const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
+
   return (
     <>
       <OfflineBanner />
       <View style={styles.container}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar por título, código o dirección..."
-          value={busqueda}
-          onChangeText={setBusqueda}
-          autoCapitalize="none"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-        />
+
+        {/* Header de bienvenida */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerSaludo}>
+              {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
+            </Text>
+            <Text style={styles.headerSubtitulo}>
+              {propiedades.length > 0
+                ? `${propiedades.length} propiedad${propiedades.length !== 1 ? 'es' : ''} disponible${propiedades.length !== 1 ? 's' : ''}`
+                : 'Cargando propiedades...'}
+            </Text>
+          </View>
+          <View style={styles.headerIcono}>
+            <Text style={styles.headerIconoText}>🏠</Text>
+          </View>
+        </View>
+
+        {/* Barra de búsqueda */}
+        <View style={styles.searchWrapper}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar por título, código o dirección..."
+            placeholderTextColor="#aaa"
+            value={busqueda}
+            onChangeText={setBusqueda}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
+        </View>
 
         <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
           <Text style={styles.filtrosToggleText}>
-            Filtros{filtrosActivos > 0 ? ` (${filtrosActivos})` : ''} {mostrarFiltros ? '▲' : '▼'}
+            {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
           </Text>
         </TouchableOpacity>
 
@@ -251,7 +290,7 @@ export default function ProspectadorPropiedades() {
           <FlatList
             data={propiedadesFiltradas}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingBottom: 24 }}
+            contentContainerStyle={{ paddingBottom: 24, paddingHorizontal: 16 }}
             renderItem={({ item }) => {
               const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
               const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
@@ -339,22 +378,63 @@ export default function ProspectadorPropiedades() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#f5f5f5' },
-  searchInput: {
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1a6470',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 24,
+  },
+  headerSaludo: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  headerSubtitulo: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.75)',
+  },
+  headerIcono: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconoText: { fontSize: 22 },
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ddd',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    fontSize: 15,
+    borderColor: '#e0e0e0',
+    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    marginTop: -18,
     marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  searchIcon: { fontSize: 15, marginRight: 8, color: '#aaa' },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 14,
     color: '#1a6470',
   },
   filtrosToggle: {
     alignSelf: 'flex-end',
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     marginBottom: 8,
   },
   filtrosToggleText: { color: '#1a6470', fontSize: 14, fontWeight: '600' },
@@ -363,6 +443,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     marginBottom: 12,
+    marginHorizontal: 16,
     borderWidth: 1,
     borderColor: '#eee',
   },
@@ -382,7 +463,7 @@ const styles = StyleSheet.create({
   chipTextActive: { color: '#fff', fontWeight: '600' },
   limpiarBtn: { marginTop: 10, alignSelf: 'flex-end' },
   limpiarText: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
-  emptyContainer: { flex: 1, alignItems: 'center', marginTop: 60 },
+  emptyContainer: { flex: 1, alignItems: 'center', marginTop: 60, paddingHorizontal: 16 },
   emptyText: { color: '#aaa', fontSize: 15, textAlign: 'center' },
   card: {
     backgroundColor: '#fff',
