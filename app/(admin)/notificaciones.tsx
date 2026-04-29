@@ -88,8 +88,8 @@ export default function AdminNotificaciones() {
     setMarcandoTodas(false)
   }
 
-  async function handlePress(item: Notificacion) {
-    if (!item.leida) await marcarLeida(item.id)
+  function handlePress(item: Notificacion) {
+    if (!item.leida) marcarLeida(item.id)
 
     if (item.tipo === 'nuevo_cliente' && item.cliente_id) {
       router.push(`/(admin)/detalle-cliente?id=${item.cliente_id}`)

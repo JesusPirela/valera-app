@@ -67,6 +67,7 @@ export default function ProspectadorLayout() {
 
       const { error } = await supabase.from('notificaciones').insert({
         user_id: user.id,
+        cliente_id: r.cliente_id ?? null,
         titulo: `Recordatorio: ${r.titulo}`,
         mensaje: `Tienes un seguimiento pendiente con ${nombreCliente} programado para el ${fechaHora}.${r.descripcion ? ` Nota: ${r.descripcion}` : ''}`,
         tipo: 'recordatorio',

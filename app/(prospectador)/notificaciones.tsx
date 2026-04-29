@@ -117,8 +117,8 @@ export default function Notificaciones() {
     setMarcandoTodas(false)
   }
 
-  async function handlePress(item: Notificacion) {
-    if (!item.leida) await marcarLeida(item.id)
+  function handlePress(item: Notificacion) {
+    if (!item.leida) marcarLeida(item.id)
 
     if (item.tipo === 'recordatorio' && item.cliente_id) {
       router.push(`/(prospectador)/detalle-cliente?id=${item.cliente_id}`)
