@@ -11,25 +11,22 @@ export default function RootLayout() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Reiniciar el auto-refresh del token cuando la app vuelve al frente
     const appStateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        supabase.auth.startAutoRefresh()
-      } else {
-        supabase.auth.stopAutoRefresh()
-      }
+      if (state === 'active') supabase.auth.startAutoRefresh()
+      else supabase.auth.stopAutoRefresh()
     })
 
-    // Restore persisted session from AsyncStorage on app open
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setLoading(false)
-    })
-
+    // onAuthStateChange es la fuente de verdad: INITIAL_SESSION se dispara
+    // DESPUÉS de que AsyncStorage termina de leer la sesión guardada,
+    // evitando la race condition con getSession() en nativo.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session)
-      // Only redirect to login on an explicit sign-out, not on token refresh or initial load
-      if (event === 'SIGNED_OUT') {
+      if (event === 'INITIAL_SESSION') {
+        setSession(session)
+        setLoading(false)
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setSession(session)
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null)
         queryClient.clear()
         router.replace('/(auth)/login')
       }
@@ -41,12 +38,9 @@ export default function RootLayout() {
     }
   }, [])
 
-  // Single redirect check once the initial session restore completes
   useEffect(() => {
     if (loading) return
-    if (!session) {
-      router.replace('/(auth)/login')
-    }
+    if (!session) router.replace('/(auth)/login')
   }, [loading])
 
   if (loading) {

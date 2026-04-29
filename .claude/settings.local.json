@@ -18,7 +18,11 @@
       "Bash(npx tsc *)",
       "Bash(eas update *)",
       "Bash(npx supabase *)",
-      "Bash(supabase db *)"
+      "Bash(supabase db *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.dependencies, null, 2\\)\\)\")",
+      "Bash(node -e \"const p=require\\('/dev/stdin'\\); console.log\\(JSON.stringify\\({scripts: p.scripts}, null, 2\\)\\)\")"
     ]
   }
 }

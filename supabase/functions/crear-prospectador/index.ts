@@ -31,8 +31,14 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) return json({ error: 'No autorizado' }, 401)
 
-    // 2. Verificar que el llamante sea admin
-    const { data: profile } = await supabase
+    // 2. Usar service role para verificar rol (ignora RLS)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    )
+
+    // 3. Verificar que el llamante sea admin
+    const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('role')
       .eq('id', user.id)
@@ -40,7 +46,7 @@ serve(async (req) => {
 
     if (profile?.role !== 'admin') return json({ error: 'Acceso denegado' }, 403)
 
-    // 3. Validar body
+    // 4. Validar body
     const { email, password, plus, nombre, role: roleParam } = await req.json()
     if (!email || !password) return json({ error: 'Email y contraseña son requeridos' }, 400)
     if (!nombre?.trim()) return json({ error: 'El nombre es requerido' }, 400)
@@ -48,12 +54,7 @@ serve(async (req) => {
     const ROLES_VALIDOS = ['nuevo', 'prospectador', 'prospectador_plus']
     const role = ROLES_VALIDOS.includes(roleParam) ? roleParam : (plus === true ? 'prospectador_plus' : 'prospectador')
 
-    // 4. Crear usuario con service_role (puede crear usuarios sin confirmación de email)
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
-
+    // 5. Crear usuario con service_role (sin confirmación de email)
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -67,13 +68,12 @@ serve(async (req) => {
       return json({ error: msg }, 400)
     }
 
-    // 5. Crear perfil con el rol correspondiente
+    // 6. Crear perfil con el rol correspondiente
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert({ id: newUser.user!.id, role, nombre: nombre.trim() })
 
     if (profileError) {
-      // Revertir: borrar el usuario recién creado
       await supabaseAdmin.auth.admin.deleteUser(newUser.user!.id)
       return json({ error: 'Error al crear el perfil del usuario.' }, 500)
     }
