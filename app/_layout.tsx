@@ -1,14 +1,30 @@
 import { useEffect, useState } from 'react'
-import { View, ActivityIndicator, AppState } from 'react-native'
+import { View, ActivityIndicator, AppState, Platform } from 'react-native'
 import { Stack, router } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { Session } from '@supabase/supabase-js'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { queryClient, persister } from '../lib/queryClient'
+import * as Updates from 'expo-updates'
+
+async function checkForUpdate() {
+  if (Platform.OS === 'web' || __DEV__) return
+  try {
+    const result = await Updates.checkForUpdateAsync()
+    if (result.isAvailable) {
+      await Updates.fetchUpdateAsync()
+      await Updates.reloadAsync()
+    }
+  } catch { /* ignorar errores de red al verificar actualizaciones */ }
+}
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    checkForUpdate()
+  }, [])
 
   useEffect(() => {
     const appStateSub = AppState.addEventListener('change', (state) => {
