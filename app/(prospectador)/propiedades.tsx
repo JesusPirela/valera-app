@@ -75,6 +75,7 @@ export default function ProspectadorPropiedades() {
   const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
+  const [filtroPublicadas, setFiltroPublicadas] = useState(false)
 
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
     queryKey: ['prospectador-propiedades'],
@@ -170,7 +171,7 @@ export default function ProspectadorPropiedades() {
     queryClient.invalidateQueries({ queryKey: ['prospectador-propiedades'] })
   }
 
-  const filtrosActivos = [filtroOperacion, filtroTipo, ordenPrecio].filter(Boolean).length
+  const filtrosActivos = [filtroOperacion, filtroTipo, ordenPrecio, filtroPublicadas || null].filter(Boolean).length
 
   let propiedadesFiltradas = propiedades
 
@@ -182,6 +183,7 @@ export default function ProspectadorPropiedades() {
       p.titulo?.toLowerCase().includes(q)
     )
   }
+  if (filtroPublicadas) propiedadesFiltradas = propiedadesFiltradas.filter((p) => publicadas.has(p.id))
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
   if (ordenPrecio) {
@@ -196,6 +198,7 @@ export default function ProspectadorPropiedades() {
     setFiltroOperacion(null)
     setFiltroTipo(null)
     setOrdenPrecio(null)
+    setFiltroPublicadas(false)
   }
 
   const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
@@ -266,6 +269,12 @@ export default function ProspectadorPropiedades() {
               <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)} />
               <FiltroChip label="Menor precio" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} />
               <FiltroChip label="Mayor precio" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} />
+            </ScrollView>
+
+            <Text style={styles.filtroLabel}>Mis publicadas</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+              <FiltroChip label="Todas" active={!filtroPublicadas} onPress={() => setFiltroPublicadas(false)} />
+              <FiltroChip label="Solo publicadas" active={filtroPublicadas} onPress={() => setFiltroPublicadas(true)} />
             </ScrollView>
 
             {filtrosActivos > 0 && (
