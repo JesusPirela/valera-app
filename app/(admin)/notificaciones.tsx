@@ -1,10 +1,14 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList,
   ActivityIndicator, TouchableOpacity, Alert,
+  Animated, PanResponder, Platform, Dimensions,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+
+const SCREEN_WIDTH = Dimensions.get('window').width
+const SWIPE_THRESHOLD = -80
 
 type Notificacion = {
   id: string
@@ -50,6 +54,128 @@ function hintTexto(n: Notificacion): string {
   return ''
 }
 
+type NotifItemProps = {
+  item: Notificacion
+  onPress: (item: Notificacion) => void
+  onDelete: (id: string) => void
+}
+
+function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
+  const swipeX = useRef(new Animated.Value(0)).current
+  const deleteOpacity = swipeX.interpolate({
+    inputRange: [-120, -20],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  })
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Platform.OS !== 'web' && Math.abs(gs.dx) > 8 && Math.abs(gs.dy) < 15,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dx < 0) swipeX.setValue(gs.dx)
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dx < SWIPE_THRESHOLD) {
+          Animated.timing(swipeX, {
+            toValue: -SCREEN_WIDTH,
+            duration: 220,
+            useNativeDriver: true,
+          }).start(() => onDelete(item.id))
+        } else {
+          Animated.spring(swipeX, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start()
+        }
+      },
+    })
+  ).current
+
+  const esCliente   = item.tipo === 'nuevo_cliente'
+  const esLogin     = item.tipo === 'login'
+  const esDestacada = item.tipo === 'destacada'
+  const navegable   = esNavegable(item)
+  const hint        = hintTexto(item)
+
+  return (
+    <View style={styles.swipeContainer}>
+      {Platform.OS !== 'web' && (
+        <Animated.View style={[styles.deleteBg, { opacity: deleteOpacity }]}>
+          <Text style={styles.deleteBgIcon}>🗑</Text>
+        </Animated.View>
+      )}
+
+      <Animated.View
+        style={{ transform: [{ translateX: swipeX }] }}
+        {...(Platform.OS !== 'web' ? panResponder.panHandlers : {})}
+      >
+        <TouchableOpacity
+          style={[
+            styles.card,
+            !item.leida && styles.cardNoLeida,
+            esCliente   && styles.cardCliente,
+            esCliente   && !item.leida && styles.cardClienteNoLeida,
+            esDestacada && styles.cardDestacada,
+            esDestacada && !item.leida && styles.cardDestacadaNoLeida,
+            navegable   && styles.cardNavegable,
+          ]}
+          onPress={() => onPress(item)}
+          activeOpacity={0.75}
+        >
+          <View style={styles.cardTop}>
+            <View style={styles.cardTituloCont}>
+              <Text style={styles.icono}>{iconoPorTipo(item.tipo)}</Text>
+              {!item.leida && (
+                <View style={[
+                  styles.puntito,
+                  esCliente   && styles.puntitoCliente,
+                  esDestacada && styles.puntitoDestacada,
+                ]} />
+              )}
+              <Text style={[
+                styles.cardTitulo,
+                !item.leida && styles.cardTituloNoLeido,
+                esCliente   && styles.cardTituloCliente,
+                esDestacada && styles.cardTituloDestacada,
+              ]}>
+                {item.titulo}
+              </Text>
+            </View>
+            <View style={styles.cardTopRight}>
+              <Text style={styles.tiempo}>{tiempoRelativo(item.created_at)}</Text>
+              {Platform.OS === 'web' && (
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => onDelete(item.id)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.deleteBtnText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido]}>
+            {item.mensaje}
+          </Text>
+
+          {hint !== '' && (
+            <Text style={[
+              styles.tapHint,
+              esCliente   && styles.tapHintCliente,
+              esDestacada && styles.tapHintDestacada,
+            ]}>
+              {hint}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  )
+}
+
 export default function AdminNotificaciones() {
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,6 +212,11 @@ export default function AdminNotificaciones() {
       setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })))
     }
     setMarcandoTodas(false)
+  }
+
+  async function eliminarNotificacion(id: string) {
+    setNotificaciones((prev) => prev.filter((n) => n.id !== id))
+    await supabase.from('notificaciones').delete().eq('id', id)
   }
 
   function handlePress(item: Notificacion) {
@@ -132,65 +263,14 @@ export default function AdminNotificaciones() {
           data={notificaciones}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
-          renderItem={({ item }) => {
-            const esCliente   = item.tipo === 'nuevo_cliente'
-            const esLogin     = item.tipo === 'login'
-            const esDestacada = item.tipo === 'destacada'
-            const navegable   = esNavegable(item)
-            const hint        = hintTexto(item)
-
-            return (
-              <TouchableOpacity
-                style={[
-                  styles.card,
-                  !item.leida && styles.cardNoLeida,
-                  esCliente   && styles.cardCliente,
-                  esCliente   && !item.leida && styles.cardClienteNoLeida,
-                  esDestacada && styles.cardDestacada,
-                  esDestacada && !item.leida && styles.cardDestacadaNoLeida,
-                  navegable   && styles.cardNavegable,
-                ]}
-                onPress={() => handlePress(item)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.cardTop}>
-                  <View style={styles.cardTituloCont}>
-                    <Text style={styles.icono}>{iconoPorTipo(item.tipo)}</Text>
-                    {!item.leida && (
-                      <View style={[
-                        styles.puntito,
-                        esCliente   && styles.puntitoCliente,
-                        esDestacada && styles.puntitoDestacada,
-                      ]} />
-                    )}
-                    <Text style={[
-                      styles.cardTitulo,
-                      !item.leida && styles.cardTituloNoLeido,
-                      esCliente   && styles.cardTituloCliente,
-                      esDestacada && styles.cardTituloDestacada,
-                    ]}>
-                      {item.titulo}
-                    </Text>
-                  </View>
-                  <Text style={styles.tiempo}>{tiempoRelativo(item.created_at)}</Text>
-                </View>
-
-                <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido]}>
-                  {item.mensaje}
-                </Text>
-
-                {hint !== '' && (
-                  <Text style={[
-                    styles.tapHint,
-                    esCliente   && styles.tapHintCliente,
-                    esDestacada && styles.tapHintDestacada,
-                  ]}>
-                    {hint}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            )
-          }}
+          renderItem={({ item }) => (
+            <NotifItem
+              item={item}
+              onPress={handlePress}
+              onDelete={eliminarNotificacion}
+            />
+          )}
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         />
       )}
     </View>
@@ -211,12 +291,41 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1a6470', marginBottom: 8, textAlign: 'center' },
   emptySubtitle: { fontSize: 14, color: '#999', textAlign: 'center', lineHeight: 20 },
 
+  swipeContainer: {
+    position: 'relative',
+  },
+  deleteBg: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 80,
+    backgroundColor: '#e53935',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteBgIcon: { fontSize: 22 },
+
   card: {
     backgroundColor: '#fff', borderRadius: 12, padding: 14,
-    marginBottom: 10, borderWidth: 1, borderColor: '#eee',
+    borderWidth: 1, borderColor: '#eee',
   },
   cardNoLeida: { backgroundColor: '#f0f4ff', borderColor: '#c5d5ff' },
   cardNavegable: { borderRightWidth: 3 },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5 },
+  cardTituloCont: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6 },
+  cardTopRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+  icono: { fontSize: 16, flexShrink: 0 },
+  puntito: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1a6470', flexShrink: 0 },
+  cardTitulo: { fontSize: 14, fontWeight: '600', color: '#555', flex: 1 },
+  cardTituloNoLeido: { color: '#1a6470' },
+  tiempo: { fontSize: 11, color: '#aaa' },
+  deleteBtn: { padding: 2 },
+  deleteBtnText: { fontSize: 13, color: '#bbb', fontWeight: '700' },
+  cardMensaje: { fontSize: 14, color: '#888', lineHeight: 20 },
+  cardMensajeNoLeido: { color: '#333' },
+  tapHint: { fontSize: 11, color: '#7a9ee8', marginTop: 6 },
 
   // Nuevo cliente — verde
   cardCliente: { borderColor: '#2e7d32', borderWidth: 1.5, backgroundColor: '#f6fff6' },
@@ -231,15 +340,4 @@ const styles = StyleSheet.create({
   puntitoDestacada: { backgroundColor: '#c8960c' },
   cardTituloDestacada: { color: '#7a5500' },
   tapHintDestacada: { color: '#c8960c' },
-
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5 },
-  cardTituloCont: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6 },
-  icono: { fontSize: 16, flexShrink: 0 },
-  puntito: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1a6470', flexShrink: 0 },
-  cardTitulo: { fontSize: 14, fontWeight: '600', color: '#555', flex: 1 },
-  cardTituloNoLeido: { color: '#1a6470' },
-  tiempo: { fontSize: 11, color: '#aaa', marginLeft: 8, flexShrink: 0 },
-  cardMensaje: { fontSize: 14, color: '#888', lineHeight: 20 },
-  cardMensajeNoLeido: { color: '#333' },
-  tapHint: { fontSize: 11, color: '#7a9ee8', marginTop: 6 },
 })
