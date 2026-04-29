@@ -12,6 +12,9 @@ type Notificacion = {
   mensaje: string
   leida: boolean
   created_at: string
+  propiedad_id: string | null
+  cliente_id: string | null
+  tipo: 'nuevo_cliente' | 'login' | 'nueva_propiedad' | 'destacada' | string
 }
 
 function tiempoRelativo(fechaISO: string): string {
@@ -27,6 +30,26 @@ function tiempoRelativo(fechaISO: string): string {
   return new Date(fechaISO).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
 
+function iconoPorTipo(tipo: string) {
+  if (tipo === 'nuevo_cliente') return '👤'
+  if (tipo === 'login')         return '🔑'
+  if (tipo === 'destacada')     return '⭐'
+  return '🔔'
+}
+
+function esNavegable(n: Notificacion): boolean {
+  if (n.tipo === 'nuevo_cliente' && n.cliente_id) return true
+  if (n.propiedad_id) return true
+  return false
+}
+
+function hintTexto(n: Notificacion): string {
+  if (!n.leida && esNavegable(n)) return 'Toca para ver →'
+  if (!n.leida) return 'Toca para marcar como leída'
+  if (esNavegable(n)) return 'Toca para ver →'
+  return ''
+}
+
 export default function AdminNotificaciones() {
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,7 +62,7 @@ export default function AdminNotificaciones() {
 
     const { data, error } = await supabase
       .from('notificaciones')
-      .select('id, titulo, mensaje, leida, created_at')
+      .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, tipo')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -63,6 +86,16 @@ export default function AdminNotificaciones() {
       setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })))
     }
     setMarcandoTodas(false)
+  }
+
+  async function handlePress(item: Notificacion) {
+    if (!item.leida) await marcarLeida(item.id)
+
+    if (item.tipo === 'nuevo_cliente' && item.cliente_id) {
+      router.push(`/(admin)/detalle-cliente?id=${item.cliente_id}`)
+    } else if (item.propiedad_id) {
+      router.push(`/(admin)/editar-propiedad?id=${item.propiedad_id}`)
+    }
   }
 
   const hayNoLeidas = notificaciones.some((n) => !n.leida)
@@ -99,27 +132,65 @@ export default function AdminNotificaciones() {
           data={notificaciones}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.card, !item.leida && styles.cardNoLeida]}
-              onPress={() => { if (!item.leida) marcarLeida(item.id) }}
-              activeOpacity={item.leida ? 1 : 0.75}
-            >
-              <View style={styles.cardTop}>
-                <View style={styles.cardTituloCont}>
-                  {!item.leida && <View style={styles.puntito} />}
-                  <Text style={[styles.cardTitulo, !item.leida && styles.cardTituloNoLeido]}>
-                    {item.titulo}
-                  </Text>
+          renderItem={({ item }) => {
+            const esCliente   = item.tipo === 'nuevo_cliente'
+            const esLogin     = item.tipo === 'login'
+            const esDestacada = item.tipo === 'destacada'
+            const navegable   = esNavegable(item)
+            const hint        = hintTexto(item)
+
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.card,
+                  !item.leida && styles.cardNoLeida,
+                  esCliente   && styles.cardCliente,
+                  esCliente   && !item.leida && styles.cardClienteNoLeida,
+                  esDestacada && styles.cardDestacada,
+                  esDestacada && !item.leida && styles.cardDestacadaNoLeida,
+                  navegable   && styles.cardNavegable,
+                ]}
+                onPress={() => handlePress(item)}
+                activeOpacity={0.75}
+              >
+                <View style={styles.cardTop}>
+                  <View style={styles.cardTituloCont}>
+                    <Text style={styles.icono}>{iconoPorTipo(item.tipo)}</Text>
+                    {!item.leida && (
+                      <View style={[
+                        styles.puntito,
+                        esCliente   && styles.puntitoCliente,
+                        esDestacada && styles.puntitoDestacada,
+                      ]} />
+                    )}
+                    <Text style={[
+                      styles.cardTitulo,
+                      !item.leida && styles.cardTituloNoLeido,
+                      esCliente   && styles.cardTituloCliente,
+                      esDestacada && styles.cardTituloDestacada,
+                    ]}>
+                      {item.titulo}
+                    </Text>
+                  </View>
+                  <Text style={styles.tiempo}>{tiempoRelativo(item.created_at)}</Text>
                 </View>
-                <Text style={styles.tiempo}>{tiempoRelativo(item.created_at)}</Text>
-              </View>
-              <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido]}>
-                {item.mensaje}
-              </Text>
-              {!item.leida && <Text style={styles.tapHint}>Toca para marcar como leída</Text>}
-            </TouchableOpacity>
-          )}
+
+                <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido]}>
+                  {item.mensaje}
+                </Text>
+
+                {hint !== '' && (
+                  <Text style={[
+                    styles.tapHint,
+                    esCliente   && styles.tapHintCliente,
+                    esDestacada && styles.tapHintDestacada,
+                  ]}>
+                    {hint}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )
+          }}
         />
       )}
     </View>
@@ -139,13 +210,31 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1a6470', marginBottom: 8, textAlign: 'center' },
   emptySubtitle: { fontSize: 14, color: '#999', textAlign: 'center', lineHeight: 20 },
+
   card: {
     backgroundColor: '#fff', borderRadius: 12, padding: 14,
     marginBottom: 10, borderWidth: 1, borderColor: '#eee',
   },
   cardNoLeida: { backgroundColor: '#f0f4ff', borderColor: '#c5d5ff' },
+  cardNavegable: { borderRightWidth: 3 },
+
+  // Nuevo cliente — verde
+  cardCliente: { borderColor: '#2e7d32', borderWidth: 1.5, backgroundColor: '#f6fff6' },
+  cardClienteNoLeida: { backgroundColor: '#e8f5e9', borderColor: '#2e7d32' },
+  puntitoCliente: { backgroundColor: '#2e7d32' },
+  cardTituloCliente: { color: '#1b5e20' },
+  tapHintCliente: { color: '#2e7d32' },
+
+  // Destacada — amarillo
+  cardDestacada: { borderColor: '#f5c518', borderWidth: 2, backgroundColor: '#fffdf0' },
+  cardDestacadaNoLeida: { backgroundColor: '#fff8d6', borderColor: '#f5c518' },
+  puntitoDestacada: { backgroundColor: '#c8960c' },
+  cardTituloDestacada: { color: '#7a5500' },
+  tapHintDestacada: { color: '#c8960c' },
+
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5 },
   cardTituloCont: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6 },
+  icono: { fontSize: 16, flexShrink: 0 },
   puntito: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1a6470', flexShrink: 0 },
   cardTitulo: { fontSize: 14, fontWeight: '600', color: '#555', flex: 1 },
   cardTituloNoLeido: { color: '#1a6470' },

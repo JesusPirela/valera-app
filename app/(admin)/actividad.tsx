@@ -21,6 +21,7 @@ type Registro = {
   propiedad_codigo: string
   propiedad_titulo: string
   prospectador_email: string
+  prospectador_nombre: string | null
 }
 
 type FiltroTipo = 'todos' | 'descarga' | 'vista'
@@ -40,8 +41,9 @@ function tiempoRelativo(fechaISO: string): string {
   return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
 
-function emailCorto(email: string): string {
-  return email.length > 30 ? email.slice(0, 28) + '…' : email
+function nombreCorto(nombre: string | null, email: string): string {
+  const texto = nombre ?? email.split('@')[0]
+  return texto.length > 30 ? texto.slice(0, 28) + '…' : texto
 }
 
 export default function ActividadAdmin() {
@@ -137,7 +139,7 @@ export default function ActividadAdmin() {
             <View style={styles.row}>
               <View style={styles.rowLeft}>
                 <Text style={styles.email} numberOfLines={1}>
-                  {emailCorto(item.prospectador_email)}
+                  {nombreCorto(item.prospectador_nombre, item.prospectador_email)}
                 </Text>
                 <Text style={styles.propiedad} numberOfLines={1}>
                   {item.propiedad_codigo} · {item.propiedad_titulo}

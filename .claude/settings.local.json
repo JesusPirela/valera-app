@@ -16,7 +16,9 @@
       "Bash(curl -s http://localhost:8081)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8081)",
       "Bash(npx tsc *)",
-      "Bash(eas update *)"
+      "Bash(eas update *)",
+      "Bash(npx supabase *)",
+      "Bash(supabase db *)"
     ]
   }
 }

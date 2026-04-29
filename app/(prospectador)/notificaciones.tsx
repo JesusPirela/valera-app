@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
 type Notificacion = {
@@ -18,6 +18,7 @@ type Notificacion = {
   leida: boolean
   created_at: string
   propiedad_id: string | null
+  cliente_id: string | null
   tipo: 'nueva_propiedad' | 'destacada' | 'exclusiva' | 'recordatorio' | string
 }
 
@@ -44,6 +45,19 @@ function iconoPorTipo(tipo: string) {
   return '🔔'
 }
 
+function esNavegable(n: Notificacion): boolean {
+  if (n.tipo === 'recordatorio' && n.cliente_id) return true
+  if (n.propiedad_id) return true
+  return false
+}
+
+function hintTexto(n: Notificacion): string {
+  if (!n.leida && esNavegable(n)) return 'Toca para ver →'
+  if (!n.leida) return 'Toca para marcar como leída'
+  if (esNavegable(n)) return 'Toca para ver →'
+  return ''
+}
+
 export default function Notificaciones() {
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,7 +70,7 @@ export default function Notificaciones() {
 
     const { data, error } = await supabase
       .from('notificaciones')
-      .select('id, titulo, mensaje, leida, created_at, propiedad_id, tipo')
+      .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, tipo')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -103,6 +117,16 @@ export default function Notificaciones() {
     setMarcandoTodas(false)
   }
 
+  async function handlePress(item: Notificacion) {
+    if (!item.leida) await marcarLeida(item.id)
+
+    if (item.tipo === 'recordatorio' && item.cliente_id) {
+      router.push(`/(prospectador)/detalle-cliente?id=${item.cliente_id}`)
+    } else if (item.propiedad_id) {
+      router.push(`/(prospectador)/detalle-propiedad?id=${item.propiedad_id}`)
+    }
+  }
+
   const hayNoLeidas = notificaciones.some((n) => !n.leida)
 
   return (
@@ -137,6 +161,8 @@ export default function Notificaciones() {
             const esRecordatorio = item.tipo === 'recordatorio'
             const esDestacada    = item.tipo === 'destacada'
             const esExclusiva    = item.tipo === 'exclusiva'
+            const navegable      = esNavegable(item)
+            const hint           = hintTexto(item)
 
             return (
               <TouchableOpacity
@@ -149,9 +175,10 @@ export default function Notificaciones() {
                   esDestacada && !item.leida && styles.cardDestacadaNoLeida,
                   esExclusiva && styles.cardExclusiva,
                   esExclusiva && !item.leida && styles.cardExclusivaNoLeida,
+                  navegable && styles.cardNavegable,
                 ]}
-                onPress={() => { if (!item.leida) marcarLeida(item.id) }}
-                activeOpacity={item.leida ? 1 : 0.7}
+                onPress={() => handlePress(item)}
+                activeOpacity={0.75}
               >
                 <View style={styles.cardTop}>
                   <View style={styles.cardTituloCont}>
@@ -181,14 +208,14 @@ export default function Notificaciones() {
                   {item.mensaje}
                 </Text>
 
-                {!item.leida && (
+                {hint !== '' && (
                   <Text style={[
                     styles.tapHint,
                     esRecordatorio && styles.tapHintRecordatorio,
                     esDestacada && styles.tapHintDestacada,
                     esExclusiva && styles.tapHintExclusiva,
                   ]}>
-                    Toca para marcar como leída
+                    {hint}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -227,6 +254,9 @@ const styles = StyleSheet.create({
   cardNoLeida: {
     backgroundColor: '#f0f4ff',
     borderColor: '#c5d5ff',
+  },
+  cardNavegable: {
+    borderRightWidth: 3,
   },
   cardTop: {
     flexDirection: 'row',
