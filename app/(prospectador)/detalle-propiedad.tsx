@@ -6,7 +6,6 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
-  Dimensions,
   TouchableOpacity,
   Platform,
   Alert,
@@ -14,6 +13,7 @@ import {
   TextInput,
   Modal,
   FlatList,
+  useWindowDimensions,
 } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -24,7 +24,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window')
 
 type Propiedad = {
   id: string
@@ -101,6 +100,7 @@ function formatearFichaWhatsApp(p: Propiedad): string {
 
 export default function DetallePropiedad() {
   const { id } = useLocalSearchParams<{ id: string }>()
+  const { width: SCREEN_WIDTH } = useWindowDimensions()
   const isOnline = useNetworkStatus()
   const [imagenActual, setImagenActual] = useState(0)
   const [descargando, setDescargando] = useState(false)
@@ -390,61 +390,37 @@ export default function DetallePropiedad() {
 
     try {
       if (Platform.OS === 'web') {
-        // Copiar texto al portapapeles primero (no requiere gesto del usuario)
-        try { await navigator.clipboard.writeText(texto) } catch { /* ignorar si no disponible */ }
+        // Abrir WhatsApp PRIMERO (gesto directo del usuario, sin ningún await previo)
+        window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
+        // Copiar texto al portapapeles como respaldo
+        try { await navigator.clipboard.writeText(texto) } catch { /* ignorar */ }
 
-        // Web Share API para imágenes (cuando está disponible)
-        if (imagenes.length > 0 && typeof navigator.share === 'function') {
+        // Descargar imágenes para que el usuario las adjunte en WhatsApp Web
+        for (let i = 0; i < imagenes.length; i++) {
           try {
-            const archivos: globalThis.File[] = []
-            for (let i = 0; i < imagenes.length; i++) {
-              const resp = await fetch(imagenes[i].url)
-              const blob = await resp.blob()
-              archivos.push(new globalThis.File(
-                [blob],
-                `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`,
-                { type: 'image/jpeg' }
-              ))
-            }
-
-            if (navigator.canShare?.({ files: archivos })) {
-              await navigator.share({ title: propiedad.titulo ?? '', files: archivos })
-              // Mostrar aviso DESPUÉS de que el share sheet se cierre
-              Alert.alert(
-                'Fotos compartidas',
-                'El texto de la propiedad fue copiado al portapapeles. Pégalo en WhatsApp junto con las fotos.'
-              )
-              setCompartiendoFotos(false)
-              return
-            }
-          } catch (e) {
-            if ((e as Error).name === 'AbortError') {
-              setCompartiendoFotos(false)
-              return
-            }
-            // Otro error: caer al fallback
+            const resp = await fetch(imagenes[i].url)
+            const blob = await resp.blob()
+            const objectUrl = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = objectUrl
+            a.download = `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(objectUrl)
+          } catch {
+            // CORS bloqueó fetch — abrir en nueva pestaña para descarga manual
+            const a = document.createElement('a')
+            a.href = imagenes[i].url
+            a.target = '_blank'
+            a.rel = 'noopener'
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
           }
         }
-
-        // Fallback: WhatsApp con texto + descarga de fotos
-        window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
-        for (let i = 0; i < imagenes.length; i++) {
-          const resp = await fetch(imagenes[i].url)
-          const blob = await resp.blob()
-          const objectUrl = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = objectUrl
-          a.download = `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`
-          document.body.appendChild(a)
-          a.click()
-          document.body.removeChild(a)
-          URL.revokeObjectURL(objectUrl)
-        }
         if (imagenes.length > 0) {
-          Alert.alert(
-            'Listo',
-            'WhatsApp se abrió con el texto. Las fotos se descargaron: adjúntalas desde WhatsApp Web.'
-          )
+          Alert.alert('Listo', 'WhatsApp se abrió con el texto. Las fotos se descargaron — adjúntalas desde WhatsApp Web.')
         }
         setCompartiendoFotos(false)
         return
@@ -510,19 +486,33 @@ export default function DetallePropiedad() {
     registrarActividad('descarga')
 
     if (Platform.OS === 'web') {
-      for (let i = 0; i < imagenes.length; i++) {
-        const resp = await fetch(imagenes[i].url)
-        const blob = await resp.blob()
-        const objectUrl = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = objectUrl
-        a.download = `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(objectUrl)
+      try {
+        for (let i = 0; i < imagenes.length; i++) {
+          try {
+            const resp = await fetch(imagenes[i].url)
+            const blob = await resp.blob()
+            const objectUrl = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = objectUrl
+            a.download = `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(objectUrl)
+          } catch {
+            // CORS bloqueó fetch — abrir en nueva pestaña para descarga manual
+            const a = document.createElement('a')
+            a.href = imagenes[i].url
+            a.target = '_blank'
+            a.rel = 'noopener'
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+          }
+        }
+      } finally {
+        setDescargando(false)
       }
-      setDescargando(false)
     } else {
       const { status } = await MediaLibrary.requestPermissionsAsync()
       if (status !== 'granted') {
@@ -594,7 +584,7 @@ export default function DetallePropiedad() {
               <Image
                 key={i}
                 source={{ uri: img.url }}
-                style={styles.imagen}
+                style={[styles.imagen, { width: SCREEN_WIDTH }]}
                 resizeMode="cover"
               />
             ))}
@@ -611,7 +601,7 @@ export default function DetallePropiedad() {
           )}
         </View>
       ) : (
-        <View style={styles.sinImagen}>
+        <View style={[styles.sinImagen, { width: SCREEN_WIDTH }]}>
           <Text style={styles.sinImagenText}>Sin imágenes</Text>
         </View>
       )}
@@ -1034,9 +1024,8 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: '#aaa', fontSize: 15 },
 
-  imagen: { width: SCREEN_WIDTH, height: 260 },
+  imagen: { height: 260 },
   sinImagen: {
-    width: SCREEN_WIDTH,
     height: 180,
     backgroundColor: '#e0e0e0',
     alignItems: 'center',
