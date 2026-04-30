@@ -21,6 +21,9 @@ jobs:
 
       - name: Build web
         run: npx expo export --platform web
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://ystxicgrryyzhrxinsbq.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl
 
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
