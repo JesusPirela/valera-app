@@ -9,8 +9,11 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
+  Modal,
+  Linking,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
@@ -63,6 +66,19 @@ function formatPrecio(precio: number | null) {
   return `$${precio.toLocaleString('es-MX')} MXN`
 }
 
+function extraerZona(direccion: string): string {
+  if (!direccion) return 'Sin zona'
+  const partes = direccion.split(',').map(s => s.trim()).filter(s => s.length > 0)
+  for (let i = 1; i < partes.length; i++) {
+    const p = partes[i]
+    if (/^\d+/.test(p)) continue
+    if (/^(qr[oó]?\.?|quer[eé]taro|m[eé]xico|cdmx|gto\.?|guanajuato|jal\.?|jalisco|nl\.?|nuevo le[oó]n)$/i.test(p)) continue
+    if (p.length < 3) continue
+    return p
+  }
+  return partes[0] ?? 'Sin zona'
+}
+
 export default function ProspectadorPropiedades() {
   const queryClient = useQueryClient()
   const isOnline = useNetworkStatus()
@@ -76,6 +92,10 @@ export default function ProspectadorPropiedades() {
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
   const [filtroPublicadas, setFiltroPublicadas] = useState(false)
+  const [vistaZonas, setVistaZonas] = useState(false)
+  const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
+  const [showHelp, setShowHelp] = useState(false)
+  const [mensajeAyuda, setMensajeAyuda] = useState('')
 
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
     queryKey: ['prospectador-propiedades'],
@@ -94,7 +114,6 @@ export default function ProspectadorPropiedades() {
         supabase.from('propiedad_publicada').select('propiedad_id').eq('user_id', userId),
       ])
 
-      // Si falla la consulta principal, lanzar error para que TanStack Query conserve el caché anterior
       if (propsRes.error) throw propsRes.error
 
       const rol = profileRes.data?.role ?? null
@@ -119,7 +138,6 @@ export default function ProspectadorPropiedades() {
     if (togglingRef.current.size === 0) refetch()
   }, [refetch]))
 
-  // Sembrar el caché de cada detalle con los datos de la lista (sin requests extra)
   useEffect(() => {
     if (!queryData?.propiedades) return
     for (const p of queryData.propiedades) {
@@ -171,6 +189,25 @@ export default function ProspectadorPropiedades() {
     queryClient.invalidateQueries({ queryKey: ['prospectador-propiedades'] })
   }
 
+  function toggleZona(zona: string) {
+    setZonasExpandidas(prev => {
+      const s = new Set(prev)
+      if (s.has(zona)) s.delete(zona)
+      else s.add(zona)
+      return s
+    })
+  }
+
+  function enviarAyuda() {
+    const msg = mensajeAyuda.trim()
+    if (!msg) return
+    const nombre = queryData?.nombreUsuario ?? 'Un prospectador'
+    const texto = `Hola, soy ${nombre} (prospectador Valera). ${msg}`
+    Linking.openURL(`https://wa.me/527821954946?text=${encodeURIComponent(texto)}`)
+    setShowHelp(false)
+    setMensajeAyuda('')
+  }
+
   const filtrosActivos = [filtroOperacion, filtroTipo, ordenPrecio, filtroPublicadas || null].filter(Boolean).length
 
   let propiedadesFiltradas = propiedades
@@ -194,6 +231,19 @@ export default function ProspectadorPropiedades() {
     )
   }
 
+  const propiedadesPorZona: [string, Propiedad[]][] = []
+  if (vistaZonas) {
+    const map = new Map<string, Propiedad[]>()
+    for (const p of propiedadesFiltradas) {
+      const zona = extraerZona(p.direccion ?? '')
+      if (!map.has(zona)) map.set(zona, [])
+      map.get(zona)!.push(p)
+    }
+    Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(entry => propiedadesPorZona.push(entry))
+  }
+
   function limpiarFiltros() {
     setFiltroOperacion(null)
     setFiltroTipo(null)
@@ -201,10 +251,86 @@ export default function ProspectadorPropiedades() {
     setFiltroPublicadas(false)
   }
 
+  function renderPropiedad(item: Propiedad) {
+    const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+    const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[styles.card, item.exclusiva && styles.cardExclusiva, item.destacada && !item.exclusiva && styles.cardDestacada]}
+        activeOpacity={0.85}
+        onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.id}`)}
+      >
+        {primera?.url && (
+          <Image source={{ uri: primera.url }} style={styles.cardImagen} resizeMode="cover" />
+        )}
+        {item.exclusiva && (
+          <View style={styles.exclusivaBanner}>
+            <Text style={styles.exclusivaBannerText}>★ Propiedad exclusiva</Text>
+          </View>
+        )}
+        {item.destacada && !item.exclusiva && (
+          <View style={styles.destacadaBanner}>
+            <Text style={styles.destacadaBannerText}>★ Propiedad destacada</Text>
+          </View>
+        )}
+        <View style={styles.cardBody}>
+          {item.destacada && item.destacada_mensaje ? (
+            <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
+          ) : null}
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.codigo}>{item.codigo ?? '—'}</Text>
+            {item.tipo && (
+              <Text style={styles.tipoBadge}>
+                {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
+                {item.operacion ? ` · ${item.operacion}` : ''}
+              </Text>
+            )}
+          </View>
+          {item.es_constructora && (
+            <Text style={styles.constructoraBadge}>
+              🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
+            </Text>
+          )}
+          <Text style={styles.cardTitulo}>{item.titulo}</Text>
+          <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
+          {item.descripcion ? (
+            <Text style={styles.cardDescripcion} numberOfLines={2}>{item.descripcion}</Text>
+          ) : null}
+          {tieneMeta && (
+            <View style={styles.metaRow}>
+              {item.recamaras != null && <Text style={styles.metaItem}>Rec {item.recamaras}</Text>}
+              {item.banos != null && <Text style={styles.metaItem}>Ba {item.banos}</Text>}
+              {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m²</Text>}
+              {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
+            </View>
+          )}
+          <View style={styles.cardFooter}>
+            <Text style={styles.precio}>{formatPrecio(item.precio)}</Text>
+            <TouchableOpacity
+              style={[styles.publicadaBtn, publicadas.has(item.id) && styles.publicadaBtnActive, !isOnline && styles.publicadaBtnDisabled]}
+              onPress={(e) => { e.stopPropagation(); if (isOnline) togglePublicada(item.id) }}
+              disabled={toggling.has(item.id) || !isOnline}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              {toggling.has(item.id) ? (
+                <ActivityIndicator size="small" color={publicadas.has(item.id) ? '#fff' : '#1a6470'} />
+              ) : (
+                <Text style={[styles.publicadaBtnText, publicadas.has(item.id) && styles.publicadaBtnTextActive]}>
+                  {publicadas.has(item.id) ? '✓ Publicada' : 'Publicar'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    )
+  }
+
   const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <OfflineBanner />
       <View style={styles.container}>
 
@@ -240,11 +366,21 @@ export default function ProspectadorPropiedades() {
           />
         </View>
 
-        <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
-          <Text style={styles.filtrosToggleText}>
-            {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
-          </Text>
-        </TouchableOpacity>
+        {/* Fila de controles: Filtros + Por zona */}
+        <View style={styles.controlsRow}>
+          <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
+            <Text style={styles.filtrosToggleText}>
+              {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.zonasToggle, vistaZonas && styles.zonasToggleActive]}
+            onPress={() => setVistaZonas(v => !v)}
+          >
+            <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : '#1a6470'} />
+            <Text style={[styles.zonasToggleText, vistaZonas && styles.zonasToggleTextActive]}>Por zona</Text>
+          </TouchableOpacity>
+        </View>
 
         {mostrarFiltros && (
           <View style={styles.filtrosPanel}>
@@ -295,94 +431,85 @@ export default function ProspectadorPropiedades() {
                 : 'No hay propiedades disponibles.'}
             </Text>
           </View>
+        ) : vistaZonas ? (
+          <ScrollView contentContainerStyle={{ paddingBottom: 24, paddingTop: 8 }}>
+            {propiedadesPorZona.map(([zona, props]) => {
+              const expandida = zonasExpandidas.has(zona)
+              return (
+                <View key={zona} style={styles.zonaSection}>
+                  <TouchableOpacity style={styles.zonaHeader} onPress={() => toggleZona(zona)} activeOpacity={0.7}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.zonaNombre}>{zona}</Text>
+                      <Text style={styles.zonaCount}>{props.length} propiedad{props.length !== 1 ? 'es' : ''}</Text>
+                    </View>
+                    <Ionicons
+                      name={expandida ? 'chevron-up-outline' : 'chevron-down-outline'}
+                      size={20}
+                      color="#1a6470"
+                    />
+                  </TouchableOpacity>
+                  {expandida && (
+                    <View style={styles.zonaContent}>
+                      {props.map(p => renderPropiedad(p))}
+                    </View>
+                  )}
+                </View>
+              )
+            })}
+          </ScrollView>
         ) : (
           <FlatList
             data={propiedadesFiltradas}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 24, paddingHorizontal: 16 }}
-            renderItem={({ item }) => {
-              const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-              const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
-              return (
-                <TouchableOpacity
-                  style={[styles.card, item.exclusiva && styles.cardExclusiva, item.destacada && !item.exclusiva && styles.cardDestacada]}
-                  activeOpacity={0.85}
-                  onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.id}`)}
-                >
-                  {primera?.url && (
-                    <Image source={{ uri: primera.url }} style={styles.cardImagen} resizeMode="cover" />
-                  )}
-                  {item.exclusiva && (
-                    <View style={styles.exclusivaBanner}>
-                      <Text style={styles.exclusivaBannerText}>★ Propiedad exclusiva</Text>
-                    </View>
-                  )}
-                  {item.destacada && !item.exclusiva && (
-                    <View style={styles.destacadaBanner}>
-                      <Text style={styles.destacadaBannerText}>★ Propiedad destacada</Text>
-                    </View>
-                  )}
-                  <View style={styles.cardBody}>
-                    {item.destacada && item.destacada_mensaje ? (
-                      <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
-                    ) : null}
-                    <View style={styles.cardHeaderRow}>
-                      <Text style={styles.codigo}>{item.codigo ?? '—'}</Text>
-                      {item.tipo && (
-                        <Text style={styles.tipoBadge}>
-                          {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
-                          {item.operacion ? ` · ${item.operacion}` : ''}
-                        </Text>
-                      )}
-                    </View>
-
-                    {item.es_constructora && (
-                      <Text style={styles.constructoraBadge}>
-                        🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
-                      </Text>
-                    )}
-
-                    <Text style={styles.cardTitulo}>{item.titulo}</Text>
-                    <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
-
-                    {item.descripcion ? (
-                      <Text style={styles.cardDescripcion} numberOfLines={2}>{item.descripcion}</Text>
-                    ) : null}
-
-                    {tieneMeta && (
-                      <View style={styles.metaRow}>
-                        {item.recamaras != null && <Text style={styles.metaItem}>Rec {item.recamaras}</Text>}
-                        {item.banos != null && <Text style={styles.metaItem}>Ba {item.banos}</Text>}
-                        {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m²</Text>}
-                        {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
-                      </View>
-                    )}
-
-                    <View style={styles.cardFooter}>
-                      <Text style={styles.precio}>{formatPrecio(item.precio)}</Text>
-                      <TouchableOpacity
-                        style={[styles.publicadaBtn, publicadas.has(item.id) && styles.publicadaBtnActive, !isOnline && styles.publicadaBtnDisabled]}
-                        onPress={(e) => { e.stopPropagation(); if (isOnline) togglePublicada(item.id) }}
-                        disabled={toggling.has(item.id) || !isOnline}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        {toggling.has(item.id) ? (
-                          <ActivityIndicator size="small" color={publicadas.has(item.id) ? '#fff' : '#1a6470'} />
-                        ) : (
-                          <Text style={[styles.publicadaBtnText, publicadas.has(item.id) && styles.publicadaBtnTextActive]}>
-                            {publicadas.has(item.id) ? '✓ Publicada' : 'Publicar'}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              )
-            }}
+            renderItem={({ item }) => renderPropiedad(item)}
           />
         )}
       </View>
-    </>
+
+      {/* Botón de ayuda flotante */}
+      <TouchableOpacity style={styles.helpFab} onPress={() => setShowHelp(true)} activeOpacity={0.85}>
+        <Ionicons name="help" size={26} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Modal de ayuda */}
+      <Modal visible={showHelp} transparent animationType="fade" onRequestClose={() => setShowHelp(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>¿Necesitas ayuda?</Text>
+            <Text style={styles.modalSubtitle}>Escribe tu problema y lo enviaremos por WhatsApp al soporte.</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Describe tu problema o consulta..."
+              placeholderTextColor="#aaa"
+              value={mensajeAyuda}
+              onChangeText={setMensajeAyuda}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              maxLength={500}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => { setShowHelp(false); setMensajeAyuda('') }}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSendBtn, !mensajeAyuda.trim() && { opacity: 0.45 }]}
+                onPress={enviarAyuda}
+                disabled={!mensajeAyuda.trim()}
+              >
+                <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                <Text style={styles.modalSendText}>Enviar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   )
 }
 
@@ -440,13 +567,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1a6470',
   },
-  filtrosToggle: {
-    alignSelf: 'flex-end',
-    paddingVertical: 6,
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     marginBottom: 8,
   },
+  filtrosToggle: {
+    paddingVertical: 6,
+  },
   filtrosToggleText: { color: '#1a6470', fontSize: 14, fontWeight: '600' },
+  zonasToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1.5,
+    borderColor: '#1a6470',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  zonasToggleActive: {
+    backgroundColor: '#1a6470',
+  },
+  zonasToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1a6470',
+  },
+  zonasToggleTextActive: {
+    color: '#fff',
+  },
   filtrosPanel: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -474,6 +626,43 @@ const styles = StyleSheet.create({
   limpiarText: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
   emptyContainer: { flex: 1, alignItems: 'center', marginTop: 60, paddingHorizontal: 16 },
   emptyText: { color: '#aaa', fontSize: 15, textAlign: 'center' },
+  // Zona view
+  zonaSection: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#eee',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  zonaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+  },
+  zonaNombre: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1a6470',
+    marginBottom: 2,
+  },
+  zonaCount: {
+    fontSize: 12,
+    color: '#888',
+  },
+  zonaContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  // Cards
   card: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -607,5 +796,93 @@ const styles = StyleSheet.create({
   },
   publicadaBtnTextActive: {
     color: '#fff',
+  },
+  // Help FAB
+  helpFab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#c9a84c',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 8,
+    zIndex: 100,
+  },
+  // Help Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 420,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1a1a2e',
+    marginBottom: 6,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  modalInput: {
+    backgroundColor: '#f4f8f8',
+    borderWidth: 1.5,
+    borderColor: '#e0eaec',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 14,
+    color: '#1a2e30',
+    minHeight: 110,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: '#555',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  modalSendBtn: {
+    flex: 1,
+    backgroundColor: '#25D366',
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  modalSendText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
   },
 })
