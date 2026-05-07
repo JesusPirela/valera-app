@@ -74,9 +74,10 @@ function extraerZona(direccion: string): string {
     if (/^\d+/.test(p)) continue
     if (/^(qr[oó]?\.?|quer[eé]taro|m[eé]xico|cdmx|gto\.?|guanajuato|jal\.?|jalisco|nl\.?|nuevo le[oó]n)$/i.test(p)) continue
     if (p.length < 3) continue
-    return p
+    return p.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
   }
-  return partes[0] ?? 'Sin zona'
+  const fallback = partes[0] ?? 'Sin zona'
+  return fallback.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
 export default function ProspectadorPropiedades() {
