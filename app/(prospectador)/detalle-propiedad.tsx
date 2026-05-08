@@ -191,6 +191,9 @@ export default function DetallePropiedad() {
   const [guardandoCliente, setGuardandoCliente] = useState(false)
   const [solicitandoDiseno, setSolicitandoDiseno] = useState(false)
   const [descripcionCopiada, setDescripcionCopiada] = useState(false)
+  const [publicada, setPublicada] = useState(false)
+  const [fechaPublicacion, setFechaPublicacion] = useState<string | null>(null)
+  const [togglingPublicacion, setTogglingPublicacion] = useState(false)
 
   // Paso 2: selección de fecha/hora de la cita
   const [clienteParaCita, setClienteParaCita] = useState<ClienteCRM | null>(null)
@@ -205,7 +208,77 @@ export default function DetallePropiedad() {
   useEffect(() => {
     if (!id || !isOnline) return
     registrarActividad('vista')
+    cargarPublicacion()
   }, [id])
+
+  async function cargarPublicacion() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase
+      .from('propiedad_publicacion')
+      .select('publicada, fecha_publicacion')
+      .eq('propiedad_id', id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (data) {
+      setPublicada(data.publicada)
+      setFechaPublicacion(data.fecha_publicacion)
+    }
+  }
+
+  async function togglePublicacion() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    setTogglingPublicacion(true)
+
+    const nuevoEstado = !publicada
+    const ahora = nuevoEstado ? new Date().toISOString() : null
+
+    await supabase
+      .from('propiedad_publicacion')
+      .upsert({
+        propiedad_id: id,
+        user_id: user.id,
+        publicada: nuevoEstado,
+        fecha_publicacion: ahora,
+      }, { onConflict: 'propiedad_id,user_id' })
+
+    setPublicada(nuevoEstado)
+    setFechaPublicacion(ahora)
+
+    // Actualizar progreso en tarea de tipo publicar_propiedades
+    if (nuevoEstado) {
+      const { count } = await supabase
+        .from('propiedad_publicacion')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('publicada', true)
+
+      const totalPublicadas = count ?? 0
+
+      const { data: asigs } = await supabase
+        .from('tarea_asignaciones')
+        .select('id, tarea:tareas!inner(tipo, meta_cantidad)')
+        .eq('user_id', user.id)
+        .eq('completada', false)
+        .eq('tarea.tipo', 'publicar_propiedades')
+
+      for (const a of (asigs ?? []) as any[]) {
+        const meta = a.tarea?.meta_cantidad ?? 1
+        const completada = totalPublicadas >= meta
+        await supabase
+          .from('tarea_asignaciones')
+          .update({
+            progreso: Math.min(totalPublicadas, meta),
+            completada,
+            completada_at: completada ? new Date().toISOString() : null,
+          })
+          .eq('id', a.id)
+      }
+    }
+
+    setTogglingPublicacion(false)
+  }
 
   async function guardarNota() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -741,6 +814,35 @@ export default function DetallePropiedad() {
               }
             </TouchableOpacity>
           )}
+        </View>
+
+        {/* Estado de publicación */}
+        <View style={styles.seccion}>
+          <Text style={styles.seccionTitulo}>Estado de publicación</Text>
+          <View style={styles.pubRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pubEstado}>
+                {publicada ? '✅ Publicada' : '⏳ Pendiente de publicar'}
+              </Text>
+              {publicada && fechaPublicacion && (
+                <Text style={styles.pubFecha}>
+                  {new Date(fechaPublicacion).toLocaleDateString('es-MX', {
+                    day: 'numeric', month: 'long', year: 'numeric',
+                  })}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[styles.pubBtn, publicada ? styles.pubBtnActiva : styles.pubBtnPendiente, togglingPublicacion && styles.btnDisabled]}
+              onPress={togglePublicacion}
+              disabled={togglingPublicacion}
+            >
+              {togglingPublicacion
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.pubBtnText}>{publicada ? 'Marcar pendiente' : 'Marcar publicada'}</Text>
+              }
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Botón descargar imágenes */}
@@ -1469,6 +1571,14 @@ const styles = StyleSheet.create({
     color: '#888',
     marginBottom: 10,
   },
+  pubRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pubEstado: { fontSize: 15, fontWeight: '700', color: '#1a2e30' },
+  pubFecha: { fontSize: 12, color: '#888', marginTop: 3 },
+  pubBtn: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+  pubBtnPendiente: { backgroundColor: '#1a6470' },
+  pubBtnActiva: { backgroundColor: '#888' },
+  pubBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
   constructoraBadge: {
     fontSize: 12,
     color: '#1a4a6b',

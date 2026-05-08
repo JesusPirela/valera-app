@@ -123,7 +123,7 @@ export default function ProspectadorLayout() {
           elevation: 12,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: '600',
           marginTop: 2,
         },
@@ -167,6 +167,13 @@ export default function ProspectadorLayout() {
         options={{
           title: 'Universidad',
           tabBarIcon: tabIcon('school-outline', 'school'),
+        }}
+      />
+      <Tabs.Screen
+        name="tareas"
+        options={{
+          title: 'Tareas',
+          tabBarIcon: tabIcon('checkmark-done-outline', 'checkmark-done'),
         }}
       />
       <Tabs.Screen
