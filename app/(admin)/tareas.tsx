@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Modal, Alert, Platform,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 
-type UserProfile = { id: string; nombre: string; email: string }
+type UserProfile = { id: string; nombre: string }
 
 type Asignacion = {
   id: string
@@ -15,7 +15,7 @@ type Asignacion = {
   progreso: number
   completada: boolean
   completada_at: string | null
-  user: UserProfile
+  nombre?: string
 }
 
 type Tarea = {
@@ -28,98 +28,214 @@ type Tarea = {
   para_todos: boolean
   activa: boolean
   created_at: string
-  tarea_asignaciones: Asignacion[]
+  asignaciones: Asignacion[]
 }
 
 const TIPOS = [
-  { key: 'manual', label: 'Manual', icon: 'checkmark-circle-outline', hint: 'El usuario la marca manualmente' },
-  { key: 'publicar_propiedades', label: 'Publicar propiedades', icon: 'home-outline', hint: 'Progresa al marcar propiedades como publicadas' },
-  { key: 'contactar_clientes', label: 'Contactar clientes', icon: 'people-outline', hint: 'Progresa al contactar clientes en el CRM' },
-  { key: 'completar_curso', label: 'Completar curso', icon: 'school-outline', hint: 'Progresa al completar lecciones' },
+  { key: 'manual',                label: 'Manual',               icon: 'checkmark-circle-outline' as const, hint: 'El usuario la marca manualmente' },
+  { key: 'publicar_propiedades',  label: 'Publicar propiedades', icon: 'home-outline' as const,             hint: 'Progresa al marcar propiedades como publicadas' },
+  { key: 'contactar_clientes',    label: 'Contactar clientes',   icon: 'people-outline' as const,           hint: 'Progresa al contactar clientes en el CRM' },
+  { key: 'completar_curso',       label: 'Completar curso',      icon: 'school-outline' as const,           hint: 'Progresa al completar lecciones' },
 ]
 
 const NAV_ITEMS = [
-  { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1a6470' },
-  { label: 'CRM', icon: '👤', route: '/(admin)/crm', color: '#0f4c5c' },
-  { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#2a8a7a' },
-  { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#1a7060' },
-  { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#145560' },
-  { label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#c9a84c' },
+  { label: 'Nueva',        icon: '＋',  route: '/(admin)/nueva-propiedad', color: '#1a6470' },
+  { label: 'CRM',          icon: '👤',  route: '/(admin)/crm',             color: '#0f4c5c' },
+  { label: 'Actividad',    icon: '📋',  route: '/(admin)/actividad',       color: '#2a8a7a' },
+  { label: 'Estadísticas', icon: '📊',  route: '/(admin)/estadisticas',    color: '#1a7060' },
+  { label: 'Usuarios',     icon: '👥',  route: '/(admin)/prospectadores',  color: '#145560' },
+  { label: 'Universidad',  icon: '🎓',  route: '/(admin)/university',      color: '#c9a84c' },
 ]
 
-import { router } from 'expo-router'
+// ─── Mini-calendario ────────────────────────────────────────────────────────
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+               'Julio','Agosto','Sep','Octubre','Noviembre','Dic']
+const DIAS_S = ['L','M','M','J','V','S','D']
 
+function CalendarioPicker({ fecha, onChange }: { fecha: Date; onChange: (d: Date) => void }) {
+  const [mes, setMes] = useState(fecha.getMonth())
+  const [anio, setAnio] = useState(fecha.getFullYear())
+
+  function irMes(delta: number) {
+    let m = mes + delta, a = anio
+    if (m < 0)  { m = 11; a-- }
+    if (m > 11) { m = 0;  a++ }
+    setMes(m); setAnio(a)
+  }
+
+  function selDia(dia: number) {
+    const d = new Date(fecha)
+    d.setFullYear(anio, mes, dia)
+    onChange(d)
+  }
+
+  function ajustarHora(delta: number) {
+    const d = new Date(fecha); d.setHours(d.getHours() + delta); onChange(d)
+  }
+  function ajustarMin(delta: number) {
+    const d = new Date(fecha)
+    d.setMinutes(Math.round(d.getMinutes() / 15) * 15 + delta)
+    onChange(d)
+  }
+
+  const totalDias  = new Date(anio, mes + 1, 0).getDate()
+  const offset     = (new Date(anio, mes, 1).getDay() + 6) % 7
+  const celdas: (number | null)[] = [...Array(offset).fill(null), ...Array.from({ length: totalDias }, (_, i) => i + 1)]
+  while (celdas.length % 7 !== 0) celdas.push(null)
+
+  const diaActual = fecha.getMonth() === mes && fecha.getFullYear() === anio ? fecha.getDate() : null
+  const hoy = new Date()
+  const diaHoy = hoy.getMonth() === mes && hoy.getFullYear() === anio ? hoy.getDate() : null
+  const horas = fecha.getHours()
+  const mins  = Math.round(fecha.getMinutes() / 15) * 15 % 60
+
+  return (
+    <View style={cal.wrap}>
+      {/* Header mes/año */}
+      <View style={cal.header}>
+        <TouchableOpacity onPress={() => irMes(-1)} style={cal.navBtn}>
+          <Text style={cal.navArrow}>‹</Text>
+        </TouchableOpacity>
+        <Text style={cal.mesAnio}>{MESES[mes]} {anio}</Text>
+        <TouchableOpacity onPress={() => irMes(1)} style={cal.navBtn}>
+          <Text style={cal.navArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Cabecera días */}
+      <View style={cal.semanaRow}>
+        {DIAS_S.map((d, i) => <Text key={i} style={cal.diaSemana}>{d}</Text>)}
+      </View>
+
+      {/* Grid días */}
+      <View style={cal.grid}>
+        {celdas.map((dia, i) => {
+          const sel  = dia === diaActual
+          const esHoy = dia === diaHoy && !sel
+          return (
+            <TouchableOpacity
+              key={i}
+              style={[cal.celda, sel && cal.celdaSel, esHoy && cal.celdaHoy]}
+              onPress={() => dia && selDia(dia)}
+              disabled={!dia}
+              activeOpacity={0.7}
+            >
+              {dia ? (
+                <Text style={[cal.celdaTxt, sel && cal.celdaTxtSel, esHoy && cal.celdaTxtHoy]}>
+                  {dia}
+                </Text>
+              ) : null}
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+
+      {/* Hora */}
+      <View style={cal.horaWrap}>
+        <Text style={cal.horaLabel}>Hora límite</Text>
+        <View style={cal.horaRow}>
+          <TouchableOpacity onPress={() => ajustarHora(-1)} style={cal.horaBtn}><Text style={cal.horaBtnTxt}>‹</Text></TouchableOpacity>
+          <Text style={cal.horaVal}>{String(horas).padStart(2, '0')}</Text>
+          <TouchableOpacity onPress={() => ajustarHora(1)} style={cal.horaBtn}><Text style={cal.horaBtnTxt}>›</Text></TouchableOpacity>
+          <Text style={cal.horaSep}>:</Text>
+          <TouchableOpacity onPress={() => ajustarMin(-15)} style={cal.horaBtn}><Text style={cal.horaBtnTxt}>‹</Text></TouchableOpacity>
+          <Text style={cal.horaVal}>{String(mins).padStart(2, '0')}</Text>
+          <TouchableOpacity onPress={() => ajustarMin(15)} style={cal.horaBtn}><Text style={cal.horaBtnTxt}>›</Text></TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  )
+}
+
+// ─── Pantalla principal ──────────────────────────────────────────────────────
 export default function AdminTareas() {
-  const [tareas, setTareas] = useState<Tarea[]>([])
-  const [loading, setLoading] = useState(true)
-  const [modalVisible, setModalVisible] = useState(false)
-  const [expandida, setExpandida] = useState<string | null>(null)
+  const [tareas,     setTareas]     = useState<Tarea[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [modal,      setModal]      = useState(false)
+  const [expandida,  setExpandida]  = useState<string | null>(null)
 
-  // Form state
-  const [titulo, setTitulo] = useState('')
+  // Form
+  const [titulo,      setTitulo]      = useState('')
   const [descripcion, setDescripcion] = useState('')
-  const [tipo, setTipo] = useState('manual')
-  const [metaCantidad, setMetaCantidad] = useState('1')
-  const [fechaLimite, setFechaLimite] = useState('')
-  const [paraAlguien, setParaAlguien] = useState<'todos' | 'seleccion'>('todos')
-  const [usuarios, setUsuarios] = useState<UserProfile[]>([])
+  const [tipo,        setTipo]        = useState('manual')
+  const [metaCant,    setMetaCant]    = useState('1')
+  const [fechaDate,   setFechaDate]   = useState<Date>(() => { const d = new Date(); d.setHours(23, 59, 0, 0); return d })
+  const [conFecha,    setConFecha]    = useState(false)
+  const [paraQuien,   setParaQuien]   = useState<'todos' | 'seleccion'>('todos')
+  const [usuarios,    setUsuarios]    = useState<UserProfile[]>([])
   const [seleccionados, setSeleccionados] = useState<string[]>([])
-  const [guardando, setGuardando] = useState(false)
+  const [guardando,   setGuardando]   = useState(false)
 
-  useFocusEffect(useCallback(() => {
-    cargar()
-  }, []))
+  useFocusEffect(useCallback(() => { cargar() }, []))
 
   async function cargar() {
     setLoading(true)
-    const { data } = await supabase
+
+    // 1. Tareas con asignaciones (sin join a profiles)
+    const { data: tareasData } = await supabase
       .from('tareas')
       .select(`
         id, titulo, descripcion, tipo, meta_cantidad, fecha_limite,
         para_todos, activa, created_at,
-        tarea_asignaciones(
-          id, user_id, progreso, completada, completada_at,
-          user:profiles!tarea_asignaciones_user_id_fkey(id, nombre, email)
-        )
+        tarea_asignaciones(id, user_id, progreso, completada, completada_at)
       `)
       .eq('activa', true)
       .order('created_at', { ascending: false })
 
-    setTareas((data ?? []) as any)
+    if (!tareasData || tareasData.length === 0) { setTareas([]); setLoading(false); return }
+
+    // 2. Perfiles de todos los user_ids mencionados
+    const allIds = [...new Set(
+      (tareasData as any[]).flatMap((t: any) => (t.tarea_asignaciones ?? []).map((a: any) => a.user_id))
+    )].filter(Boolean)
+
+    const perfilesMap = new Map<string, string>()
+    if (allIds.length > 0) {
+      const { data: perfiles } = await supabase
+        .from('profiles')
+        .select('id, nombre')
+        .in('id', allIds)
+      for (const p of perfiles ?? []) perfilesMap.set(p.id, p.nombre ?? 'Sin nombre')
+    }
+
+    // 3. Merge
+    const merged: Tarea[] = (tareasData as any[]).map((t: any) => ({
+      ...t,
+      asignaciones: (t.tarea_asignaciones ?? []).map((a: any) => ({
+        ...a,
+        nombre: perfilesMap.get(a.user_id) ?? 'Usuario',
+      })),
+    }))
+
+    setTareas(merged)
     setLoading(false)
   }
 
   async function abrirModal() {
-    setTitulo('')
-    setDescripcion('')
-    setTipo('manual')
-    setMetaCantidad('1')
-    setFechaLimite('')
-    setParaAlguien('todos')
-    setSeleccionados([])
+    setTitulo(''); setDescripcion(''); setTipo('manual')
+    setMetaCant('1'); setConFecha(false); setParaQuien('todos'); setSeleccionados([])
+    const d = new Date(); d.setHours(23, 59, 0, 0); setFechaDate(d)
 
     const { data } = await supabase
       .from('profiles')
-      .select('id, nombre, email')
+      .select('id, nombre')
       .neq('role', 'admin')
       .order('nombre')
     setUsuarios((data ?? []) as UserProfile[])
-    setModalVisible(true)
+    setModal(true)
   }
 
-  function toggleSeleccion(id: string) {
-    setSeleccionados(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    )
+  function toggleSel(id: string) {
+    setSeleccionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
-  async function guardarTarea() {
+  async function guardar() {
     if (!titulo.trim()) {
       if (Platform.OS === 'web') window.alert('El título es requerido')
       else Alert.alert('Error', 'El título es requerido')
       return
     }
-    if (paraAlguien === 'seleccion' && seleccionados.length === 0) {
+    if (paraQuien === 'seleccion' && seleccionados.length === 0) {
       if (Platform.OS === 'web') window.alert('Selecciona al menos un usuario')
       else Alert.alert('Error', 'Selecciona al menos un usuario')
       return
@@ -127,11 +243,10 @@ export default function AdminTareas() {
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
     setGuardando(true)
 
-    const meta = parseInt(metaCantidad) || 1
-    const esParaTodos = paraAlguien === 'todos'
+    const meta = parseInt(metaCant) || 1
+    const esTodos = paraQuien === 'todos'
 
     const { data: tarea, error } = await supabase
       .from('tareas')
@@ -140,8 +255,8 @@ export default function AdminTareas() {
         descripcion: descripcion.trim() || null,
         tipo,
         meta_cantidad: meta,
-        fecha_limite: fechaLimite || null,
-        para_todos: esParaTodos,
+        fecha_limite: conFecha ? fechaDate.toISOString() : null,
+        para_todos: esTodos,
         created_by: user.id,
       })
       .select('id')
@@ -149,13 +264,18 @@ export default function AdminTareas() {
 
     if (error || !tarea) {
       setGuardando(false)
-      if (Platform.OS === 'web') window.alert('Error al crear la tarea')
-      else Alert.alert('Error', 'No se pudo crear la tarea')
+      if (Platform.OS === 'web') window.alert(`Error: ${error?.message}`)
+      else Alert.alert('Error', error?.message ?? 'No se pudo crear la tarea')
       return
     }
 
-    // Crear asignaciones
-    const destinos = esParaTodos ? usuarios.map(u => u.id) : seleccionados
+    // Cargar todos los usuarios si es para_todos
+    let destinos = esTodos ? usuarios.map(u => u.id) : seleccionados
+    if (esTodos && destinos.length === 0) {
+      const { data: todos } = await supabase.from('profiles').select('id').neq('role', 'admin')
+      destinos = (todos ?? []).map((p: any) => p.id)
+    }
+
     if (destinos.length > 0) {
       await supabase.from('tarea_asignaciones').insert(
         destinos.map(uid => ({ tarea_id: tarea.id, user_id: uid }))
@@ -163,147 +283,124 @@ export default function AdminTareas() {
     }
 
     setGuardando(false)
-    setModalVisible(false)
+    setModal(false)
     cargar()
   }
 
-  async function desactivarTarea(tareaId: string) {
-    const confirmar = Platform.OS === 'web'
+  async function desactivar(tareaId: string) {
+    const ok = Platform.OS === 'web'
       ? window.confirm('¿Desactivar esta tarea?')
-      : await new Promise<boolean>(resolve =>
+      : await new Promise<boolean>(res =>
           Alert.alert('Desactivar', '¿Desactivar esta tarea?', [
-            { text: 'Cancelar', onPress: () => resolve(false) },
-            { text: 'Desactivar', style: 'destructive', onPress: () => resolve(true) },
+            { text: 'Cancelar', onPress: () => res(false) },
+            { text: 'Desactivar', style: 'destructive', onPress: () => res(true) },
           ])
         )
-    if (!confirmar) return
+    if (!ok) return
     await supabase.from('tareas').update({ activa: false }).eq('id', tareaId)
     cargar()
   }
 
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1a6470" />
-      </View>
-    )
-  }
+  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color="#1a6470" /></View>
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f0f4f5' }}>
-      {/* Navegación superior */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.navBar} contentContainerStyle={styles.navContent}>
+      {/* Nav */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.navBar} contentContainerStyle={s.navContent}>
         {NAV_ITEMS.map(item => (
-          <TouchableOpacity key={item.route} style={[styles.navItem, { backgroundColor: item.color }]} onPress={() => router.push(item.route as any)}>
-            <Text style={styles.navIcon}>{item.icon}</Text>
-            <Text style={styles.navLabel}>{item.label}</Text>
+          <TouchableOpacity key={item.route} style={[s.navItem, { backgroundColor: item.color }]} onPress={() => router.push(item.route as any)}>
+            <Text style={s.navIcon}>{item.icon}</Text>
+            <Text style={s.navLabel}>{item.label}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Tareas Diarias</Text>
-        <TouchableOpacity style={styles.crearBtn} onPress={abrirModal}>
+      <View style={s.header}>
+        <Text style={s.headerTitle}>Tareas Diarias</Text>
+        <TouchableOpacity style={s.crearBtn} onPress={abrirModal}>
           <Ionicons name="add" size={18} color="#fff" />
-          <Text style={styles.crearText}>Nueva tarea</Text>
+          <Text style={s.crearText}>Nueva tarea</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}>
         {tareas.length === 0 && (
-          <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyTitle}>Sin tareas creadas</Text>
-            <Text style={styles.emptySub}>Crea una tarea y asígnala a tu equipo</Text>
+          <View style={s.empty}>
+            <Text style={s.emptyIcon}>📋</Text>
+            <Text style={s.emptyTitle}>Sin tareas creadas</Text>
+            <Text style={s.emptySub}>Crea una tarea y asígnala a tu equipo</Text>
           </View>
         )}
 
         {tareas.map(tarea => {
-          const asigs = tarea.tarea_asignaciones ?? []
+          const asigs = tarea.asignaciones
           const completadas = asigs.filter(a => a.completada).length
-          const pctGlobal = asigs.length > 0 ? Math.round((completadas / asigs.length) * 100) : 0
+          const pct = asigs.length > 0 ? Math.round((completadas / asigs.length) * 100) : 0
           const abierta = expandida === tarea.id
 
           return (
-            <View key={tarea.id} style={styles.card}>
+            <View key={tarea.id} style={s.card}>
               <TouchableOpacity onPress={() => setExpandida(abierta ? null : tarea.id)} activeOpacity={0.8}>
-                <View style={styles.cardHeader}>
+                <View style={s.cardHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.cardTitulo}>{tarea.titulo}</Text>
-                    {tarea.descripcion ? (
-                      <Text style={styles.cardDesc} numberOfLines={abierta ? undefined : 1}>
-                        {tarea.descripcion}
-                      </Text>
-                    ) : null}
-                    <View style={styles.chipRow}>
-                      <Text style={styles.tipoChip}>{TIPOS.find(t => t.key === tarea.tipo)?.label ?? tarea.tipo}</Text>
-                      {tarea.meta_cantidad > 1 && (
-                        <Text style={styles.metaChip}>Meta: {tarea.meta_cantidad}</Text>
-                      )}
+                    <Text style={s.cardTitulo}>{tarea.titulo}</Text>
+                    {tarea.descripcion ? <Text style={s.cardDesc} numberOfLines={abierta ? undefined : 1}>{tarea.descripcion}</Text> : null}
+                    <View style={s.chipRow}>
+                      <Text style={s.tipoChip}>{TIPOS.find(t => t.key === tarea.tipo)?.label ?? tarea.tipo}</Text>
+                      {tarea.meta_cantidad > 1 && <Text style={s.metaChip}>Meta: {tarea.meta_cantidad}</Text>}
                       {tarea.fecha_limite && (
-                        <Text style={styles.fechaChip}>
-                          📅 {new Date(tarea.fecha_limite).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                        <Text style={s.fechaChip}>
+                          📅 {new Date(tarea.fecha_limite).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </Text>
                       )}
                     </View>
                   </View>
-                  <View style={styles.pctBadge}>
-                    <Text style={styles.pctText}>{pctGlobal}%</Text>
-                    <Text style={styles.pctSub}>{completadas}/{asigs.length}</Text>
+                  <View style={s.pctBadge}>
+                    <Text style={s.pctText}>{pct}%</Text>
+                    <Text style={s.pctSub}>{completadas}/{asigs.length}</Text>
                   </View>
                 </View>
-
-                {/* Barra de progreso global */}
-                <View style={styles.globalBar}>
-                  <View style={[styles.globalBarFill, { width: `${pctGlobal}%` as any }]} />
-                </View>
+                <View style={s.globalBar}><View style={[s.globalBarFill, { width: `${pct}%` as any }]} /></View>
               </TouchableOpacity>
 
-              {/* Lista de usuarios (expandible) */}
               {abierta && (
-                <View style={styles.usuariosList}>
-                  <Text style={styles.usuariosHeader}>Progreso por usuario</Text>
-                  {asigs.length === 0 && (
-                    <Text style={styles.sinUsuarios}>Sin usuarios asignados</Text>
-                  )}
+                <View style={s.listaUsuarios}>
+                  <Text style={s.listaHeader}>Progreso por usuario</Text>
+                  {asigs.length === 0 && <Text style={s.sinUsuarios}>Sin usuarios asignados</Text>}
                   {asigs.map(a => {
                     const medible = tarea.meta_cantidad > 1
-                    const pctUser = medible
-                      ? Math.min(100, Math.round((a.progreso / tarea.meta_cantidad) * 100))
-                      : a.completada ? 100 : 0
+                    const pctU = medible ? Math.min(100, Math.round((a.progreso / tarea.meta_cantidad) * 100)) : a.completada ? 100 : 0
                     return (
-                      <View key={a.id} style={styles.usuarioRow}>
-                        <View style={[styles.avatar, { backgroundColor: a.completada ? '#d4f0e2' : '#e8f2f4' }]}>
-                          <Text style={[styles.avatarText, { color: a.completada ? '#2a8a5a' : '#1a6470' }]}>
-                            {(a.user?.nombre ?? '?')[0].toUpperCase()}
+                      <View key={a.id} style={s.usuarioRow}>
+                        <View style={[s.avatar, { backgroundColor: a.completada ? '#d4f0e2' : '#e8f2f4' }]}>
+                          <Text style={[s.avatarTxt, { color: a.completada ? '#2a8a5a' : '#1a6470' }]}>
+                            {(a.nombre ?? '?')[0].toUpperCase()}
                           </Text>
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.usuarioNombre}>{a.user?.nombre ?? 'Usuario'}</Text>
+                          <Text style={s.usuarioNombre}>{a.nombre}</Text>
                           {medible && (
-                            <View style={styles.usuarioBar}>
-                              <View style={[styles.usuarioBarFill, { width: `${pctUser}%` as any, backgroundColor: a.completada ? '#2a8a5a' : '#1a6470' }]} />
+                            <View style={s.usuarioBar}>
+                              <View style={[s.usuarioBarFill, { width: `${pctU}%` as any, backgroundColor: a.completada ? '#2a8a5a' : '#1a6470' }]} />
                             </View>
                           )}
                         </View>
-                        <View style={styles.statusWrap}>
+                        <View style={s.statusWrap}>
                           {a.completada ? (
-                            <View style={styles.doneBadge}>
+                            <View style={s.doneBadge}>
                               <Ionicons name="checkmark" size={12} color="#2a8a5a" />
-                              <Text style={styles.doneText}>Listo</Text>
+                              <Text style={s.doneTxt}>Listo</Text>
                             </View>
                           ) : (
-                            <Text style={styles.progText}>
-                              {medible ? `${a.progreso}/${tarea.meta_cantidad}` : 'Pendiente'}
-                            </Text>
+                            <Text style={s.progTxt}>{medible ? `${a.progreso}/${tarea.meta_cantidad}` : 'Pendiente'}</Text>
                           )}
                         </View>
                       </View>
                     )
                   })}
-                  <TouchableOpacity style={styles.desactivarBtn} onPress={() => desactivarTarea(tarea.id)}>
-                    <Text style={styles.desactivarText}>Desactivar tarea</Text>
+                  <TouchableOpacity style={s.desactivarBtn} onPress={() => desactivar(tarea.id)}>
+                    <Text style={s.desactivarTxt}>Desactivar tarea</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -313,132 +410,95 @@ export default function AdminTareas() {
       </ScrollView>
 
       {/* Modal crear tarea */}
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitulo}>Nueva tarea</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Text style={styles.sheetCerrar}>✕</Text>
+      <Modal visible={modal} animationType="slide" transparent onRequestClose={() => setModal(false)}>
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitulo}>Nueva tarea</Text>
+              <TouchableOpacity onPress={() => setModal(false)}>
+                <Text style={s.sheetCerrar}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.fieldLabel}>Título *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: Publicar 20 propiedades hoy"
-                value={titulo}
-                onChangeText={setTitulo}
-              />
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={s.fieldLabel}>Título *</Text>
+              <TextInput style={s.input} placeholder="Ej: Publicar 20 propiedades hoy" value={titulo} onChangeText={setTitulo} />
 
-              <Text style={styles.fieldLabel}>Descripción</Text>
-              <TextInput
-                style={[styles.input, { minHeight: 70 }]}
-                placeholder="Instrucciones adicionales..."
-                value={descripcion}
-                onChangeText={setDescripcion}
-                multiline
-                textAlignVertical="top"
-              />
+              <Text style={s.fieldLabel}>Descripción</Text>
+              <TextInput style={[s.input, { minHeight: 60 }]} placeholder="Instrucciones adicionales..." value={descripcion} onChangeText={setDescripcion} multiline textAlignVertical="top" />
 
-              <Text style={styles.fieldLabel}>Tipo de tarea</Text>
+              <Text style={s.fieldLabel}>Tipo de tarea</Text>
               {TIPOS.map(t => (
                 <TouchableOpacity
                   key={t.key}
-                  style={[styles.tipoOption, tipo === t.key && styles.tipoOptionActivo]}
-                  onPress={() => {
-                    setTipo(t.key)
-                    if (t.key !== 'manual' && t.key !== 'publicar_propiedades') setMetaCantidad('1')
-                  }}
+                  style={[s.tipoOpt, tipo === t.key && s.tipoOptActivo]}
+                  onPress={() => setTipo(t.key)}
                 >
-                  <Ionicons
-                    name={t.icon as any}
-                    size={18}
-                    color={tipo === t.key ? '#fff' : '#1a6470'}
-                  />
+                  <Ionicons name={t.icon} size={18} color={tipo === t.key ? '#fff' : '#1a6470'} />
                   <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={[styles.tipoOptionLabel, tipo === t.key && { color: '#fff' }]}>{t.label}</Text>
-                    <Text style={[styles.tipoOptionHint, tipo === t.key && { color: 'rgba(255,255,255,0.7)' }]}>{t.hint}</Text>
+                    <Text style={[s.tipoOptLabel, tipo === t.key && { color: '#fff' }]}>{t.label}</Text>
+                    <Text style={[s.tipoOptHint, tipo === t.key && { color: 'rgba(255,255,255,0.7)' }]}>{t.hint}</Text>
                   </View>
                   {tipo === t.key && <Ionicons name="checkmark-circle" size={18} color="#c9a84c" />}
                 </TouchableOpacity>
               ))}
 
-              {(tipo === 'publicar_propiedades' || tipo === 'contactar_clientes' || tipo === 'completar_curso') && (
+              {tipo !== 'manual' && (
                 <>
-                  <Text style={styles.fieldLabel}>Cantidad meta</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Ej: 20"
-                    value={metaCantidad}
-                    onChangeText={setMetaCantidad}
-                    keyboardType="numeric"
-                  />
+                  <Text style={s.fieldLabel}>Cantidad meta</Text>
+                  <TextInput style={s.input} placeholder="Ej: 20" value={metaCant} onChangeText={setMetaCant} keyboardType="numeric" />
                 </>
               )}
 
-              <Text style={styles.fieldLabel}>Fecha límite (opcional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD   ej: 2025-05-10"
-                value={fechaLimite}
-                onChangeText={setFechaLimite}
-              />
-
-              <Text style={styles.fieldLabel}>Asignar a</Text>
-              <View style={styles.asignarRow}>
+              {/* Fecha límite con calendario */}
+              <View style={s.fechaToggleRow}>
+                <Text style={s.fieldLabel}>Fecha y hora límite</Text>
                 <TouchableOpacity
-                  style={[styles.asignarOpt, paraAlguien === 'todos' && styles.asignarOptActivo]}
-                  onPress={() => setParaAlguien('todos')}
+                  style={[s.fechaToggleBtn, conFecha && s.fechaToggleBtnActivo]}
+                  onPress={() => setConFecha(v => !v)}
                 >
-                  <Text style={[styles.asignarOptText, paraAlguien === 'todos' && { color: '#fff' }]}>Todos los usuarios</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.asignarOpt, paraAlguien === 'seleccion' && styles.asignarOptActivo]}
-                  onPress={() => setParaAlguien('seleccion')}
-                >
-                  <Text style={[styles.asignarOptText, paraAlguien === 'seleccion' && { color: '#fff' }]}>Seleccionar usuarios</Text>
+                  <Text style={[s.fechaToggleTxt, conFecha && { color: '#fff' }]}>
+                    {conFecha ? 'Quitar fecha' : 'Agregar fecha'}
+                  </Text>
                 </TouchableOpacity>
               </View>
+              {conFecha && <CalendarioPicker fecha={fechaDate} onChange={setFechaDate} />}
 
-              {paraAlguien === 'seleccion' && (
-                <View style={styles.usuariosSelect}>
+              <Text style={s.fieldLabel}>Asignar a</Text>
+              <View style={s.asignarRow}>
+                {(['todos', 'seleccion'] as const).map(op => (
+                  <TouchableOpacity
+                    key={op}
+                    style={[s.asignarOpt, paraQuien === op && s.asignarOptActivo]}
+                    onPress={() => setParaQuien(op)}
+                  >
+                    <Text style={[s.asignarOptTxt, paraQuien === op && { color: '#fff' }]}>
+                      {op === 'todos' ? 'Todos los usuarios' : 'Seleccionar usuarios'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {paraQuien === 'seleccion' && (
+                <View style={s.usuariosSelect}>
+                  {usuarios.length === 0 && <Text style={s.sinUsuarios}>No hay usuarios registrados</Text>}
                   {usuarios.map(u => {
                     const sel = seleccionados.includes(u.id)
                     return (
-                      <TouchableOpacity
-                        key={u.id}
-                        style={[styles.usuarioSelectRow, sel && styles.usuarioSelectActivo]}
-                        onPress={() => toggleSeleccion(u.id)}
-                      >
-                        <View style={[styles.avatarSm, { backgroundColor: sel ? '#d4f0e2' : '#e8f2f4' }]}>
-                          <Text style={[styles.avatarSmText, { color: sel ? '#2a8a5a' : '#1a6470' }]}>
-                            {u.nombre[0].toUpperCase()}
-                          </Text>
+                      <TouchableOpacity key={u.id} style={[s.usuarioSelRow, sel && s.usuarioSelActivo]} onPress={() => toggleSel(u.id)}>
+                        <View style={[s.avatarSm, { backgroundColor: sel ? '#d4f0e2' : '#e8f2f4' }]}>
+                          <Text style={[s.avatarSmTxt, { color: sel ? '#2a8a5a' : '#1a6470' }]}>{u.nombre[0].toUpperCase()}</Text>
                         </View>
-                        <Text style={[styles.usuarioSelectNombre, sel && { color: '#2a8a5a', fontWeight: '700' }]}>
-                          {u.nombre}
-                        </Text>
+                        <Text style={[s.usuarioSelNombre, sel && { color: '#2a8a5a', fontWeight: '700' }]}>{u.nombre}</Text>
                         {sel && <Ionicons name="checkmark-circle" size={18} color="#2a8a5a" />}
                       </TouchableOpacity>
                     )
                   })}
-                  {usuarios.length === 0 && (
-                    <Text style={styles.sinUsuarios}>No hay usuarios registrados</Text>
-                  )}
                 </View>
               )}
 
-              <TouchableOpacity
-                style={[styles.guardarBtn, guardando && { opacity: 0.6 }]}
-                onPress={guardarTarea}
-                disabled={guardando}
-              >
-                {guardando
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={styles.guardarText}>Crear tarea</Text>
-                }
+              <TouchableOpacity style={[s.guardarBtn, guardando && { opacity: 0.6 }]} onPress={guardar} disabled={guardando}>
+                {guardando ? <ActivityIndicator color="#fff" /> : <Text style={s.guardarTxt}>Crear tarea</Text>}
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -448,149 +508,103 @@ export default function AdminTareas() {
   )
 }
 
+// ─── Estilos calendario ──────────────────────────────────────────────────────
+const cal = StyleSheet.create({
+  wrap: { backgroundColor: '#f8fafb', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#e0eaec', marginTop: 4 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  navBtn: { padding: 6 },
+  navArrow: { fontSize: 22, color: '#1a6470', fontWeight: '700' },
+  mesAnio: { fontSize: 14, fontWeight: '700', color: '#1a2e30' },
+  semanaRow: { flexDirection: 'row', marginBottom: 4 },
+  diaSemana: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#8a9ea0' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  celda: { width: `${100 / 7}%` as any, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
+  celdaSel: { backgroundColor: '#1a6470' },
+  celdaHoy: { borderWidth: 1.5, borderColor: '#1a6470' },
+  celdaTxt: { fontSize: 13, color: '#1a2e30', fontWeight: '500' },
+  celdaTxtSel: { color: '#fff', fontWeight: '700' },
+  celdaTxtHoy: { color: '#1a6470', fontWeight: '700' },
+  horaWrap: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#e0eaec' },
+  horaLabel: { fontSize: 11, fontWeight: '700', color: '#8a9ea0', textAlign: 'center', marginBottom: 8 },
+  horaRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
+  horaBtn: { backgroundColor: '#e0eaec', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  horaBtnTxt: { fontSize: 18, color: '#1a6470', fontWeight: '700' },
+  horaVal: { fontSize: 20, fontWeight: '700', color: '#1a2e30', minWidth: 32, textAlign: 'center' },
+  horaSep: { fontSize: 20, fontWeight: '700', color: '#1a2e30' },
+})
+
+// ─── Estilos pantalla ────────────────────────────────────────────────────────
 const TEAL = '#1a6470'
 const GOLD = '#c9a84c'
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
   navBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e0eaec' },
   navContent: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
   navItem: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   navIcon: { fontSize: 14 },
   navLabel: { color: '#fff', fontSize: 12, fontWeight: '700' },
-
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0eaec',
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e0eaec' },
   headerTitle: { fontSize: 20, fontWeight: '800', color: TEAL },
-  crearBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: TEAL,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
+  crearBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: TEAL, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
   crearText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: TEAL, marginBottom: 6 },
   emptySub: { fontSize: 14, color: '#8a9ea0', textAlign: 'center' },
-
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    marginBottom: 12,
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: '#e0eaec',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
+  card: { backgroundColor: '#fff', borderRadius: 16, marginBottom: 12, marginTop: 4, borderWidth: 1, borderColor: '#e0eaec', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 16, gap: 12 },
   cardTitulo: { fontSize: 15, fontWeight: '700', color: '#1a2e30', marginBottom: 3 },
   cardDesc: { fontSize: 13, color: '#888', lineHeight: 18, marginBottom: 6 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  tipoChip: {
-    fontSize: 10, fontWeight: '600', color: TEAL,
-    backgroundColor: '#e8f2f4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-  },
-  metaChip: {
-    fontSize: 10, fontWeight: '600', color: '#6a4c00',
-    backgroundColor: '#fff3cd', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-  },
-  fechaChip: {
-    fontSize: 10, fontWeight: '600', color: '#555',
-    backgroundColor: '#f0f0f0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-  },
+  tipoChip: { fontSize: 10, fontWeight: '600', color: TEAL, backgroundColor: '#e8f2f4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  metaChip: { fontSize: 10, fontWeight: '600', color: '#6a4c00', backgroundColor: '#fff3cd', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  fechaChip: { fontSize: 10, fontWeight: '600', color: '#555', backgroundColor: '#f0f0f0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   pctBadge: { alignItems: 'center', minWidth: 50 },
   pctText: { fontSize: 20, fontWeight: '800', color: TEAL },
   pctSub: { fontSize: 10, color: '#8a9ea0', marginTop: 1 },
-
   globalBar: { height: 6, backgroundColor: '#e0eaec', marginHorizontal: 16, marginBottom: 12, borderRadius: 3 },
   globalBarFill: { height: 6, backgroundColor: GOLD, borderRadius: 3 },
-
-  usuariosList: { borderTopWidth: 1, borderTopColor: '#f0f4f5', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
-  usuariosHeader: { fontSize: 11, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
+  listaUsuarios: { borderTopWidth: 1, borderTopColor: '#f0f4f5', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  listaHeader: { fontSize: 11, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
   sinUsuarios: { fontSize: 13, color: '#aaa', fontStyle: 'italic', textAlign: 'center', paddingVertical: 8 },
   usuarioRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 14, fontWeight: '700' },
+  avatarTxt: { fontSize: 14, fontWeight: '700' },
   usuarioNombre: { fontSize: 13, fontWeight: '600', color: '#1a2e30', marginBottom: 3 },
   usuarioBar: { height: 5, backgroundColor: '#e0eaec', borderRadius: 3 },
   usuarioBarFill: { height: 5, borderRadius: 3 },
   statusWrap: { minWidth: 60, alignItems: 'flex-end' },
   doneBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#d4f0e2', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
-  doneText: { fontSize: 11, fontWeight: '700', color: '#2a8a5a' },
-  progText: { fontSize: 12, color: '#8a9ea0', fontWeight: '600' },
+  doneTxt: { fontSize: 11, fontWeight: '700', color: '#2a8a5a' },
+  progTxt: { fontSize: 12, color: '#8a9ea0', fontWeight: '600' },
   desactivarBtn: { marginTop: 8, paddingVertical: 8, alignItems: 'center' },
-  desactivarText: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
-
-  // Modal
+  desactivarTxt: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    padding: 20,
-    paddingBottom: 36,
-    maxHeight: '92%',
-  },
+  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 36, maxHeight: '94%' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   sheetTitulo: { fontSize: 18, fontWeight: '800', color: TEAL },
   sheetCerrar: { fontSize: 18, color: '#888', paddingHorizontal: 6 },
-
   fieldLabel: { fontSize: 12, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6, marginTop: 14 },
-  input: {
-    borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1a2e30',
-    backgroundColor: '#fafcfc',
-  },
-
-  tipoOption: {
-    flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
-  },
-  tipoOptionActivo: { backgroundColor: TEAL, borderColor: TEAL },
-  tipoOptionLabel: { fontSize: 14, fontWeight: '700', color: '#1a2e30' },
-  tipoOptionHint: { fontSize: 11, color: '#8a9ea0', marginTop: 1 },
-
+  input: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1a2e30', backgroundColor: '#fafcfc' },
+  tipoOpt: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
+  tipoOptActivo: { backgroundColor: TEAL, borderColor: TEAL },
+  tipoOptLabel: { fontSize: 14, fontWeight: '700', color: '#1a2e30' },
+  tipoOptHint: { fontSize: 11, color: '#8a9ea0', marginTop: 1 },
+  fechaToggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 },
+  fechaToggleBtn: { borderWidth: 1.5, borderColor: TEAL, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  fechaToggleBtnActivo: { backgroundColor: TEAL },
+  fechaToggleTxt: { fontSize: 12, fontWeight: '700', color: TEAL },
   asignarRow: { flexDirection: 'row', gap: 8 },
-  asignarOpt: {
-    flex: 1, alignItems: 'center', borderWidth: 1.5, borderColor: '#e0eaec',
-    borderRadius: 10, paddingVertical: 10,
-  },
+  asignarOpt: { flex: 1, alignItems: 'center', borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 10, paddingVertical: 10 },
   asignarOptActivo: { backgroundColor: TEAL, borderColor: TEAL },
-  asignarOptText: { fontSize: 13, fontWeight: '700', color: TEAL },
-
+  asignarOptTxt: { fontSize: 13, fontWeight: '700', color: TEAL },
   usuariosSelect: { marginTop: 10, borderWidth: 1, borderColor: '#e0eaec', borderRadius: 12, overflow: 'hidden' },
-  usuarioSelectRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 14, paddingVertical: 11,
-    borderBottomWidth: 1, borderBottomColor: '#f0f4f5',
-  },
-  usuarioSelectActivo: { backgroundColor: '#f3fbf6' },
+  usuarioSelRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f0f4f5' },
+  usuarioSelActivo: { backgroundColor: '#f3fbf6' },
   avatarSm: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  avatarSmText: { fontSize: 12, fontWeight: '700' },
-  usuarioSelectNombre: { flex: 1, fontSize: 14, color: '#1a2e30' },
-
-  guardarBtn: {
-    backgroundColor: GOLD, borderRadius: 12, paddingVertical: 15,
-    alignItems: 'center', marginTop: 20,
-  },
-  guardarText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  avatarSmTxt: { fontSize: 12, fontWeight: '700' },
+  usuarioSelNombre: { flex: 1, fontSize: 14, color: '#1a2e30' },
+  guardarBtn: { backgroundColor: GOLD, borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 20 },
+  guardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
 })

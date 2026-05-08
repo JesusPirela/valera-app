@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, TextInput,
-  ActivityIndicator, TouchableOpacity, ScrollView,
+  ActivityIndicator, TouchableOpacity, ScrollView, Modal, Alert, Platform,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -56,6 +56,13 @@ const COLS = [
 ]
 const TABLE_WIDTH = COLS.reduce((s, c) => s + c.width, 0) + COLS.length + 1
 
+type UsuarioSimple = { id: string; nombre: string }
+
+const ESTADOS_LISTA = [
+  'por_perfilar', 'no_contesta', 'cita_por_agendar',
+  'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
+]
+
 export default function AdminCRM() {
   const [secciones, setSecciones] = useState<Seccion[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,6 +74,18 @@ export default function AdminCRM() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
+
+  // Modal nuevo cliente
+  const [modalNuevo, setModalNuevo] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevoTelefono, setNuevoTelefono] = useState('')
+  const [nuevoEmail, setNuevoEmail] = useState('')
+  const [nuevoEmpresa, setNuevoEmpresa] = useState('')
+  const [nuevoTipoOp, setNuevoTipoOp] = useState<'venta' | 'renta'>('venta')
+  const [nuevoEstado, setNuevoEstado] = useState('por_perfilar')
+  const [nuevoUserId, setNuevoUserId] = useState('')
+  const [usuariosLista, setUsuariosLista] = useState<UsuarioSimple[]>([])
+  const [guardandoCliente, setGuardandoCliente] = useState(false)
 
   async function cargarClientes() {
     setLoading(true)
@@ -142,6 +161,52 @@ export default function AdminCRM() {
   }
 
   useFocusEffect(useCallback(() => { cargarClientes() }, []))
+
+  async function abrirModalNuevo() {
+    setNuevoNombre(''); setNuevoTelefono(''); setNuevoEmail('')
+    setNuevoEmpresa(''); setNuevoTipoOp('venta'); setNuevoEstado('por_perfilar'); setNuevoUserId('')
+    const { data } = await supabase.from('profiles').select('id, nombre').neq('role', 'admin').order('nombre')
+    setUsuariosLista((data ?? []) as UsuarioSimple[])
+    setModalNuevo(true)
+  }
+
+  async function guardarNuevoCliente() {
+    if (!nuevoNombre.trim()) {
+      if (Platform.OS === 'web') window.alert('El nombre es requerido')
+      else Alert.alert('Error', 'El nombre es requerido')
+      return
+    }
+    if (!nuevoTelefono.trim()) {
+      if (Platform.OS === 'web') window.alert('El teléfono es requerido')
+      else Alert.alert('Error', 'El teléfono es requerido')
+      return
+    }
+    if (!nuevoUserId) {
+      if (Platform.OS === 'web') window.alert('Selecciona un asesor')
+      else Alert.alert('Error', 'Selecciona un asesor al que asignar el cliente')
+      return
+    }
+    setGuardandoCliente(true)
+    const { error } = await supabase.from('clientes').insert({
+      nombre: nuevoNombre.trim(),
+      telefono: nuevoTelefono.trim(),
+      email: nuevoEmail.trim() || null,
+      empresa: nuevoEmpresa.trim() || null,
+      tipo_operacion: nuevoTipoOp,
+      estado: nuevoEstado,
+      fuente_lead: 'admin',
+      user_id: nuevoUserId,
+      responsable_id: nuevoUserId,
+    })
+    setGuardandoCliente(false)
+    if (error) {
+      if (Platform.OS === 'web') window.alert(`Error: ${error.message}`)
+      else Alert.alert('Error', error.message)
+      return
+    }
+    setModalNuevo(false)
+    cargarClientes()
+  }
 
   function toggleSeccion(title: string) {
     setSeccionesColapsadas((prev) => {
@@ -267,10 +332,7 @@ export default function AdminCRM() {
           autoCorrect={false}
           clearButtonMode="while-editing"
         />
-        <TouchableOpacity
-          style={styles.btnNuevo}
-          onPress={() => router.push('/(prospectador)/cliente-form?fromAdmin=1')}
-        >
+        <TouchableOpacity style={styles.btnNuevo} onPress={abrirModalNuevo}>
           <Text style={styles.btnNuevoText}>+ Nuevo</Text>
         </TouchableOpacity>
       </View>
@@ -407,6 +469,102 @@ export default function AdminCRM() {
           })}
         </ScrollView>
       )}
+
+      {/* Modal nuevo cliente */}
+      <Modal visible={modalNuevo} animationType="slide" transparent onRequestClose={() => setModalNuevo(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitulo}>Nuevo cliente</Text>
+              <TouchableOpacity onPress={() => setModalNuevo(false)}>
+                <Text style={styles.modalCerrar}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.mLabel}>Nombre *</Text>
+              <TextInput style={styles.mInput} placeholder="Nombre completo" value={nuevoNombre} onChangeText={setNuevoNombre} autoCapitalize="words" />
+
+              <Text style={styles.mLabel}>Teléfono *</Text>
+              <TextInput style={styles.mInput} placeholder="10 dígitos" value={nuevoTelefono} onChangeText={setNuevoTelefono} keyboardType="phone-pad" />
+
+              <Text style={styles.mLabel}>Email</Text>
+              <TextInput style={styles.mInput} placeholder="correo@ejemplo.com" value={nuevoEmail} onChangeText={setNuevoEmail} keyboardType="email-address" autoCapitalize="none" />
+
+              <Text style={styles.mLabel}>Empresa</Text>
+              <TextInput style={styles.mInput} placeholder="Empresa (opcional)" value={nuevoEmpresa} onChangeText={setNuevoEmpresa} />
+
+              <Text style={styles.mLabel}>Tipo de operación</Text>
+              <View style={styles.mRow}>
+                {(['venta', 'renta'] as const).map(op => (
+                  <TouchableOpacity
+                    key={op}
+                    style={[styles.mChip, nuevoTipoOp === op && styles.mChipActivo]}
+                    onPress={() => setNuevoTipoOp(op)}
+                  >
+                    <Text style={[styles.mChipTxt, nuevoTipoOp === op && { color: '#fff' }]}>
+                      {op === 'venta' ? 'Venta' : 'Renta'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.mLabel}>Estado inicial</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+                <View style={styles.mRow}>
+                  {ESTADOS_LISTA.map(e => {
+                    const info = ESTADOS[e] ?? { label: e, color: '#555', bg: '#eee' }
+                    return (
+                      <TouchableOpacity
+                        key={e}
+                        style={[styles.mChip, { borderColor: info.color }, nuevoEstado === e && { backgroundColor: info.bg }]}
+                        onPress={() => setNuevoEstado(e)}
+                      >
+                        <Text style={[styles.mChipTxt, { color: info.color }]}>{info.label}</Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              </ScrollView>
+
+              <Text style={styles.mLabel}>Asignar a asesor *</Text>
+              {usuariosLista.length === 0 ? (
+                <Text style={styles.mHint}>No hay asesores registrados</Text>
+              ) : (
+                <View style={styles.mUsuariosList}>
+                  {usuariosLista.map(u => (
+                    <TouchableOpacity
+                      key={u.id}
+                      style={[styles.mUsuarioRow, nuevoUserId === u.id && styles.mUsuarioRowActivo]}
+                      onPress={() => setNuevoUserId(u.id)}
+                    >
+                      <View style={[styles.mAvatar, { backgroundColor: nuevoUserId === u.id ? '#d4f0e2' : '#e8f2f4' }]}>
+                        <Text style={[styles.mAvatarTxt, { color: nuevoUserId === u.id ? '#2a8a5a' : '#1a6470' }]}>
+                          {u.nombre[0].toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text style={[styles.mUsuarioNombre, nuevoUserId === u.id && { color: '#2a8a5a', fontWeight: '700' }]}>
+                        {u.nombre}
+                      </Text>
+                      {nuevoUserId === u.id && <Text style={{ color: '#2a8a5a', fontSize: 16 }}>✓</Text>}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.mGuardarBtn, guardandoCliente && { opacity: 0.6 }]}
+                onPress={guardarNuevoCliente}
+                disabled={guardandoCliente}
+              >
+                {guardandoCliente
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={styles.mGuardarTxt}>Crear cliente</Text>
+                }
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -514,4 +672,26 @@ const styles = StyleSheet.create({
 
   estadoBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
   estadoText:  { fontSize: 11, fontWeight: '600' },
+
+  // Modal nuevo cliente
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 36, maxHeight: '90%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a6470' },
+  modalCerrar: { fontSize: 18, color: '#888', paddingHorizontal: 6 },
+  mLabel: { fontSize: 12, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6, marginTop: 12 },
+  mInput: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: '#1a2e30', backgroundColor: '#fafcfc' },
+  mRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  mChip: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
+  mChipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  mChipTxt: { fontSize: 13, fontWeight: '600', color: '#1a6470' },
+  mHint: { fontSize: 13, color: '#aaa', fontStyle: 'italic' },
+  mUsuariosList: { borderWidth: 1, borderColor: '#e0eaec', borderRadius: 10, overflow: 'hidden', marginTop: 4 },
+  mUsuarioRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f0f4f5' },
+  mUsuarioRowActivo: { backgroundColor: '#f3fbf6' },
+  mAvatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  mAvatarTxt: { fontSize: 13, fontWeight: '700' },
+  mUsuarioNombre: { flex: 1, fontSize: 14, color: '#1a2e30' },
+  mGuardarBtn: { backgroundColor: '#c9a84c', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 20 },
+  mGuardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
 })

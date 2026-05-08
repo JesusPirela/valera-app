@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { Text, TouchableOpacity, Image, View, Platform } from 'react-native'
-import { Tabs, usePathname } from 'expo-router'
+import { Tabs, usePathname, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
@@ -137,6 +137,11 @@ export default function ProspectadorLayout() {
             resizeMode="contain"
           />
         ),
+        headerLeft: () => router.canGoBack() ? (
+          <TouchableOpacity onPress={() => router.back()} style={{ paddingLeft: 8, paddingRight: 4 }}>
+            <Text style={{ color: '#c9a84c', fontSize: 22, fontWeight: '700' }}>‹</Text>
+          </TouchableOpacity>
+        ) : null,
         headerRight: () => (
           <TouchableOpacity
             onPress={() => supabase.auth.signOut()}

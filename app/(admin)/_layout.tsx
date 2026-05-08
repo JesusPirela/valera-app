@@ -46,6 +46,11 @@ export default function AdminLayout() {
         headerStyle: { backgroundColor: '#1a6470' },
         headerTintColor: '#c9a84c',
         headerTitleStyle: { fontWeight: 'bold' },
+        headerLeft: () => router.canGoBack() ? (
+          <TouchableOpacity onPress={() => router.back()} style={{ paddingLeft: 8, paddingRight: 4 }}>
+            <Text style={{ color: '#c9a84c', fontSize: 22, fontWeight: '700' }}>‹</Text>
+          </TouchableOpacity>
+        ) : null,
         headerTitle: () => (
           <Image
             source={LOGO}
