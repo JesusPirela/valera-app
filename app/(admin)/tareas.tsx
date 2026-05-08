@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Modal, Alert, Platform, useWindowDimensions,
 } from 'react-native'
-import { useFocusEffect, router } from 'expo-router'
+import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 
@@ -36,15 +36,6 @@ const TIPOS = [
   { key: 'publicar_propiedades',  label: 'Publicar propiedades', icon: 'home-outline' as const,             hint: 'Progresa al marcar propiedades como publicadas' },
   { key: 'contactar_clientes',    label: 'Contactar clientes',   icon: 'people-outline' as const,           hint: 'Progresa al contactar clientes en el CRM' },
   { key: 'completar_curso',       label: 'Completar curso',      icon: 'school-outline' as const,           hint: 'Progresa al completar lecciones' },
-]
-
-const NAV_ITEMS = [
-  { label: 'Nueva',        icon: '＋',  route: '/(admin)/nueva-propiedad', color: '#1a6470' },
-  { label: 'CRM',          icon: '👤',  route: '/(admin)/crm',             color: '#0f4c5c' },
-  { label: 'Actividad',    icon: '📋',  route: '/(admin)/actividad',       color: '#2a8a7a' },
-  { label: 'Estadísticas', icon: '📊',  route: '/(admin)/estadisticas',    color: '#1a7060' },
-  { label: 'Usuarios',     icon: '👥',  route: '/(admin)/prospectadores',  color: '#145560' },
-  { label: 'Universidad',  icon: '🎓',  route: '/(admin)/university',      color: '#c9a84c' },
 ]
 
 // ─── Mini-calendario ────────────────────────────────────────────────────────
@@ -308,16 +299,6 @@ export default function AdminTareas() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f0f4f5' }}>
-      {/* Nav */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.navBar} contentContainerStyle={s.navContent}>
-        {NAV_ITEMS.map(item => (
-          <TouchableOpacity key={item.route} style={[s.navItem, { backgroundColor: item.color }]} onPress={() => router.push(item.route as any)}>
-            <Text style={s.navIcon}>{item.icon}</Text>
-            <Text style={s.navLabel}>{item.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
       {/* Header */}
       <View style={s.header}>
         <Text style={s.headerTitle}>Tareas Diarias</Text>
@@ -492,9 +473,9 @@ export default function AdminTareas() {
                     return (
                       <TouchableOpacity key={u.id} style={[s.usuarioSelRow, sel && s.usuarioSelActivo]} onPress={() => toggleSel(u.id)}>
                         <View style={[s.avatarSm, { backgroundColor: sel ? '#d4f0e2' : '#e8f2f4' }]}>
-                          <Text style={[s.avatarSmTxt, { color: sel ? '#2a8a5a' : '#1a6470' }]}>{u.nombre[0].toUpperCase()}</Text>
+                          <Text style={[s.avatarSmTxt, { color: sel ? '#2a8a5a' : '#1a6470' }]}>{(u.nombre ?? '?')[0].toUpperCase()}</Text>
                         </View>
-                        <Text style={[s.usuarioSelNombre, sel && { color: '#2a8a5a', fontWeight: '700' }]}>{u.nombre}</Text>
+                        <Text style={[s.usuarioSelNombre, sel && { color: '#2a8a5a', fontWeight: '700' }]}>{u.nombre ?? 'Sin nombre'}</Text>
                         {sel && <Ionicons name="checkmark-circle" size={18} color="#2a8a5a" />}
                       </TouchableOpacity>
                     )
@@ -544,11 +525,6 @@ const GOLD = '#c9a84c'
 
 const s = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  navBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e0eaec' },
-  navContent: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
-  navItem: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  navIcon: { fontSize: 14 },
-  navLabel: { color: '#fff', fontSize: 12, fontWeight: '700' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e0eaec' },
   headerTitle: { fontSize: 20, fontWeight: '800', color: TEAL },
   crearBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: TEAL, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
