@@ -4,7 +4,9 @@ import {
   TextInput, ActivityIndicator, Platform, Alert, Image,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
+import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
+import { useTheme } from '../../lib/ThemeContext'
 
 const COLORES_PRESET = [
   { label: 'Verde Valera',  valor: '#1a6470' },
@@ -25,6 +27,8 @@ function mostrarAlerta(msg: string) {
 }
 
 export default function Perfil() {
+  const { setPrimaryColor } = useTheme()
+
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
 
@@ -56,26 +60,37 @@ export default function Perfil() {
     if (data) {
       setNombre(data.nombre ?? '')
       setTelefono(data.telefono ?? '')
-      setAvatarUrl(data.avatar_url ?? null)
       setColorAcento(data.color_acento ?? '#1a6470')
-      // Si el avatar_url es un emoji (guardado como 'emoji:X')
       if (data.avatar_url?.startsWith('emoji:')) {
         setAvatarEmoji(data.avatar_url.replace('emoji:', ''))
         setAvatarUrl(null)
+      } else {
+        setAvatarUrl(data.avatar_url ?? null)
       }
     }
     setLoading(false)
   }
 
-  async function subirFoto(file: File) {
-    const ext = file.name.split('.').pop() ?? 'jpg'
+  async function subirFotoBlob(blob: Blob, mimeType: string, ext: string): Promise<string | null> {
     const path = `${userId}/avatar.${ext}`
     const { data, error } = await supabase.storage
       .from('avatares')
-      .upload(path, file, { upsert: true })
+      .upload(path, blob, { upsert: true, contentType: mimeType })
     if (error) { mostrarAlerta('Error al subir foto: ' + error.message); return null }
     const { data: { publicUrl } } = supabase.storage.from('avatares').getPublicUrl(data.path)
     return publicUrl
+  }
+
+  async function subirFotoNativa(uri: string, mimeType: string): Promise<string | null> {
+    const response = await fetch(uri)
+    const blob = await response.blob()
+    const ext = mimeType.split('/')[1] ?? 'jpg'
+    return subirFotoBlob(blob, mimeType, ext)
+  }
+
+  async function subirFotoWeb(file: File): Promise<string | null> {
+    const ext = file.name.split('.').pop() ?? 'jpg'
+    return subirFotoBlob(file, file.type, ext)
   }
 
   async function guardar(nuevoAvatarUrl?: string | null) {
@@ -97,12 +112,42 @@ export default function Perfil() {
         .eq('id', userId)
 
       if (error) throw error
+      setPrimaryColor(colorAcento)
       mostrarAlerta('¡Perfil actualizado!')
       cargar()
     } catch (e: any) {
       mostrarAlerta('Error: ' + e.message)
     } finally {
       setGuardando(false)
+    }
+  }
+
+  async function seleccionarFoto() {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (status !== 'granted') {
+        mostrarAlerta('Necesitamos permiso para acceder a tu galería.')
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      })
+      if (!result.canceled) {
+        const asset = result.assets[0]
+        setGuardando(true)
+        const mimeType = asset.mimeType ?? 'image/jpeg'
+        const url = await subirFotoNativa(asset.uri, mimeType)
+        if (url) {
+          setAvatarUrl(url)
+          await guardar(url)
+        }
+        setGuardando(false)
+      }
+    } else {
+      fileRef.current?.click()
     }
   }
 
@@ -168,38 +213,43 @@ export default function Perfil() {
           ))}
         </View>
 
-        {/* Subir foto */}
+        {/* Subir foto — funciona en web y nativo */}
         <Text style={s.label}>O sube tu foto de perfil</Text>
+
         {Platform.OS === 'web' && (
-          <>
-            {/* @ts-ignore */}
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileRef}
-              style={{ display: 'none' }}
-              onChange={async (e: any) => {
-                const file = e.target.files?.[0]
-                if (!file) return
-                setGuardando(true)
-                const url = await subirFoto(file)
-                if (url) {
-                  setAvatarUrl(url)
-                  await guardar(url)
-                }
-                setGuardando(false)
-              }}
-            />
-            <TouchableOpacity
-              style={[s.btnFoto, { borderColor: colorAcento }]}
-              onPress={() => fileRef.current?.click()}
-            >
-              <Text style={[s.btnFotoText, { color: colorAcento }]}>
-                {avatarMostrado ? '🔄 Cambiar foto' : '📷 Subir foto'}
-              </Text>
-            </TouchableOpacity>
-          </>
+          // @ts-ignore
+          <input
+            type="file"
+            accept="image/*"
+            ref={fileRef}
+            style={{ display: 'none' }}
+            onChange={async (e: any) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              setGuardando(true)
+              const url = await subirFotoWeb(file)
+              if (url) {
+                setAvatarUrl(url)
+                await guardar(url)
+              }
+              setGuardando(false)
+            }}
+          />
         )}
+
+        <TouchableOpacity
+          style={[s.btnFoto, { borderColor: colorAcento }]}
+          onPress={seleccionarFoto}
+          disabled={guardando}
+        >
+          {guardando ? (
+            <ActivityIndicator color={colorAcento} />
+          ) : (
+            <Text style={[s.btnFotoText, { color: colorAcento }]}>
+              {avatarMostrado ? '🔄 Cambiar foto' : '📷 Subir foto'}
+            </Text>
+          )}
+        </TouchableOpacity>
 
         {/* Color de acento */}
         <Text style={s.seccion}>COLOR DE LA APLICACIÓN</Text>

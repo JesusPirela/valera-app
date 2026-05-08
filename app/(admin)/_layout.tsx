@@ -3,7 +3,7 @@ import { Image, Text, TouchableOpacity, View, StyleSheet } from 'react-native'
 import { Stack, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
-const LOGO_URI = 'https://valerarealestate.com/images/logo.png'
+const LOGO = require('../../assets/logo.png')
 
 export default function AdminLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
@@ -48,8 +48,8 @@ export default function AdminLayout() {
         headerTitleStyle: { fontWeight: 'bold' },
         headerTitle: () => (
           <Image
-            source={{ uri: LOGO_URI }}
-            style={{ width: 80, height: 40 }}
+            source={LOGO}
+            style={{ width: 100, height: 44 }}
             resizeMode="contain"
           />
         ),

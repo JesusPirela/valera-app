@@ -444,8 +444,8 @@ export default function DetallePropiedad() {
       for (let i = 0; i < imagenes.length; i++) {
         try {
           const dest = new FSFile(Paths.cache, `${propiedad.codigo ?? 'prop'}-wa-${i}.jpg`)
-          const dl = await FSFile.downloadFileAsync(imagenes[i].url, dest)
-          uris.push(dl.uri)
+          await dest.downloadAsync(imagenes[i].url)
+          uris.push(dest.uri)
         } catch { /* continuar con las demás */ }
       }
 
@@ -526,8 +526,8 @@ export default function DetallePropiedad() {
       for (let i = 0; i < imagenes.length; i++) {
         try {
           const dest = new FSFile(Paths.cache, `${propiedad.codigo ?? 'prop'}-${i + 1}.jpg`)
-          const downloaded = await FSFile.downloadFileAsync(imagenes[i].url, dest)
-          await MediaLibrary.saveToLibraryAsync(downloaded.uri)
+          await dest.downloadAsync(imagenes[i].url)
+          await MediaLibrary.saveToLibraryAsync(dest.uri)
           guardadas++
         } catch {
           // continuar con las demás

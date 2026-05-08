@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Session } from '@supabase/supabase-js'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { queryClient, persister } from '../lib/queryClient'
+import { ThemeProvider } from '../lib/ThemeContext'
 import * as Updates from 'expo-updates'
 
 async function checkForUpdate() {
@@ -68,12 +69,14 @@ export default function RootLayout() {
   }
 
   return (
-    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(admin)" />
-        <Stack.Screen name="(prospectador)" />
-      </Stack>
-    </PersistQueryClientProvider>
+    <ThemeProvider>
+      <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(admin)" />
+          <Stack.Screen name="(prospectador)" />
+        </Stack>
+      </PersistQueryClientProvider>
+    </ThemeProvider>
   )
 }

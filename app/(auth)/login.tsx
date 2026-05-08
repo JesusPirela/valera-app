@@ -15,8 +15,8 @@ import {
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
-
-const LOGO_URI = 'https://valerarealestate.com/images/logo.png'
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const LOGO = require('../../assets/logo.png')
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
@@ -70,7 +70,7 @@ export default function LoginScreen() {
       {/* Top section – branding */}
       <View style={styles.topSection}>
         <Image
-          source={{ uri: LOGO_URI }}
+          source={LOGO}
           style={styles.logo}
           resizeMode="contain"
         />

@@ -60,6 +60,7 @@ export default function EditarPropiedad() {
   const [banos, setBanos] = useState<number | null>(null)
   const [m2, setM2] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
+  const [zona, setZona] = useState<'queretaro' | 'monterrey' | 'puebla' | null>(null)
   const [asesorId, setAsesorId] = useState<string | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
@@ -77,7 +78,7 @@ export default function EditarPropiedad() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, asesor_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
+      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, recamaras, banos, m2, estacionamientos, asesor_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
       .eq('id', id)
       .single()
 
@@ -94,6 +95,7 @@ export default function EditarPropiedad() {
     setOperacion((data.operacion as 'venta' | 'renta') ?? 'venta')
     setTipo((data.tipo as 'casa' | 'departamento' | 'local') ?? 'casa')
     setEstado((data.estado as 'disponible' | 'vendida') ?? 'disponible')
+    setZona((data.zona as 'queretaro' | 'monterrey' | 'puebla') ?? null)
     setRecamaras(data.recamaras ?? null)
     setBanos(data.banos ?? null)
     setM2(data.m2 != null ? String(data.m2) : '')
@@ -185,7 +187,7 @@ export default function EditarPropiedad() {
 
     setGuardando(true)
     try {
-      const { error: errorUpdate } = await supabase
+      const { data: filaActualizada, error: errorUpdate } = await supabase
         .from('propiedades')
         .update({
           titulo: titulo.trim(),
@@ -195,6 +197,7 @@ export default function EditarPropiedad() {
           operacion,
           tipo,
           estado,
+          zona: zona ?? null,
           recamaras,
           banos,
           m2: m2Num,
@@ -205,18 +208,11 @@ export default function EditarPropiedad() {
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
         })
         .eq('id', id)
+        .select('id')
       if (errorUpdate) throw errorUpdate
-
-      // Verificar que el asesor se guardó realmente (Supabase silencia fallos de RLS en UPDATE)
-      const { data: verificacion, error: errorVerif } = await supabase
-        .from('propiedades')
-        .select('asesor_id')
-        .eq('id', id)
-        .single()
-      if (!errorVerif && verificacion?.asesor_id !== asesorId) {
-        throw new Error(
-          'El asesor no se guardó. Revisa los permisos (RLS) de la tabla propiedades en Supabase para permitir actualizar el campo asesor_id.'
-        )
+      // Si Supabase silencia el UPDATE por RLS, devuelve array vacío en lugar de error
+      if (!filaActualizada || filaActualizada.length === 0) {
+        throw new Error('No se guardó la propiedad. Verifica los permisos de edición en Supabase (RLS UPDATE en tabla propiedades).')
       }
 
       if (imagenesEliminar.length > 0) {
@@ -323,6 +319,17 @@ export default function EditarPropiedad() {
           options={[{ value: 'disponible', label: 'Disponible' }, { value: 'vendida', label: 'Vendida' }]}
           value={estado}
           onChange={setEstado}
+        />
+
+        <Text style={styles.label}>Zona</Text>
+        <PillSelector
+          options={[
+            { value: 'queretaro', label: 'Querétaro' },
+            { value: 'monterrey', label: 'Monterrey' },
+            { value: 'puebla', label: 'Puebla' },
+          ]}
+          value={zona}
+          onChange={(v) => setZona(zona === v ? null : v)}
         />
 
         <View style={styles.dosColumnas}>

@@ -18,6 +18,7 @@ import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
+import { useTheme } from '../../lib/ThemeContext'
 
 type Propiedad = {
   id: string
@@ -28,6 +29,7 @@ type Propiedad = {
   operacion: string | null
   tipo: string | null
   estado: string | null
+  zona: 'queretaro' | 'monterrey' | 'puebla' | null
   destacada: boolean
   destacada_mensaje: string | null
   exclusiva: boolean
@@ -44,6 +46,7 @@ type Propiedad = {
 type FiltroOperacion = 'venta' | 'renta' | null
 type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
+type FiltroPublicadas = 'publicadas' | 'sin_publicar' | null
 
 type PropiedadesData = {
   rol: string | null
@@ -53,9 +56,18 @@ type PropiedadesData = {
   publicadasIds: string[]
 }
 
-function FiltroChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+const ZONAS_CONFIG = [
+  { key: 'queretaro', label: 'Querétaro' },
+  { key: 'monterrey', label: 'Monterrey' },
+  { key: 'puebla', label: 'Puebla' },
+] as const
+
+function FiltroChip({ label, active, onPress, color }: { label: string; active: boolean; onPress: () => void; color: string }) {
   return (
-    <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.chip, active && { backgroundColor: color, borderColor: color }]}
+      onPress={onPress}
+    >
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </TouchableOpacity>
   )
@@ -66,23 +78,21 @@ function formatPrecio(precio: number | null) {
   return `$${precio.toLocaleString('es-MX')} MXN`
 }
 
-function extraerZona(direccion: string): string {
-  if (!direccion) return 'Sin zona'
-  const partes = direccion.split(',').map(s => s.trim()).filter(s => s.length > 0)
-  for (let i = 1; i < partes.length; i++) {
-    const p = partes[i]
-    if (/^\d+/.test(p)) continue
-    if (/^(qr[oó]?\.?|quer[eé]taro|m[eé]xico|cdmx|gto\.?|guanajuato|jal\.?|jalisco|nl\.?|nuevo le[oó]n)$/i.test(p)) continue
-    if (p.length < 3) continue
-    return p.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+function agruparPorZona(propiedades: Propiedad[]): [string, Propiedad[]][] {
+  const result: [string, Propiedad[]][] = []
+  for (const z of ZONAS_CONFIG) {
+    const group = propiedades.filter(p => p.zona === z.key)
+    if (group.length > 0) result.push([z.label, group])
   }
-  const fallback = partes[0] ?? 'Sin zona'
-  return fallback.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+  const sinZona = propiedades.filter(p => !p.zona)
+  if (sinZona.length > 0) result.push(['Otras', sinZona])
+  return result
 }
 
 export default function ProspectadorPropiedades() {
   const queryClient = useQueryClient()
   const isOnline = useNetworkStatus()
+  const { primaryColor } = useTheme()
 
   const [busqueda, setBusqueda] = useState('')
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
@@ -92,7 +102,9 @@ export default function ProspectadorPropiedades() {
   const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
-  const [filtroPublicadas, setFiltroPublicadas] = useState(false)
+  const [precioMin, setPrecioMin] = useState('')
+  const [precioMax, setPrecioMax] = useState('')
+  const [filtroPublicadas, setFiltroPublicadas] = useState<FiltroPublicadas>(null)
   const [vistaZonas, setVistaZonas] = useState(false)
   const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
   const [showHelp, setShowHelp] = useState(false)
@@ -109,7 +121,7 @@ export default function ProspectadorPropiedades() {
         supabase.from('profiles').select('role, nombre').eq('id', userId).single(),
         supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .order('created_at', { ascending: false }),
         supabase.from('propiedad_publicada').select('propiedad_id').eq('user_id', userId),
@@ -209,7 +221,16 @@ export default function ProspectadorPropiedades() {
     setMensajeAyuda('')
   }
 
-  const filtrosActivos = [filtroOperacion, filtroTipo, ordenPrecio, filtroPublicadas || null].filter(Boolean).length
+  const precioMinNum = precioMin ? parseFloat(precioMin.replace(/,/g, '')) : null
+  const precioMaxNum = precioMax ? parseFloat(precioMax.replace(/,/g, '')) : null
+
+  const filtrosActivos = [
+    filtroOperacion,
+    filtroTipo,
+    ordenPrecio,
+    (precioMinNum != null || precioMaxNum != null) ? 'precio' : null,
+    filtroPublicadas,
+  ].filter(Boolean).length
 
   let propiedadesFiltradas = propiedades
 
@@ -221,9 +242,12 @@ export default function ProspectadorPropiedades() {
       p.titulo?.toLowerCase().includes(q)
     )
   }
-  if (filtroPublicadas) propiedadesFiltradas = propiedadesFiltradas.filter((p) => publicadas.has(p.id))
+  if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => publicadas.has(p.id))
+  if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => !publicadas.has(p.id))
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
+  if (precioMinNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio >= precioMinNum)
+  if (precioMaxNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio <= precioMaxNum)
   if (ordenPrecio) {
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
       ordenPrecio === 'asc'
@@ -232,24 +256,15 @@ export default function ProspectadorPropiedades() {
     )
   }
 
-  const propiedadesPorZona: [string, Propiedad[]][] = []
-  if (vistaZonas) {
-    const map = new Map<string, Propiedad[]>()
-    for (const p of propiedadesFiltradas) {
-      const zona = extraerZona(p.direccion ?? '')
-      if (!map.has(zona)) map.set(zona, [])
-      map.get(zona)!.push(p)
-    }
-    Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .forEach(entry => propiedadesPorZona.push(entry))
-  }
+  const propiedadesPorZona = vistaZonas ? agruparPorZona(propiedadesFiltradas) : []
 
   function limpiarFiltros() {
     setFiltroOperacion(null)
     setFiltroTipo(null)
     setOrdenPrecio(null)
-    setFiltroPublicadas(false)
+    setFiltroPublicadas(null)
+    setPrecioMin('')
+    setPrecioMax('')
   }
 
   function renderPropiedad(item: Propiedad) {
@@ -280,7 +295,7 @@ export default function ProspectadorPropiedades() {
             <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
           ) : null}
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.codigo}>{item.codigo ?? '—'}</Text>
+            <Text style={[styles.codigo, { backgroundColor: primaryColor }]}>{item.codigo ?? '—'}</Text>
             {item.tipo && (
               <Text style={styles.tipoBadge}>
                 {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
@@ -293,7 +308,7 @@ export default function ProspectadorPropiedades() {
               🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
             </Text>
           )}
-          <Text style={styles.cardTitulo}>{item.titulo}</Text>
+          <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
           <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
           {item.descripcion ? (
             <Text style={styles.cardDescripcion} numberOfLines={2}>{item.descripcion}</Text>
@@ -307,17 +322,22 @@ export default function ProspectadorPropiedades() {
             </View>
           )}
           <View style={styles.cardFooter}>
-            <Text style={styles.precio}>{formatPrecio(item.precio)}</Text>
+            <Text style={[styles.precio, { color: primaryColor }]}>{formatPrecio(item.precio)}</Text>
             <TouchableOpacity
-              style={[styles.publicadaBtn, publicadas.has(item.id) && styles.publicadaBtnActive, !isOnline && styles.publicadaBtnDisabled]}
+              style={[
+                styles.publicadaBtn,
+                { borderColor: primaryColor },
+                publicadas.has(item.id) && { backgroundColor: primaryColor, borderColor: primaryColor },
+                !isOnline && styles.publicadaBtnDisabled,
+              ]}
               onPress={(e) => { e.stopPropagation(); if (isOnline) togglePublicada(item.id) }}
               disabled={toggling.has(item.id) || !isOnline}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {toggling.has(item.id) ? (
-                <ActivityIndicator size="small" color={publicadas.has(item.id) ? '#fff' : '#1a6470'} />
+                <ActivityIndicator size="small" color={publicadas.has(item.id) ? '#fff' : primaryColor} />
               ) : (
-                <Text style={[styles.publicadaBtnText, publicadas.has(item.id) && styles.publicadaBtnTextActive]}>
+                <Text style={[styles.publicadaBtnText, { color: publicadas.has(item.id) ? '#fff' : primaryColor }]}>
                   {publicadas.has(item.id) ? '✓ Publicada' : 'Publicar'}
                 </Text>
               )}
@@ -336,7 +356,7 @@ export default function ProspectadorPropiedades() {
       <View style={styles.container}>
 
         {/* Header de bienvenida */}
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: primaryColor }]}>
           <View>
             <Text style={styles.headerSaludo}>
               {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
@@ -356,7 +376,7 @@ export default function ProspectadorPropiedades() {
         <View style={styles.searchWrapper}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: primaryColor }]}
             placeholder="Buscar por título, código o dirección..."
             placeholderTextColor="#aaa"
             value={busqueda}
@@ -367,51 +387,106 @@ export default function ProspectadorPropiedades() {
           />
         </View>
 
-        {/* Fila de controles: Filtros + Por zona */}
+        {/* Botones rápidos Venta / Renta */}
+        <View style={styles.quickFiltersRow}>
+          <TouchableOpacity
+            style={[
+              styles.quickFilterBtn,
+              { borderColor: primaryColor },
+              filtroOperacion === 'venta' && { backgroundColor: primaryColor },
+            ]}
+            onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')}
+          >
+            <Ionicons name="home" size={14} color={filtroOperacion === 'venta' ? '#fff' : primaryColor} />
+            <Text style={[styles.quickFilterText, { color: filtroOperacion === 'venta' ? '#fff' : primaryColor }]}>
+              Venta
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.quickFilterBtn,
+              { borderColor: primaryColor },
+              filtroOperacion === 'renta' && { backgroundColor: primaryColor },
+            ]}
+            onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')}
+          >
+            <Ionicons name="key" size={14} color={filtroOperacion === 'renta' ? '#fff' : primaryColor} />
+            <Text style={[styles.quickFilterText, { color: filtroOperacion === 'renta' ? '#fff' : primaryColor }]}>
+              Renta
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Fila de controles: Filtros + Ver zonas */}
         <View style={styles.controlsRow}>
           <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
-            <Text style={styles.filtrosToggleText}>
+            <Text style={[styles.filtrosToggleText, { color: primaryColor }]}>
               {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.zonasToggle, vistaZonas && styles.zonasToggleActive]}
+            style={[styles.zonasToggle, { borderColor: primaryColor }, vistaZonas && { backgroundColor: primaryColor }]}
             onPress={() => setVistaZonas(v => !v)}
           >
-            <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : '#1a6470'} />
-            <Text style={[styles.zonasToggleText, vistaZonas && styles.zonasToggleTextActive]}>Por zona</Text>
+            <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : primaryColor} />
+            <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : primaryColor }]}>
+              Ver zonas
+            </Text>
           </TouchableOpacity>
         </View>
 
         {mostrarFiltros && (
           <View style={styles.filtrosPanel}>
-            <Text style={styles.filtroLabel}>Operación</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              <FiltroChip label="Todas" active={filtroOperacion === null} onPress={() => setFiltroOperacion(null)} />
-              <FiltroChip label="Venta" active={filtroOperacion === 'venta'} onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')} />
-              <FiltroChip label="Renta" active={filtroOperacion === 'renta'} onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')} />
-            </ScrollView>
-
             <Text style={styles.filtroLabel}>Tipo</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)} />
-              <FiltroChip label="Casa" active={filtroTipo === 'casa'} onPress={() => setFiltroTipo(filtroTipo === 'casa' ? null : 'casa')} />
-              <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')} />
-              <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')} />
-              <FiltroChip label="Terreno" active={filtroTipo === 'terreno'} onPress={() => setFiltroTipo(filtroTipo === 'terreno' ? null : 'terreno')} />
+              <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)} color={primaryColor} />
+              <FiltroChip label="Casa" active={filtroTipo === 'casa'} onPress={() => setFiltroTipo(filtroTipo === 'casa' ? null : 'casa')} color={primaryColor} />
+              <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')} color={primaryColor} />
+              <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')} color={primaryColor} />
+              <FiltroChip label="Terreno" active={filtroTipo === 'terreno'} onPress={() => setFiltroTipo(filtroTipo === 'terreno' ? null : 'terreno')} color={primaryColor} />
             </ScrollView>
 
-            <Text style={styles.filtroLabel}>Precio</Text>
+            <Text style={styles.filtroLabel}>Precio — ordenar</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)} />
-              <FiltroChip label="Menor precio" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} />
-              <FiltroChip label="Mayor precio" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} />
+              <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)} color={primaryColor} />
+              <FiltroChip label="Menor precio" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} color={primaryColor} />
+              <FiltroChip label="Mayor precio" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} color={primaryColor} />
             </ScrollView>
 
-            <Text style={styles.filtroLabel}>Mis publicadas</Text>
+            <Text style={styles.filtroLabel}>Rango de precio (MXN)</Text>
+            <View style={styles.precioRangoRow}>
+              <View style={styles.precioRangoInput}>
+                <Text style={styles.precioRangoLabel}>Mínimo</Text>
+                <TextInput
+                  style={[styles.precioInput, { borderColor: primaryColor + '44' }]}
+                  placeholder="Ej. 500,000"
+                  placeholderTextColor="#bbb"
+                  value={precioMin}
+                  onChangeText={setPrecioMin}
+                  keyboardType="numeric"
+                  maxLength={12}
+                />
+              </View>
+              <Text style={styles.precioRangoSep}>—</Text>
+              <View style={styles.precioRangoInput}>
+                <Text style={styles.precioRangoLabel}>Máximo</Text>
+                <TextInput
+                  style={[styles.precioInput, { borderColor: primaryColor + '44' }]}
+                  placeholder="Ej. 3,000,000"
+                  placeholderTextColor="#bbb"
+                  value={precioMax}
+                  onChangeText={setPrecioMax}
+                  keyboardType="numeric"
+                  maxLength={12}
+                />
+              </View>
+            </View>
+
+            <Text style={styles.filtroLabel}>Mis propiedades</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              <FiltroChip label="Todas" active={!filtroPublicadas} onPress={() => setFiltroPublicadas(false)} />
-              <FiltroChip label="Solo publicadas" active={filtroPublicadas} onPress={() => setFiltroPublicadas(true)} />
+              <FiltroChip label="Todas" active={filtroPublicadas === null} onPress={() => setFiltroPublicadas(null)} color={primaryColor} />
+              <FiltroChip label="Publicadas" active={filtroPublicadas === 'publicadas'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'publicadas' ? null : 'publicadas')} color={primaryColor} />
+              <FiltroChip label="Sin publicar" active={filtroPublicadas === 'sin_publicar'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar')} color={primaryColor} />
             </ScrollView>
 
             {filtrosActivos > 0 && (
@@ -423,7 +498,7 @@ export default function ProspectadorPropiedades() {
         )}
 
         {isLoading ? (
-          <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={primaryColor} style={{ marginTop: 40 }} />
         ) : propiedadesFiltradas.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
@@ -440,13 +515,13 @@ export default function ProspectadorPropiedades() {
                 <View key={zona} style={styles.zonaSection}>
                   <TouchableOpacity style={styles.zonaHeader} onPress={() => toggleZona(zona)} activeOpacity={0.7}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.zonaNombre}>{zona}</Text>
+                      <Text style={[styles.zonaNombre, { color: primaryColor }]}>{zona}</Text>
                       <Text style={styles.zonaCount}>{props.length} propiedad{props.length !== 1 ? 'es' : ''}</Text>
                     </View>
                     <Ionicons
                       name={expandida ? 'chevron-up-outline' : 'chevron-down-outline'}
                       size={20}
-                      color="#1a6470"
+                      color={primaryColor}
                     />
                   </TouchableOpacity>
                   {expandida && (
@@ -520,7 +595,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1a6470',
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 24,
@@ -566,7 +640,27 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     fontSize: 14,
-    color: '#1a6470',
+  },
+  // Botones rápidos Venta / Renta
+  quickFiltersRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 10,
+    marginBottom: 8,
+  },
+  quickFilterBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingVertical: 9,
+  },
+  quickFilterText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   controlsRow: {
     flexDirection: 'row',
@@ -578,27 +672,19 @@ const styles = StyleSheet.create({
   filtrosToggle: {
     paddingVertical: 6,
   },
-  filtrosToggleText: { color: '#1a6470', fontSize: 14, fontWeight: '600' },
+  filtrosToggleText: { fontSize: 14, fontWeight: '600' },
   zonasToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     borderWidth: 1.5,
-    borderColor: '#1a6470',
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 5,
   },
-  zonasToggleActive: {
-    backgroundColor: '#1a6470',
-  },
   zonasToggleText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1a6470',
-  },
-  zonasToggleTextActive: {
-    color: '#fff',
   },
   filtrosPanel: {
     backgroundColor: '#fff',
@@ -620,9 +706,27 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor: '#fff',
   },
-  chipActive: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   chipText: { fontSize: 12, color: '#555' },
   chipTextActive: { color: '#fff', fontWeight: '600' },
+  // Rango de precio
+  precioRangoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  precioRangoInput: { flex: 1 },
+  precioRangoLabel: { fontSize: 11, color: '#aaa', marginBottom: 4 },
+  precioRangoSep: { fontSize: 16, color: '#bbb', marginTop: 16 },
+  precioInput: {
+    backgroundColor: '#f8f8f8',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#333',
+  },
   limpiarBtn: { marginTop: 10, alignSelf: 'flex-end' },
   limpiarText: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
   emptyContainer: { flex: 1, alignItems: 'center', marginTop: 60, paddingHorizontal: 16 },
@@ -650,7 +754,6 @@ const styles = StyleSheet.create({
   zonaNombre: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1a6470',
     marginBottom: 2,
   },
   zonaCount: {
@@ -728,7 +831,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#fff',
-    backgroundColor: '#1a6470',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -755,7 +857,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     overflow: 'hidden',
   },
-  cardTitulo: { fontSize: 16, fontWeight: '700', color: '#1a6470', marginBottom: 3 },
+  cardTitulo: { fontSize: 16, fontWeight: '700', marginBottom: 3 },
   cardDireccion: { fontSize: 13, color: '#888', marginBottom: 6 },
   cardDescripcion: { fontSize: 13, color: '#666', lineHeight: 19, marginBottom: 8 },
   metaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 10 },
@@ -773,19 +875,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 4,
   },
-  precio: { fontSize: 16, fontWeight: '700', color: '#1a6470' },
+  precio: { fontSize: 16, fontWeight: '700' },
   publicadaBtn: {
     borderWidth: 1.5,
-    borderColor: '#1a6470',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 5,
     minWidth: 80,
     alignItems: 'center',
-  },
-  publicadaBtnActive: {
-    backgroundColor: '#1a6470',
-    borderColor: '#1a6470',
   },
   publicadaBtnDisabled: {
     opacity: 0.4,
@@ -793,10 +890,6 @@ const styles = StyleSheet.create({
   publicadaBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#1a6470',
-  },
-  publicadaBtnTextActive: {
-    color: '#fff',
   },
   // Help FAB
   helpFab: {

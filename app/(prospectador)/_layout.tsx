@@ -3,14 +3,15 @@ import { Text, TouchableOpacity, Image, View, Platform } from 'react-native'
 import { Tabs, usePathname } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { useTheme } from '../../lib/ThemeContext'
 
-const LOGO_URI = 'https://valerarealestate.com/images/logo.png'
+const LOGO = require('../../assets/logo.png')
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name']
 
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
-  const [colorAcento, setColorAcento] = useState('#1a6470')
+  const { primaryColor: colorAcento } = useTheme()
   const pathname = usePathname()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(false)
@@ -19,17 +20,6 @@ export default function ProspectadorLayout() {
     mountedRef.current = true
     return () => { mountedRef.current = false }
   }, [])
-
-  async function cargarPerfil() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user || !mountedRef.current) return
-    const { data } = await supabase
-      .from('profiles')
-      .select('color_acento')
-      .eq('id', user.id)
-      .single()
-    if (data?.color_acento && mountedRef.current) setColorAcento(data.color_acento)
-  }
 
   async function cargarNoLeidas() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -82,10 +72,7 @@ export default function ProspectadorLayout() {
     if (huboNuevas && mountedRef.current) cargarNoLeidas()
   }
 
-  useEffect(() => { cargarPerfil() }, [pathname])
-
   useEffect(() => {
-    cargarPerfil()
     cargarNoLeidas()
     verificarRecordatorios()
 
@@ -145,8 +132,8 @@ export default function ProspectadorLayout() {
         headerTitleStyle: { fontWeight: 'bold' },
         headerTitle: () => (
           <Image
-            source={{ uri: LOGO_URI }}
-            style={{ width: 80, height: 40 }}
+            source={LOGO}
+            style={{ width: 100, height: 44 }}
             resizeMode="contain"
           />
         ),

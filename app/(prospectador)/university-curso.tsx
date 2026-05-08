@@ -6,6 +6,8 @@ import {
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import * as Sharing from 'expo-sharing'
+import * as FileSystem from 'expo-file-system'
+import { Asset } from 'expo-asset'
 
 type Curso = {
   id: string
@@ -29,7 +31,33 @@ const NIVEL_LABEL: Record<string, string> = {
   basico: 'Básico', intermedio: 'Intermedio', avanzado: 'Avanzado',
 }
 
-function certificadoHTML(nombreCompleto: string, cursoTitulo: string): string {
+async function getLogoBase64(): Promise<string> {
+  try {
+    if (Platform.OS === 'web') {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const logoModule = require('../../assets/logo.png')
+      const url = typeof logoModule === 'string' ? logoModule : ''
+      if (!url) return ''
+      const resp = await fetch(url)
+      const blob = await resp.blob()
+      return new Promise((res) => {
+        const reader = new FileReader()
+        reader.onloadend = () => res(reader.result as string)
+        reader.readAsDataURL(blob)
+      })
+    }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const asset = Asset.fromModule(require('../../assets/logo.png'))
+    await asset.downloadAsync()
+    if (!asset.localUri) return ''
+    const b64 = await FileSystem.readAsStringAsync(asset.localUri, { encoding: FileSystem.EncodingType.Base64 })
+    return `data:image/png;base64,${b64}`
+  } catch {
+    return ''
+  }
+}
+
+function certificadoHTML(nombreCompleto: string, cursoTitulo: string, logoSrc: string): string {
   const fecha = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
   const cursoEscapado = cursoTitulo.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const nombreEscapado = nombreCompleto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -79,7 +107,7 @@ function certificadoHTML(nombreCompleto: string, cursoTitulo: string): string {
   <div class="corner tl"></div><div class="corner tr"></div>
   <div class="corner bl"></div><div class="corner br"></div>
   <div class="content">
-    <img src="https://valerarealestate.com/images/logo.png" class="logo"
+    <img src="${logoSrc}" class="logo"
          onerror="this.outerHTML='<p style=\\"font-size:13pt;color:#c9a84c;font-weight:bold;margin-bottom:4mm;\\">VALERA REAL ESTATE</p>'" />
     <div class="title">CERTIFICADO DE FINALIZACIÓN</div>
     <div class="divider"></div>
@@ -102,9 +130,11 @@ function certificadoHTML(nombreCompleto: string, cursoTitulo: string): string {
 
 async function generarCertificadoPDF(nombreCompleto: string, cursoTitulo: string) {
   try {
+    const logoB64 = await getLogoBase64()
+
     if (Platform.OS !== 'web') {
       const Print = await import('expo-print')
-      const html = certificadoHTML(nombreCompleto, cursoTitulo)
+      const html = certificadoHTML(nombreCompleto, cursoTitulo, logoB64)
       const { uri } = await Print.printToFileAsync({ html, width: 842, height: 595 })
       const canShare = await Sharing.isAvailableAsync()
       if (canShare) {
@@ -138,16 +168,9 @@ async function generarCertificadoPDF(nombreCompleto: string, cursoTitulo: string
     corner(8, 8, 3, 3); corner(W - 8, 8, 3, 3)
     corner(8, H - 8, 3, 3); corner(W - 8, H - 8, 3, 3)
 
-    try {
-      const resp = await fetch('https://valerarealestate.com/images/logo.png')
-      const blob = await resp.blob()
-      const b64: string = await new Promise((res) => {
-        const reader = new FileReader()
-        reader.onloadend = () => res(reader.result as string)
-        reader.readAsDataURL(blob)
-      })
-      doc.addImage(b64, 'PNG', W / 2 - 28, 18, 56, 28)
-    } catch {
+    if (logoB64) {
+      doc.addImage(logoB64, 'PNG', W / 2 - 28, 18, 56, 28)
+    } else {
       doc.setFontSize(14); doc.setTextColor(201, 168, 76)
       doc.text('VALERA REAL ESTATE', W / 2, 35, { align: 'center' })
     }

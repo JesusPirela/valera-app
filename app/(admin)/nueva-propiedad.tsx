@@ -63,6 +63,7 @@ export default function NuevaPropiedad() {
   const [banos, setBanos] = useState<number | null>(null)
   const [m2, setM2] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
+  const [zona, setZona] = useState<'queretaro' | 'monterrey' | 'puebla' | null>(null)
   const [asesorId, setAsesorId] = useState<string | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
@@ -172,6 +173,7 @@ export default function NuevaPropiedad() {
           operacion,
           tipo,
           estado,
+          zona: zona ?? null,
           recamaras,
           banos,
           m2: m2Num,
@@ -280,6 +282,17 @@ export default function NuevaPropiedad() {
           options={[{ value: 'disponible', label: 'Disponible' }, { value: 'vendida', label: 'Vendida' }]}
           value={estado}
           onChange={setEstado}
+        />
+
+        <Text style={styles.label}>Zona</Text>
+        <PillSelector
+          options={[
+            { value: 'queretaro', label: 'Querétaro' },
+            { value: 'monterrey', label: 'Monterrey' },
+            { value: 'puebla', label: 'Puebla' },
+          ]}
+          value={zona}
+          onChange={(v) => setZona(zona === v ? null : v)}
         />
 
         <View style={styles.dosColumnas}>
