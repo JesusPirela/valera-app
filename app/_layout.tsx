@@ -24,7 +24,7 @@ async function checkForUpdate() {
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
-  useFonts(Ionicons.font)
+  const [fontsLoaded] = useFonts(Ionicons.font)
 
   useEffect(() => {
     checkForUpdate()
@@ -63,7 +63,7 @@ export default function RootLayout() {
     if (!session) router.replace('/(auth)/login')
   }, [loading])
 
-  if (loading) {
+  if (loading || !fontsLoaded) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a6470' }}>
         <ActivityIndicator size="large" color="#c9a84c" />
