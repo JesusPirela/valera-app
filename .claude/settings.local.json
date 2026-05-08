@@ -25,13 +25,9 @@
       "Bash(node -e \"const p=require\\('/dev/stdin'\\); console.log\\(JSON.stringify\\({scripts: p.scripts}, null, 2\\)\\)\")",
       "Bash(git push *)",
       "Bash(gh run *)",
-      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\carbe\\\\OneDrive\\\\Escritorio\\\\valera_app\" -Recurse -Force)",
-      "Bash(Select-Object FullName)",
-      "Bash(Sort-Object FullName)",
-      "Bash(ConvertTo-Csv -NoTypeInformation)",
-      "Bash(Select-Object -Skip 1)",
-      "Bash(node -e \"const p = require\\('./package.json'\\); const deps = {...p.dependencies, ...p.devDependencies}; console.log\\('expo-asset:', deps['expo-asset']\\); console.log\\('expo-file-system:', deps['expo-file-system']\\)\")",
-      "Bash(node -e \"try { require\\('expo-asset'\\); console.log\\('expo-asset: available'\\); } catch\\(e\\) { console.log\\('expo-asset: not available'\\); }\")"
+      "Bash(git pull *)",
+      "Bash(git stash *)",
+      "Bash(git rebase *)"
     ]
   }
 }
