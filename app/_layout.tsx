@@ -7,6 +7,8 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { queryClient, persister } from '../lib/queryClient'
 import { ThemeProvider } from '../lib/ThemeContext'
 import * as Updates from 'expo-updates'
+import { useFonts } from 'expo-font'
+import { Ionicons } from '@expo/vector-icons'
 
 async function checkForUpdate() {
   if (Platform.OS === 'web' || __DEV__) return
@@ -22,6 +24,7 @@ async function checkForUpdate() {
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  useFonts(Ionicons.font)
 
   useEffect(() => {
     checkForUpdate()

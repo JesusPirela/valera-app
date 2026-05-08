@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Platform, Alert,
+  ActivityIndicator, Platform, Alert, useWindowDimensions,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -41,6 +41,8 @@ const TIPO_ICON: Record<string, string> = {
 export default function TareasScreen() {
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
   const [loading, setLoading] = useState(true)
+  const { width } = useWindowDimensions()
+  const isWide = width >= 768
 
   useFocusEffect(useCallback(() => {
     cargar()
@@ -92,56 +94,72 @@ export default function TareasScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* Hero de progreso diario */}
-      <View style={styles.hero}>
-        <View style={styles.heroTop}>
-          <View>
-            <Text style={styles.heroLabel}>Progreso de hoy</Text>
-            <Text style={styles.heroPct}>{pct}%</Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        { paddingBottom: 40 },
+        isWide && { alignItems: 'center' },
+      ]}
+    >
+      <View style={isWide ? styles.wideInner : undefined}>
+        {/* Hero de progreso diario */}
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View>
+              <Text style={styles.heroLabel}>Progreso de hoy</Text>
+              <Text style={styles.heroPct}>{pct}%</Text>
+            </View>
+            <View style={styles.heroStats}>
+              <Text style={styles.heroFrac}>{completadas.length}/{total}</Text>
+              <Text style={styles.heroFracLabel}>completadas</Text>
+            </View>
           </View>
-          <View style={styles.heroStats}>
-            <Text style={styles.heroFrac}>{completadas.length}/{total}</Text>
-            <Text style={styles.heroFracLabel}>completadas</Text>
+          <View style={styles.barBg}>
+            <View style={[styles.barFill, { width: `${pct}%` as any }]} />
           </View>
+          {pct === 100 && total > 0 && (
+            <Text style={styles.heroFire}>🔥 ¡Todas completadas! Excelente trabajo.</Text>
+          )}
         </View>
-        <View style={styles.barBg}>
-          <View style={[styles.barFill, { width: `${pct}%` as any }]} />
-        </View>
-        {pct === 100 && total > 0 && (
-          <Text style={styles.heroFire}>🔥 ¡Todas completadas! Excelente trabajo.</Text>
+
+        {/* Pendientes */}
+        {pendientes.length > 0 && (
+          <View style={styles.seccion}>
+            <Text style={styles.seccionTitulo}>Pendientes ({pendientes.length})</Text>
+            <View style={isWide ? styles.grid : undefined}>
+              {pendientes.map(a => (
+                <View key={a.id} style={isWide ? styles.gridItem : undefined}>
+                  <TareaCard asignacion={a} onMarcar={() => marcarManual(a.id)} />
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Completadas */}
+        {completadas.length > 0 && (
+          <View style={styles.seccion}>
+            <Text style={styles.seccionTitulo}>Completadas ({completadas.length})</Text>
+            <View style={isWide ? styles.grid : undefined}>
+              {completadas.map(a => (
+                <View key={a.id} style={isWide ? styles.gridItem : undefined}>
+                  <TareaCard asignacion={a} onMarcar={() => {}} />
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {total === 0 && (
+          <View style={styles.empty}>
+            <Text style={styles.emptyIcon}>🎯</Text>
+            <Text style={styles.emptyTitle}>Sin tareas asignadas</Text>
+            <Text style={styles.emptySub}>
+              Cuando el administrador te asigne tareas, aparecerán aquí
+            </Text>
+          </View>
         )}
       </View>
-
-      {/* Pendientes */}
-      {pendientes.length > 0 && (
-        <View style={styles.seccion}>
-          <Text style={styles.seccionTitulo}>Pendientes ({pendientes.length})</Text>
-          {pendientes.map(a => (
-            <TareaCard key={a.id} asignacion={a} onMarcar={() => marcarManual(a.id)} />
-          ))}
-        </View>
-      )}
-
-      {/* Completadas */}
-      {completadas.length > 0 && (
-        <View style={styles.seccion}>
-          <Text style={styles.seccionTitulo}>Completadas ({completadas.length})</Text>
-          {completadas.map(a => (
-            <TareaCard key={a.id} asignacion={a} onMarcar={() => {}} />
-          ))}
-        </View>
-      )}
-
-      {total === 0 && (
-        <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>🎯</Text>
-          <Text style={styles.emptyTitle}>Sin tareas asignadas</Text>
-          <Text style={styles.emptySub}>
-            Cuando el administrador te asigne tareas, aparecerán aquí
-          </Text>
-        </View>
-      )}
     </ScrollView>
   )
 }
@@ -337,4 +355,8 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 52, marginBottom: 14 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: TEAL, marginBottom: 6 },
   emptySub: { fontSize: 14, color: '#8a9ea0', textAlign: 'center', lineHeight: 20 },
+
+  wideInner: { width: '100%', maxWidth: 860, paddingHorizontal: 8 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  gridItem: { flex: 1, minWidth: 300 },
 })

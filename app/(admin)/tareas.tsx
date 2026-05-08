@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, TextInput, Modal, Alert, Platform,
+  ActivityIndicator, TextInput, Modal, Alert, Platform, useWindowDimensions,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -166,6 +166,9 @@ export default function AdminTareas() {
   const [seleccionados, setSeleccionados] = useState<string[]>([])
   const [guardando,   setGuardando]   = useState(false)
 
+  const { width } = useWindowDimensions()
+  const isWide = width >= 768
+
   useFocusEffect(useCallback(() => { cargar() }, []))
 
   async function cargar() {
@@ -324,7 +327,8 @@ export default function AdminTareas() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={[{ paddingBottom: 40 }, isWide && { alignItems: 'center' }]}>
+        <View style={isWide ? { width: '100%', maxWidth: 860, paddingHorizontal: 16 } : { paddingHorizontal: 16 }}>
         {tareas.length === 0 && (
           <View style={s.empty}>
             <Text style={s.emptyIcon}>📋</Text>
@@ -407,6 +411,7 @@ export default function AdminTareas() {
             </View>
           )
         })}
+        </View>
       </ScrollView>
 
       {/* Modal crear tarea */}
