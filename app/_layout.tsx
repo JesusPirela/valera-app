@@ -24,7 +24,19 @@ async function checkForUpdate() {
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
-  const [fontsLoaded] = useFonts(Ionicons.font)
+  // En web useFonts no funciona en el bundle de producción:
+  // se inyecta la fuente vía CSS apuntando a /fonts/Ionicons.ttf
+  const [fontsLoaded] = useFonts(Platform.OS === 'web' ? {} : Ionicons.font)
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return
+    const id = 'ionicons-css'
+    if (document.getElementById(id)) return
+    const style = document.createElement('style')
+    style.id = id
+    style.textContent = "@font-face{font-family:'Ionicons';src:url('/fonts/Ionicons.ttf') format('truetype');font-weight:normal;font-style:normal;}"
+    document.head.appendChild(style)
+  }, [])
 
   useEffect(() => {
     checkForUpdate()
