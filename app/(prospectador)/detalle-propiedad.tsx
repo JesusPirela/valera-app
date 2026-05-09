@@ -20,6 +20,7 @@ import { supabase } from '../../lib/supabase'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
 import * as Clipboard from 'expo-clipboard'
+import * as FileSystem from 'expo-file-system'
 import { useQuery } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -465,10 +466,8 @@ export default function DetallePropiedad() {
       if (Platform.OS === 'web') {
         // Abrir WhatsApp PRIMERO (gesto directo del usuario, sin ningún await previo)
         window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
-        // Copiar texto al portapapeles como respaldo
         try { await navigator.clipboard.writeText(texto) } catch { /* ignorar */ }
 
-        // Descargar imágenes para que el usuario las adjunte en WhatsApp Web
         for (let i = 0; i < imagenes.length; i++) {
           try {
             const resp = await fetch(imagenes[i].url)
@@ -482,7 +481,6 @@ export default function DetallePropiedad() {
             document.body.removeChild(a)
             URL.revokeObjectURL(objectUrl)
           } catch {
-            // CORS bloqueó fetch — abrir en nueva pestaña para descarga manual
             const a = document.createElement('a')
             a.href = imagenes[i].url
             a.target = '_blank'
@@ -492,17 +490,16 @@ export default function DetallePropiedad() {
             document.body.removeChild(a)
           }
         }
-        if (imagenes.length > 0) {
-          Alert.alert('Listo', 'WhatsApp se abrió con el texto. Las fotos se descargaron — adjúntalas desde WhatsApp Web.')
-        }
         setCompartiendoFotos(false)
         return
       }
 
+      // Nativo: copiar texto al portapapeles automáticamente
+      await Clipboard.setStringAsync(texto)
+
       const encoded = encodeURIComponent(texto)
-      const canOpenWA = await Linking.canOpenURL('whatsapp://')
       const abrirWhatsApp = () =>
-        Linking.openURL(canOpenWA ? `whatsapp://send?text=${encoded}` : `https://wa.me/?text=${encoded}`)
+        Linking.openURL(`https://wa.me/?text=${encoded}`)
 
       if (imagenes.length === 0) {
         await abrirWhatsApp()
@@ -510,39 +507,34 @@ export default function DetallePropiedad() {
         return
       }
 
-      // Descargar todas las imágenes al caché
-      const { File: FSFile, Paths } = await import('expo-file-system/next')
-
+      // Descargar imágenes con la API estable de expo-file-system
       const uris: string[] = []
       for (let i = 0; i < imagenes.length; i++) {
         try {
-          const dest = new FSFile(Paths.cache, `${propiedad.codigo ?? 'prop'}-wa-${i}.jpg`)
-          await dest.downloadAsync(imagenes[i].url)
-          uris.push(dest.uri)
+          const dest = `${FileSystem.cacheDirectory}${propiedad.codigo ?? 'prop'}-wa-${i}.jpg`
+          const { uri } = await FileSystem.downloadAsync(imagenes[i].url, dest)
+          uris.push(uri)
         } catch { /* continuar con las demás */ }
       }
 
-      // Guardar todas en galería para que el usuario las adjunte desde WhatsApp
+      // Guardar en galería para adjuntar desde WhatsApp
       let guardadas = 0
-      const { status } = await MediaLibrary.requestPermissionsAsync()
-      if (status === 'granted') {
-        for (const uri of uris) {
-          try { await MediaLibrary.saveToLibraryAsync(uri); guardadas++ } catch { /* skip */ }
+      if (uris.length > 0) {
+        const { status } = await MediaLibrary.requestPermissionsAsync()
+        if (status === 'granted') {
+          for (const uri of uris) {
+            try { await MediaLibrary.saveToLibraryAsync(uri); guardadas++ } catch { /* skip */ }
+          }
         }
       }
 
-      if (guardadas > 0) {
-        Alert.alert(
-          'Listo para enviar',
-          `${guardadas} foto${guardadas > 1 ? 's guardadas' : ' guardada'} en tu galería.\n\nAl abrir WhatsApp el texto ya estará escrito — adjunta las fotos tocando el clip (📎).`,
-          [{ text: 'Abrir WhatsApp', onPress: abrirWhatsApp }]
-        )
-      } else {
-        await abrirWhatsApp()
-        for (const uri of uris) {
-          await Sharing.shareAsync(uri, { mimeType: 'image/jpeg' })
-        }
-      }
+      Alert.alert(
+        'Listo para enviar',
+        guardadas > 0
+          ? `Texto copiado al portapapeles.\n${guardadas} foto${guardadas > 1 ? 's guardadas' : ' guardada'} en tu galería.\n\nAbre WhatsApp, pega el texto (manteniendo presionado) y adjunta las fotos con el clip (📎).`
+          : 'Texto copiado al portapapeles.\n\nAbre WhatsApp y pega el texto (manteniendo presionado).',
+        [{ text: 'Abrir WhatsApp', onPress: abrirWhatsApp }]
+      )
     } catch {
       Alert.alert('Error', 'No se pudo compartir la propiedad.')
     }
@@ -594,13 +586,12 @@ export default function DetallePropiedad() {
         return
       }
 
-      const { File: FSFile, Paths } = await import('expo-file-system/next')
       let guardadas = 0
       for (let i = 0; i < imagenes.length; i++) {
         try {
-          const dest = new FSFile(Paths.cache, `${propiedad.codigo ?? 'prop'}-${i + 1}.jpg`)
-          await dest.downloadAsync(imagenes[i].url)
-          await MediaLibrary.saveToLibraryAsync(dest.uri)
+          const dest = `${FileSystem.cacheDirectory}${propiedad.codigo ?? 'prop'}-${i + 1}.jpg`
+          const { uri } = await FileSystem.downloadAsync(imagenes[i].url, dest)
+          await MediaLibrary.saveToLibraryAsync(uri)
           guardadas++
         } catch {
           // continuar con las demás

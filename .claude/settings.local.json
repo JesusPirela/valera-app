@@ -27,7 +27,8 @@
       "Bash(gh run *)",
       "Bash(git pull *)",
       "Bash(git stash *)",
-      "Bash(git rebase *)"
+      "Bash(git rebase *)",
+      "Bash(xargs grep -l \"CREATE TABLE.*profiles\")"
     ]
   }
 }
