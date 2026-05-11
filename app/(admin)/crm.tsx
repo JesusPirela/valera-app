@@ -195,7 +195,6 @@ export default function AdminCRM() {
       tipo_operacion: nuevoTipoOp,
       estado: nuevoEstado,
       fuente_lead: 'admin',
-      user_id: nuevoUserId,
       responsable_id: nuevoUserId,
     })
     setGuardandoCliente(false)
@@ -539,7 +538,7 @@ export default function AdminCRM() {
                     >
                       <View style={[styles.mAvatar, { backgroundColor: nuevoUserId === u.id ? '#d4f0e2' : '#e8f2f4' }]}>
                         <Text style={[styles.mAvatarTxt, { color: nuevoUserId === u.id ? '#2a8a5a' : '#1a6470' }]}>
-                          {u.nombre[0].toUpperCase()}
+                          {(u.nombre ?? '?')[0].toUpperCase()}
                         </Text>
                       </View>
                       <Text style={[styles.mUsuarioNombre, nuevoUserId === u.id && { color: '#2a8a5a', fontWeight: '700' }]}>

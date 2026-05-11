@@ -545,7 +545,7 @@ export default function ProspectadorPropiedades() {
 
       {/* Botón de ayuda flotante */}
       <TouchableOpacity style={styles.helpFab} onPress={() => setShowHelp(true)} activeOpacity={0.85}>
-        <Ionicons name="help" size={26} color="#fff" />
+        <Ionicons name="help" size={20} color="#fff" />
       </TouchableOpacity>
 
       {/* Modal de ayuda */}
@@ -596,28 +596,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 24,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   headerSaludo: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '800',
     color: '#fff',
-    marginBottom: 2,
+    marginBottom: 1,
   },
   headerSubtitulo: {
-    fontSize: 13,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.75)',
   },
   headerIcono: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerIconoText: { fontSize: 22 },
+  headerIconoText: { fontSize: 18 },
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -895,18 +895,18 @@ const styles = StyleSheet.create({
   helpFab: {
     position: 'absolute',
     bottom: 20,
-    right: 20,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#c9a84c',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 6,
     zIndex: 100,
   },
   // Help Modal

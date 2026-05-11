@@ -398,7 +398,7 @@ export default function DetallePropiedad() {
         telefono: nuevoTelefono.trim(),
         fuente_lead: 'otro',
         estado: 'cita_por_agendar',
-        user_id: user?.id,
+        responsable_id: user?.id,
       })
       .select('id, nombre, telefono, estado')
       .single()
