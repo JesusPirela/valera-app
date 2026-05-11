@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView,
-  ActivityIndicator,
+  ActivityIndicator, TouchableOpacity, Modal, Alert, Platform,
 } from 'react-native'
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { ESTADOS } from '../(prospectador)/crm'
+
+type UsuarioSimple = { id: string; nombre: string }
 
 type Cliente = {
   id: string
@@ -22,6 +24,8 @@ type Cliente = {
   notas: string | null
   proximo_contacto: string | null
   created_at: string
+  responsable_id: string | null
+  responsable_nombre: string | null
 }
 
 type Interaccion = {
@@ -83,17 +87,60 @@ export default function AdminDetalleCliente() {
   const [recordatorios, setRecordatorios] = useState<Recordatorio[]>([])
   const [loading, setLoading] = useState(true)
 
+  const [modalReasignar, setModalReasignar] = useState(false)
+  const [usuarios, setUsuarios] = useState<UsuarioSimple[]>([])
+  const [asesorSeleccionado, setAsesorSeleccionado] = useState('')
+  const [guardandoReasignar, setGuardandoReasignar] = useState(false)
+
   async function cargar() {
     setLoading(true)
     const [{ data: c }, { data: i }, { data: r }] = await Promise.all([
-      supabase.from('clientes').select('*').eq('id', id).single(),
+      supabase.from('clientes')
+        .select('*, profiles!clientes_responsable_id_fkey(nombre)')
+        .eq('id', id)
+        .single(),
       supabase.from('interacciones').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
       supabase.from('recordatorios').select('*').eq('cliente_id', id).order('fecha_hora', { ascending: true }),
     ])
-    if (c) setCliente(c)
+    if (c) {
+      const perfil = c.profiles as any
+      setCliente({ ...c, responsable_nombre: perfil?.nombre ?? null })
+    }
     setInteracciones(i ?? [])
     setRecordatorios(r ?? [])
     setLoading(false)
+  }
+
+  async function abrirReasignar() {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, nombre')
+      .neq('role', 'admin')
+      .order('nombre')
+    setUsuarios((data ?? []) as UsuarioSimple[])
+    setAsesorSeleccionado(cliente?.responsable_id ?? '')
+    setModalReasignar(true)
+  }
+
+  async function guardarReasignacion() {
+    if (!asesorSeleccionado) {
+      if (Platform.OS === 'web') window.alert('Selecciona un asesor')
+      else Alert.alert('Error', 'Selecciona un asesor')
+      return
+    }
+    setGuardandoReasignar(true)
+    const { error } = await supabase
+      .from('clientes')
+      .update({ responsable_id: asesorSeleccionado })
+      .eq('id', id)
+    setGuardandoReasignar(false)
+    if (error) {
+      if (Platform.OS === 'web') window.alert(`Error: ${error.message}`)
+      else Alert.alert('Error', error.message)
+      return
+    }
+    setModalReasignar(false)
+    cargar()
   }
 
   useFocusEffect(useCallback(() => { cargar() }, [id]))
@@ -111,11 +158,6 @@ export default function AdminDetalleCliente() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-
-      {/* Etiqueta solo lectura */}
-      <View style={styles.readonlyBanner}>
-        <Text style={styles.readonlyText}>Vista de consulta — solo lectura</Text>
-      </View>
 
       {/* Info principal */}
       <View style={styles.clienteCard}>
@@ -184,6 +226,72 @@ export default function AdminDetalleCliente() {
           </View>
         ) : null}
       </View>
+
+      {/* Asesor asignado */}
+      <View style={styles.asesorCard}>
+        <View style={styles.asesorRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.asesorLabel}>Asesor asignado</Text>
+            <Text style={styles.asesorNombre}>
+              {cliente.responsable_nombre ?? 'Sin asignar'}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.asesorBtn} onPress={abrirReasignar}>
+            <Text style={styles.asesorBtnText}>Cambiar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Modal reasignar */}
+      <Modal visible={modalReasignar} animationType="slide" transparent onRequestClose={() => setModalReasignar(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitulo}>Reasignar asesor</Text>
+              <TouchableOpacity onPress={() => setModalReasignar(false)}>
+                <Text style={styles.modalCerrar}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {usuarios.length === 0 ? (
+                <Text style={{ color: '#aaa', fontStyle: 'italic', padding: 12 }}>
+                  No hay asesores registrados
+                </Text>
+              ) : (
+                <View style={styles.usuariosList}>
+                  {usuarios.map((u) => (
+                    <TouchableOpacity
+                      key={u.id}
+                      style={[styles.usuarioRow, asesorSeleccionado === u.id && styles.usuarioRowActivo]}
+                      onPress={() => setAsesorSeleccionado(u.id)}
+                    >
+                      <View style={[styles.usuarioAvatar, { backgroundColor: asesorSeleccionado === u.id ? '#d4f0e2' : '#e8f2f4' }]}>
+                        <Text style={[styles.usuarioAvatarTxt, { color: asesorSeleccionado === u.id ? '#2a8a5a' : '#1a6470' }]}>
+                          {(u.nombre ?? '?')[0].toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text style={[styles.usuarioNombre, asesorSeleccionado === u.id && { color: '#2a8a5a', fontWeight: '700' }]}>
+                        {u.nombre}
+                      </Text>
+                      {asesorSeleccionado === u.id && <Text style={{ color: '#2a8a5a', fontSize: 16 }}>✓</Text>}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.guardarBtn, guardandoReasignar && { opacity: 0.6 }]}
+                onPress={guardarReasignacion}
+                disabled={guardandoReasignar}
+              >
+                {guardandoReasignar
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={styles.guardarBtnTxt}>Guardar cambio</Text>
+                }
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Recordatorios — solo lectura */}
       <Text style={styles.secTitle}>Recordatorios</Text>
@@ -300,4 +408,28 @@ const styles = StyleSheet.create({
   interaccionIcon: { fontSize: 18 },
   interaccionDesc: { fontSize: 13, color: '#333', lineHeight: 19 },
   interaccionFecha: { fontSize: 11, color: '#bbb', marginTop: 3 },
+
+  asesorCard: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 14,
+    marginBottom: 16, borderWidth: 1, borderColor: '#dde8e9',
+  },
+  asesorRow: { flexDirection: 'row', alignItems: 'center' },
+  asesorLabel: { fontSize: 11, fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 },
+  asesorNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
+  asesorBtn: { backgroundColor: '#1a6470', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
+  asesorBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 36, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitulo: { fontSize: 17, fontWeight: '800', color: '#1a6470' },
+  modalCerrar: { fontSize: 18, color: '#888', paddingHorizontal: 6 },
+  usuariosList: { borderWidth: 1, borderColor: '#e0eaec', borderRadius: 10, overflow: 'hidden', marginBottom: 16 },
+  usuarioRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f4f5' },
+  usuarioRowActivo: { backgroundColor: '#f3fbf6' },
+  usuarioAvatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  usuarioAvatarTxt: { fontSize: 14, fontWeight: '700' },
+  usuarioNombre: { flex: 1, fontSize: 14, color: '#1a2e30' },
+  guardarBtn: { backgroundColor: '#c9a84c', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  guardarBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
 })
