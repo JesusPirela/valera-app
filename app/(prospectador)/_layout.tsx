@@ -4,6 +4,7 @@ import { Tabs, usePathname, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
+import { trackLoginDiario } from '../../lib/gamification'
 
 const LOGO = require('../../assets/logo.png')
 
@@ -73,6 +74,11 @@ export default function ProspectadorLayout() {
   }
 
   useEffect(() => {
+    // Tracking de login diario y streak
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) trackLoginDiario(user.id).catch(() => {})
+    })
+
     cargarNoLeidas()
     verificarRecordatorios()
 
@@ -168,6 +174,13 @@ export default function ProspectadorLayout() {
         }}
       />
       <Tabs.Screen
+        name="misiones"
+        options={{
+          title: 'Misiones',
+          tabBarIcon: tabIcon('flash-outline', 'flash'),
+        }}
+      />
+      <Tabs.Screen
         name="university"
         options={{
           title: 'Universidad',
@@ -203,6 +216,8 @@ export default function ProspectadorLayout() {
       <Tabs.Screen name="detalle-cliente"    options={{ href: null, title: 'Cliente' }} />
       <Tabs.Screen name="university-curso"   options={{ href: null, title: 'Curso' }} />
       <Tabs.Screen name="university-leccion" options={{ href: null, title: 'Lección' }} />
+      <Tabs.Screen name="tienda"             options={{ href: null, title: 'Tienda' }} />
+      <Tabs.Screen name="ranking"            options={{ href: null, title: 'Ranking' }} />
     </Tabs>
   )
 }

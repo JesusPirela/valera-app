@@ -19,6 +19,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { useTheme } from '../../lib/ThemeContext'
+import { registrarAccion } from '../../lib/gamification'
 
 type Propiedad = {
   id: string
@@ -196,6 +197,8 @@ export default function ProspectadorPropiedades() {
             : old.publicadasIds.filter(id => id !== propiedadId),
         }
       })
+    } else if (!yaPublicada) {
+      registrarAccion(userId, 'publicar_propiedad').catch(() => {})
     }
 
     setToggling(prev => { const s = new Set(prev); s.delete(propiedadId); return s })

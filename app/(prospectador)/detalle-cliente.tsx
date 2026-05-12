@@ -7,6 +7,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { ESTADOS } from './crm'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { registrarAccion } from '../../lib/gamification'
 import { OfflineBanner } from '../../components/OfflineBanner'
 
 type Cliente = {
@@ -218,6 +219,9 @@ export default function DetalleCliente() {
       descripcion: `Estado cambiado de "${estadoAnterior}" a "${estadoNuevo}".`,
     })
 
+    if (nuevoEstado === 'cita_agendada') registrarAccion(user!.id, 'agendar_cita').catch(() => {})
+    if (nuevoEstado === 'compro') registrarAccion(user!.id, 'cerrar_venta').catch(() => {})
+
     refetch()
   }
 
@@ -233,6 +237,7 @@ export default function DetalleCliente() {
     })
     setGuardandoInteraccion(false)
     if (error) { Alert.alert('Error', error.message); return }
+    registrarAccion(user!.id, 'agregar_interaccion').catch(() => {})
     setTextoInteraccion('')
     setTipoInteraccion('nota')
     setModalInteraccion(false)
@@ -261,11 +266,15 @@ export default function DetalleCliente() {
   }
 
   async function completarRecordatorio(recId: string) {
-    await supabase.from('recordatorios').update({ completado: true }).eq('id', recId)
+    const { error } = await supabase.from('recordatorios').update({ completado: true }).eq('id', recId)
     queryClient.setQueryData(['detalle-cliente', id], (old: typeof data) => {
       if (!old) return old
       return { ...old, recordatorios: old.recordatorios.map(r => r.id === recId ? { ...r, completado: true } : r) }
     })
+    if (!error) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) registrarAccion(user.id, 'completar_seguimiento').catch(() => {})
+    }
   }
 
   async function eliminarCliente() {

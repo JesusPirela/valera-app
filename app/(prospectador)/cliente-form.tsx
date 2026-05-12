@@ -11,6 +11,7 @@ function mostrarError(titulo: string, msg: string) {
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { ESTADOS } from './crm'
+import { registrarAccion } from '../../lib/gamification'
 
 // ── Fuentes de lead ──────────────────────────────────────
 const FUENTES = [
@@ -321,6 +322,7 @@ export default function ClienteForm() {
             p_cliente_id: data.id,
             p_prospectador_nombre: nombreProspectador,
           })
+          registrarAccion(user.id, 'agregar_cliente').catch(() => {})
         }
       }
 

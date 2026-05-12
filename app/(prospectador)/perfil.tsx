@@ -7,6 +7,7 @@ import { useFocusEffect } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
+import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
 
 const COLORES_PRESET = [
   { label: 'Verde Valera',  valor: '#1a6470' },
@@ -34,6 +35,7 @@ export default function Perfil() {
 
   const [userId, setUserId] = useState('')
   const [nombre, setNombre] = useState('')
+  const [stats, setStats] = useState<UserStats | null>(null)
   const [telefono, setTelefono] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarEmoji, setAvatarEmoji] = useState('👤')
@@ -51,11 +53,11 @@ export default function Perfil() {
     setUserId(user.id)
     setEmail(user.email ?? '')
 
-    const { data } = await supabase
-      .from('profiles')
-      .select('nombre, telefono, avatar_url, color_acento')
-      .eq('id', user.id)
-      .single()
+    const [{ data }, statsData] = await Promise.all([
+      supabase.from('profiles').select('nombre, telefono, avatar_url, color_acento').eq('id', user.id).single(),
+      getUserStats(user.id),
+    ])
+    setStats(statsData)
 
     if (data) {
       setNombre(data.nombre ?? '')
@@ -175,6 +177,47 @@ export default function Perfil() {
         </View>
         <Text style={s.emailText}>{email}</Text>
       </View>
+
+      {/* Gamification stats */}
+      {stats && (() => {
+        const nivel = calcularNivel(stats.xp)
+        const info = infoNivel(stats.xp)
+        const titulo = tituloPorNivel(nivel)
+        return (
+          <View style={[s.statsCard, { borderColor: colorAcento + '44' }]}>
+            <View style={s.statsTop}>
+              <View style={[s.nivelBadge, { backgroundColor: colorAcento }]}>
+                <Text style={s.nivelNum}>{nivel}</Text>
+                <Text style={s.nivelLbl}>Nv.</Text>
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[s.statsTitle, { color: colorAcento }]}>{titulo}</Text>
+                <Text style={s.statsXP}>{stats.xp.toLocaleString()} XP totales</Text>
+                <View style={s.barTrack}>
+                  <View style={[s.barFill, { width: `${info.porcentaje}%` as any, backgroundColor: colorAcento }]} />
+                </View>
+                <Text style={s.barLabel}>{info.xpActual} / {info.xpNecesario} XP para nivel {nivel + 1}</Text>
+              </View>
+            </View>
+            <View style={s.statsRow}>
+              <View style={s.statItem}>
+                <Text style={s.statVal}>💰 {stats.valera_coins.toLocaleString()}</Text>
+                <Text style={s.statLbl}>Valera Coins</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.statItem}>
+                <Text style={s.statVal}>🔥 {stats.streak_dias}</Text>
+                <Text style={s.statLbl}>Días seguidos</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.statItem}>
+                <Text style={s.statVal}>🏠 {stats.total_propiedades}</Text>
+                <Text style={s.statLbl}>Propiedades</Text>
+              </View>
+            </View>
+          </View>
+        )
+      })()}
 
       <View style={s.body}>
         {/* Info básica */}
@@ -327,4 +370,28 @@ const s = StyleSheet.create({
   colorPreviewText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   btnGuardar: { borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   btnGuardarText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+
+  statsCard: {
+    margin: 16, marginTop: -8,
+    backgroundColor: '#fff', borderRadius: 16, padding: 16,
+    borderWidth: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+  statsTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  nivelBadge: {
+    width: 52, height: 52, borderRadius: 26,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  nivelNum: { fontSize: 20, fontWeight: '900', color: '#fff', lineHeight: 22 },
+  nivelLbl: { fontSize: 9, color: 'rgba(255,255,255,0.8)', fontWeight: '700' },
+  statsTitle: { fontSize: 14, fontWeight: '800', marginBottom: 1 },
+  statsXP: { fontSize: 11, color: '#888', marginBottom: 6 },
+  barTrack: { height: 6, backgroundColor: '#e8eef0', borderRadius: 3, overflow: 'hidden', marginBottom: 3 },
+  barFill: { height: 6, borderRadius: 3 },
+  barLabel: { fontSize: 10, color: '#aaa' },
+  statsRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 12 },
+  statItem: { flex: 1, alignItems: 'center' },
+  statVal: { fontSize: 13, fontWeight: '800', color: '#1a1a2e', marginBottom: 2 },
+  statLbl: { fontSize: 10, color: '#aaa' },
+  statDivider: { width: 1, height: 32, backgroundColor: '#f0f0f0' },
 })
