@@ -49,6 +49,7 @@ const NAV_ITEMS = [
   { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#145560' },
   { label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#c9a84c' },
   { label: 'Tareas', icon: '✅', route: '/(admin)/tareas', color: '#1a6b3a' },
+  { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#6a1b9a' },
 ]
 
 export default function AdminPropiedades() {
