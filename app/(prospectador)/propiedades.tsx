@@ -11,6 +11,8 @@ import {
   TouchableOpacity,
   Modal,
   Linking,
+  Platform,
+  useWindowDimensions,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -270,13 +272,18 @@ export default function ProspectadorPropiedades() {
     setPrecioMax('')
   }
 
-  function renderPropiedad(item: Propiedad) {
+  function renderPropiedad(item: Propiedad, width?: number) {
     const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
     const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
     return (
       <TouchableOpacity
         key={item.id}
-        style={[styles.card, item.exclusiva && styles.cardExclusiva, item.destacada && !item.exclusiva && styles.cardDestacada]}
+        style={[
+          styles.card,
+          item.exclusiva && styles.cardExclusiva,
+          item.destacada && !item.exclusiva && styles.cardDestacada,
+          width != null && { width },
+        ]}
         activeOpacity={0.85}
         onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.id}`)}
       >
@@ -352,6 +359,12 @@ export default function ProspectadorPropiedades() {
   }
 
   const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
+  const { width: screenWidth } = useWindowDimensions()
+  const isWeb = Platform.OS === 'web'
+  const numCols = isWeb ? (screenWidth >= 1100 ? 3 : screenWidth >= 680 ? 2 : 1) : 1
+  const CARD_GAP = 16
+  const contentWidth = Math.min(screenWidth, 1280) - 32
+  const cardWidth = isWeb ? (contentWidth - CARD_GAP * (numCols - 1)) / numCols : undefined
 
   return (
     <View style={{ flex: 1 }}>
@@ -374,6 +387,9 @@ export default function ProspectadorPropiedades() {
             <Text style={styles.headerIconoText}>🏠</Text>
           </View>
         </View>
+
+        {/* Contenido centrado en web */}
+        <View style={isWeb ? styles.webBody : undefined}>
 
         {/* Barra de búsqueda */}
         <View style={styles.searchWrapper}>
@@ -528,13 +544,19 @@ export default function ProspectadorPropiedades() {
                     />
                   </TouchableOpacity>
                   {expandida && (
-                    <View style={styles.zonaContent}>
-                      {props.map(p => renderPropiedad(p))}
+                    <View style={isWeb ? styles.webGrid : styles.zonaContent}>
+                      {props.map(p => renderPropiedad(p, cardWidth))}
                     </View>
                   )}
                 </View>
               )
             })}
+          </ScrollView>
+        ) : isWeb ? (
+          <ScrollView contentContainerStyle={styles.webGridScroll}>
+            <View style={styles.webGrid}>
+              {propiedadesFiltradas.map(item => renderPropiedad(item, cardWidth))}
+            </View>
           </ScrollView>
         ) : (
           <FlatList
@@ -544,6 +566,8 @@ export default function ProspectadorPropiedades() {
             renderItem={({ item }) => renderPropiedad(item)}
           />
         )}
+
+        </View>{/* fin webBody */}
       </View>
 
       {/* Botón de ayuda flotante */}
@@ -594,11 +618,27 @@ export default function ProspectadorPropiedades() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
+  webBody: {
+    flex: 1,
+    maxWidth: 1280,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  webGridScroll: {
+    paddingBottom: 32,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  webGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: Platform.OS === 'web' ? '10%' : 20,
     paddingTop: 12,
     paddingBottom: 12,
   },
@@ -821,7 +861,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f5e07a',
   },
-  cardImagen: { width: '100%', height: 180 },
+  cardImagen: { width: '100%', height: Platform.OS === 'web' ? 200 : 180 },
   cardBody: { padding: 14 },
   cardHeaderRow: {
     flexDirection: 'row',
