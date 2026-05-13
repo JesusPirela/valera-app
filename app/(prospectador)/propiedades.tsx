@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: Platform.OS === 'web' ? '10%' : 20,
     paddingTop: 12,
-    paddingBottom: 12,
+    paddingBottom: 10,
   },
   headerSaludo: {
     fontSize: 16,
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     paddingHorizontal: 12,
     marginHorizontal: 16,
-    marginTop: -18,
+    marginTop: 8,
     marginBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
