@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Alert, Platform,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
 type Compra = {
@@ -125,6 +125,9 @@ export default function TiendaCompras() {
             {pendientes > 0 ? `${pendientes} pendiente${pendientes > 1 ? 's' : ''} de entrega` : 'Todo al día ✅'}
           </Text>
         </View>
+        <TouchableOpacity style={s.btnArticulos} onPress={() => router.push('/(admin)/tienda-items')}>
+          <Text style={s.btnArticulosTxt}>🏪 Artículos</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Filtros */}
@@ -272,8 +275,11 @@ export default function TiendaCompras() {
 
 const s = StyleSheet.create({
   header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#1a6470', paddingHorizontal: 16, paddingVertical: 14,
   },
+  btnArticulos:    { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+  btnArticulosTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
 
