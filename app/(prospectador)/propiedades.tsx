@@ -56,7 +56,7 @@ type PropiedadesData = {
   nombreUsuario: string | null
   userId: string
   propiedades: Propiedad[]
-  publicadasIds: string[]
+  pubMap: Record<string, { pub: boolean; veces: number }>
 }
 
 const ZONAS_CONFIG = [
@@ -127,7 +127,7 @@ export default function ProspectadorPropiedades() {
           .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .order('created_at', { ascending: false }),
-        supabase.from('propiedad_publicada').select('propiedad_id').eq('user_id', userId),
+        supabase.from('propiedad_publicacion').select('propiedad_id, publicada, veces_publicada').eq('user_id', userId),
       ])
 
       if (propsRes.error) throw propsRes.error
@@ -138,12 +138,17 @@ export default function ProspectadorPropiedades() {
         propiedades = propiedades.filter(p => !p.exclusiva)
       }
 
+      const pubMap: Record<string, { pub: boolean; veces: number }> = {}
+      for (const r of (pubRes.data ?? []) as { propiedad_id: string; publicada: boolean; veces_publicada: number }[]) {
+        pubMap[r.propiedad_id] = { pub: r.publicada ?? false, veces: r.veces_publicada ?? 0 }
+      }
+
       return {
         rol,
         nombreUsuario: profileRes.data?.nombre ?? null,
         userId,
         propiedades,
-        publicadasIds: (pubRes.data ?? []).map((r: { propiedad_id: string }) => r.propiedad_id),
+        pubMap,
       }
     },
     networkMode: 'offlineFirst',
@@ -165,41 +170,51 @@ export default function ProspectadorPropiedades() {
   }, [queryData?.propiedades])
 
   const propiedades = queryData?.propiedades ?? []
-  const publicadas = new Set(queryData?.publicadasIds ?? [])
+  const pubMap = queryData?.pubMap ?? {}
 
   async function togglePublicada(propiedadId: string) {
     if (toggling.has(propiedadId)) return
     const userId = queryData?.userId
     if (!userId) return
 
-    const yaPublicada = publicadas.has(propiedadId)
+    const current = pubMap[propiedadId]
+    const yaPublicada = current?.pub ?? false
+    const vecesActuales = current?.veces ?? 0
+
+    if (!yaPublicada && vecesActuales >= 10) return
+
     setToggling(prev => new Set(prev).add(propiedadId))
+
+    const nuevoEstado = !yaPublicada
+    const nuevasVeces = nuevoEstado ? vecesActuales + 1 : vecesActuales
 
     queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades'], old => {
       if (!old) return old
       return {
         ...old,
-        publicadasIds: yaPublicada
-          ? old.publicadasIds.filter(id => id !== propiedadId)
-          : [...old.publicadasIds, propiedadId],
+        pubMap: { ...old.pubMap, [propiedadId]: { pub: nuevoEstado, veces: nuevasVeces } },
       }
     })
 
-    const { error } = yaPublicada
-      ? await supabase.from('propiedad_publicada').delete().eq('user_id', userId).eq('propiedad_id', propiedadId)
-      : await supabase.from('propiedad_publicada').insert({ user_id: userId, propiedad_id: propiedadId })
+    const { error } = await supabase
+      .from('propiedad_publicacion')
+      .upsert({
+        propiedad_id: propiedadId,
+        user_id: userId,
+        publicada: nuevoEstado,
+        fecha_publicacion: nuevoEstado ? new Date().toISOString() : null,
+        veces_publicada: nuevasVeces,
+      }, { onConflict: 'propiedad_id,user_id' })
 
     if (error) {
       queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades'], old => {
         if (!old) return old
         return {
           ...old,
-          publicadasIds: yaPublicada
-            ? [...old.publicadasIds, propiedadId]
-            : old.publicadasIds.filter(id => id !== propiedadId),
+          pubMap: { ...old.pubMap, [propiedadId]: { pub: yaPublicada, veces: vecesActuales } },
         }
       })
-    } else if (!yaPublicada) {
+    } else if (nuevoEstado) {
       registrarAccion(userId, 'publicar_propiedad').catch(() => {})
     }
 
@@ -247,8 +262,8 @@ export default function ProspectadorPropiedades() {
       p.titulo?.toLowerCase().includes(q)
     )
   }
-  if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => publicadas.has(p.id))
-  if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => !publicadas.has(p.id))
+  if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => pubMap[p.id]?.pub)
+  if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => !pubMap[p.id]?.pub)
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
   if (precioMinNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio >= precioMinNum)
@@ -333,25 +348,33 @@ export default function ProspectadorPropiedades() {
           )}
           <View style={styles.cardFooter}>
             <Text style={[styles.precio, { color: primaryColor }]}>{formatPrecio(item.precio)}</Text>
-            <TouchableOpacity
-              style={[
-                styles.publicadaBtn,
-                { borderColor: primaryColor },
-                publicadas.has(item.id) && { backgroundColor: primaryColor, borderColor: primaryColor },
-                !isOnline && styles.publicadaBtnDisabled,
-              ]}
-              onPress={(e) => { e.stopPropagation(); if (isOnline) togglePublicada(item.id) }}
-              disabled={toggling.has(item.id) || !isOnline}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {toggling.has(item.id) ? (
-                <ActivityIndicator size="small" color={publicadas.has(item.id) ? '#fff' : primaryColor} />
-              ) : (
-                <Text style={[styles.publicadaBtnText, { color: publicadas.has(item.id) ? '#fff' : primaryColor }]}>
-                  {publicadas.has(item.id) ? '✓ Publicada' : 'Publicar'}
-                </Text>
-              )}
-            </TouchableOpacity>
+            {(() => {
+              const info = pubMap[item.id]
+              const estaPublicada = info?.pub ?? false
+              const veces = info?.veces ?? 0
+              const bloqueada = !estaPublicada && veces >= 10
+              return (
+                <TouchableOpacity
+                  style={[
+                    styles.publicadaBtn,
+                    { borderColor: bloqueada ? '#aaa' : primaryColor },
+                    estaPublicada && { backgroundColor: primaryColor, borderColor: primaryColor },
+                    (!isOnline || bloqueada) && styles.publicadaBtnDisabled,
+                  ]}
+                  onPress={(e) => { e.stopPropagation(); if (isOnline && !bloqueada) togglePublicada(item.id) }}
+                  disabled={toggling.has(item.id) || !isOnline || bloqueada}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  {toggling.has(item.id) ? (
+                    <ActivityIndicator size="small" color={estaPublicada ? '#fff' : primaryColor} />
+                  ) : (
+                    <Text style={[styles.publicadaBtnText, { color: estaPublicada ? '#fff' : bloqueada ? '#aaa' : primaryColor }]}>
+                      {estaPublicada ? `✓ ${veces}/10` : bloqueada ? '🚫 Límite' : veces > 0 ? `Publicar (${veces}/10)` : 'Publicar'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )
+            })()}
           </View>
         </View>
       </TouchableOpacity>

@@ -195,6 +195,7 @@ export default function DetallePropiedad() {
   const [publicada, setPublicada] = useState(false)
   const [fechaPublicacion, setFechaPublicacion] = useState<string | null>(null)
   const [togglingPublicacion, setTogglingPublicacion] = useState(false)
+  const [vecesPublicada, setVecesPublicada] = useState(0)
 
   // Paso 2: selección de fecha/hora de la cita
   const [clienteParaCita, setClienteParaCita] = useState<ClienteCRM | null>(null)
@@ -217,23 +218,32 @@ export default function DetallePropiedad() {
     if (!user) return
     const { data } = await supabase
       .from('propiedad_publicacion')
-      .select('publicada, fecha_publicacion')
+      .select('publicada, fecha_publicacion, veces_publicada')
       .eq('propiedad_id', id)
       .eq('user_id', user.id)
       .maybeSingle()
     if (data) {
       setPublicada(data.publicada)
       setFechaPublicacion(data.fecha_publicacion)
+      setVecesPublicada(data.veces_publicada ?? 0)
     }
   }
 
   async function togglePublicacion() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
+
+    if (!publicada && vecesPublicada >= 10) {
+      if (Platform.OS === 'web') window.alert('Esta propiedad alcanzó el límite de 10 publicaciones.')
+      else Alert.alert('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
+      return
+    }
+
     setTogglingPublicacion(true)
 
     const nuevoEstado = !publicada
     const ahora = nuevoEstado ? new Date().toISOString() : null
+    const nuevasVeces = nuevoEstado ? vecesPublicada + 1 : vecesPublicada
 
     await supabase
       .from('propiedad_publicacion')
@@ -242,10 +252,12 @@ export default function DetallePropiedad() {
         user_id: user.id,
         publicada: nuevoEstado,
         fecha_publicacion: ahora,
+        veces_publicada: nuevasVeces,
       }, { onConflict: 'propiedad_id,user_id' })
 
     setPublicada(nuevoEstado)
     setFechaPublicacion(ahora)
+    setVecesPublicada(nuevasVeces)
 
     // Actualizar progreso en tarea de tipo publicar_propiedades
     if (nuevoEstado) {
@@ -809,11 +821,16 @@ export default function DetallePropiedad() {
 
         {/* Estado de publicación */}
         <View style={styles.seccion}>
-          <Text style={styles.seccionTitulo}>Estado de publicación</Text>
+          <View style={styles.seccionHeader}>
+            <Text style={styles.seccionTitulo}>Estado de publicación</Text>
+            <Text style={[styles.pubContador, vecesPublicada >= 10 && styles.pubContadorLimite]}>
+              {vecesPublicada}/10
+            </Text>
+          </View>
           <View style={styles.pubRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.pubEstado}>
-                {publicada ? '✅ Publicada' : '⏳ Pendiente de publicar'}
+                {publicada ? '✅ Publicada' : vecesPublicada >= 10 ? '🚫 Límite alcanzado' : '⏳ Pendiente de publicar'}
               </Text>
               {publicada && fechaPublicacion && (
                 <Text style={styles.pubFecha}>
@@ -822,11 +839,18 @@ export default function DetallePropiedad() {
                   })}
                 </Text>
               )}
+              {!publicada && vecesPublicada > 0 && vecesPublicada < 10 && (
+                <Text style={styles.pubFecha}>Te quedan {10 - vecesPublicada} publicaciones</Text>
+              )}
             </View>
             <TouchableOpacity
-              style={[styles.pubBtn, publicada ? styles.pubBtnActiva : styles.pubBtnPendiente, togglingPublicacion && styles.btnDisabled]}
+              style={[
+                styles.pubBtn,
+                publicada ? styles.pubBtnActiva : styles.pubBtnPendiente,
+                (togglingPublicacion || (!publicada && vecesPublicada >= 10)) && styles.btnDisabled,
+              ]}
               onPress={togglePublicacion}
-              disabled={togglingPublicacion}
+              disabled={togglingPublicacion || (!publicada && vecesPublicada >= 10)}
             >
               {togglingPublicacion
                 ? <ActivityIndicator color="#fff" size="small" />
@@ -1565,6 +1589,8 @@ const styles = StyleSheet.create({
   pubRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   pubEstado: { fontSize: 15, fontWeight: '700', color: '#1a2e30' },
   pubFecha: { fontSize: 12, color: '#888', marginTop: 3 },
+  pubContador: { fontSize: 13, fontWeight: '700', color: '#1a6470' },
+  pubContadorLimite: { color: '#c0392b' },
   pubBtn: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   pubBtnPendiente: { backgroundColor: '#1a6470' },
   pubBtnActiva: { backgroundColor: '#888' },
