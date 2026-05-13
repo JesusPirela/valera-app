@@ -12,6 +12,7 @@ import {
   Platform,
   ScrollView,
   Modal,
+  useWindowDimensions,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -177,6 +178,12 @@ export default function AdminPropiedades() {
     )
   }
 
+  const { width: screenWidth } = useWindowDimensions()
+  const isWeb = Platform.OS === 'web'
+  const numCols = isWeb ? (screenWidth >= 900 ? 3 : screenWidth >= 580 ? 2 : 1) : 1
+  const contentWidth = Math.min(screenWidth, 1280) - 32
+  const cardWidth = isWeb ? (contentWidth - 16 * (numCols - 1)) / numCols : undefined
+
   return (
     <View style={styles.container}>
 
@@ -266,16 +273,14 @@ export default function AdminPropiedades() {
             {busqueda.trim() || filtrosActivos > 0 ? 'Sin resultados para esa búsqueda.' : 'No hay propiedades aún.'}
           </Text>
         </View>
-      ) : (
-        <FlatList
-          data={propiedadesFiltradas}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 24 }}
-          renderItem={({ item }) => {
-            const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-            const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
-            return (
-              <View style={[styles.card, item.destacada && styles.cardDestacada]}>
+      ) : isWeb ? (
+        <ScrollView contentContainerStyle={styles.webGridScroll}>
+          <View style={styles.webGrid}>
+            {propiedadesFiltradas.map((item) => {
+              const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+              const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
+              return (
+                <View key={item.id} style={[styles.card, item.destacada && styles.cardDestacada, cardWidth ? { width: cardWidth } : undefined]}>
                 {/* Imagen con badges superpuestos */}
                 <View style={styles.imagenWrapper}>
                   {primera?.url ? (
@@ -359,6 +364,89 @@ export default function AdminPropiedades() {
                   </View>
                 </View>
               </View>
+              )
+            })}
+          </View>
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={propiedadesFiltradas}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          renderItem={({ item }) => {
+            const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+            const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
+            return (
+              <View style={[styles.card, item.destacada && styles.cardDestacada]}>
+                <View style={styles.imagenWrapper}>
+                  {primera?.url ? (
+                    <Image source={{ uri: primera.url }} style={styles.cardImagen} />
+                  ) : (
+                    <View style={styles.cardImagenPlaceholder}>
+                      <Text style={styles.cardImagenPlaceholderText}>🏠</Text>
+                    </View>
+                  )}
+                  <View style={styles.imagenOverlay} />
+                  <View style={styles.badgesTop}>
+                    <Text style={styles.codigoBadge}>{item.codigo ?? '—'}</Text>
+                    {item.destacada && <Text style={styles.destacadaBadge}>★ Destacada</Text>}
+                    <View style={[styles.estadoBadge, item.estado === 'vendida' && styles.estadoVendida]}>
+                      <Text style={[styles.estadoText, item.estado === 'vendida' && styles.estadoTextVendida]}>
+                        {item.estado === 'vendida' ? 'Vendida' : 'Disponible'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.precioBadge}>
+                    <Text style={styles.precioText}>{formatPrecio(item.precio)}</Text>
+                  </View>
+                </View>
+                <View style={styles.cardBody}>
+                  {item.destacada && item.destacada_mensaje ? (
+                    <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
+                  ) : null}
+                  {item.tipo && (
+                    <Text style={styles.cardTipo}>
+                      {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
+                      {item.operacion ? ` · ${item.operacion}` : ''}
+                    </Text>
+                  )}
+                  {item.es_constructora && (
+                    <Text style={styles.constructoraBadge}>
+                      🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
+                    </Text>
+                  )}
+                  <Text style={styles.cardTitulo}>{item.titulo}</Text>
+                  <Text style={styles.cardDireccion} numberOfLines={1}>📍 {item.direccion}</Text>
+                  {tieneMeta && (
+                    <View style={styles.metaRow}>
+                      {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
+                      {item.banos != null && <Text style={styles.metaItem}>🚿 {item.banos}</Text>}
+                      {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m²</Text>}
+                      {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
+                    </View>
+                  )}
+                  <View style={styles.cardAcciones}>
+                    <TouchableOpacity
+                      style={styles.btnEditar}
+                      onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: item.id } })}
+                    >
+                      <Text style={styles.btnEditarText}>✏️ Editar</Text>
+                    </TouchableOpacity>
+                    {item.destacada ? (
+                      <TouchableOpacity style={styles.btnQuitarDestacada} onPress={() => quitarDestacada(item.id)}>
+                        <Text style={styles.btnQuitarDestacadaText}>✕ Destacado</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={styles.btnDestacar} onPress={() => abrirModalDestacar(item)}>
+                        <Text style={styles.btnDestacarText}>★ Destacar</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={styles.btnBorrar} onPress={() => handleBorrar(item.id, item.titulo)}>
+                      <Text style={styles.btnBorrarText}>🗑</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
             )
           }}
         />
@@ -409,6 +497,8 @@ export default function AdminPropiedades() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 16, backgroundColor: '#f0f5f5' },
+  webGridScroll: { paddingBottom: 32, paddingHorizontal: 16, paddingTop: 8, maxWidth: 1280, alignSelf: 'center' as const, width: '100%' },
+  webGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 16 },
 
   // Grid de navegación 2x2
   navGrid: {
