@@ -24,6 +24,7 @@ import * as FileSystem from 'expo-file-system'
 import { useQuery } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
+import { registrarAccion } from '../../lib/gamification'
 
 
 type Propiedad = {
@@ -258,6 +259,10 @@ export default function DetallePropiedad() {
     setPublicada(nuevoEstado)
     setFechaPublicacion(ahora)
     setVecesPublicada(nuevasVeces)
+
+    if (nuevoEstado) {
+      registrarAccion(user.id, 'publicar_propiedad').catch(() => {})
+    }
 
     // Actualizar progreso en tarea de tipo publicar_propiedades
     if (nuevoEstado) {

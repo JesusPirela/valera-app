@@ -30,7 +30,14 @@
       "Bash(git rebase *)",
       "Bash(git commit *)",
       "Bash(xargs grep -l \"CREATE TABLE.*profiles\")",
-      "Bash(npx eas-cli *)"
+      "Bash(Get-ChildItem -Path \"f:\\\\github\\\\valera-app\\\\app\\\\\\(prospectador\\)\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(Get-Content \"C:\\\\Users\\\\Alexi\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\f--github-valera-app\\\\93e7d311-e32f-4bfc-9d7f-a165cbac05ca\\\\tasks\\\\bcep1lmyn.output\")",
+      "PowerShell(netstat -ano)",
+      "PowerShell(Get-Process -Id 30836)",
+      "PowerShell(Get-Process -Id 30836 -ErrorAction SilentlyContinue)",
+      "Bash(supabase projects *)",
+      "Bash(where supabase *)"
     ]
   }
 }
