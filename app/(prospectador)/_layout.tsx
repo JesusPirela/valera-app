@@ -189,10 +189,7 @@ export default function ProspectadorLayout() {
       />
       <Tabs.Screen
         name="tareas"
-        options={{
-          title: 'Tareas',
-          tabBarIcon: tabIcon('checkmark-done-outline', 'checkmark-done'),
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="notificaciones"

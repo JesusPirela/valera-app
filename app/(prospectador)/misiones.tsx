@@ -381,7 +381,7 @@ const s = StyleSheet.create({
   misionDesc: { fontSize: 12, color: '#556a7a', lineHeight: 17 },
 
   misionBot:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  misionProg: { fontSize: 11, color: '#7a9ab5', minWidth: 40, textAlign: 'right' },
+  misionProg: { fontSize: 13, fontWeight: '700', color: '#c9a84c', minWidth: 44, textAlign: 'right' },
 
   doneBadge: {
     width: 28, height: 28, borderRadius: 14, backgroundColor: '#2ecc71',

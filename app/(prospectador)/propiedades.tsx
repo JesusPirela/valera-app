@@ -185,11 +185,24 @@ export default function ProspectadorPropiedades() {
       }
     })
 
-    const { error } = yaPublicada
-      ? await supabase.from('propiedad_publicada').delete().eq('user_id', userId).eq('propiedad_id', propiedadId)
-      : await supabase.from('propiedad_publicada').insert({ user_id: userId, propiedad_id: propiedadId })
+    let error: any = null
+    if (yaPublicada) {
+      const res = await supabase.from('propiedad_publicada').delete().eq('user_id', userId).eq('propiedad_id', propiedadId)
+      error = res.error
+    } else {
+      // upsert evita error de duplicado si por alguna razón ya existe el registro
+      const res = await supabase.from('propiedad_publicada')
+        .upsert({ user_id: userId, propiedad_id: propiedadId }, { onConflict: 'user_id,propiedad_id' })
+        .select('propiedad_id')
+      error = res.error
+      // si no retornó filas, el upsert no funcionó (RLS bloqueó)
+      if (!error && (!res.data || res.data.length === 0)) {
+        error = new Error('No se pudo marcar como publicada')
+      }
+    }
 
     if (error) {
+      // revertir optimistic update
       queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades'], old => {
         if (!old) return old
         return {
@@ -204,7 +217,6 @@ export default function ProspectadorPropiedades() {
     }
 
     setToggling(prev => { const s = new Set(prev); s.delete(propiedadId); return s })
-    queryClient.invalidateQueries({ queryKey: ['prospectador-propiedades'] })
   }
 
   function toggleZona(zona: string) {

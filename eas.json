@@ -18,6 +18,9 @@
       "android": {
         "buildType": "app-bundle"
       },
+      "ios": {
+        "image": "latest"
+      },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://ystxicgrryyzhrxinsbq.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl"
@@ -25,6 +28,11 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "valerarealestate@icloud.com",
+        "ascAppId": "6769195695"
+      }
+    }
   }
 }
