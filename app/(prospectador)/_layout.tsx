@@ -148,15 +148,7 @@ export default function ProspectadorLayout() {
             <Text style={{ color: '#c9a84c', fontSize: 22, fontWeight: '700' }}>‹</Text>
           </TouchableOpacity>
         ) : null,
-        headerRight: () => (
-          <TouchableOpacity
-            onPress={() => supabase.auth.signOut()}
-            style={{ marginRight: 16, flexDirection: 'row', alignItems: 'center', gap: 4 }}
-          >
-            <Ionicons name="log-out-outline" size={18} color="#c9a84c" />
-            <Text style={{ color: '#c9a84c', fontSize: 13, fontWeight: '600' }}>Salir</Text>
-          </TouchableOpacity>
-        ),
+        headerRight: () => null,
       }}
     >
       <Tabs.Screen

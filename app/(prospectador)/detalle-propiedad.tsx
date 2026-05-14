@@ -192,6 +192,7 @@ export default function DetallePropiedad() {
   const [nuevoTelefono, setNuevoTelefono] = useState('')
   const [guardandoCliente, setGuardandoCliente] = useState(false)
   const [solicitandoDiseno, setSolicitandoDiseno] = useState(false)
+  const [generandoPDF, setGenerandoPDF] = useState(false)
   const [descripcionCopiada, setDescripcionCopiada] = useState(false)
   const [publicada, setPublicada] = useState(false)
   const [fechaPublicacion, setFechaPublicacion] = useState<string | null>(null)
@@ -324,6 +325,68 @@ export default function DetallePropiedad() {
     }
     setDescripcionCopiada(true)
     setTimeout(() => setDescripcionCopiada(false), 2000)
+  }
+
+  async function generarFichaPDF() {
+    if (!propiedad) return
+    setGenerandoPDF(true)
+    try {
+      const precio = propiedad.precio != null ? `$${propiedad.precio.toLocaleString('es-MX')} MXN` : 'Precio a consultar'
+      const tipo = propiedad.tipo ? propiedad.tipo.charAt(0).toUpperCase() + propiedad.tipo.slice(1) : ''
+      const operacion = propiedad.operacion ? propiedad.operacion.charAt(0).toUpperCase() + propiedad.operacion.slice(1) : ''
+      const caracteristicas = [
+        propiedad.recamaras != null ? `🛏 ${propiedad.recamaras} Recámaras` : null,
+        propiedad.banos != null ? `🚿 ${propiedad.banos} Baños` : null,
+        propiedad.m2 != null ? `📐 ${propiedad.m2} m²` : null,
+        propiedad.estacionamientos != null ? `🚗 ${propiedad.estacionamientos} Estacionamientos` : null,
+      ].filter(Boolean).join('&nbsp;&nbsp;&nbsp;')
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  body { font-family: Helvetica, Arial, sans-serif; margin: 0; padding: 32px; color: #1a1a2e; }
+  .header { background: #1a6470; color: #fff; padding: 24px 32px; border-radius: 12px; margin-bottom: 24px; }
+  .codigo { font-size: 13px; color: #c9a84c; font-weight: bold; margin-bottom: 6px; }
+  .titulo { font-size: 24px; font-weight: 800; margin: 0 0 6px; }
+  .tipo-op { font-size: 14px; color: rgba(255,255,255,0.75); }
+  .precio { font-size: 28px; font-weight: 800; color: #c9a84c; margin: 16px 0 4px; }
+  .direccion { font-size: 14px; color: rgba(255,255,255,0.8); }
+  .seccion { font-size: 11px; font-weight: 800; color: #888; letter-spacing: 1px; text-transform: uppercase; margin: 24px 0 10px; }
+  .caracteristicas { background: #f5f9fa; border-radius: 10px; padding: 16px; font-size: 15px; margin-bottom: 8px; }
+  .descripcion { font-size: 14px; line-height: 1.7; color: #444; }
+  .asesor { background: #fff3cd; border-radius: 10px; padding: 14px 18px; margin-top: 24px; border-left: 4px solid #c9a84c; }
+  .asesor-nombre { font-weight: 700; font-size: 15px; color: #1a6470; }
+  .footer { margin-top: 32px; text-align: center; font-size: 11px; color: #aaa; border-top: 1px solid #eee; padding-top: 16px; }
+</style></head><body>
+<div class="header">
+  <div class="codigo">${propiedad.codigo ?? ''}</div>
+  <div class="titulo">${propiedad.titulo}</div>
+  <div class="tipo-op">${[tipo, operacion].filter(Boolean).join(' en ')}</div>
+  <div class="precio">${precio}</div>
+  <div class="direccion">📍 ${propiedad.direccion}</div>
+</div>
+${caracteristicas ? `<div class="seccion">Características</div><div class="caracteristicas">${caracteristicas}</div>` : ''}
+${propiedad.descripcion ? `<div class="seccion">Descripción</div><p class="descripcion">${propiedad.descripcion}</p>` : ''}
+${subidoPor ? `<div class="asesor"><div class="asesor-nombre">👤 ${subidoPor.nombre}</div>${subidoPor.telefono ? `<div style="font-size:13px;color:#555;margin-top:4px;">📞 ${subidoPor.telefono}</div>` : ''}</div>` : ''}
+<div class="footer">Valera Real Estate · valerarealestate.com</div>
+</body></html>`
+
+      if (Platform.OS === 'web') {
+        const blob = new Blob([html], { type: 'text/html' })
+        const url = URL.createObjectURL(blob)
+        const win = window.open(url, '_blank')
+        setTimeout(() => { win?.print(); URL.revokeObjectURL(url) }, 500)
+      } else {
+        const Print = await import('expo-print')
+        const Sharing = await import('expo-sharing')
+        const { uri } = await Print.printToFileAsync({ html })
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' })
+      }
+    } catch {
+      if (Platform.OS === 'web') window.alert('No se pudo generar el PDF.')
+      else Alert.alert('Error', 'No se pudo generar la ficha PDF.')
+    } finally {
+      setGenerandoPDF(false)
+    }
   }
 
   async function pedirDiseno() {
@@ -885,6 +948,18 @@ export default function DetallePropiedad() {
           </TouchableOpacity>
         )}
 
+        {/* Botón generar ficha PDF */}
+        <TouchableOpacity
+          style={[styles.btnPDF, generandoPDF && styles.btnDisabled]}
+          onPress={generarFichaPDF}
+          disabled={generandoPDF}
+        >
+          {generandoPDF
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <Text style={styles.btnPDFText}>📄 Generar ficha PDF</Text>
+          }
+        </TouchableOpacity>
+
         {/* Botón coordinar cita */}
         <TouchableOpacity
           style={[styles.btnCita, !propiedad && styles.btnDisabled]}
@@ -1348,6 +1423,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   btnValeraText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  btnPDF: {
+    backgroundColor: '#2c3e50',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  btnPDFText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   btnCita: {
     backgroundColor: '#1a6b3a',
     borderRadius: 12,

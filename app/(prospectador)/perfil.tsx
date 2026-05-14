@@ -327,6 +327,14 @@ export default function Perfil() {
             : <Text style={s.btnGuardarText}>💾 Guardar perfil</Text>
           }
         </TouchableOpacity>
+
+        {/* Cerrar sesión */}
+        <TouchableOpacity
+          style={s.btnSalir}
+          onPress={() => supabase.auth.signOut()}
+        >
+          <Text style={s.btnSalirText}>Cerrar sesión</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   )
@@ -370,6 +378,8 @@ const s = StyleSheet.create({
   colorPreviewText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   btnGuardar: { borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   btnGuardarText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  btnSalir: { marginTop: 12, marginBottom: 32, borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1.5, borderColor: '#e0e0e0' },
+  btnSalirText: { color: '#e74c3c', fontWeight: '700', fontSize: 15 },
 
   statsCard: {
     margin: 16, marginTop: -8,

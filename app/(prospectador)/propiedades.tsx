@@ -383,40 +383,35 @@ export default function ProspectadorPropiedades() {
       <OfflineBanner />
       <View style={styles.container}>
 
-        {/* Header de bienvenida */}
+        {/* Header unificado con búsqueda */}
         <View style={[styles.header, { backgroundColor: primaryColor }]}>
-          <View>
+          <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
             <Text style={styles.headerSaludo}>
               {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
             </Text>
             <Text style={styles.headerSubtitulo}>
               {propiedades.length > 0
-                ? `${propiedades.length} propiedad${propiedades.length !== 1 ? 'es' : ''} disponible${propiedades.length !== 1 ? 's' : ''}`
-                : 'Cargando propiedades...'}
+                ? `${propiedades.length} propiedades disponibles`
+                : 'Cargando...'}
             </Text>
-          </View>
-          <View style={styles.headerIcono}>
-            <Text style={styles.headerIconoText}>🏠</Text>
+            <View style={styles.searchWrapper}>
+              <Text style={styles.searchIcon}>🔍</Text>
+              <TextInput
+                style={[styles.searchInput, { color: '#333' }]}
+                placeholder="Buscar por título, código o dirección..."
+                placeholderTextColor="#aaa"
+                value={busqueda}
+                onChangeText={setBusqueda}
+                autoCapitalize="none"
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+              />
+            </View>
           </View>
         </View>
 
         {/* Contenido centrado en web */}
         <View style={isWeb ? styles.webBody : undefined}>
-
-        {/* Barra de búsqueda */}
-        <View style={styles.searchWrapper}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={[styles.searchInput, { color: primaryColor }]}
-            placeholder="Buscar por título, código o dirección..."
-            placeholderTextColor="#aaa"
-            value={busqueda}
-            onChangeText={setBusqueda}
-            autoCapitalize="none"
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-          />
-        </View>
 
         {/* Botones rápidos Venta / Renta */}
         <View style={styles.quickFiltersRow}>
@@ -636,6 +631,12 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
+  webHeaderInner: {
+    flex: 1,
+    maxWidth: 1280,
+    width: '100%',
+    alignSelf: 'center' as const,
+  },
   webGridScroll: {
     paddingBottom: 32,
     paddingHorizontal: 16,
@@ -677,18 +678,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderRadius: 10,
     paddingHorizontal: 12,
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 4,
+    marginTop: 10,
+    marginBottom: 4,
   },
   searchIcon: { fontSize: 15, marginRight: 8, color: '#aaa' },
   searchInput: {
@@ -708,13 +701,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     borderWidth: 1.5,
-    borderRadius: 10,
-    paddingVertical: 9,
+    borderRadius: 8,
+    paddingVertical: 6,
   },
   quickFilterText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   controlsRow: {
