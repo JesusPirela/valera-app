@@ -201,8 +201,11 @@ export default function Misiones() {
                 }
               </View>
               <View style={s.misionBot}>
-                <BarraProgreso porcentaje={pct} color={m.completada ? '#2ecc71' : '#c9a84c'} height={7} />
-                <Text style={s.misionProg}>{m.progreso}/{m.meta}</Text>
+                <View style={s.progHeader}>
+                  <Text style={s.progLabel}>Progreso</Text>
+                  <Text style={[s.misionProg, m.completada && { color: '#2ecc71' }]}>{m.progreso}/{m.meta}</Text>
+                </View>
+                <BarraProgreso porcentaje={pct} color={m.completada ? '#2ecc71' : '#c9a84c'} height={8} />
               </View>
             </View>
           )
@@ -267,12 +270,15 @@ export default function Misiones() {
                     </View>
                   </View>
                   <View style={s.misionBot}>
+                    <View style={s.progHeader}>
+                      <Text style={s.progLabel}>Progreso</Text>
+                      <Text style={s.misionProg}>{proxima.progreso}/{proxima.meta}</Text>
+                    </View>
                     <BarraProgreso
                       porcentaje={proxima.meta > 0 ? Math.min(100, Math.round((proxima.progreso / proxima.meta) * 100)) : 0}
                       color="#c9a84c"
                       height={8}
                     />
-                    <Text style={s.misionProg}>{proxima.progreso}/{proxima.meta}</Text>
                   </View>
                 </View>
               )}
@@ -380,8 +386,10 @@ const s = StyleSheet.create({
   misionTit:  { fontSize: 14, fontWeight: '700', color: '#e8f0f4', marginBottom: 3 },
   misionDesc: { fontSize: 12, color: '#556a7a', lineHeight: 17 },
 
-  misionBot:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  misionProg: { fontSize: 13, fontWeight: '700', color: '#c9a84c', minWidth: 44, textAlign: 'right' },
+  misionBot:  { flexDirection: 'column', gap: 6 },
+  progHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  progLabel:  { fontSize: 11, color: '#556a7a' },
+  misionProg: { fontSize: 16, fontWeight: '800', color: '#c9a84c' },
 
   doneBadge: {
     width: 28, height: 28, borderRadius: 14, backgroundColor: '#2ecc71',
