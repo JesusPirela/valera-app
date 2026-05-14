@@ -180,7 +180,7 @@ export default function AdminPropiedades() {
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
   const numCols = isWeb ? (screenWidth >= 1200 ? 4 : screenWidth >= 800 ? 3 : 2) : 1
-  const contentWidth = Math.min(screenWidth, 1280) - 32
+  const contentWidth = screenWidth - 64
   const cardWidth = isWeb ? (contentWidth - 16 * (numCols - 1)) / numCols : undefined
 
   return (
@@ -496,7 +496,7 @@ export default function AdminPropiedades() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 16, backgroundColor: '#f0f5f5' },
-  webGridScroll: { paddingBottom: 32, paddingHorizontal: 16, paddingTop: 8, maxWidth: 1280, alignSelf: 'center' as const, width: '100%' },
+  webGridScroll: { paddingBottom: 32, paddingHorizontal: 16, paddingTop: 8, width: '100%' },
   webGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 16 },
 
   // Grid de navegación 2x2

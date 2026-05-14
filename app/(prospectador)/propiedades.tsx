@@ -375,7 +375,7 @@ export default function ProspectadorPropiedades() {
   const isWeb = Platform.OS === 'web'
   const numCols = isWeb ? (screenWidth >= 1200 ? 4 : screenWidth >= 800 ? 3 : 2) : 1
   const CARD_GAP = 16
-  const contentWidth = Math.min(screenWidth, 1280) - 32
+  const contentWidth = screenWidth - 64
   const cardWidth = isWeb ? (contentWidth - CARD_GAP * (numCols - 1)) / numCols : undefined
 
   return (
@@ -627,13 +627,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   webBody: {
     flex: 1,
-    maxWidth: 1280,
+    maxWidth: 1920,
     width: '100%',
     alignSelf: 'center',
   },
   webHeaderInner: {
     flex: 1,
-    maxWidth: 1280,
+    maxWidth: 1920,
     width: '100%',
     alignSelf: 'center' as const,
   },

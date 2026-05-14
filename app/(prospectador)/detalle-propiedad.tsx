@@ -331,55 +331,80 @@ export default function DetallePropiedad() {
     if (!propiedad) return
     setGenerandoPDF(true)
     try {
-      const precio = propiedad.precio != null ? `$${propiedad.precio.toLocaleString('es-MX')} MXN` : 'Precio a consultar'
-      const tipo = propiedad.tipo ? propiedad.tipo.charAt(0).toUpperCase() + propiedad.tipo.slice(1) : ''
-      const operacion = propiedad.operacion ? propiedad.operacion.charAt(0).toUpperCase() + propiedad.operacion.slice(1) : ''
-      const caracteristicas = [
-        propiedad.recamaras != null ? `🛏 ${propiedad.recamaras} Recámaras` : null,
-        propiedad.banos != null ? `🚿 ${propiedad.banos} Baños` : null,
-        propiedad.m2 != null ? `📐 ${propiedad.m2} m²` : null,
-        propiedad.estacionamientos != null ? `🚗 ${propiedad.estacionamientos} Estacionamientos` : null,
-      ].filter(Boolean).join('&nbsp;&nbsp;&nbsp;')
+      const esc = (s: string | null | undefined) =>
+        (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-  body { font-family: Helvetica, Arial, sans-serif; margin: 0; padding: 32px; color: #1a1a2e; }
-  .header { background: #1a6470; color: #fff; padding: 24px 32px; border-radius: 12px; margin-bottom: 24px; }
-  .codigo { font-size: 13px; color: #c9a84c; font-weight: bold; margin-bottom: 6px; }
-  .titulo { font-size: 24px; font-weight: 800; margin: 0 0 6px; }
-  .tipo-op { font-size: 14px; color: rgba(255,255,255,0.75); }
-  .precio { font-size: 28px; font-weight: 800; color: #c9a84c; margin: 16px 0 4px; }
-  .direccion { font-size: 14px; color: rgba(255,255,255,0.8); }
-  .seccion { font-size: 11px; font-weight: 800; color: #888; letter-spacing: 1px; text-transform: uppercase; margin: 24px 0 10px; }
-  .caracteristicas { background: #f5f9fa; border-radius: 10px; padding: 16px; font-size: 15px; margin-bottom: 8px; }
-  .descripcion { font-size: 14px; line-height: 1.7; color: #444; }
-  .asesor { background: #fff3cd; border-radius: 10px; padding: 14px 18px; margin-top: 24px; border-left: 4px solid #c9a84c; }
-  .asesor-nombre { font-weight: 700; font-size: 15px; color: #1a6470; }
-  .footer { margin-top: 32px; text-align: center; font-size: 11px; color: #aaa; border-top: 1px solid #eee; padding-top: 16px; }
-</style></head><body>
-<div class="header">
-  <div class="codigo">${propiedad.codigo ?? ''}</div>
-  <div class="titulo">${propiedad.titulo}</div>
-  <div class="tipo-op">${[tipo, operacion].filter(Boolean).join(' en ')}</div>
-  <div class="precio">${precio}</div>
-  <div class="direccion">📍 ${propiedad.direccion}</div>
-</div>
-${caracteristicas ? `<div class="seccion">Características</div><div class="caracteristicas">${caracteristicas}</div>` : ''}
-${propiedad.descripcion ? `<div class="seccion">Descripción</div><p class="descripcion">${propiedad.descripcion}</p>` : ''}
-${subidoPor ? `<div class="asesor"><div class="asesor-nombre">👤 ${subidoPor.nombre}</div>${subidoPor.telefono ? `<div style="font-size:13px;color:#555;margin-top:4px;">📞 ${subidoPor.telefono}</div>` : ''}</div>` : ''}
-<div class="footer">Valera Real Estate · valerarealestate.com</div>
-</body></html>`
+      const precio = propiedad.precio != null
+        ? '$' + propiedad.precio.toLocaleString('es-MX') + ' MXN'
+        : 'Precio a consultar'
+      const tipo = propiedad.tipo
+        ? propiedad.tipo.charAt(0).toUpperCase() + propiedad.tipo.slice(1)
+        : ''
+      const operacion = propiedad.operacion
+        ? propiedad.operacion.charAt(0).toUpperCase() + propiedad.operacion.slice(1)
+        : ''
+
+      const imagenes = [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
+      const imagenesHTML = imagenes.slice(0, 12).map(img =>
+        `<img src="${img.url}" style="width:48%;height:160px;object-fit:cover;border-radius:8px;margin:4px;" />`
+      ).join('')
+
+      const cars: string[] = []
+      if (propiedad.recamaras != null) cars.push(`<div class="car"><span class="car-val">${propiedad.recamaras}</span><span class="car-lbl">Recamaras</span></div>`)
+      if (propiedad.banos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.banos}</span><span class="car-lbl">Banos</span></div>`)
+      if (propiedad.m2 != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2}</span><span class="car-lbl">m2</span></div>`)
+      if (propiedad.estacionamientos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.estacionamientos}</span><span class="car-lbl">Estacionamientos</span></div>`)
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; }
+        .header { background: #1a6470; padding: 24px 28px 20px; }
+        .codigo { font-size: 12px; color: #c9a84c; font-weight: 700; margin-bottom: 4px; }
+        .titulo { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+        .tipo-op { font-size: 13px; color: rgba(255,255,255,0.7); margin-bottom: 12px; }
+        .precio { font-size: 26px; font-weight: 800; color: #c9a84c; margin-bottom: 6px; }
+        .direccion { font-size: 13px; color: rgba(255,255,255,0.8); }
+        .body { padding: 20px 28px; }
+        .fotos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+        .fotos img { width: 48%; height: 160px; object-fit: cover; border-radius: 8px; }
+        .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1px; text-transform: uppercase; margin: 20px 0 10px; }
+        .cars { display: flex; gap: 12px; flex-wrap: wrap; }
+        .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; }
+        .car-val { display: block; font-size: 20px; font-weight: 800; color: #1a6470; }
+        .car-lbl { display: block; font-size: 11px; color: #888; margin-top: 2px; }
+        .desc { font-size: 13px; line-height: 1.7; color: #444; white-space: pre-wrap; }
+        .asesor { background: #fff8e1; border-left: 4px solid #c9a84c; border-radius: 8px; padding: 12px 16px; margin-top: 20px; }
+        .asesor-nombre { font-weight: 700; font-size: 14px; color: #1a6470; }
+        .asesor-tel { font-size: 12px; color: #555; margin-top: 3px; }
+        .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; }
+      </style></head><body>
+      <div class="header">
+        <div class="codigo">${esc(propiedad.codigo)}</div>
+        <div class="titulo">${esc(propiedad.titulo)}</div>
+        <div class="tipo-op">${[tipo, operacion].filter(Boolean).join(' en ')}</div>
+        <div class="precio">${precio}</div>
+        <div class="direccion">${esc(propiedad.direccion)}</div>
+      </div>
+      <div class="body">
+        ${imagenes.length > 0 ? `<div class="seccion">Fotos</div><div class="fotos">${imagenesHTML}</div>` : ''}
+        ${cars.length > 0 ? `<div class="seccion">Caracteristicas</div><div class="cars">${cars.join('')}</div>` : ''}
+        ${propiedad.descripcion ? `<div class="seccion">Descripcion</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
+        ${subidoPor ? `<div class="asesor"><div class="asesor-nombre">${esc(subidoPor.nombre)}</div>${subidoPor.telefono ? `<div class="asesor-tel">${esc(subidoPor.telefono)}</div>` : ''}</div>` : ''}
+        <div class="footer">Valera Real Estate · valerarealestate.com</div>
+      </div>
+      </body></html>`
 
       if (Platform.OS === 'web') {
         const blob = new Blob([html], { type: 'text/html' })
         const url = URL.createObjectURL(blob)
         const win = window.open(url, '_blank')
-        setTimeout(() => { win?.print(); URL.revokeObjectURL(url) }, 500)
+        setTimeout(() => { win?.print(); URL.revokeObjectURL(url) }, 800)
       } else {
         const Print = await import('expo-print')
-        const Sharing = await import('expo-sharing')
-        const { uri } = await Print.printToFileAsync({ html })
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' })
+        const ShareLib = await import('expo-sharing')
+        const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 })
+        const nombreArchivo = `${propiedad.codigo ?? 'ficha'}.pdf`
+        await ShareLib.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: nombreArchivo })
       }
     } catch {
       if (Platform.OS === 'web') window.alert('No se pudo generar el PDF.')
