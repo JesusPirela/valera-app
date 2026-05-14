@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "preview": {
@@ -19,7 +20,8 @@
         "buildType": "app-bundle"
       },
       "ios": {
-        "image": "latest"
+        "image": "latest",
+        "autoIncrement": true
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://ystxicgrryyzhrxinsbq.supabase.co",
