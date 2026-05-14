@@ -373,7 +373,7 @@ export default function ProspectadorPropiedades() {
   const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
-  const numCols = isWeb ? (screenWidth >= 900 ? 3 : screenWidth >= 580 ? 2 : 1) : 1
+  const numCols = isWeb ? (screenWidth >= 580 ? 3 : 2) : 1
   const CARD_GAP = 16
   const contentWidth = Math.min(screenWidth, 1280) - 32
   const cardWidth = isWeb ? (contentWidth - CARD_GAP * (numCols - 1)) / numCols : undefined
