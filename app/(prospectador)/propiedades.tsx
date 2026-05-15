@@ -15,11 +15,14 @@ import {
   useWindowDimensions,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
+
+const LOGO = require('../../assets/logo.png')
 import { useTheme } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
 
@@ -372,6 +375,7 @@ export default function ProspectadorPropiedades() {
 
   const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
   const { width: screenWidth } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
   const isWeb = Platform.OS === 'web'
   const numCols = isWeb ? 4 : 1
   const CARD_GAP = 16
@@ -384,8 +388,11 @@ export default function ProspectadorPropiedades() {
       <View style={styles.container}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor }]}>
+        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : insets.top + 10 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
+            {!isWeb && (
+              <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
+            )}
             <Text style={styles.headerSaludo}>
               {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
             </Text>
@@ -674,6 +681,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerIconoText: { fontSize: 18 },
+  headerLogo: { width: 130, height: 52, marginBottom: 10 },
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',

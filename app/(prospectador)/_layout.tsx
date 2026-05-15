@@ -156,6 +156,7 @@ export default function ProspectadorLayout() {
         options={{
           title: 'Propiedades',
           tabBarIcon: tabIcon('home-outline', 'home'),
+          headerShown: false,
         }}
       />
       <Tabs.Screen
