@@ -179,7 +179,7 @@ export default function AdminPropiedades() {
 
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
-  const numCols = isWeb ? (screenWidth >= 900 ? 4 : screenWidth >= 600 ? 2 : 1) : 1
+  const numCols = isWeb ? 4 : 1
   const contentWidth = screenWidth - 64
   const cardWidth = isWeb ? (contentWidth - 16 * (numCols - 1)) / numCols : undefined
 

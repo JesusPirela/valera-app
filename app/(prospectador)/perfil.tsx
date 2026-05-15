@@ -73,26 +73,30 @@ export default function Perfil() {
     setLoading(false)
   }
 
-  async function subirFotoBlob(blob: Blob, mimeType: string, ext: string): Promise<string | null> {
+  async function subirArchivo(payload: ArrayBuffer | File, mimeType: string, ext: string): Promise<string | null> {
     const path = `${userId}/avatar.${ext}`
     const { data, error } = await supabase.storage
       .from('avatares')
-      .upload(path, blob, { upsert: true, contentType: mimeType })
+      .upload(path, payload, { upsert: true, contentType: mimeType })
     if (error) { mostrarAlerta('Error al subir foto: ' + error.message); return null }
     const { data: { publicUrl } } = supabase.storage.from('avatares').getPublicUrl(data.path)
     return publicUrl
   }
 
   async function subirFotoNativa(uri: string, mimeType: string): Promise<string | null> {
-    const response = await fetch(uri)
-    const blob = await response.blob()
-    const ext = mimeType.split('/')[1] ?? 'jpg'
-    return subirFotoBlob(blob, mimeType, ext)
+    try {
+      const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'jpg'
+      const arraybuffer = await fetch(uri).then(r => r.arrayBuffer())
+      return subirArchivo(arraybuffer, mimeType, ext)
+    } catch (e: any) {
+      mostrarAlerta('Error al procesar la imagen: ' + e.message)
+      return null
+    }
   }
 
   async function subirFotoWeb(file: File): Promise<string | null> {
     const ext = file.name.split('.').pop() ?? 'jpg'
-    return subirFotoBlob(file, file.type, ext)
+    return subirArchivo(file, file.type, ext)
   }
 
   async function guardar(nuevoAvatarUrl?: string | null) {
