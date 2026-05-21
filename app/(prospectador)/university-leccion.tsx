@@ -37,8 +37,15 @@ type Entrega = {
 
 function getEmbedUrl(url: string | null): string | null {
   if (!url) return null
-  const m = url.match(/(?:youtu\.be\/|v=|embed\/)([\w-]{11})/)
-  return m ? `https://www.youtube.com/embed/${m[1]}?rel=0&modestbranding=1` : null
+  const yt = url.match(/(?:youtu\.be\/|v=|embed\/)([\w-]{11})/)
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}?rel=0&modestbranding=1`
+  const gd = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/)
+  if (gd) return `https://drive.google.com/file/d/${gd[1]}/preview`
+  return null
+}
+
+function isGoogleDrive(url: string | null): boolean {
+  return !!url?.includes('drive.google.com')
 }
 
 function VideoPlayer({ url }: { url: string | null }) {
@@ -57,7 +64,7 @@ function VideoPlayer({ url }: { url: string | null }) {
   return (
     <TouchableOpacity style={vpS.native} onPress={() => Linking.openURL(url!)}>
       <Text style={vpS.playIcon}>▶</Text>
-      <Text style={vpS.playText}>Ver video en YouTube</Text>
+      <Text style={vpS.playText}>{isGoogleDrive(url) ? 'Ver video en Google Drive' : 'Ver video en YouTube'}</Text>
     </TouchableOpacity>
   )
 }

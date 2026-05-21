@@ -415,7 +415,7 @@ export default function UniversityCursoForm() {
 
             <TextInput style={estilos.lecInput} value={lec.titulo} onChangeText={(v) => actualizarLeccion(lec._key, 'titulo', v)} placeholder="Título de la lección *" />
             <TextInput style={estilos.lecInput} value={lec.descripcion} onChangeText={(v) => actualizarLeccion(lec._key, 'descripcion', v)} placeholder="Descripción corta" />
-            <TextInput style={estilos.lecInput} value={lec.youtube_url} onChangeText={(v) => actualizarLeccion(lec._key, 'youtube_url', v)} placeholder="URL de YouTube (https://youtu.be/...)" autoCapitalize="none" />
+            <TextInput style={estilos.lecInput} value={lec.youtube_url} onChangeText={(v) => actualizarLeccion(lec._key, 'youtube_url', v)} placeholder="URL de YouTube o Google Drive" autoCapitalize="none" />
             <TextInput style={[estilos.lecInput, { height: 70 }]} value={lec.contenido} onChangeText={(v) => actualizarLeccion(lec._key, 'contenido', v)} placeholder="Notas o texto explicativo (opcional)" multiline numberOfLines={3} textAlignVertical="top" />
 
             {/* Tarea de la lección */}
