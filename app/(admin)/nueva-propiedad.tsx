@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Text,
   TextInput,
@@ -96,30 +96,32 @@ export default function NuevaPropiedad() {
     setImagenes((prev) => prev.filter((u) => u !== uri))
   }
 
-  function handleDrop(e: any) {
-    e.preventDefault?.(); e.stopPropagation?.()
-    setIsDragging(false)
-    const dt = e.nativeEvent?.dataTransfer ?? e.dataTransfer
-    const files: File[] = Array.from(dt?.files ?? [])
-    const imageFiles = files.filter((f: File) => f.type.startsWith('image/'))
-    const urls = imageFiles.map((f: File) => URL.createObjectURL(f))
-    if (urls.length > 0) setImagenes(prev => [...prev, ...urls])
-  }
-
-  function handleDragOver(e: any) {
-    e.preventDefault?.(); e.stopPropagation?.()
-    setIsDragging(true)
-  }
-
-  function handleDragLeave(e: any) {
-    e.preventDefault?.()
-    setIsDragging(false)
-  }
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const el = document.getElementById('dropzone-nueva')
+    if (!el) return
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault()
+      setIsDragging(false)
+      const files = Array.from(e.dataTransfer?.files ?? []) as File[]
+      const urls = files.filter(f => f.type.startsWith('image/')).map(f => URL.createObjectURL(f))
+      if (urls.length > 0) setImagenes(prev => [...prev, ...urls])
+    }
+    const onDragOver = (e: DragEvent) => { e.preventDefault(); setIsDragging(true) }
+    const onDragLeave = () => setIsDragging(false)
+    el.addEventListener('drop', onDrop)
+    el.addEventListener('dragover', onDragOver)
+    el.addEventListener('dragleave', onDragLeave)
+    return () => {
+      el.removeEventListener('drop', onDrop)
+      el.removeEventListener('dragover', onDragOver)
+      el.removeEventListener('dragleave', onDragLeave)
+    }
+  }, [])
 
   function handleFileInput(e: any) {
-    const files: File[] = Array.from(e.target?.files ?? e.nativeEvent?.target?.files ?? [])
-    const imageFiles = files.filter((f: File) => f.type.startsWith('image/'))
-    const urls = imageFiles.map((f: File) => URL.createObjectURL(f))
+    const files: File[] = Array.from(e.target?.files ?? [])
+    const urls = files.filter((f: File) => f.type.startsWith('image/')).map((f: File) => URL.createObjectURL(f))
     if (urls.length > 0) setImagenes(prev => [...prev, ...urls])
   }
 
@@ -265,13 +267,7 @@ export default function NuevaPropiedad() {
           />
         )}
         {Platform.OS === 'web' ? (
-          <View
-            // @ts-ignore
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            style={[styles.imagenPicker, isDragging && styles.imagenPickerDragging]}
-          >
+          <View nativeID="dropzone-nueva" style={[styles.imagenPicker, isDragging && styles.imagenPickerDragging]}>
             {/* @ts-ignore */}
             <input
               type="file"
