@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Linking, TextInput, Alert,
 } from 'react-native'
+import { WebView } from 'react-native-webview'
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
@@ -37,9 +38,13 @@ type Entrega = {
 
 function getEmbedUrl(url: string | null): string | null {
   if (!url) return null
-  const m = url.match(/(?:youtu\.be\/|v=|embed\/)([\w-]{11})/)
-  return m ? `https://www.youtube.com/embed/${m[1]}?rel=0&modestbranding=1` : null
+  const yt = url.match(/(?:youtu\.be\/|v=|embed\/)([\w-]{11})/)
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}?rel=0&modestbranding=1`
+  const gd = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/)
+  if (gd) return `https://drive.google.com/file/d/${gd[1]}/preview`
+  return null
 }
+
 
 function VideoPlayer({ url }: { url: string | null }) {
   const embed = getEmbedUrl(url)
@@ -55,10 +60,15 @@ function VideoPlayer({ url }: { url: string | null }) {
     )
   }
   return (
-    <TouchableOpacity style={vpS.native} onPress={() => Linking.openURL(url!)}>
-      <Text style={vpS.playIcon}>▶</Text>
-      <Text style={vpS.playText}>Ver video en YouTube</Text>
-    </TouchableOpacity>
+    <View style={vpS.container}>
+      <WebView
+        source={{ uri: embed }}
+        style={{ flex: 1 }}
+        allowsFullscreenVideo
+        mediaPlaybackRequiresUserAction={false}
+        javaScriptEnabled
+      />
+    </View>
   )
 }
 const vpS = StyleSheet.create({
@@ -66,6 +76,7 @@ const vpS = StyleSheet.create({
   native: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#1a1a2e', alignItems: 'center', justifyContent: 'center', gap: 8 },
   playIcon: { fontSize: 40, color: '#c9a84c' },
   playText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+
 })
 
 const ESTADO_INFO: Record<string, { label: string; color: string; bg: string }> = {
