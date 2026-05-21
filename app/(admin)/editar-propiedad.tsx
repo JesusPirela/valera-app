@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#ddd',
     borderStyle: 'dashed',
-    paddingVertical: 14,
+    paddingVertical: 40,
     alignItems: 'center',
     marginBottom: 4,
   },

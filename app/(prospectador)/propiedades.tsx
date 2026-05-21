@@ -383,7 +383,7 @@ export default function ProspectadorPropiedades() {
       <View style={styles.container}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : statusBarHeight + 4, paddingBottom: 8 }]}>
+        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : statusBarHeight + 2, paddingBottom: 6 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
             {!isWeb ? (
               <View style={styles.headerTopRow}>
@@ -669,13 +669,13 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   headerSaludo: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     color: '#fff',
     marginBottom: 0,
   },
   headerSubtitulo: {
-    fontSize: 11,
+    fontSize: 10,
     color: 'rgba(255,255,255,0.75)',
   },
   headerIcono: {
@@ -687,15 +687,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerIconoText: { fontSize: 18 },
-  headerLogo: { width: 90, height: 32 },
-  headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  headerLogo: { width: 75, height: 26 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    marginTop: 8,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginTop: 6,
     marginBottom: 0,
   },
   searchIcon: { fontSize: 15, marginRight: 8, color: '#aaa' },
