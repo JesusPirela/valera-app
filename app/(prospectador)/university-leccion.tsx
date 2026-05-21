@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Linking, TextInput, Alert,
 } from 'react-native'
+import { WebView } from 'react-native-webview'
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
@@ -44,37 +45,30 @@ function getEmbedUrl(url: string | null): string | null {
   return null
 }
 
-function isGoogleDrive(url: string | null): boolean {
-  return !!url?.includes('drive.google.com')
-}
 
 function VideoPlayer({ url }: { url: string | null }) {
   const embed = getEmbedUrl(url)
-  const isDrive = isGoogleDrive(url)
-  const label = isDrive ? 'Ver video en Google Drive' : 'Ver video en YouTube'
-  if (!embed && !url) return null
+  if (!embed) return null
   if (Platform.OS === 'web') {
     return (
-      <View>
-        {embed ? (
-          <View style={vpS.container}>
-            {/* @ts-ignore */}
-            <iframe src={embed} style={{ width: '100%', height: '100%', border: 'none' }}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen title="Valera University" />
-          </View>
-        ) : null}
-        <TouchableOpacity style={vpS.fallbackBtn} onPress={() => { if (url) { if (Platform.OS === 'web') { (window as any).open(url, '_blank') } else { Linking.openURL(url) } } }}>
-          <Text style={vpS.fallbackText}>🔗 {label}</Text>
-        </TouchableOpacity>
+      <View style={vpS.container}>
+        {/* @ts-ignore */}
+        <iframe src={embed} style={{ width: '100%', height: '100%', border: 'none' }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen title="Valera University" />
       </View>
     )
   }
   return (
-    <TouchableOpacity style={vpS.native} onPress={() => Linking.openURL(url!)}>
-      <Text style={vpS.playIcon}>▶</Text>
-      <Text style={vpS.playText}>{label}</Text>
-    </TouchableOpacity>
+    <View style={vpS.container}>
+      <WebView
+        source={{ uri: embed }}
+        style={{ flex: 1 }}
+        allowsFullscreenVideo
+        mediaPlaybackRequiresUserAction={false}
+        javaScriptEnabled
+      />
+    </View>
   )
 }
 const vpS = StyleSheet.create({
@@ -82,8 +76,7 @@ const vpS = StyleSheet.create({
   native: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#1a1a2e', alignItems: 'center', justifyContent: 'center', gap: 8 },
   playIcon: { fontSize: 40, color: '#c9a84c' },
   playText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  fallbackBtn: { marginTop: 8, paddingVertical: 10, alignItems: 'center' },
-  fallbackText: { color: '#1a6470', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
+
 })
 
 const ESTADO_INFO: Record<string, { label: string; color: string; bg: string }> = {
