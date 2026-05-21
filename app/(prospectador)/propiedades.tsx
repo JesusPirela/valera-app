@@ -193,15 +193,9 @@ export default function ProspectadorPropiedades() {
       const res = await supabase.from('propiedad_publicada').delete().eq('user_id', userId).eq('propiedad_id', propiedadId)
       error = res.error
     } else {
-      // upsert evita error de duplicado si por alguna razón ya existe el registro
       const res = await supabase.from('propiedad_publicada')
-        .upsert({ user_id: userId, propiedad_id: propiedadId }, { onConflict: 'user_id,propiedad_id' })
-        .select('propiedad_id')
+        .upsert({ user_id: userId, propiedad_id: propiedadId }, { onConflict: 'user_id,propiedad_id', ignoreDuplicates: true })
       error = res.error
-      // si no retornó filas, el upsert no funcionó (RLS bloqueó)
-      if (!error && (!res.data || res.data.length === 0)) {
-        error = new Error('No se pudo marcar como publicada')
-      }
     }
 
     if (error) {
@@ -388,19 +382,30 @@ export default function ProspectadorPropiedades() {
       <View style={styles.container}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : statusBarHeight + 10 }]}>
+        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : statusBarHeight + 6, paddingBottom: 10 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
-            {!isWeb && (
-              <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
+            {!isWeb ? (
+              <View style={styles.headerTopRow}>
+                <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.headerSaludo}>
+                    {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
+                  </Text>
+                  <Text style={styles.headerSubtitulo}>
+                    {propiedades.length > 0 ? `${propiedades.length} propiedades disponibles` : 'Cargando...'}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.headerSaludo}>
+                  {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
+                </Text>
+                <Text style={styles.headerSubtitulo}>
+                  {propiedades.length > 0 ? `${propiedades.length} propiedades disponibles` : 'Cargando...'}
+                </Text>
+              </>
             )}
-            <Text style={styles.headerSaludo}>
-              {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
-            </Text>
-            <Text style={styles.headerSubtitulo}>
-              {propiedades.length > 0
-                ? `${propiedades.length} propiedades disponibles`
-                : 'Cargando...'}
-            </Text>
             <View style={styles.searchWrapper}>
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
@@ -576,7 +581,7 @@ export default function ProspectadorPropiedades() {
           <FlatList
             data={propiedadesFiltradas}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingBottom: 24, paddingHorizontal: 16 }}
+            contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 16 }}
             renderItem={({ item }) => renderPropiedad(item)}
           />
         )}
@@ -681,15 +686,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerIconoText: { fontSize: 18 },
-  headerLogo: { width: 130, height: 52, marginBottom: 10 },
+  headerLogo: { width: 110, height: 42 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 10,
     paddingHorizontal: 12,
-    marginTop: 10,
-    marginBottom: 4,
+    marginTop: 8,
+    marginBottom: 0,
   },
   searchIcon: { fontSize: 15, marginRight: 8, color: '#aaa' },
   searchInput: {

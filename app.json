@@ -24,12 +24,12 @@
     },
     "android": {
       "package": "com.valerarealestate.app",
+      "versionCode": 2,
       "softwareKeyboardLayoutMode": "pan",
+      "icon": "./assets/icon.png",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#1a6470"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [

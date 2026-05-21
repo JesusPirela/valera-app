@@ -68,6 +68,7 @@ export default function EditarPropiedad() {
   const [imagenesExistentes, setImagenesExistentes] = useState<ImagenExistente[]>([])
   const [imagenesEliminar, setImagenesEliminar] = useState<string[]>([])
   const [imagenesNuevas, setImagenesNuevas] = useState<string[]>([])
+  const [isDragging, setIsDragging] = useState(false)
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [mejorando, setMejorando] = useState(false)
@@ -117,6 +118,25 @@ export default function EditarPropiedad() {
 
   function quitarImagenNueva(uri: string) {
     setImagenesNuevas((prev) => prev.filter((u) => u !== uri))
+  }
+
+  function handleDrop(e: any) {
+    e.preventDefault()
+    setIsDragging(false)
+    const files: File[] = Array.from(e.dataTransfer?.files ?? [])
+    const imageFiles = files.filter((f: File) => f.type.startsWith('image/'))
+    const urls = imageFiles.map((f: File) => URL.createObjectURL(f))
+    if (urls.length > 0) setImagenesNuevas(prev => [...prev, ...urls])
+  }
+
+  function handleDragOver(e: any) { e.preventDefault(); setIsDragging(true) }
+  function handleDragLeave() { setIsDragging(false) }
+
+  function handleFileInput(e: any) {
+    const files: File[] = Array.from(e.target?.files ?? [])
+    const imageFiles = files.filter((f: File) => f.type.startsWith('image/'))
+    const urls = imageFiles.map((f: File) => URL.createObjectURL(f))
+    if (urls.length > 0) setImagenesNuevas(prev => [...prev, ...urls])
   }
 
   async function seleccionarImagenes() {
@@ -285,9 +305,31 @@ export default function EditarPropiedad() {
             )}
           />
         )}
-        <TouchableOpacity style={styles.imagenPicker} onPress={seleccionarImagenes}>
-          <Text style={styles.imagenPickerText}>+ Agregar fotos</Text>
-        </TouchableOpacity>
+        {Platform.OS === 'web' ? (
+          <View
+            // @ts-ignore
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            style={[styles.imagenPicker, isDragging && styles.imagenPickerDragging]}
+          >
+            {/* @ts-ignore */}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleFileInput}
+              style={{ position: 'absolute', width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+            />
+            <Text style={styles.imagenPickerText}>
+              {isDragging ? '📂 Suelta las fotos aquí' : '📁 Arrastra fotos aquí o haz clic para seleccionar'}
+            </Text>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.imagenPicker} onPress={seleccionarImagenes}>
+            <Text style={styles.imagenPickerText}>+ Agregar fotos</Text>
+          </TouchableOpacity>
+        )}
 
         <Text style={styles.label}>Título *</Text>
         <TextInput style={styles.input} value={titulo} onChangeText={setTitulo} maxLength={100} />
@@ -475,6 +517,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   imagenPickerText: { color: '#888', fontSize: 15 },
+  imagenPickerDragging: { borderColor: '#1a6470', backgroundColor: '#e8f4f5', borderStyle: 'solid' },
   miniatura: { position: 'relative', marginRight: 10 },
   miniaturaImg: { width: 100, height: 100, borderRadius: 10 },
   miniaturaQuitar: {
