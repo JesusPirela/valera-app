@@ -121,19 +121,20 @@ export default function EditarPropiedad() {
   }
 
   function handleDrop(e: any) {
-    e.preventDefault()
+    e.preventDefault?.(); e.stopPropagation?.()
     setIsDragging(false)
-    const files: File[] = Array.from(e.dataTransfer?.files ?? [])
+    const dt = e.nativeEvent?.dataTransfer ?? e.dataTransfer
+    const files: File[] = Array.from(dt?.files ?? [])
     const imageFiles = files.filter((f: File) => f.type.startsWith('image/'))
     const urls = imageFiles.map((f: File) => URL.createObjectURL(f))
     if (urls.length > 0) setImagenesNuevas(prev => [...prev, ...urls])
   }
 
-  function handleDragOver(e: any) { e.preventDefault(); setIsDragging(true) }
-  function handleDragLeave() { setIsDragging(false) }
+  function handleDragOver(e: any) { e.preventDefault?.(); e.stopPropagation?.(); setIsDragging(true) }
+  function handleDragLeave(e: any) { e.preventDefault?.(); setIsDragging(false) }
 
   function handleFileInput(e: any) {
-    const files: File[] = Array.from(e.target?.files ?? [])
+    const files: File[] = Array.from(e.target?.files ?? e.nativeEvent?.target?.files ?? [])
     const imageFiles = files.filter((f: File) => f.type.startsWith('image/'))
     const urls = imageFiles.map((f: File) => URL.createObjectURL(f))
     if (urls.length > 0) setImagenesNuevas(prev => [...prev, ...urls])

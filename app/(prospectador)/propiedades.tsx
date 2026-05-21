@@ -379,10 +379,11 @@ export default function ProspectadorPropiedades() {
   return (
     <View style={{ flex: 1 }}>
       <OfflineBanner />
+      {!isWeb && <StatusBar backgroundColor={primaryColor} barStyle="light-content" />}
       <View style={styles.container}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : statusBarHeight + 6, paddingBottom: 10 }]}>
+        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : statusBarHeight + 4, paddingBottom: 8 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
             {!isWeb ? (
               <View style={styles.headerTopRow}>
@@ -668,13 +669,13 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   headerSaludo: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
     color: '#fff',
-    marginBottom: 1,
+    marginBottom: 0,
   },
   headerSubtitulo: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(255,255,255,0.75)',
   },
   headerIcono: {
@@ -686,8 +687,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerIconoText: { fontSize: 18 },
-  headerLogo: { width: 110, height: 42 },
-  headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  headerLogo: { width: 90, height: 32 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
