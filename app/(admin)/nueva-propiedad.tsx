@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Text,
   TextInput,
@@ -70,6 +70,8 @@ export default function NuevaPropiedad() {
   const [nombreConstructora, setNombreConstructora] = useState('')
   const [imagenes, setImagenes] = useState<string[]>([])
   const [isDragging, setIsDragging] = useState(false)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+  const dragIdxRef = useRef<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [mejorando, setMejorando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -248,23 +250,61 @@ export default function NuevaPropiedad() {
           <Text style={styles.backBtnText}>← Volver</Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>Imágenes</Text>
+        <Text style={styles.label}>Imágenes {Platform.OS === 'web' && imagenes.length > 1 ? <Text style={{ fontSize: 11, color: '#aaa', fontWeight: '400' }}> · arrastra para reordenar</Text> : null}</Text>
         {imagenes.length > 0 && (
-          <FlatList
-            data={imagenes}
-            horizontal
-            keyExtractor={(uri) => uri}
-            showsHorizontalScrollIndicator={false}
-            style={{ marginBottom: 10 }}
-            renderItem={({ item }) => (
-              <View style={styles.miniatura}>
-                <Image source={{ uri: item }} style={styles.miniaturaImg} />
-                <TouchableOpacity style={styles.miniaturaQuitar} onPress={() => quitarImagen(item)}>
-                  <Text style={styles.miniaturaQuitarText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          />
+          Platform.OS === 'web' ? (
+            <View style={styles.miniaturasGrid}>
+              {imagenes.map((uri, index) => (
+                <View
+                  key={uri}
+                  // @ts-ignore
+                  draggable
+                  onDragStart={() => { dragIdxRef.current = index; setDragOverIdx(index) }}
+                  onDragOver={(e: any) => { e.preventDefault?.(); setDragOverIdx(index) }}
+                  onDragEnd={() => { dragIdxRef.current = null; setDragOverIdx(null) }}
+                  onDrop={(e: any) => {
+                    e.preventDefault?.()
+                    const from = dragIdxRef.current
+                    if (from === null || from === index) return
+                    const arr = [...imagenes]
+                    const [moved] = arr.splice(from, 1)
+                    arr.splice(index, 0, moved)
+                    setImagenes(arr)
+                    dragIdxRef.current = null
+                    setDragOverIdx(null)
+                  }}
+                  style={[styles.miniatura, dragOverIdx === index && { opacity: 0.5, borderWidth: 2, borderColor: '#1a6470', borderRadius: 10 }]}
+                >
+                  <Image source={{ uri }} style={{ width: 100, height: 100, borderRadius: 10 }} />
+                  <TouchableOpacity style={styles.miniaturaQuitar} onPress={() => quitarImagen(uri)}>
+                    <Text style={styles.miniaturaQuitarText}>✕</Text>
+                  </TouchableOpacity>
+                  <View style={styles.miniaturaDragHandle}>
+                    <Text style={{ color: '#fff', fontSize: 12 }}>⠿</Text>
+                  </View>
+                  <View style={styles.miniaturaNro}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{index + 1}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <FlatList
+              data={imagenes}
+              horizontal
+              keyExtractor={(uri) => uri}
+              showsHorizontalScrollIndicator={false}
+              style={{ marginBottom: 10 }}
+              renderItem={({ item }) => (
+                <View style={styles.miniatura}>
+                  <Image source={{ uri: item }} style={styles.miniaturaImg} />
+                  <TouchableOpacity style={styles.miniaturaQuitar} onPress={() => quitarImagen(item)}>
+                    <Text style={styles.miniaturaQuitarText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            />
+          )
         )}
         {Platform.OS === 'web' ? (
           <View nativeID="dropzone-nueva" style={[styles.imagenPicker, isDragging && styles.imagenPickerDragging]}>
@@ -503,6 +543,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   miniaturaQuitarText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  miniaturasGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  miniaturaDragHandle: { position: 'absolute', bottom: 4, left: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 2 },
+  miniaturaNro: { position: 'absolute', top: 4, left: 4, backgroundColor: 'rgba(26,100,112,0.85)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
   dosColumnas: { flexDirection: 'row', gap: 12 },
   labelRow: {
     flexDirection: 'row',
