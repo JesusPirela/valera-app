@@ -102,13 +102,16 @@ export default function NuevaPropiedad() {
   // Mantener ref sincronizado para evitar closures estancadas
   useEffect(() => { imagenesRef.current = imagenes }, [imagenes])
 
-  // Marcar imágenes como draggable cada vez que cambia la lista
+  // Marcar imágenes como draggable via DOM usando nativeID
   useEffect(() => {
     if (Platform.OS !== 'web') return
     setTimeout(() => {
-      const container = document.getElementById('drag-grid-nueva')
-      container?.querySelectorAll('[data-idx]').forEach(el => {
-        (el as HTMLElement).draggable = true
+      imagenes.forEach((_, index) => {
+        const el = document.getElementById(`drag-img-nueva-${index}`)
+        if (el) {
+          el.draggable = true
+          el.setAttribute('data-idx', String(index))
+        }
       })
     }, 100)
   }, [imagenes])
@@ -322,8 +325,6 @@ export default function NuevaPropiedad() {
                 <View
                   key={uri}
                   nativeID={`drag-img-nueva-${index}`}
-                  // @ts-ignore
-                  data-idx={index}
                   style={[styles.miniatura, dragOverIdx === index && { opacity: 0.5, borderWidth: 2, borderColor: '#1a6470', borderRadius: 10 }]}
                 >
                   <Image source={{ uri }} style={{ width: 100, height: 100, borderRadius: 10 }} />
