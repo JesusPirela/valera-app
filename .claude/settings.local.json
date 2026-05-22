@@ -37,7 +37,8 @@
       "PowerShell(Get-Process -Id 30836)",
       "PowerShell(Get-Process -Id 30836 -ErrorAction SilentlyContinue)",
       "Bash(supabase projects *)",
-      "Bash(where supabase *)"
+      "Bash(where supabase *)",
+      "Bash(xargs grep -l \"notificado_24h\\\\|notificado_2h\")"
     ]
   }
 }

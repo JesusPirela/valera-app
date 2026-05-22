@@ -47,6 +47,9 @@ export default function LoginScreen() {
       .eq('id', data.user.id)
       .single()
 
+    // Registrar última conexión
+    await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', data.user.id)
+
     if (profile?.role === 'admin') {
       router.replace('/(admin)/propiedades')
     } else {

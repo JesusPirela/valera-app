@@ -186,17 +186,41 @@ function Card({ titulo, children }: { titulo?: string; children: React.ReactNode
   )
 }
 
+type Periodo = 'dia' | 'semana' | 'mes' | 'total'
+const PERIODOS: { value: Periodo; label: string }[] = [
+  { value: 'dia',    label: 'Hoy' },
+  { value: 'semana', label: 'Semana' },
+  { value: 'mes',    label: 'Mes' },
+  { value: 'total',  label: 'Total' },
+]
+
+function fechaDesde(periodo: Periodo): string | null {
+  const now = new Date()
+  if (periodo === 'dia') {
+    const d = new Date(now); d.setHours(0, 0, 0, 0); return d.toISOString()
+  }
+  if (periodo === 'semana') {
+    const d = new Date(now); d.setDate(d.getDate() - 7); return d.toISOString()
+  }
+  if (periodo === 'mes') {
+    const d = new Date(now); d.setDate(d.getDate() - 30); return d.toISOString()
+  }
+  return null
+}
+
 // ─── Pantalla principal ───────────────────────────────────
 export default function Estadisticas() {
   const [stats, setStats] = useState<Estadisticas | null>(null)
   const [propDist, setPropDist] = useState<{ tipo: string | null; operacion: string | null; estado: string | null }[]>([])
   const [clienteDist, setClienteDist] = useState<{ estado: string }[]>([])
   const [loading, setLoading] = useState(true)
+  const [periodo, setPeriodo] = useState<Periodo>('semana')
 
-  async function cargar() {
+  async function cargar(p: Periodo = periodo) {
     setLoading(true)
+    const desde = fechaDesde(p)
     const [rpcRes, propRes, crmRes] = await Promise.all([
-      supabase.rpc('get_estadisticas_admin'),
+      supabase.rpc('get_estadisticas_admin', desde ? { p_desde: desde } : {}),
       supabase.from('propiedades').select('tipo, operacion, estado'),
       supabase.from('clientes').select('estado'),
     ])
@@ -206,7 +230,7 @@ export default function Estadisticas() {
     setLoading(false)
   }
 
-  useFocusEffect(useCallback(() => { cargar() }, []))
+  useFocusEffect(useCallback(() => { cargar(periodo) }, [periodo]))
 
   if (loading) {
     return (
@@ -306,6 +330,21 @@ export default function Estadisticas() {
       </TouchableOpacity>
 
       <Text style={styles.pageTitle}>Estadísticas</Text>
+
+      {/* Selector de período */}
+      <View style={styles.periodoRow}>
+        {PERIODOS.map(p => (
+          <TouchableOpacity
+            key={p.value}
+            style={[styles.periodoBtn, periodo === p.value && styles.periodoBtnActivo]}
+            onPress={() => { setPeriodo(p.value); cargar(p.value) }}
+          >
+            <Text style={[styles.periodoBtnText, periodo === p.value && styles.periodoBtnTextActivo]}>
+              {p.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       {/* KPI Cards */}
       <View style={styles.kpiGrid}>
@@ -462,7 +501,12 @@ const styles = StyleSheet.create({
 
   backBtn: { alignSelf: 'flex-start', paddingVertical: 14, paddingRight: 12 },
   backBtnText: { color: C.teal, fontSize: 15, fontWeight: '600' },
-  pageTitle: { fontSize: 24, fontWeight: '800', color: '#1a2e35', marginBottom: 16 },
+  pageTitle: { fontSize: 24, fontWeight: '800', color: '#1a2e35', marginBottom: 12 },
+  periodoRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  periodoBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#ddd', alignItems: 'center', backgroundColor: '#fff' },
+  periodoBtnActivo: { backgroundColor: C.teal, borderColor: C.teal },
+  periodoBtnText: { fontSize: 13, fontWeight: '600', color: '#888' },
+  periodoBtnTextActivo: { color: '#fff' },
 
   // KPI
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },

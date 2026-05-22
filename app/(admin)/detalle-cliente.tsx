@@ -95,16 +95,18 @@ export default function AdminDetalleCliente() {
   async function cargar() {
     setLoading(true)
     const [{ data: c }, { data: i }, { data: r }] = await Promise.all([
-      supabase.from('clientes')
-        .select('*, profiles!clientes_responsable_id_fkey(nombre)')
-        .eq('id', id)
-        .single(),
+      supabase.from('clientes').select('*').eq('id', id).single(),
       supabase.from('interacciones').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
       supabase.from('recordatorios').select('*').eq('cliente_id', id).order('fecha_hora', { ascending: true }),
     ])
     if (c) {
-      const perfil = c.profiles as any
-      setCliente({ ...c, responsable_nombre: perfil?.nombre ?? null })
+      let responsableNombre: string | null = null
+      if (c.responsable_id) {
+        const { data: perfil } = await supabase
+          .from('profiles').select('nombre').eq('id', c.responsable_id).maybeSingle()
+        responsableNombre = perfil?.nombre ?? null
+      }
+      setCliente({ ...c, responsable_nombre: responsableNombre })
     }
     setInteracciones(i ?? [])
     setRecordatorios(r ?? [])

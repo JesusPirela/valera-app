@@ -22,6 +22,7 @@ type Prospectador = {
   role: string
   nombre: string | null
   created_at: string
+  last_seen: string | null
 }
 
 type Credenciales = {
@@ -213,6 +214,9 @@ export default function Prospectadores() {
                   {item.nombre ? <Text style={styles.cardNombre}>{item.nombre}</Text> : null}
                   <Text style={styles.cardEmail}>{item.email}</Text>
                   <Text style={styles.cardFecha}>Alta: {tiempoRelativo(item.created_at)}</Text>
+                  <Text style={[styles.cardFecha, { color: item.last_seen ? '#1a6470' : '#bbb' }]}>
+                    {item.last_seen ? `Última conexión: ${tiempoRelativo(item.last_seen)}` : 'Sin conexión registrada'}
+                  </Text>
                 </View>
                 <TouchableOpacity
                   style={[styles.rolBadge, ROL_BADGE[item.role] ?? ROL_BADGE.prospectador]}

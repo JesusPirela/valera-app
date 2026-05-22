@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
 import { trackLoginDiario } from '../../lib/gamification'
+import { programarRecordatorios } from '../../lib/notificaciones-locales'
 
 const LOGO = require('../../assets/logo.png')
 
@@ -78,6 +79,9 @@ export default function ProspectadorLayout() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) trackLoginDiario(user.id).catch(() => {})
     })
+
+    // Programar alarmas de recordatorios
+    programarRecordatorios().catch(() => {})
 
     cargarNoLeidas()
     verificarRecordatorios()
