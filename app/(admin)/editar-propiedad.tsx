@@ -122,8 +122,8 @@ export default function EditarPropiedad() {
 
   useEffect(() => {
     if (Platform.OS !== 'web') return
-    const el = document.getElementById('dropzone-editar')
-    if (!el) return
+    let cleanup: (() => void) | undefined
+
     const onDrop = (e: DragEvent) => {
       e.preventDefault()
       setIsDragging(false)
@@ -133,14 +133,21 @@ export default function EditarPropiedad() {
     }
     const onDragOver = (e: DragEvent) => { e.preventDefault(); setIsDragging(true) }
     const onDragLeave = () => setIsDragging(false)
-    el.addEventListener('drop', onDrop)
-    el.addEventListener('dragover', onDragOver)
-    el.addEventListener('dragleave', onDragLeave)
-    return () => {
-      el.removeEventListener('drop', onDrop)
-      el.removeEventListener('dragover', onDragOver)
-      el.removeEventListener('dragleave', onDragLeave)
+
+    function tryAttach() {
+      const el = document.getElementById('dropzone-editar')
+      if (!el) { setTimeout(tryAttach, 100); return }
+      el.addEventListener('drop', onDrop)
+      el.addEventListener('dragover', onDragOver)
+      el.addEventListener('dragleave', onDragLeave)
+      cleanup = () => {
+        el.removeEventListener('drop', onDrop)
+        el.removeEventListener('dragover', onDragOver)
+        el.removeEventListener('dragleave', onDragLeave)
+      }
     }
+    tryAttach()
+    return () => cleanup?.()
   }, [])
 
   function handleFileInput(e: any) {

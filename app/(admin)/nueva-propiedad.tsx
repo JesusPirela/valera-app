@@ -118,8 +118,8 @@ export default function NuevaPropiedad() {
 
   useEffect(() => {
     if (Platform.OS !== 'web') return
-    const el = document.getElementById('dropzone-nueva')
-    if (!el) return
+    let cleanup: (() => void) | undefined
+
     const onDrop = (e: DragEvent) => {
       e.preventDefault()
       setIsDragging(false)
@@ -129,14 +129,21 @@ export default function NuevaPropiedad() {
     }
     const onDragOver = (e: DragEvent) => { e.preventDefault(); setIsDragging(true) }
     const onDragLeave = () => setIsDragging(false)
-    el.addEventListener('drop', onDrop)
-    el.addEventListener('dragover', onDragOver)
-    el.addEventListener('dragleave', onDragLeave)
-    return () => {
-      el.removeEventListener('drop', onDrop)
-      el.removeEventListener('dragover', onDragOver)
-      el.removeEventListener('dragleave', onDragLeave)
+
+    function tryAttach() {
+      const el = document.getElementById('dropzone-nueva')
+      if (!el) { setTimeout(tryAttach, 100); return }
+      el.addEventListener('drop', onDrop)
+      el.addEventListener('dragover', onDragOver)
+      el.addEventListener('dragleave', onDragLeave)
+      cleanup = () => {
+        el.removeEventListener('drop', onDrop)
+        el.removeEventListener('dragover', onDragOver)
+        el.removeEventListener('dragleave', onDragLeave)
+      }
     }
+    tryAttach()
+    return () => cleanup?.()
   }, [])
 
   // Reordenamiento por arrastre — DOM events en el grid de miniaturas
