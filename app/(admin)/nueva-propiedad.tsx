@@ -163,6 +163,16 @@ export default function NuevaPropiedad() {
     const onDragEnd = () => { dragIdxRef.current = null; setDragOverIdx(null) }
     const onDrop = (e: DragEvent) => {
       e.preventDefault()
+      // Si vienen archivos del OS, agregarlos
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        const files = Array.from(e.dataTransfer.files) as File[]
+        const urls = files.filter(f => f.type.startsWith('image/')).map(f => URL.createObjectURL(f))
+        if (urls.length > 0) setImagenes(prev => [...prev, ...urls])
+        dragIdxRef.current = null
+        setDragOverIdx(null)
+        return
+      }
+      // Si es reordenamiento interno
       const target = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null
       if (!target) return
       const toIdx = parseInt(target.dataset.idx ?? '-1')
