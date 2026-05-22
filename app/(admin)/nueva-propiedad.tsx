@@ -72,6 +72,7 @@ export default function NuevaPropiedad() {
   const [isDragging, setIsDragging] = useState(false)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const dragIdxRef = useRef<number | null>(null)
+  const imagenesRef = useRef<string[]>([])
   const [loading, setLoading] = useState(false)
   const [mejorando, setMejorando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -98,6 +99,20 @@ export default function NuevaPropiedad() {
     setImagenes((prev) => prev.filter((u) => u !== uri))
   }
 
+  // Mantener ref sincronizado para evitar closures estancadas
+  useEffect(() => { imagenesRef.current = imagenes }, [imagenes])
+
+  // Marcar imágenes como draggable cada vez que cambia la lista
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    setTimeout(() => {
+      const container = document.getElementById('drag-grid-nueva')
+      container?.querySelectorAll('[data-idx]').forEach(el => {
+        (el as HTMLElement).draggable = true
+      })
+    }, 100)
+  }, [imagenes])
+
   useEffect(() => {
     if (Platform.OS !== 'web') return
     const el = document.getElementById('dropzone-nueva')
@@ -118,6 +133,55 @@ export default function NuevaPropiedad() {
       el.removeEventListener('drop', onDrop)
       el.removeEventListener('dragover', onDragOver)
       el.removeEventListener('dragleave', onDragLeave)
+    }
+  }, [])
+
+  // Reordenamiento por arrastre — DOM events en el grid de miniaturas
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const container = document.getElementById('drag-grid-nueva')
+    if (!container) return
+    // Marcar draggable se necesita en cada render porque los elementos cambian
+    setTimeout(() => {
+      container.querySelectorAll('[data-idx]').forEach(el => {
+        (el as HTMLElement).draggable = true
+      })
+    }, 50)
+
+    const onDragStart = (e: DragEvent) => {
+      const target = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null
+      if (target) dragIdxRef.current = parseInt(target.dataset.idx ?? '-1')
+    }
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault()
+      const target = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null
+      if (target) setDragOverIdx(parseInt(target.dataset.idx ?? '-1'))
+    }
+    const onDragEnd = () => { dragIdxRef.current = null; setDragOverIdx(null) }
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault()
+      const target = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null
+      if (!target) return
+      const toIdx = parseInt(target.dataset.idx ?? '-1')
+      const fromIdx = dragIdxRef.current
+      if (fromIdx === null || fromIdx === toIdx || toIdx < 0) return
+      const arr = [...imagenesRef.current]
+      const [moved] = arr.splice(fromIdx, 1)
+      arr.splice(toIdx, 0, moved)
+      setImagenes(arr)
+      dragIdxRef.current = null
+      setDragOverIdx(null)
+    }
+
+    container.addEventListener('dragstart', onDragStart)
+    container.addEventListener('dragover', onDragOver)
+    container.addEventListener('dragend', onDragEnd)
+    container.addEventListener('drop', onDrop)
+    return () => {
+      container.removeEventListener('dragstart', onDragStart)
+      container.removeEventListener('dragover', onDragOver)
+      container.removeEventListener('dragend', onDragEnd)
+      container.removeEventListener('drop', onDrop)
     }
   }, [])
 
@@ -253,26 +317,13 @@ export default function NuevaPropiedad() {
         <Text style={styles.label}>Imágenes {Platform.OS === 'web' && imagenes.length > 1 ? <Text style={{ fontSize: 11, color: '#aaa', fontWeight: '400' }}> · arrastra para reordenar</Text> : null}</Text>
         {imagenes.length > 0 && (
           Platform.OS === 'web' ? (
-            <View style={styles.miniaturasGrid}>
+            <View nativeID="drag-grid-nueva" style={styles.miniaturasGrid}>
               {imagenes.map((uri, index) => (
                 <View
                   key={uri}
+                  nativeID={`drag-img-nueva-${index}`}
                   // @ts-ignore
-                  draggable
-                  onDragStart={() => { dragIdxRef.current = index; setDragOverIdx(index) }}
-                  onDragOver={(e: any) => { e.preventDefault?.(); setDragOverIdx(index) }}
-                  onDragEnd={() => { dragIdxRef.current = null; setDragOverIdx(null) }}
-                  onDrop={(e: any) => {
-                    e.preventDefault?.()
-                    const from = dragIdxRef.current
-                    if (from === null || from === index) return
-                    const arr = [...imagenes]
-                    const [moved] = arr.splice(from, 1)
-                    arr.splice(index, 0, moved)
-                    setImagenes(arr)
-                    dragIdxRef.current = null
-                    setDragOverIdx(null)
-                  }}
+                  data-idx={index}
                   style={[styles.miniatura, dragOverIdx === index && { opacity: 0.5, borderWidth: 2, borderColor: '#1a6470', borderRadius: 10 }]}
                 >
                   <Image source={{ uri }} style={{ width: 100, height: 100, borderRadius: 10 }} />
