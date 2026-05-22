@@ -146,17 +146,9 @@ export default function NuevaPropiedad() {
     return () => cleanup?.()
   }, [])
 
-  // Reordenamiento por arrastre — DOM events en el grid de miniaturas
+  // Reordenamiento por arrastre — se re-adjunta cuando cambian las imágenes
   useEffect(() => {
     if (Platform.OS !== 'web') return
-    const container = document.getElementById('drag-grid-nueva')
-    if (!container) return
-    // Marcar draggable se necesita en cada render porque los elementos cambian
-    setTimeout(() => {
-      container.querySelectorAll('[data-idx]').forEach(el => {
-        (el as HTMLElement).draggable = true
-      })
-    }, 50)
 
     const onDragStart = (e: DragEvent) => {
       const target = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null
@@ -170,16 +162,13 @@ export default function NuevaPropiedad() {
     const onDragEnd = () => { dragIdxRef.current = null; setDragOverIdx(null) }
     const onDrop = (e: DragEvent) => {
       e.preventDefault()
-      // Si vienen archivos del OS, agregarlos
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         const files = Array.from(e.dataTransfer.files) as File[]
         const urls = files.filter(f => f.type.startsWith('image/')).map(f => URL.createObjectURL(f))
         if (urls.length > 0) setImagenes(prev => [...prev, ...urls])
-        dragIdxRef.current = null
-        setDragOverIdx(null)
+        dragIdxRef.current = null; setDragOverIdx(null)
         return
       }
-      // Si es reordenamiento interno
       const target = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null
       if (!target) return
       const toIdx = parseInt(target.dataset.idx ?? '-1')
@@ -189,21 +178,29 @@ export default function NuevaPropiedad() {
       const [moved] = arr.splice(fromIdx, 1)
       arr.splice(toIdx, 0, moved)
       setImagenes(arr)
-      dragIdxRef.current = null
-      setDragOverIdx(null)
+      dragIdxRef.current = null; setDragOverIdx(null)
     }
 
-    container.addEventListener('dragstart', onDragStart)
-    container.addEventListener('dragover', onDragOver)
-    container.addEventListener('dragend', onDragEnd)
-    container.addEventListener('drop', onDrop)
-    return () => {
-      container.removeEventListener('dragstart', onDragStart)
-      container.removeEventListener('dragover', onDragOver)
-      container.removeEventListener('dragend', onDragEnd)
-      container.removeEventListener('drop', onDrop)
+    let container: HTMLElement | null = null
+    function tryAttachGrid() {
+      container = document.getElementById('drag-grid-nueva')
+      if (!container) { setTimeout(tryAttachGrid, 100); return }
+      container.addEventListener('dragstart', onDragStart)
+      container.addEventListener('dragover', onDragOver)
+      container.addEventListener('dragend', onDragEnd)
+      container.addEventListener('drop', onDrop)
     }
-  }, [])
+    tryAttachGrid()
+
+    return () => {
+      if (container) {
+        container.removeEventListener('dragstart', onDragStart)
+        container.removeEventListener('dragover', onDragOver)
+        container.removeEventListener('dragend', onDragEnd)
+        container.removeEventListener('drop', onDrop)
+      }
+    }
+  }, [imagenes.length])
 
   function handleFileInput(e: any) {
     const files: File[] = Array.from(e.target?.files ?? [])

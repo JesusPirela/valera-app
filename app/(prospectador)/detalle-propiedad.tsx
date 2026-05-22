@@ -1018,25 +1018,6 @@ export default function DetallePropiedad() {
           <Text style={styles.btnValeraText}>📣 Impulsar la promoción de la propiedad mediante una campaña</Text>
         </TouchableOpacity>
 
-        {/* Botón compartir en WhatsApp */}
-        <TouchableOpacity
-          style={[styles.btnWhatsapp, compartiendoFotos && styles.btnDisabled]}
-          onPress={compartirEnWhatsApp}
-          disabled={compartiendoFotos}
-        >
-          {compartiendoFotos ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.btnWhatsappText}>
-              {Platform.OS === 'web'
-                ? 'Enviar ficha por WhatsApp'
-                : imagenes.length > 0
-                  ? `Enviar por WhatsApp con ${imagenes.length === 1 ? '1 foto' : `${imagenes.length} fotos`}`
-                  : 'Enviar ficha por WhatsApp'
-              }
-            </Text>
-          )}
-        </TouchableOpacity>
 
         {/* Botón volver */}
         <TouchableOpacity
