@@ -325,7 +325,7 @@ export default function NuevaPropiedad() {
     setMejorando(true)
     try {
       const { data, error } = await supabase.functions.invoke('mejorar-descripcion', {
-        body: { titulo, direccion, precio, descripcion, tipo, operacion, recamaras, banos, m2 },
+        body: { titulo, direccion, precio, descripcion, tipo, operacion, recamaras, banos, mediosBanos, m2, estacionamientos },
       })
       if (error) throw error
       if (data?.texto) setDescripcion(data.texto)
