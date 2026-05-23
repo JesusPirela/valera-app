@@ -639,7 +639,6 @@ export default function NuevaPropiedad() {
           onChangeText={setDescripcion}
           multiline
           numberOfLines={4}
-          maxLength={1000}
           textAlignVertical="top"
         />
 
