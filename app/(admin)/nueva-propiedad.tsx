@@ -50,6 +50,81 @@ const ESTACIONAMIENTOS_OPTIONS = [
   { value: 2, label: '2' },
   { value: 3, label: '3+' },
 ]
+const MEDIOS_BANOS_OPTIONS = [
+  { value: null, label: '—' },
+  { value: 0, label: '0' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+]
+
+function parsearFicha(texto: string) {
+  const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean)
+
+  // Título y dirección: primera línea separada por |
+  let titulo = ''
+  let direccion = ''
+  if (lineas.length > 0) {
+    const primera = lineas[0].replace(/^[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ0-9$]+/, '').trim()
+    const partes = primera.split('|')
+    titulo = partes[0].trim()
+    if (partes[1]) direccion = partes[1].trim()
+  }
+
+  // Precio: $X,XXX,XXX MXN
+  let precio = ''
+  const mPrecio = texto.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:MXN)?/i)
+  if (mPrecio) precio = mPrecio[1].replace(/,/g, '')
+
+  // M2: construcción tiene prioridad sobre terreno
+  let m2 = ''
+  const mConst = texto.match(/construcci[oó]n\s*[:.]?\s*([\d,.]+)\s*m[²2]/i)
+  if (mConst) {
+    m2 = mConst[1].replace(/,/g, '')
+  } else {
+    const mTerr = texto.match(/terreno\s*[:.]?\s*([\d,.]+)\s*m[²2]/i)
+    if (mTerr) m2 = mTerr[1].replace(/,/g, '')
+  }
+
+  // Recámaras
+  let recamaras: number | null = null
+  const mRec = texto.match(/(\d+)\s*rec[aá]maras?/i)
+  if (mRec) recamaras = Math.min(parseInt(mRec[1]), 5)
+
+  // Baños completos (evitar capturar "medio baño")
+  let banos: number | null = null
+  const mBanos = texto.match(/(\d+)\s*ba[ñn]os?\s*(?:completos?)?(?!\s*\w*medio)/i)
+  if (mBanos) banos = Math.min(parseInt(mBanos[1]), 4)
+
+  // Medios baños
+  let mediosBanos: number | null = null
+  const mMedios = texto.match(/(\d+)\s*medio\s*ba[ñn]o/i)
+  if (mMedios) mediosBanos = Math.min(parseInt(mMedios[1]), 2)
+
+  // Estacionamientos
+  let estacionamientos: number | null = null
+  const mCochera = texto.match(/cochera\s+para\s+(\d+)/i)
+  if (mCochera) {
+    estacionamientos = Math.min(parseInt(mCochera[1]), 3)
+  } else {
+    const mEst = texto.match(/(\d+)\s*(?:autos?|estacionamientos?|lugares?)/i)
+    if (mEst) estacionamientos = Math.min(parseInt(mEst[1]), 3)
+  }
+
+  // Tipo
+  let tipo: 'casa' | 'departamento' | 'local' | 'terreno' | null = null
+  if (/departamento/i.test(titulo)) tipo = 'departamento'
+  else if (/\bcasa\b/i.test(titulo)) tipo = 'casa'
+  else if (/local/i.test(titulo)) tipo = 'local'
+  else if (/terreno/i.test(titulo)) tipo = 'terreno'
+
+  // Operación
+  let operacion: 'venta' | 'renta' | null = null
+  const inicio = texto.slice(0, 120)
+  if (/\brenta\b/i.test(inicio)) operacion = 'renta'
+  else if (/\bventa\b/i.test(inicio)) operacion = 'venta'
+
+  return { titulo, direccion, precio, m2, recamaras, banos, mediosBanos, estacionamientos, tipo, operacion }
+}
 
 export default function NuevaPropiedad() {
   const [titulo, setTitulo] = useState('')
@@ -73,9 +148,39 @@ export default function NuevaPropiedad() {
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const dragIdxRef = useRef<number | null>(null)
   const imagenesRef = useRef<string[]>([])
+  const [mediosBanos, setMediosBanos] = useState<number | null>(null)
+  const [ficha, setFicha] = useState('')
+  const [mostrarFicha, setMostrarFicha] = useState(true)
+  const [fichaMsg, setFichaMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const [mejorando, setMejorando] = useState(false)
   const [guardado, setGuardado] = useState(false)
+
+  function aplicarFicha() {
+    if (!ficha.trim()) return
+    const r = parsearFicha(ficha)
+    if (r.titulo) setTitulo(r.titulo)
+    if (r.direccion) setDireccion(r.direccion)
+    if (r.precio) setPrecio(r.precio)
+    if (r.m2) setM2(r.m2)
+    if (r.recamaras !== null) setRecamaras(r.recamaras)
+    if (r.banos !== null) setBanos(r.banos)
+    if (r.mediosBanos !== null) setMediosBanos(r.mediosBanos)
+    if (r.estacionamientos !== null) setEstacionamientos(r.estacionamientos)
+    if (r.tipo) setTipo(r.tipo)
+    if (r.operacion) setOperacion(r.operacion)
+    setDescripcion(ficha)
+
+    const partes: string[] = []
+    if (r.titulo) partes.push(r.titulo)
+    if (r.precio) partes.push(`$${parseInt(r.precio).toLocaleString('es-MX')}`)
+    if (r.recamaras) partes.push(`${r.recamaras} rec.`)
+    if (r.banos) partes.push(`${r.banos} baños`)
+    if (r.mediosBanos) partes.push(`${r.mediosBanos} medio baño`)
+    if (r.estacionamientos != null) partes.push(`${r.estacionamientos} est.`)
+    setFichaMsg(partes.length > 0 ? `✓ Detectado: ${partes.join(' · ')}` : '⚠ No se detectaron campos. Revisa el formato.')
+    setMostrarFicha(false)
+  }
 
   async function seleccionarImagenes() {
     if (Platform.OS !== 'web') {
@@ -289,6 +394,7 @@ export default function NuevaPropiedad() {
           zona: zona ?? null,
           recamaras,
           banos,
+          medios_banos: mediosBanos ?? 0,
           m2: m2Num,
           estacionamientos,
           asesor_id: asesorId,
@@ -330,6 +436,30 @@ export default function NuevaPropiedad() {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
           <Text style={styles.backBtnText}>← Volver</Text>
         </TouchableOpacity>
+
+        {/* Importar desde ficha */}
+        <View style={styles.fichaBox}>
+          <TouchableOpacity style={styles.fichaToggle} onPress={() => setMostrarFicha(v => !v)}>
+            <Text style={styles.fichaToggleText}>📋 Importar desde ficha</Text>
+            <Text style={styles.fichaChevron}>{mostrarFicha ? '▲' : '▼'}</Text>
+          </TouchableOpacity>
+          {fichaMsg ? <Text style={styles.fichaMsg}>{fichaMsg}</Text> : null}
+          {mostrarFicha && (
+            <View style={{ marginTop: 8 }}>
+              <TextInput
+                style={[styles.input, { height: 130, paddingTop: 10 }]}
+                placeholder={'Pega aquí la ficha completa de la propiedad y detectaremos automáticamente:\ntítulo, precio, m², recámaras, baños, estacionamientos...'}
+                value={ficha}
+                onChangeText={setFicha}
+                multiline
+                textAlignVertical="top"
+              />
+              <TouchableOpacity style={[styles.btnIA, { marginTop: 8, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8 }]} onPress={aplicarFicha}>
+                <Text style={styles.btnIAText}>✦ Detectar y rellenar campos</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
         <Text style={styles.label}>Imágenes {Platform.OS === 'web' && imagenes.length > 1 ? <Text style={{ fontSize: 11, color: '#aaa', fontWeight: '400' }}> · arrastra para reordenar</Text> : null}</Text>
         {imagenes.length > 0 && (
@@ -453,9 +583,16 @@ export default function NuevaPropiedad() {
             <DropdownModal options={RECAMARAS_OPTIONS} value={recamaras} onChange={setRecamaras} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Baños</Text>
+            <Text style={styles.label}>Baños completos</Text>
             <DropdownModal options={BANOS_OPTIONS} value={banos} onChange={setBanos} />
           </View>
+        </View>
+        <View style={styles.dosColumnas}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Medios baños</Text>
+            <DropdownModal options={MEDIOS_BANOS_OPTIONS} value={mediosBanos} onChange={setMediosBanos} />
+          </View>
+          <View style={{ flex: 1 }} />
         </View>
 
         <View style={styles.dosColumnas}>
@@ -669,4 +806,12 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginTop: 24,
   },
   successText: { color: '#2e7d32', fontSize: 15, fontWeight: '700' },
+  fichaBox: {
+    backgroundColor: '#fff', borderRadius: 12, borderWidth: 1,
+    borderColor: '#d4e8ea', padding: 14, marginBottom: 8,
+  },
+  fichaToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  fichaToggleText: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
+  fichaChevron: { fontSize: 12, color: '#1a6470' },
+  fichaMsg: { fontSize: 12, color: '#2e7d32', marginTop: 6, fontWeight: '600' },
 })
