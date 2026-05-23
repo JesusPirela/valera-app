@@ -60,14 +60,22 @@ const MEDIOS_BANOS_OPTIONS = [
 function parsearFicha(texto: string) {
   const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean)
 
-  // Título y dirección: primera línea separada por |
+  // Título: primera línea completa (sin emojis/símbolos al inicio)
+  // Dirección: si hay "|" se toma lo que está después; si no, se extrae "en <Lugar>" del título
   let titulo = ''
   let direccion = ''
   if (lineas.length > 0) {
     const primera = lineas[0].replace(/^[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ0-9$]+/, '').trim()
-    const partes = primera.split('|')
-    titulo = partes[0].trim()
-    if (partes[1]) direccion = partes[1].trim()
+    if (primera.includes('|')) {
+      const partes = primera.split('|')
+      titulo = partes[0].trim()
+      direccion = partes[1].trim()
+    } else {
+      titulo = primera
+      // Extrae "Juriquilla" de "Venta de Casa en Juriquilla"
+      const mLoc = primera.match(/\ben\s+([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+(?:(?:[,\s]+(?:de\s+)?)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+)*)$/i)
+      if (mLoc) direccion = mLoc[1].trim()
+    }
   }
 
   // Precio: $X,XXX,XXX MXN
@@ -528,7 +536,6 @@ export default function NuevaPropiedad() {
           placeholder="Ej. Casa en la colonia Roma"
           value={titulo}
           onChangeText={setTitulo}
-          maxLength={100}
         />
 
         <Text style={styles.label}>Dirección *</Text>
