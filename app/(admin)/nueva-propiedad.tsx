@@ -420,7 +420,12 @@ export default function NuevaPropiedad() {
         const registros = await Promise.all(
           imagenes.map(async (uri, index) => {
             const url = await subirImagen(uri, propiedadId, index)
-            return { propiedad_id: propiedadId, url, orden: index }
+            let phash: string | null = null
+            try {
+              const { data: hashData } = await supabase.functions.invoke('calcular-phash', { body: { url } })
+              phash = hashData?.phash ?? null
+            } catch {}
+            return { propiedad_id: propiedadId, url, orden: index, phash }
           })
         )
         const { error: errorImagenes } = await supabase.from('propiedad_imagenes').insert(registros)
