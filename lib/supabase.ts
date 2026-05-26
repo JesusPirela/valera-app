@@ -19,5 +19,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // Deshabilitar Web Lock API para evitar deadlocks en web con PersistQueryClient
+    lock: Platform.OS === 'web'
+      ? (_name: string, _timeout: number, fn: () => Promise<unknown>) => fn()
+      : undefined,
   },
 })
