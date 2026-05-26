@@ -27,6 +27,7 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 const LOGO = require('../../assets/logo.png')
 import { useTheme } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
+import { computePhash, hammingDistance } from '../../lib/phash'
 
 type Propiedad = {
   id: string
@@ -118,6 +119,8 @@ export default function ProspectadorPropiedades() {
   const [mensajeAyuda, setMensajeAyuda] = useState('')
   const [buscandoImagen, setBuscandoImagen] = useState(false)
   const [resultadoImagenId, setResultadoImagenId] = useState<string | null>(null)
+  const [resultadosImagen, setResultadosImagen] = useState<{ propiedad: Propiedad; distancia: number }[]>([])
+  const [showResultadosImagen, setShowResultadosImagen] = useState(false)
 
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
     queryKey: ['prospectador-propiedades'],
@@ -291,51 +294,51 @@ export default function ProspectadorPropiedades() {
 
   async function buscarPorImagen() {
     if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (status !== 'granted') {
-        Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería.')
-        return
-      }
+      Alert.alert('Solo disponible en web', 'La búsqueda por imagen funciona en la versión web de la app.')
+      return
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.5,
-      base64: true,
-    })
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] })
     if (result.canceled || !result.assets[0]) return
 
     setBuscandoImagen(true)
     setResultadoImagenId(null)
     try {
-      const asset = result.assets[0]
-      const base64 = asset.base64 ?? null
-      if (!base64) throw new Error('No se pudo leer la imagen')
+      const queryPhash = await computePhash(result.assets[0].uri)
+      if (!queryPhash) throw new Error('No se pudo procesar la imagen')
 
-      const { data, error } = await supabase.functions.invoke('calcular-phash', {
-        body: { base64: `data:image/jpeg;base64,${base64}` },
-      })
-      if (error || !data?.phash) throw new Error('No se pudo calcular el hash')
-
-      const { data: rows, error: rpcError } = await supabase.rpc('buscar_por_phash', {
-        query_hash: data.phash,
-        max_distancia: 12,
-      })
-      if (rpcError) throw rpcError
-
-      if (!rows || rows.length === 0 || rows[0].distancia > 12) {
-        Alert.alert('Sin resultado', 'No se encontró ninguna propiedad con esa imagen.')
+      const { data: rows, error } = await supabase
+        .from('propiedad_imagenes')
+        .select('propiedad_id, phash')
+        .not('phash', 'is', null)
+      if (error) throw error
+      if (!rows || rows.length === 0) {
+        Alert.alert('Sin datos', 'Aún no hay imágenes indexadas.')
         return
       }
 
-      const encontrada = propiedades.find(p => p.id === rows[0].propiedad_id)
-      if (!encontrada) {
-        Alert.alert('Sin resultado', 'La propiedad encontrada no está en tu lista actual.')
+      // Calcular distancia mínima por propiedad (puede tener varias fotos)
+      const distPorPropiedad = new Map<string, number>()
+      for (const row of rows) {
+        if (!row.phash) continue
+        const dist = hammingDistance(queryPhash, row.phash)
+        const prev = distPorPropiedad.get(row.propiedad_id)
+        if (prev === undefined || dist < prev) distPorPropiedad.set(row.propiedad_id, dist)
+      }
+
+      // Top 3 más cercanas
+      const top3 = [...distPorPropiedad.entries()]
+        .sort((a, b) => a[1] - b[1])
+        .slice(0, 3)
+        .map(([id, distancia]) => ({ propiedad: propiedades.find(p => p.id === id), distancia }))
+        .filter(r => r.propiedad != null) as { propiedad: Propiedad; distancia: number }[]
+
+      if (top3.length === 0) {
+        Alert.alert('Sin resultado', 'No se encontraron propiedades.')
         return
       }
 
-      setResultadoImagenId(encontrada.id)
-      setBusqueda(encontrada.codigo ?? encontrada.titulo ?? '')
-      Alert.alert('¡Encontrada!', `Se encontró: ${encontrada.titulo}`)
+      setResultadosImagen(top3)
+      setShowResultadosImagen(true)
     } catch (err: any) {
       Alert.alert('Error', err.message || 'No se pudo buscar por imagen.')
     } finally {
@@ -672,6 +675,46 @@ export default function ProspectadorPropiedades() {
       <TouchableOpacity style={styles.helpFab} onPress={() => setShowHelp(true)} activeOpacity={0.85}>
         <Ionicons name="help" size={20} color="#fff" />
       </TouchableOpacity>
+
+      {/* Modal top 3 resultados por imagen */}
+      <Modal visible={showResultadosImagen} transparent animationType="slide" onRequestClose={() => setShowResultadosImagen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { paddingBottom: 16, maxWidth: 480 }]}>
+            <Text style={styles.modalTitle}>Propiedades similares</Text>
+            <Text style={styles.modalSubtitle}>Top 3 por parecido visual</Text>
+            {resultadosImagen.map(({ propiedad: p, distancia }, idx) => {
+              const primera = [...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+              const similitud = Math.round((1 - distancia / 64) * 100)
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={styles.imagenResultRow}
+                  activeOpacity={0.8}
+                  onPress={() => { setShowResultadosImagen(false); router.push(`/(prospectador)/detalle-propiedad?id=${p.id}`) }}
+                >
+                  {primera?.url
+                    ? <Image source={{ uri: primera.url }} style={styles.imagenResultThumb} resizeMode="cover" />
+                    : <View style={[styles.imagenResultThumb, { backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' }]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
+                  }
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <Text style={[styles.imagenResultRank, { backgroundColor: primaryColor }]}>#{idx + 1}</Text>
+                      <Text style={[styles.imagenResultSimilitud, { color: similitud >= 80 ? '#27ae60' : similitud >= 60 ? '#e67e22' : '#888' }]}>
+                        {similitud}% similar
+                      </Text>
+                    </View>
+                    <Text style={styles.imagenResultTitulo} numberOfLines={2}>{p.titulo}</Text>
+                    <Text style={styles.imagenResultPrecio}>{formatPrecio(p.precio)}</Text>
+                  </View>
+                </TouchableOpacity>
+              )
+            })}
+            <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 12 }]} onPress={() => setShowResultadosImagen(false)}>
+              <Text style={styles.modalCancelText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal de ayuda */}
       <Modal visible={showHelp} transparent animationType="fade" onRequestClose={() => setShowHelp(false)}>
@@ -1121,5 +1164,44 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 15,
+  },
+  // Imagen search results modal
+  imagenResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  imagenResultThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  imagenResultRank: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#fff',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+  imagenResultSimilitud: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  imagenResultTitulo: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1a1a2e',
+    marginBottom: 3,
+  },
+  imagenResultPrecio: {
+    fontSize: 13,
+    color: '#888',
+    fontWeight: '600',
   },
 })
