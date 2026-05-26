@@ -211,8 +211,8 @@ export default function Prospectadores() {
                   <Text style={styles.cardIconText}>{(item.nombre || item.email)[0].toUpperCase()}</Text>
                 </View>
                 <View style={styles.cardInfo}>
-                  {item.nombre ? <Text style={styles.cardNombre}>{item.nombre}</Text> : null}
-                  <Text style={styles.cardEmail}>{item.email}</Text>
+                  <Text style={styles.cardNombre}>{item.nombre || item.email}</Text>
+                  {item.nombre ? <Text style={styles.cardEmail}>{item.email}</Text> : null}
                   <Text style={styles.cardFecha}>Alta: {tiempoRelativo(item.created_at)}</Text>
                   <Text style={[styles.cardFecha, { color: item.last_seen ? '#1a6470' : '#bbb' }]}>
                     {item.last_seen ? `Última conexión: ${tiempoRelativo(item.last_seen)}` : 'Sin conexión registrada'}
@@ -451,8 +451,8 @@ const styles = StyleSheet.create({
   },
   cardIconText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cardInfo: { flex: 1 },
-  cardNombre: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
-  cardEmail: { fontSize: 14, fontWeight: '600', color: '#1a6470' },
+  cardNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
+  cardEmail: { fontSize: 11, color: '#aaa', marginTop: 1 },
   cardFecha: { fontSize: 11, color: '#aaa', marginTop: 2 },
 
   rolBadge: {
