@@ -47,7 +47,6 @@ type Propiedad = {
   banos: number | null
   m2: number | null
   estacionamientos: number | null
-  descripcion: string | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
@@ -131,9 +130,10 @@ export default function ProspectadorPropiedades() {
         supabase.from('profiles').select('role, nombre').eq('id', userId).single(),
         supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true }),
         supabase.from('propiedad_publicada').select('propiedad_id').eq('user_id', userId),
       ])
 
@@ -159,8 +159,12 @@ export default function ProspectadorPropiedades() {
   })
 
   useFocusEffect(useCallback(() => {
-    if (togglingRef.current.size === 0) refetch()
-  }, [refetch]))
+    if (togglingRef.current.size === 0) {
+      const state = queryClient.getQueryState(['prospectador-propiedades'])
+      const isStale = !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt > 1000 * 60 * 5
+      if (isStale) refetch()
+    }
+  }, [refetch, queryClient]))
 
   useEffect(() => {
     if (!queryData?.propiedades) return
@@ -349,7 +353,7 @@ export default function ProspectadorPropiedades() {
   }
 
   function renderPropiedad(item: Propiedad, width?: number) {
-    const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+    const primera = item.propiedad_imagenes?.[0]
     const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
     return (
       <TouchableOpacity
@@ -396,9 +400,6 @@ export default function ProspectadorPropiedades() {
           )}
           <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
           <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
-          {item.descripcion ? (
-            <Text style={styles.cardDescripcion} numberOfLines={2}>{item.descripcion}</Text>
-          ) : null}
           {tieneMeta && (
             <View style={styles.metaRow}>
               {item.recamaras != null && <Text style={styles.metaItem}>Rec {item.recamaras}</Text>}

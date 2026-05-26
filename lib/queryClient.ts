@@ -6,7 +6,7 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5,           // 5 min: no refetch si los datos son recientes
-      gcTime: 1000 * 60 * 60 * 24 * 7,    // 7 días en memoria/disco
+      gcTime: 1000 * 60 * 60 * 24,          // 1 día en memoria/disco
       retry: 1,
       networkMode: 'offlineFirst',         // retorna caché aunque no haya internet
     },
