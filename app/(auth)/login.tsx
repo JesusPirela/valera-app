@@ -32,31 +32,38 @@ export default function LoginScreen() {
     }
 
     setLoading(true)
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    setLoading(false)
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
-    if (error) {
-      if (Platform.OS === 'web') window.alert(error.message)
-      else Alert.alert('Error al iniciar sesión', error.message)
-      return
-    }
+      if (error) {
+        if (Platform.OS === 'web') window.alert(error.message)
+        else Alert.alert('Error al iniciar sesión', error.message)
+        return
+      }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, nombre')
-      .eq('id', data.user.id)
-      .single()
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, nombre')
+        .eq('id', data.user.id)
+        .single()
 
-    // Registrar última conexión
-    await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', data.user.id)
+      supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', data.user.id).then(() => {}).catch(() => {})
 
-    if (profile?.role === 'admin') {
-      router.replace('/(admin)/propiedades')
-    } else {
-      await supabase.rpc('notificar_admins_login_prospectador', {
-        p_prospectador_nombre: profile?.nombre ?? 'Un prospectador',
-      })
-      router.replace('/(prospectador)/propiedades')
+      if (profile?.role === 'admin') {
+        router.replace('/(admin)/propiedades')
+      } else {
+        try {
+          await supabase.rpc('notificar_admins_login_prospectador', {
+            p_prospectador_nombre: profile?.nombre ?? 'Un prospectador',
+          })
+        } catch {}
+        router.replace('/(prospectador)/propiedades')
+      }
+    } catch {
+      if (Platform.OS === 'web') window.alert('Error de conexión. Verifica tu internet e intenta de nuevo.')
+      else Alert.alert('Error de conexión', 'Verifica tu internet e intenta de nuevo.')
+    } finally {
+      setLoading(false)
     }
   }
 
