@@ -10,12 +10,14 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
+  Alert,
   Linking,
   Platform,
   useWindowDimensions,
   StatusBar,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
+import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -115,6 +117,8 @@ export default function ProspectadorPropiedades() {
   const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
   const [showHelp, setShowHelp] = useState(false)
   const [mensajeAyuda, setMensajeAyuda] = useState('')
+  const [buscandoImagen, setBuscandoImagen] = useState(false)
+  const [resultadoImagenId, setResultadoImagenId] = useState<string | null>(null)
 
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
     queryKey: ['prospectador-propiedades'],
@@ -281,6 +285,60 @@ export default function ProspectadorPropiedades() {
 
   const propiedadesPorZona = vistaZonas ? agruparPorZona(propiedadesFiltradas) : []
 
+  async function buscarPorImagen() {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería.')
+        return
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.5,
+      base64: true,
+    })
+    if (result.canceled || !result.assets[0]) return
+
+    setBuscandoImagen(true)
+    setResultadoImagenId(null)
+    try {
+      const asset = result.assets[0]
+      const base64 = asset.base64 ?? null
+      if (!base64) throw new Error('No se pudo leer la imagen')
+
+      const { data, error } = await supabase.functions.invoke('calcular-phash', {
+        body: { base64: `data:image/jpeg;base64,${base64}` },
+      })
+      if (error || !data?.phash) throw new Error('No se pudo calcular el hash')
+
+      const { data: rows, error: rpcError } = await supabase.rpc('buscar_por_phash', {
+        query_hash: data.phash,
+        max_distancia: 12,
+      })
+      if (rpcError) throw rpcError
+
+      if (!rows || rows.length === 0 || rows[0].distancia > 12) {
+        Alert.alert('Sin resultado', 'No se encontró ninguna propiedad con esa imagen.')
+        return
+      }
+
+      const encontrada = propiedades.find(p => p.id === rows[0].propiedad_id)
+      if (!encontrada) {
+        Alert.alert('Sin resultado', 'La propiedad encontrada no está en tu lista actual.')
+        return
+      }
+
+      setResultadoImagenId(encontrada.id)
+      setBusqueda(encontrada.codigo ?? encontrada.titulo ?? '')
+      Alert.alert('¡Encontrada!', `Se encontró: ${encontrada.titulo}`)
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo buscar por imagen.')
+    } finally {
+      setBuscandoImagen(false)
+    }
+  }
+
   function limpiarFiltros() {
     setFiltroOperacion(null)
     setFiltroTipo(null)
@@ -428,6 +486,16 @@ export default function ProspectadorPropiedades() {
                 autoCorrect={false}
                 clearButtonMode="while-editing"
               />
+              <TouchableOpacity
+                style={styles.searchCamBtn}
+                onPress={buscarPorImagen}
+                disabled={buscandoImagen}
+              >
+                {buscandoImagen
+                  ? <ActivityIndicator size="small" color="#888" />
+                  : <Text style={styles.searchCamIcon}>📷</Text>
+                }
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -708,6 +776,8 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   searchIcon: { fontSize: 15, marginRight: 8, color: '#aaa' },
+  searchCamBtn: { padding: 6, marginLeft: 4 },
+  searchCamIcon: { fontSize: 18 },
   searchInput: {
     flex: 1,
     paddingVertical: 12,
