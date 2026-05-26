@@ -48,11 +48,23 @@ export default function RootLayout() {
       else supabase.auth.stopAutoRefresh()
     })
 
+    // Fallback: si INITIAL_SESSION no dispara en 5s, forzamos loading=false
+    const fallbackTimer = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) {
+          supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null)).catch(() => {})
+          return false
+        }
+        return prev
+      })
+    }, 5000)
+
     // onAuthStateChange es la fuente de verdad: INITIAL_SESSION se dispara
     // DESPUÉS de que AsyncStorage termina de leer la sesión guardada,
     // evitando la race condition con getSession() en nativo.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') {
+        clearTimeout(fallbackTimer)
         setSession(session)
         setLoading(false)
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -65,6 +77,7 @@ export default function RootLayout() {
     })
 
     return () => {
+      clearTimeout(fallbackTimer)
       appStateSub.remove()
       subscription.unsubscribe()
     }
