@@ -151,6 +151,7 @@ export default function ProspectadorPropiedades() {
     },
     networkMode: 'offlineFirst',
     staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   })
 
   useFocusEffect(useCallback(() => {
@@ -171,12 +172,18 @@ export default function ProspectadorPropiedades() {
   const publicadas = new Set(queryData?.publicadasIds ?? [])
 
   async function togglePublicada(propiedadId: string) {
-    if (toggling.has(propiedadId)) return
+    if (togglingRef.current.has(propiedadId)) return
     const userId = queryData?.userId
     if (!userId) return
 
     const yaPublicada = publicadas.has(propiedadId)
-    setToggling(prev => new Set(prev).add(propiedadId))
+
+    // Actualizar ref inmediatamente (antes del re-render) para que useFocusEffect
+    // no dispare un refetch() entre el click y el primer render con el nuevo state
+    const newTogglingSet = new Set(togglingRef.current)
+    newTogglingSet.add(propiedadId)
+    togglingRef.current = newTogglingSet
+    setToggling(newTogglingSet)
 
     queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades'], old => {
       if (!old) return old
@@ -199,7 +206,6 @@ export default function ProspectadorPropiedades() {
     }
 
     if (error) {
-      // revertir optimistic update
       queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades'], old => {
         if (!old) return old
         return {
@@ -213,7 +219,10 @@ export default function ProspectadorPropiedades() {
       registrarAccion(userId, 'publicar_propiedad').catch(() => {})
     }
 
-    setToggling(prev => { const s = new Set(prev); s.delete(propiedadId); return s })
+    const finalTogglingSet = new Set(togglingRef.current)
+    finalTogglingSet.delete(propiedadId)
+    togglingRef.current = finalTogglingSet
+    setToggling(finalTogglingSet)
   }
 
   function toggleZona(zona: string) {
