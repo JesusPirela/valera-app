@@ -135,8 +135,7 @@ export default function ProspectadorPropiedades() {
           .from('propiedades')
           .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
-          .order('created_at', { ascending: false })
-          .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true }),
+          .order('created_at', { ascending: false }),
         supabase.from('propiedad_publicada').select('propiedad_id').eq('user_id', userId),
       ])
 
@@ -356,7 +355,7 @@ export default function ProspectadorPropiedades() {
   }
 
   function renderPropiedad(item: Propiedad, width?: number) {
-    const primera = item.propiedad_imagenes?.[0]
+    const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
     const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
     return (
       <TouchableOpacity
