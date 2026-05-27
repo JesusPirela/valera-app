@@ -296,14 +296,21 @@ export default function ProspectadorPropiedades() {
       Alert.alert('Solo disponible en web', 'La búsqueda por imagen funciona en la versión web de la app.')
       return
     }
+    if (propiedades.length === 0) {
+      Alert.alert('Cargando', 'Espera a que carguen las propiedades e intenta de nuevo.')
+      return
+    }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] })
     if (result.canceled || !result.assets[0]) return
 
     setBuscandoImagen(true)
-    setResultadoImagenId(null)
+    setResultadosImagen([])
     try {
       const queryPhash = await computePhash(result.assets[0].uri)
-      if (!queryPhash) throw new Error('No se pudo procesar la imagen')
+      if (!queryPhash) {
+        Alert.alert('Error', 'No se pudo leer la imagen. Intenta con otro formato (JPG o PNG).')
+        return
+      }
 
       const { data: rows, error } = await supabase
         .from('propiedad_imagenes')
@@ -315,7 +322,7 @@ export default function ProspectadorPropiedades() {
         return
       }
 
-      // Calcular distancia mínima por propiedad (puede tener varias fotos)
+      // Distancia mínima por propiedad
       const distPorPropiedad = new Map<string, number>()
       for (const row of rows) {
         if (!row.phash) continue
@@ -324,15 +331,18 @@ export default function ProspectadorPropiedades() {
         if (prev === undefined || dist < prev) distPorPropiedad.set(row.propiedad_id, dist)
       }
 
-      // Top 3 más cercanas
-      const top3 = [...distPorPropiedad.entries()]
+      // Tomar top 20 candidatos y filtrar solo las que el usuario puede ver
+      const candidatos = [...distPorPropiedad.entries()]
         .sort((a, b) => a[1] - b[1])
-        .slice(0, 3)
+        .slice(0, 20)
+
+      const top3 = candidatos
         .map(([id, distancia]) => ({ propiedad: propiedades.find(p => p.id === id), distancia }))
-        .filter(r => r.propiedad != null) as { propiedad: Propiedad; distancia: number }[]
+        .filter(r => r.propiedad != null)
+        .slice(0, 3) as { propiedad: Propiedad; distancia: number }[]
 
       if (top3.length === 0) {
-        Alert.alert('Sin resultado', 'No se encontraron propiedades.')
+        Alert.alert('Sin resultado', 'No se encontraron propiedades similares a esa imagen.')
         return
       }
 

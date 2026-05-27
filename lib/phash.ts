@@ -7,7 +7,11 @@ export async function computePhash(uri: string): Promise<string | null> {
   if (Platform.OS !== 'web') return null
   return new Promise((resolve) => {
     const img = new (window as any).Image()
-    img.crossOrigin = 'anonymous'
+    // crossOrigin solo para URLs remotas (HTTPS) — blob: y data: son same-origin
+    // y en Safari setting crossOrigin en blob: URLs hace que el load falle
+    if (uri.startsWith('https://') || uri.startsWith('http://')) {
+      img.crossOrigin = 'anonymous'
+    }
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas')
