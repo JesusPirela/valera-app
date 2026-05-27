@@ -327,6 +327,19 @@ export default function DetallePropiedad() {
     setTimeout(() => setDescripcionCopiada(false), 2000)
   }
 
+  async function imagenABase64(url: string): Promise<string> {
+    try {
+      if (Platform.OS === 'web') return url
+      const FileSystemLib = await import('expo-file-system')
+      const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
+      const { uri } = await FileSystemLib.FileSystem.downloadAsync(url, localUri)
+      const base64 = await FileSystemLib.FileSystem.readAsStringAsync(uri, { encoding: FileSystemLib.FileSystem.EncodingType.Base64 })
+      return `data:image/jpeg;base64,${base64}`
+    } catch {
+      return url
+    }
+  }
+
   async function generarFichaPDF() {
     if (!propiedad) return
     setGenerandoPDF(true)
@@ -345,8 +358,16 @@ export default function DetallePropiedad() {
         : ''
 
       const imagenes = [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
-      const imagenesHTML = imagenes.slice(0, 12).map(img =>
-        `<img src="${img.url}" style="width:48%;height:160px;object-fit:cover;border-radius:8px;margin:4px;" />`
+
+      // En móvil convertimos a base64 para que expo-print pueda renderizarlas
+      const imagenesConSrc = await Promise.all(
+        imagenes.slice(0, 20).map(async img => ({
+          ...img,
+          src: await imagenABase64(img.url),
+        }))
+      )
+      const imagenesHTML = imagenesConSrc.map(img =>
+        `<img src="${img.src}" style="width:48%;height:160px;object-fit:cover;border-radius:8px;margin:4px;" />`
       ).join('')
 
       const cars: string[] = []
