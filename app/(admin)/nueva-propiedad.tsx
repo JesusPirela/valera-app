@@ -420,8 +420,8 @@ export default function NuevaPropiedad() {
       if (imagenes.length > 0) {
         const registros = await Promise.all(
           imagenes.map(async (uri, index) => {
+            const phash = await computePhash(uri)
             const url = await subirImagen(uri, propiedadId, index)
-            const phash = await computePhash(url)
             return { propiedad_id: propiedadId, url, orden: index, phash }
           })
         )

@@ -197,9 +197,21 @@ export default function AdminPropiedades() {
         if (reindexCancelRef.current) break
 
         const batch = allImages.slice(i, i + BATCH)
-        // Cache buster evita que el navegador use una versión cacheada sin CORS headers
+        // Descarga cada imagen como blob y computa desde blob: URI — mismo método que la búsqueda
         const hashes = await Promise.all(
-          batch.map((img) => computePhash(img.url + (img.url.includes('?') ? '&' : '?') + '_cb=' + Date.now()))
+          batch.map(async (img) => {
+            try {
+              const res = await fetch(img.url)
+              if (!res.ok) return null
+              const blob = await res.blob()
+              const objectUrl = URL.createObjectURL(blob)
+              const hash = await computePhash(objectUrl)
+              URL.revokeObjectURL(objectUrl)
+              return hash
+            } catch {
+              return null
+            }
+          })
         )
         failed += hashes.filter((h) => h == null).length
 
