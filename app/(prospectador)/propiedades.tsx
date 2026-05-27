@@ -28,6 +28,28 @@ const LOGO = require('../../assets/logo.png')
 import { useTheme } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
 import { computePhash, hammingDistance } from '../../lib/phash'
+import { WebView } from 'react-native-webview'
+import * as FileSystem from 'expo-file-system'
+
+const PHASH_HTML = `<!DOCTYPE html><html><head><script>
+function compute(uri){
+  var img=new Image();
+  img.crossOrigin='anonymous';
+  img.onload=function(){
+    try{
+      var c=document.createElement('canvas');c.width=8;c.height=8;
+      var ctx=c.getContext('2d');ctx.drawImage(img,0,0,8,8);
+      var d=ctx.getImageData(0,0,8,8).data,px=[],i;
+      for(i=0;i<64;i++) px.push(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]);
+      var avg=px.reduce(function(a,b){return a+b},0)/64,hex='',b,v,bit;
+      for(b=0;b<8;b++){v=0;for(bit=0;bit<8;bit++){if(px[b*8+bit]>=avg)v|=(1<<bit);}hex+=('0'+v.toString(16)).slice(-2);}
+      window.ReactNativeWebView.postMessage(hex);
+    }catch(e){window.ReactNativeWebView.postMessage('error');}
+  };
+  img.onerror=function(){window.ReactNativeWebView.postMessage('error');};
+  img.src=uri;
+}
+</script></head><body></body></html>`
 
 type Propiedad = {
   id: string
@@ -121,6 +143,22 @@ export default function ProspectadorPropiedades() {
   const [resultadoImagenId, setResultadoImagenId] = useState<string | null>(null)
   const [resultadosImagen, setResultadosImagen] = useState<{ propiedad: Propiedad; distancia: number }[]>([])
   const [showResultadosImagen, setShowResultadosImagen] = useState(false)
+  const phashWebViewRef = useRef<WebView>(null)
+  const phashResolveRef = useRef<((h: string | null) => void) | null>(null)
+
+  function onPhashMessage(event: { nativeEvent: { data: string } }) {
+    const hash = event.nativeEvent.data
+    phashResolveRef.current?.(hash === 'error' ? null : hash)
+    phashResolveRef.current = null
+  }
+
+  function computePhashMobile(dataUri: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      phashResolveRef.current = resolve
+      phashWebViewRef.current?.injectJavaScript(`compute(${JSON.stringify(dataUri)});true;`)
+      setTimeout(() => { phashResolveRef.current?.(null); phashResolveRef.current = null }, 10000)
+    })
+  }
 
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
     queryKey: ['prospectador-propiedades'],
@@ -292,10 +330,6 @@ export default function ProspectadorPropiedades() {
   const propiedadesPorZona = vistaZonas ? agruparPorZona(propiedadesFiltradas) : []
 
   async function buscarPorImagen() {
-    if (Platform.OS !== 'web') {
-      Alert.alert('Solo disponible en web', 'La búsqueda por imagen funciona en la versión web de la app.')
-      return
-    }
     if (propiedades.length === 0) {
       Alert.alert('Cargando', 'Espera a que carguen las propiedades e intenta de nuevo.')
       return
@@ -306,7 +340,15 @@ export default function ProspectadorPropiedades() {
     setBuscandoImagen(true)
     setResultadosImagen([])
     try {
-      const queryPhash = await computePhash(result.assets[0].uri)
+      let queryPhash: string | null = null
+      if (Platform.OS === 'web') {
+        queryPhash = await computePhash(result.assets[0].uri)
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        })
+        queryPhash = await computePhashMobile(`data:image/jpeg;base64,${base64}`)
+      }
       if (!queryPhash) {
         Alert.alert('Error', 'No se pudo leer la imagen. Intenta con otro formato (JPG o PNG).')
         return
@@ -458,6 +500,15 @@ export default function ProspectadorPropiedades() {
 
   return (
     <View style={{ flex: 1 }}>
+      {Platform.OS !== 'web' && (
+        <WebView
+          ref={phashWebViewRef}
+          source={{ html: PHASH_HTML }}
+          onMessage={onPhashMessage}
+          javaScriptEnabled
+          style={{ width: 0, height: 0, position: 'absolute' }}
+        />
+      )}
       <OfflineBanner />
       {!isWeb && <StatusBar backgroundColor={primaryColor} barStyle="light-content" />}
       <View style={styles.container}>
