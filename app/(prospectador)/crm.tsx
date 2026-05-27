@@ -59,11 +59,7 @@ function proximoRecordatorio(recordatorios: Cliente['recordatorios']) {
 }
 
 function iniciales(nombre: string) {
-  return nombre
-    .split(' ')
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('')
+  return nombre.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 }
 
 export default function CRM() {
@@ -93,11 +89,7 @@ export default function CRM() {
     for (const c of clientes) {
       queryClient.setQueryData(
         ['detalle-cliente', c.id],
-        (old: unknown) => old ?? {
-          cliente: c,
-          interacciones: [],
-          recordatorios: c.recordatorios ?? [],
-        }
+        (old: unknown) => old ?? { cliente: c, interacciones: [], recordatorios: c.recordatorios ?? [] }
       )
     }
   }, [clientes])
@@ -106,6 +98,13 @@ export default function CRM() {
     acc[e] = clientes.filter((c) => c.estado === e).length
     return acc
   }, {})
+
+  const conRecordatorio = clientes.filter(c =>
+    (c.recordatorios ?? []).some(r => !r.completado)
+  ).length
+  const vencidos = clientes.filter(c =>
+    (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora) < new Date())
+  ).length
 
   let filtrados = clientes
   if (busqueda.trim()) {
@@ -122,6 +121,24 @@ export default function CRM() {
     <>
       <OfflineBanner />
       <View style={styles.container}>
+
+        {/* Métricas rápidas */}
+        <View style={styles.statsBar}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>{clientes.length}</Text>
+            <Text style={styles.statLbl}>Total</Text>
+          </View>
+          <View style={styles.statSep} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>{conRecordatorio}</Text>
+            <Text style={styles.statLbl}>Con recordatorio</Text>
+          </View>
+          <View style={styles.statSep} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNum, vencidos > 0 && styles.statNumAlert]}>{vencidos}</Text>
+            <Text style={styles.statLbl}>Vencidos</Text>
+          </View>
+        </View>
 
         {/* Filtro Venta / Renta */}
         <View style={styles.operacionRow}>
@@ -144,21 +161,20 @@ export default function CRM() {
 
         {/* Pipeline chips */}
         <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.pipeline}
-          contentContainerStyle={styles.pipelineContent}
+          horizontal showsHorizontalScrollIndicator={false}
+          style={styles.pipeline} contentContainerStyle={styles.pipelineContent}
         >
           <TouchableOpacity
-            style={[styles.pipelineChip, estadoFiltro === null && styles.pipelineChipAll]}
+            style={[styles.pipelineChip, estadoFiltro === null && styles.pipelineChipActive]}
             onPress={() => setEstadoFiltro(null)}
           >
-            <Text style={[styles.pipelineCount, estadoFiltro === null && styles.pipelineCountAll]}>
-              {clientes.length}
-            </Text>
-            <Text style={[styles.pipelineLabel, estadoFiltro === null && styles.pipelineLabelAll]}>
-              Todos
-            </Text>
+            <View style={[styles.chipDot, { backgroundColor: '#1a6470' }]} />
+            <Text style={[styles.chipLabel, estadoFiltro === null && styles.chipLabelActive]}>Todos</Text>
+            <View style={[styles.chipBadge, estadoFiltro === null && styles.chipBadgeActive]}>
+              <Text style={[styles.chipBadgeText, estadoFiltro === null && styles.chipBadgeTextActive]}>
+                {clientes.length}
+              </Text>
+            </View>
           </TouchableOpacity>
           {ORDEN_ESTADOS.map((e) => {
             const info = estadoInfo(e)
@@ -169,12 +185,13 @@ export default function CRM() {
                 style={[styles.pipelineChip, activo && { backgroundColor: info.bg, borderColor: info.color }]}
                 onPress={() => setEstadoFiltro(activo ? null : e)}
               >
-                <Text style={[styles.pipelineCount, activo && { color: info.color }]}>
-                  {conteos[e]}
-                </Text>
-                <Text style={[styles.pipelineLabel, activo && { color: info.color, fontWeight: '600' }]}>
+                <View style={[styles.chipDot, { backgroundColor: info.color }]} />
+                <Text style={[styles.chipLabel, activo && { color: info.color, fontWeight: '700' }]}>
                   {info.label}
                 </Text>
+                <View style={[styles.chipBadge, activo && { backgroundColor: info.color }]}>
+                  <Text style={[styles.chipBadgeText, activo && { color: '#fff' }]}>{conteos[e]}</Text>
+                </View>
               </TouchableOpacity>
             )
           })}
@@ -182,8 +199,8 @@ export default function CRM() {
 
         {/* Búsqueda + botón nuevo */}
         <View style={styles.searchRow}>
-          <View style={styles.searchInputWrap}>
-            <Ionicons name="search-outline" size={16} color="#9eafb2" style={styles.searchIcon} />
+          <View style={styles.searchWrap}>
+            <Ionicons name="search-outline" size={16} color="#9eafb2" style={{ marginRight: 8 }} />
             <TextInput
               style={styles.searchInput}
               placeholder="Buscar por nombre, teléfono..."
@@ -195,34 +212,30 @@ export default function CRM() {
               clearButtonMode="while-editing"
             />
           </View>
-          <TouchableOpacity
-            style={styles.btnNuevo}
-            onPress={() => router.push('/(prospectador)/cliente-form')}
-          >
-            <Ionicons name="add" size={18} color="#fff" />
-            <Text style={styles.btnNuevoText}>Nuevo</Text>
+          <TouchableOpacity style={styles.btnNuevo} onPress={() => router.push('/(prospectador)/cliente-form')}>
+            <Ionicons name="add" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
         {isLoading ? (
           <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
         ) : filtrados.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="people-outline" size={52} color="#d0dfe1" />
+          <View style={styles.emptyWrap}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="people-outline" size={36} color="#1a6470" />
+            </View>
             <Text style={styles.emptyTitle}>
               {busqueda || estadoFiltro ? 'Sin resultados' : 'Sin clientes aún'}
             </Text>
             {!busqueda && !estadoFiltro && (
-              <Text style={styles.emptySubtitle}>
-                Agrega tu primer cliente con el botón "+ Nuevo"
-              </Text>
+              <Text style={styles.emptySubtitle}>Agrega tu primer cliente con el botón "+"</Text>
             )}
           </View>
         ) : (
           <FlatList
             data={filtrados}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 24, paddingTop: 4 }}
+            contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 28, paddingTop: 8 }}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
               const info = estadoInfo(item.estado)
@@ -234,63 +247,67 @@ export default function CRM() {
                 <TouchableOpacity
                   style={styles.card}
                   onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
-                  activeOpacity={0.78}
+                  activeOpacity={0.75}
                 >
-                  {/* Avatar + nombre + estado + chevron */}
-                  <View style={styles.cardTop}>
-                    <View style={[styles.avatar, { backgroundColor: info.color + '22' }]}>
-                      <Text style={[styles.avatarText, { color: info.color }]}>{initials}</Text>
-                    </View>
-                    <View style={styles.cardTopInfo}>
-                      <Text style={styles.cardNombre} numberOfLines={1}>{item.nombre}</Text>
-                      {item.empresa ? (
-                        <Text style={styles.cardEmpresa} numberOfLines={1}>{item.empresa}</Text>
-                      ) : null}
-                    </View>
-                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                      <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
-                        <Text style={[styles.estadoText, { color: info.color }]}>{info.label}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={14} color="#cdd8da" />
-                    </View>
-                  </View>
+                  {/* Borde izquierdo de color por estado */}
+                  <View style={[styles.cardAccent, { backgroundColor: info.color }]} />
 
-                  {/* Detalles secundarios */}
-                  <View style={styles.cardMeta}>
-                    <View style={styles.metaItem}>
-                      <Ionicons name="call-outline" size={13} color="#9eafb2" />
-                      <Text style={styles.metaText}>{item.telefono}</Text>
+                  <View style={styles.cardInner}>
+                    {/* Fila superior */}
+                    <View style={styles.cardTop}>
+                      <View style={[styles.avatar, { backgroundColor: info.color + '1a' }]}>
+                        <Text style={[styles.avatarText, { color: info.color }]}>{initials}</Text>
+                      </View>
+                      <View style={styles.cardTopInfo}>
+                        <Text style={styles.cardNombre} numberOfLines={1}>{item.nombre}</Text>
+                        {item.empresa ? (
+                          <Text style={styles.cardEmpresa} numberOfLines={1}>{item.empresa}</Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.cardRight}>
+                        <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
+                          <Text style={[styles.estadoText, { color: info.color }]}>{info.label}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={13} color="#d5dfe0" style={{ alignSelf: 'flex-end', marginTop: 4 }} />
+                      </View>
                     </View>
-                    {item.tipo_operacion && (
+
+                    {/* Meta row */}
+                    <View style={styles.cardMeta}>
                       <View style={styles.metaItem}>
-                        <Ionicons name="home-outline" size={13} color="#9eafb2" />
-                        <Text style={styles.metaText}>{item.tipo_operacion}</Text>
+                        <Ionicons name="call-outline" size={12} color="#adbfc2" />
+                        <Text style={styles.metaText}>{item.telefono}</Text>
+                      </View>
+                      {item.tipo_operacion && (
+                        <View style={styles.metaItem}>
+                          <Ionicons name="home-outline" size={12} color="#adbfc2" />
+                          <Text style={styles.metaText}>{item.tipo_operacion}</Text>
+                        </View>
+                      )}
+                      <View style={styles.metaItem}>
+                        <Ionicons name="time-outline" size={12} color="#adbfc2" />
+                        <Text style={styles.metaText}>{tiempoRelativo(item.created_at)}</Text>
+                      </View>
+                    </View>
+
+                    {/* Recordatorio próximo */}
+                    {recProximo && (
+                      <View style={[styles.recRow, recVencido && styles.recRowVencido]}>
+                        <Ionicons
+                          name={recVencido ? 'warning-outline' : 'alarm-outline'}
+                          size={12}
+                          color={recVencido ? '#c0392b' : '#1a6470'}
+                        />
+                        <Text style={[styles.recText, recVencido && styles.recTextVencido]} numberOfLines={1}>
+                          {recVencido
+                            ? `Vencido: ${recProximo.titulo}`
+                            : new Date(recProximo.fecha_hora).toLocaleDateString('es-MX', {
+                                day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                              }) + ` · ${recProximo.titulo}`}
+                        </Text>
                       </View>
                     )}
-                    <View style={styles.metaItem}>
-                      <Ionicons name="time-outline" size={13} color="#9eafb2" />
-                      <Text style={styles.metaText}>{tiempoRelativo(item.created_at)}</Text>
-                    </View>
                   </View>
-
-                  {/* Recordatorio próximo */}
-                  {recProximo && (
-                    <View style={[styles.recRow, recVencido && styles.recRowVencido]}>
-                      <Ionicons
-                        name={recVencido ? 'warning-outline' : 'alarm-outline'}
-                        size={13}
-                        color={recVencido ? '#c0392b' : '#1a6470'}
-                      />
-                      <Text style={[styles.recText, recVencido && styles.recTextVencido]} numberOfLines={1}>
-                        {recVencido
-                          ? `Vencido: ${recProximo.titulo}`
-                          : new Date(recProximo.fecha_hora).toLocaleDateString('es-MX', {
-                              day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                            }) + ` · ${recProximo.titulo}`}
-                      </Text>
-                    </View>
-                  )}
-
                 </TouchableOpacity>
               )
             }}
@@ -302,104 +319,119 @@ export default function CRM() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f2f5' },
+  container: { flex: 1, backgroundColor: '#f2f5f8' },
 
-  operacionRow: {
+  // Stats bar
+  statsBar: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    backgroundColor: '#1a6470',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  statItem: { flex: 1, alignItems: 'center' },
+  statNum: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  statNumAlert: { color: '#ffb74d' },
+  statLbl: { fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 2, letterSpacing: 0.2 },
+  statSep: { width: 1, backgroundColor: 'rgba(255,255,255,0.18)', marginVertical: 6 },
+
+  // Operation tabs
+  operacionRow: {
+    flexDirection: 'row', backgroundColor: '#fff',
+    borderBottomWidth: 1, borderBottomColor: '#edf0f3',
   },
   operacionTab: {
-    flex: 1, paddingVertical: 12, alignItems: 'center',
+    flex: 1, paddingVertical: 11, alignItems: 'center',
     borderBottomWidth: 2, borderBottomColor: 'transparent',
   },
   operacionTabActivo: { borderBottomColor: '#1a6470' },
-  operacionTabText: { fontSize: 13, fontWeight: '600', color: '#aaa' },
+  operacionTabText: { fontSize: 13, fontWeight: '600', color: '#b0bec5' },
   operacionTabTextActivo: { color: '#1a6470' },
 
-  pipeline: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  pipelineContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, flexDirection: 'row' },
+  // Pipeline
+  pipeline: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#edf0f3' },
+  pipelineContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 6, flexDirection: 'row' },
   pipelineChip: {
-    alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 10, borderWidth: 1, borderColor: '#e0e0e0',
-    backgroundColor: '#fafafa', minWidth: 70,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 20, borderWidth: 1, borderColor: '#e5eaed',
+    backgroundColor: '#fafbfc',
   },
-  pipelineChipAll: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  pipelineCount: { fontSize: 18, fontWeight: '700', color: '#555' },
-  pipelineCountAll: { color: '#fff' },
-  pipelineLabel: { fontSize: 10, color: '#888', textAlign: 'center', marginTop: 1 },
-  pipelineLabelAll: { color: '#c9a84c' },
+  pipelineChipActive: { backgroundColor: '#e8f4f5', borderColor: '#1a6470' },
+  chipDot: { width: 7, height: 7, borderRadius: 4 },
+  chipLabel: { fontSize: 12, color: '#6b8082', fontWeight: '500' },
+  chipLabelActive: { color: '#1a6470', fontWeight: '700' },
+  chipBadge: {
+    backgroundColor: '#e8eef0', borderRadius: 10,
+    paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center',
+  },
+  chipBadgeActive: { backgroundColor: '#1a6470' },
+  chipBadgeText: { fontSize: 11, fontWeight: '700', color: '#6b8082' },
+  chipBadgeTextActive: { color: '#fff' },
 
-  searchRow: { flexDirection: 'row', gap: 8, padding: 12, alignItems: 'center' },
-  searchInputWrap: {
+  // Search row
+  searchRow: { flexDirection: 'row', gap: 10, padding: 12, alignItems: 'center' },
+  searchWrap: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', borderRadius: 12, borderWidth: 1,
-    borderColor: '#e0e8ea', paddingHorizontal: 10,
+    backgroundColor: '#fff', borderRadius: 14,
+    borderWidth: 1, borderColor: '#e2e8ea',
+    paddingHorizontal: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
-  searchIcon: { marginRight: 6 },
-  searchInput: {
-    flex: 1, paddingVertical: 11, fontSize: 14, color: '#1a1a2e',
-  },
+  searchInput: { flex: 1, paddingVertical: 11, fontSize: 14, color: '#1a1a2e' },
   btnNuevo: {
-    backgroundColor: '#1a6470', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 11,
-    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#1a6470', borderRadius: 14,
+    width: 46, height: 46, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#1a6470', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3, shadowRadius: 5, elevation: 4,
   },
-  btnNuevoText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
-  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a6470' },
-  emptySubtitle: { fontSize: 14, color: '#aaa', textAlign: 'center' },
+  // Empty state
+  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
+  emptyIcon: {
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: '#e0f0f2', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+  },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#2c4a4e' },
+  emptySubtitle: { fontSize: 14, color: '#9eafb2', textAlign: 'center', lineHeight: 20 },
 
   // Card
   card: {
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     marginBottom: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#e8eef0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    shadowColor: '#1a2e30',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
     elevation: 2,
   },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
-  },
+  cardAccent: { width: 4 },
+  cardInner: { flex: 1, padding: 14 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   avatar: {
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  avatarText: { fontSize: 15, fontWeight: '700' },
+  avatarText: { fontSize: 15, fontWeight: '800' },
   cardTopInfo: { flex: 1, minWidth: 0 },
-  cardNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
-  cardEmpresa: { fontSize: 12, color: '#999', marginTop: 1 },
-  estadoBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 0 },
+  cardNombre: { fontSize: 16, fontWeight: '700', color: '#1a1a2e' },
+  cardEmpresa: { fontSize: 12, color: '#9eafb2', marginTop: 2 },
+  cardRight: { alignItems: 'flex-end' },
+  estadoBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   estadoText: { fontSize: 11, fontWeight: '700' },
 
-  cardMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 6,
-  },
+  cardMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 4 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 12, color: '#7a8e91' },
+  metaText: { fontSize: 12, color: '#8a9fa2' },
 
   recRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#e8f4f5', borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 5, marginTop: 2,
+    flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6,
+    backgroundColor: '#e8f4f5', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5,
   },
   recRowVencido: { backgroundColor: '#fde8e8' },
   recText: { fontSize: 12, color: '#1a6470', flex: 1 },
   recTextVencido: { color: '#c0392b', fontWeight: '600' },
-
 })

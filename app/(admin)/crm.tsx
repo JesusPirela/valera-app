@@ -282,23 +282,25 @@ export default function AdminCRM() {
         })}
       </View>
 
-      {/* Resumen global por estado */}
+      {/* Pipeline chips */}
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.resumenScroll}
-        contentContainerStyle={styles.resumenContent}
+        horizontal showsHorizontalScrollIndicator={false}
+        style={styles.resumenScroll} contentContainerStyle={styles.resumenContent}
       >
         <TouchableOpacity
           style={[styles.resumenChip, estadoFiltro === null && styles.resumenChipAll]}
           onPress={() => setEstadoFiltro(null)}
         >
-          <Text style={[styles.resumenCount, estadoFiltro === null && styles.resumenCountAll]}>
-            {totalGlobal}
-          </Text>
-          <Text style={[styles.resumenLabel, estadoFiltro === null && styles.resumenLabelAll]}>
-            Total
-          </Text>
+          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#1a6470' }} />
+          <Text style={[styles.resumenLabel, estadoFiltro === null && styles.resumenLabelAll]}>Todos</Text>
+          <View style={{
+            backgroundColor: estadoFiltro === null ? '#1a6470' : '#e8eef0',
+            borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: estadoFiltro === null ? '#fff' : '#6b8082' }}>
+              {totalGlobal}
+            </Text>
+          </View>
         </TouchableOpacity>
         {ORDEN_ESTADOS.map((e) => {
           const info = estadoInfo(e)
@@ -309,12 +311,18 @@ export default function AdminCRM() {
               style={[styles.resumenChip, activo && { backgroundColor: info.bg, borderColor: info.color }]}
               onPress={() => setEstadoFiltro(activo ? null : e)}
             >
-              <Text style={[styles.resumenCount, activo && { color: info.color }]}>
-                {conteosPorEstado[e]}
-              </Text>
-              <Text style={[styles.resumenLabel, activo && { color: info.color, fontWeight: '600' }]}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: info.color }} />
+              <Text style={[styles.resumenLabel, activo && { color: info.color, fontWeight: '700' }]}>
                 {info.label}
               </Text>
+              <View style={{
+                backgroundColor: activo ? info.color : '#e8eef0',
+                borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center',
+              }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: activo ? '#fff' : '#6b8082' }}>
+                  {conteosPorEstado[e]}
+                </Text>
+              </View>
             </TouchableOpacity>
           )
         })}
@@ -569,128 +577,124 @@ export default function AdminCRM() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f4f5' },
+  container: { flex: 1, backgroundColor: '#f2f5f8' },
 
   // Operacion tabs
   operacionRow: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    flexDirection: 'row', backgroundColor: '#fff',
+    borderBottomWidth: 1, borderBottomColor: '#edf0f3',
   },
   operacionTab: {
-    flex: 1, paddingVertical: 10, alignItems: 'center',
+    flex: 1, paddingVertical: 11, alignItems: 'center',
     borderBottomWidth: 2, borderBottomColor: 'transparent',
   },
   operacionTabActivo: { borderBottomColor: '#1a6470' },
-  operacionTabText: { fontSize: 13, fontWeight: '600', color: '#aaa' },
+  operacionTabText: { fontSize: 13, fontWeight: '600', color: '#b0bec5' },
   operacionTabTextActivo: { color: '#1a6470' },
 
-  // Resumen
-  resumenScroll: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  resumenContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, flexDirection: 'row' },
+  // Resumen (pipeline chips)
+  resumenScroll: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#edf0f3' },
+  resumenContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 6, flexDirection: 'row' },
   resumenChip: {
-    alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 10, borderWidth: 1, borderColor: '#e0e0e0',
-    backgroundColor: '#fafafa', minWidth: 70,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 20, borderWidth: 1, borderColor: '#e5eaed',
+    backgroundColor: '#fafbfc',
   },
-  resumenChipAll: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  resumenCount: { fontSize: 18, fontWeight: '700', color: '#555' },
+  resumenChipAll: { backgroundColor: '#e8f4f5', borderColor: '#1a6470' },
+  resumenCount: { fontSize: 11, fontWeight: '700', color: '#6b8082' },
   resumenCountAll: { color: '#fff' },
-  resumenLabel: { fontSize: 10, color: '#888', textAlign: 'center', marginTop: 1 },
-  resumenLabelAll: { color: '#c9a84c' },
+  resumenLabel: { fontSize: 12, color: '#6b8082', fontWeight: '500' },
+  resumenLabelAll: { color: '#1a6470', fontWeight: '700' },
 
   // Search
   searchRow: { flexDirection: 'row', gap: 10, padding: 12, alignItems: 'center' },
   searchInput: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#ddd',
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1a1a2e',
+    flex: 1, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8ea',
+    paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: '#1a1a2e',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
-  btnNuevo: { backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
+  btnNuevo: {
+    backgroundColor: '#1a6470', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 11,
+    shadowColor: '#1a6470', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 3,
+  },
   btnNuevoText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   // Empty
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  emptyTitle: { fontSize: 16, color: '#aaa' },
+  emptyTitle: { fontSize: 16, color: '#9eafb2' },
 
   // Sección prospectador
   seccion: { marginHorizontal: 12, marginBottom: 14 },
   secHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#fff', borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: '#dde8e9',
+    backgroundColor: '#fff', borderRadius: 14, padding: 14,
+    shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 5, elevation: 2,
   },
   secHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   avatarCircle: {
-    width: 38, height: 38, borderRadius: 19,
+    width: 40, height: 40, borderRadius: 20,
     backgroundColor: '#1a6470', alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { color: '#c9a84c', fontSize: 16, fontWeight: '800' },
+  avatarText: { color: '#c9a84c', fontSize: 17, fontWeight: '800' },
   secNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
   secEmail: { fontSize: 11, color: '#aaa', marginTop: 1 },
   secHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  totalBadge: { backgroundColor: '#e0f4f5', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  totalBadge: { backgroundColor: '#e8f4f5', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
   totalBadgeText: { fontSize: 12, color: '#1a6470', fontWeight: '700' },
-  chevron: { fontSize: 12, color: '#aaa' },
+  chevron: { fontSize: 12, color: '#c0cdd0' },
 
   // Table
   tableWrapper: {
-    borderWidth: 1,
-    borderColor: '#dde3e7',
-    borderBottomLeftRadius: 10,
-    borderBottomRightRadius: 10,
-    borderTopWidth: 0,
-    overflow: 'hidden',
+    borderWidth: 1, borderColor: '#e0e8ea',
+    borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
+    borderTopWidth: 0, overflow: 'hidden',
+    shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
   tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#1a6470',
-    borderBottomWidth: 2,
-    borderBottomColor: '#c9a84c',
+    flexDirection: 'row', backgroundColor: '#1a6470',
+    borderBottomWidth: 2, borderBottomColor: '#c9a84c',
   },
-  headerCell: { paddingVertical: 9, paddingHorizontal: 10, justifyContent: 'center' },
-  headerCellText: { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+  headerCell: { paddingVertical: 10, paddingHorizontal: 10, justifyContent: 'center' },
+  headerCellText: { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 0.4 },
   sortIcon: { color: '#c9a84c', fontWeight: '400' },
-  cellBorderRight: { borderRightWidth: 1, borderRightColor: '#dde3e7' },
+  cellBorderRight: { borderRightWidth: 1, borderRightColor: '#e0e8ea' },
 
   tableRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e8ecef',
-    minHeight: 44,
+    flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#edf0f3', minHeight: 46,
   },
   rowEven: { backgroundColor: '#ffffff' },
   rowOdd:  { backgroundColor: '#f7f9fb' },
 
-  cell: { paddingVertical: 9, paddingHorizontal: 10, justifyContent: 'center' },
+  cell: { paddingVertical: 10, paddingHorizontal: 10, justifyContent: 'center' },
   cellCenter: { alignItems: 'center' },
   cellNombre: { fontSize: 13, fontWeight: '700', color: '#1a1a2e' },
-  cellSub:    { fontSize: 11, color: '#999', marginTop: 1 },
-  cellText:   { fontSize: 13, color: '#444' },
-  cellFecha:  { fontSize: 12, color: '#888', textAlign: 'center' },
+  cellSub:    { fontSize: 11, color: '#9eafb2', marginTop: 2 },
+  cellText:   { fontSize: 13, color: '#4a5568' },
+  cellFecha:  { fontSize: 12, color: '#9eafb2', textAlign: 'center' },
 
-  estadoBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
-  estadoText:  { fontSize: 11, fontWeight: '600' },
+  estadoBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  estadoText:  { fontSize: 11, fontWeight: '700' },
 
   // Modal nuevo cliente
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 36, maxHeight: '90%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a6470' },
-  modalCerrar: { fontSize: 18, color: '#888', paddingHorizontal: 6 },
-  mLabel: { fontSize: 12, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6, marginTop: 12 },
-  mInput: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: '#1a2e30', backgroundColor: '#fafcfc' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40, maxHeight: '90%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e' },
+  modalCerrar: { fontSize: 18, color: '#9eafb2', paddingHorizontal: 6 },
+  mLabel: { fontSize: 11, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6, marginTop: 14 },
+  mInput: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1a2e30', backgroundColor: '#f5f7f8' },
   mRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  mChip: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
+  mChip: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
   mChipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   mChipTxt: { fontSize: 13, fontWeight: '600', color: '#1a6470' },
   mHint: { fontSize: 13, color: '#aaa', fontStyle: 'italic' },
-  mUsuariosList: { borderWidth: 1, borderColor: '#e0eaec', borderRadius: 10, overflow: 'hidden', marginTop: 4 },
-  mUsuarioRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f0f4f5' },
-  mUsuarioRowActivo: { backgroundColor: '#f3fbf6' },
-  mAvatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  mAvatarTxt: { fontSize: 13, fontWeight: '700' },
+  mUsuariosList: { borderWidth: 1, borderColor: '#e0eaec', borderRadius: 14, overflow: 'hidden', marginTop: 4 },
+  mUsuarioRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f4f5' },
+  mUsuarioRowActivo: { backgroundColor: '#f0fcf6' },
+  mAvatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  mAvatarTxt: { fontSize: 14, fontWeight: '700' },
   mUsuarioNombre: { flex: 1, fontSize: 14, color: '#1a2e30' },
-  mGuardarBtn: { backgroundColor: '#c9a84c', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 20 },
+  mGuardarBtn: { backgroundColor: '#c9a84c', borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 22 },
   mGuardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
 })
