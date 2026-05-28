@@ -70,6 +70,7 @@ type Propiedad = {
   banos: number | null
   m2: number | null
   estacionamientos: number | null
+  descripcion: string | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
@@ -172,7 +173,7 @@ export default function ProspectadorPropiedades() {
         supabase.from('profiles').select('role, nombre').eq('id', userId).single(),
         supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .order('created_at', { ascending: false }),
         supabase.from('propiedad_publicacion').select('propiedad_id, veces_publicada').eq('user_id', userId),
@@ -453,6 +454,9 @@ export default function ProspectadorPropiedades() {
           )}
           <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
           <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
+          {item.descripcion ? (
+            <Text style={styles.cardDescripcion} numberOfLines={2}>{item.descripcion}</Text>
+          ) : null}
           {tieneMeta && (
             <View style={styles.metaRow}>
               {item.recamaras != null && <Text style={styles.metaItem}>Rec {item.recamaras}</Text>}
