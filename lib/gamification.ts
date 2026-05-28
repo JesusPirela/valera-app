@@ -100,6 +100,15 @@ export async function registrarAccion(userId: string, accion: AccionGamificacion
   }
 }
 
+// Mapeo categoria → campo en user_stats (fuente de verdad para misiones base)
+const STATS_CAMPO: Partial<Record<string, keyof UserStats>> = {
+  propiedad:   'total_propiedades',
+  crm:         'total_clientes',
+  seguimiento: 'total_seguimientos',
+  interaccion: 'total_interacciones',
+  curso:       'total_cursos',
+}
+
 // ── Actualizar progreso de misiones para una categoría ─────────
 async function actualizarMisionesPorCategoria(userId: string, categoria: string): Promise<void> {
   const hoy = new Date().toISOString().slice(0, 10)
@@ -112,6 +121,15 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
 
   if (!misiones?.length) return
 
+  // Para misiones base: leer user_stats como fuente de verdad (auto-correctivo)
+  let statsActual: number | null = null
+  const campoStats = STATS_CAMPO[categoria]
+  if (campoStats) {
+    const { data: stats } = await supabase
+      .from('user_stats').select(campoStats).eq('id', userId).maybeSingle()
+    statsActual = (stats as any)?.[campoStats] ?? null
+  }
+
   for (const m of misiones) {
     const { data: um } = await supabase
       .from('user_misiones')
@@ -123,15 +141,23 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
     // Saltar misiones base ya completadas
     if (m.tipo === 'base' && um?.completada) continue
 
-    // Para diarias: resetear si es un día distinto
-    const yaReset     = um?.fecha_reset === hoy
-    const progreso    = (m.tipo === 'diaria' && !yaReset) ? 0 : (um?.progreso ?? 0)
-    const completada  = (m.tipo === 'diaria' && !yaReset) ? false : (um?.completada ?? false)
+    let nuevoProg: number
+    let yaCompletada: boolean
 
-    if (completada) continue
+    if (m.tipo === 'base') {
+      // Misiones base: usar contador real de user_stats (se auto-corrige si hubo fallos)
+      nuevoProg    = Math.min(statsActual ?? (um?.progreso ?? 0) + 1, m.meta)
+      yaCompletada = um?.completada ?? false
+    } else {
+      // Misiones diarias: incremental +1, reset por fecha
+      const yaReset = um?.fecha_reset === hoy
+      const progDiario = (um && !yaReset) ? 0 : (um?.progreso ?? 0)
+      yaCompletada = (um?.completada && yaReset) ? true : (um?.completada ?? false)
+      if (yaCompletada) continue
+      nuevoProg = Math.min(progDiario + 1, m.meta)
+    }
 
-    const nuevoProg   = Math.min(progreso + 1, m.meta)
-    const nuevaCompl  = nuevoProg >= m.meta
+    const nuevaCompl = nuevoProg >= m.meta
 
     if (!um) {
       await supabase.from('user_misiones').insert({
@@ -146,7 +172,72 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
       }).eq('id', um.id)
     }
 
-    if (nuevaCompl && !completada) {
+    if (nuevaCompl && !yaCompletada) {
+      await supabase.rpc('award_xp_coins', {
+        p_user_id: userId,
+        p_xp:      m.recompensa_xp,
+        p_coins:   m.recompensa_coins,
+        p_concepto: '¡Misión completada! 🎯',
+        p_campo_contador: null,
+      })
+    }
+  }
+}
+
+// ── Sincronizar progreso de misiones base desde user_stats ─────
+// Corrige misiones base desincronizadas sin necesidad de nuevas acciones
+export async function sincronizarMisionesBase(userId: string): Promise<void> {
+  const hoy = new Date().toISOString().slice(0, 10)
+
+  const { data: stats } = await supabase
+    .from('user_stats')
+    .select('total_propiedades, total_clientes, total_seguimientos, total_interacciones, total_cursos')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (!stats) return
+
+  const { data: misiones } = await supabase
+    .from('misiones')
+    .select('id, categoria, meta, recompensa_xp, recompensa_coins')
+    .eq('tipo', 'base')
+    .eq('activa', true)
+
+  if (!misiones?.length) return
+
+  for (const m of misiones) {
+    const campoStats = STATS_CAMPO[m.categoria]
+    if (!campoStats) continue
+
+    const progresoCorrecto = Math.min((stats as any)[campoStats] ?? 0, m.meta)
+    if (progresoCorrecto === 0) continue
+
+    const { data: um } = await supabase
+      .from('user_misiones')
+      .select('id, progreso, completada')
+      .eq('user_id', userId)
+      .eq('mision_id', m.id)
+      .maybeSingle()
+
+    if (um?.completada) continue
+    if (um && um.progreso >= progresoCorrecto) continue
+
+    const nuevaCompl = progresoCorrecto >= m.meta
+
+    if (!um) {
+      await supabase.from('user_misiones').insert({
+        user_id: userId, mision_id: m.id, progreso: progresoCorrecto,
+        completada: nuevaCompl, fecha_reset: hoy,
+        fecha_completada: nuevaCompl ? new Date().toISOString() : null,
+      })
+    } else {
+      await supabase.from('user_misiones').update({
+        progreso: progresoCorrecto, completada: nuevaCompl,
+        fecha_completada: nuevaCompl && !um.completada ? new Date().toISOString() : null,
+      }).eq('id', um.id)
+    }
+
+    if (nuevaCompl && !(um?.completada)) {
       await supabase.rpc('award_xp_coins', {
         p_user_id: userId,
         p_xp:      m.recompensa_xp,

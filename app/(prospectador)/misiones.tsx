@@ -6,7 +6,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
-import { calcularNivel, infoNivel, tituloPorNivel } from '../../lib/gamification'
+import { calcularNivel, infoNivel, tituloPorNivel, sincronizarMisionesBase } from '../../lib/gamification'
 
 type UserStats = {
   xp: number
@@ -63,6 +63,7 @@ export default function Misiones() {
   const [misiones, setMisiones] = useState<MisionConProgreso[]>([])
   const [loading, setLoading]   = useState(true)
   const [tabBase, setTabBase]   = useState<string>('propiedad')
+  const [sincronizando, setSincronizando] = useState(false)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -214,7 +215,25 @@ export default function Misiones() {
 
       {/* ── MISIONES BASE ─────────────────────────────────────── */}
       <View style={s.section}>
-        <Text style={s.sectionTitle}>🏆 Misiones Base</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+          <Text style={s.sectionTitle}>🏆 Misiones Base</Text>
+          <TouchableOpacity
+            style={[s.syncBtn, sincronizando && { opacity: 0.6 }]}
+            disabled={sincronizando}
+            onPress={async () => {
+              if (!userId) return
+              setSincronizando(true)
+              await sincronizarMisionesBase(userId).catch(() => {})
+              await cargar()
+              setSincronizando(false)
+            }}
+          >
+            {sincronizando
+              ? <ActivityIndicator size="small" color="#c9a84c" />
+              : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Ionicons name="sync-outline" size={13} color="#c9a84c" /><Text style={s.syncBtnTxt}>Sincronizar</Text></View>
+            }
+          </TouchableOpacity>
+        </View>
         <Text style={s.sectionSub}>Progreso permanente — nunca se reinician</Text>
 
         {/* Tabs de categoría */}
@@ -369,6 +388,8 @@ const s = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
   sectionTitle:  { fontSize: 16, fontWeight: '800', color: '#fff', flex: 1 },
   sectionSub:    { fontSize: 12, color: '#556a7a', marginBottom: 14 },
+  syncBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: '#c9a84c44' },
+  syncBtnTxt: { color: GOLD, fontSize: 11, fontWeight: '600' },
   badge: { backgroundColor: GOLD, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
   badgeTxt: { color: '#1a1000', fontSize: 11, fontWeight: '800' },
 
