@@ -508,7 +508,7 @@ export default function ProspectadorPropiedades() {
           source={{ html: PHASH_HTML }}
           onMessage={onPhashMessage}
           javaScriptEnabled
-          style={{ width: 0, height: 0, opacity: 0, overflow: 'hidden' }}
+          style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, opacity: 0 }}
         />
       )}
       <OfflineBanner />
