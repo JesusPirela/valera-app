@@ -309,7 +309,7 @@ export default function AdminPropiedades() {
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
           style={styles.searchInput}
-          placeholder="Buscar por código o dirección..."
+          placeholder="Buscar por código, título o dirección..."
           placeholderTextColor="#aaa"
           value={busqueda}
           onChangeText={setBusqueda}

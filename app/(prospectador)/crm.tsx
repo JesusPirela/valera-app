@@ -127,7 +127,8 @@ export default function CRM() {
     const q = busqueda.toLowerCase()
     filtrados = filtrados.filter((c) =>
       c.nombre.toLowerCase().includes(q) || c.telefono.includes(q) ||
-      (c.email ?? '').toLowerCase().includes(q)
+      (c.email ?? '').toLowerCase().includes(q) ||
+      (c.empresa ?? '').toLowerCase().includes(q)
     )
   }
   if (estadoFiltro) filtrados = filtrados.filter((c) => c.estado === estadoFiltro)
