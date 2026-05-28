@@ -878,7 +878,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 8,
     paddingHorizontal: 10,
-    marginTop: 6,
+    marginTop: 2,
     marginBottom: 0,
   },
   searchIcon: { fontSize: 15, marginRight: 8, color: '#aaa' },
