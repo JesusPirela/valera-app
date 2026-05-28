@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import {
-  View, Text, StyleSheet, TextInput,
+  View, Text, StyleSheet, TextInput, Platform, Linking,
   ActivityIndicator, TouchableOpacity, ScrollView, FlatList,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
@@ -60,6 +60,22 @@ function proximoRecordatorio(recordatorios: Cliente['recordatorios']) {
 
 function iniciales(nombre: string) {
   return nombre.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+}
+
+function abrirWhatsApp(telefono: string, nombre: string) {
+  const phone = telefono.replace(/\D/g, '')
+  const num = phone.length === 10 ? `52${phone}` : phone
+  const msg = encodeURIComponent(`Hola ${nombre}, te contacto de Valera Real Estate. ¿Cómo estás?`)
+  const url = `https://wa.me/${num}?text=${msg}`
+  if (Platform.OS === 'web') {
+    window.open(url, '_blank')
+  } else {
+    Linking.openURL(url)
+  }
+}
+
+function llamar(telefono: string) {
+  Linking.openURL(`tel:${telefono}`)
 }
 
 export default function CRM() {
@@ -307,6 +323,24 @@ export default function CRM() {
                         </Text>
                       </View>
                     )}
+
+                    {/* Acciones rápidas */}
+                    <View style={styles.cardActions}>
+                      <TouchableOpacity
+                        style={styles.actionWa}
+                        onPress={() => abrirWhatsApp(item.telefono, item.nombre)}
+                      >
+                        <Ionicons name="logo-whatsapp" size={13} color="#25D366" />
+                        <Text style={styles.actionWaText}>WhatsApp</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.actionCall}
+                        onPress={() => llamar(item.telefono)}
+                      >
+                        <Ionicons name="call-outline" size={13} color="#1a6470" />
+                        <Text style={styles.actionCallText}>Llamar</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </TouchableOpacity>
               )
@@ -434,4 +468,20 @@ const styles = StyleSheet.create({
   recRowVencido: { backgroundColor: '#fde8e8' },
   recText: { fontSize: 12, color: '#1a6470', flex: 1 },
   recTextVencido: { color: '#c0392b', fontWeight: '600' },
+
+  cardActions: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  actionWa: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#f0fdf6', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, borderColor: '#d1f7e2',
+  },
+  actionWaText: { fontSize: 12, fontWeight: '600', color: '#16a34a' },
+  actionCall: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#f0f8fa', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, borderColor: '#cde8ed',
+  },
+  actionCallText: { fontSize: 12, fontWeight: '600', color: '#1a6470' },
 })
