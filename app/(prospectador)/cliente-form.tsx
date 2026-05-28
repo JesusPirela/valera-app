@@ -209,9 +209,10 @@ export default function ClienteForm() {
   const [notas, setNotas] = useState('')
   const [proximoContacto, setProximoContacto] = useState<Date | null>(null)
 
+  const [nivelInteres, setNivelInteres] = useState<'alto' | 'medio' | 'bajo' | null>(null)
+
   // Solo Venta
   const [email, setEmail] = useState('')
-  const [empresa, setEmpresa] = useState('')
   const [tipoCredito, setTipoCredito] = useState<string | null>(null)
   const [presupuesto, setPresupuesto] = useState('')
   const [zonaBusqueda, setZonaBusqueda] = useState('')
@@ -238,7 +239,7 @@ export default function ClienteForm() {
           setNombre(data.nombre ?? '')
           setTelefono(data.telefono ?? '')
           setEmail(data.email ?? '')
-          setEmpresa(data.empresa ?? '')
+          setNivelInteres(data.nivel_interes ?? null)
           setFuente(data.fuente_lead ?? 'otro')
           setEstado(data.estado ?? 'por_perfilar')
           setTipoCredito(data.tipo_credito ?? null)
@@ -280,9 +281,9 @@ export default function ClienteForm() {
         tipo_operacion: tipoOperacion,
         notas: notas.trim() || null,
         proximo_contacto: proximoContacto?.toISOString() ?? null,
+        nivel_interes: nivelInteres,
         // Venta
         email: !esRenta ? email.trim() || null : null,
-        empresa: !esRenta ? empresa.trim() || null : null,
         tipo_credito: !esRenta ? tipoCredito : null,
         presupuesto: !esRenta
           ? presupuesto.trim() || null
@@ -359,6 +360,31 @@ export default function ClienteForm() {
         })}
       </View>
 
+      {/* ── Nivel de interés ── */}
+      {tipoOperacion && (
+        <>
+          <Text style={styles.sectionTitle}>Nivel de interés</Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+            {([
+              { value: 'alto',  label: '🔥 Alto' },
+              { value: 'medio', label: '🌡️ Medio' },
+              { value: 'bajo',  label: '❄️ Bajo' },
+            ] as const).map((op) => {
+              const activo = nivelInteres === op.value
+              return (
+                <TouchableOpacity
+                  key={op.value}
+                  style={[styles.chip, activo && styles.chipActivo, { flex: 1, justifyContent: 'center', paddingVertical: 10 }]}
+                  onPress={() => setNivelInteres(activo ? null : op.value)}
+                >
+                  <Text style={[styles.chipText, activo && styles.chipTextActivo]}>{op.label}</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        </>
+      )}
+
       {/* ── Si no hay selección, mostrar aviso ── */}
       {!tipoOperacion && (
         <View style={styles.sinTipoBox}>
@@ -382,10 +408,6 @@ export default function ClienteForm() {
           <Text style={styles.fieldLabel}>Email</Text>
           <TextInput style={styles.input} value={email} onChangeText={setEmail}
             placeholder="correo@ejemplo.com" keyboardType="email-address" autoCapitalize="none" />
-
-          <Text style={styles.fieldLabel}>Empresa</Text>
-          <TextInput style={styles.input} value={empresa} onChangeText={setEmpresa}
-            placeholder="Nombre de la empresa (opcional)" autoCapitalize="words" />
 
           <Text style={styles.sectionTitle}>Búsqueda</Text>
           <Text style={styles.fieldLabel}>Zona en la que busca</Text>

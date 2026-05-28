@@ -20,7 +20,12 @@ type Cliente = {
   tipo_operacion: string | null
   proximo_contacto: string | null
   created_at: string
+  nivel_interes: 'alto' | 'medio' | 'bajo' | null
   recordatorios: { id: string; titulo: string; fecha_hora: string; completado: boolean }[]
+}
+
+const NIVEL_INTERES_LABEL: Record<string, string> = {
+  alto: '🔥 Alto', medio: '🌡️ Medio', bajo: '❄️ Bajo',
 }
 
 export const ESTADOS: Record<string, { label: string; color: string; bg: string }> = {
@@ -90,13 +95,14 @@ export default function CRM() {
   const [opFiltro, setOpFiltro]           = useState<'venta' | 'renta' | null>(null)
   const [sortBy, setSortBy]               = useState<SortBy>('reciente')
   const [showSort, setShowSort]           = useState(false)
+  const [vistaExcel, setVistaExcel]       = useState(false)
 
   const { data: clientes = [], isLoading, refetch } = useQuery<Cliente[]>({
     queryKey: ['clientes'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('clientes')
-        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, recordatorios(id, titulo, fecha_hora, completado)')
+        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, nivel_interes, recordatorios(id, titulo, fecha_hora, completado)')
         .order('updated_at', { ascending: false })
       if (error) throw error
       return data ?? []
@@ -267,6 +273,9 @@ export default function CRM() {
             <Ionicons name="funnel-outline" size={15} color="#1a6470" />
             {sortBy !== 'reciente' && <View style={s.sortDot} />}
           </TouchableOpacity>
+          <TouchableOpacity style={s.sortBtn} onPress={() => setVistaExcel(v => !v)}>
+            <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
+          </TouchableOpacity>
           <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
             <Ionicons name="add" size={20} color="#fff" />
           </TouchableOpacity>
@@ -313,6 +322,45 @@ export default function CRM() {
               <Text style={s.emptySub}>Agrega tu primer lead con el botón "Nuevo lead"</Text>
             )}
           </View>
+        ) : vistaExcel ? (
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            <ScrollView horizontal showsHorizontalScrollIndicator style={{ flex: 1 }}>
+              <View>
+                {/* Encabezado tabla */}
+                <View style={s.excelHeader}>
+                  <Text style={[s.excelCell, s.excelCellNombre, s.excelHeaderTxt]}>Nombre</Text>
+                  <Text style={[s.excelCell, s.excelCellTel, s.excelHeaderTxt]}>Teléfono</Text>
+                  <Text style={[s.excelCell, s.excelCellEstado, s.excelHeaderTxt]}>Estado</Text>
+                  <Text style={[s.excelCell, s.excelCellOp, s.excelHeaderTxt]}>Operación</Text>
+                  <Text style={[s.excelCell, s.excelCellInteres, s.excelHeaderTxt]}>Interés</Text>
+                </View>
+                {filtrados.map((item, idx) => {
+                  const info = estadoInfo(item.estado)
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[s.excelRow, idx % 2 === 0 && s.excelRowAlt]}
+                      onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
+                    >
+                      <Text style={[s.excelCell, s.excelCellNombre]} numberOfLines={1}>{item.nombre}</Text>
+                      <Text style={[s.excelCell, s.excelCellTel]} numberOfLines={1}>{item.telefono}</Text>
+                      <View style={[s.excelCell, s.excelCellEstado, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                        <View style={[s.estadoDot, { backgroundColor: info.color }]} />
+                        <Text style={{ fontSize: 11, color: info.color, fontWeight: '600' }} numberOfLines={1}>{info.label}</Text>
+                      </View>
+                      <Text style={[s.excelCell, s.excelCellOp, { textTransform: 'capitalize' }]} numberOfLines={1}>
+                        {item.tipo_operacion ?? '—'}
+                      </Text>
+                      <Text style={[s.excelCell, s.excelCellInteres]} numberOfLines={1}>
+                        {item.nivel_interes ? NIVEL_INTERES_LABEL[item.nivel_interes] : '—'}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+                <View style={{ height: 100 }} />
+              </View>
+            </ScrollView>
+          </ScrollView>
         ) : (
           <FlatList
             data={filtrados}
@@ -343,8 +391,12 @@ export default function CRM() {
                       <View style={s.cardHeadInfo}>
                         <Text style={s.cardNombre} numberOfLines={1}>{item.nombre}</Text>
                         <View style={s.cardSubRow}>
-                          {item.empresa
-                            ? <Text style={s.cardEmpresa} numberOfLines={1}>{item.empresa}</Text>
+                          {item.nivel_interes
+                            ? <View style={[s.fuenteTag, { backgroundColor: item.nivel_interes === 'alto' ? '#fee2e2' : item.nivel_interes === 'medio' ? '#fef3c7' : '#dbeafe' }]}>
+                                <Text style={[s.fuenteTagTxt, { color: item.nivel_interes === 'alto' ? '#b91c1c' : item.nivel_interes === 'medio' ? '#92400e' : '#1e40af' }]}>
+                                  {NIVEL_INTERES_LABEL[item.nivel_interes]}
+                                </Text>
+                              </View>
                             : null
                           }
                           {item.fuente_lead
@@ -370,7 +422,7 @@ export default function CRM() {
                       {item.tipo_operacion && (
                         <View style={s.metaItem}>
                           <Ionicons name="home-outline" size={11} color="#94a3b8" />
-                          <Text style={s.metaTxt} style={{ textTransform: 'capitalize' }}>{item.tipo_operacion}</Text>
+                          <Text style={[s.metaTxt, { textTransform: 'capitalize' }]}>{item.tipo_operacion}</Text>
                         </View>
                       )}
                       <View style={s.metaTime}>
@@ -623,4 +675,22 @@ const s = StyleSheet.create({
   },
   sortOptLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   sortOptTxt:  { fontSize: 15, color: '#334155', fontWeight: '500' },
+
+  // ── Vista Excel ──────────────────────────────────────────────────
+  excelHeader: {
+    flexDirection: 'row', backgroundColor: '#1a6470',
+    paddingVertical: 8, paddingHorizontal: 4,
+  },
+  excelHeaderTxt: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  excelRow: {
+    flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 4,
+    borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+  },
+  excelRowAlt: { backgroundColor: '#f8fafc' },
+  excelCell: { paddingHorizontal: 6, fontSize: 12, color: '#334155', justifyContent: 'center' },
+  excelCellNombre:  { width: 140 },
+  excelCellTel:     { width: 120 },
+  excelCellEstado:  { width: 130 },
+  excelCellOp:      { width: 80 },
+  excelCellInteres: { width: 90 },
 })

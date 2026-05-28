@@ -386,12 +386,16 @@ export default function DetalleCliente() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Mensajes rápidos</Text>
         <View style={styles.waCard}>
-          {[
-            { label: 'Recordatorio de cita', icon: 'alarm-outline', msg: `Hola ${cliente.nombre}, te recuerdo que tenemos una cita agendada. ¿Sigue en pie? Con gusto te confirmo los detalles.` },
-            { label: 'Compartir propiedad',   icon: 'home-outline',  msg: `Hola ${cliente.nombre}, encontré una propiedad que puede interesarte. ¿Tienes unos minutos para que te cuente los detalles?` },
-            { label: 'Solicitar documentos',  icon: 'folder-outline',msg: `Hola ${cliente.nombre}, para avanzar con tu proceso necesitamos algunos documentos. ¿Puedes enviarlos cuando puedas?` },
-            { label: 'Seguimiento post-visita',icon: 'checkmark-circle-outline', msg: `Hola ${cliente.nombre}, ¿qué te pareció la propiedad que visitamos? Quedo a tus órdenes para cualquier duda.` },
-          ].map((t, i, arr) => (
+          {(() => {
+            const proxCita = recPendientes[0]
+            const horaStr = proxCita ? formatFechaHora(proxCita.fecha_hora) : '[hora pendiente]'
+            return [
+              { label: 'Recordatorio de cita', icon: 'alarm-outline', msg: `Hola ${cliente.nombre}, lo contacto para confirmar su cita programada para el día *${horaStr}*. ¿Podría indicarme si contaremos con su presencia? Quedo a sus órdenes para cualquier ajuste que requiera.` },
+              { label: 'Compartir propiedad',   icon: 'home-outline',  msg: `Hola ${cliente.nombre}, encontré una propiedad que puede interesarte. ¿Tienes unos minutos para que te cuente los detalles?` },
+              { label: 'Reagenda',              icon: 'calendar-outline', msg: `Hola ${cliente.nombre}, para recordarte que tenemos pendiente ver la propiedad, ¿te queda bien entre semana o fin de semana?` },
+              { label: 'Seguimiento post-visita',icon: 'checkmark-circle-outline', msg: `Hola ${cliente.nombre}, ¿qué te pareció la propiedad que visitamos? Quedo a tus órdenes para cualquier duda.` },
+            ]
+          })().map((t, i, arr) => (
             <TouchableOpacity
               key={t.label}
               style={[styles.waRow, i < arr.length - 1 && styles.waRowBorder]}

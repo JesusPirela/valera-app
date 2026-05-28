@@ -71,6 +71,7 @@ type Propiedad = {
   m2: number | null
   estacionamientos: number | null
   descripcion: string | null
+  created_at: string
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
@@ -78,6 +79,7 @@ type FiltroOperacion = 'venta' | 'renta' | null
 type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
 type FiltroPublicadas = 'publicadas' | 'sin_publicar' | null
+type FiltroNueva = boolean
 
 type PropiedadesData = {
   rol: string | null
@@ -137,6 +139,7 @@ export default function ProspectadorPropiedades() {
   const [precioMin, setPrecioMin] = useState('')
   const [precioMax, setPrecioMax] = useState('')
   const [filtroPublicadas, setFiltroPublicadas] = useState<FiltroPublicadas>(null)
+  const [filtroNueva, setFiltroNueva] = useState(false)
   const [vistaZonas, setVistaZonas] = useState(false)
   const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
   const [showHelp, setShowHelp] = useState(false)
@@ -173,7 +176,7 @@ export default function ProspectadorPropiedades() {
         supabase.from('profiles').select('role, nombre').eq('id', userId).single(),
         supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, created_at, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .order('created_at', { ascending: false }),
         supabase.from('propiedad_publicacion').select('propiedad_id, veces_publicada').eq('user_id', userId),
@@ -300,6 +303,7 @@ export default function ProspectadorPropiedades() {
     ordenPrecio,
     (precioMinNum != null || precioMaxNum != null) ? 'precio' : null,
     filtroPublicadas,
+    filtroNueva ? 'nueva' : null,
   ].filter(Boolean).length
 
   let propiedadesFiltradas = propiedades
@@ -314,6 +318,10 @@ export default function ProspectadorPropiedades() {
   }
   if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) > 0)
   if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0)
+  if (filtroNueva) {
+    const haceUnaS = Date.now() - 7 * 24 * 60 * 60 * 1000
+    propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() > haceUnaS)
+  }
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
   if (precioMinNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio >= precioMinNum)
@@ -401,6 +409,7 @@ export default function ProspectadorPropiedades() {
     setFiltroTipo(null)
     setOrdenPrecio(null)
     setFiltroPublicadas(null)
+    setFiltroNueva(false)
     setPrecioMin('')
     setPrecioMax('')
   }
@@ -552,24 +561,29 @@ export default function ProspectadorPropiedades() {
                 autoCorrect={false}
                 clearButtonMode="while-editing"
               />
+            </View>
+            {!isWeb && (
               <TouchableOpacity
-                style={styles.searchCamBtn}
+                style={[styles.imagenSearchBtn, { borderColor: primaryColor }]}
                 onPress={buscarPorImagen}
                 disabled={buscandoImagen}
               >
                 {buscandoImagen
-                  ? <ActivityIndicator size="small" color="#888" />
+                  ? <ActivityIndicator size="small" color={primaryColor} />
                   : <Text style={styles.searchCamIcon}>📷</Text>
                 }
+                <Text style={[styles.imagenSearchText, { color: primaryColor }]}>
+                  {buscandoImagen ? 'Buscando...' : 'Buscar por imagen'}
+                </Text>
               </TouchableOpacity>
-            </View>
+            )}
           </View>
         </View>
 
         {/* Contenido centrado en web */}
         <View style={isWeb ? styles.webBody : undefined}>
 
-        {/* Botones rápidos Venta / Renta */}
+        {/* Botones rápidos Venta / Renta / Nuevas */}
         <View style={styles.quickFiltersRow}>
           <TouchableOpacity
             style={[
@@ -595,6 +609,19 @@ export default function ProspectadorPropiedades() {
             <Ionicons name="key" size={14} color={filtroOperacion === 'renta' ? '#fff' : primaryColor} />
             <Text style={[styles.quickFilterText, { color: filtroOperacion === 'renta' ? '#fff' : primaryColor }]}>
               Renta
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.quickFilterBtn,
+              { borderColor: primaryColor },
+              filtroNueva && { backgroundColor: primaryColor },
+            ]}
+            onPress={() => setFiltroNueva(v => !v)}
+          >
+            <Ionicons name="sparkles" size={14} color={filtroNueva ? '#fff' : primaryColor} />
+            <Text style={[styles.quickFilterText, { color: filtroNueva ? '#fff' : primaryColor }]}>
+              Nuevas
             </Text>
           </TouchableOpacity>
         </View>
@@ -884,6 +911,18 @@ const styles = StyleSheet.create({
   searchIcon: { fontSize: 15, marginRight: 8, color: '#aaa' },
   searchCamBtn: { padding: 6, marginLeft: 4 },
   searchCamIcon: { fontSize: 18 },
+  imagenSearchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: '#fff',
+  },
+  imagenSearchText: { fontSize: 13, fontWeight: '600' },
   searchInput: {
     flex: 1,
     paddingVertical: 12,

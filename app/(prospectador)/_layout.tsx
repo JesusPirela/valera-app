@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Text, TouchableOpacity, Image, View, Platform } from 'react-native'
+import { Text, TouchableOpacity, Image, View, Platform, Modal, StyleSheet } from 'react-native'
 import { Tabs, usePathname, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
@@ -13,6 +13,7 @@ type IoniconsName = React.ComponentProps<typeof Ionicons>['name']
 
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
+  const [showCrmPopup, setShowCrmPopup] = useState(true)
   const { primaryColor: colorAcento } = useTheme()
   const pathname = usePathname()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -74,6 +75,8 @@ export default function ProspectadorLayout() {
     if (huboNuevas && mountedRef.current) cargarNoLeidas()
   }
 
+  useEffect(() => { cargarNoLeidas() }, [pathname])
+
   useEffect(() => {
     // Tracking de login diario y streak
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -115,6 +118,7 @@ export default function ProspectadorLayout() {
   const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : 64
 
   return (
+    <>
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colorAcento,
@@ -213,5 +217,42 @@ export default function ProspectadorLayout() {
       <Tabs.Screen name="tienda"             options={{ href: null, title: 'Tienda' }} />
       <Tabs.Screen name="ranking"            options={{ href: null, title: 'Ranking' }} />
     </Tabs>
+
+    <Modal visible={showCrmPopup} transparent animationType="fade" onRequestClose={() => setShowCrmPopup(false)}>
+      <View style={popupStyles.overlay}>
+        <View style={popupStyles.card}>
+          <TouchableOpacity style={popupStyles.closeBtn} onPress={() => setShowCrmPopup(false)}>
+            <Ionicons name="close" size={20} color="#94a3b8" />
+          </TouchableOpacity>
+          <Text style={popupStyles.emoji}>📋</Text>
+          <Text style={popupStyles.titulo}>¿Ya revisaste tu CRM?</Text>
+          <Text style={popupStyles.mensaje}>
+            Recuerda agregar nuevos clientes y dar seguimiento a tus leads de hoy.
+          </Text>
+          <TouchableOpacity
+            style={[popupStyles.btn, { backgroundColor: colorAcento }]}
+            onPress={() => { setShowCrmPopup(false); router.navigate('/(prospectador)/crm') }}
+          >
+            <Text style={popupStyles.btnText}>Ir al CRM</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowCrmPopup(false)}>
+            <Text style={popupStyles.skip}>Ahora no</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+    </>
   )
 }
+
+const popupStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  card: { backgroundColor: '#fff', borderRadius: 20, padding: 28, alignItems: 'center', width: '100%', maxWidth: 360 },
+  closeBtn: { position: 'absolute', top: 14, right: 14 },
+  emoji: { fontSize: 44, marginBottom: 12 },
+  titulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 8, textAlign: 'center' },
+  mensaje: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  btn: { borderRadius: 12, paddingVertical: 13, paddingHorizontal: 40, width: '100%', alignItems: 'center', marginBottom: 12 },
+  btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  skip: { fontSize: 13, color: '#94a3b8' },
+})
