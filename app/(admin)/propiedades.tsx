@@ -93,7 +93,7 @@ export default function AdminPropiedades() {
   if (busqueda.trim()) {
     const q = busqueda.trim().toLowerCase()
     propiedadesFiltradas = propiedadesFiltradas.filter((p) =>
-      p.codigo?.toLowerCase().includes(q) || p.direccion?.toLowerCase().includes(q)
+      p.codigo?.toLowerCase().includes(q) || p.direccion?.toLowerCase().includes(q) || p.titulo?.toLowerCase().includes(q)
     )
   }
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)

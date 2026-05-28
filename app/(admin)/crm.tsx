@@ -170,6 +170,7 @@ export default function AdminCRM() {
         const q = busqueda.toLowerCase()
         clientes = clientes.filter((c) =>
           c.nombre.toLowerCase().includes(q) || c.telefono.includes(q) ||
+          (c.empresa ?? '').toLowerCase().includes(q) ||
           sec.title.toLowerCase().includes(q)
         )
       }
