@@ -161,6 +161,7 @@ export default function ProspectadorLayout() {
           title: 'Propiedades',
           tabBarIcon: tabIcon('home-outline', 'home'),
           headerShown: false,
+          sceneStyle: { paddingTop: 0 },
         }}
       />
       <Tabs.Screen
