@@ -93,7 +93,7 @@ export default function AdminCRM() {
     const { data: clientesData, error: errorClientes } = await supabase
       .from('clientes')
       .select('id, nombre, telefono, email, empresa, estado, tipo_operacion, created_at, responsable_id')
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
 
     if (errorClientes) { setErrorMsg(errorClientes.message); setLoading(false); return }
     if (!clientesData?.length) { setSecciones([]); setLoading(false); return }
