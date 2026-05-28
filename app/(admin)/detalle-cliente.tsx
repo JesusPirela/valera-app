@@ -102,6 +102,10 @@ export default function AdminDetalleCliente() {
   const [asesorSeleccionado, setAsesorSeleccionado] = useState('')
   const [guardandoReasignar, setGuardandoReasignar] = useState(false)
 
+  const [modalEstado, setModalEstado] = useState(false)
+  const [estadoSeleccionado, setEstadoSeleccionado] = useState('')
+  const [guardandoEstado, setGuardandoEstado] = useState(false)
+
   async function cargar() {
     setLoading(true)
     const [{ data: c }, { data: i }, { data: r }] = await Promise.all([
@@ -152,6 +156,29 @@ export default function AdminDetalleCliente() {
       return
     }
     setModalReasignar(false)
+    cargar()
+  }
+
+  async function guardarEstado() {
+    if (!estadoSeleccionado || estadoSeleccionado === cliente?.estado) { setModalEstado(false); return }
+    setGuardandoEstado(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    const estadoAnterior = cliente?.estado ?? ''
+    const { error } = await supabase.from('clientes').update({ estado: estadoSeleccionado }).eq('id', id)
+    setGuardandoEstado(false)
+    if (error) {
+      if (Platform.OS === 'web') window.alert(`Error: ${error.message}`)
+      else Alert.alert('Error', error.message)
+      return
+    }
+    if (user) {
+      await supabase.from('interacciones').insert({
+        cliente_id: id, user_id: user.id,
+        tipo: 'estado_cambiado',
+        descripcion: `Estado cambiado de "${ESTADOS[estadoAnterior]?.label ?? estadoAnterior}" a "${ESTADOS[estadoSeleccionado]?.label ?? estadoSeleccionado}" por el administrador.`,
+      })
+    }
+    setModalEstado(false)
     cargar()
   }
 
@@ -257,8 +284,23 @@ export default function AdminDetalleCliente() {
         ) : null}
       </View>
 
-      {/* Asesor asignado */}
+      {/* Estado + Asesor */}
       <View style={styles.asesorCard}>
+        {/* Estado */}
+        <View style={[styles.asesorRow, { borderBottomWidth: 1, borderBottomColor: '#f0f3f5', paddingBottom: 14, marginBottom: 14 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.asesorLabel}>Estado del lead</Text>
+            <View style={[styles.estadoBadgeInline, { backgroundColor: info.bg }]}>
+              <View style={[styles.estadoDotInline, { backgroundColor: info.color }]} />
+              <Text style={[styles.estadoText, { color: info.color }]}>{info.label}</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.asesorBtn} onPress={() => { setEstadoSeleccionado(cliente.estado); setModalEstado(true) }}>
+            <Text style={styles.asesorBtnText}>Cambiar</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Asesor asignado */}
         <View style={styles.asesorRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.asesorLabel}>Asesor asignado</Text>
@@ -316,6 +358,50 @@ export default function AdminDetalleCliente() {
                 {guardandoReasignar
                   ? <ActivityIndicator color="#fff" />
                   : <Text style={styles.guardarBtnTxt}>Guardar cambio</Text>
+                }
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal cambiar estado */}
+      <Modal visible={modalEstado} animationType="slide" transparent onRequestClose={() => setModalEstado(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitulo}>Cambiar estado</Text>
+              <TouchableOpacity onPress={() => setModalEstado(false)}>
+                <Text style={styles.modalCerrar}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={{ gap: 6, marginBottom: 16 }}>
+                {Object.entries(ESTADOS).map(([key, est]) => {
+                  const activo = estadoSeleccionado === key
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[styles.estadoOpcion, activo && { backgroundColor: est.bg, borderColor: est.color }]}
+                      onPress={() => setEstadoSeleccionado(key)}
+                    >
+                      <View style={[styles.estadoOpcionDot, { backgroundColor: est.color }]} />
+                      <Text style={[styles.estadoOpcionText, activo && { color: est.color, fontWeight: '700' }]}>
+                        {est.label}
+                      </Text>
+                      {activo && <Ionicons name="checkmark-circle" size={18} color={est.color} />}
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+              <TouchableOpacity
+                style={[styles.guardarBtn, (guardandoEstado || estadoSeleccionado === cliente.estado) && { opacity: 0.6 }]}
+                onPress={guardarEstado}
+                disabled={guardandoEstado || estadoSeleccionado === cliente.estado}
+              >
+                {guardandoEstado
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={styles.guardarBtnTxt}>Guardar estado</Text>
                 }
               </TouchableOpacity>
             </ScrollView>
@@ -411,6 +497,15 @@ const styles = StyleSheet.create({
   clienteEmpresa: { fontSize: 13, color: '#9eafb2', marginTop: 3 },
   estadoBadge: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, flexShrink: 0 },
   estadoText: { fontSize: 12, fontWeight: '700' },
+  estadoBadgeInline: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, alignSelf: 'flex-start', marginTop: 4 },
+  estadoDotInline: { width: 6, height: 6, borderRadius: 3 },
+  estadoOpcion: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  estadoOpcionDot: { width: 8, height: 8, borderRadius: 4 },
+  estadoOpcionText: { flex: 1, fontSize: 14, color: '#4a5568' },
 
   infoRow: {
     flexDirection: 'row', paddingVertical: 10, flexWrap: 'wrap',
