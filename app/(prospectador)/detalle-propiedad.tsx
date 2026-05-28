@@ -21,7 +21,7 @@ import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
 import * as Clipboard from 'expo-clipboard'
 import * as FileSystem from 'expo-file-system'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { registrarAccion } from '../../lib/gamification'
@@ -104,6 +104,7 @@ export default function DetallePropiedad() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { width: SCREEN_WIDTH } = useWindowDimensions()
   const isOnline = useNetworkStatus()
+  const queryClient = useQueryClient()
   const [imagenActual, setImagenActual] = useState(0)
   const [descargando, setDescargando] = useState(false)
   const [compartiendoFotos, setCompartiendoFotos] = useState(false)
@@ -235,7 +236,7 @@ export default function DetallePropiedad() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    if (!publicada && vecesPublicada >= 10) {
+    if (vecesPublicada >= 10) {
       if (Platform.OS === 'web') window.alert('Esta propiedad alcanzó el límite de 10 publicaciones.')
       else Alert.alert('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
       return
@@ -243,57 +244,56 @@ export default function DetallePropiedad() {
 
     setTogglingPublicacion(true)
 
-    const nuevoEstado = !publicada
-    const ahora = nuevoEstado ? new Date().toISOString() : null
-    const nuevasVeces = nuevoEstado ? vecesPublicada + 1 : vecesPublicada
+    const nuevasVeces = vecesPublicada + 1
+    const ahora = new Date().toISOString()
 
     await supabase
       .from('propiedad_publicacion')
       .upsert({
         propiedad_id: id,
         user_id: user.id,
-        publicada: nuevoEstado,
+        publicada: true,
         fecha_publicacion: ahora,
         veces_publicada: nuevasVeces,
       }, { onConflict: 'propiedad_id,user_id' })
 
-    setPublicada(nuevoEstado)
+    setPublicada(true)
     setFechaPublicacion(ahora)
     setVecesPublicada(nuevasVeces)
 
-    if (nuevoEstado) {
-      registrarAccion(user.id, 'publicar_propiedad').catch(() => {})
-    }
+    registrarAccion(user.id, 'publicar_propiedad').catch(() => {})
+    queryClient.setQueryData<any>(['prospectador-propiedades'], (old: any) => {
+      if (!old) return old
+      return { ...old, publicacionesMap: { ...old.publicacionesMap, [id]: nuevasVeces } }
+    })
 
     // Actualizar progreso en tarea de tipo publicar_propiedades
-    if (nuevoEstado) {
-      const { count } = await supabase
-        .from('propiedad_publicacion')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('publicada', true)
+    const { count } = await supabase
+      .from('propiedad_publicacion')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('publicada', true)
 
-      const totalPublicadas = count ?? 0
+    const totalPublicadas = count ?? 0
 
-      const { data: asigs } = await supabase
+    const { data: asigs } = await supabase
+      .from('tarea_asignaciones')
+      .select('id, tarea:tareas!inner(tipo, meta_cantidad)')
+      .eq('user_id', user.id)
+      .eq('completada', false)
+      .eq('tarea.tipo', 'publicar_propiedades')
+
+    for (const a of (asigs ?? []) as any[]) {
+      const meta = a.tarea?.meta_cantidad ?? 1
+      const completada = totalPublicadas >= meta
+      await supabase
         .from('tarea_asignaciones')
-        .select('id, tarea:tareas!inner(tipo, meta_cantidad)')
-        .eq('user_id', user.id)
-        .eq('completada', false)
-        .eq('tarea.tipo', 'publicar_propiedades')
-
-      for (const a of (asigs ?? []) as any[]) {
-        const meta = a.tarea?.meta_cantidad ?? 1
-        const completada = totalPublicadas >= meta
-        await supabase
-          .from('tarea_asignaciones')
-          .update({
-            progreso: Math.min(totalPublicadas, meta),
-            completada,
-            completada_at: completada ? new Date().toISOString() : null,
-          })
-          .eq('id', a.id)
-      }
+        .update({
+          progreso: Math.min(totalPublicadas, meta),
+          completada,
+          completada_at: completada ? new Date().toISOString() : null,
+        })
+        .eq('id', a.id)
     }
 
     setTogglingPublicacion(false)
@@ -945,31 +945,33 @@ export default function DetallePropiedad() {
           <View style={styles.pubRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.pubEstado}>
-                {publicada ? '✅ Publicada' : vecesPublicada >= 10 ? '🚫 Límite alcanzado' : '⏳ Pendiente de publicar'}
+                {vecesPublicada >= 10 ? '🚫 Límite alcanzado' : vecesPublicada > 0 ? '✅ Publicada' : '⏳ Pendiente de publicar'}
               </Text>
-              {publicada && fechaPublicacion && (
+              {vecesPublicada > 0 && fechaPublicacion && (
                 <Text style={styles.pubFecha}>
-                  {new Date(fechaPublicacion).toLocaleDateString('es-MX', {
+                  Última vez: {new Date(fechaPublicacion).toLocaleDateString('es-MX', {
                     day: 'numeric', month: 'long', year: 'numeric',
                   })}
                 </Text>
               )}
-              {!publicada && vecesPublicada > 0 && vecesPublicada < 10 && (
+              {vecesPublicada > 0 && vecesPublicada < 10 && (
                 <Text style={styles.pubFecha}>Te quedan {10 - vecesPublicada} publicaciones</Text>
               )}
             </View>
             <TouchableOpacity
               style={[
                 styles.pubBtn,
-                publicada ? styles.pubBtnActiva : styles.pubBtnPendiente,
-                (togglingPublicacion || (!publicada && vecesPublicada >= 10)) && styles.btnDisabled,
+                vecesPublicada > 0 ? styles.pubBtnActiva : styles.pubBtnPendiente,
+                (togglingPublicacion || vecesPublicada >= 10) && styles.btnDisabled,
               ]}
               onPress={togglePublicacion}
-              disabled={togglingPublicacion || (!publicada && vecesPublicada >= 10)}
+              disabled={togglingPublicacion || vecesPublicada >= 10}
             >
               {togglingPublicacion
                 ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.pubBtnText}>{publicada ? 'Marcar pendiente' : 'Marcar publicada'}</Text>
+                : <Text style={styles.pubBtnText}>
+                    {vecesPublicada === 0 ? 'Publicar' : vecesPublicada >= 10 ? '10/10 ✅' : `${vecesPublicada}/10`}
+                  </Text>
               }
             </TouchableOpacity>
           </View>

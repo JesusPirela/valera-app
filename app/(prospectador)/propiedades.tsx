@@ -23,6 +23,7 @@ import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 const LOGO = require('../../assets/logo.png')
 import { useTheme } from '../../lib/ThemeContext'
@@ -83,7 +84,7 @@ type PropiedadesData = {
   nombreUsuario: string | null
   userId: string
   propiedades: Propiedad[]
-  publicadasIds: string[]
+  publicacionesMap: Record<string, number>
 }
 
 const ZONAS_CONFIG = [
@@ -174,7 +175,7 @@ export default function ProspectadorPropiedades() {
           .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .order('created_at', { ascending: false }),
-        supabase.from('propiedad_publicada').select('propiedad_id').eq('user_id', userId),
+        supabase.from('propiedad_publicacion').select('propiedad_id, veces_publicada').eq('user_id', userId),
       ])
 
       if (propsRes.error) throw propsRes.error
@@ -190,7 +191,9 @@ export default function ProspectadorPropiedades() {
         nombreUsuario: profileRes.data?.nombre ?? null,
         userId,
         propiedades,
-        publicadasIds: (pubRes.data ?? []).map((r: { propiedad_id: string }) => r.propiedad_id),
+        publicacionesMap: Object.fromEntries(
+          (pubRes.data ?? []).map((r: { propiedad_id: string; veces_publicada: number }) => [r.propiedad_id, r.veces_publicada ?? 0])
+        ),
       }
     },
     networkMode: 'offlineFirst',
@@ -217,53 +220,48 @@ export default function ProspectadorPropiedades() {
   }, [queryData?.propiedades])
 
   const propiedades = queryData?.propiedades ?? []
-  const publicadas = new Set(queryData?.publicadasIds ?? [])
+  const publicaciones = queryData?.publicacionesMap ?? {}
 
-  async function togglePublicada(propiedadId: string) {
+  async function publicarPropiedad(propiedadId: string) {
     if (togglingRef.current.has(propiedadId)) return
     const userId = queryData?.userId
     if (!userId) return
 
-    const yaPublicada = publicadas.has(propiedadId)
+    const vecesActual = publicaciones[propiedadId] ?? 0
+    if (vecesActual >= 10) {
+      if (Platform.OS === 'web') window.alert('Esta propiedad alcanzó el límite de 10 publicaciones.')
+      else Alert.alert('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
+      return
+    }
 
-    // Actualizar ref inmediatamente (antes del re-render) para que useFocusEffect
-    // no dispare un refetch() entre el click y el primer render con el nuevo state
     const newTogglingSet = new Set(togglingRef.current)
     newTogglingSet.add(propiedadId)
     togglingRef.current = newTogglingSet
     setToggling(newTogglingSet)
 
+    const nuevasVeces = vecesActual + 1
+
     queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades'], old => {
       if (!old) return old
-      return {
-        ...old,
-        publicadasIds: yaPublicada
-          ? old.publicadasIds.filter(id => id !== propiedadId)
-          : [...old.publicadasIds, propiedadId],
-      }
+      return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: nuevasVeces } }
     })
 
-    let error: any = null
-    if (yaPublicada) {
-      const res = await supabase.from('propiedad_publicada').delete().eq('user_id', userId).eq('propiedad_id', propiedadId)
-      error = res.error
-    } else {
-      const res = await supabase.from('propiedad_publicada')
-        .upsert({ user_id: userId, propiedad_id: propiedadId }, { onConflict: 'user_id,propiedad_id', ignoreDuplicates: true })
-      error = res.error
-    }
+    const { error } = await supabase
+      .from('propiedad_publicacion')
+      .upsert({
+        propiedad_id: propiedadId,
+        user_id: userId,
+        publicada: true,
+        fecha_publicacion: new Date().toISOString(),
+        veces_publicada: nuevasVeces,
+      }, { onConflict: 'propiedad_id,user_id' })
 
     if (error) {
       queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades'], old => {
         if (!old) return old
-        return {
-          ...old,
-          publicadasIds: yaPublicada
-            ? [...old.publicadasIds, propiedadId]
-            : old.publicadasIds.filter(id => id !== propiedadId),
-        }
+        return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual } }
       })
-    } else if (!yaPublicada) {
+    } else {
       registrarAccion(userId, 'publicar_propiedad').catch(() => {})
     }
 
@@ -313,8 +311,8 @@ export default function ProspectadorPropiedades() {
       p.titulo?.toLowerCase().includes(q)
     )
   }
-  if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => publicadas.has(p.id))
-  if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => !publicadas.has(p.id))
+  if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) > 0)
+  if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0)
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
   if (precioMinNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio >= precioMinNum)
@@ -409,6 +407,7 @@ export default function ProspectadorPropiedades() {
   function renderPropiedad(item: Propiedad, width?: number) {
     const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
     const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
+    const veces = publicaciones[item.id] ?? 0
     return (
       <TouchableOpacity
         key={item.id}
@@ -468,18 +467,18 @@ export default function ProspectadorPropiedades() {
               style={[
                 styles.publicadaBtn,
                 { borderColor: primaryColor },
-                publicadas.has(item.id) && { backgroundColor: primaryColor, borderColor: primaryColor },
-                !isOnline && styles.publicadaBtnDisabled,
+                veces > 0 && { backgroundColor: primaryColor, borderColor: primaryColor },
+                (toggling.has(item.id) || !isOnline || veces >= 10) && styles.publicadaBtnDisabled,
               ]}
-              onPress={(e) => { e.stopPropagation(); if (isOnline) togglePublicada(item.id) }}
-              disabled={toggling.has(item.id) || !isOnline}
+              onPress={(e) => { e.stopPropagation(); if (isOnline) publicarPropiedad(item.id) }}
+              disabled={toggling.has(item.id) || !isOnline || veces >= 10}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {toggling.has(item.id) ? (
-                <ActivityIndicator size="small" color={publicadas.has(item.id) ? '#fff' : primaryColor} />
+                <ActivityIndicator size="small" color={veces > 0 ? '#fff' : primaryColor} />
               ) : (
-                <Text style={[styles.publicadaBtnText, { color: publicadas.has(item.id) ? '#fff' : primaryColor }]}>
-                  {publicadas.has(item.id) ? '✓ Publicada' : 'Publicar'}
+                <Text style={[styles.publicadaBtnText, { color: veces > 0 ? '#fff' : primaryColor }]}>
+                  {veces === 0 ? 'Publicar' : veces >= 10 ? '10/10 ✅' : `${veces}/10`}
                 </Text>
               )}
             </TouchableOpacity>
@@ -491,7 +490,7 @@ export default function ProspectadorPropiedades() {
 
   const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
   const { width: screenWidth } = useWindowDimensions()
-  const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) : 44
+  const insets = useSafeAreaInsets()
   const isWeb = Platform.OS === 'web'
   const numCols = isWeb ? 4 : 1
   const CARD_GAP = 16
@@ -506,7 +505,7 @@ export default function ProspectadorPropiedades() {
           source={{ html: PHASH_HTML }}
           onMessage={onPhashMessage}
           javaScriptEnabled
-          style={{ width: 0, height: 0, position: 'absolute' }}
+          style={{ position: 'absolute', top: -500, left: -500, width: 1, height: 1, opacity: 0 }}
         />
       )}
       <OfflineBanner />
@@ -514,7 +513,7 @@ export default function ProspectadorPropiedades() {
       <View style={styles.container}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : statusBarHeight + 2, paddingBottom: 6 }]}>
+        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : insets.top + 8, paddingBottom: 6 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
             {!isWeb ? (
               <View style={styles.headerTopRow}>

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking,
-  ActivityIndicator, TouchableOpacity, ScrollView, FlatList,
+  ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -24,13 +24,13 @@ type Cliente = {
 }
 
 export const ESTADOS: Record<string, { label: string; color: string; bg: string }> = {
-  por_perfilar:       { label: 'Por perfilar',      color: '#1565c0', bg: '#e3f2fd' },
-  no_contesta:        { label: 'No contesta',        color: '#757575', bg: '#f5f5f5' },
-  cita_por_agendar:   { label: 'Cita por agendar',  color: '#e65100', bg: '#fff3e0' },
-  cita_agendada:      { label: 'Cita agendada',      color: '#1a6470', bg: '#e0f4f5' },
-  seguimiento_cierre: { label: 'Seg. de cierre',     color: '#6a1b9a', bg: '#f3e5f5' },
-  compro:             { label: 'Apartó / Compró',    color: '#2e7d32', bg: '#e8f5e9' },
-  descartado:         { label: 'Descartado',          color: '#c0392b', bg: '#fde8e8' },
+  por_perfilar:       { label: 'Por perfilar',     color: '#1565c0', bg: '#e3f2fd' },
+  no_contesta:        { label: 'No contesta',       color: '#757575', bg: '#f5f5f5' },
+  cita_por_agendar:   { label: 'Cita por agendar', color: '#e65100', bg: '#fff3e0' },
+  cita_agendada:      { label: 'Cita agendada',     color: '#1a6470', bg: '#e0f4f5' },
+  seguimiento_cierre: { label: 'Seg. de cierre',    color: '#6a1b9a', bg: '#f3e5f5' },
+  compro:             { label: 'Apartó / Compró',   color: '#2e7d32', bg: '#e8f5e9' },
+  descartado:         { label: 'Descartado',         color: '#b91c1c', bg: '#fef2f2' },
 }
 
 const ORDEN_ESTADOS = [
@@ -38,51 +38,58 @@ const ORDEN_ESTADOS = [
   'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
 ]
 
-function estadoInfo(estado: string) {
-  return ESTADOS[estado] ?? { label: estado, color: '#555', bg: '#eee' }
+function estadoInfo(e: string) {
+  return ESTADOS[e] ?? { label: e, color: '#64748b', bg: '#f1f5f9' }
 }
 
-function tiempoRelativo(fechaISO: string) {
-  const diff = Date.now() - new Date(fechaISO).getTime()
-  const dias = Math.floor(diff / 86400000)
-  if (dias === 0) return 'Hoy'
-  if (dias === 1) return 'Ayer'
-  if (dias < 7) return `Hace ${dias}d`
-  return new Date(fechaISO).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+function tiempoRelativo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 2) return 'Ahora'
+  if (m < 60) return `${m}m`
+  const h = Math.floor(diff / 3600000)
+  if (h < 24) return `${h}h`
+  const d = Math.floor(diff / 86400000)
+  if (d === 1) return 'Ayer'
+  if (d < 7) return `${d}d`
+  return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
 
-function proximoRecordatorio(recordatorios: Cliente['recordatorios']) {
-  const pendientes = recordatorios
-    .filter((r) => !r.completado)
-    .sort((a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime())
-  return pendientes[0] ?? null
+function proximoRec(recs: Cliente['recordatorios']) {
+  return recs
+    .filter(r => !r.completado)
+    .sort((a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime())[0] ?? null
 }
 
 function iniciales(nombre: string) {
-  return nombre.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+  return nombre.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 }
 
-function abrirWhatsApp(telefono: string, nombre: string) {
+export function abrirWhatsApp(telefono: string, nombre: string) {
   const phone = telefono.replace(/\D/g, '')
   const num = phone.length === 10 ? `52${phone}` : phone
   const msg = encodeURIComponent(`Hola ${nombre}, te contacto de Valera Real Estate. ¿Cómo estás?`)
   const url = `https://wa.me/${num}?text=${msg}`
-  if (Platform.OS === 'web') {
-    window.open(url, '_blank')
-  } else {
-    Linking.openURL(url)
-  }
+  if (Platform.OS === 'web') window.open(url, '_blank')
+  else Linking.openURL(url)
 }
 
-function llamar(telefono: string) {
-  Linking.openURL(`tel:${telefono}`)
+function llamar(tel: string) { Linking.openURL(`tel:${tel}`) }
+
+type SortBy = 'reciente' | 'nombre' | 'contacto'
+const SORT_LABELS: Record<SortBy, string> = {
+  reciente: 'Más reciente',
+  nombre:   'Nombre A–Z',
+  contacto: 'Próximo contacto',
 }
 
 export default function CRM() {
   const queryClient = useQueryClient()
-  const [busqueda, setBusqueda] = useState('')
-  const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null)
-  const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
+  const [busqueda, setBusqueda]           = useState('')
+  const [estadoFiltro, setEstadoFiltro]   = useState<string | null>(null)
+  const [opFiltro, setOpFiltro]           = useState<'venta' | 'renta' | null>(null)
+  const [sortBy, setSortBy]               = useState<SortBy>('reciente')
+  const [showSort, setShowSort]           = useState(false)
 
   const { data: clientes = [], isLoading, refetch } = useQuery<Cliente[]>({
     queryKey: ['clientes'],
@@ -110,118 +117,145 @@ export default function CRM() {
     }
   }, [clientes])
 
-  const conteos = ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
-    acc[e] = clientes.filter((c) => c.estado === e).length
-    return acc
-  }, {})
-
-  const conRecordatorio = clientes.filter(c =>
-    (c.recordatorios ?? []).some(r => !r.completado)
-  ).length
+  // ── KPIs ──────────────────────────────────────────────────────
+  const total    = clientes.length
+  const activos  = clientes.filter(c => c.estado !== 'descartado' && c.estado !== 'compro').length
+  const citas    = clientes.filter(c => c.estado === 'cita_agendada').length
   const vencidos = clientes.filter(c =>
     (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora) < new Date())
   ).length
+  const cerrados = clientes.filter(c => c.estado === 'compro').length
 
+  const conteos = ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
+    acc[e] = clientes.filter(c => c.estado === e).length
+    return acc
+  }, {})
+
+  // ── Filtros ───────────────────────────────────────────────────
   let filtrados = clientes
   if (busqueda.trim()) {
     const q = busqueda.toLowerCase()
-    filtrados = filtrados.filter((c) =>
+    filtrados = filtrados.filter(c =>
       c.nombre.toLowerCase().includes(q) || c.telefono.includes(q) ||
       (c.email ?? '').toLowerCase().includes(q) ||
       (c.empresa ?? '').toLowerCase().includes(q)
     )
   }
-  if (estadoFiltro) filtrados = filtrados.filter((c) => c.estado === estadoFiltro)
-  if (operacionFiltro) filtrados = filtrados.filter((c) => c.tipo_operacion === operacionFiltro)
+  if (estadoFiltro) filtrados = filtrados.filter(c => c.estado === estadoFiltro)
+  if (opFiltro)     filtrados = filtrados.filter(c => c.tipo_operacion === opFiltro)
+
+  if (sortBy === 'nombre') {
+    filtrados = [...filtrados].sort((a, b) => a.nombre.localeCompare(b.nombre))
+  } else if (sortBy === 'contacto') {
+    filtrados = [...filtrados].sort((a, b) => {
+      const aT = a.proximo_contacto ? new Date(a.proximo_contacto).getTime() : Infinity
+      const bT = b.proximo_contacto ? new Date(b.proximo_contacto).getTime() : Infinity
+      return aT - bT
+    })
+  }
 
   return (
     <>
       <OfflineBanner />
-      <View style={styles.container}>
+      <View style={s.container}>
 
-        {/* Métricas rápidas */}
-        <View style={styles.statsBar}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{clientes.length}</Text>
-            <Text style={styles.statLbl}>Total</Text>
+        {/* ── KPI strip ── */}
+        <View style={s.kpiStrip}>
+          <TouchableOpacity style={s.kpiItem} onPress={() => { setEstadoFiltro(null); setOpFiltro(null) }}>
+            <Text style={[s.kpiNum, { color: '#3b82f6' }]}>{activos}</Text>
+            <Text style={s.kpiLbl}>ACTIVOS</Text>
+          </TouchableOpacity>
+          <View style={s.kpiDiv} />
+          <TouchableOpacity style={s.kpiItem} onPress={() => setEstadoFiltro('cita_agendada')}>
+            <Text style={[s.kpiNum, { color: '#f59e0b' }]}>{citas}</Text>
+            <Text style={s.kpiLbl}>CITAS</Text>
+          </TouchableOpacity>
+          <View style={s.kpiDiv} />
+          <View style={s.kpiItem}>
+            <Text style={[s.kpiNum, vencidos > 0 ? { color: '#ef4444' } : { color: '#cbd5e1' }]}>{vencidos}</Text>
+            <Text style={s.kpiLbl}>VENCIDOS</Text>
           </View>
-          <View style={styles.statSep} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{conRecordatorio}</Text>
-            <Text style={styles.statLbl}>Con recordatorio</Text>
-          </View>
-          <View style={styles.statSep} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statNum, vencidos > 0 && styles.statNumAlert]}>{vencidos}</Text>
-            <Text style={styles.statLbl}>Vencidos</Text>
-          </View>
+          <View style={s.kpiDiv} />
+          <TouchableOpacity style={s.kpiItem} onPress={() => setEstadoFiltro('compro')}>
+            <Text style={[s.kpiNum, { color: '#10b981' }]}>{cerrados}</Text>
+            <Text style={s.kpiLbl}>CERRADOS</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Filtro Venta / Renta */}
-        <View style={styles.operacionRow}>
-          {([null, 'venta', 'renta'] as const).map((op) => {
-            const activo = operacionFiltro === op
-            const label = op === null ? 'Todos' : op === 'venta' ? 'Venta' : 'Renta'
-            return (
-              <TouchableOpacity
-                key={label}
-                style={[styles.operacionTab, activo && styles.operacionTabActivo]}
-                onPress={() => setOperacionFiltro(op)}
-              >
-                <Text style={[styles.operacionTabText, activo && styles.operacionTabTextActivo]}>
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            )
-          })}
-        </View>
+        {/* ── Funnel bar ── */}
+        {total > 0 && (
+          <View style={s.funnelWrap}>
+            <View style={s.funnelBar}>
+              {ORDEN_ESTADOS.map(e => {
+                const n = conteos[e]
+                if (n === 0) return null
+                const info = estadoInfo(e)
+                return (
+                  <TouchableOpacity
+                    key={e}
+                    style={[s.funnelSeg, { flex: n, backgroundColor: info.color }]}
+                    onPress={() => setEstadoFiltro(estadoFiltro === e ? null : e)}
+                    activeOpacity={0.75}
+                  />
+                )
+              })}
+            </View>
+            <View style={s.funnelLegend}>
+              {ORDEN_ESTADOS.filter(e => conteos[e] > 0).map(e => {
+                const info = estadoInfo(e)
+                return (
+                  <View key={e} style={s.legendItem}>
+                    <View style={[s.legendDot, { backgroundColor: info.color }]} />
+                    <Text style={s.legendTxt}>{info.label} ({conteos[e]})</Text>
+                  </View>
+                )
+              })}
+            </View>
+          </View>
+        )}
 
-        {/* Pipeline chips */}
+        {/* ── Stage chips ── */}
         <ScrollView
           horizontal showsHorizontalScrollIndicator={false}
-          style={styles.pipeline} contentContainerStyle={styles.pipelineContent}
+          style={s.stagePipe} contentContainerStyle={s.stagePipeContent}
         >
           <TouchableOpacity
-            style={[styles.pipelineChip, estadoFiltro === null && styles.pipelineChipActive]}
+            style={[s.stageChip, estadoFiltro === null && s.stageChipAll]}
             onPress={() => setEstadoFiltro(null)}
           >
-            <View style={[styles.chipDot, { backgroundColor: '#1a6470' }]} />
-            <Text style={[styles.chipLabel, estadoFiltro === null && styles.chipLabelActive]}>Todos</Text>
-            <View style={[styles.chipBadge, estadoFiltro === null && styles.chipBadgeActive]}>
-              <Text style={[styles.chipBadgeText, estadoFiltro === null && styles.chipBadgeTextActive]}>
-                {clientes.length}
-              </Text>
-            </View>
+            <Text style={[s.stageChipTxt, estadoFiltro === null && { color: '#fff', fontWeight: '700' }]}>
+              Todos · {total}
+            </Text>
           </TouchableOpacity>
-          {ORDEN_ESTADOS.map((e) => {
+          {ORDEN_ESTADOS.map(e => {
             const info = estadoInfo(e)
             const activo = estadoFiltro === e
             return (
               <TouchableOpacity
                 key={e}
-                style={[styles.pipelineChip, activo && { backgroundColor: info.bg, borderColor: info.color }]}
+                style={[s.stageChip, activo && { backgroundColor: info.color, borderColor: info.color }]}
                 onPress={() => setEstadoFiltro(activo ? null : e)}
               >
-                <View style={[styles.chipDot, { backgroundColor: info.color }]} />
-                <Text style={[styles.chipLabel, activo && { color: info.color, fontWeight: '700' }]}>
+                <View style={[s.stageDot, { backgroundColor: activo ? '#fff' : info.color }]} />
+                <Text style={[s.stageChipTxt, activo && { color: '#fff', fontWeight: '700' }]}>
                   {info.label}
                 </Text>
-                <View style={[styles.chipBadge, activo && { backgroundColor: info.color }]}>
-                  <Text style={[styles.chipBadgeText, activo && { color: '#fff' }]}>{conteos[e]}</Text>
-                </View>
+                <Text style={[s.stageCnt, activo && { color: 'rgba(255,255,255,0.75)' }]}>
+                  {conteos[e]}
+                </Text>
               </TouchableOpacity>
             )
           })}
         </ScrollView>
 
-        {/* Búsqueda + botón nuevo */}
-        <View style={styles.searchRow}>
-          <View style={styles.searchWrap}>
-            <Ionicons name="search-outline" size={16} color="#9eafb2" style={{ marginRight: 8 }} />
+        {/* ── Search + sort + nuevo ── */}
+        <View style={s.searchRow}>
+          <View style={s.searchWrap}>
+            <Ionicons name="search-outline" size={15} color="#94a3b8" style={{ marginRight: 8 }} />
             <TextInput
-              style={styles.searchInput}
-              placeholder="Buscar por nombre, teléfono..."
-              placeholderTextColor="#bbb"
+              style={s.searchInput}
+              placeholder="Buscar nombre, teléfono, empresa..."
+              placeholderTextColor="#94a3b8"
               value={busqueda}
               onChangeText={setBusqueda}
               autoCapitalize="none"
@@ -229,119 +263,154 @@ export default function CRM() {
               clearButtonMode="while-editing"
             />
           </View>
-          <TouchableOpacity style={styles.btnNuevo} onPress={() => router.push('/(prospectador)/cliente-form')}>
-            <Ionicons name="add" size={22} color="#fff" />
+          <TouchableOpacity style={s.sortBtn} onPress={() => setShowSort(true)}>
+            <Ionicons name="funnel-outline" size={15} color="#1a6470" />
+            {sortBy !== 'reciente' && <View style={s.sortDot} />}
+          </TouchableOpacity>
+          <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
+            <Ionicons name="add" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
 
+        {/* ── Operacion tabs ── */}
+        <View style={s.opRow}>
+          {([null, 'venta', 'renta'] as const).map(op => {
+            const label = op === null ? 'Todos' : op === 'venta' ? '🏠 Venta' : '🔑 Renta'
+            const cnt   = op === null ? total : clientes.filter(c => c.tipo_operacion === op).length
+            const activo = opFiltro === op
+            return (
+              <TouchableOpacity key={String(op)} style={[s.opTab, activo && s.opTabActivo]} onPress={() => setOpFiltro(op)}>
+                <Text style={[s.opTabTxt, activo && s.opTabTxtActivo]}>{label}</Text>
+                <View style={[s.opTabBadge, activo && s.opTabBadgeActivo]}>
+                  <Text style={[s.opTabBadgeTxt, activo && { color: '#1a6470' }]}>{cnt}</Text>
+                </View>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
+        {/* ── Sort label ── */}
+        {sortBy !== 'reciente' && (
+          <View style={s.sortActiveBar}>
+            <Ionicons name="funnel" size={11} color="#1a6470" />
+            <Text style={s.sortActiveTxt}>Ordenado por: {SORT_LABELS[sortBy]}</Text>
+            <TouchableOpacity onPress={() => setSortBy('reciente')}>
+              <Ionicons name="close-circle" size={14} color="#94a3b8" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── List ── */}
         {isLoading ? (
-          <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 48 }} />
         ) : filtrados.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="people-outline" size={36} color="#1a6470" />
+          <View style={s.empty}>
+            <View style={s.emptyIcon}>
+              <Ionicons name="people-outline" size={32} color="#94a3b8" />
             </View>
-            <Text style={styles.emptyTitle}>
-              {busqueda || estadoFiltro ? 'Sin resultados' : 'Sin clientes aún'}
-            </Text>
+            <Text style={s.emptyTitle}>{busqueda || estadoFiltro ? 'Sin resultados' : 'Sin leads aún'}</Text>
             {!busqueda && !estadoFiltro && (
-              <Text style={styles.emptySubtitle}>Agrega tu primer cliente con el botón "+"</Text>
+              <Text style={s.emptySub}>Agrega tu primer lead con el botón "Nuevo lead"</Text>
             )}
           </View>
         ) : (
           <FlatList
             data={filtrados}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 28, paddingTop: 8 }}
+            keyExtractor={item => item.id}
+            contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100, paddingTop: 10 }}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
-              const info = estadoInfo(item.estado)
-              const recProximo = proximoRecordatorio(item.recordatorios ?? [])
-              const recVencido = recProximo && new Date(recProximo.fecha_hora) < new Date()
-              const initials = iniciales(item.nombre)
+              const info      = estadoInfo(item.estado)
+              const rec       = proximoRec(item.recordatorios ?? [])
+              const recVenc   = rec && new Date(rec.fecha_hora) < new Date()
+              const recHoy    = rec && !recVenc && new Date(rec.fecha_hora).toDateString() === new Date().toDateString()
+              const inits     = iniciales(item.nombre)
 
               return (
                 <TouchableOpacity
-                  style={styles.card}
+                  style={s.card}
                   onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
-                  activeOpacity={0.75}
+                  activeOpacity={0.8}
                 >
-                  {/* Borde izquierdo de color por estado */}
-                  <View style={[styles.cardAccent, { backgroundColor: info.color }]} />
+                  <View style={[s.cardBar, { backgroundColor: info.color }]} />
+                  <View style={s.cardBody}>
 
-                  <View style={styles.cardInner}>
-                    {/* Fila superior */}
-                    <View style={styles.cardTop}>
-                      <View style={[styles.avatar, { backgroundColor: info.color + '1a' }]}>
-                        <Text style={[styles.avatarText, { color: info.color }]}>{initials}</Text>
+                    {/* ── Fila superior ── */}
+                    <View style={s.cardHead}>
+                      <View style={[s.avatar, { backgroundColor: info.color + '22' }]}>
+                        <Text style={[s.avatarTxt, { color: info.color }]}>{inits}</Text>
                       </View>
-                      <View style={styles.cardTopInfo}>
-                        <Text style={styles.cardNombre} numberOfLines={1}>{item.nombre}</Text>
-                        {item.empresa ? (
-                          <Text style={styles.cardEmpresa} numberOfLines={1}>{item.empresa}</Text>
-                        ) : null}
-                      </View>
-                      <View style={styles.cardRight}>
-                        <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
-                          <Text style={[styles.estadoText, { color: info.color }]}>{info.label}</Text>
+                      <View style={s.cardHeadInfo}>
+                        <Text style={s.cardNombre} numberOfLines={1}>{item.nombre}</Text>
+                        <View style={s.cardSubRow}>
+                          {item.empresa
+                            ? <Text style={s.cardEmpresa} numberOfLines={1}>{item.empresa}</Text>
+                            : null
+                          }
+                          {item.fuente_lead
+                            ? <View style={s.fuenteTag}>
+                                <Text style={s.fuenteTagTxt}>{item.fuente_lead}</Text>
+                              </View>
+                            : null
+                          }
                         </View>
-                        <Ionicons name="chevron-forward" size={13} color="#d5dfe0" style={{ alignSelf: 'flex-end', marginTop: 4 }} />
+                      </View>
+                      <View style={[s.estadoBadge, { backgroundColor: info.bg }]}>
+                        <View style={[s.estadoDot, { backgroundColor: info.color }]} />
+                        <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
                       </View>
                     </View>
 
-                    {/* Meta row */}
-                    <View style={styles.cardMeta}>
-                      <View style={styles.metaItem}>
-                        <Ionicons name="call-outline" size={12} color="#adbfc2" />
-                        <Text style={styles.metaText}>{item.telefono}</Text>
+                    {/* ── Meta ── */}
+                    <View style={s.metaRow}>
+                      <View style={s.metaItem}>
+                        <Ionicons name="call-outline" size={11} color="#94a3b8" />
+                        <Text style={s.metaTxt}>{item.telefono}</Text>
                       </View>
                       {item.tipo_operacion && (
-                        <View style={styles.metaItem}>
-                          <Ionicons name="home-outline" size={12} color="#adbfc2" />
-                          <Text style={styles.metaText}>{item.tipo_operacion}</Text>
+                        <View style={s.metaItem}>
+                          <Ionicons name="home-outline" size={11} color="#94a3b8" />
+                          <Text style={s.metaTxt} style={{ textTransform: 'capitalize' }}>{item.tipo_operacion}</Text>
                         </View>
                       )}
-                      <View style={styles.metaItem}>
-                        <Ionicons name="time-outline" size={12} color="#adbfc2" />
-                        <Text style={styles.metaText}>{tiempoRelativo(item.created_at)}</Text>
+                      <View style={s.metaTime}>
+                        <Ionicons name="time-outline" size={11} color="#94a3b8" />
+                        <Text style={s.metaTxt}>{tiempoRelativo(item.created_at)}</Text>
                       </View>
                     </View>
 
-                    {/* Recordatorio próximo */}
-                    {recProximo && (
-                      <View style={[styles.recRow, recVencido && styles.recRowVencido]}>
+                    {/* ── Recordatorio ── */}
+                    {rec && (
+                      <View style={[s.recRow, recVenc ? s.recVenc : recHoy ? s.recHoy : s.recProx]}>
                         <Ionicons
-                          name={recVencido ? 'warning-outline' : 'alarm-outline'}
+                          name={recVenc ? 'warning-outline' : recHoy ? 'alarm-outline' : 'calendar-outline'}
                           size={12}
-                          color={recVencido ? '#c0392b' : '#1a6470'}
+                          color={recVenc ? '#ef4444' : recHoy ? '#d97706' : '#1a6470'}
                         />
-                        <Text style={[styles.recText, recVencido && styles.recTextVencido]} numberOfLines={1}>
-                          {recVencido
-                            ? `Vencido: ${recProximo.titulo}`
-                            : new Date(recProximo.fecha_hora).toLocaleDateString('es-MX', {
-                                day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                              }) + ` · ${recProximo.titulo}`}
+                        <Text
+                          style={[s.recTxt, { color: recVenc ? '#ef4444' : recHoy ? '#92400e' : '#1a6470' }]}
+                          numberOfLines={1}
+                        >
+                          {recVenc ? '⚠ Vencido · ' : recHoy ? 'Hoy · ' : ''}
+                          {new Date(rec.fecha_hora).toLocaleDateString('es-MX', {
+                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                          })} — {rec.titulo}
                         </Text>
                       </View>
                     )}
 
-                    {/* Acciones rápidas */}
-                    <View style={styles.cardActions}>
-                      <TouchableOpacity
-                        style={styles.actionWa}
-                        onPress={() => abrirWhatsApp(item.telefono, item.nombre)}
-                      >
-                        <Ionicons name="logo-whatsapp" size={13} color="#25D366" />
-                        <Text style={styles.actionWaText}>WhatsApp</Text>
+                    {/* ── Acciones ── */}
+                    <View style={s.actions}>
+                      <TouchableOpacity style={s.actionWa} onPress={() => abrirWhatsApp(item.telefono, item.nombre)}>
+                        <Ionicons name="logo-whatsapp" size={14} color="#16a34a" />
+                        <Text style={s.actionWaTxt}>WhatsApp</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.actionCall}
-                        onPress={() => llamar(item.telefono)}
-                      >
-                        <Ionicons name="call-outline" size={13} color="#1a6470" />
-                        <Text style={styles.actionCallText}>Llamar</Text>
+                      <TouchableOpacity style={s.actionCall} onPress={() => llamar(item.telefono)}>
+                        <Ionicons name="call-outline" size={14} color="#0369a1" />
+                        <Text style={s.actionCallTxt}>Llamar</Text>
                       </TouchableOpacity>
                     </View>
+
                   </View>
                 </TouchableOpacity>
               )
@@ -349,140 +418,209 @@ export default function CRM() {
           />
         )}
       </View>
+
+      {/* ── Sort bottom sheet ── */}
+      <Modal visible={showSort} transparent animationType="slide" onRequestClose={() => setShowSort(false)}>
+        <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setShowSort(false)}>
+          <View style={s.sortSheet}>
+            <View style={s.sortHandle} />
+            <Text style={s.sortTitle}>Ordenar leads</Text>
+            {(['reciente', 'nombre', 'contacto'] as SortBy[]).map(opt => (
+              <TouchableOpacity
+                key={opt}
+                style={s.sortOpt}
+                onPress={() => { setSortBy(opt); setShowSort(false) }}
+              >
+                <View style={s.sortOptLeft}>
+                  <Ionicons
+                    name={opt === 'reciente' ? 'time-outline' : opt === 'nombre' ? 'text-outline' : 'calendar-outline'}
+                    size={16}
+                    color={sortBy === opt ? '#1a6470' : '#94a3b8'}
+                  />
+                  <Text style={[s.sortOptTxt, sortBy === opt && { color: '#1a6470', fontWeight: '700' }]}>
+                    {SORT_LABELS[opt]}
+                  </Text>
+                </View>
+                {sortBy === opt && <Ionicons name="checkmark-circle" size={18} color="#1a6470" />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </>
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2f5f8' },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f1f5f9' },
 
-  // Stats bar
-  statsBar: {
-    flexDirection: 'row',
-    backgroundColor: '#1a6470',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
+  addBtn: {
+    width: 42, height: 42, backgroundColor: '#1a6470',
+    borderRadius: 12, alignItems: 'center', justifyContent: 'center',
   },
-  statItem: { flex: 1, alignItems: 'center' },
-  statNum: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
-  statNumAlert: { color: '#ffb74d' },
-  statLbl: { fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 2, letterSpacing: 0.2 },
-  statSep: { width: 1, backgroundColor: 'rgba(255,255,255,0.18)', marginVertical: 6 },
 
-  // Operation tabs
-  operacionRow: {
+  // ── KPI strip ───────────────────────────────────────────────────
+  kpiStrip: {
     flexDirection: 'row', backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: '#edf0f3',
+    paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
   },
-  operacionTab: {
-    flex: 1, paddingVertical: 11, alignItems: 'center',
-    borderBottomWidth: 2, borderBottomColor: 'transparent',
-  },
-  operacionTabActivo: { borderBottomColor: '#1a6470' },
-  operacionTabText: { fontSize: 13, fontWeight: '600', color: '#b0bec5' },
-  operacionTabTextActivo: { color: '#1a6470' },
+  kpiItem: { flex: 1, alignItems: 'center', gap: 2 },
+  kpiNum:  { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  kpiLbl:  { fontSize: 9, color: '#94a3b8', fontWeight: '700', letterSpacing: 0.6 },
+  kpiDiv:  { width: 1, backgroundColor: '#e2e8f0', marginVertical: 6 },
 
-  // Pipeline
-  pipeline: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#edf0f3' },
-  pipelineContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 6, flexDirection: 'row' },
-  pipelineChip: {
+  // ── Funnel ──────────────────────────────────────────────────────
+  funnelWrap: { backgroundColor: '#fff', paddingHorizontal: 16, paddingBottom: 10 },
+  funnelBar: {
+    height: 6, flexDirection: 'row', borderRadius: 6, overflow: 'hidden',
+    backgroundColor: '#e2e8f0',
+  },
+  funnelSeg: { height: '100%' },
+  funnelLegend: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot:  { width: 7, height: 7, borderRadius: 4 },
+  legendTxt:  { fontSize: 10, color: '#64748b', fontWeight: '500' },
+
+  // ── Stage chips ─────────────────────────────────────────────────
+  stagePipe:        { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  stagePipeContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 6, flexDirection: 'row' },
+  stageChip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 20, borderWidth: 1, borderColor: '#e5eaed',
-    backgroundColor: '#fafbfc',
+    paddingHorizontal: 11, paddingVertical: 6,
+    borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc',
   },
-  pipelineChipActive: { backgroundColor: '#e8f4f5', borderColor: '#1a6470' },
-  chipDot: { width: 7, height: 7, borderRadius: 4 },
-  chipLabel: { fontSize: 12, color: '#6b8082', fontWeight: '500' },
-  chipLabelActive: { color: '#1a6470', fontWeight: '700' },
-  chipBadge: {
-    backgroundColor: '#e8eef0', borderRadius: 10,
-    paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center',
-  },
-  chipBadgeActive: { backgroundColor: '#1a6470' },
-  chipBadgeText: { fontSize: 11, fontWeight: '700', color: '#6b8082' },
-  chipBadgeTextActive: { color: '#fff' },
+  stageChipAll: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  stageDot:     { width: 6, height: 6, borderRadius: 3 },
+  stageChipTxt: { fontSize: 12, color: '#64748b', fontWeight: '500' },
+  stageCnt:     { fontSize: 11, color: '#94a3b8', fontWeight: '700' },
 
-  // Search row
-  searchRow: { flexDirection: 'row', gap: 10, padding: 12, alignItems: 'center' },
+  // ── Search ──────────────────────────────────────────────────────
+  searchRow: {
+    flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6,
+    alignItems: 'center',
+  },
   searchWrap: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', borderRadius: 14,
-    borderWidth: 1, borderColor: '#e2e8ea',
-    paddingHorizontal: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
+    backgroundColor: '#fff', borderRadius: 12,
+    borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 42,
   },
-  searchInput: { flex: 1, paddingVertical: 11, fontSize: 14, color: '#1a1a2e' },
-  btnNuevo: {
-    backgroundColor: '#1a6470', borderRadius: 14,
-    width: 46, height: 46, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#1a6470', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3, shadowRadius: 5, elevation: 4,
+  searchInput: { flex: 1, fontSize: 14, color: '#1e293b' },
+  sortBtn: {
+    width: 42, height: 42, backgroundColor: '#fff',
+    borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sortDot: {
+    position: 'absolute', top: 8, right: 8,
+    width: 7, height: 7, borderRadius: 4, backgroundColor: '#ef4444',
   },
 
-  // Empty state
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
+  // ── Operation tabs ──────────────────────────────────────────────
+  opRow: {
+    flexDirection: 'row', backgroundColor: '#fff',
+    borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+  },
+  opTab: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  opTabActivo:   { borderBottomColor: '#1a6470' },
+  opTabTxt:      { fontSize: 13, fontWeight: '600', color: '#94a3b8' },
+  opTabTxtActivo:{ color: '#1a6470' },
+  opTabBadge:    { backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center' },
+  opTabBadgeActivo: { backgroundColor: '#e0f4f5' },
+  opTabBadgeTxt: { fontSize: 11, fontWeight: '700', color: '#94a3b8' },
+
+  // ── Sort active bar ─────────────────────────────────────────────
+  sortActiveBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 6,
+    backgroundColor: '#e0f4f5',
+  },
+  sortActiveTxt: { flex: 1, fontSize: 12, color: '#1a6470', fontWeight: '600' },
+
+  // ── Empty ────────────────────────────────────────────────────────
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 40 },
   emptyIcon: {
-    width: 76, height: 76, borderRadius: 38,
-    backgroundColor: '#e0f0f2', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#2c4a4e' },
-  emptySubtitle: { fontSize: 14, color: '#9eafb2', textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#334155' },
+  emptySub:   { fontSize: 13, color: '#94a3b8', textAlign: 'center', lineHeight: 20 },
 
-  // Card
+  // ── Card ────────────────────────────────────────────────────────
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    marginBottom: 10,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    shadowColor: '#1a2e30',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 2,
+    backgroundColor: '#fff', borderRadius: 14,
+    marginBottom: 10, flexDirection: 'row', overflow: 'hidden',
+    shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
   },
-  cardAccent: { width: 4 },
-  cardInner: { flex: 1, padding: 14 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  cardBar:  { width: 4 },
+  cardBody: { flex: 1, padding: 14 },
+
+  cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
   avatar: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  avatarText: { fontSize: 15, fontWeight: '800' },
-  cardTopInfo: { flex: 1, minWidth: 0 },
-  cardNombre: { fontSize: 16, fontWeight: '700', color: '#1a1a2e' },
-  cardEmpresa: { fontSize: 12, color: '#9eafb2', marginTop: 2 },
-  cardRight: { alignItems: 'flex-end' },
-  estadoBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  estadoText: { fontSize: 11, fontWeight: '700' },
+  avatarTxt:    { fontSize: 15, fontWeight: '800' },
+  cardHeadInfo: { flex: 1, minWidth: 0 },
+  cardNombre:   { fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 3 },
+  cardSubRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  cardEmpresa:  { fontSize: 12, color: '#64748b' },
+  fuenteTag:    { backgroundColor: '#f1f5f9', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  fuenteTagTxt: { fontSize: 10, color: '#64748b', fontWeight: '600', textTransform: 'capitalize' },
 
-  cardMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 4 },
+  estadoBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4, flexShrink: 0, maxWidth: 130,
+  },
+  estadoDot: { width: 5, height: 5, borderRadius: 3 },
+  estadoTxt: { fontSize: 11, fontWeight: '700' },
+
+  metaRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 6, alignItems: 'center' },
+  metaTime: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' as any },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 12, color: '#8a9fa2' },
+  metaTxt:  { fontSize: 12, color: '#64748b' },
 
-  recRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6,
-    backgroundColor: '#e8f4f5', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5,
-  },
-  recRowVencido: { backgroundColor: '#fde8e8' },
-  recText: { fontSize: 12, color: '#1a6470', flex: 1 },
-  recTextVencido: { color: '#c0392b', fontWeight: '600' },
+  recRow:  { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8 },
+  recVenc: { backgroundColor: '#fef2f2' },
+  recHoy:  { backgroundColor: '#fffbeb' },
+  recProx: { backgroundColor: '#f0fdfa' },
+  recTxt:  { fontSize: 12, flex: 1, fontWeight: '500' },
 
-  cardActions: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  actions:      { flexDirection: 'row', gap: 8 },
   actionWa: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#f0fdf6', borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderWidth: 1, borderColor: '#d1f7e2',
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    backgroundColor: '#f0fdf4', borderRadius: 10, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#bbf7d0',
   },
-  actionWaText: { fontSize: 12, fontWeight: '600', color: '#16a34a' },
+  actionWaTxt:  { fontSize: 13, fontWeight: '600', color: '#16a34a' },
   actionCall: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#f0f8fa', borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderWidth: 1, borderColor: '#cde8ed',
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    backgroundColor: '#f0f9ff', borderRadius: 10, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#bae6fd',
   },
-  actionCallText: { fontSize: 12, fontWeight: '600', color: '#1a6470' },
+  actionCallTxt: { fontSize: 13, fontWeight: '600', color: '#0369a1' },
+
+  // ── Sort bottom sheet ────────────────────────────────────────────
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  sortSheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 40,
+  },
+  sortHandle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0',
+    alignSelf: 'center', marginBottom: 20,
+  },
+  sortTitle:   { fontSize: 17, fontWeight: '800', color: '#0f172a', marginBottom: 16 },
+  sortOpt:     {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+  },
+  sortOptLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  sortOptTxt:  { fontSize: 15, color: '#334155', fontWeight: '500' },
 })
