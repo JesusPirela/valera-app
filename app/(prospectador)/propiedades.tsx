@@ -124,7 +124,6 @@ export default function ProspectadorPropiedades() {
   const queryClient = useQueryClient()
   const isOnline = useNetworkStatus()
   const { primaryColor } = useTheme()
-  const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) : 44
 
   const [busqueda, setBusqueda] = useState('')
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
@@ -516,7 +515,7 @@ export default function ProspectadorPropiedades() {
       <View style={styles.container}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : statusBarHeight + 2, paddingBottom: 6 }]}>
+        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : 0, paddingBottom: 6 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
             {!isWeb ? (
               <View style={styles.headerTopRow}>
