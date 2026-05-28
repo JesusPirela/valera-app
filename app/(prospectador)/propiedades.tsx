@@ -23,7 +23,7 @@ import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 const LOGO = require('../../assets/logo.png')
 import { useTheme } from '../../lib/ThemeContext'
@@ -490,7 +490,6 @@ export default function ProspectadorPropiedades() {
 
   const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
   const { width: screenWidth } = useWindowDimensions()
-  const insets = useSafeAreaInsets()
   const isWeb = Platform.OS === 'web'
   const numCols = isWeb ? 4 : 1
   const CARD_GAP = 16
@@ -498,7 +497,7 @@ export default function ProspectadorPropiedades() {
   const cardWidth = isWeb ? (contentWidth - CARD_GAP * (numCols - 1)) / numCols : undefined
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: primaryColor }} edges={['top']}>
       {Platform.OS !== 'web' && (
         <WebView
           ref={phashWebViewRef}
@@ -513,7 +512,7 @@ export default function ProspectadorPropiedades() {
       <View style={styles.container}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : insets.top + 8, paddingBottom: 6 }]}>
+        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : 8, paddingBottom: 6 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
             {!isWeb ? (
               <View style={styles.headerTopRow}>
@@ -812,7 +811,7 @@ export default function ProspectadorPropiedades() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   )
 }
 
