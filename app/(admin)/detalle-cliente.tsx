@@ -1,11 +1,21 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView,
-  ActivityIndicator, TouchableOpacity, Modal, Alert, Platform,
+  ActivityIndicator, TouchableOpacity, Modal, Alert, Platform, Linking,
 } from 'react-native'
-import { useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { ESTADOS } from '../(prospectador)/crm'
+
+function abrirWhatsApp(telefono: string, nombre: string) {
+  const phone = telefono.replace(/\D/g, '')
+  const num = phone.length === 10 ? `52${phone}` : phone
+  const msg = encodeURIComponent(`Hola ${nombre}, te contacto de Valera Real Estate. ¿Cómo estás?`)
+  const url = `https://wa.me/${num}?text=${msg}`
+  if (Platform.OS === 'web') window.open(url, '_blank')
+  else Linking.openURL(url)
+}
 
 type UsuarioSimple = { id: string; nombre: string }
 
@@ -160,6 +170,24 @@ export default function AdminDetalleCliente() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+
+      {/* Back + acciones rápidas */}
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/crm')}>
+          <Ionicons name="arrow-back" size={18} color="#1a6470" />
+          <Text style={styles.backText}>CRM</Text>
+        </TouchableOpacity>
+        <View style={styles.quickActions}>
+          <TouchableOpacity style={styles.qaWa} onPress={() => abrirWhatsApp(cliente.telefono, cliente.nombre)}>
+            <Ionicons name="logo-whatsapp" size={14} color="#25D366" />
+            <Text style={styles.qaWaText}>WhatsApp</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.qaCall} onPress={() => Linking.openURL(`tel:${cliente.telefono}`)}>
+            <Ionicons name="call-outline" size={14} color="#1a6470" />
+            <Text style={styles.qaCallText}>Llamar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Info principal */}
       <View style={styles.clienteCard}>
@@ -347,6 +375,25 @@ export default function AdminDetalleCliente() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f2f5f8' },
   content: { padding: 16, paddingBottom: 52 },
+
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4, paddingRight: 8 },
+  backText: { fontSize: 14, fontWeight: '600', color: '#1a6470' },
+  quickActions: { flexDirection: 'row', gap: 8 },
+  qaWa: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#f0fdf6', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#d1f7e2',
+  },
+  qaWaText: { fontSize: 12, fontWeight: '700', color: '#16a34a' },
+  qaCall: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#f0f8fa', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#cde8ed',
+  },
+  qaCallText: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
 
   readonlyBanner: {
     backgroundColor: '#fff8e1', borderRadius: 10,
