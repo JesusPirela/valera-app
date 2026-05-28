@@ -318,10 +318,11 @@ export default function DetallePropiedad() {
 
   async function copiarDescripcion() {
     if (!propiedad?.descripcion) return
+    const texto = `ID: ${propiedad.codigo}\n\n${propiedad.descripcion}`
     if (Platform.OS === 'web') {
-      try { await navigator.clipboard.writeText(propiedad.descripcion) } catch { /* ignorar */ }
+      try { await navigator.clipboard.writeText(texto) } catch { /* ignorar */ }
     } else {
-      await Clipboard.setStringAsync(propiedad.descripcion)
+      await Clipboard.setStringAsync(texto)
     }
     setDescripcionCopiada(true)
     setTimeout(() => setDescripcionCopiada(false), 2000)

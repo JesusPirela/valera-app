@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react'
 import {
-  View, Text, StyleSheet, TextInput,
-  ActivityIndicator, TouchableOpacity, ScrollView, Modal, Alert, Platform,
+  View, Text, StyleSheet, TextInput, Platform, Linking,
+  ActivityIndicator, TouchableOpacity, ScrollView, Modal, Alert, FlatList,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { ESTADOS } from '../(prospectador)/crm'
 
@@ -33,6 +34,8 @@ const ORDEN_ESTADOS = [
   'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
 ]
 
+const ESTADOS_LISTA = ORDEN_ESTADOS
+
 function estadoInfo(estado: string) {
   return ESTADOS[estado] ?? { label: estado, color: '#555', bg: '#eee' }
 }
@@ -45,23 +48,20 @@ function tiempoRelativo(fechaISO: string) {
   return new Date(fechaISO).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
 
-// Anchos de columnas
-const COL = { nombre: 150, estado: 130, telefono: 120, empresa: 110, fecha: 80 }
-const COLS = [
-  { key: 'nombre',   label: 'Nombre',    width: COL.nombre,   sortable: true  },
-  { key: 'estado',   label: 'Estado',    width: COL.estado,   sortable: true  },
-  { key: 'telefono', label: 'Teléfono',  width: COL.telefono, sortable: false },
-  { key: 'empresa',  label: 'Empresa',   width: COL.empresa,  sortable: true  },
-  { key: 'fecha',    label: 'Agregado',  width: COL.fecha,    sortable: true  },
-]
-const TABLE_WIDTH = COLS.reduce((s, c) => s + c.width, 0) + COLS.length + 1
+function iniciales(nombre: string) {
+  return nombre.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+}
+
+function abrirWhatsApp(telefono: string, nombre: string) {
+  const phone = telefono.replace(/\D/g, '')
+  const num = phone.length === 10 ? `52${phone}` : phone
+  const msg = encodeURIComponent(`Hola ${nombre}, te contacto de Valera Real Estate. ¿Cómo estás?`)
+  const url = `https://wa.me/${num}?text=${msg}`
+  if (Platform.OS === 'web') window.open(url, '_blank')
+  else Linking.openURL(url)
+}
 
 type UsuarioSimple = { id: string; nombre: string }
-
-const ESTADOS_LISTA = [
-  'por_perfilar', 'no_contesta', 'cita_por_agendar',
-  'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
-]
 
 export default function AdminCRM() {
   const [secciones, setSecciones] = useState<Seccion[]>([])
@@ -69,13 +69,10 @@ export default function AdminCRM() {
   const [busqueda, setBusqueda] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null)
   const [seccionesColapsadas, setSeccionesColapsadas] = useState<Set<string>>(new Set())
-  const [sortCol, setSortCol] = useState('created_at')
-  const [sortAsc, setSortAsc] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
 
-  // Modal nuevo cliente
   const [modalNuevo, setModalNuevo] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoTelefono, setNuevoTelefono] = useState('')
@@ -90,73 +87,43 @@ export default function AdminCRM() {
   async function cargarClientes() {
     setLoading(true)
     setErrorMsg(null)
-
     const { data: { user } } = await supabase.auth.getUser()
     if (user) setCurrentUserId(user.id)
 
-    // 1. Traer todos los clientes
     const { data: clientesData, error: errorClientes } = await supabase
       .from('clientes')
       .select('id, nombre, telefono, email, empresa, estado, tipo_operacion, created_at, responsable_id')
       .order('created_at', { ascending: false })
 
-    if (errorClientes) {
-      setErrorMsg(`Error al cargar clientes: ${errorClientes.message}`)
-      setLoading(false)
-      return
-    }
-    if (!clientesData || clientesData.length === 0) {
-      setSecciones([])
-      setLoading(false)
-      return
-    }
+    if (errorClientes) { setErrorMsg(errorClientes.message); setLoading(false); return }
+    if (!clientesData?.length) { setSecciones([]); setLoading(false); return }
 
-    // 2. Traer los perfiles de los responsables únicos
     const idsUnicos = [...new Set(clientesData.map((c: any) => c.responsable_id).filter(Boolean))]
     const { data: perfilesData } = await supabase
-      .from('profiles')
-      .select('id, nombre')
-      .in('id', idsUnicos)
+      .from('profiles').select('id, nombre').in('id', idsUnicos)
 
-    const mapaPerfiles = new Map<string, { nombre: string; email: string }>()
-    for (const p of perfilesData ?? []) {
-      mapaPerfiles.set(p.id, { nombre: p.nombre ?? 'Sin nombre', email: '' })
-    }
+    const mapaPerfiles = new Map<string, string>()
+    for (const p of perfilesData ?? []) mapaPerfiles.set(p.id, p.nombre ?? 'Sin nombre')
 
-    const clientesNorm: ClienteAdmin[] = clientesData.map((c: any) => {
-      const perfil = mapaPerfiles.get(c.responsable_id)
-      return {
-        id: c.id,
-        nombre: c.nombre,
-        telefono: c.telefono,
-        email: c.email,
-        empresa: c.empresa,
-        estado: c.estado,
-        tipo_operacion: c.tipo_operacion ?? null,
-        created_at: c.created_at,
-        responsable_id: c.responsable_id,
-        prospectador_nombre: perfil?.nombre ?? 'Sin asignar',
-        prospectador_email: perfil?.email ?? '',
-      }
-    })
+    const clientesNorm: ClienteAdmin[] = clientesData.map((c: any) => ({
+      id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email,
+      empresa: c.empresa, estado: c.estado, tipo_operacion: c.tipo_operacion ?? null,
+      created_at: c.created_at, responsable_id: c.responsable_id,
+      prospectador_nombre: mapaPerfiles.get(c.responsable_id) ?? 'Sin asignar',
+      prospectador_email: '',
+    }))
 
     const mapaProsp = new Map<string, ClienteAdmin[]>()
     for (const cl of clientesNorm) {
-      const key = cl.prospectador_nombre
-      if (!mapaProsp.has(key)) mapaProsp.set(key, [])
-      mapaProsp.get(key)!.push(cl)
+      if (!mapaProsp.has(cl.prospectador_nombre)) mapaProsp.set(cl.prospectador_nombre, [])
+      mapaProsp.get(cl.prospectador_nombre)!.push(cl)
     }
 
-    const secs: Seccion[] = Array.from(mapaProsp.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([nombre, clientes]) => ({
-        title: nombre,
-        email: clientes[0]?.prospectador_email ?? '',
-        data: clientes,
-        total: clientes.length,
-      }))
-
-    setSecciones(secs)
+    setSecciones(
+      Array.from(mapaProsp.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([nombre, clientes]) => ({ title: nombre, email: '', data: clientes, total: clientes.length }))
+    )
     setLoading(false)
   }
 
@@ -171,74 +138,26 @@ export default function AdminCRM() {
   }
 
   async function guardarNuevoCliente() {
-    if (!nuevoNombre.trim()) {
-      if (Platform.OS === 'web') window.alert('El nombre es requerido')
-      else Alert.alert('Error', 'El nombre es requerido')
-      return
-    }
-    if (!nuevoTelefono.trim()) {
-      if (Platform.OS === 'web') window.alert('El teléfono es requerido')
-      else Alert.alert('Error', 'El teléfono es requerido')
-      return
-    }
-    if (!nuevoUserId) {
-      if (Platform.OS === 'web') window.alert('Selecciona un asesor')
-      else Alert.alert('Error', 'Selecciona un asesor al que asignar el cliente')
-      return
-    }
+    if (!nuevoNombre.trim()) { Platform.OS === 'web' ? window.alert('El nombre es requerido') : Alert.alert('Error', 'El nombre es requerido'); return }
+    if (!nuevoTelefono.trim()) { Platform.OS === 'web' ? window.alert('El teléfono es requerido') : Alert.alert('Error', 'El teléfono es requerido'); return }
+    if (!nuevoUserId) { Platform.OS === 'web' ? window.alert('Selecciona un asesor') : Alert.alert('Error', 'Selecciona un asesor'); return }
     setGuardandoCliente(true)
     const { error } = await supabase.from('clientes').insert({
-      nombre: nuevoNombre.trim(),
-      telefono: nuevoTelefono.trim(),
-      email: nuevoEmail.trim() || null,
-      empresa: nuevoEmpresa.trim() || null,
-      tipo_operacion: nuevoTipoOp,
-      estado: nuevoEstado,
-      fuente_lead: 'admin',
-      responsable_id: nuevoUserId,
+      nombre: nuevoNombre.trim(), telefono: nuevoTelefono.trim(),
+      email: nuevoEmail.trim() || null, empresa: nuevoEmpresa.trim() || null,
+      tipo_operacion: nuevoTipoOp, estado: nuevoEstado,
+      fuente_lead: 'admin', responsable_id: nuevoUserId,
     })
     setGuardandoCliente(false)
-    if (error) {
-      if (Platform.OS === 'web') window.alert(`Error: ${error.message}`)
-      else Alert.alert('Error', error.message)
-      return
-    }
+    if (error) { Platform.OS === 'web' ? window.alert(error.message) : Alert.alert('Error', error.message); return }
     setModalNuevo(false)
     cargarClientes()
   }
 
-  function toggleSeccion(title: string) {
-    setSeccionesColapsadas((prev) => {
-      const nuevo = new Set(prev)
-      if (nuevo.has(title)) nuevo.delete(title)
-      else nuevo.add(title)
-      return nuevo
-    })
-  }
-
-  function toggleSort(col: string) {
-    if (sortCol === col) setSortAsc(!sortAsc)
-    else { setSortCol(col); setSortAsc(true) }
-  }
-
-  function sortIcon(col: string) {
-    if (sortCol !== col) return ' ↕'
-    return sortAsc ? ' ↑' : ' ↓'
-  }
-
-  function sortClientes(clientes: ClienteAdmin[]) {
-    return [...clientes].sort((a, b) => {
-      let va: string, vb: string
-      if (sortCol === 'nombre')   { va = a.nombre; vb = b.nombre }
-      else if (sortCol === 'estado')  { va = a.estado; vb = b.estado }
-      else if (sortCol === 'empresa') { va = a.empresa ?? ''; vb = b.empresa ?? '' }
-      else { va = a.created_at; vb = b.created_at }
-      return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va)
-    })
-  }
-
   const todosClientes = secciones.flatMap((s) => s.data)
   const totalGlobal = todosClientes.length
+  const calientes = todosClientes.filter(c => c.estado === 'seguimiento_cierre' || c.estado === 'cita_agendada').length
+  const comprados = todosClientes.filter(c => c.estado === 'compro').length
   const conteosPorEstado = ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
     acc[e] = todosClientes.filter((c) => c.estado === e).length
     return acc
@@ -250,8 +169,7 @@ export default function AdminCRM() {
       if (busqueda.trim()) {
         const q = busqueda.toLowerCase()
         clientes = clientes.filter((c) =>
-          c.nombre.toLowerCase().includes(q) ||
-          c.telefono.includes(q) ||
+          c.nombre.toLowerCase().includes(q) || c.telefono.includes(q) ||
           sec.title.toLowerCase().includes(q)
         )
       }
@@ -263,43 +181,53 @@ export default function AdminCRM() {
 
   return (
     <View style={styles.container}>
+
+      {/* Stats banner */}
+      <View style={styles.statsBanner}>
+        <View style={styles.statItem}>
+          <Text style={[styles.statNum, { color: '#1a6470' }]}>{totalGlobal}</Text>
+          <Text style={styles.statLabel}>Leads</Text>
+        </View>
+        <View style={styles.statSep} />
+        <View style={styles.statItem}>
+          <Text style={[styles.statNum, { color: '#6a1b9a' }]}>{calientes}</Text>
+          <Text style={styles.statLabel}>Calientes</Text>
+        </View>
+        <View style={styles.statSep} />
+        <View style={styles.statItem}>
+          <Text style={[styles.statNum, { color: '#2e7d32' }]}>{comprados}</Text>
+          <Text style={styles.statLabel}>Cerrados</Text>
+        </View>
+        <View style={styles.statSep} />
+        <View style={styles.statItem}>
+          <Text style={[styles.statNum, { color: '#1a6470' }]}>{secciones.length}</Text>
+          <Text style={styles.statLabel}>Asesores</Text>
+        </View>
+      </View>
+
       {/* Filtro Venta / Renta */}
       <View style={styles.operacionRow}>
         {([null, 'venta', 'renta'] as const).map((op) => {
           const activo = operacionFiltro === op
           const label = op === null ? 'Todos' : op === 'venta' ? 'Venta' : 'Renta'
           return (
-            <TouchableOpacity
-              key={label}
-              style={[styles.operacionTab, activo && styles.operacionTabActivo]}
-              onPress={() => setOperacionFiltro(op)}
-            >
-              <Text style={[styles.operacionTabText, activo && styles.operacionTabTextActivo]}>
-                {label}
-              </Text>
+            <TouchableOpacity key={label} style={[styles.operacionTab, activo && styles.operacionTabActivo]} onPress={() => setOperacionFiltro(op)}>
+              <Text style={[styles.operacionTabText, activo && styles.operacionTabTextActivo]}>{label}</Text>
             </TouchableOpacity>
           )
         })}
       </View>
 
       {/* Pipeline chips */}
-      <ScrollView
-        horizontal showsHorizontalScrollIndicator={false}
-        style={styles.resumenScroll} contentContainerStyle={styles.resumenContent}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pipelineScroll} contentContainerStyle={styles.pipelineContent}>
         <TouchableOpacity
-          style={[styles.resumenChip, estadoFiltro === null && styles.resumenChipAll]}
+          style={[styles.pipelineChip, estadoFiltro === null && styles.pipelineChipAll]}
           onPress={() => setEstadoFiltro(null)}
         >
-          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#1a6470' }} />
-          <Text style={[styles.resumenLabel, estadoFiltro === null && styles.resumenLabelAll]}>Todos</Text>
-          <View style={{
-            backgroundColor: estadoFiltro === null ? '#1a6470' : '#e8eef0',
-            borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center',
-          }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: estadoFiltro === null ? '#fff' : '#6b8082' }}>
-              {totalGlobal}
-            </Text>
+          <View style={[styles.pipelineDot, { backgroundColor: estadoFiltro === null ? '#c9a84c' : '#aaa' }]} />
+          <View>
+            <Text style={[styles.pipelineCount, estadoFiltro === null && styles.pipelineCountAll]}>{totalGlobal}</Text>
+            <Text style={[styles.pipelineLabel, estadoFiltro === null && styles.pipelineLabelAll]}>Todos</Text>
           </View>
         </TouchableOpacity>
         {ORDEN_ESTADOS.map((e) => {
@@ -308,20 +236,13 @@ export default function AdminCRM() {
           return (
             <TouchableOpacity
               key={e}
-              style={[styles.resumenChip, activo && { backgroundColor: info.bg, borderColor: info.color }]}
+              style={[styles.pipelineChip, activo && { backgroundColor: info.bg, borderColor: info.color }]}
               onPress={() => setEstadoFiltro(activo ? null : e)}
             >
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: info.color }} />
-              <Text style={[styles.resumenLabel, activo && { color: info.color, fontWeight: '700' }]}>
-                {info.label}
-              </Text>
-              <View style={{
-                backgroundColor: activo ? info.color : '#e8eef0',
-                borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center',
-              }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: activo ? '#fff' : '#6b8082' }}>
-                  {conteosPorEstado[e]}
-                </Text>
+              <View style={[styles.pipelineDot, { backgroundColor: info.color }]} />
+              <View>
+                <Text style={[styles.pipelineCount, activo && { color: info.color }]}>{conteosPorEstado[e]}</Text>
+                <Text style={[styles.pipelineLabel, activo && { color: info.color, fontWeight: '600' }]}>{info.label}</Text>
               </View>
             </TouchableOpacity>
           )
@@ -330,147 +251,140 @@ export default function AdminCRM() {
 
       {/* Búsqueda + botón nuevo */}
       <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar cliente o prospectador..."
-          value={busqueda}
-          onChangeText={setBusqueda}
-          autoCapitalize="none"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-        />
+        <View style={styles.searchWrap}>
+          <Ionicons name="search-outline" size={16} color="#9eafb2" style={{ marginRight: 8 }} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar cliente o asesor..."
+            value={busqueda}
+            onChangeText={setBusqueda}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
+        </View>
         <TouchableOpacity style={styles.btnNuevo} onPress={abrirModalNuevo}>
-          <Text style={styles.btnNuevoText}>+ Nuevo</Text>
+          <Ionicons name="add" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
 
       {loading ? (
         <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : errorMsg ? (
-        <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyTitle, { color: '#c0392b', fontSize: 13 }]}>{errorMsg}</Text>
+        <View style={styles.emptyWrap}>
+          <Text style={{ color: '#c0392b', fontSize: 13 }}>{errorMsg}</Text>
         </View>
       ) : seccionesFiltradas.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        <View style={styles.emptyWrap}>
+          <Ionicons name="people-outline" size={48} color="#d0dfe1" />
           <Text style={styles.emptyTitle}>Sin resultados</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 32, paddingTop: 4 }}>
           {seccionesFiltradas.map((sec) => {
             const colapsada = seccionesColapsadas.has(sec.title)
             const totalSec = secciones.find((s) => s.title === sec.title)?.total ?? 0
-            const clientesOrdenados = sortClientes(sec.data)
+            const initProsp = iniciales(sec.title)
 
             return (
               <View key={sec.title} style={styles.seccion}>
                 {/* Cabecera del prospectador */}
                 <TouchableOpacity
                   style={styles.secHeader}
-                  onPress={() => toggleSeccion(sec.title)}
+                  onPress={() => setSeccionesColapsadas((prev) => {
+                    const s = new Set(prev)
+                    s.has(sec.title) ? s.delete(sec.title) : s.add(sec.title)
+                    return s
+                  })}
                   activeOpacity={0.75}
                 >
                   <View style={styles.secHeaderLeft}>
-                    <View style={styles.avatarCircle}>
-                      <Text style={styles.avatarText}>
-                        {sec.title.charAt(0).toUpperCase()}
-                      </Text>
+                    <View style={styles.secAvatar}>
+                      <Text style={styles.secAvatarText}>{initProsp}</Text>
                     </View>
                     <View>
                       <Text style={styles.secNombre}>{sec.title}</Text>
+                      <Text style={styles.secSub}>{sec.data.length} mostrando · {totalSec} total</Text>
                     </View>
                   </View>
-                  <View style={styles.secHeaderRight}>
-                    <View style={styles.totalBadge}>
-                      <Text style={styles.totalBadgeText}>{totalSec} clientes</Text>
-                    </View>
-                    <Text style={styles.chevron}>{colapsada ? '▶' : '▼'}</Text>
-                  </View>
+                  <Ionicons name={colapsada ? 'chevron-forward' : 'chevron-down'} size={16} color="#c0cdd0" />
                 </TouchableOpacity>
 
-                {/* Tabla de clientes (colapsable) */}
-                {!colapsada && (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    bounces={false}
-                    style={styles.tableWrapper}
-                  >
-                    <View style={{ width: TABLE_WIDTH }}>
-                      {/* Encabezado de tabla */}
-                      <View style={styles.tableHeader}>
-                        {COLS.map((col, i) => (
-                          <TouchableOpacity
-                            key={col.key}
-                            style={[
-                              styles.headerCell,
-                              { width: col.width },
-                              i < COLS.length - 1 && styles.cellBorderRight,
-                            ]}
-                            onPress={() => col.sortable && toggleSort(col.key)}
-                            disabled={!col.sortable}
-                          >
-                            <Text style={styles.headerCellText}>
-                              {col.label}
-                              {col.sortable
-                                ? <Text style={styles.sortIcon}>{sortIcon(col.key)}</Text>
-                                : null}
+                {/* Cards de clientes */}
+                {!colapsada && sec.data.map((item) => {
+                  const info = estadoInfo(item.estado)
+                  const initials = iniciales(item.nombre)
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.card}
+                      onPress={() =>
+                        item.responsable_id === currentUserId
+                          ? router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)
+                          : router.push(`/(admin)/detalle-cliente?id=${item.id}`)
+                      }
+                      activeOpacity={0.82}
+                    >
+                      <View style={[styles.cardAccent, { backgroundColor: info.color }]} />
+                      <View style={styles.cardInner}>
+                        <View style={styles.cardTop}>
+                          <View style={[styles.avatar, { backgroundColor: info.color + '18' }]}>
+                            <Text style={[styles.avatarText, { color: info.color }]}>{initials}</Text>
+                          </View>
+                          <View style={styles.cardInfo}>
+                            <Text style={styles.cardNombre} numberOfLines={1}>{item.nombre}</Text>
+                            <Text style={styles.cardSub} numberOfLines={1}>
+                              {item.empresa ? item.empresa : item.telefono}
                             </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
+                          </View>
+                          <View style={[styles.estadoBadge, { backgroundColor: info.bg, borderColor: info.color + '50' }]}>
+                            <View style={[styles.estadoDot, { backgroundColor: info.color }]} />
+                            <Text style={[styles.estadoText, { color: info.color }]}>{info.label}</Text>
+                          </View>
+                        </View>
 
-                      {/* Filas */}
-                      {clientesOrdenados.map((item, idx) => {
-                        const info = estadoInfo(item.estado)
-                        const isEven = idx % 2 === 0
-                        return (
+                        <View style={styles.cardMeta}>
+                          {item.empresa ? (
+                            <View style={styles.metaItem}>
+                              <Ionicons name="call-outline" size={11} color="#b0bfc2" />
+                              <Text style={styles.metaText}>{item.telefono}</Text>
+                            </View>
+                          ) : null}
+                          {item.tipo_operacion ? (
+                            <View style={styles.metaItem}>
+                              <Ionicons name="home-outline" size={11} color="#b0bfc2" />
+                              <Text style={styles.metaText}>{item.tipo_operacion}</Text>
+                            </View>
+                          ) : null}
+                          <View style={styles.metaItem}>
+                            <Ionicons name="time-outline" size={11} color="#b0bfc2" />
+                            <Text style={styles.metaText}>{tiempoRelativo(item.created_at)}</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.cardActions}>
                           <TouchableOpacity
-                            key={item.id}
-                            style={[styles.tableRow, isEven ? styles.rowEven : styles.rowOdd]}
-                            onPress={() =>
-                            item.responsable_id === currentUserId
-                              ? router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)
-                              : router.push(`/(admin)/detalle-cliente?id=${item.id}`)
-                          }
-                            activeOpacity={0.75}
+                            style={styles.actionWa}
+                            onPress={() => abrirWhatsApp(item.telefono, item.nombre)}
                           >
-                            {/* Nombre */}
-                            <View style={[styles.cell, { width: COL.nombre }, styles.cellBorderRight]}>
-                              <Text style={styles.cellNombre} numberOfLines={1}>{item.nombre}</Text>
-                              {item.empresa
-                                ? <Text style={styles.cellSub} numberOfLines={1}>{item.empresa}</Text>
-                                : null}
-                            </View>
-
-                            {/* Estado */}
-                            <View style={[styles.cell, { width: COL.estado }, styles.cellBorderRight, styles.cellCenter]}>
-                              <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
-                                <Text style={[styles.estadoText, { color: info.color }]} numberOfLines={1}>
-                                  {info.label}
-                                </Text>
-                              </View>
-                            </View>
-
-                            {/* Teléfono */}
-                            <View style={[styles.cell, { width: COL.telefono }, styles.cellBorderRight]}>
-                              <Text style={styles.cellText} numberOfLines={1}>{item.telefono}</Text>
-                            </View>
-
-                            {/* Empresa */}
-                            <View style={[styles.cell, { width: COL.empresa }, styles.cellBorderRight]}>
-                              <Text style={styles.cellText} numberOfLines={1}>{item.empresa ?? '—'}</Text>
-                            </View>
-
-                            {/* Agregado */}
-                            <View style={[styles.cell, { width: COL.fecha }]}>
-                              <Text style={styles.cellFecha}>{tiempoRelativo(item.created_at)}</Text>
-                            </View>
+                            <Ionicons name="logo-whatsapp" size={12} color="#25D366" />
+                            <Text style={styles.actionWaText}>WhatsApp</Text>
                           </TouchableOpacity>
-                        )
-                      })}
-                    </View>
-                  </ScrollView>
-                )}
+                          <TouchableOpacity
+                            style={styles.actionCall}
+                            onPress={() => Linking.openURL(`tel:${item.telefono}`)}
+                          >
+                            <Ionicons name="call-outline" size={12} color="#1a6470" />
+                            <Text style={styles.actionCallText}>Llamar</Text>
+                          </TouchableOpacity>
+                          <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                            <Ionicons name="chevron-forward" size={14} color="#d0d8da" />
+                          </View>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  )
+                })}
               </View>
             )
           })}
@@ -484,7 +398,7 @@ export default function AdminCRM() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitulo}>Nuevo cliente</Text>
               <TouchableOpacity onPress={() => setModalNuevo(false)}>
-                <Text style={styles.modalCerrar}>✕</Text>
+                <Ionicons name="close" size={22} color="#9eafb2" />
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -552,7 +466,7 @@ export default function AdminCRM() {
                       <Text style={[styles.mUsuarioNombre, nuevoUserId === u.id && { color: '#2a8a5a', fontWeight: '700' }]}>
                         {u.nombre}
                       </Text>
-                      {nuevoUserId === u.id && <Text style={{ color: '#2a8a5a', fontSize: 16 }}>✓</Text>}
+                      {nuevoUserId === u.id && <Ionicons name="checkmark-circle" size={18} color="#2a8a5a" />}
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -579,109 +493,123 @@ export default function AdminCRM() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f2f5f8' },
 
+  // Stats
+  statsBanner: {
+    flexDirection: 'row', backgroundColor: '#1a6470',
+    paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center',
+  },
+  statItem: { flex: 1, alignItems: 'center' },
+  statNum: { fontSize: 22, fontWeight: '800', color: '#fff', lineHeight: 26 },
+  statLabel: { fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3, marginTop: 1 },
+  statSep: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.15)' },
+
   // Operacion tabs
-  operacionRow: {
-    flexDirection: 'row', backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: '#edf0f3',
-  },
-  operacionTab: {
-    flex: 1, paddingVertical: 11, alignItems: 'center',
-    borderBottomWidth: 2, borderBottomColor: 'transparent',
-  },
-  operacionTabActivo: { borderBottomColor: '#1a6470' },
+  operacionRow: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#edf0f3' },
+  operacionTab: { flex: 1, paddingVertical: 11, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  operacionTabActivo: { borderBottomColor: '#c9a84c' },
   operacionTabText: { fontSize: 13, fontWeight: '600', color: '#b0bec5' },
   operacionTabTextActivo: { color: '#1a6470' },
 
-  // Resumen (pipeline chips)
-  resumenScroll: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#edf0f3' },
-  resumenContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 6, flexDirection: 'row' },
-  resumenChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 20, borderWidth: 1, borderColor: '#e5eaed',
-    backgroundColor: '#fafbfc',
+  // Pipeline
+  pipelineScroll: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#edf0f3' },
+  pipelineContent: { paddingHorizontal: 10, paddingVertical: 10, gap: 6, flexDirection: 'row' },
+  pipelineChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 7,
+    borderRadius: 20, borderWidth: 1.5, borderColor: '#e8e8e8',
+    backgroundColor: '#fafafa', minWidth: 75,
   },
-  resumenChipAll: { backgroundColor: '#e8f4f5', borderColor: '#1a6470' },
-  resumenCount: { fontSize: 11, fontWeight: '700', color: '#6b8082' },
-  resumenCountAll: { color: '#fff' },
-  resumenLabel: { fontSize: 12, color: '#6b8082', fontWeight: '500' },
-  resumenLabelAll: { color: '#1a6470', fontWeight: '700' },
+  pipelineChipAll: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  pipelineDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
+  pipelineCount: { fontSize: 15, fontWeight: '800', color: '#444', lineHeight: 17 },
+  pipelineCountAll: { color: '#fff' },
+  pipelineLabel: { fontSize: 9, color: '#999', fontWeight: '500', lineHeight: 11 },
+  pipelineLabelAll: { color: '#c9a84c' },
 
   // Search
   searchRow: { flexDirection: 'row', gap: 10, padding: 12, alignItems: 'center' },
-  searchInput: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8ea',
-    paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: '#1a1a2e',
+  searchWrap: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 14,
+    borderWidth: 1, borderColor: '#e2e8ea', paddingHorizontal: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
+  searchInput: { flex: 1, paddingVertical: 11, fontSize: 14, color: '#1a1a2e' },
   btnNuevo: {
-    backgroundColor: '#1a6470', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 11,
-    shadowColor: '#1a6470', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 3,
+    backgroundColor: '#1a6470', borderRadius: 14,
+    width: 46, height: 46, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#1a6470', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3,
   },
-  btnNuevoText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   // Empty
-  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  emptyTitle: { fontSize: 16, color: '#9eafb2' },
+  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
+  emptyTitle: { fontSize: 16, color: '#9eafb2', fontWeight: '600' },
 
   // Sección prospectador
-  seccion: { marginHorizontal: 12, marginBottom: 14 },
+  seccion: { marginHorizontal: 12, marginTop: 14 },
   secHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#fff', borderRadius: 14, padding: 14,
+    backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 6,
     shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 5, elevation: 2,
   },
   secHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  avatarCircle: {
-    width: 40, height: 40, borderRadius: 20,
+  secAvatar: {
+    width: 42, height: 42, borderRadius: 21,
     backgroundColor: '#1a6470', alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { color: '#c9a84c', fontSize: 17, fontWeight: '800' },
+  secAvatarText: { color: '#c9a84c', fontSize: 16, fontWeight: '800' },
   secNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
-  secEmail: { fontSize: 11, color: '#aaa', marginTop: 1 },
-  secHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  totalBadge: { backgroundColor: '#e8f4f5', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
-  totalBadgeText: { fontSize: 12, color: '#1a6470', fontWeight: '700' },
-  chevron: { fontSize: 12, color: '#c0cdd0' },
+  secSub: { fontSize: 11, color: '#aaa', marginTop: 1 },
 
-  // Table
-  tableWrapper: {
-    borderWidth: 1, borderColor: '#e0e8ea',
-    borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
-    borderTopWidth: 0, overflow: 'hidden',
-    shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  // Card
+  card: {
+    backgroundColor: '#fff', borderRadius: 14, marginBottom: 8,
+    flexDirection: 'row', overflow: 'hidden',
+    borderWidth: 1, borderColor: '#e8eef0',
+    shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 1,
   },
-  tableHeader: {
-    flexDirection: 'row', backgroundColor: '#1a6470',
-    borderBottomWidth: 2, borderBottomColor: '#c9a84c',
+  cardAccent: { width: 4, flexShrink: 0 },
+  cardInner: { flex: 1, padding: 12 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 7 },
+  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatarText: { fontSize: 14, fontWeight: '800' },
+  cardInfo: { flex: 1, minWidth: 0 },
+  cardNombre: { fontSize: 14, fontWeight: '700', color: '#1a1a2e' },
+  cardSub: { fontSize: 11, color: '#9eafb2', marginTop: 1 },
+
+  estadoBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    borderRadius: 20, paddingHorizontal: 7, paddingVertical: 3,
+    borderWidth: 1, flexShrink: 0, alignSelf: 'flex-start',
   },
-  headerCell: { paddingVertical: 10, paddingHorizontal: 10, justifyContent: 'center' },
-  headerCellText: { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 0.4 },
-  sortIcon: { color: '#c9a84c', fontWeight: '400' },
-  cellBorderRight: { borderRightWidth: 1, borderRightColor: '#e0e8ea' },
+  estadoDot: { width: 4, height: 4, borderRadius: 2 },
+  estadoText: { fontSize: 10, fontWeight: '700' },
 
-  tableRow: {
-    flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#edf0f3', minHeight: 46,
+  cardMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 7 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  metaText: { fontSize: 11, color: '#8a9fa2' },
+
+  cardActions: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  actionWa: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#f0fdf6', borderRadius: 7,
+    paddingHorizontal: 8, paddingVertical: 5,
+    borderWidth: 1, borderColor: '#d1f7e2',
   },
-  rowEven: { backgroundColor: '#ffffff' },
-  rowOdd:  { backgroundColor: '#f7f9fb' },
+  actionWaText: { fontSize: 11, fontWeight: '600', color: '#16a34a' },
+  actionCall: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#f0f8fa', borderRadius: 7,
+    paddingHorizontal: 8, paddingVertical: 5,
+    borderWidth: 1, borderColor: '#cde8ed',
+  },
+  actionCallText: { fontSize: 11, fontWeight: '600', color: '#1a6470' },
 
-  cell: { paddingVertical: 10, paddingHorizontal: 10, justifyContent: 'center' },
-  cellCenter: { alignItems: 'center' },
-  cellNombre: { fontSize: 13, fontWeight: '700', color: '#1a1a2e' },
-  cellSub:    { fontSize: 11, color: '#9eafb2', marginTop: 2 },
-  cellText:   { fontSize: 13, color: '#4a5568' },
-  cellFecha:  { fontSize: 12, color: '#9eafb2', textAlign: 'center' },
-
-  estadoBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  estadoText:  { fontSize: 11, fontWeight: '700' },
-
-  // Modal nuevo cliente
+  // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e' },
-  modalCerrar: { fontSize: 18, color: '#9eafb2', paddingHorizontal: 6 },
   mLabel: { fontSize: 11, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6, marginTop: 14 },
   mInput: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1a2e30', backgroundColor: '#f5f7f8' },
   mRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
