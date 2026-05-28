@@ -23,7 +23,6 @@ import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
-import { SafeAreaView } from 'react-native-safe-area-context'
 
 const LOGO = require('../../assets/logo.png')
 import { useTheme } from '../../lib/ThemeContext'
@@ -497,7 +496,7 @@ export default function ProspectadorPropiedades() {
   const cardWidth = isWeb ? (contentWidth - CARD_GAP * (numCols - 1)) / numCols : undefined
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: primaryColor }} edges={['top']}>
+    <View style={{ flex: 1, backgroundColor: primaryColor }}>
       {Platform.OS !== 'web' && (
         <WebView
           ref={phashWebViewRef}
@@ -811,7 +810,7 @@ export default function ProspectadorPropiedades() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   )
 }
 
