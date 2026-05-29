@@ -171,6 +171,10 @@ export default function Misiones() {
             <Ionicons name="podium-outline" size={18} color="#c9a84c" />
             <Text style={s.quickBtnTxt}>Ranking</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={s.quickBtn} onPress={() => router.push('/(prospectador)/mi-actividad' as any)}>
+            <Ionicons name="bar-chart-outline" size={18} color="#c9a84c" />
+            <Text style={s.quickBtnTxt}>Actividad</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
