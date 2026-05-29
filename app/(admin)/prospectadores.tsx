@@ -25,6 +25,7 @@ type Prospectador = {
   nombre: string | null
   created_at: string
   last_seen: string | null
+  valera_coins: number
 }
 
 type Credenciales = {
@@ -223,8 +224,7 @@ export default function Prospectadores() {
       .from('coin_transactions')
       .select('id, cantidad, concepto, created_at')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(50)
+      .order('created_at', { ascending: true })
     setCoinsTxs((data ?? []) as CoinTx[])
     setLoadingTxs(false)
   }
@@ -289,6 +289,7 @@ export default function Prospectadores() {
                   <Text style={[styles.cardFecha, { color: item.last_seen ? '#1a6470' : '#bbb' }]}>
                     {item.last_seen ? `Última conexión: ${tiempoRelativo(item.last_seen)}` : 'Sin conexión registrada'}
                   </Text>
+                  <Text style={styles.cardCoins}>💰 {(item.valera_coins ?? 0).toLocaleString()} Valera Coins</Text>
                 </View>
                 <TouchableOpacity
                   style={[styles.rolBadge, ROL_BADGE[item.role] ?? ROL_BADGE.prospectador]}
@@ -426,7 +427,7 @@ export default function Prospectadores() {
                 ) : coinsTxs.length === 0 ? (
                   <Text style={styles.emptySubtitle}>Sin movimientos registrados</Text>
                 ) : (
-                  coinsTxs.map(tx => (
+                  [...coinsTxs].reverse().map(tx => (
                     <View key={tx.id} style={styles.txRow}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.txConcepto}>{tx.concepto}</Text>
@@ -638,8 +639,9 @@ const styles = StyleSheet.create({
   cardIconText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cardInfo: { flex: 1 },
   cardNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
-  cardEmail: { fontSize: 11, color: '#aaa', marginTop: 1 },
-  cardFecha: { fontSize: 11, color: '#aaa', marginTop: 2 },
+  cardEmail:  { fontSize: 11, color: '#aaa', marginTop: 1 },
+  cardFecha:  { fontSize: 11, color: '#aaa', marginTop: 2 },
+  cardCoins:  { fontSize: 12, color: '#a07820', fontWeight: '700', marginTop: 4 },
 
   rolBadge: {
     borderRadius: 6,

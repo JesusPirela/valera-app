@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { ESTADOS } from './crm'
+import { ESTADOS, ORDEN_ESTADOS } from './crm'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { registrarAccion } from '../../lib/gamification'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -53,10 +53,6 @@ const TIPO_ICON: Record<string, { icon: string; color: string }> = {
   estado_cambiado: { icon: 'git-branch-outline',   color: '#1a6470' },
 }
 
-const ORDEN_ESTADOS = [
-  'por_perfilar', 'no_contesta', 'cita_por_agendar',
-  'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
-]
 
 function tiempoRelativo(fechaISO: string) {
   const diff = Date.now() - new Date(fechaISO).getTime()

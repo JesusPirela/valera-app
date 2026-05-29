@@ -131,10 +131,8 @@ export default function MiActividad() {
     if (userId) await cargarConexion(userId, p)
   }
 
-  const totalHoyMinutos = conexionData.find(d => {
-    const hoy = new Date().toISOString().slice(0, 10)
-    return d.fecha === hoy
-  })?.minutos ?? 0
+  const hoy = new Date().toISOString().slice(0, 10)
+  const totalHoyMinutos = conexionData.find(d => d.fecha === hoy)?.minutos ?? 0
 
   if (loading) return (
     <View style={{ flex: 1, backgroundColor: DARK, justifyContent: 'center', alignItems: 'center' }}>
@@ -184,18 +182,25 @@ export default function MiActividad() {
           </View>
         </View>
 
-        <BarChart
-          data={conexionData}
-          label={periodo === 'semana' ? 'Últimos 7 días (minutos por día)' : 'Últimos 30 días (minutos por día)'}
-        />
-
-        {conexionData.length > 0 && (
-          <View style={s.totalRow}>
-            <Text style={s.totalLabel}>Total {periodo === 'semana' ? 'semana' : 'mes'}</Text>
-            <Text style={s.totalVal}>
-              {formatMinutos(conexionData.reduce((a, d) => a + d.minutos, 0))}
-            </Text>
+        {conexionData.length === 0 ? (
+          <View style={s.emptyConexion}>
+            <Text style={s.emptyConexionIcn}>⏱️</Text>
+            <Text style={s.emptyConexionTxt}>El registro de tiempo conectado comenzó con la última actualización de la app.</Text>
+            <Text style={s.emptyConexionSub}>Los datos aparecerán a medida que uses la app.</Text>
           </View>
+        ) : (
+          <>
+            <BarChart
+              data={conexionData}
+              label={periodo === 'semana' ? 'Últimos 7 días (minutos por día)' : 'Últimos 30 días (minutos por día)'}
+            />
+            <View style={s.totalRow}>
+              <Text style={s.totalLabel}>Total {periodo === 'semana' ? 'semana' : 'mes'}</Text>
+              <Text style={s.totalVal}>
+                {formatMinutos(conexionData.reduce((a, d) => a + d.minutos, 0))}
+              </Text>
+            </View>
+          </>
         )}
       </View>
 
@@ -245,4 +250,9 @@ const s = StyleSheet.create({
   totalRow:   { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: MID },
   totalLabel: { fontSize: 13, color: '#7a9ab5' },
   totalVal:   { fontSize: 14, fontWeight: '800', color: GOLD },
+
+  emptyConexion:    { alignItems: 'center', paddingVertical: 24 },
+  emptyConexionIcn: { fontSize: 36, marginBottom: 10 },
+  emptyConexionTxt: { fontSize: 13, color: '#7a9ab5', textAlign: 'center', lineHeight: 19, marginBottom: 6 },
+  emptyConexionSub: { fontSize: 11, color: '#556a7a', textAlign: 'center' },
 })
