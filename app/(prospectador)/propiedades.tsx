@@ -17,7 +17,6 @@ import {
   StatusBar,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
-import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -27,29 +26,6 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 const LOGO = require('../../assets/logo.png')
 import { useTheme } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
-import { computePhash, hammingDistance } from '../../lib/phash'
-import { WebView } from 'react-native-webview'
-import * as FileSystem from 'expo-file-system'
-
-const PHASH_HTML = `<!DOCTYPE html><html><head><script>
-function compute(uri){
-  var img=new Image();
-  img.crossOrigin='anonymous';
-  img.onload=function(){
-    try{
-      var c=document.createElement('canvas');c.width=8;c.height=8;
-      var ctx=c.getContext('2d');ctx.drawImage(img,0,0,8,8);
-      var d=ctx.getImageData(0,0,8,8).data,px=[],i;
-      for(i=0;i<64;i++) px.push(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]);
-      var avg=px.reduce(function(a,b){return a+b},0)/64,hex='',b,v,bit;
-      for(b=0;b<8;b++){v=0;for(bit=0;bit<8;bit++){if(px[b*8+bit]>=avg)v|=(1<<bit);}hex+=('0'+v.toString(16)).slice(-2);}
-      window.ReactNativeWebView.postMessage(hex);
-    }catch(e){window.ReactNativeWebView.postMessage('error');}
-  };
-  img.onerror=function(){window.ReactNativeWebView.postMessage('error');};
-  img.src=uri;
-}
-</script></head><body></body></html>`
 
 type Propiedad = {
   id: string
@@ -144,27 +120,6 @@ export default function ProspectadorPropiedades() {
   const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
   const [showHelp, setShowHelp] = useState(false)
   const [mensajeAyuda, setMensajeAyuda] = useState('')
-  const [buscandoImagen, setBuscandoImagen] = useState(false)
-  const [resultadoImagenId, setResultadoImagenId] = useState<string | null>(null)
-  const [resultadosImagen, setResultadosImagen] = useState<{ propiedad: Propiedad; distancia: number }[]>([])
-  const [showResultadosImagen, setShowResultadosImagen] = useState(false)
-  const phashWebViewRef = useRef<WebView>(null)
-  const phashResolveRef = useRef<((h: string | null) => void) | null>(null)
-
-  function onPhashMessage(event: { nativeEvent: { data: string } }) {
-    const hash = event.nativeEvent.data
-    phashResolveRef.current?.(hash === 'error' ? null : hash)
-    phashResolveRef.current = null
-  }
-
-  function computePhashMobile(dataUri: string): Promise<string | null> {
-    return new Promise((resolve) => {
-      phashResolveRef.current = resolve
-      phashWebViewRef.current?.injectJavaScript(`compute(${JSON.stringify(dataUri)});true;`)
-      setTimeout(() => { phashResolveRef.current?.(null); phashResolveRef.current = null }, 10000)
-    })
-  }
-
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
     queryKey: ['prospectador-propiedades'],
     queryFn: async () => {
@@ -336,74 +291,6 @@ export default function ProspectadorPropiedades() {
 
   const propiedadesPorZona = vistaZonas ? agruparPorZona(propiedadesFiltradas) : []
 
-  async function buscarPorImagen() {
-    if (propiedades.length === 0) {
-      Alert.alert('Cargando', 'Espera a que carguen las propiedades e intenta de nuevo.')
-      return
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] })
-    if (result.canceled || !result.assets[0]) return
-
-    setBuscandoImagen(true)
-    setResultadosImagen([])
-    try {
-      let queryPhash: string | null = null
-      if (Platform.OS === 'web') {
-        queryPhash = await computePhash(result.assets[0].uri)
-      } else {
-        const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        })
-        queryPhash = await computePhashMobile(`data:image/jpeg;base64,${base64}`)
-      }
-      if (!queryPhash) {
-        Alert.alert('Error', 'No se pudo leer la imagen. Intenta con otro formato (JPG o PNG).')
-        return
-      }
-
-      const { data: rows, error } = await supabase
-        .from('propiedad_imagenes')
-        .select('propiedad_id, phash')
-        .not('phash', 'is', null)
-      if (error) throw error
-      if (!rows || rows.length === 0) {
-        Alert.alert('Sin datos', 'Aún no hay imágenes indexadas.')
-        return
-      }
-
-      // Distancia mínima por propiedad
-      const distPorPropiedad = new Map<string, number>()
-      for (const row of rows) {
-        if (!row.phash) continue
-        const dist = hammingDistance(queryPhash, row.phash)
-        const prev = distPorPropiedad.get(row.propiedad_id)
-        if (prev === undefined || dist < prev) distPorPropiedad.set(row.propiedad_id, dist)
-      }
-
-      // Tomar top 20 candidatos y filtrar solo las que el usuario puede ver
-      const candidatos = [...distPorPropiedad.entries()]
-        .sort((a, b) => a[1] - b[1])
-        .slice(0, 20)
-
-      const top3 = candidatos
-        .map(([id, distancia]) => ({ propiedad: propiedades.find(p => p.id === id), distancia }))
-        .filter(r => r.propiedad != null)
-        .slice(0, 3) as { propiedad: Propiedad; distancia: number }[]
-
-      if (top3.length === 0) {
-        Alert.alert('Sin resultado', 'No se encontraron propiedades similares a esa imagen.')
-        return
-      }
-
-      setResultadosImagen(top3)
-      setShowResultadosImagen(true)
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'No se pudo buscar por imagen.')
-    } finally {
-      setBuscandoImagen(false)
-    }
-  }
-
   function limpiarFiltros() {
     setFiltroOperacion(null)
     setFiltroTipo(null)
@@ -511,15 +398,6 @@ export default function ProspectadorPropiedades() {
 
   return (
     <View style={{ flex: 1, backgroundColor: primaryColor }}>
-      {Platform.OS !== 'web' && (
-        <WebView
-          ref={phashWebViewRef}
-          source={{ html: PHASH_HTML }}
-          onMessage={onPhashMessage}
-          javaScriptEnabled
-          style={{ width: 0, height: 0, position: 'absolute' }}
-        />
-      )}
       <OfflineBanner />
       {!isWeb && <StatusBar backgroundColor={primaryColor} barStyle="light-content" />}
       <View style={styles.container}>
@@ -562,21 +440,6 @@ export default function ProspectadorPropiedades() {
                 clearButtonMode="while-editing"
               />
             </View>
-            {!isWeb && (
-              <TouchableOpacity
-                style={[styles.imagenSearchBtn, { borderColor: primaryColor }]}
-                onPress={buscarPorImagen}
-                disabled={buscandoImagen}
-              >
-                {buscandoImagen
-                  ? <ActivityIndicator size="small" color={primaryColor} />
-                  : <Text style={styles.searchCamIcon}>📷</Text>
-                }
-                <Text style={[styles.imagenSearchText, { color: primaryColor }]}>
-                  {buscandoImagen ? 'Buscando...' : 'Buscar por imagen'}
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
 
@@ -765,46 +628,6 @@ export default function ProspectadorPropiedades() {
         <Ionicons name="help" size={20} color="#fff" />
       </TouchableOpacity>
 
-      {/* Modal top 3 resultados por imagen */}
-      <Modal visible={showResultadosImagen} transparent animationType="slide" onRequestClose={() => setShowResultadosImagen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { paddingBottom: 16, maxWidth: 480 }]}>
-            <Text style={styles.modalTitle}>Propiedades similares</Text>
-            <Text style={styles.modalSubtitle}>Top 3 por parecido visual</Text>
-            {resultadosImagen.map(({ propiedad: p, distancia }, idx) => {
-              const primera = [...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-              const similitud = Math.round((1 - distancia / 64) * 100)
-              return (
-                <TouchableOpacity
-                  key={p.id}
-                  style={styles.imagenResultRow}
-                  activeOpacity={0.8}
-                  onPress={() => { setShowResultadosImagen(false); router.push(`/(prospectador)/detalle-propiedad?id=${p.id}`) }}
-                >
-                  {primera?.url
-                    ? <Image source={{ uri: primera.url }} style={styles.imagenResultThumb} resizeMode="cover" />
-                    : <View style={[styles.imagenResultThumb, { backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' }]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
-                  }
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                      <Text style={[styles.imagenResultRank, { backgroundColor: primaryColor }]}>#{idx + 1}</Text>
-                      <Text style={[styles.imagenResultSimilitud, { color: similitud >= 80 ? '#27ae60' : similitud >= 60 ? '#e67e22' : '#888' }]}>
-                        {similitud}% similar
-                      </Text>
-                    </View>
-                    <Text style={styles.imagenResultTitulo} numberOfLines={2}>{p.titulo}</Text>
-                    <Text style={styles.imagenResultPrecio}>{formatPrecio(p.precio)}</Text>
-                  </View>
-                </TouchableOpacity>
-              )
-            })}
-            <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 12 }]} onPress={() => setShowResultadosImagen(false)}>
-              <Text style={styles.modalCancelText}>Cerrar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* Modal de ayuda */}
       <Modal visible={showHelp} transparent animationType="fade" onRequestClose={() => setShowHelp(false)}>
         <View style={styles.modalOverlay}>
@@ -909,20 +732,6 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   searchIcon: { fontSize: 15, marginRight: 8, color: '#aaa' },
-  searchCamBtn: { padding: 6, marginLeft: 4 },
-  searchCamIcon: { fontSize: 18 },
-  imagenSearchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 8,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: '#fff',
-  },
-  imagenSearchText: { fontSize: 13, fontWeight: '600' },
   searchInput: {
     flex: 1,
     paddingVertical: 12,
@@ -1265,44 +1074,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 15,
-  },
-  // Imagen search results modal
-  imagenResultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  imagenResultThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  imagenResultRank: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#fff',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 5,
-    overflow: 'hidden',
-  },
-  imagenResultSimilitud: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  imagenResultTitulo: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1a1a2e',
-    marginBottom: 3,
-  },
-  imagenResultPrecio: {
-    fontSize: 13,
-    color: '#888',
-    fontWeight: '600',
   },
 })

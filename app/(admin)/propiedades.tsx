@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import {
   View,
   Text,
@@ -16,7 +16,6 @@ import {
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { computePhash } from '../../lib/phash'
 
 type Propiedad = {
   id: string
@@ -69,10 +68,6 @@ export default function AdminPropiedades() {
   const [propSeleccionada, setPropSeleccionada] = useState<Propiedad | null>(null)
   const [mensajeDestacado, setMensajeDestacado] = useState('')
   const [guardandoDestacado, setGuardandoDestacado] = useState(false)
-
-  const [reindexando, setReindexando] = useState(false)
-  const [reindexProgreso, setReindexProgreso] = useState('')
-  const reindexCancelRef = useRef(false)
 
   async function cargarPropiedades() {
     setLoading(true)
@@ -167,79 +162,6 @@ export default function AdminPropiedades() {
     return `$${precio.toLocaleString('es-MX')} MXN`
   }
 
-  async function reindexarPhash() {
-    if (!window.confirm('¿Re-indexar todas las fotos? Esto puede tardar varios minutos y usa la CPU del navegador.')) return
-    reindexCancelRef.current = false
-    setReindexando(true)
-    setReindexProgreso('Cargando lista de imágenes...')
-
-    try {
-      const allImages: { id: string; url: string }[] = []
-      let from = 0
-      const PAGE = 1000
-      while (true) {
-        const { data, error } = await supabase
-          .from('propiedad_imagenes')
-          .select('id, url')
-          .range(from, from + PAGE - 1)
-        if (error || !data) break
-        allImages.push(...data)
-        if (data.length < PAGE) break
-        from += PAGE
-      }
-
-      const total = allImages.length
-      let processed = 0
-      let failed = 0
-      const BATCH = 30
-
-      for (let i = 0; i < total; i += BATCH) {
-        if (reindexCancelRef.current) break
-
-        const batch = allImages.slice(i, i + BATCH)
-        // Descarga cada imagen como blob y computa desde blob: URI — mismo método que la búsqueda
-        const hashes = await Promise.all(
-          batch.map(async (img) => {
-            try {
-              const res = await fetch(img.url)
-              if (!res.ok) return null
-              const blob = await res.blob()
-              const objectUrl = URL.createObjectURL(blob)
-              const hash = await computePhash(objectUrl)
-              URL.revokeObjectURL(objectUrl)
-              return hash
-            } catch {
-              return null
-            }
-          })
-        )
-        failed += hashes.filter((h) => h == null).length
-
-        await Promise.all(
-          batch
-            .map((img, j) => {
-              if (hashes[j] == null) return null
-              return supabase.from('propiedad_imagenes').update({ phash: hashes[j] }).eq('id', img.id)
-            })
-            .filter(Boolean)
-        )
-
-        processed += batch.length
-        setReindexProgreso(`Indexando... ${processed}/${total}${failed > 0 ? ` (${failed} sin hash)` : ''}`)
-      }
-
-      if (reindexCancelRef.current) {
-        setReindexProgreso(`Cancelado en ${processed}/${total}`)
-      } else {
-        setReindexProgreso(`✅ ${processed} fotos indexadas${failed > 0 ? `, ${failed} sin hash` : ''}`)
-      }
-    } catch {
-      setReindexProgreso('Error durante la indexación')
-    } finally {
-      setReindexando(false)
-    }
-  }
-
   function limpiarFiltros() {
     setFiltroOperacion(null)
     setFiltroEstado(null)
@@ -277,32 +199,6 @@ export default function AdminPropiedades() {
           </TouchableOpacity>
         ))}
       </View>
-
-      {/* Re-indexar fotos (solo web, para corregir hashes de búsqueda por imagen) */}
-      {Platform.OS === 'web' && (
-        <View style={styles.herramientasRow}>
-          {reindexando ? (
-            <>
-              <Text style={styles.reindexText}>{reindexProgreso}</Text>
-              <TouchableOpacity
-                style={styles.btnCancelarReindex}
-                onPress={() => { reindexCancelRef.current = true }}
-              >
-                <Text style={styles.btnCancelarReindexText}>Cancelar</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              {reindexProgreso !== '' && (
-                <Text style={styles.reindexText}>{reindexProgreso}</Text>
-              )}
-              <TouchableOpacity style={styles.btnReindexar} onPress={reindexarPhash}>
-                <Text style={styles.btnReindexarText}>🔄 Re-indexar fotos</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      )}
 
       {/* Barra de búsqueda con ícono */}
       <View style={styles.searchRow}>
@@ -625,32 +521,6 @@ const styles = StyleSheet.create({
   },
   navIcon: { fontSize: 22 },
   navLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
-
-  // Re-indexar
-  herramientasRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
-  },
-  btnReindexar: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: '#e8f0f0',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#1a6470',
-  },
-  btnReindexarText: { color: '#1a6470', fontSize: 13, fontWeight: '700' as const },
-  reindexText: { flex: 1, color: '#555', fontSize: 13 },
-  btnCancelarReindex: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#c0392b',
-    borderRadius: 8,
-  },
-  btnCancelarReindexText: { color: '#c0392b', fontSize: 12, fontWeight: '600' as const },
 
   // Búsqueda
   searchRow: {

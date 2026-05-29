@@ -17,7 +17,6 @@ import {
 import { router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
-import { computePhash } from '../../lib/phash'
 import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
 import AsesorPicker from '../../components/ui/AsesorPicker'
@@ -420,9 +419,8 @@ export default function NuevaPropiedad() {
       if (imagenes.length > 0) {
         const registros = await Promise.all(
           imagenes.map(async (uri, index) => {
-            const phash = await computePhash(uri)
             const url = await subirImagen(uri, propiedadId, index)
-            return { propiedad_id: propiedadId, url, orden: index, phash }
+            return { propiedad_id: propiedadId, url, orden: index }
           })
         )
         const { error: errorImagenes } = await supabase.from('propiedad_imagenes').insert(registros)
