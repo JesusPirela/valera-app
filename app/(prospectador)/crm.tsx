@@ -8,6 +8,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { OfflineBanner } from '../../components/OfflineBanner'
+import * as FileSystem from 'expo-file-system'
+import * as Sharing from 'expo-sharing'
 
 type Cliente = {
   id: string
@@ -243,6 +245,42 @@ export default function CRM() {
     }
   }
 
+  // ── Exportar CSV ──────────────────────────────────────────────
+  async function exportarCSV() {
+    const filas = filtrados
+    const headers = ['Nombre', 'Teléfono', 'Email', 'Empresa', 'Tipo Operación', 'Estado', 'Nivel Interés', 'Fuente Lead', 'Próximo Contacto', 'Fecha Registro']
+    const rows = filas.map(c => [
+      c.nombre,
+      c.telefono,
+      c.email ?? '',
+      c.empresa ?? '',
+      c.tipo_operacion ?? '',
+      estadoInfo(c.estado).label,
+      c.nivel_interes ?? '',
+      c.fuente_lead,
+      c.proximo_contacto ? new Date(c.proximo_contacto).toLocaleDateString('es-MX') : '',
+      new Date(c.created_at).toLocaleDateString('es-MX'),
+    ])
+    const csv = [headers, ...rows]
+      .map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+    const filename = `clientes_${new Date().toISOString().slice(0, 10)}.csv`
+
+    if (Platform.OS === 'web') {
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } else {
+      const path = (FileSystem.cacheDirectory ?? '') + filename
+      await FileSystem.writeAsStringAsync(path, csv, { encoding: FileSystem.EncodingType.UTF8 })
+      await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Exportar clientes' })
+    }
+  }
+
   // ── Excel table columns ───────────────────────────────────────
   type TCol = { id: string; label: string; flex: number; mw: number; sortable?: boolean; filterable?: boolean }
   const TABLE_COLS: TCol[] = isWeb ? [
@@ -380,6 +418,9 @@ export default function CRM() {
           </TouchableOpacity>
           <TouchableOpacity style={s.sortBtn} onPress={() => setVistaExcel(v => !v)}>
             <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.sortBtn} onPress={exportarCSV} disabled={filtrados.length === 0}>
+            <Ionicons name="download-outline" size={15} color={filtrados.length === 0 ? '#cbd5e1' : '#1a6470'} />
           </TouchableOpacity>
           <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
             <Ionicons name="add" size={20} color="#fff" />
