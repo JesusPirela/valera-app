@@ -293,8 +293,8 @@ export default function ProspectadorPropiedades() {
   if (precioMinNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio >= precioMinNum)
   if (precioMaxNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio <= precioMaxNum)
   if (filtroFechaPreset) {
-    // Rangos exclusivos: cada preset muestra publicaciones en ese período específico
-    // 7d = 0-7 días atrás, 30d = 7-30 días atrás, 90d = 30-90 días atrás, 180d = 90-180 días atrás
+    // Rangos exclusivos por fecha de creación de la propiedad en el catálogo
+    // 7d = últimos 7 días, 30d = hace 7-30 días, 90d = hace 30-90 días, 180d = hace 90-180 días
     const BOUNDS: Record<number, [number, number]> = {
       7:   [7,   0  ],
       30:  [30,  7  ],
@@ -306,16 +306,14 @@ export default function ProspectadorPropiedades() {
     const olderEdge = now - minDays * 86400000
     const newerEdge = maxDays === 0 ? now + 1000 : now - maxDays * 86400000
     propiedadesFiltradas = propiedadesFiltradas.filter(p => {
-      const fechaPub = publicacionFechas[p.id]
-      if (!fechaPub) return false
-      const t = new Date(fechaPub).getTime()
+      const t = new Date(p.created_at).getTime()
+      if (isNaN(t)) return false
       return t >= olderEdge && t <= newerEdge
     })
   } else if (fechaDesdeCustom || fechaHastaCustom) {
     propiedadesFiltradas = propiedadesFiltradas.filter(p => {
-      const fechaPub = publicacionFechas[p.id]
-      if (!fechaPub) return false
-      const t = new Date(fechaPub).getTime()
+      const t = new Date(p.created_at).getTime()
+      if (isNaN(t)) return true
       if (fechaDesdeCustom) {
         const desde = new Date(fechaDesdeCustom).getTime()
         if (!isNaN(desde) && t < desde) return false
@@ -610,7 +608,7 @@ export default function ProspectadorPropiedades() {
               <FiltroChip label="Sin publicar" active={filtroPublicadas === 'sin_publicar'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar')} color={primaryColor} />
             </ScrollView>
 
-            <Text style={styles.filtroLabel}>Cuándo publiqué</Text>
+            <Text style={styles.filtroLabel}>Fecha de publicación</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
               <FiltroChip
                 label="Todo"
