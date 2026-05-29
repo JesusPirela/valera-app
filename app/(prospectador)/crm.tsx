@@ -541,8 +541,7 @@ export default function CRM() {
               </ScrollView>
             </ScrollView>
           )
-        })()
-        ) : (
+        })() : (
           <FlatList
             data={filtrados}
             keyExtractor={item => item.id}
