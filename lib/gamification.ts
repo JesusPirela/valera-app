@@ -363,15 +363,14 @@ export async function adminAjustarMonedas(
   targetUserId: string,
   cantidad: number,
   concepto: string
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; nuevoSaldo?: number }> {
   try {
-    const { data: ok, error } = await supabase.rpc('admin_ajustar_monedas', {
-      p_target_user_id: targetUserId,
-      p_cantidad:        cantidad,
-      p_concepto:        concepto,
+    const { data, error } = await supabase.functions.invoke('admin-ajustar-monedas', {
+      body: { targetUserId, cantidad, concepto },
     })
-    if (error || !ok) return { ok: false, error: error?.message ?? 'Saldo insuficiente' }
-    return { ok: true }
+    if (error) return { ok: false, error: error.message }
+    if (data?.error) return { ok: false, error: data.error }
+    return { ok: true, nuevoSaldo: data?.nuevoSaldo }
   } catch (e: any) {
     return { ok: false, error: e.message }
   }

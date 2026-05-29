@@ -236,23 +236,23 @@ export default function Prospectadores() {
     if (!conceptoCoins.trim()) { mostrarError('Agrega un concepto/razón'); return }
 
     setAjustandoCoins(true)
-    const { ok, error } = await adminAjustarMonedas(
+    const result = await adminAjustarMonedas(
       coinsModal.userId,
       cantidad * signo,
       conceptoCoins.trim()
     )
     setAjustandoCoins(false)
 
-    if (!ok) { mostrarError(error ?? 'Error al ajustar coins'); return }
+    if (!result.ok) { mostrarError(result.error ?? 'Error al ajustar coins'); return }
 
-    setCoinsModal(prev => prev
-      ? { ...prev, coinsActuales: Math.max(0, prev.coinsActuales + cantidad * signo) }
-      : null
-    )
+    const saldoNuevo = result.nuevoSaldo ?? Math.max(0, coinsModal.coinsActuales + cantidad * signo)
+    setCoinsModal(prev => prev ? { ...prev, coinsActuales: saldoNuevo } : null)
+    // Actualizar el saldo en la tarjeta sin recargar
+    setLista(prev => prev.map(u =>
+      u.id === coinsModal.userId ? { ...u, valera_coins: saldoNuevo } : u
+    ))
     setCantidadStr('')
     setConceptoCoins('')
-    // Refrescar lista
-    setLista(prev => prev.map(u => u.id === coinsModal.userId ? { ...u } : u))
   }
 
   return (
@@ -289,7 +289,6 @@ export default function Prospectadores() {
                   <Text style={[styles.cardFecha, { color: item.last_seen ? '#1a6470' : '#bbb' }]}>
                     {item.last_seen ? `Última conexión: ${tiempoRelativo(item.last_seen)}` : 'Sin conexión registrada'}
                   </Text>
-                  <Text style={styles.cardCoins}>💰 {(item.valera_coins ?? 0).toLocaleString()} Valera Coins</Text>
                 </View>
                 <TouchableOpacity
                   style={[styles.rolBadge, ROL_BADGE[item.role] ?? ROL_BADGE.prospectador]}
@@ -305,7 +304,7 @@ export default function Prospectadores() {
                 style={styles.coinsBtnSmall}
                 onPress={() => abrirCoinsModal(item)}
               >
-                <Text style={styles.coinsBtnSmallText}>💰 Coins</Text>
+                <Text style={styles.coinsBtnSmallText}>💰 {(item.valera_coins ?? 0).toLocaleString()}</Text>
               </TouchableOpacity>
 
               {editandoRolId === item.id && (
@@ -641,7 +640,6 @@ const styles = StyleSheet.create({
   cardNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
   cardEmail:  { fontSize: 11, color: '#aaa', marginTop: 1 },
   cardFecha:  { fontSize: 11, color: '#aaa', marginTop: 2 },
-  cardCoins:  { fontSize: 12, color: '#a07820', fontWeight: '700', marginTop: 4 },
 
   rolBadge: {
     borderRadius: 6,
