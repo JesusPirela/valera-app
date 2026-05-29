@@ -6,7 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
-import { ESTADOS } from '../(prospectador)/crm'
+import { ESTADOS, ORDEN_ESTADOS as ORDEN_ESTADOS_BASE } from '../(prospectador)/crm'
 import * as DocumentPicker from 'expo-document-picker'
 
 type ClienteAdmin = {
@@ -30,10 +30,7 @@ type Seccion = {
   total: number
 }
 
-const ORDEN_ESTADOS = [
-  'por_perfilar', 'no_contesta', 'cita_por_agendar',
-  'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
-]
+const ORDEN_ESTADOS = ORDEN_ESTADOS_BASE
 
 const ESTADOS_LISTA = ORDEN_ESTADOS
 

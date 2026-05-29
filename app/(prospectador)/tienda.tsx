@@ -6,7 +6,7 @@ import {
 import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
-import { comprarItem } from '../../lib/gamification'
+import { comprarItem, getCoinsDisplay } from '../../lib/gamification'
 
 type StoreItem = {
   id: string
@@ -128,23 +128,23 @@ export default function Tienda() {
       {/* Cómo ganar coins */}
       <View style={s.howCard}>
         <Text style={s.howTitle}>¿Cómo ganar Valera Coins?</Text>
-        {[
-          ['🏠', 'Publicar propiedad',      '+2 coins'],
-          ['👤', 'Agregar cliente al CRM',  '+5 coins'],
-          ['✅', 'Completar seguimiento',   '+3 coins'],
-          ['💬', 'Registrar interacción',   '+2 coins'],
-          ['📅', 'Agendar cita',            '+10 coins'],
-          ['🎉', 'Cerrar venta',            '+50 coins'],
-          ['📚', 'Completar lección',       '+5 coins'],
-          ['🔥', 'Acceso diario',           '+5 coins'],
-          ['🎯', 'Completar misión',        'bonus coins'],
-        ].map(([icn, txt, val]) => (
-          <View key={txt} style={s.howRow}>
-            <Text style={s.howIcn}>{icn}</Text>
-            <Text style={s.howTxt}>{txt}</Text>
-            <Text style={s.howVal}>{val}</Text>
+        {getCoinsDisplay().map(({ icono, label, coins }) => (
+          <View key={label} style={s.howRow}>
+            <Text style={s.howIcn}>{icono}</Text>
+            <Text style={s.howTxt}>{label}</Text>
+            <Text style={s.howVal}>+{coins} coins</Text>
           </View>
         ))}
+        <View style={s.howRow}>
+          <Text style={s.howIcn}>🔥</Text>
+          <Text style={s.howTxt}>Acceso diario</Text>
+          <Text style={s.howVal}>+5 coins</Text>
+        </View>
+        <View style={s.howRow}>
+          <Text style={s.howIcn}>🎯</Text>
+          <Text style={s.howTxt}>Completar misión</Text>
+          <Text style={s.howVal}>bonus coins</Text>
+        </View>
       </View>
 
     </ScrollView>

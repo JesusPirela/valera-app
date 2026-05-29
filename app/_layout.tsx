@@ -75,9 +75,33 @@ export default function RootLayout() {
   }, [])
 
   useEffect(() => {
+    let sessionId: string | null = null
+
+    async function iniciarSesion() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('user_sessions')
+        .insert({ user_id: user.id })
+        .select('id')
+        .single()
+      sessionId = data?.id ?? null
+    }
+
+    async function cerrarSesion() {
+      if (!sessionId) return
+      await supabase.from('user_sessions').update({ fin: new Date().toISOString() }).eq('id', sessionId)
+      sessionId = null
+    }
+
     const appStateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') supabase.auth.startAutoRefresh()
-      else supabase.auth.stopAutoRefresh()
+      if (state === 'active') {
+        supabase.auth.startAutoRefresh()
+        iniciarSesion()
+      } else {
+        supabase.auth.stopAutoRefresh()
+        cerrarSesion()
+      }
     })
 
     const fallbackTimer = setTimeout(() => {
@@ -95,9 +119,14 @@ export default function RootLayout() {
         clearTimeout(fallbackTimer)
         setSession(session)
         setLoading(false)
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session) iniciarSesion()
+      } else if (event === 'SIGNED_IN') {
+        setSession(session)
+        iniciarSesion()
+      } else if (event === 'TOKEN_REFRESHED') {
         setSession(session)
       } else if (event === 'SIGNED_OUT') {
+        cerrarSesion()
         setSession(null)
         queryClient.clear()
         router.replace('/(auth)/login')

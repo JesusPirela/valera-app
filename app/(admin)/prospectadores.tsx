@@ -10,9 +10,11 @@ import {
   TextInput,
   Modal,
   Platform,
+  ScrollView,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { adminAjustarMonedas } from '../../lib/gamification'
 
 type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus'
 
@@ -28,6 +30,19 @@ type Prospectador = {
 type Credenciales = {
   email: string
   password: string
+}
+
+type CoinTx = {
+  id: string
+  cantidad: number
+  concepto: string
+  created_at: string
+}
+
+type CoinsModal = {
+  userId: string
+  nombre: string
+  coinsActuales: number
 }
 
 const ROL_LABEL: Record<string, string> = {
@@ -107,6 +122,15 @@ export default function Prospectadores() {
   // Panel de credenciales tras crear
   const [credenciales, setCredenciales] = useState<Credenciales | null>(null)
 
+  // Modal de gestión de coins
+  const [coinsModal, setCoinsModal]         = useState<CoinsModal | null>(null)
+  const [coinsTab, setCoinsTab]             = useState<'ajustar' | 'historial'>('ajustar')
+  const [cantidadStr, setCantidadStr]       = useState('')
+  const [conceptoCoins, setConceptoCoins]   = useState('')
+  const [ajustandoCoins, setAjustandoCoins] = useState(false)
+  const [coinsTxs, setCoinsTxs]             = useState<CoinTx[]>([])
+  const [loadingTxs, setLoadingTxs]         = useState(false)
+
   async function cargar() {
     setLoading(true)
     const { data, error } = await supabase.rpc('get_prospectadores')
@@ -183,6 +207,54 @@ export default function Prospectadores() {
     setCredenciales(null)
   }
 
+  async function abrirCoinsModal(p: Prospectador) {
+    const { data: stats } = await supabase
+      .from('user_stats').select('valera_coins').eq('id', p.id).maybeSingle()
+    setCoinsModal({ userId: p.id, nombre: p.nombre ?? p.email, coinsActuales: stats?.valera_coins ?? 0 })
+    setCoinsTab('ajustar')
+    setCantidadStr('')
+    setConceptoCoins('')
+    setCoinsTxs([])
+  }
+
+  async function cargarHistorialCoins(userId: string) {
+    setLoadingTxs(true)
+    const { data } = await supabase
+      .from('coin_transactions')
+      .select('id, cantidad, concepto, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    setCoinsTxs((data ?? []) as CoinTx[])
+    setLoadingTxs(false)
+  }
+
+  async function aplicarAjuste(signo: 1 | -1) {
+    if (!coinsModal) return
+    const cantidad = parseInt(cantidadStr, 10)
+    if (!cantidad || cantidad <= 0) { mostrarError('Ingresa una cantidad válida'); return }
+    if (!conceptoCoins.trim()) { mostrarError('Agrega un concepto/razón'); return }
+
+    setAjustandoCoins(true)
+    const { ok, error } = await adminAjustarMonedas(
+      coinsModal.userId,
+      cantidad * signo,
+      conceptoCoins.trim()
+    )
+    setAjustandoCoins(false)
+
+    if (!ok) { mostrarError(error ?? 'Error al ajustar coins'); return }
+
+    setCoinsModal(prev => prev
+      ? { ...prev, coinsActuales: Math.max(0, prev.coinsActuales + cantidad * signo) }
+      : null
+    )
+    setCantidadStr('')
+    setConceptoCoins('')
+    // Refrescar lista
+    setLista(prev => prev.map(u => u.id === coinsModal.userId ? { ...u } : u))
+  }
+
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
@@ -228,6 +300,13 @@ export default function Prospectadores() {
                 </TouchableOpacity>
               </View>
 
+              <TouchableOpacity
+                style={styles.coinsBtnSmall}
+                onPress={() => abrirCoinsModal(item)}
+              >
+                <Text style={styles.coinsBtnSmallText}>💰 Coins</Text>
+              </TouchableOpacity>
+
               {editandoRolId === item.id && (
                 <View style={styles.rolPickerContainer}>
                   <Text style={styles.rolPickerLabel}>Cambiar rol:</Text>
@@ -263,6 +342,113 @@ export default function Prospectadores() {
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         />
       )}
+
+      {/* Modal gestión de coins */}
+      <Modal
+        visible={!!coinsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCoinsModal(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitulo}>💰 Valera Coins</Text>
+            <Text style={styles.modalSubtitulo}>{coinsModal?.nombre}</Text>
+            <View style={styles.coinsSaldoRow}>
+              <Text style={styles.coinsSaldoLabel}>Saldo actual</Text>
+              <Text style={styles.coinsSaldoVal}>{coinsModal?.coinsActuales?.toLocaleString() ?? 0} 💰</Text>
+            </View>
+
+            {/* Tabs */}
+            <View style={styles.coinsTabRow}>
+              <TouchableOpacity
+                style={[styles.coinsTab, coinsTab === 'ajustar' && styles.coinsTabActive]}
+                onPress={() => setCoinsTab('ajustar')}
+              >
+                <Text style={[styles.coinsTabTxt, coinsTab === 'ajustar' && styles.coinsTabActiveTxt]}>Ajustar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.coinsTab, coinsTab === 'historial' && styles.coinsTabActive]}
+                onPress={() => {
+                  setCoinsTab('historial')
+                  if (coinsModal) cargarHistorialCoins(coinsModal.userId)
+                }}
+              >
+                <Text style={[styles.coinsTabTxt, coinsTab === 'historial' && styles.coinsTabActiveTxt]}>Historial</Text>
+              </TouchableOpacity>
+            </View>
+
+            {coinsTab === 'ajustar' ? (
+              <>
+                <Text style={styles.inputLabel}>Cantidad de coins</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej: 100"
+                  value={cantidadStr}
+                  onChangeText={setCantidadStr}
+                  keyboardType="number-pad"
+                />
+                <Text style={styles.inputLabel}>Concepto / Razón</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej: Bono por cierre del mes"
+                  value={conceptoCoins}
+                  onChangeText={setConceptoCoins}
+                  maxLength={80}
+                />
+                <View style={styles.coinsAcciones}>
+                  <TouchableOpacity
+                    style={[styles.coinsBtn, { backgroundColor: '#2e7d32' }, ajustandoCoins && { opacity: 0.6 }]}
+                    onPress={() => aplicarAjuste(1)}
+                    disabled={ajustandoCoins}
+                  >
+                    {ajustandoCoins
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={styles.coinsBtnTxt}>+ Agregar</Text>
+                    }
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.coinsBtn, { backgroundColor: '#c0392b' }, ajustandoCoins && { opacity: 0.6 }]}
+                    onPress={() => aplicarAjuste(-1)}
+                    disabled={ajustandoCoins}
+                  >
+                    {ajustandoCoins
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={styles.coinsBtnTxt}>− Quitar</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
+                {loadingTxs ? (
+                  <ActivityIndicator color="#1a6470" style={{ marginTop: 20 }} />
+                ) : coinsTxs.length === 0 ? (
+                  <Text style={styles.emptySubtitle}>Sin movimientos registrados</Text>
+                ) : (
+                  coinsTxs.map(tx => (
+                    <View key={tx.id} style={styles.txRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.txConcepto}>{tx.concepto}</Text>
+                        <Text style={styles.txFecha}>
+                          {new Date(tx.created_at).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                      <Text style={[styles.txCantidad, { color: tx.cantidad >= 0 ? '#2e7d32' : '#c0392b' }]}>
+                        {tx.cantidad >= 0 ? '+' : ''}{tx.cantidad} 💰
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            )}
+
+            <TouchableOpacity style={[styles.btnCerrar, { marginTop: 16 }]} onPress={() => setCoinsModal(null)}>
+              <Text style={styles.btnCerrarText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal crear prospectador */}
       <Modal
@@ -596,4 +782,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnCerrarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  // Coins modal
+  coinsBtnSmall: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    backgroundColor: '#fffbea',
+    borderWidth: 1,
+    borderColor: '#c9a84c',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  coinsBtnSmallText: { color: '#a07820', fontSize: 12, fontWeight: '700' },
+
+  coinsSaldoRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#fffbea', borderRadius: 10, padding: 12, marginBottom: 16,
+    borderWidth: 1, borderColor: '#e8d090',
+  },
+  coinsSaldoLabel: { fontSize: 13, color: '#888' },
+  coinsSaldoVal:   { fontSize: 18, fontWeight: '800', color: '#a07820' },
+
+  coinsTabRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  coinsTab: {
+    flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
+  coinsTabActive: { backgroundColor: '#1a6470' },
+  coinsTabTxt:    { fontSize: 13, fontWeight: '600', color: '#888' },
+  coinsTabActiveTxt: { color: '#fff' },
+
+  coinsAcciones: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  coinsBtn: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
+  coinsBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  txRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+  },
+  txConcepto: { fontSize: 13, color: '#1a1a2e', fontWeight: '600' },
+  txFecha:    { fontSize: 11, color: '#aaa', marginTop: 2 },
+  txCantidad: { fontSize: 14, fontWeight: '800' },
 })

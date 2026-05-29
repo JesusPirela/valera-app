@@ -160,6 +160,7 @@ export default function ProspectadorLayout() {
             'university-leccion':'/(prospectador)/university',
             'tienda':            '/(prospectador)/misiones',
             'ranking':           '/(prospectador)/misiones',
+            'mi-actividad':      '/(prospectador)/perfil',
           }
           const match = Object.entries(BACK).find(([seg]) => pathname.includes(seg))
           if (!match) return null
@@ -229,6 +230,7 @@ export default function ProspectadorLayout() {
       <Tabs.Screen name="university-leccion" options={{ href: null, title: 'Lección' }} />
       <Tabs.Screen name="tienda"             options={{ href: null, title: 'Tienda' }} />
       <Tabs.Screen name="ranking"            options={{ href: null, title: 'Ranking' }} />
+      <Tabs.Screen name="mi-actividad"       options={{ href: null, title: 'Mi Actividad' }} />
     </Tabs>
 
     <Modal visible={showCrmPopup} transparent animationType="fade" onRequestClose={() => setShowCrmPopup(false)}>

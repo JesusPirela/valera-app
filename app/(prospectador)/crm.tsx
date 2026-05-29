@@ -30,18 +30,20 @@ const NIVEL_INTERES_LABEL: Record<string, string> = {
 }
 
 export const ESTADOS: Record<string, { label: string; color: string; bg: string }> = {
+  primer_contacto:    { label: 'Primer contacto',  color: '#0277bd', bg: '#e1f5fe' },
   por_perfilar:       { label: 'Por perfilar',     color: '#1565c0', bg: '#e3f2fd' },
   no_contesta:        { label: 'No contesta',       color: '#757575', bg: '#f5f5f5' },
   cita_por_agendar:   { label: 'Cita por agendar', color: '#e65100', bg: '#fff3e0' },
+  cita_a_futuro:      { label: 'Cita a futuro',    color: '#6d4c41', bg: '#efebe9' },
   cita_agendada:      { label: 'Cita agendada',     color: '#1a6470', bg: '#e0f4f5' },
   seguimiento_cierre: { label: 'Seg. de cierre',    color: '#6a1b9a', bg: '#f3e5f5' },
   compro:             { label: 'Apartó / Compró',   color: '#2e7d32', bg: '#e8f5e9' },
   descartado:         { label: 'Descartado',         color: '#b91c1c', bg: '#fef2f2' },
 }
 
-const ORDEN_ESTADOS = [
-  'por_perfilar', 'no_contesta', 'cita_por_agendar',
-  'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
+export const ORDEN_ESTADOS = [
+  'primer_contacto', 'por_perfilar', 'no_contesta', 'cita_por_agendar',
+  'cita_a_futuro', 'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
 ]
 
 function estadoInfo(e: string) {

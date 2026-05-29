@@ -296,13 +296,15 @@ export default function Estadisticas() {
     crmCount[c.estado] = (crmCount[c.estado] ?? 0) + 1
   }
   const CRM_LABELS: Record<string, string> = {
-    por_perfilar: 'Por perfilar',
-    no_contesta: 'No contesta',
-    cita_por_agendar: 'Cita x agendar',
-    cita_agendada: 'Cita agendada',
+    primer_contacto:    'Primer contacto',
+    por_perfilar:       'Por perfilar',
+    no_contesta:        'No contesta',
+    cita_por_agendar:   'Cita x agendar',
+    cita_a_futuro:      'Cita a futuro',
+    cita_agendada:      'Cita agendada',
     seguimiento_cierre: 'Seg. cierre',
-    compro: 'Compró',
-    descartado: 'Descartado',
+    compro:             'Compró',
+    descartado:         'Descartado',
   }
   const slicesCRM: Slice[] = Object.entries(crmCount)
     .sort((a, b) => b[1] - a[1])
@@ -329,7 +331,15 @@ export default function Estadisticas() {
         <Text style={styles.backBtnText}>← Volver</Text>
       </TouchableOpacity>
 
-      <Text style={styles.pageTitle}>Estadísticas</Text>
+      <View style={styles.pageHeader}>
+        <Text style={styles.pageTitle}>Estadísticas</Text>
+        <TouchableOpacity
+          style={styles.conexionBtn}
+          onPress={() => router.push('/(admin)/conexion-usuarios' as any)}
+        >
+          <Text style={styles.conexionBtnTxt}>⏱️ Tiempo conectado</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Selector de período */}
       <View style={styles.periodoRow}>
@@ -501,7 +511,13 @@ const styles = StyleSheet.create({
 
   backBtn: { alignSelf: 'flex-start', paddingVertical: 14, paddingRight: 12 },
   backBtnText: { color: C.teal, fontSize: 15, fontWeight: '600' },
-  pageTitle: { fontSize: 24, fontWeight: '800', color: '#1a2e35', marginBottom: 12 },
+  pageHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  pageTitle: { fontSize: 24, fontWeight: '800', color: '#1a2e35' },
+  conexionBtn: {
+    backgroundColor: '#e8f5f6', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#1a6470',
+  },
+  conexionBtnTxt: { color: '#1a6470', fontSize: 12, fontWeight: '700' },
   periodoRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   periodoBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#ddd', alignItems: 'center', backgroundColor: '#fff' },
   periodoBtnActivo: { backgroundColor: C.teal, borderColor: C.teal },
