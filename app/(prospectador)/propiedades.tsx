@@ -293,11 +293,23 @@ export default function ProspectadorPropiedades() {
   if (precioMinNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio >= precioMinNum)
   if (precioMaxNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio <= precioMaxNum)
   if (filtroFechaPreset) {
-    const threshold = Date.now() - filtroFechaPreset * 24 * 60 * 60 * 1000
+    // Rangos exclusivos: cada preset muestra publicaciones en ese período específico
+    // 7d = 0-7 días atrás, 30d = 7-30 días atrás, 90d = 30-90 días atrás, 180d = 90-180 días atrás
+    const BOUNDS: Record<number, [number, number]> = {
+      7:   [7,   0  ],
+      30:  [30,  7  ],
+      90:  [90,  30 ],
+      180: [180, 90 ],
+    }
+    const [minDays, maxDays] = BOUNDS[filtroFechaPreset] ?? [filtroFechaPreset, 0]
+    const now = Date.now()
+    const olderEdge = now - minDays * 86400000
+    const newerEdge = maxDays === 0 ? now + 1000 : now - maxDays * 86400000
     propiedadesFiltradas = propiedadesFiltradas.filter(p => {
       const fechaPub = publicacionFechas[p.id]
       if (!fechaPub) return false
-      return new Date(fechaPub).getTime() >= threshold
+      const t = new Date(fechaPub).getTime()
+      return t >= olderEdge && t <= newerEdge
     })
   } else if (fechaDesdeCustom || fechaHastaCustom) {
     propiedadesFiltradas = propiedadesFiltradas.filter(p => {
@@ -598,7 +610,7 @@ export default function ProspectadorPropiedades() {
               <FiltroChip label="Sin publicar" active={filtroPublicadas === 'sin_publicar'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar')} color={primaryColor} />
             </ScrollView>
 
-            <Text style={styles.filtroLabel}>Fecha de publicación</Text>
+            <Text style={styles.filtroLabel}>Cuándo publiqué</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
               <FiltroChip
                 label="Todo"
@@ -609,7 +621,7 @@ export default function ProspectadorPropiedades() {
               {([7, 30, 90, 180] as const).map(d => (
                 <FiltroChip
                   key={d}
-                  label={d === 7 ? '7 días' : d === 30 ? '1 mes' : d === 90 ? '3 meses' : '6 meses'}
+                  label={d === 7 ? 'Esta semana' : d === 30 ? 'Hace ~1 mes' : d === 90 ? 'Hace ~3 meses' : 'Hace ~6 meses'}
                   active={filtroFechaPreset === d}
                   onPress={() => { setFiltroFechaPreset(filtroFechaPreset === d ? null : d); setFechaDesdeCustom(''); setFechaHastaCustom('') }}
                   color={primaryColor}
@@ -636,11 +648,19 @@ export default function ProspectadorPropiedades() {
               </View>
             )}
 
-            {filtrosActivos > 0 && (
-              <TouchableOpacity style={styles.limpiarBtn} onPress={limpiarFiltros}>
-                <Text style={styles.limpiarText}>Limpiar filtros</Text>
+            <View style={styles.filtrosBtnRow}>
+              {filtrosActivos > 0 && (
+                <TouchableOpacity style={styles.limpiarBtn} onPress={limpiarFiltros}>
+                  <Text style={styles.limpiarText}>Limpiar</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.aplicarBtn, { backgroundColor: primaryColor }]}
+                onPress={() => setMostrarFiltros(false)}
+              >
+                <Text style={styles.aplicarBtnText}>Aplicar filtros</Text>
               </TouchableOpacity>
-            )}
+            </View>
           </View>
         )}
 
@@ -898,8 +918,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#333',
   },
-  limpiarBtn: { marginTop: 10, alignSelf: 'flex-end' },
-  limpiarText: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
+  filtrosBtnRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end',
+    gap: 10, marginTop: 14,
+  },
+  limpiarBtn: { paddingHorizontal: 14, paddingVertical: 10 },
+  limpiarText: { fontSize: 13, color: '#c0392b', fontWeight: '600' },
+  aplicarBtn: {
+    flex: 1, borderRadius: 10, paddingVertical: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  aplicarBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   emptyContainer: { flex: 1, alignItems: 'center', marginTop: 60, paddingHorizontal: 16 },
   emptyText: { color: '#aaa', fontSize: 15, textAlign: 'center' },
   // Zona view
