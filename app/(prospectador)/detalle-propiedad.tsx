@@ -135,24 +135,34 @@ export default function DetallePropiedad() {
       if (error) throw error
 
       let subidoPor: SubidoPor | null = null
-      if (data.asesor_id) {
-        // Primero buscar en tabla asesores (asesor asignado a la propiedad)
-        const { data: asesor } = await supabase
-          .from('asesores').select('nombre, telefono').eq('id', data.asesor_id).maybeSingle()
-        if (asesor) subidoPor = { nombre: asesor.nombre ?? 'Asesor', telefono: asesor.telefono ?? null }
-      }
-      if (!subidoPor && data.created_by) {
-        // Fallback: perfil de quien subió la propiedad
+      let uploaderPhone: string | null = null
+
+      // Siempre resolver perfil del uploader para usar su teléfono como fallback
+      if (data.created_by) {
         const { data: perfil } = await supabase
           .from('profiles').select('nombre, telefono').eq('id', data.created_by).maybeSingle()
-        if (perfil) subidoPor = { nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null }
+        if (perfil) {
+          uploaderPhone = perfil.telefono ?? null
+          subidoPor = { nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null }
+        }
+      }
+
+      if (data.asesor_id) {
+        const { data: asesor } = await supabase
+          .from('asesores').select('nombre, telefono').eq('id', data.asesor_id).maybeSingle()
+        if (asesor) {
+          subidoPor = {
+            nombre: asesor.nombre ?? 'Asesor',
+            telefono: asesor.telefono ?? uploaderPhone,
+          }
+        }
       }
 
       return { propiedad: data as Propiedad, subidoPor, nombreUsuario }
     },
     enabled: !!id,
     networkMode: 'offlineFirst',
-    staleTime: 1000 * 60 * 5,
+    staleTime: 0,
   })
 
   const { data: notaData } = useQuery({
