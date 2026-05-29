@@ -41,29 +41,32 @@ const ACCIONES: Record<AccionGamificacion, CfgAccion> = {
   agregar_interaccion:   { xp: 10,  coins: 2,  concepto: 'Interacción registrada 💬', categoria: 'interaccion',  contadorCampo: 'total_interacciones' },
   agendar_cita:          { xp: 50,  coins: 10, concepto: 'Cita agendada 📅',          categoria: null,           contadorCampo: null                  },
   cerrar_venta:          { xp: 200, coins: 50, concepto: 'Venta cerrada 🎉',          categoria: null,           contadorCampo: 'total_ventas'        },
-  completar_leccion:     { xp: 30,  coins: 5,  concepto: 'Lección completada 📚',     categoria: 'curso',        contadorCampo: null                  },
+  completar_leccion:     { xp: 30,  coins: 10, concepto: 'Lección completada 📚',     categoria: 'curso',        contadorCampo: null                  },
   completar_curso:       { xp: 100, coins: 20, concepto: 'Curso completado 🎓',       categoria: null,           contadorCampo: 'total_cursos'        },
 }
 
-// ── Sistema de niveles infinito ────────────────────────────────
-// Nivel N requiere N*100 XP para subir al siguiente
-// XP total para llegar al nivel N: N*(N-1)/2 * 100
+// ── Sistema de niveles progresivo ─────────────────────────────
+// Nivel 1→2: 500 XP, cada nivel siguiente +30 XP más
+// XP para ir de nivel L a L+1: 500 + 30*(L-1)
+// XP total para LLEGAR al nivel L desde cero: (L-1)*(470 + 15*L)
+// Fórmula inversa: L = 1 + floor((-485 + sqrt(235225 + 60*XP)) / 30)
 export function calcularNivel(xp: number): number {
   if (xp <= 0) return 1
-  return Math.floor((1 + Math.sqrt(1 + 8 * xp / 100)) / 2)
+  return 1 + Math.floor((-485 + Math.sqrt(235225 + 60 * xp)) / 30)
 }
 
 export function infoNivel(xp: number) {
   const nivel = calcularNivel(xp)
-  const xpInicio = nivel * (nivel - 1) / 2 * 100
-  const xpFin    = (nivel + 1) * nivel / 2 * 100
-  const xpActual   = xp - xpInicio
-  const xpNecesario = xpFin - xpInicio
+  // XP acumulado al inicio del nivel actual: (nivel-1)*(470+15*nivel)
+  const xpInicio    = (nivel - 1) * (470 + 15 * nivel)
+  // XP necesario para este nivel: 500 + 30*(nivel-1)
+  const xpNecesario = 500 + 30 * (nivel - 1)
+  const xpActual    = xp - xpInicio
   return {
     nivel,
     xpActual,
     xpNecesario,
-    porcentaje: xpNecesario > 0 ? Math.min(100, Math.round((xpActual / xpNecesario) * 100)) : 100,
+    porcentaje: Math.min(100, Math.round((xpActual / xpNecesario) * 100)),
   }
 }
 
@@ -354,6 +357,39 @@ export async function getUserStats(userId: string): Promise<UserStats | null> {
     .maybeSingle()
   return data as UserStats | null
 }
+
+// ── Admin: ajustar monedas de un usuario ──────────────────────
+export async function adminAjustarMonedas(
+  targetUserId: string,
+  cantidad: number,
+  concepto: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { data: ok, error } = await supabase.rpc('admin_ajustar_monedas', {
+      p_target_user_id: targetUserId,
+      p_cantidad:        cantidad,
+      p_concepto:        concepto,
+    })
+    if (error || !ok) return { ok: false, error: error?.message ?? 'Saldo insuficiente' }
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e.message }
+  }
+}
+
+// ── Tabla de recompensas para UI dinámica ─────────────────────
+export function getCoinsDisplay(): { icono: string; label: string; coins: number; xp: number }[] {
+  return [
+    { icono: '🏠', label: 'Publicar propiedad',     ...pick(ACCIONES.publicar_propiedad)    },
+    { icono: '👤', label: 'Agregar cliente al CRM', ...pick(ACCIONES.agregar_cliente)       },
+    { icono: '✅', label: 'Completar seguimiento',  ...pick(ACCIONES.completar_seguimiento) },
+    { icono: '💬', label: 'Registrar interacción',  ...pick(ACCIONES.agregar_interaccion)   },
+    { icono: '📅', label: 'Agendar cita',           ...pick(ACCIONES.agendar_cita)          },
+    { icono: '🎉', label: 'Cerrar venta',           ...pick(ACCIONES.cerrar_venta)          },
+    { icono: '📚', label: 'Ver lección',            ...pick(ACCIONES.completar_leccion)     },
+  ]
+}
+function pick(a: CfgAccion) { return { coins: a.coins, xp: a.xp } }
 
 // ── Comprar item de la tienda ──────────────────────────────────
 export async function comprarItem(

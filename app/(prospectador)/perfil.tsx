@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Platform, Alert, Image,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
@@ -332,6 +332,14 @@ export default function Perfil() {
           }
         </TouchableOpacity>
 
+        {/* Mi Actividad */}
+        <TouchableOpacity
+          style={s.btnActividad}
+          onPress={() => router.push('/(prospectador)/mi-actividad' as any)}
+        >
+          <Text style={s.btnActividadText}>📊 Ver mi actividad y tiempo conectado</Text>
+        </TouchableOpacity>
+
         {/* Cerrar sesión */}
         <TouchableOpacity
           style={s.btnSalir}
@@ -382,6 +390,11 @@ const s = StyleSheet.create({
   colorPreviewText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   btnGuardar: { borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   btnGuardarText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  btnActividad: {
+    marginTop: 16, borderRadius: 12, paddingVertical: 14, alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#1a6470', backgroundColor: '#e8f5f6',
+  },
+  btnActividadText: { color: '#1a6470', fontWeight: '700', fontSize: 14 },
   btnSalir: { marginTop: 12, marginBottom: 32, borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1.5, borderColor: '#e0e0e0' },
   btnSalirText: { color: '#e74c3c', fontWeight: '700', fontSize: 15 },
 
