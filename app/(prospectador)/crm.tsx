@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import * as DocumentPicker from 'expo-document-picker'
+import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
 
 type Cliente = {
   id: string
@@ -245,76 +246,18 @@ export default function CRM() {
   }
 
   // ── Importar CSV ──────────────────────────────────────────────
-  const [importModal, setImportModal] = useState(false)
-  const [importRows, setImportRows]   = useState<Record<string, string>[]>([])
-  const [importError, setImportError] = useState<string | null>(null)
-  const [importando, setImportando]   = useState(false)
-
-  function parsearCSV(texto: string): string[][] {
-    // Soporta coma y punto y coma como delimitadores
-    const lineas = texto.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim())
-    const delim = lineas[0].includes(';') ? ';' : ','
-    return lineas.map(linea => {
-      const cols: string[] = []
-      let actual = ''
-      let enComillas = false
-      for (let i = 0; i < linea.length; i++) {
-        const ch = linea[i]
-        if (ch === '"') {
-          if (enComillas && linea[i + 1] === '"') { actual += '"'; i++ }
-          else enComillas = !enComillas
-        } else if (ch === delim && !enComillas) {
-          cols.push(actual.trim()); actual = ''
-        } else {
-          actual += ch
-        }
-      }
-      cols.push(actual.trim())
-      return cols
-    })
-  }
-
-  function mapearHeaders(headers: string[]): Record<string, number> {
-    const mapa: Record<string, number> = {}
-    headers.forEach((h, i) => {
-      const n = h.toLowerCase().replace(/[^a-záéíóúüñ_]/gi, '')
-      if (['nombre', 'name', 'cliente'].includes(n))                    mapa.nombre = i
-      if (['telefono', 'teléfono', 'phone', 'tel', 'celular'].includes(n)) mapa.telefono = i
-      if (['email', 'correo', 'email'].includes(n))                     mapa.email = i
-      if (['empresa', 'company', 'negocio'].includes(n))                mapa.empresa = i
-      if (['tipooperacion', 'operacion', 'operación', 'tipo'].includes(n)) mapa.tipo_operacion = i
-      if (['estado', 'status', 'etapa'].includes(n))                    mapa.estado = i
-      if (['fuentelead', 'fuente', 'source', 'origen'].includes(n))     mapa.fuente_lead = i
-      if (['notas', 'notes', 'comentarios'].includes(n))                mapa.notas = i
-    })
-    return mapa
-  }
-
-  function procesarTextoCSV(texto: string) {
-    setImportError(null)
-    const matriz = parsearCSV(texto)
-    if (matriz.length < 2) { setImportError('El archivo está vacío o no tiene datos.'); setImportModal(true); return }
-    const mapa = mapearHeaders(matriz[0])
-    if (mapa.nombre === undefined) { setImportError('No se encontró la columna "Nombre" en el archivo.'); setImportModal(true); return }
-    if (mapa.telefono === undefined) { setImportError('No se encontró la columna "Teléfono" en el archivo.'); setImportModal(true); return }
-    const filas = matriz.slice(1)
-      .filter(row => row[mapa.nombre]?.trim())
-      .map(row => ({
-        nombre:        row[mapa.nombre]?.trim() ?? '',
-        telefono:      row[mapa.telefono]?.trim() ?? '',
-        email:         mapa.email !== undefined ? row[mapa.email]?.trim() || '' : '',
-        empresa:       mapa.empresa !== undefined ? row[mapa.empresa]?.trim() || '' : '',
-        tipo_operacion: mapa.tipo_operacion !== undefined ? row[mapa.tipo_operacion]?.trim().toLowerCase() || '' : '',
-        estado:        mapa.estado !== undefined ? row[mapa.estado]?.trim().toLowerCase() || 'por_perfilar' : 'por_perfilar',
-        fuente_lead:   mapa.fuente_lead !== undefined ? row[mapa.fuente_lead]?.trim() || 'sheets' : 'sheets',
-        notas:         mapa.notas !== undefined ? row[mapa.notas]?.trim() || '' : '',
-      }))
-    if (filas.length === 0) { setImportError('No se encontraron filas válidas en el archivo.'); setImportModal(true); return }
-    setImportRows(filas)
-    setImportModal(true)
-  }
+  const [importModal, setImportModal]   = useState(false)
+  const [csvHeaders, setCsvHeaders]     = useState<string[]>([])
+  const [csvData, setCsvData]           = useState<string[][]>([])
 
   async function abrirImport() {
+    const procesar = (texto: string) => {
+      const matriz = parsearCSV(texto)
+      if (matriz.length < 2) return
+      setCsvHeaders(matriz[0])
+      setCsvData(matriz.slice(1))
+      setImportModal(true)
+    }
     if (Platform.OS === 'web') {
       const input = document.createElement('input')
       input.type = 'file'
@@ -322,45 +265,30 @@ export default function CRM() {
       input.onchange = async (e: any) => {
         const file = e.target.files?.[0]
         if (!file) return
-        const texto = await file.text()
-        procesarTextoCSV(texto)
+        procesar(await file.text())
       }
       input.click()
     } else {
-      const result = await DocumentPicker.getDocumentAsync({ type: ['text/csv', 'text/comma-separated-values', '*/*'] })
+      const result = await DocumentPicker.getDocumentAsync({ type: ['text/csv', '*/*'] })
       if (result.canceled) return
-      const uri = result.assets[0].uri
       const { default: FileSystem } = await import('expo-file-system')
-      const texto = await FileSystem.readAsStringAsync(uri)
-      procesarTextoCSV(texto)
+      procesar(await FileSystem.readAsStringAsync(result.assets[0].uri))
     }
   }
 
-  async function confirmarImport() {
-    setImportando(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const ESTADOS_VALIDOS = new Set(Object.keys(ESTADOS))
-      const payload = importRows.map(r => ({
-        nombre:        r.nombre,
-        telefono:      r.telefono,
-        email:         r.email || null,
-        empresa:       r.empresa || null,
-        tipo_operacion: ['venta', 'renta'].includes(r.tipo_operacion) ? r.tipo_operacion : null,
-        estado:        ESTADOS_VALIDOS.has(r.estado) ? r.estado : 'por_perfilar',
-        fuente_lead:   r.fuente_lead || 'sheets',
-        notas:         r.notas || null,
-        responsable_id: user.id,
-      }))
-      const { error } = await supabase.from('clientes').insert(payload)
-      if (error) { setImportError(error.message); return }
-      setImportModal(false)
-      setImportRows([])
-      queryClient.invalidateQueries({ queryKey: ['clientes'] })
-    } finally {
-      setImportando(false)
-    }
+  async function handleImportConfirm(rows: ImportedRow[]) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Sesión expirada')
+    const { error } = await supabase.from('clientes').insert(rows.map(r => ({
+      nombre: r.nombre, telefono: r.telefono,
+      email: r.email, empresa: r.empresa,
+      tipo_operacion: r.tipo_operacion, estado: r.estado ?? 'por_perfilar',
+      zona_busqueda: r.zona_busqueda, presupuesto: r.presupuesto,
+      fuente_lead: r.fuente_lead ?? 'sheets', notas: r.notas,
+      responsable_id: user.id,
+    })))
+    if (error) throw error
+    queryClient.invalidateQueries({ queryKey: ['clientes'] })
   }
 
   // ── Excel table columns ───────────────────────────────────────
@@ -829,63 +757,13 @@ export default function CRM() {
         </TouchableOpacity>
       </Modal>
 
-      {/* ── Import modal ── */}
-      <Modal visible={importModal} transparent animationType="slide" onRequestClose={() => { setImportModal(false); setImportRows([]) }}>
-        <View style={s.modalBg}>
-          <View style={[s.sortSheet, { maxHeight: '80%' }]}>
-            <View style={s.sortHandle} />
-            <Text style={s.sortTitle}>Importar desde Google Sheets</Text>
-
-            {importError ? (
-              <View style={s.importErrorBox}>
-                <Ionicons name="alert-circle-outline" size={20} color="#ef4444" />
-                <Text style={s.importErrorTxt}>{importError}</Text>
-              </View>
-            ) : (
-              <>
-                <View style={s.importInfoRow}>
-                  <Ionicons name="people-outline" size={16} color="#1a6470" />
-                  <Text style={s.importInfoTxt}>{importRows.length} clientes detectados</Text>
-                </View>
-
-                <ScrollView style={s.importPreview} showsVerticalScrollIndicator={false}>
-                  {importRows.slice(0, 5).map((row, i) => (
-                    <View key={i} style={s.importRow}>
-                      <Text style={s.importRowNombre} numberOfLines={1}>{row.nombre}</Text>
-                      <Text style={s.importRowSub} numberOfLines={1}>{row.telefono}{row.tipo_operacion ? ` · ${row.tipo_operacion}` : ''}</Text>
-                    </View>
-                  ))}
-                  {importRows.length > 5 && (
-                    <Text style={s.importMas}>+{importRows.length - 5} más...</Text>
-                  )}
-                </ScrollView>
-
-                <Text style={s.importHint}>
-                  Los campos no reconocidos se dejarán en blanco. El estado por defecto será "Por perfilar".
-                </Text>
-
-                <TouchableOpacity
-                  style={[s.importBtn, importando && { opacity: 0.6 }]}
-                  onPress={confirmarImport}
-                  disabled={importando}
-                >
-                  {importando
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={s.importBtnTxt}>Importar {importRows.length} clientes</Text>
-                  }
-                </TouchableOpacity>
-              </>
-            )}
-
-            <TouchableOpacity
-              style={s.importCancelar}
-              onPress={() => { setImportModal(false); setImportRows([]); setImportError(null) }}
-            >
-              <Text style={s.importCancelarTxt}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <ImportCSVModal
+        visible={importModal}
+        csvHeaders={csvHeaders}
+        csvData={csvData}
+        onClose={() => setImportModal(false)}
+        onConfirm={handleImportConfirm}
+      />
     </>
   )
 }
@@ -1133,30 +1011,4 @@ const s = StyleSheet.create({
   excelOpRenta: { backgroundColor: '#f3e8ff' },
   excelOpTxt: { fontSize: 12, fontWeight: '600' },
   excelNull: { fontSize: 13, color: '#cbd5e1', paddingHorizontal: 12, paddingVertical: 10 },
-
-  // ── Import modal ─────────────────────────────────────────────────
-  importErrorBox: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
-    backgroundColor: '#fef2f2', borderRadius: 12, padding: 14, marginBottom: 16,
-  },
-  importErrorTxt: { flex: 1, fontSize: 13, color: '#b91c1c', lineHeight: 18 },
-  importInfoRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  importInfoTxt:  { fontSize: 15, fontWeight: '700', color: '#0f172a' },
-  importPreview:  { maxHeight: 200, marginBottom: 12 },
-  importRow: {
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
-  },
-  importRowNombre: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
-  importRowSub:    { fontSize: 12, color: '#64748b', marginTop: 2 },
-  importMas:       { fontSize: 12, color: '#94a3b8', paddingTop: 8, textAlign: 'center' },
-  importHint: {
-    fontSize: 11, color: '#94a3b8', lineHeight: 16, marginBottom: 16, textAlign: 'center',
-  },
-  importBtn: {
-    backgroundColor: '#1a6470', borderRadius: 14, paddingVertical: 14,
-    alignItems: 'center', marginBottom: 10,
-  },
-  importBtnTxt:     { color: '#fff', fontSize: 15, fontWeight: '700' },
-  importCancelar:   { alignItems: 'center', paddingVertical: 10 },
-  importCancelarTxt:{ fontSize: 14, color: '#94a3b8' },
 })
