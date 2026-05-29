@@ -63,6 +63,7 @@ type PropiedadesData = {
   userId: string
   propiedades: Propiedad[]
   publicacionesMap: Record<string, number>
+  publicacionFechasMap: Record<string, string>
 }
 
 const ZONAS_CONFIG = [
@@ -137,7 +138,7 @@ export default function ProspectadorPropiedades() {
           .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, created_at, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .order('created_at', { ascending: false }),
-        supabase.from('propiedad_publicacion').select('propiedad_id, veces_publicada').eq('user_id', userId),
+        supabase.from('propiedad_publicacion').select('propiedad_id, veces_publicada, fecha_publicacion').eq('user_id', userId),
       ])
 
       if (propsRes.error) throw propsRes.error
@@ -154,7 +155,12 @@ export default function ProspectadorPropiedades() {
         userId,
         propiedades,
         publicacionesMap: Object.fromEntries(
-          (pubRes.data ?? []).map((r: { propiedad_id: string; veces_publicada: number }) => [r.propiedad_id, r.veces_publicada ?? 0])
+          (pubRes.data ?? []).map((r: { propiedad_id: string; veces_publicada: number; fecha_publicacion: string | null }) => [r.propiedad_id, r.veces_publicada ?? 0])
+        ),
+        publicacionFechasMap: Object.fromEntries(
+          (pubRes.data ?? [])
+            .filter((r: { propiedad_id: string; fecha_publicacion: string | null }) => r.fecha_publicacion)
+            .map((r: { propiedad_id: string; fecha_publicacion: string }) => [r.propiedad_id, r.fecha_publicacion])
         ),
       }
     },
@@ -183,6 +189,7 @@ export default function ProspectadorPropiedades() {
 
   const propiedades = queryData?.propiedades ?? []
   const publicaciones = queryData?.publicacionesMap ?? {}
+  const publicacionFechas = queryData?.publicacionFechasMap ?? {}
 
   async function publicarPropiedad(propiedadId: string) {
     if (togglingRef.current.has(propiedadId)) return
@@ -287,16 +294,26 @@ export default function ProspectadorPropiedades() {
   if (precioMaxNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio <= precioMaxNum)
   if (filtroFechaPreset) {
     const threshold = Date.now() - filtroFechaPreset * 24 * 60 * 60 * 1000
-    propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() >= threshold)
-  } else {
-    if (fechaDesdeCustom) {
-      const t = new Date(fechaDesdeCustom).getTime()
-      if (!isNaN(t)) propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() >= t)
-    }
-    if (fechaHastaCustom) {
-      const t = new Date(fechaHastaCustom + 'T23:59:59').getTime()
-      if (!isNaN(t)) propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() <= t)
-    }
+    propiedadesFiltradas = propiedadesFiltradas.filter(p => {
+      const fechaPub = publicacionFechas[p.id]
+      if (!fechaPub) return false
+      return new Date(fechaPub).getTime() >= threshold
+    })
+  } else if (fechaDesdeCustom || fechaHastaCustom) {
+    propiedadesFiltradas = propiedadesFiltradas.filter(p => {
+      const fechaPub = publicacionFechas[p.id]
+      if (!fechaPub) return false
+      const t = new Date(fechaPub).getTime()
+      if (fechaDesdeCustom) {
+        const desde = new Date(fechaDesdeCustom).getTime()
+        if (!isNaN(desde) && t < desde) return false
+      }
+      if (fechaHastaCustom) {
+        const hasta = new Date(fechaHastaCustom + 'T23:59:59').getTime()
+        if (!isNaN(hasta) && t > hasta) return false
+      }
+      return true
+    })
   }
   if (ordenPrecio) {
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
