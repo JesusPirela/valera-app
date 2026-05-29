@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Modal, Platform, FlatList, Linking,
+  ActivityIndicator, Alert, TextInput, Modal, Platform, Linking,
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -12,50 +12,31 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 import { Ionicons } from '@expo/vector-icons'
 
 type Cliente = {
-  id: string
-  nombre: string
-  telefono: string
-  email: string | null
-  empresa: string | null
-  fuente_lead: string
-  estado: string
-  tipo_operacion: string | null
-  tipo_credito: string | null
-  presupuesto: string | null
-  zona_busqueda: string | null
-  notas: string | null
-  proximo_contacto: string | null
-  created_at: string
-  responsable_id: string
+  id: string; nombre: string; telefono: string; email: string | null
+  empresa: string | null; fuente_lead: string; estado: string
+  tipo_operacion: string | null; tipo_credito: string | null; presupuesto: string | null
+  zona_busqueda: string | null; notas: string | null; proximo_contacto: string | null
+  created_at: string; responsable_id: string
 }
 
-type Interaccion = {
-  id: string
-  tipo: string
-  descripcion: string
-  created_at: string
-}
+type Interaccion = { id: string; tipo: string; descripcion: string; created_at: string }
 
 type Recordatorio = {
-  id: string
-  titulo: string
-  descripcion: string | null
-  fecha_hora: string
-  completado: boolean
-  notificado: boolean
+  id: string; titulo: string; descripcion: string | null
+  fecha_hora: string; completado: boolean; notificado: boolean
 }
 
 const TIPOS_INTERACCION = [
-  { value: 'nota',    label: 'Nota' },
+  { value: 'nota', label: 'Nota' },
   { value: 'llamada', label: 'Llamada' },
   { value: 'mensaje', label: 'Mensaje' },
-  { value: 'visita',  label: 'Visita' },
+  { value: 'visita', label: 'Visita' },
 ]
 
 const FUENTE_LABELS: Record<string, string> = {
-  marketplace: 'Marketplace', tokko: 'Tokko',
-  campana_fb: 'Campaña FB', grupo_fb: 'Grupo FB', otro: 'Otro',
-  referido: 'Referido', redes_sociales: 'Redes sociales', sitio_web: 'Sitio web',
+  marketplace: 'Marketplace', tokko: 'Tokko', campana_fb: 'Campaña FB',
+  grupo_fb: 'Grupo FB', otro: 'Otro', referido: 'Referido',
+  redes_sociales: 'Redes sociales', sitio_web: 'Sitio web',
   llamada_fria: 'Llamada fría', evento: 'Evento',
 }
 
@@ -100,7 +81,7 @@ function iniciales(nombre: string) {
   return nombre.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 }
 
-// ── Date picker ─────────────────────────────────────────
+// ── DateTimePicker ───────────────────────────────────────
 function DateTimePicker({ value, onChange, label }: {
   value: Date | null; onChange: (d: Date | null) => void; label: string
 }) {
@@ -136,9 +117,9 @@ function DateTimePicker({ value, onChange, label }: {
             <Text style={dpStyles.modalTitle}>Fecha y hora</Text>
             <Text style={dpStyles.secLabel}>Fecha</Text>
             <View style={dpStyles.row}>
-              <Spin label="Día"  value={temp.getDate()}  onUp={() => adj('date', 1)}  onDown={() => adj('date', -1)} />
-              <Spin label="Mes"  value={temp.toLocaleString('es-MX', { month: 'short' })}  onUp={() => adj('month', 1)}  onDown={() => adj('month', -1)} />
-              <Spin label="Año"  value={temp.getFullYear()}  onUp={() => adj('year', 1)}  onDown={() => adj('year', -1)} />
+              <Spin label="Día"  value={temp.getDate()} onUp={() => adj('date', 1)}  onDown={() => adj('date', -1)} />
+              <Spin label="Mes"  value={temp.toLocaleString('es-MX', { month: 'short' })} onUp={() => adj('month', 1)} onDown={() => adj('month', -1)} />
+              <Spin label="Año"  value={temp.getFullYear()} onUp={() => adj('year', 1)}  onDown={() => adj('year', -1)} />
             </View>
             <Text style={dpStyles.secLabel}>Hora</Text>
             <View style={dpStyles.row}>
@@ -170,6 +151,44 @@ function Spin({ label, value, onUp, onDown }: { label: string; value: string | n
     </View>
   )
 }
+
+// ── SectionTitle ─────────────────────────────────────────
+function SectionTitle({ icon, label, accentColor }: { icon: string; label: string; accentColor: string }) {
+  return (
+    <View style={stStyles.row}>
+      <View style={[stStyles.bar, { backgroundColor: accentColor }]} />
+      <Ionicons name={icon as any} size={15} color={accentColor} />
+      <Text style={stStyles.text}>{label}</Text>
+    </View>
+  )
+}
+const stStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  bar: { width: 3, height: 16, borderRadius: 2 },
+  text: { fontSize: 13, fontWeight: '800', color: '#1a1a2e', letterSpacing: 0.2 },
+})
+
+// ── InfoRow ──────────────────────────────────────────────
+function InfoRow({ icon, label, value, isLast, accentColor }: {
+  icon: string; label: string; value: string; isLast?: boolean; accentColor: string
+}) {
+  return (
+    <View style={[irStyles.row, !isLast && irStyles.rowBorder]}>
+      <View style={[irStyles.iconWrap, { backgroundColor: accentColor + '18' }]}>
+        <Ionicons name={icon as any} size={14} color={accentColor} />
+      </View>
+      <Text style={irStyles.label}>{label}</Text>
+      <Text style={irStyles.value} numberOfLines={2}>{value}</Text>
+    </View>
+  )
+}
+const irStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, gap: 10 },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: '#f0f3f5' },
+  iconWrap: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  label: { fontSize: 12, color: '#9eafb2', width: 88 },
+  value: { flex: 1, fontSize: 13, color: '#1a1a2e', fontWeight: '600' },
+})
 
 // ── Pantalla principal ───────────────────────────────────
 export default function DetalleCliente() {
@@ -235,9 +254,7 @@ export default function DetalleCliente() {
     setGuardandoInteraccion(false)
     if (error) { Alert.alert('Error', error.message); return }
     registrarAccion(user!.id, 'agregar_interaccion').catch(() => {})
-    setTextoInteraccion('')
-    setTipoInteraccion('nota')
-    setModalInteraccion(false)
+    setTextoInteraccion(''); setTipoInteraccion('nota'); setModalInteraccion(false)
     refetch()
   }
 
@@ -252,8 +269,7 @@ export default function DetalleCliente() {
     })
     setGuardandoRec(false)
     if (error) { Alert.alert('Error', error.message); return }
-    setTituloRec(''); setDescRec(''); setFechaRec(null)
-    setModalRecordatorio(false)
+    setTituloRec(''); setDescRec(''); setFechaRec(null); setModalRecordatorio(false)
     refetch()
   }
 
@@ -298,7 +314,7 @@ export default function DetalleCliente() {
   }
 
   if (isLoading) return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f2f5f8' }}>
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f4f8' }}>
       <ActivityIndicator size="large" color="#1a6470" />
     </View>
   )
@@ -312,137 +328,193 @@ export default function DetalleCliente() {
   const recPendientes = recordatorios.filter((r) => !r.completado)
   const recCompletados = recordatorios.filter((r) => r.completado)
   const initials = iniciales(cliente.nombre)
-
+  const estadoIdx = ORDEN_ESTADOS.indexOf(cliente.estado)
   const waDefault = `Hola ${cliente.nombre}, soy tu asesor de Valera Real Estate. Te contacto para dar seguimiento a tu búsqueda de propiedad. ¿Tienes un momento para platicar?`
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <OfflineBanner />
 
-      {/* ── Hero header ──────────────────────────────── */}
+      {/* ── Hero ──────────────────────────────────────── */}
       <View style={[styles.hero, { backgroundColor: info.color }]}>
         <View style={styles.heroTopRow}>
-          <TouchableOpacity style={styles.heroBack} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.9)" />
-          </TouchableOpacity>
+          <View />
           <TouchableOpacity
-            style={styles.heroEdit}
+            style={styles.heroEditBtn}
             onPress={() => router.push(`/(prospectador)/cliente-form?id=${id}`)}
           >
-            <Ionicons name="create-outline" size={18} color="rgba(255,255,255,0.9)" />
+            <Ionicons name="create-outline" size={16} color="rgba(255,255,255,0.95)" />
             <Text style={styles.heroEditText}>Editar</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.heroBody}>
-          <View style={[styles.heroAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-            <Text style={styles.heroAvatarText}>{initials}</Text>
+          <View style={styles.heroAvatarRing}>
+            <View style={[styles.heroAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={styles.heroAvatarText}>{initials}</Text>
+            </View>
           </View>
           <Text style={styles.heroNombre}>{cliente.nombre}</Text>
           {cliente.empresa ? <Text style={styles.heroEmpresa}>{cliente.empresa}</Text> : null}
-          <View style={[styles.heroBadge, { backgroundColor: 'rgba(255,255,255,0.22)' }]}>
+          <View style={styles.heroBadge}>
             <Text style={styles.heroBadgeText}>{info.label}</Text>
           </View>
         </View>
 
-        {/* Botones de acción */}
-        <View style={styles.heroActions}>
-          <TouchableOpacity style={styles.heroActionBtn} onPress={() => Linking.openURL(`tel:${cliente.telefono}`)}>
-            <Ionicons name="call" size={20} color={info.color} />
-            <Text style={[styles.heroActionText, { color: info.color }]}>Llamar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.heroActionBtn} onPress={() => abrirWhatsApp(waDefault)}>
-            <Ionicons name="logo-whatsapp" size={20} color="#25d366" />
-            <Text style={[styles.heroActionText, { color: '#25d366' }]}>WhatsApp</Text>
-          </TouchableOpacity>
+        <View style={styles.heroStatsBar}>
+          <View style={styles.heroStatItem}>
+            <Text style={styles.heroStatNum}>{interacciones.length}</Text>
+            <Text style={styles.heroStatLbl}>Actividades</Text>
+          </View>
+          <View style={styles.heroStatSep} />
+          <View style={styles.heroStatItem}>
+            <Text style={styles.heroStatNum}>{recPendientes.length}</Text>
+            <Text style={styles.heroStatLbl}>Pendientes</Text>
+          </View>
+          <View style={styles.heroStatSep} />
+          <View style={styles.heroStatItem}>
+            <Text style={styles.heroStatNum}>{estadoIdx >= 0 ? `${estadoIdx + 1}/${ORDEN_ESTADOS.length}` : '—'}</Text>
+            <Text style={styles.heroStatLbl}>Etapa</Text>
+          </View>
         </View>
       </View>
 
-      {/* ── Info del cliente ─────────────────────────── */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Información</Text>
-        <View style={styles.infoCard}>
-          <InfoRow icon="call-outline"       label="Teléfono"  value={cliente.telefono} />
-          {cliente.email ? <InfoRow icon="mail-outline" label="Email" value={cliente.email} /> : null}
-          <InfoRow icon="megaphone-outline"   label="Fuente"    value={FUENTE_LABELS[cliente.fuente_lead] ?? cliente.fuente_lead} />
-          {cliente.tipo_operacion ? <InfoRow icon="home-outline" label="Busca en" value={cliente.tipo_operacion === 'venta' ? 'Venta' : 'Renta'} /> : null}
-          {cliente.zona_busqueda  ? <InfoRow icon="map-outline"  label="Zona"     value={cliente.zona_busqueda} /> : null}
-          {cliente.tipo_credito   ? <InfoRow icon="card-outline" label="Crédito"  value={CREDITO_LABELS[cliente.tipo_credito] ?? cliente.tipo_credito} /> : null}
-          {cliente.presupuesto    ? <InfoRow icon="cash-outline" label="Presupuesto" value={cliente.presupuesto} isLast /> : null}
-        </View>
+      {/* ── Action bar ────────────────────────────────── */}
+      <View style={styles.actionBar}>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: info.color }]}
+          onPress={() => Linking.openURL(`tel:${cliente.telefono}`)}
+        >
+          <Ionicons name="call" size={20} color="#fff" />
+          <Text style={styles.actionBtnTxt}>Llamar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: '#25d366' }]}
+          onPress={() => abrirWhatsApp(waDefault)}
+        >
+          <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+          <Text style={styles.actionBtnTxt}>WhatsApp</Text>
+        </TouchableOpacity>
+      </View>
 
+      {/* ── Información ─────────────────────────────────── */}
+      <View style={styles.section}>
+        <View style={{ marginBottom: 12 }}>
+          <SectionTitle icon="person-circle-outline" label="Información" accentColor={info.color} />
+        </View>
+        <View style={styles.infoCard}>
+          <InfoRow icon="call-outline"       label="Teléfono"    value={cliente.telefono}                                                         accentColor={info.color} />
+          {cliente.email          ? <InfoRow icon="mail-outline"   label="Email"       value={cliente.email}                                      accentColor={info.color} /> : null}
+          <InfoRow icon="megaphone-outline"   label="Fuente"      value={FUENTE_LABELS[cliente.fuente_lead] ?? cliente.fuente_lead}               accentColor={info.color} />
+          {cliente.tipo_operacion ? <InfoRow icon="home-outline"   label="Busca en"    value={cliente.tipo_operacion === 'venta' ? 'Venta' : 'Renta'} accentColor={info.color} /> : null}
+          {cliente.zona_busqueda  ? <InfoRow icon="map-outline"    label="Zona"        value={cliente.zona_busqueda}                               accentColor={info.color} /> : null}
+          {cliente.tipo_credito   ? <InfoRow icon="card-outline"   label="Crédito"     value={CREDITO_LABELS[cliente.tipo_credito] ?? cliente.tipo_credito} accentColor={info.color} /> : null}
+          {cliente.presupuesto    ? <InfoRow icon="cash-outline"   label="Presupuesto" value={cliente.presupuesto} isLast                          accentColor={info.color} /> : null}
+        </View>
         {cliente.notas ? (
-          <View style={styles.notasCard}>
+          <View style={[styles.notasCard, { borderLeftColor: info.color }]}>
             <View style={styles.notasHeader}>
-              <Ionicons name="document-text-outline" size={14} color="#6b8082" />
-              <Text style={styles.notasLabel}>Notas</Text>
+              <Ionicons name="document-text-outline" size={14} color={info.color} />
+              <Text style={[styles.notasLabel, { color: info.color }]}>Notas</Text>
             </View>
             <Text style={styles.notasText}>{cliente.notas}</Text>
           </View>
         ) : null}
       </View>
 
-      {/* ── Mensajes rápidos WhatsApp ─────────────────── */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Mensajes rápidos</Text>
-        <View style={styles.waCard}>
-          {(() => {
-            const proxCita = recPendientes[0]
-            const horaStr = proxCita ? formatFechaHora(proxCita.fecha_hora) : '[hora pendiente]'
-            return [
-              { label: 'Recordatorio de cita', icon: 'alarm-outline', msg: `Hola ${cliente.nombre}, lo contacto para confirmar su cita programada para el día *${horaStr}*. ¿Podría indicarme si contaremos con su presencia? Quedo a sus órdenes para cualquier ajuste que requiera.` },
-              { label: 'Compartir propiedad',   icon: 'home-outline',  msg: `Hola ${cliente.nombre}, encontré una propiedad que puede interesarte. ¿Tienes unos minutos para que te cuente los detalles?` },
-              { label: 'Reagenda',              icon: 'calendar-outline', msg: `Hola ${cliente.nombre}, para recordarte que tenemos pendiente ver la propiedad, ¿te queda bien entre semana o fin de semana?` },
-              { label: 'Seguimiento post-visita',icon: 'checkmark-circle-outline', msg: `Hola ${cliente.nombre}, ¿qué te pareció la propiedad que visitamos? Quedo a tus órdenes para cualquier duda.` },
-            ]
-          })().map((t, i, arr) => (
-            <TouchableOpacity
-              key={t.label}
-              style={[styles.waRow, i < arr.length - 1 && styles.waRowBorder]}
-              onPress={() => abrirWhatsApp(t.msg)}
-            >
-              <View style={styles.waIconWrap}>
-                <Ionicons name={t.icon as any} size={16} color="#1a6470" />
-              </View>
-              <Text style={styles.waLabel}>{t.label}</Text>
-              <Ionicons name="logo-whatsapp" size={16} color="#25d366" />
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
       {/* ── Etapa de venta ───────────────────────────── */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Etapa de venta</Text>
+        <View style={{ marginBottom: 12 }}>
+          <SectionTitle icon="git-network-outline" label="Etapa de venta" accentColor={info.color} />
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
-            {ORDEN_ESTADOS.map((e) => {
+          <View style={styles.pipelineRow}>
+            {ORDEN_ESTADOS.map((e, i) => {
               const ei = ESTADOS[e] ?? { label: e, color: '#555', bg: '#eee' }
               const activo = cliente.estado === e
+              const pasado = estadoIdx > i
               return (
-                <TouchableOpacity
-                  key={e}
-                  style={[styles.estadoChip, { borderColor: ei.color }, activo && { backgroundColor: ei.bg }]}
-                  onPress={() => cambiarEstado(e)}
-                >
-                  {activo && <View style={[styles.estadoDot, { backgroundColor: ei.color }]} />}
-                  <Text style={[styles.estadoChipText, { color: activo ? ei.color : '#bbb' }, activo && { fontWeight: '700' }]}>
-                    {ei.label}
-                  </Text>
-                </TouchableOpacity>
+                <View key={e} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TouchableOpacity
+                    style={[
+                      styles.pipelineChip,
+                      activo && { backgroundColor: ei.color, borderColor: ei.color },
+                      !activo && pasado && { borderColor: ei.color },
+                    ]}
+                    onPress={() => cambiarEstado(e)}
+                  >
+                    <View style={[
+                      styles.pipelineNumCircle,
+                      activo && { backgroundColor: 'rgba(255,255,255,0.3)' },
+                      !activo && pasado && { backgroundColor: ei.color + '25' },
+                    ]}>
+                      {pasado && !activo
+                        ? <Ionicons name="checkmark" size={10} color={ei.color} />
+                        : <Text style={[styles.pipelineNum, activo && { color: '#fff' }, !pasado && !activo && { color: '#ccc' }]}>{i + 1}</Text>
+                      }
+                    </View>
+                    <Text style={[
+                      styles.pipelineLabel,
+                      activo && { color: '#fff', fontWeight: '700' },
+                      !activo && pasado && { color: ei.color },
+                      !activo && !pasado && { color: '#aaa' },
+                    ]}>
+                      {ei.label}
+                    </Text>
+                  </TouchableOpacity>
+                  {i < ORDEN_ESTADOS.length - 1 && (
+                    <View style={[styles.pipelineConnector, pasado && { backgroundColor: ei.color }]} />
+                  )}
+                </View>
               )
             })}
           </View>
         </ScrollView>
       </View>
 
+      {/* ── Mensajes rápidos ─────────────────────────── */}
+      <View style={styles.section}>
+        <View style={{ marginBottom: 12 }}>
+          <SectionTitle icon="chatbubbles-outline" label="Mensajes rápidos" accentColor={info.color} />
+        </View>
+        <View style={styles.waCard}>
+          {(() => {
+            const proxCita = recPendientes[0]
+            const horaStr = proxCita ? formatFechaHora(proxCita.fecha_hora) : '[hora pendiente]'
+            const msgs = [
+              { label: 'Recordatorio de cita',  icon: 'alarm-outline' as const,            iconBg: '#fff3cd', iconColor: '#e6a817',
+                msg: `Hola ${cliente.nombre}, lo contacto para confirmar su cita programada para el día *${horaStr}*. ¿Podría indicarme si contaremos con su presencia? Quedo a sus órdenes para cualquier ajuste que requiera.` },
+              { label: 'Compartir propiedad',    icon: 'home-outline' as const,             iconBg: '#e8f4f5', iconColor: '#1a6470',
+                msg: `Hola ${cliente.nombre}, encontré una propiedad que puede interesarte. ¿Tienes unos minutos para que te cuente los detalles?` },
+              { label: 'Reagendar cita',         icon: 'calendar-outline' as const,         iconBg: '#f0ebff', iconColor: '#7c3aed',
+                msg: `Hola ${cliente.nombre}, para recordarte que tenemos pendiente ver la propiedad, ¿te queda bien entre semana o fin de semana?` },
+              { label: 'Seguimiento post-visita',icon: 'checkmark-circle-outline' as const, iconBg: '#e8fdf0', iconColor: '#16a34a',
+                msg: `Hola ${cliente.nombre}, ¿qué te pareció la propiedad que visitamos? Quedo a tus órdenes para cualquier duda.` },
+            ]
+            return msgs.map((t, i) => (
+              <TouchableOpacity
+                key={t.label}
+                style={[styles.waRow, i < msgs.length - 1 && styles.waRowBorder]}
+                onPress={() => abrirWhatsApp(t.msg)}
+              >
+                <View style={[styles.waIconWrap, { backgroundColor: t.iconBg }]}>
+                  <Ionicons name={t.icon} size={16} color={t.iconColor} />
+                </View>
+                <Text style={styles.waLabel}>{t.label}</Text>
+                <Ionicons name="logo-whatsapp" size={18} color="#25d366" />
+              </TouchableOpacity>
+            ))
+          })()}
+        </View>
+      </View>
+
       {/* ── Recordatorios ────────────────────────────── */}
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recordatorios</Text>
-          <TouchableOpacity style={styles.sectionBtn} onPress={() => setModalRecordatorio(true)}>
-            <Ionicons name="add" size={14} color="#1a6470" />
-            <Text style={styles.sectionBtnText}>Agregar</Text>
+        <View style={styles.sectionHeaderRow}>
+          <SectionTitle icon="alarm-outline" label="Recordatorios" accentColor={info.color} />
+          <TouchableOpacity style={[styles.addBtn, { borderColor: info.color }]} onPress={() => setModalRecordatorio(true)}>
+            <Ionicons name="add" size={14} color={info.color} />
+            <Text style={[styles.addBtnText, { color: info.color }]}>Agregar</Text>
           </TouchableOpacity>
         </View>
         {recPendientes.length === 0 ? (
@@ -451,18 +523,20 @@ export default function DetalleCliente() {
         {recPendientes.map((r) => {
           const vencido = new Date(r.fecha_hora) < new Date()
           return (
-            <View key={r.id} style={[styles.recCard, vencido && styles.recCardVencido]}>
-              <View style={[styles.recIcon, { backgroundColor: vencido ? '#fde8e8' : '#e8f4f5' }]}>
-                <Ionicons name={vencido ? 'warning-outline' : 'alarm-outline'} size={18} color={vencido ? '#c0392b' : '#1a6470'} />
+            <View key={r.id} style={[styles.recCard, { borderLeftColor: vencido ? '#e53935' : info.color }]}>
+              <View style={[styles.recIconWrap, { backgroundColor: vencido ? '#fde8e8' : info.color + '18' }]}>
+                <Ionicons name={vencido ? 'warning-outline' : 'alarm-outline'} size={18} color={vencido ? '#e53935' : info.color} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.recTitulo, vencido && styles.recTituloVencido]}>{r.titulo}</Text>
+                <View style={styles.recTituloRow}>
+                  <Text style={[styles.recTitulo, vencido && styles.recTituloVencido]}>{r.titulo}</Text>
+                  {vencido && <View style={styles.recVencidoPill}><Text style={styles.recVencidoTxt}>Vencido</Text></View>}
+                </View>
                 <Text style={styles.recFecha}>{formatFechaHora(r.fecha_hora)}</Text>
                 {r.descripcion ? <Text style={styles.recDesc}>{r.descripcion}</Text> : null}
-                {vencido && <Text style={styles.recVencidoTag}>Vencido</Text>}
               </View>
-              <TouchableOpacity style={styles.recCompletarBtn} onPress={() => completarRecordatorio(r.id)}>
-                <Ionicons name="checkmark-circle-outline" size={22} color="#1a6470" />
+              <TouchableOpacity style={styles.recDoneBtn} onPress={() => completarRecordatorio(r.id)}>
+                <Ionicons name="checkmark-circle-outline" size={24} color={info.color} />
               </TouchableOpacity>
             </View>
           )
@@ -474,13 +548,13 @@ export default function DetalleCliente() {
         )}
       </View>
 
-      {/* ── Historial de interacciones ────────────────── */}
+      {/* ── Historial ────────────────────────────────── */}
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Historial</Text>
-          <TouchableOpacity style={styles.sectionBtn} onPress={() => setModalInteraccion(true)}>
-            <Ionicons name="add" size={14} color="#1a6470" />
-            <Text style={styles.sectionBtnText}>Registrar</Text>
+        <View style={styles.sectionHeaderRow}>
+          <SectionTitle icon="time-outline" label="Historial" accentColor={info.color} />
+          <TouchableOpacity style={[styles.addBtn, { borderColor: info.color }]} onPress={() => setModalInteraccion(true)}>
+            <Ionicons name="add" size={14} color={info.color} />
+            <Text style={[styles.addBtnText, { color: info.color }]}>Registrar</Text>
           </TouchableOpacity>
         </View>
         {interacciones.length === 0 ? (
@@ -488,6 +562,7 @@ export default function DetalleCliente() {
         ) : (
           interacciones.map((item, idx) => {
             const ti = TIPO_ICON[item.tipo] ?? { icon: 'ellipse-outline', color: '#aaa' }
+            const tipoLabel = TIPOS_INTERACCION.find(t => t.value === item.tipo)?.label
             return (
               <View key={item.id} style={styles.timelineRow}>
                 <View style={styles.timelineLeft}>
@@ -497,8 +572,15 @@ export default function DetalleCliente() {
                   {idx < interacciones.length - 1 && <View style={styles.timelineLine} />}
                 </View>
                 <View style={styles.timelineBody}>
+                  <View style={styles.timelineMeta}>
+                    {tipoLabel && (
+                      <View style={[styles.tipoPill, { backgroundColor: ti.color + '18' }]}>
+                        <Text style={[styles.tipoPillTxt, { color: ti.color }]}>{tipoLabel}</Text>
+                      </View>
+                    )}
+                    <Text style={styles.timelineFecha}>{tiempoRelativo(item.created_at)}</Text>
+                  </View>
                   <Text style={styles.timelineDesc}>{item.descripcion}</Text>
-                  <Text style={styles.timelineFecha}>{tiempoRelativo(item.created_at)}</Text>
                 </View>
               </View>
             )
@@ -506,7 +588,7 @@ export default function DetalleCliente() {
         )}
       </View>
 
-      {/* Eliminar */}
+      {/* ── Eliminar ─────────────────────────────────── */}
       <TouchableOpacity style={styles.btnEliminar} onPress={eliminarCliente}>
         <Ionicons name="trash-outline" size={16} color="#c0392b" />
         <Text style={styles.btnEliminarText}>Eliminar cliente</Text>
@@ -587,27 +669,6 @@ export default function DetalleCliente() {
   )
 }
 
-// ── Componente fila de info ──────────────────────────────
-function InfoRow({ icon, label, value, isLast }: { icon: string; label: string; value: string; isLast?: boolean }) {
-  return (
-    <View style={[infoRowStyles.row, !isLast && infoRowStyles.rowBorder]}>
-      <View style={infoRowStyles.iconWrap}>
-        <Ionicons name={icon as any} size={15} color="#6b8082" />
-      </View>
-      <Text style={infoRowStyles.label}>{label}</Text>
-      <Text style={infoRowStyles.value} numberOfLines={2}>{value}</Text>
-    </View>
-  )
-}
-
-const infoRowStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, gap: 10 },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: '#f0f3f5' },
-  iconWrap: { width: 28, alignItems: 'center' },
-  label: { fontSize: 13, color: '#9eafb2', width: 90 },
-  value: { flex: 1, fontSize: 13, color: '#1a1a2e', fontWeight: '500' },
-})
-
 // ── DateTimePicker styles ────────────────────────────────
 const dpStyles = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
@@ -641,93 +702,134 @@ const dpStyles = StyleSheet.create({
 
 // ── Main styles ──────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2f5f8' },
-  content: { paddingBottom: 56 },
+  container: { flex: 1, backgroundColor: '#f0f4f8' },
+  content: { paddingBottom: 60 },
 
   // Hero
   hero: {
-    paddingTop: 52,
-    paddingBottom: 0,
+    paddingTop: 24,
     paddingHorizontal: 20,
+    paddingBottom: 0,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
-  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  heroBack: { padding: 4 },
-  heroEdit: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 },
-  heroEditText: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600' },
+  heroTopRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 16 },
+  heroEditBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 6,
+  },
+  heroEditText: { color: 'rgba(255,255,255,0.95)', fontSize: 13, fontWeight: '600' },
   heroBody: { alignItems: 'center', paddingBottom: 20 },
+  heroAvatarRing: {
+    width: 92, height: 92, borderRadius: 46,
+    borderWidth: 3, borderColor: 'rgba(255,255,255,0.55)',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+  },
   heroAvatar: {
-    width: 72, height: 72, borderRadius: 36,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+    width: 82, height: 82, borderRadius: 41,
+    alignItems: 'center', justifyContent: 'center',
   },
-  heroAvatarText: { fontSize: 28, fontWeight: '800', color: '#fff' },
+  heroAvatarText: { fontSize: 30, fontWeight: '800', color: '#fff' },
   heroNombre: { fontSize: 22, fontWeight: '800', color: '#fff', textAlign: 'center', marginBottom: 4 },
-  heroEmpresa: { fontSize: 14, color: 'rgba(255,255,255,0.75)', marginBottom: 10 },
-  heroBadge: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5 },
-  heroBadgeText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  heroActions: {
-    flexDirection: 'row', backgroundColor: '#fff',
-    marginHorizontal: -20, paddingVertical: 4,
+  heroEmpresa: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginBottom: 10 },
+  heroBadge: {
+    backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 5,
   },
-  heroActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14 },
-  heroActionText: { fontSize: 14, fontWeight: '700' },
+  heroBadgeText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  // Stats strip (bottom of hero)
+  heroStatsBar: {
+    flexDirection: 'row', justifyContent: 'space-around',
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    marginHorizontal: -20, paddingVertical: 14,
+    borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
+  },
+  heroStatItem: { alignItems: 'center', flex: 1 },
+  heroStatNum: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  heroStatLbl: { fontSize: 10, color: 'rgba(255,255,255,0.75)', marginTop: 2, fontWeight: '600' },
+  heroStatSep: { width: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginVertical: 6 },
+
+  // Action buttons
+  actionBar: {
+    flexDirection: 'row', gap: 10,
+    marginHorizontal: 16, marginTop: 16, marginBottom: 4,
+  },
+  actionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 14, borderRadius: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 6, elevation: 3,
+  },
+  actionBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
   // Sections
-  section: { marginHorizontal: 16, marginTop: 20 },
-  sectionTitle: {
-    fontSize: 11, fontWeight: '700', color: '#6b8082',
-    letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
+  section: { marginHorizontal: 16, marginTop: 24 },
+  sectionHeaderRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12,
   },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  sectionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#1a6470', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 },
-  sectionBtnText: { color: '#1a6470', fontSize: 12, fontWeight: '600' },
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderWidth: 1.5, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+  },
+  addBtnText: { fontSize: 12, fontWeight: '700' },
 
   // Info card
   infoCard: {
-    backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 16,
-    shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+    backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14,
+    shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
   },
   notasCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 14, marginTop: 10,
+    backgroundColor: '#fff', borderRadius: 14, padding: 14, marginTop: 10,
+    borderLeftWidth: 3,
     shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
   notasHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  notasLabel: { fontSize: 12, fontWeight: '600', color: '#6b8082' },
+  notasLabel: { fontSize: 12, fontWeight: '700' },
   notasText: { fontSize: 13, color: '#4a5568', lineHeight: 20, fontStyle: 'italic' },
 
-  // WA card
+  // Pipeline
+  pipelineRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 2 },
+  pipelineChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1.5, borderColor: '#ddd', borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fff',
+  },
+  pipelineNumCircle: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: '#f0f3f5', alignItems: 'center', justifyContent: 'center',
+  },
+  pipelineNum: { fontSize: 10, fontWeight: '800', color: '#bbb' },
+  pipelineLabel: { fontSize: 11, fontWeight: '600', color: '#bbb' },
+  pipelineConnector: { width: 14, height: 2, backgroundColor: '#ddd', marginHorizontal: 2 },
+
+  // WA messages
   waCard: {
-    backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 16,
-    shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+    backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14,
+    shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
   },
   waRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, gap: 12 },
   waRowBorder: { borderBottomWidth: 1, borderBottomColor: '#f0f3f5' },
-  waIconWrap: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#e8f4f5', alignItems: 'center', justifyContent: 'center' },
+  waIconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   waLabel: { flex: 1, fontSize: 13, color: '#1a1a2e', fontWeight: '500' },
-
-  // Pipeline chips
-  estadoChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    borderWidth: 1.5, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7,
-    backgroundColor: '#fff',
-  },
-  estadoDot: { width: 7, height: 7, borderRadius: 4 },
-  estadoChipText: { fontSize: 12 },
 
   // Recordatorios
   recCard: {
     flexDirection: 'row', alignItems: 'flex-start',
     backgroundColor: '#fff', borderRadius: 14, padding: 14,
-    marginBottom: 8, gap: 12,
+    marginBottom: 8, gap: 12, borderLeftWidth: 4,
     shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 1,
   },
-  recCardVencido: { backgroundColor: '#fff8f8' },
-  recIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  recTitulo: { fontSize: 14, fontWeight: '700', color: '#1a1a2e', marginBottom: 2 },
+  recIconWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  recTituloRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 },
+  recTitulo: { fontSize: 14, fontWeight: '700', color: '#1a1a2e' },
   recTituloVencido: { color: '#c0392b' },
   recFecha: { fontSize: 12, color: '#9eafb2' },
   recDesc: { fontSize: 12, color: '#666', marginTop: 3 },
-  recVencidoTag: { fontSize: 11, color: '#c0392b', fontWeight: '700', marginTop: 4 },
-  recCompletarBtn: { padding: 4 },
+  recVencidoPill: { backgroundColor: '#fde8e8', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  recVencidoTxt: { fontSize: 10, color: '#e53935', fontWeight: '700' },
+  recDoneBtn: { padding: 4, flexShrink: 0 },
   recCompletadosLabel: { fontSize: 12, color: '#bbb', marginTop: 4, textAlign: 'center' },
 
   // Timeline
@@ -740,11 +842,14 @@ const styles = StyleSheet.create({
   },
   timelineLine: { width: 1.5, flex: 1, backgroundColor: '#e0e8ea', marginTop: 4, marginBottom: 4 },
   timelineBody: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8,
+    flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 8,
     shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
+  timelineMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  tipoPill: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  tipoPillTxt: { fontSize: 10, fontWeight: '700' },
   timelineDesc: { fontSize: 13, color: '#2d3748', lineHeight: 19 },
-  timelineFecha: { fontSize: 11, color: '#9eafb2', marginTop: 4 },
+  timelineFecha: { fontSize: 11, color: '#9eafb2' },
 
   emptyText: { fontSize: 13, color: '#c0cdd0', marginBottom: 8 },
 
