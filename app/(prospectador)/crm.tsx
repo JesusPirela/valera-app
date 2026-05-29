@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking,
-  ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal,
+  ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -96,6 +96,14 @@ export default function CRM() {
   const [sortBy, setSortBy]               = useState<SortBy>('reciente')
   const [showSort, setShowSort]           = useState(false)
   const [vistaExcel, setVistaExcel]       = useState(false)
+  const [interesFilter, setInteresFilter] = useState<string | null>(null)
+  const [excelSort, setExcelSort]         = useState<{ col: string; dir: 'asc' | 'desc' } | null>(null)
+  const [excelFilterModal, setExcelFilterModal] = useState<{
+    col: string; label: string
+    options: { value: string | null; label: string; color?: string }[]
+  } | null>(null)
+  const { width: screenWidth } = useWindowDimensions()
+  const isWeb = Platform.OS === 'web'
 
   const { data: clientes = [], isLoading, refetch } = useQuery<Cliente[]>({
     queryKey: ['clientes'],
@@ -149,6 +157,7 @@ export default function CRM() {
   }
   if (estadoFiltro) filtrados = filtrados.filter(c => c.estado === estadoFiltro)
   if (opFiltro)     filtrados = filtrados.filter(c => c.tipo_operacion === opFiltro)
+  if (interesFilter) filtrados = filtrados.filter(c => c.nivel_interes === interesFilter)
 
   if (sortBy === 'nombre') {
     filtrados = [...filtrados].sort((a, b) => a.nombre.localeCompare(b.nombre))
@@ -158,6 +167,102 @@ export default function CRM() {
       const bT = b.proximo_contacto ? new Date(b.proximo_contacto).getTime() : Infinity
       return aT - bT
     })
+  }
+
+  // ── Excel table helpers ───────────────────────────────────────
+  let filtradosExcel = filtrados
+  if (excelSort) {
+    filtradosExcel = [...filtrados].sort((a, b) => {
+      let cmp = 0
+      if (excelSort.col === 'nombre') cmp = a.nombre.localeCompare(b.nombre)
+      else if (excelSort.col === 'estado') cmp = a.estado.localeCompare(b.estado)
+      else if (excelSort.col === 'fecha') cmp = a.created_at.localeCompare(b.created_at)
+      return excelSort.dir === 'asc' ? cmp : -cmp
+    })
+  }
+
+  function handleColSort(colId: string) {
+    setExcelSort(prev => {
+      if (prev?.col === colId) {
+        if (prev.dir === 'asc') return { col: colId, dir: 'desc' as const }
+        return null
+      }
+      return { col: colId, dir: 'asc' as const }
+    })
+  }
+
+  function isColFiltered(colId: string): boolean {
+    if (colId === 'estado') return estadoFiltro !== null
+    if (colId === 'operacion') return opFiltro !== null
+    if (colId === 'interes') return interesFilter !== null
+    return false
+  }
+
+  function getColFilterValue(colId: string): string | null {
+    if (colId === 'estado') return estadoFiltro
+    if (colId === 'operacion') return opFiltro
+    if (colId === 'interes') return interesFilter
+    return null
+  }
+
+  function applyColFilter(col: string, value: string | null) {
+    if (col === 'estado') setEstadoFiltro(value)
+    else if (col === 'operacion') setOpFiltro(value as any)
+    else if (col === 'interes') setInteresFilter(value)
+    setExcelFilterModal(null)
+  }
+
+  function handleOpenColFilter(colId: string) {
+    if (colId === 'estado') {
+      setExcelFilterModal({
+        col: 'estado', label: 'Filtrar por Estado',
+        options: [
+          { value: null, label: 'Todos los estados' },
+          ...ORDEN_ESTADOS.map(e => ({ value: e, label: estadoInfo(e).label, color: estadoInfo(e).color })),
+        ],
+      })
+    } else if (colId === 'operacion') {
+      setExcelFilterModal({
+        col: 'operacion', label: 'Filtrar por Operación',
+        options: [
+          { value: null, label: 'Todos' },
+          { value: 'venta', label: '🏠 Venta' },
+          { value: 'renta', label: '🔑 Renta' },
+        ],
+      })
+    } else if (colId === 'interes') {
+      setExcelFilterModal({
+        col: 'interes', label: 'Filtrar por Interés',
+        options: [
+          { value: null, label: 'Todos' },
+          { value: 'alto', label: '🔥 Alto' },
+          { value: 'medio', label: '🌡️ Medio' },
+          { value: 'bajo', label: '❄️ Bajo' },
+        ],
+      })
+    }
+  }
+
+  // ── Excel table columns ───────────────────────────────────────
+  type TCol = { id: string; label: string; flex: number; mw: number; sortable?: boolean; filterable?: boolean }
+  const TABLE_COLS: TCol[] = isWeb ? [
+    { id: 'nombre',    label: 'Nombre',     flex: 3,   mw: 0, sortable: true },
+    { id: 'telefono',  label: 'Teléfono',   flex: 1.8, mw: 0 },
+    { id: 'estado',    label: 'Estado',     flex: 2.5, mw: 0, sortable: true, filterable: true },
+    { id: 'operacion', label: 'Operación',  flex: 1.5, mw: 0, filterable: true },
+    { id: 'interes',   label: 'Interés',    flex: 1.5, mw: 0, filterable: true },
+    { id: 'fecha',     label: 'Ingresado',  flex: 1.5, mw: 0, sortable: true },
+  ] : [
+    { id: 'nombre',    label: 'Nombre',     flex: 0, mw: 155 },
+    { id: 'telefono',  label: 'Teléfono',   flex: 0, mw: 115 },
+    { id: 'estado',    label: 'Estado',     flex: 0, mw: 145, sortable: true, filterable: true },
+    { id: 'operacion', label: 'Op.',        flex: 0, mw: 80,  filterable: true },
+    { id: 'interes',   label: 'Interés',    flex: 0, mw: 90,  filterable: true },
+    { id: 'fecha',     label: 'Fecha',      flex: 0, mw: 100, sortable: true },
+  ]
+
+  function cStyle(col: TCol) {
+    return isWeb ? { flex: col.flex } : { minWidth: col.mw }
   }
 
   return (
@@ -322,45 +427,121 @@ export default function CRM() {
               <Text style={s.emptySub}>Agrega tu primer lead con el botón "Nuevo lead"</Text>
             )}
           </View>
-        ) : vistaExcel ? (
-          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-            <ScrollView horizontal showsHorizontalScrollIndicator style={{ flex: 1 }}>
-              <View>
-                {/* Encabezado tabla */}
-                <View style={s.excelHeader}>
-                  <Text style={[s.excelCell, s.excelCellNombre, s.excelHeaderTxt]}>Nombre</Text>
-                  <Text style={[s.excelCell, s.excelCellTel, s.excelHeaderTxt]}>Teléfono</Text>
-                  <Text style={[s.excelCell, s.excelCellEstado, s.excelHeaderTxt]}>Estado</Text>
-                  <Text style={[s.excelCell, s.excelCellOp, s.excelHeaderTxt]}>Operación</Text>
-                  <Text style={[s.excelCell, s.excelCellInteres, s.excelHeaderTxt]}>Interés</Text>
-                </View>
-                {filtrados.map((item, idx) => {
-                  const info = estadoInfo(item.estado)
-                  return (
+        ) : vistaExcel ? (() => {
+          const tableHeader = (
+            <View style={s.excelTrHead}>
+              {TABLE_COLS.map(col => {
+                const isSorted = excelSort?.col === col.id
+                const filtered = isColFiltered(col.id)
+                return (
+                  <View key={col.id} style={[s.excelTh, cStyle(col)]}>
                     <TouchableOpacity
-                      key={item.id}
-                      style={[s.excelRow, idx % 2 === 0 && s.excelRowAlt]}
-                      onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0 }}
+                      onPress={col.sortable ? () => handleColSort(col.id) : undefined}
+                      disabled={!col.sortable}
                     >
-                      <Text style={[s.excelCell, s.excelCellNombre]} numberOfLines={1}>{item.nombre}</Text>
-                      <Text style={[s.excelCell, s.excelCellTel]} numberOfLines={1}>{item.telefono}</Text>
-                      <View style={[s.excelCell, s.excelCellEstado, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
-                        <View style={[s.estadoDot, { backgroundColor: info.color }]} />
-                        <Text style={{ fontSize: 11, color: info.color, fontWeight: '600' }} numberOfLines={1}>{info.label}</Text>
-                      </View>
-                      <Text style={[s.excelCell, s.excelCellOp, { textTransform: 'capitalize' }]} numberOfLines={1}>
-                        {item.tipo_operacion ?? '—'}
-                      </Text>
-                      <Text style={[s.excelCell, s.excelCellInteres]} numberOfLines={1}>
-                        {item.nivel_interes ? NIVEL_INTERES_LABEL[item.nivel_interes] : '—'}
-                      </Text>
+                      <Text style={s.excelThTxt} numberOfLines={1}>{col.label}</Text>
+                      {col.sortable && (
+                        <Ionicons
+                          name={!isSorted ? 'swap-vertical-outline' : excelSort!.dir === 'asc' ? 'arrow-up-outline' : 'arrow-down-outline'}
+                          size={11} color={isSorted ? '#fbbf24' : 'rgba(255,255,255,0.45)'}
+                        />
+                      )}
                     </TouchableOpacity>
-                  )
+                    {col.filterable && (
+                      <TouchableOpacity style={[s.excelThFilter, filtered && s.excelThFilterOn]} onPress={() => handleOpenColFilter(col.id)}>
+                        <Ionicons name="funnel" size={10} color={filtered ? '#fbbf24' : 'rgba(255,255,255,0.4)'} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )
+              })}
+            </View>
+          )
+
+          const tableRows = filtradosExcel.map((item, idx) => {
+            const info = estadoInfo(item.estado)
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[s.excelTr, idx % 2 !== 0 && s.excelTrAlt]}
+                onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
+                activeOpacity={0.75}
+              >
+                {TABLE_COLS.map(col => {
+                  const cs = cStyle(col)
+                  switch (col.id) {
+                    case 'nombre':
+                      return <Text key={col.id} style={[s.excelTd, s.excelTdBold, cs]} numberOfLines={1}>{item.nombre}</Text>
+                    case 'telefono':
+                      return <Text key={col.id} style={[s.excelTd, cs]} numberOfLines={1}>{item.telefono}</Text>
+                    case 'estado':
+                      return (
+                        <View key={col.id} style={[s.excelTdCell, cs]}>
+                          <View style={[s.excelEstadoPill, { backgroundColor: info.bg }]}>
+                            <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: info.color }} />
+                            <Text style={{ fontSize: 11, color: info.color, fontWeight: '700' }} numberOfLines={1}>{info.label}</Text>
+                          </View>
+                        </View>
+                      )
+                    case 'operacion':
+                      return (
+                        <View key={col.id} style={[s.excelTdCell, cs]}>
+                          {item.tipo_operacion
+                            ? <View style={[s.excelOpTag, item.tipo_operacion === 'venta' ? s.excelOpVenta : s.excelOpRenta]}>
+                                <Text style={[s.excelOpTxt, { color: item.tipo_operacion === 'venta' ? '#1a6470' : '#7c3aed' }]}>
+                                  {item.tipo_operacion === 'venta' ? '🏠 Venta' : '🔑 Renta'}
+                                </Text>
+                              </View>
+                            : <Text style={s.excelNull}>—</Text>
+                          }
+                        </View>
+                      )
+                    case 'interes':
+                      return (
+                        <View key={col.id} style={[s.excelTdCell, cs]}>
+                          {item.nivel_interes
+                            ? <Text style={s.excelTd} numberOfLines={1}>{NIVEL_INTERES_LABEL[item.nivel_interes]}</Text>
+                            : <Text style={s.excelNull}>—</Text>
+                          }
+                        </View>
+                      )
+                    case 'fecha':
+                      return (
+                        <Text key={col.id} style={[s.excelTd, s.excelTdDate, cs]} numberOfLines={1}>
+                          {new Date(item.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: '2-digit' })}
+                        </Text>
+                      )
+                    default: return null
+                  }
                 })}
-                <View style={{ height: 100 }} />
-              </View>
+              </TouchableOpacity>
+            )
+          })
+
+          const table = (
+            <View style={[s.excelTable, isWeb && { minWidth: screenWidth - 32 }]}>
+              {tableHeader}
+              {tableRows}
+              <View style={{ height: 100 }} />
+            </View>
+          )
+
+          if (isWeb) {
+            return (
+              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 12 }}>
+                <View style={s.excelTableWrap}>{table}</View>
+              </ScrollView>
+            )
+          }
+          return (
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {table}
+              </ScrollView>
             </ScrollView>
-          </ScrollView>
+          )
+        })()
         ) : (
           <FlatList
             data={filtrados}
@@ -496,6 +677,32 @@ export default function CRM() {
                 {sortBy === opt && <Ionicons name="checkmark-circle" size={18} color="#1a6470" />}
               </TouchableOpacity>
             ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Column filter modal ── */}
+      <Modal visible={excelFilterModal !== null} transparent animationType="slide" onRequestClose={() => setExcelFilterModal(null)}>
+        <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setExcelFilterModal(null)}>
+          <View style={s.sortSheet}>
+            <View style={s.sortHandle} />
+            <Text style={s.sortTitle}>{excelFilterModal?.label ?? ''}</Text>
+            {excelFilterModal?.options.map(opt => {
+              const active = getColFilterValue(excelFilterModal!.col) === opt.value
+              return (
+                <TouchableOpacity
+                  key={String(opt.value)}
+                  style={s.sortOpt}
+                  onPress={() => applyColFilter(excelFilterModal!.col, opt.value)}
+                >
+                  <View style={s.sortOptLeft}>
+                    {opt.color && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: opt.color }} />}
+                    <Text style={[s.sortOptTxt, active && { color: '#1a6470', fontWeight: '700' }]}>{opt.label}</Text>
+                  </View>
+                  {active && <Ionicons name="checkmark-circle" size={18} color="#1a6470" />}
+                </TouchableOpacity>
+              )
+            })}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -676,21 +883,74 @@ const s = StyleSheet.create({
   sortOptLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   sortOptTxt:  { fontSize: 15, color: '#334155', fontWeight: '500' },
 
-  // ── Vista Excel ──────────────────────────────────────────────────
-  excelHeader: {
-    flexDirection: 'row', backgroundColor: '#1a6470',
-    paddingVertical: 8, paddingHorizontal: 4,
+  // ── Vista Tabla Monday.com ───────────────────────────────────────
+  excelTableWrap: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  excelHeaderTxt: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  excelRow: {
-    flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 4,
-    borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+  excelTable: { flex: 1 },
+  excelTrHead: {
+    flexDirection: 'row',
+    backgroundColor: '#1a3547',
+    minHeight: 44,
+    alignItems: 'stretch',
   },
-  excelRowAlt: { backgroundColor: '#f8fafc' },
-  excelCell: { paddingHorizontal: 6, fontSize: 12, color: '#334155', justifyContent: 'center' },
-  excelCellNombre:  { width: 140 },
-  excelCellTel:     { width: 120 },
-  excelCellEstado:  { width: 130 },
-  excelCellOp:      { width: 80 },
-  excelCellInteres: { width: 90 },
+  excelTh: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(255,255,255,0.08)',
+  },
+  excelThTxt: { color: '#fff', fontSize: 12, fontWeight: '700', letterSpacing: 0.3, flex: 1 },
+  excelThFilter: {
+    width: 22, height: 22, borderRadius: 6,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginLeft: 4,
+  },
+  excelThFilterOn: { backgroundColor: 'rgba(251,191,36,0.2)' },
+  excelTr: {
+    flexDirection: 'row',
+    minHeight: 44,
+    alignItems: 'stretch',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  excelTrAlt: { backgroundColor: '#f8fafc' },
+  excelTd: {
+    fontSize: 13,
+    color: '#334155',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignSelf: 'center',
+  },
+  excelTdBold: { fontWeight: '700', color: '#0f172a' },
+  excelTdDate: { fontSize: 12, color: '#64748b' },
+  excelTdCell: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  excelEstadoPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
+    alignSelf: 'flex-start',
+  },
+  excelOpTag: {
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,
+    alignSelf: 'flex-start',
+  },
+  excelOpVenta: { backgroundColor: '#e0f4f5' },
+  excelOpRenta: { backgroundColor: '#f3e8ff' },
+  excelOpTxt: { fontSize: 12, fontWeight: '600' },
+  excelNull: { fontSize: 13, color: '#cbd5e1', paddingHorizontal: 12, paddingVertical: 10 },
 })

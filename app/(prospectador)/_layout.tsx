@@ -151,11 +151,24 @@ export default function ProspectadorLayout() {
             resizeMode="contain"
           />
         ),
-        headerLeft: () => router.canGoBack() ? (
-          <TouchableOpacity onPress={() => router.back()} style={{ paddingLeft: 8, paddingRight: 4 }}>
-            <Text style={{ color: '#c9a84c', fontSize: 22, fontWeight: '700' }}>‹</Text>
-          </TouchableOpacity>
-        ) : null,
+        headerLeft: () => {
+          const BACK: Record<string, string> = {
+            'detalle-propiedad': '/(prospectador)/propiedades',
+            'detalle-cliente':   '/(prospectador)/crm',
+            'cliente-form':      '/(prospectador)/crm',
+            'university-curso':  '/(prospectador)/university',
+            'university-leccion':'/(prospectador)/university',
+            'tienda':            '/(prospectador)/misiones',
+            'ranking':           '/(prospectador)/misiones',
+          }
+          const match = Object.entries(BACK).find(([seg]) => pathname.includes(seg))
+          if (!match) return null
+          return (
+            <TouchableOpacity onPress={() => router.navigate(match[1] as any)} style={{ paddingLeft: 8, paddingRight: 4 }}>
+              <Text style={{ color: '#c9a84c', fontSize: 22, fontWeight: '700' }}>‹</Text>
+            </TouchableOpacity>
+          )
+        },
         headerRight: () => null,
       }}
     >

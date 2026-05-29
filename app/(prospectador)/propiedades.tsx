@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, createElement } from 'react'
 import {
   View,
   Text,
@@ -116,6 +116,9 @@ export default function ProspectadorPropiedades() {
   const [precioMax, setPrecioMax] = useState('')
   const [filtroPublicadas, setFiltroPublicadas] = useState<FiltroPublicadas>(null)
   const [filtroNueva, setFiltroNueva] = useState(false)
+  const [filtroFechaPreset, setFiltroFechaPreset] = useState<7 | 30 | 90 | 180 | null>(null)
+  const [fechaDesdeCustom, setFechaDesdeCustom] = useState('')
+  const [fechaHastaCustom, setFechaHastaCustom] = useState('')
   const [vistaZonas, setVistaZonas] = useState(false)
   const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
   const [showHelp, setShowHelp] = useState(false)
@@ -259,6 +262,7 @@ export default function ProspectadorPropiedades() {
     (precioMinNum != null || precioMaxNum != null) ? 'precio' : null,
     filtroPublicadas,
     filtroNueva ? 'nueva' : null,
+    (filtroFechaPreset || fechaDesdeCustom || fechaHastaCustom) ? 'fecha' : null,
   ].filter(Boolean).length
 
   let propiedadesFiltradas = propiedades
@@ -281,6 +285,19 @@ export default function ProspectadorPropiedades() {
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
   if (precioMinNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio >= precioMinNum)
   if (precioMaxNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio <= precioMaxNum)
+  if (filtroFechaPreset) {
+    const threshold = Date.now() - filtroFechaPreset * 24 * 60 * 60 * 1000
+    propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() >= threshold)
+  } else {
+    if (fechaDesdeCustom) {
+      const t = new Date(fechaDesdeCustom).getTime()
+      if (!isNaN(t)) propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() >= t)
+    }
+    if (fechaHastaCustom) {
+      const t = new Date(fechaHastaCustom + 'T23:59:59').getTime()
+      if (!isNaN(t)) propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() <= t)
+    }
+  }
   if (ordenPrecio) {
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
       ordenPrecio === 'asc'
@@ -299,6 +316,9 @@ export default function ProspectadorPropiedades() {
     setFiltroNueva(false)
     setPrecioMin('')
     setPrecioMax('')
+    setFiltroFechaPreset(null)
+    setFechaDesdeCustom('')
+    setFechaHastaCustom('')
   }
 
   function renderPropiedad(item: Propiedad, width?: number) {
@@ -560,6 +580,44 @@ export default function ProspectadorPropiedades() {
               <FiltroChip label="Publicadas" active={filtroPublicadas === 'publicadas'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'publicadas' ? null : 'publicadas')} color={primaryColor} />
               <FiltroChip label="Sin publicar" active={filtroPublicadas === 'sin_publicar'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar')} color={primaryColor} />
             </ScrollView>
+
+            <Text style={styles.filtroLabel}>Fecha de publicación</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+              <FiltroChip
+                label="Todo"
+                active={!filtroFechaPreset && !fechaDesdeCustom && !fechaHastaCustom}
+                onPress={() => { setFiltroFechaPreset(null); setFechaDesdeCustom(''); setFechaHastaCustom('') }}
+                color={primaryColor}
+              />
+              {([7, 30, 90, 180] as const).map(d => (
+                <FiltroChip
+                  key={d}
+                  label={d === 7 ? '7 días' : d === 30 ? '1 mes' : d === 90 ? '3 meses' : '6 meses'}
+                  active={filtroFechaPreset === d}
+                  onPress={() => { setFiltroFechaPreset(filtroFechaPreset === d ? null : d); setFechaDesdeCustom(''); setFechaHastaCustom('') }}
+                  color={primaryColor}
+                />
+              ))}
+            </ScrollView>
+            {isWeb && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                <Text style={styles.precioRangoLabel}>Desde</Text>
+                {createElement('input', {
+                  type: 'date',
+                  value: fechaDesdeCustom,
+                  onChange: (e: any) => { setFechaDesdeCustom(e.target.value); setFiltroFechaPreset(null) },
+                  style: { flex: 1, minWidth: 130, padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, color: '#333', fontFamily: 'inherit' }
+                })}
+                <Text style={styles.precioRangoSep}>—</Text>
+                <Text style={styles.precioRangoLabel}>Hasta</Text>
+                {createElement('input', {
+                  type: 'date',
+                  value: fechaHastaCustom,
+                  onChange: (e: any) => { setFechaHastaCustom(e.target.value); setFiltroFechaPreset(null) },
+                  style: { flex: 1, minWidth: 130, padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, color: '#333', fontFamily: 'inherit' }
+                })}
+              </View>
+            )}
 
             {filtrosActivos > 0 && (
               <TouchableOpacity style={styles.limpiarBtn} onPress={limpiarFiltros}>
