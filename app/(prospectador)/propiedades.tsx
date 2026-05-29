@@ -710,6 +710,7 @@ export default function ProspectadorPropiedades() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 16 }}
             renderItem={({ item }) => renderPropiedad(item)}
+            extraData={publicaciones}
           />
         )}
 
