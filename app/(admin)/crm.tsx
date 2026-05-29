@@ -7,6 +7,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { ESTADOS } from '../(prospectador)/crm'
+import * as DocumentPicker from 'expo-document-picker'
 
 type ClienteAdmin = {
   id: string
@@ -180,6 +181,127 @@ export default function AdminCRM() {
     })
     .filter((sec) => sec.data.length > 0)
 
+  // ── Importar CSV ─────────────────────────────────────────────
+  const [importModal, setImportModal] = useState(false)
+  const [importRows, setImportRows]   = useState<Record<string, string>[]>([])
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importando, setImportando]   = useState(false)
+  const [nuevoUserId2, setNuevoUserId2] = useState('')
+  const [usuariosImport, setUsuariosImport] = useState<UsuarioSimple[]>([])
+
+  function parsearCSV(texto: string): string[][] {
+    const lineas = texto.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim())
+    const delim = lineas[0].includes(';') ? ';' : ','
+    return lineas.map(linea => {
+      const cols: string[] = []
+      let actual = ''
+      let enComillas = false
+      for (let i = 0; i < linea.length; i++) {
+        const ch = linea[i]
+        if (ch === '"') {
+          if (enComillas && linea[i + 1] === '"') { actual += '"'; i++ }
+          else enComillas = !enComillas
+        } else if (ch === delim && !enComillas) {
+          cols.push(actual.trim()); actual = ''
+        } else {
+          actual += ch
+        }
+      }
+      cols.push(actual.trim())
+      return cols
+    })
+  }
+
+  function mapearHeaders(headers: string[]): Record<string, number> {
+    const mapa: Record<string, number> = {}
+    headers.forEach((h, i) => {
+      const n = h.toLowerCase().replace(/[^a-záéíóúüñ_]/gi, '')
+      if (['nombre', 'name', 'cliente'].includes(n))                       mapa.nombre = i
+      if (['telefono', 'teléfono', 'phone', 'tel', 'celular'].includes(n)) mapa.telefono = i
+      if (['email', 'correo'].includes(n))                                 mapa.email = i
+      if (['empresa', 'company', 'negocio'].includes(n))                   mapa.empresa = i
+      if (['tipooperacion', 'operacion', 'operación', 'tipo'].includes(n)) mapa.tipo_operacion = i
+      if (['estado', 'status', 'etapa'].includes(n))                       mapa.estado = i
+      if (['fuentelead', 'fuente', 'source', 'origen'].includes(n))        mapa.fuente_lead = i
+      if (['notas', 'notes', 'comentarios'].includes(n))                   mapa.notas = i
+    })
+    return mapa
+  }
+
+  function procesarTextoCSV(texto: string) {
+    setImportError(null)
+    const matriz = parsearCSV(texto)
+    if (matriz.length < 2) { setImportError('El archivo está vacío o no tiene datos.'); setImportModal(true); return }
+    const mapa = mapearHeaders(matriz[0])
+    if (mapa.nombre === undefined)   { setImportError('No se encontró la columna "Nombre".'); setImportModal(true); return }
+    if (mapa.telefono === undefined) { setImportError('No se encontró la columna "Teléfono".'); setImportModal(true); return }
+    const filas = matriz.slice(1)
+      .filter(row => row[mapa.nombre]?.trim())
+      .map(row => ({
+        nombre:         row[mapa.nombre]?.trim() ?? '',
+        telefono:       row[mapa.telefono]?.trim() ?? '',
+        email:          mapa.email !== undefined ? row[mapa.email]?.trim() || '' : '',
+        empresa:        mapa.empresa !== undefined ? row[mapa.empresa]?.trim() || '' : '',
+        tipo_operacion: mapa.tipo_operacion !== undefined ? row[mapa.tipo_operacion]?.trim().toLowerCase() || '' : '',
+        estado:         mapa.estado !== undefined ? row[mapa.estado]?.trim().toLowerCase() || 'por_perfilar' : 'por_perfilar',
+        fuente_lead:    mapa.fuente_lead !== undefined ? row[mapa.fuente_lead]?.trim() || 'sheets' : 'sheets',
+        notas:          mapa.notas !== undefined ? row[mapa.notas]?.trim() || '' : '',
+      }))
+    if (filas.length === 0) { setImportError('No se encontraron filas válidas.'); setImportModal(true); return }
+    setImportRows(filas)
+    setImportModal(true)
+  }
+
+  async function abrirImport() {
+    const { data: perfs } = await supabase.from('profiles').select('id, nombre').neq('role', 'admin').order('nombre')
+    setUsuariosImport((perfs ?? []) as UsuarioSimple[])
+    setNuevoUserId2('')
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.csv,text/csv'
+      input.onchange = async (e: any) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        const texto = await file.text()
+        procesarTextoCSV(texto)
+      }
+      input.click()
+    } else {
+      const result = await DocumentPicker.getDocumentAsync({ type: ['text/csv', '*/*'] })
+      if (result.canceled) return
+      const { default: FileSystem } = await import('expo-file-system')
+      const texto = await FileSystem.readAsStringAsync(result.assets[0].uri)
+      procesarTextoCSV(texto)
+    }
+  }
+
+  async function confirmarImport() {
+    if (!nuevoUserId2) { Platform.OS === 'web' ? window.alert('Selecciona un asesor para asignar los clientes') : Alert.alert('Error', 'Selecciona un asesor'); return }
+    setImportando(true)
+    try {
+      const ESTADOS_VALIDOS = new Set(Object.keys(ESTADOS))
+      const payload = importRows.map(r => ({
+        nombre:         r.nombre,
+        telefono:       r.telefono,
+        email:          r.email || null,
+        empresa:        r.empresa || null,
+        tipo_operacion: ['venta', 'renta'].includes(r.tipo_operacion) ? r.tipo_operacion : null,
+        estado:         ESTADOS_VALIDOS.has(r.estado) ? r.estado : 'por_perfilar',
+        fuente_lead:    r.fuente_lead || 'sheets',
+        notas:          r.notas || null,
+        responsable_id: nuevoUserId2,
+      }))
+      const { error } = await supabase.from('clientes').insert(payload)
+      if (error) { setImportError(error.message); return }
+      setImportModal(false)
+      setImportRows([])
+      cargarClientes()
+    } finally {
+      setImportando(false)
+    }
+  }
+
   return (
     <View style={styles.container}>
 
@@ -250,7 +372,7 @@ export default function AdminCRM() {
         })}
       </ScrollView>
 
-      {/* Búsqueda + botón nuevo */}
+      {/* Búsqueda + botón exportar + botón nuevo */}
       <View style={styles.searchRow}>
         <View style={styles.searchWrap}>
           <Ionicons name="search-outline" size={16} color="#9eafb2" style={{ marginRight: 8 }} />
@@ -264,6 +386,9 @@ export default function AdminCRM() {
             clearButtonMode="while-editing"
           />
         </View>
+        <TouchableOpacity style={styles.btnExportar} onPress={abrirImport}>
+          <Ionicons name="cloud-upload-outline" size={16} color="#1a6470" />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.btnNuevo} onPress={abrirModalNuevo}>
           <Ionicons name="add" size={20} color="#fff" />
         </TouchableOpacity>
@@ -487,6 +612,67 @@ export default function AdminCRM() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Import modal ── */}
+      <Modal visible={importModal} transparent animationType="slide" onRequestClose={() => { setImportModal(false); setImportRows([]) }}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { maxHeight: '85%' }]}>
+            <Text style={styles.mTitle}>Importar desde Google Sheets</Text>
+
+            {importError ? (
+              <View style={styles.importErrorBox}>
+                <Ionicons name="alert-circle-outline" size={20} color="#ef4444" />
+                <Text style={styles.importErrorTxt}>{importError}</Text>
+              </View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.importInfoRow}>
+                  <Ionicons name="people-outline" size={16} color="#1a6470" />
+                  <Text style={styles.importInfoTxt}>{importRows.length} clientes detectados</Text>
+                </View>
+
+                {importRows.slice(0, 5).map((row, i) => (
+                  <View key={i} style={styles.importRow}>
+                    <Text style={styles.importRowNombre} numberOfLines={1}>{row.nombre}</Text>
+                    <Text style={styles.importRowSub} numberOfLines={1}>{row.telefono}{row.tipo_operacion ? ` · ${row.tipo_operacion}` : ''}</Text>
+                  </View>
+                ))}
+                {importRows.length > 5 && <Text style={styles.importMas}>+{importRows.length - 5} más...</Text>}
+
+                <Text style={[styles.mFieldLabel, { marginTop: 16 }]}>Asignar a asesor *</Text>
+                {usuariosImport.map(u => (
+                  <TouchableOpacity key={u.id} style={[styles.mUsuarioRow, nuevoUserId2 === u.id && styles.mUsuarioSeleccionado]} onPress={() => setNuevoUserId2(u.id)}>
+                    <View style={styles.mUsuarioAvatar}>
+                      <Text style={styles.mUsuarioAvatarTxt}>{u.nombre?.[0]?.toUpperCase() ?? '?'}</Text>
+                    </View>
+                    <Text style={[styles.mUsuarioNombre, nuevoUserId2 === u.id && { color: '#2a8a5a', fontWeight: '700' }]}>{u.nombre}</Text>
+                    {nuevoUserId2 === u.id && <Ionicons name="checkmark-circle" size={18} color="#2a8a5a" />}
+                  </TouchableOpacity>
+                ))}
+
+                <Text style={styles.importHint}>
+                  El estado por defecto será "Por perfilar" si no se especifica en el archivo.
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.mGuardarBtn, importando && { opacity: 0.6 }]}
+                  onPress={confirmarImport}
+                  disabled={importando}
+                >
+                  {importando
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={styles.mGuardarTxt}>Importar {importRows.length} clientes</Text>
+                  }
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+
+            <TouchableOpacity style={styles.mCancelarBtn} onPress={() => { setImportModal(false); setImportRows([]); setImportError(null) }}>
+              <Text style={styles.mCancelarTxt}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -536,6 +722,10 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
   searchInput: { flex: 1, paddingVertical: 11, fontSize: 14, color: '#1a1a2e' },
+  btnExportar: {
+    backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0',
+    width: 46, height: 46, alignItems: 'center', justifyContent: 'center',
+  },
   btnNuevo: {
     backgroundColor: '#1a6470', borderRadius: 14,
     width: 46, height: 46, alignItems: 'center', justifyContent: 'center',
@@ -626,4 +816,23 @@ const styles = StyleSheet.create({
   mUsuarioNombre: { flex: 1, fontSize: 14, color: '#1a2e30' },
   mGuardarBtn: { backgroundColor: '#c9a84c', borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 22 },
   mGuardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+
+  // Modal import
+  modalBox: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40 },
+  mTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 16 },
+  mFieldLabel: { fontSize: 11, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 6 },
+  mUsuarioAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#e0f4f5', alignItems: 'center', justifyContent: 'center' },
+  mUsuarioAvatarTxt: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
+  mUsuarioSeleccionado: { backgroundColor: '#f0fcf6' },
+  mCancelarBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 6 },
+  mCancelarTxt: { fontSize: 14, color: '#94a3b8' },
+  importErrorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#fef2f2', borderRadius: 12, padding: 14, marginBottom: 16 },
+  importErrorTxt: { flex: 1, fontSize: 13, color: '#b91c1c', lineHeight: 18 },
+  importInfoRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  importInfoTxt:  { fontSize: 15, fontWeight: '700', color: '#0f172a' },
+  importRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  importRowNombre: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  importRowSub:    { fontSize: 12, color: '#64748b', marginTop: 2 },
+  importMas:       { fontSize: 12, color: '#94a3b8', paddingTop: 8, textAlign: 'center' as const },
+  importHint: { fontSize: 11, color: '#94a3b8', lineHeight: 16, marginVertical: 12, textAlign: 'center' as const },
 })
