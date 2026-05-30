@@ -351,79 +351,24 @@ async function actualizarMisionesStreak(userId: string, streakActual: number): P
 }
 
 // ── Sincronizar misiones diarias con actividad real del día ───
-// Corrige progress usando los conteos reales, no los acumulados
+// Usa función SQL atómica que cuenta desde la fuente de verdad
 export async function sincronizarMisionesDiarias(userId: string): Promise<void> {
-  const hoy = getHoyMX()
-
-  // Obtener actividad real del día (usa RPC con timezone México)
-  const { data: actArr } = await supabase.rpc('get_actividad_diaria')
-  const act = actArr?.[0] as {
-    propiedades_hoy: number
-    clientes_hoy: number
-    interacciones_hoy: number
-    seguimientos_hoy: number
-  } | undefined
-
-  if (!act) return
-
-  // Mapa categoria → conteo real de hoy
-  const conteosHoy: Record<string, number> = {
-    propiedad:   act.propiedades_hoy   ?? 0,
-    crm:         act.clientes_hoy      ?? 0,
-    interaccion: act.interacciones_hoy ?? 0,
-    seguimiento: act.seguimientos_hoy  ?? 0,
-  }
-
-  const { data: misiones } = await supabase
-    .from('misiones')
-    .select('id, categoria, meta, recompensa_xp, recompensa_coins')
-    .eq('tipo', 'diaria')
-    .eq('activa', true)
-
-  if (!misiones?.length) return
-
-  for (const m of misiones) {
-    const conteoReal = conteosHoy[m.categoria] ?? 0
-    if (conteoReal === 0) continue
-
-    const { data: um } = await supabase
-      .from('user_misiones')
-      .select('id, progreso, completada, fecha_reset')
-      .eq('user_id', userId)
-      .eq('mision_id', m.id)
-      .maybeSingle()
-
-    // Si ya completó hoy, saltar
-    if (um?.completada && um.fecha_reset === hoy) continue
-
-    const nuevoProg  = Math.min(conteoReal, m.meta)
-    const nuevaCompl = nuevoProg >= m.meta
-    const yaCompletada = um?.completada && um.fecha_reset === hoy
-
-    if (!um) {
-      await supabase.from('user_misiones').insert({
-        user_id: userId, mision_id: m.id, progreso: nuevoProg,
-        completada: nuevaCompl, fecha_reset: hoy,
-        fecha_completada: nuevaCompl ? new Date().toISOString() : null,
-      })
-    } else {
-      await supabase.from('user_misiones').update({
-        progreso: nuevoProg, completada: nuevaCompl, fecha_reset: hoy,
-        fecha_completada: nuevaCompl && !yaCompletada ? new Date().toISOString() : null,
-      }).eq('id', um.id)
+  try {
+    const { data: completadas } = await supabase.rpc('sincronizar_misiones_diarias_hoy')
+    // Otorgar recompensas por misiones recién completadas
+    for (const c of completadas ?? []) {
+      if (c.recien_completada) {
+        await supabase.rpc('award_xp_coins', {
+          p_user_id: userId, p_xp: c.recompensa_xp, p_coins: c.recompensa_coins,
+          p_concepto: `¡Misión diaria completada! ⚡`, p_campo_contador: null,
+        }).catch(() => {})
+      }
     }
-
-    if (nuevaCompl && !yaCompletada) {
-      await supabase.rpc('award_xp_coins', {
-        p_user_id:        userId,
-        p_xp:             m.recompensa_xp,
-        p_coins:          m.recompensa_coins,
-        p_concepto:       '¡Misión diaria completada! ⚡',
-        p_campo_contador: null,
-      })
-    }
+  } catch (e) {
+    console.warn('[Gamification] sincronizarMisionesDiarias:', e)
   }
 }
+
 
 // ── Obtener stats del usuario ──────────────────────────────────
 export async function getUserStats(userId: string): Promise<UserStats | null> {
