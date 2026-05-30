@@ -19,10 +19,9 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: /public_html/
-          protocol: ftps-legacy
+          protocol: ftp
           port: 21
           timeout: 120000
-          security: loose
           exclude: |
             **/.git*
             **/.git*/**
