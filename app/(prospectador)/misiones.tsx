@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Animated,
@@ -64,8 +64,55 @@ export default function Misiones() {
   const [loading, setLoading]   = useState(true)
   const [tabBase, setTabBase]   = useState<string>('propiedad')
   const [sincronizando, setSincronizando] = useState(false)
+  const userIdRef = useRef<string | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+
+  // Escuchar cambios en tiempo real de user_misiones y user_stats
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      userIdRef.current = user.id
+
+      channel = supabase
+        .channel('misiones-live')
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'user_misiones', filter: `user_id=eq.${user.id}` },
+          () => { cargarSilencioso(user.id) }
+        )
+        .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'user_stats', filter: `id=eq.${user.id}` },
+          () => { cargarSilencioso(user.id) }
+        )
+        .subscribe()
+    })
+
+    return () => { if (channel) supabase.removeChannel(channel) }
+  }, [])
+
+  async function cargarSilencioso(uid: string) {
+    const [statsRes, misionesRes, progresoRes] = await Promise.all([
+      supabase.from('user_stats').select('*').eq('id', uid).maybeSingle(),
+      supabase.from('misiones').select('*').eq('activa', true).order('orden'),
+      supabase.from('user_misiones').select('*').eq('user_id', uid),
+    ])
+    if (statsRes.data) setStats(statsRes.data as UserStats)
+    const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
+    const progresoMap = new Map<string, { progreso: number; completada: boolean; fecha_reset: string | null }>()
+    for (const p of progresoRes.data ?? []) {
+      progresoMap.set(p.mision_id, { progreso: p.progreso, completada: p.completada, fecha_reset: p.fecha_reset })
+    }
+    const lista: MisionConProgreso[] = (misionesRes.data ?? []).map((m: any) => {
+      const um = progresoMap.get(m.id)
+      const yaReset = um?.fecha_reset === hoy
+      const progreso   = (m.tipo === 'diaria' && um && !yaReset) ? 0 : (um?.progreso ?? 0)
+      const completada = (m.tipo === 'diaria' && um && !yaReset) ? false : (um?.completada ?? false)
+      return { ...m, progreso, completada, fecha_reset: um?.fecha_reset ?? null }
+    })
+    setMisiones(lista)
+  }
 
   async function cargar() {
     setLoading(true)
