@@ -57,6 +57,8 @@ const bStyles = StyleSheet.create({
   fill:  { borderRadius: 999 },
 })
 
+const getHoyMX = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
+
 export default function Misiones() {
   const [userId, setUserId] = useState<string | null>(null)
   const [stats, setStats]   = useState<UserStats | null>(null)
@@ -65,6 +67,7 @@ export default function Misiones() {
   const [tabBase, setTabBase]   = useState<string>('propiedad')
   const [sincronizando, setSincronizando] = useState(false)
   const userIdRef = useRef<string | null>(null)
+  const sincronizandoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -93,13 +96,14 @@ export default function Misiones() {
   }, [])
 
   async function cargarSilencioso(uid: string) {
+    if (sincronizandoRef.current) return
     const [statsRes, misionesRes, progresoRes] = await Promise.all([
       supabase.from('user_stats').select('*').eq('id', uid).maybeSingle(),
       supabase.from('misiones').select('*').eq('activa', true).order('orden'),
       supabase.from('user_misiones').select('*').eq('user_id', uid),
     ])
     if (statsRes.data) setStats(statsRes.data as UserStats)
-    const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
+    const hoy = getHoyMX()
     const progresoMap = new Map<string, { progreso: number; completada: boolean; fecha_reset: string | null }>()
     for (const p of progresoRes.data ?? []) {
       progresoMap.set(p.mision_id, { progreso: p.progreso, completada: p.completada, fecha_reset: p.fecha_reset })
@@ -129,7 +133,7 @@ export default function Misiones() {
     const s = statsRes.data as UserStats | null
     setStats(s)
 
-    const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
+    const hoy = getHoyMX()
     const progresoMap = new Map<string, { progreso: number; completada: boolean; fecha_reset: string | null }>()
     for (const p of progresoRes.data ?? []) {
       progresoMap.set(p.mision_id, { progreso: p.progreso, completada: p.completada, fecha_reset: p.fecha_reset })
@@ -181,11 +185,13 @@ export default function Misiones() {
               onPress={async () => {
                 if (!userId) return
                 setSincronizando(true)
+                sincronizandoRef.current = true
                 await Promise.all([
                   sincronizarMisionesBase(userId).catch(() => {}),
                   sincronizarMisionesDiarias(userId).catch(() => {}),
                 ])
-                await cargar()
+                sincronizandoRef.current = false
+                await cargarSilencioso(userId)
                 setSincronizando(false)
               }}
             >
