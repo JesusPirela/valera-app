@@ -157,10 +157,10 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
       nuevoProg    = Math.min(statsActual ?? (um?.progreso ?? 0) + 1, m.meta)
       yaCompletada = um?.completada ?? false
     } else {
-      // Misiones diarias: incremental +1, reset por fecha
+      // Misiones diarias: reset por fecha; yaCompletada SOLO si fue hoy
       const yaReset = um?.fecha_reset === hoy
       const progDiario = (um && !yaReset) ? 0 : (um?.progreso ?? 0)
-      yaCompletada = (um?.completada && yaReset) ? true : (um?.completada ?? false)
+      yaCompletada = !!(um?.completada && yaReset)  // solo "completada hoy"
       if (yaCompletada) continue
       nuevoProg = Math.min(progDiario + 1, m.meta)
     }
@@ -176,7 +176,7 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
     } else {
       await supabase.from('user_misiones').update({
         progreso: nuevoProg, completada: nuevaCompl, fecha_reset: hoy,
-        fecha_completada: nuevaCompl && !um.completada ? new Date().toISOString() : null,
+        fecha_completada: nuevaCompl && !yaCompletada ? new Date().toISOString() : null,
       }).eq('id', um.id)
     }
 
