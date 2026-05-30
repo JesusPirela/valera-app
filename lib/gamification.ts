@@ -122,10 +122,11 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
   const hoy = getHoyMX()
 
   // ── Misiones DIARIAS: función atómica en SQL (evita race conditions) ──
-  const { data: completadas } = await supabase.rpc('incrementar_mision_diaria', {
-    p_user_id:   userId,
+  // auth.uid() se toma del JWT en el servidor — no hay que pasarlo
+  const { data: completadas, error: errDiaria } = await supabase.rpc('incrementar_mision_diaria', {
     p_categoria: categoria,
   })
+  if (errDiaria) console.warn('[Misiones diarias]', errDiaria.message)
   // Otorgar recompensas por misiones diarias recién completadas
   for (const c of completadas ?? []) {
     if (c.recien_completada) {
@@ -192,7 +193,7 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
 // ── Sincronizar progreso de misiones base desde user_stats ─────
 // Corrige misiones base desincronizadas sin necesidad de nuevas acciones
 export async function sincronizarMisionesBase(userId: string): Promise<void> {
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = getHoyMX()
 
   const { data: stats } = await supabase
     .from('user_stats')
