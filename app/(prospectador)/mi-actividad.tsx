@@ -99,7 +99,7 @@ function BarChart({ data, label }: { data: ConexionDia[]; label: string }) {
 export default function MiActividad() {
   const [userId, setUserId]           = useState<string | null>(null)
   const [actividad, setActividad]     = useState<ActividadDiaria | null>(null)
-  const [periodo, setPeriodo]         = useState<'semana' | 'mes'>('semana')
+  const [periodo, setPeriodo]         = useState<'hoy' | 'semana' | 'mes'>('semana')
   const [conexionData, setConexionData] = useState<ConexionDia[]>([])
   const [loading, setLoading]         = useState(true)
 
@@ -120,13 +120,13 @@ export default function MiActividad() {
     setLoading(false)
   }
 
-  async function cargarConexion(uid: string, p: 'semana' | 'mes') {
-    const dias = p === 'semana' ? 7 : 30
+  async function cargarConexion(uid: string, p: 'hoy' | 'semana' | 'mes') {
+    const dias = p === 'hoy' ? 1 : p === 'semana' ? 7 : 30
     const { data } = await supabase.rpc('get_horas_conexion', { p_user_id: uid, p_dias: dias })
     setConexionData((data ?? []).map((d: any) => ({ fecha: d.fecha, minutos: Number(d.minutos) })))
   }
 
-  async function cambiarPeriodo(p: 'semana' | 'mes') {
+  async function cambiarPeriodo(p: 'hoy' | 'semana' | 'mes') {
     setPeriodo(p)
     if (userId) await cargarConexion(userId, p)
   }
@@ -171,6 +171,12 @@ export default function MiActividad() {
           <Text style={s.sectionTitle}>⏱️ Tiempo conectado</Text>
           <View style={s.periodoRow}>
             <TouchableOpacity
+              style={[s.periodoPill, periodo === 'hoy' && s.periodoPillActive]}
+              onPress={() => cambiarPeriodo('hoy')}
+            >
+              <Text style={[s.periodoPillTxt, periodo === 'hoy' && s.periodoPillActiveTxt]}>Hoy</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[s.periodoPill, periodo === 'semana' && s.periodoPillActive]}
               onPress={() => cambiarPeriodo('semana')}
             >
@@ -195,10 +201,10 @@ export default function MiActividad() {
           <>
             <BarChart
               data={conexionData}
-              label={periodo === 'semana' ? 'Últimos 7 días (minutos por día)' : 'Últimos 30 días (minutos por día)'}
+              label={periodo === 'hoy' ? 'Hoy (minutos)' : periodo === 'semana' ? 'Últimos 7 días (minutos por día)' : 'Últimos 30 días (minutos por día)'}
             />
             <View style={s.totalRow}>
-              <Text style={s.totalLabel}>Total {periodo === 'semana' ? 'semana' : 'mes'}</Text>
+              <Text style={s.totalLabel}>Total {periodo === 'hoy' ? 'hoy' : periodo === 'semana' ? 'semana' : 'mes'}</Text>
               <Text style={s.totalVal}>
                 {formatMinutos(conexionData.reduce((a, d) => a + d.minutos, 0))}
               </Text>
