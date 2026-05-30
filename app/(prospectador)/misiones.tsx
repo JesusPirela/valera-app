@@ -59,6 +59,62 @@ const bStyles = StyleSheet.create({
 
 const getHoyMX = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 
+function getMXDayBounds(hoyMX: string): { start: string; end: string } {
+  const now = new Date()
+  const mxStr = now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' })
+  const utcStr = now.toLocaleString('en-US', { timeZone: 'UTC' })
+  const offsetMs = new Date(utcStr).getTime() - new Date(mxStr).getTime()
+  const startMs = new Date(hoyMX + 'T00:00:00Z').getTime() + offsetMs
+  return {
+    start: new Date(startMs).toISOString(),
+    end:   new Date(startMs + 86400000).toISOString(),
+  }
+}
+
+async function getConteosDiarios(uid: string): Promise<Map<string, number>> {
+  const { start, end } = getMXDayBounds(getHoyMX())
+  const [propRes, crmRes, segRes, intRes, cursoRes] = await Promise.all([
+    supabase.from('propiedad_publicacion').select('*', { count: 'exact', head: true })
+      .eq('user_id', uid).gte('fecha_publicacion', start).lt('fecha_publicacion', end),
+    supabase.from('clientes').select('*', { count: 'exact', head: true })
+      .eq('responsable_id', uid).gte('created_at', start).lt('created_at', end),
+    supabase.from('recordatorios').select('*', { count: 'exact', head: true })
+      .eq('user_id', uid).eq('completado', true).gte('updated_at', start).lt('updated_at', end),
+    supabase.from('interacciones').select('*', { count: 'exact', head: true })
+      .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
+    supabase.from('vu_progreso').select('*', { count: 'exact', head: true })
+      .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
+  ])
+  const m = new Map<string, number>()
+  m.set('propiedad',   propRes.count  ?? 0)
+  m.set('crm',         crmRes.count   ?? 0)
+  m.set('seguimiento', segRes.count   ?? 0)
+  m.set('interaccion', intRes.count   ?? 0)
+  m.set('curso',       cursoRes.count ?? 0)
+  return m
+}
+
+function buildLista(
+  misiones: any[],
+  progresoData: any[],
+  conteosMap: Map<string, number>,
+  hoy: string,
+): MisionConProgreso[] {
+  const progresoMap = new Map<string, { progreso: number; completada: boolean; fecha_reset: string | null }>()
+  for (const p of progresoData) {
+    progresoMap.set(p.mision_id, { progreso: p.progreso, completada: p.completada, fecha_reset: p.fecha_reset })
+  }
+  return misiones.map((m: any) => {
+    const um = progresoMap.get(m.id)
+    if (m.tipo === 'diaria') {
+      const conteo = Math.min(conteosMap.get(m.categoria) ?? 0, m.meta)
+      const completada = conteo >= m.meta || (um?.fecha_reset === hoy && (um?.completada ?? false))
+      return { ...m, progreso: conteo, completada, fecha_reset: um?.fecha_reset ?? null }
+    }
+    return { ...m, progreso: um?.progreso ?? 0, completada: um?.completada ?? false, fecha_reset: um?.fecha_reset ?? null }
+  })
+}
+
 export default function Misiones() {
   const [userId, setUserId] = useState<string | null>(null)
   const [stats, setStats]   = useState<UserStats | null>(null)
@@ -98,29 +154,14 @@ export default function Misiones() {
   async function cargarSilencioso(uid: string) {
     if (sincronizandoRef.current) return
     const hoy = getHoyMX()
-    const [statsRes, misionesRes, progresoRes, conteosRes] = await Promise.all([
+    const [statsRes, misionesRes, progresoRes, conteosMap] = await Promise.all([
       supabase.from('user_stats').select('*').eq('id', uid).maybeSingle(),
       supabase.from('misiones').select('*').eq('activa', true).order('orden'),
       supabase.from('user_misiones').select('*').eq('user_id', uid),
-      supabase.rpc('get_conteos_diarios_mx', { p_fecha: hoy }),
+      getConteosDiarios(uid),
     ])
     if (statsRes.data) setStats(statsRes.data as UserStats)
-    const conteosMap = new Map<string, number>()
-    for (const c of conteosRes.data ?? []) conteosMap.set(c.categoria, c.conteo)
-    const progresoMap = new Map<string, { completada: boolean; fecha_reset: string | null }>()
-    for (const p of progresoRes.data ?? []) {
-      progresoMap.set(p.mision_id, { completada: p.completada, fecha_reset: p.fecha_reset })
-    }
-    const lista: MisionConProgreso[] = (misionesRes.data ?? []).map((m: any) => {
-      const um = progresoMap.get(m.id)
-      if (m.tipo === 'diaria') {
-        const conteoHoy = conteosMap.get(m.categoria) ?? 0
-        const completada = (um?.fecha_reset === hoy && um?.completada) || conteoHoy >= m.meta
-        return { ...m, progreso: Math.min(conteoHoy, m.meta), completada, fecha_reset: um?.fecha_reset ?? null }
-      }
-      return { ...m, progreso: um ? (um as any).progreso ?? 0 : 0, completada: um?.completada ?? false, fecha_reset: um?.fecha_reset ?? null }
-    })
-    setMisiones(lista)
+    setMisiones(buildLista(misionesRes.data ?? [], progresoRes.data ?? [], conteosMap, hoy))
   }
 
   async function cargar() {
@@ -139,25 +180,8 @@ export default function Misiones() {
     setStats(s)
 
     const hoy = getHoyMX()
-    const conteosRes = await supabase.rpc('get_conteos_diarios_mx', { p_fecha: hoy })
-    const conteosMap = new Map<string, number>()
-    for (const c of conteosRes.data ?? []) conteosMap.set(c.categoria, c.conteo)
-    const progresoMap = new Map<string, { progreso: number; completada: boolean; fecha_reset: string | null }>()
-    for (const p of progresoRes.data ?? []) {
-      progresoMap.set(p.mision_id, { progreso: p.progreso, completada: p.completada, fecha_reset: p.fecha_reset })
-    }
-
-    const lista: MisionConProgreso[] = (misionesRes.data ?? []).map((m: any) => {
-      const um = progresoMap.get(m.id)
-      if (m.tipo === 'diaria') {
-        const conteoHoy = conteosMap.get(m.categoria) ?? 0
-        const completada = (um?.fecha_reset === hoy && um?.completada) || conteoHoy >= m.meta
-        return { ...m, progreso: Math.min(conteoHoy, m.meta), completada, fecha_reset: um?.fecha_reset ?? null }
-      }
-      return { ...m, progreso: um?.progreso ?? 0, completada: um?.completada ?? false, fecha_reset: um?.fecha_reset ?? null }
-    })
-
-    setMisiones(lista)
+    const conteosMap = await getConteosDiarios(user.id)
+    setMisiones(buildLista(misionesRes.data ?? [], progresoRes.data ?? [], conteosMap, hoy))
     setLoading(false)
   }
 
