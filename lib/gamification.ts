@@ -121,50 +121,50 @@ function getHoyMX(): string {
 async function actualizarMisionesPorCategoria(userId: string, categoria: string): Promise<void> {
   const hoy = getHoyMX()
 
-  const { data: misiones } = await supabase
-    .from('misiones')
-    .select('id, tipo, meta, recompensa_xp, recompensa_coins')
-    .eq('categoria', categoria)
-    .eq('activa', true)
-
-  if (!misiones?.length) return
-
-  // Para misiones base: leer user_stats como fuente de verdad (auto-correctivo)
-  let statsActual: number | null = null
-  const campoStats = STATS_CAMPO[categoria]
-  if (campoStats) {
-    const { data: stats } = await supabase
-      .from('user_stats').select(campoStats).eq('id', userId).maybeSingle()
-    statsActual = (stats as any)?.[campoStats] ?? null
+  // ── Misiones DIARIAS: función atómica en SQL (evita race conditions) ──
+  const { data: completadas } = await supabase.rpc('incrementar_mision_diaria', {
+    p_user_id:   userId,
+    p_categoria: categoria,
+  })
+  // Otorgar recompensas por misiones diarias recién completadas
+  for (const c of completadas ?? []) {
+    if (c.recien_completada) {
+      await supabase.rpc('award_xp_coins', {
+        p_user_id: userId, p_xp: c.recompensa_xp, p_coins: c.recompensa_coins,
+        p_concepto: '¡Misión diaria completada! ⚡', p_campo_contador: null,
+      }).catch(() => {})
+    }
   }
 
-  for (const m of misiones) {
+  // ── Misiones BASE: usar contador real de user_stats (fuente de verdad) ──
+  const campoStats = STATS_CAMPO[categoria]
+  if (!campoStats) return
+
+  const { data: stats } = await supabase
+    .from('user_stats').select(campoStats).eq('id', userId).maybeSingle()
+  const statsActual: number = (stats as any)?.[campoStats] ?? 0
+  if (statsActual === 0) return
+
+  const { data: misionesBase } = await supabase
+    .from('misiones')
+    .select('id, meta, recompensa_xp, recompensa_coins')
+    .eq('categoria', categoria)
+    .eq('tipo', 'base')
+    .eq('activa', true)
+
+  if (!misionesBase?.length) return
+
+  for (const m of misionesBase) {
     const { data: um } = await supabase
       .from('user_misiones')
-      .select('id, progreso, completada, fecha_reset')
+      .select('id, progreso, completada')
       .eq('user_id', userId)
       .eq('mision_id', m.id)
       .maybeSingle()
 
-    // Saltar misiones base ya completadas
-    if (m.tipo === 'base' && um?.completada) continue
+    if (um?.completada) continue
 
-    let nuevoProg: number
-    let yaCompletada: boolean
-
-    if (m.tipo === 'base') {
-      // Misiones base: usar contador real de user_stats (se auto-corrige si hubo fallos)
-      nuevoProg    = Math.min(statsActual ?? (um?.progreso ?? 0) + 1, m.meta)
-      yaCompletada = um?.completada ?? false
-    } else {
-      // Misiones diarias: reset por fecha; yaCompletada SOLO si fue hoy
-      const yaReset = um?.fecha_reset === hoy
-      const progDiario = (um && !yaReset) ? 0 : (um?.progreso ?? 0)
-      yaCompletada = !!(um?.completada && yaReset)  // solo "completada hoy"
-      if (yaCompletada) continue
-      nuevoProg = Math.min(progDiario + 1, m.meta)
-    }
-
+    const nuevoProg  = Math.min(statsActual, m.meta)
     const nuevaCompl = nuevoProg >= m.meta
 
     if (!um) {
@@ -176,18 +176,15 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
     } else {
       await supabase.from('user_misiones').update({
         progreso: nuevoProg, completada: nuevaCompl, fecha_reset: hoy,
-        fecha_completada: nuevaCompl && !yaCompletada ? new Date().toISOString() : null,
+        fecha_completada: nuevaCompl ? new Date().toISOString() : null,
       }).eq('id', um.id)
     }
 
-    if (nuevaCompl && !yaCompletada) {
+    if (nuevaCompl) {
       await supabase.rpc('award_xp_coins', {
-        p_user_id: userId,
-        p_xp:      m.recompensa_xp,
-        p_coins:   m.recompensa_coins,
-        p_concepto: '¡Misión completada! 🎯',
-        p_campo_contador: null,
-      })
+        p_user_id: userId, p_xp: m.recompensa_xp, p_coins: m.recompensa_coins,
+        p_concepto: '¡Misión completada! 🎯', p_campo_contador: null,
+      }).catch(() => {})
     }
   }
 }
