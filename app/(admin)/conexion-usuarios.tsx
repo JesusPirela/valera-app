@@ -89,22 +89,30 @@ export default function ConexionUsuarios() {
   const [usuarios, setUsuarios]   = useState<UserConexion[]>([])
   const [periodo, setPeriodo]     = useState<7 | 30>(7)
   const [loading, setLoading]     = useState(true)
+  const [errorMsg, setErrorMsg]   = useState<string | null>(null)
   const { width }                 = useWindowDimensions()
   const chartW                    = Math.min(width - 80, 480)
 
-  useFocusEffect(useCallback(() => { cargar(periodo) }, []))
+  useFocusEffect(useCallback(() => { cargar(7) }, []))
 
   async function cargar(dias: 7 | 30) {
     setLoading(true)
-    const { data } = await supabase.rpc('get_conexion_todos_usuarios', { p_dias: dias })
+    setErrorMsg(null)
+    const { data, error } = await supabase.rpc('get_conexion_todos_usuarios', { p_dias: dias })
+
+    if (error) {
+      setErrorMsg(error.message)
+      setLoading(false)
+      return
+    }
+
     const rows: ConexionRow[] = (data ?? []).map((r: any) => ({
       user_id: r.user_id,
       nombre:  r.nombre ?? 'Sin nombre',
-      fecha:   r.fecha,
+      fecha:   typeof r.fecha === 'string' ? r.fecha : String(r.fecha),
       minutos: Number(r.minutos),
     }))
 
-    // Agrupar por usuario
     const map = new Map<string, UserConexion>()
     for (const r of rows) {
       if (!map.has(r.user_id)) map.set(r.user_id, { user_id: r.user_id, nombre: r.nombre, dias: [] })
@@ -152,9 +160,16 @@ export default function ConexionUsuarios() {
 
       {loading ? (
         <ActivityIndicator size="large" color={TEAL} style={{ marginTop: 40 }} />
+      ) : errorMsg ? (
+        <View style={ss.empty}>
+          <Text style={[ss.emptyTxt, { color: '#c0392b' }]}>Error: {errorMsg}</Text>
+        </View>
       ) : usuarios.length === 0 ? (
         <View style={ss.empty}>
-          <Text style={ss.emptyTxt}>Sin datos de conexión en este periodo</Text>
+          <Text style={ss.emptyTxt}>Sin conexiones registradas en este periodo.</Text>
+          <Text style={[ss.emptyTxt, { fontSize: 12, marginTop: 6 }]}>
+            El tracking comenzó hoy — los datos se acumulan con cada sesión.
+          </Text>
         </View>
       ) : (
         <>

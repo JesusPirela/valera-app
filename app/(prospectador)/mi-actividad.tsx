@@ -131,7 +131,8 @@ export default function MiActividad() {
     if (userId) await cargarConexion(userId, p)
   }
 
-  const hoy = new Date().toISOString().slice(0, 10)
+  // Fecha local del dispositivo (México), no UTC
+  const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
   const totalHoyMinutos = conexionData.find(d => d.fecha === hoy)?.minutos ?? 0
 
   if (loading) return (
@@ -151,7 +152,9 @@ export default function MiActividad() {
 
       {/* Resumen del día */}
       <View style={s.sectionCard}>
-        <Text style={s.sectionTitle}>📊 Resumen de hoy</Text>
+        <Text style={s.sectionTitle}>
+          📊 Resumen de hoy — {new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long', day: 'numeric', month: 'long' })}
+        </Text>
         <View style={s.statsGrid}>
           <StatBox icon="🏠" label="Publicadas" val={actividad?.propiedades_hoy ?? 0} />
           <StatBox icon="👤" label="Clientes nuevos" val={actividad?.clientes_hoy ?? 0} />
