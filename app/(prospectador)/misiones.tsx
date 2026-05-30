@@ -6,7 +6,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
-import { calcularNivel, infoNivel, tituloPorNivel, sincronizarMisionesBase, sincronizarMisionesDiarias } from '../../lib/gamification'
+import { calcularNivel, infoNivel, tituloPorNivel, sincronizarMisionesBase } from '../../lib/gamification'
 
 type UserStats = {
   xp: number
@@ -186,12 +186,9 @@ export default function Misiones() {
                 if (!userId) return
                 setSincronizando(true)
                 sincronizandoRef.current = true
-                await Promise.all([
-                  sincronizarMisionesBase(userId).catch(() => {}),
-                  sincronizarMisionesDiarias(userId).catch(() => {}),
-                ])
+                await sincronizarMisionesBase(userId).catch(() => {})
                 sincronizandoRef.current = false
-                await cargarSilencioso(userId)
+                await cargar()
                 setSincronizando(false)
               }}
             >
