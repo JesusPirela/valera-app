@@ -122,9 +122,10 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
   const hoy = getHoyMX()
 
   // ── Misiones DIARIAS: función atómica en SQL (evita race conditions) ──
-  // auth.uid() se toma del JWT en el servidor — no hay que pasarlo
+  // Pasamos p_fecha en hora MX para evitar desfase UTC vs local
   const { data: completadas, error: errDiaria } = await supabase.rpc('incrementar_mision_diaria', {
     p_categoria: categoria,
+    p_fecha:     hoy,
   })
   if (errDiaria) console.warn('[Misiones diarias]', errDiaria.message)
   // Otorgar recompensas por misiones diarias recién completadas
