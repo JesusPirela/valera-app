@@ -97,23 +97,28 @@ export default function Misiones() {
 
   async function cargarSilencioso(uid: string) {
     if (sincronizandoRef.current) return
-    const [statsRes, misionesRes, progresoRes] = await Promise.all([
+    const hoy = getHoyMX()
+    const [statsRes, misionesRes, progresoRes, conteosRes] = await Promise.all([
       supabase.from('user_stats').select('*').eq('id', uid).maybeSingle(),
       supabase.from('misiones').select('*').eq('activa', true).order('orden'),
       supabase.from('user_misiones').select('*').eq('user_id', uid),
+      supabase.rpc('get_conteos_diarios_mx', { p_fecha: hoy }),
     ])
     if (statsRes.data) setStats(statsRes.data as UserStats)
-    const hoy = getHoyMX()
-    const progresoMap = new Map<string, { progreso: number; completada: boolean; fecha_reset: string | null }>()
+    const conteosMap = new Map<string, number>()
+    for (const c of conteosRes.data ?? []) conteosMap.set(c.categoria, c.conteo)
+    const progresoMap = new Map<string, { completada: boolean; fecha_reset: string | null }>()
     for (const p of progresoRes.data ?? []) {
-      progresoMap.set(p.mision_id, { progreso: p.progreso, completada: p.completada, fecha_reset: p.fecha_reset })
+      progresoMap.set(p.mision_id, { completada: p.completada, fecha_reset: p.fecha_reset })
     }
     const lista: MisionConProgreso[] = (misionesRes.data ?? []).map((m: any) => {
       const um = progresoMap.get(m.id)
-      const yaReset = um?.fecha_reset === hoy
-      const progreso   = (m.tipo === 'diaria' && um && !yaReset) ? 0 : (um?.progreso ?? 0)
-      const completada = (m.tipo === 'diaria' && um && !yaReset) ? false : (um?.completada ?? false)
-      return { ...m, progreso, completada, fecha_reset: um?.fecha_reset ?? null }
+      if (m.tipo === 'diaria') {
+        const conteoHoy = conteosMap.get(m.categoria) ?? 0
+        const completada = (um?.fecha_reset === hoy && um?.completada) || conteoHoy >= m.meta
+        return { ...m, progreso: Math.min(conteoHoy, m.meta), completada, fecha_reset: um?.fecha_reset ?? null }
+      }
+      return { ...m, progreso: um ? (um as any).progreso ?? 0 : 0, completada: um?.completada ?? false, fecha_reset: um?.fecha_reset ?? null }
     })
     setMisiones(lista)
   }
@@ -134,6 +139,9 @@ export default function Misiones() {
     setStats(s)
 
     const hoy = getHoyMX()
+    const conteosRes = await supabase.rpc('get_conteos_diarios_mx', { p_fecha: hoy })
+    const conteosMap = new Map<string, number>()
+    for (const c of conteosRes.data ?? []) conteosMap.set(c.categoria, c.conteo)
     const progresoMap = new Map<string, { progreso: number; completada: boolean; fecha_reset: string | null }>()
     for (const p of progresoRes.data ?? []) {
       progresoMap.set(p.mision_id, { progreso: p.progreso, completada: p.completada, fecha_reset: p.fecha_reset })
@@ -141,10 +149,12 @@ export default function Misiones() {
 
     const lista: MisionConProgreso[] = (misionesRes.data ?? []).map((m: any) => {
       const um = progresoMap.get(m.id)
-      const yaReset = um?.fecha_reset === hoy
-      const progreso   = (m.tipo === 'diaria' && um && !yaReset) ? 0 : (um?.progreso ?? 0)
-      const completada = (m.tipo === 'diaria' && um && !yaReset) ? false : (um?.completada ?? false)
-      return { ...m, progreso, completada, fecha_reset: um?.fecha_reset ?? null }
+      if (m.tipo === 'diaria') {
+        const conteoHoy = conteosMap.get(m.categoria) ?? 0
+        const completada = (um?.fecha_reset === hoy && um?.completada) || conteoHoy >= m.meta
+        return { ...m, progreso: Math.min(conteoHoy, m.meta), completada, fecha_reset: um?.fecha_reset ?? null }
+      }
+      return { ...m, progreso: um?.progreso ?? 0, completada: um?.completada ?? false, fecha_reset: um?.fecha_reset ?? null }
     })
 
     setMisiones(lista)
