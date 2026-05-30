@@ -73,24 +73,40 @@ function getMXDayBounds(hoyMX: string): { start: string; end: string } {
 async function getConteosDiarios(uid: string): Promise<Map<string, number>> {
   const m = new Map<string, number>()
   try {
-    const { start, end } = getMXDayBounds(getHoyMX())
-    const [propRes, crmRes, segRes, intRes, cursoRes] = await Promise.all([
-      supabase.from('propiedad_publicacion').select('propiedad_id', { count: 'exact' })
-        .eq('user_id', uid).gte('fecha_publicacion', start).lt('fecha_publicacion', end),
-      supabase.from('clientes').select('id', { count: 'exact' })
-        .eq('responsable_id', uid).gte('created_at', start).lt('created_at', end),
-      supabase.from('recordatorios').select('id', { count: 'exact' })
-        .eq('user_id', uid).eq('completado', true).gte('updated_at', start).lt('updated_at', end),
-      supabase.from('interacciones').select('id', { count: 'exact' })
+    const hoy = getHoyMX()
+    const { start, end } = getMXDayBounds(hoy)
+    console.log('[Misiones] hoy:', hoy, 'start:', start, 'end:', end, 'uid:', uid)
+
+    const propRes = await supabase.from('propiedad_publicacion')
+      .select('propiedad_id')
+      .eq('user_id', uid)
+      .gte('fecha_publicacion', start)
+      .lt('fecha_publicacion', end)
+    console.log('[Misiones] propiedad →', propRes.data?.length, 'error:', propRes.error?.message)
+
+    const crmRes = await supabase.from('clientes')
+      .select('id')
+      .eq('responsable_id', uid)
+      .gte('created_at', start)
+      .lt('created_at', end)
+    console.log('[Misiones] crm →', crmRes.data?.length, 'error:', crmRes.error?.message)
+
+    m.set('propiedad',   propRes.data?.length ?? 0)
+    m.set('crm',         crmRes.data?.length  ?? 0)
+
+    const [segRes, intRes, cursoRes] = await Promise.all([
+      supabase.from('recordatorios').select('id')
+        .eq('user_id', uid).eq('completado', true)
+        .gte('updated_at', start).lt('updated_at', end),
+      supabase.from('interacciones').select('id')
         .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
-      supabase.from('vu_progreso').select('id', { count: 'exact' })
+      supabase.from('vu_progreso').select('id')
         .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
     ])
-    m.set('propiedad',   propRes.count  ?? 0)
-    m.set('crm',         crmRes.count   ?? 0)
-    m.set('seguimiento', segRes.count   ?? 0)
-    m.set('interaccion', intRes.count   ?? 0)
-    m.set('curso',       cursoRes.count ?? 0)
+    m.set('seguimiento', segRes.data?.length  ?? 0)
+    m.set('interaccion', intRes.data?.length  ?? 0)
+    m.set('curso',       cursoRes.data?.length ?? 0)
+    console.log('[Misiones] conteos finales:', Object.fromEntries(m))
   } catch (e) {
     console.warn('[Misiones] getConteosDiarios error:', e)
   }
