@@ -129,7 +129,7 @@ export default function Misiones() {
     const s = statsRes.data as UserStats | null
     setStats(s)
 
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
     const progresoMap = new Map<string, { progreso: number; completada: boolean; fecha_reset: string | null }>()
     for (const p of progresoRes.data ?? []) {
       progresoMap.set(p.mision_id, { progreso: p.progreso, completada: p.completada, fecha_reset: p.fecha_reset })

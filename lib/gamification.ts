@@ -356,7 +356,10 @@ async function actualizarMisionesStreak(userId: string, streakActual: number): P
 // Usa función SQL atómica que cuenta desde la fuente de verdad
 export async function sincronizarMisionesDiarias(userId: string): Promise<void> {
   try {
-    const { data: completadas } = await supabase.rpc('sincronizar_misiones_diarias_hoy')
+    const hoy = getHoyMX()
+    const { data: completadas } = await supabase.rpc('sincronizar_misiones_diarias_hoy', {
+      p_fecha: hoy,
+    })
     // Otorgar recompensas por misiones recién completadas
     for (const c of completadas ?? []) {
       if (c.recien_completada) {
