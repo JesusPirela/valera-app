@@ -60,11 +60,10 @@ const bStyles = StyleSheet.create({
 const getHoyMX = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 
 function getMXDayBounds(hoyMX: string): { start: string; end: string } {
-  const now = new Date()
-  const mxStr = now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' })
-  const utcStr = now.toLocaleString('en-US', { timeZone: 'UTC' })
-  const offsetMs = new Date(utcStr).getTime() - new Date(mxStr).getTime()
-  const startMs = new Date(hoyMX + 'T00:00:00Z').getTime() + offsetMs
+  // Mexico City: CDT (UTC-5) abril-octubre, CST (UTC-6) noviembre-marzo
+  const month = parseInt(hoyMX.split('-')[1], 10)
+  const offsetHours = (month >= 4 && month <= 10) ? 5 : 6
+  const startMs = new Date(hoyMX + 'T00:00:00Z').getTime() + offsetHours * 3600000
   return {
     start: new Date(startMs).toISOString(),
     end:   new Date(startMs + 86400000).toISOString(),
@@ -72,25 +71,29 @@ function getMXDayBounds(hoyMX: string): { start: string; end: string } {
 }
 
 async function getConteosDiarios(uid: string): Promise<Map<string, number>> {
-  const { start, end } = getMXDayBounds(getHoyMX())
-  const [propRes, crmRes, segRes, intRes, cursoRes] = await Promise.all([
-    supabase.from('propiedad_publicacion').select('*', { count: 'exact', head: true })
-      .eq('user_id', uid).gte('fecha_publicacion', start).lt('fecha_publicacion', end),
-    supabase.from('clientes').select('*', { count: 'exact', head: true })
-      .eq('responsable_id', uid).gte('created_at', start).lt('created_at', end),
-    supabase.from('recordatorios').select('*', { count: 'exact', head: true })
-      .eq('user_id', uid).eq('completado', true).gte('updated_at', start).lt('updated_at', end),
-    supabase.from('interacciones').select('*', { count: 'exact', head: true })
-      .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
-    supabase.from('vu_progreso').select('*', { count: 'exact', head: true })
-      .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
-  ])
   const m = new Map<string, number>()
-  m.set('propiedad',   propRes.count  ?? 0)
-  m.set('crm',         crmRes.count   ?? 0)
-  m.set('seguimiento', segRes.count   ?? 0)
-  m.set('interaccion', intRes.count   ?? 0)
-  m.set('curso',       cursoRes.count ?? 0)
+  try {
+    const { start, end } = getMXDayBounds(getHoyMX())
+    const [propRes, crmRes, segRes, intRes, cursoRes] = await Promise.all([
+      supabase.from('propiedad_publicacion').select('propiedad_id', { count: 'exact' })
+        .eq('user_id', uid).gte('fecha_publicacion', start).lt('fecha_publicacion', end),
+      supabase.from('clientes').select('id', { count: 'exact' })
+        .eq('responsable_id', uid).gte('created_at', start).lt('created_at', end),
+      supabase.from('recordatorios').select('id', { count: 'exact' })
+        .eq('user_id', uid).eq('completado', true).gte('updated_at', start).lt('updated_at', end),
+      supabase.from('interacciones').select('id', { count: 'exact' })
+        .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
+      supabase.from('vu_progreso').select('id', { count: 'exact' })
+        .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
+    ])
+    m.set('propiedad',   propRes.count  ?? 0)
+    m.set('crm',         crmRes.count   ?? 0)
+    m.set('seguimiento', segRes.count   ?? 0)
+    m.set('interaccion', intRes.count   ?? 0)
+    m.set('curso',       cursoRes.count ?? 0)
+  } catch (e) {
+    console.warn('[Misiones] getConteosDiarios error:', e)
+  }
   return m
 }
 
