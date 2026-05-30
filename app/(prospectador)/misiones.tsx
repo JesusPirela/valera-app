@@ -6,7 +6,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
-import { calcularNivel, infoNivel, tituloPorNivel, sincronizarMisionesBase } from '../../lib/gamification'
+import { calcularNivel, infoNivel, tituloPorNivel, sincronizarMisionesBase, sincronizarMisionesDiarias } from '../../lib/gamification'
 
 type UserStats = {
   xp: number
@@ -127,10 +127,31 @@ export default function Misiones() {
             <Text style={s.titulo}>{tituloPorNivel(info.nivel)}</Text>
             <Text style={s.nivelLabel}>Nivel {info.nivel}</Text>
           </View>
-          <TouchableOpacity style={s.rankBtn} onPress={() => router.push('/(prospectador)/ranking')}>
-            <Ionicons name="trophy-outline" size={16} color="#c9a84c" />
-            <Text style={s.rankBtnTxt}>Ranking</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              style={[s.syncBtn, sincronizando && { opacity: 0.5 }]}
+              disabled={sincronizando}
+              onPress={async () => {
+                if (!userId) return
+                setSincronizando(true)
+                await Promise.all([
+                  sincronizarMisionesBase(userId).catch(() => {}),
+                  sincronizarMisionesDiarias(userId).catch(() => {}),
+                ])
+                await cargar()
+                setSincronizando(false)
+              }}
+            >
+              {sincronizando
+                ? <ActivityIndicator size="small" color="#c9a84c" />
+                : <><Ionicons name="sync-outline" size={13} color="#c9a84c" /><Text style={s.syncBtnTxt}> Sincronizar</Text></>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity style={s.rankBtn} onPress={() => router.push('/(prospectador)/ranking')}>
+              <Ionicons name="trophy-outline" size={16} color="#c9a84c" />
+              <Text style={s.rankBtnTxt}>Ranking</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Barra XP */}
@@ -219,25 +240,7 @@ export default function Misiones() {
 
       {/* ── MISIONES BASE ─────────────────────────────────────── */}
       <View style={s.section}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-          <Text style={s.sectionTitle}>🏆 Misiones Base</Text>
-          <TouchableOpacity
-            style={[s.syncBtn, sincronizando && { opacity: 0.6 }]}
-            disabled={sincronizando}
-            onPress={async () => {
-              if (!userId) return
-              setSincronizando(true)
-              await sincronizarMisionesBase(userId).catch(() => {})
-              await cargar()
-              setSincronizando(false)
-            }}
-          >
-            {sincronizando
-              ? <ActivityIndicator size="small" color="#c9a84c" />
-              : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Ionicons name="sync-outline" size={13} color="#c9a84c" /><Text style={s.syncBtnTxt}>Sincronizar</Text></View>
-            }
-          </TouchableOpacity>
-        </View>
+        <Text style={s.sectionTitle}>🏆 Misiones Base</Text>
         <Text style={s.sectionSub}>Progreso permanente — nunca se reinician</Text>
 
         {/* Tabs de categoría */}

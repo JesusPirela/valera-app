@@ -337,7 +337,15 @@ export default function Perfil() {
           style={s.btnActividad}
           onPress={() => router.push('/(prospectador)/mi-actividad' as any)}
         >
-          <Text style={s.btnActividadText}>📊 Ver mi actividad y tiempo conectado</Text>
+          <Text style={s.btnActividadText}>📊 Mi actividad — gráficas de conexión</Text>
+        </TouchableOpacity>
+
+        {/* Mi Historial */}
+        <TouchableOpacity
+          style={[s.btnActividad, { marginTop: 10, backgroundColor: '#1a1500', borderColor: '#c9a84c' }]}
+          onPress={() => router.push('/(prospectador)/mi-historial' as any)}
+        >
+          <Text style={[s.btnActividadText, { color: '#c9a84c' }]}>🏆 Mi historial — estadísticas de toda la vida</Text>
         </TouchableOpacity>
 
         {/* Cerrar sesión */}
