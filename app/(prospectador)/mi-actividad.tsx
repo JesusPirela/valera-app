@@ -168,26 +168,19 @@ export default function MiActividad() {
       {/* Gráfica de conexión */}
       <View style={s.sectionCard}>
         <View style={s.sectionRow}>
-          <Text style={s.sectionTitle}>⏱️ Tiempo conectado</Text>
+          <Text style={[s.sectionTitle, { flex: 1, marginBottom: 0 }]}>⏱️ Tiempo conectado</Text>
           <View style={s.periodoRow}>
-            <TouchableOpacity
-              style={[s.periodoPill, periodo === 'hoy' && s.periodoPillActive]}
-              onPress={() => cambiarPeriodo('hoy')}
-            >
-              <Text style={[s.periodoPillTxt, periodo === 'hoy' && s.periodoPillActiveTxt]}>Hoy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.periodoPill, periodo === 'semana' && s.periodoPillActive]}
-              onPress={() => cambiarPeriodo('semana')}
-            >
-              <Text style={[s.periodoPillTxt, periodo === 'semana' && s.periodoPillActiveTxt]}>7 días</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.periodoPill, periodo === 'mes' && s.periodoPillActive]}
-              onPress={() => cambiarPeriodo('mes')}
-            >
-              <Text style={[s.periodoPillTxt, periodo === 'mes' && s.periodoPillActiveTxt]}>30 días</Text>
-            </TouchableOpacity>
+            {(['hoy', 'semana', 'mes'] as const).map(p => (
+              <TouchableOpacity
+                key={p}
+                style={[s.periodoPill, periodo === p && s.periodoPillActive]}
+                onPress={() => cambiarPeriodo(p)}
+              >
+                <Text style={[s.periodoPillTxt, periodo === p && s.periodoPillActiveTxt]}>
+                  {p === 'hoy' ? 'Hoy' : p === 'semana' ? '7 días' : '30 días'}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
