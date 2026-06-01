@@ -76,7 +76,7 @@ export default function University() {
       { data: configData },
     ] = await Promise.all([
       supabase.from('profiles').select('nombre').eq('id', user.id).single(),
-      supabase.from('vu_cursos').select('id, titulo, descripcion_corta, imagen_url, nivel, categoria, instructor, duracion_texto, vu_lecciones(id)').eq('publicado', true).order('orden'),
+      supabase.from('vu_cursos').select('id, titulo, descripcion_corta, imagen_url, nivel, categoria, instructor, duracion_texto, es_certificacion, vu_lecciones(id)').eq('publicado', true).order('orden'),
       supabase.from('vu_progreso').select('leccion_id, curso_id').eq('user_id', user.id),
       supabase.from('vu_certificados').select('curso_id').eq('user_id', user.id),
       supabase.from('vu_puntos').select('puntos').eq('user_id', user.id),
@@ -118,6 +118,7 @@ export default function University() {
       totalLecciones: (c.vu_lecciones ?? []).length,
       completadas: completadasPorCurso.get(c.id) ?? 0,
       tieneCertificado: certSet.has(c.id),
+      es_certificacion: c.es_certificacion ?? false,
     })))
     setLoading(false)
   }
@@ -246,7 +247,7 @@ export default function University() {
                       </Text>
                     </View>
                     <Text style={estilos.categoriaText}>{curso.categoria}</Text>
-                    {curso.tieneCertificado && <Text style={estilos.certBadge}>🏆 Completado</Text>}
+                    {curso.tieneCertificado && <Text style={estilos.certBadge}>{curso.es_certificacion ? '🏆 Completado' : '✅ Completado'}</Text>}
                   </View>
                   <Text style={estilos.cardTitulo}>{curso.titulo}</Text>
                   {curso.descripcion_corta && (
@@ -265,7 +266,7 @@ export default function University() {
                     onPress={() => router.push(`/(prospectador)/university-curso?id=${curso.id}`)}
                   >
                     <Text style={estilos.btnEntrarText}>
-                      {curso.tieneCertificado ? '🏆 Ver certificado' : curso.completadas > 0 ? '▶ Continuar' : '▶ Comenzar'}
+                      {curso.tieneCertificado && curso.es_certificacion ? '🏆 Ver certificado' : curso.completadas > 0 ? '▶ Continuar' : '▶ Comenzar'}
                     </Text>
                   </TouchableOpacity>
                 </View>
