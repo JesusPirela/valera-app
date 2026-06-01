@@ -102,7 +102,7 @@ function agruparPorZona(propiedades: Propiedad[]): [string, Propiedad[]][] {
 export default function ProspectadorPropiedades() {
   const queryClient = useQueryClient()
   const isOnline = useNetworkStatus()
-  const { primaryColor } = useTheme()
+  const { primaryColor, darkMode } = useTheme()
   const c = useColors()
   const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 28) : 44
 
@@ -451,7 +451,7 @@ export default function ProspectadorPropiedades() {
       <View style={[styles.container, { backgroundColor: c.bg }]}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 20 : statusBarHeight + 8, paddingBottom: 14 }]}>
+        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 24 : statusBarHeight + 12, paddingBottom: 18 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
             {!isWeb ? (
               <View style={styles.headerTopRow}>
@@ -475,10 +475,10 @@ export default function ProspectadorPropiedades() {
                 </Text>
               </>
             )}
-            <View style={styles.searchWrapper}>
+            <View style={[styles.searchWrapper, { backgroundColor: darkMode ? 'rgba(255,255,255,0.15)' : '#fff' }]}>
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
-                style={[styles.searchInput, { color: '#333' }]}
+                style={[styles.searchInput, { color: darkMode ? '#fff' : '#333' }]}
                 placeholder="Buscar por título, código o dirección..."
                 placeholderTextColor="#aaa"
                 value={busqueda}
@@ -495,46 +495,26 @@ export default function ProspectadorPropiedades() {
         <View style={isWeb ? styles.webBody : undefined}>
 
         {/* Botones rápidos Venta / Renta / Nuevas */}
-        <View style={styles.quickFiltersRow}>
-          <TouchableOpacity
-            style={[
-              styles.quickFilterBtn,
-              { borderColor: primaryColor },
-              filtroOperacion === 'venta' && { backgroundColor: primaryColor },
-            ]}
-            onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')}
-          >
-            <Ionicons name="home" size={14} color={filtroOperacion === 'venta' ? '#fff' : primaryColor} />
-            <Text style={[styles.quickFilterText, { color: filtroOperacion === 'venta' ? '#fff' : primaryColor }]}>
-              Venta
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.quickFilterBtn,
-              { borderColor: primaryColor },
-              filtroOperacion === 'renta' && { backgroundColor: primaryColor },
-            ]}
-            onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')}
-          >
-            <Ionicons name="key" size={14} color={filtroOperacion === 'renta' ? '#fff' : primaryColor} />
-            <Text style={[styles.quickFilterText, { color: filtroOperacion === 'renta' ? '#fff' : primaryColor }]}>
-              Renta
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.quickFilterBtn,
-              { borderColor: primaryColor },
-              filtroNueva && { backgroundColor: primaryColor },
-            ]}
-            onPress={() => setFiltroNueva(v => !v)}
-          >
-            <Ionicons name="sparkles" size={14} color={filtroNueva ? '#fff' : primaryColor} />
-            <Text style={[styles.quickFilterText, { color: filtroNueva ? '#fff' : primaryColor }]}>
-              Nuevas
-            </Text>
-          </TouchableOpacity>
+        <View style={[styles.quickFiltersRow, { backgroundColor: darkMode ? '#0f1e2d' : '#eef2f4' }]}>
+          {([
+            { key: 'venta',  label: 'Venta',  icon: 'home'     as const, activo: filtroOperacion === 'venta', onPress: () => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta') },
+            { key: 'renta',  label: 'Renta',  icon: 'key'      as const, activo: filtroOperacion === 'renta', onPress: () => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta') },
+            { key: 'nuevas', label: 'Nuevas', icon: 'sparkles' as const, activo: filtroNueva,                 onPress: () => setFiltroNueva(v => !v) },
+          ]).map(btn => (
+            <TouchableOpacity
+              key={btn.key}
+              style={[
+                styles.quickFilterBtn,
+                { borderColor: primaryColor, backgroundColor: btn.activo ? primaryColor : (darkMode ? 'rgba(255,255,255,0.07)' : '#fff') },
+              ]}
+              onPress={btn.onPress}
+            >
+              <Ionicons name={btn.icon} size={14} color={btn.activo ? '#fff' : primaryColor} />
+              <Text style={[styles.quickFilterText, { color: btn.activo ? '#fff' : primaryColor }]}>
+                {btn.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Fila de controles: Filtros + Ver zonas */}
@@ -836,8 +816,9 @@ const styles = StyleSheet.create({
   quickFiltersRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
+    paddingVertical: 10,
     gap: 10,
-    marginBottom: 8,
+    marginBottom: 0,
   },
   quickFilterBtn: {
     flex: 1,
@@ -847,7 +828,7 @@ const styles = StyleSheet.create({
     gap: 5,
     borderWidth: 1.5,
     borderRadius: 8,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   quickFilterText: {
     fontSize: 12,
