@@ -14,6 +14,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors } from '../../lib/ThemeContext'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const SWIPE_THRESHOLD = -80
@@ -72,6 +73,7 @@ type NotifItemProps = {
 }
 
 function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
+  const c = useColors()
   const swipeX = useRef(new Animated.Value(0)).current
   const deleteOpacity = swipeX.interpolate({
     inputRange: [-120, -20],
@@ -126,6 +128,7 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
         <TouchableOpacity
           style={[
             styles.card,
+            { backgroundColor: c.card, borderColor: c.border },
             !item.leida && styles.cardNoLeida,
             esRecordatorio && styles.cardRecordatorio,
             esRecordatorio && !item.leida && styles.cardRecordatorioNoLeida,
@@ -194,6 +197,7 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
 }
 
 export default function Notificaciones() {
+  const c = useColors()
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([])
   const [loading, setLoading] = useState(true)
   const [marcandoTodas, setMarcandoTodas] = useState(false)
@@ -270,7 +274,7 @@ export default function Notificaciones() {
   const hayNoLeidas = notificaciones.some((n) => !n.leida)
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: c.bg }]}>
       {hayNoLeidas && (
         <TouchableOpacity
           style={styles.marcarTodasBtn}

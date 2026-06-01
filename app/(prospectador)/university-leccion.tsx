@@ -6,6 +6,7 @@ import {
 import { WebView } from 'react-native-webview'
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
 
 type Leccion = {
@@ -92,6 +93,7 @@ function mostrarError(t: string, m: string) {
 }
 
 export default function UniversityLeccion() {
+  const c = useColors()
   const { id, cursoId } = useLocalSearchParams<{ id: string; cursoId: string }>()
 
   const [leccion, setLeccion] = useState<Leccion | null>(null)
@@ -253,7 +255,7 @@ export default function UniversityLeccion() {
   )
 
   return (
-    <ScrollView style={estilos.container} contentContainerStyle={{ paddingBottom: 60 }}>
+    <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 60 }}>
       {/* Nav */}
       <View style={estilos.navBar}>
         <TouchableOpacity onPress={() => router.push(`/(prospectador)/university-curso?id=${cursoId}`)}>

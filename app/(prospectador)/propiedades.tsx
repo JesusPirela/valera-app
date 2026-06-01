@@ -24,7 +24,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
 
 const LOGO = require('../../assets/logo.png')
-import { useTheme } from '../../lib/ThemeContext'
+import { useTheme, useColors } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
 
 type Propiedad = {
@@ -103,6 +103,7 @@ export default function ProspectadorPropiedades() {
   const queryClient = useQueryClient()
   const isOnline = useNetworkStatus()
   const { primaryColor } = useTheme()
+  const c = useColors()
   const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 28) : 44
 
   const [busqueda, setBusqueda] = useState('')
@@ -447,7 +448,7 @@ export default function ProspectadorPropiedades() {
     <View style={{ flex: 1, backgroundColor: primaryColor }}>
       <OfflineBanner />
       {!isWeb && <StatusBar backgroundColor={primaryColor} barStyle="light-content" />}
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: c.bg }]}>
 
         {/* Header unificado con búsqueda */}
         <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 20 : statusBarHeight + 8, paddingBottom: 14 }]}>

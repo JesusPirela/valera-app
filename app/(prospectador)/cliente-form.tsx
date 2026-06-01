@@ -10,6 +10,7 @@ function mostrarError(titulo: string, msg: string) {
 }
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS } from './crm'
 import { registrarAccion } from '../../lib/gamification'
 
@@ -193,6 +194,7 @@ function ChipSelector<T extends string>({
 
 // ── Pantalla principal ───────────────────────────────────
 export default function ClienteForm() {
+  const c = useColors()
   const params = useLocalSearchParams<{ id?: string; fromAdmin?: string }>()
   const esEdicion = !!params.id
   const fromAdmin = params.fromAdmin === '1'
@@ -338,7 +340,7 @@ export default function ClienteForm() {
   if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.screenTitle}>{esEdicion ? 'Editar cliente' : 'Nuevo cliente'}</Text>
 
       {/* ── 1. Tipo de operación (siempre primero) ── */}

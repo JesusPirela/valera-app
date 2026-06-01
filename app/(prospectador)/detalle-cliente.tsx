@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ORDEN_ESTADOS } from './crm'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { registrarAccion } from '../../lib/gamification'
@@ -188,6 +189,7 @@ const irStyles = StyleSheet.create({
 
 // ── Pantalla principal ───────────────────────────────────
 export default function DetalleCliente() {
+  const c = useColors()
   const { id } = useLocalSearchParams<{ id: string }>()
   const queryClient = useQueryClient()
 
@@ -348,7 +350,7 @@ export default function DetalleCliente() {
   const waDefault = `Hola ${cliente.nombre}, soy tu asesor de Valera Real Estate. Te contacto para dar seguimiento a tu búsqueda de propiedad. ¿Tienes un momento para platicar?`
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <OfflineBanner />
 
       {/* ── Hero ──────────────────────────────────────── */}

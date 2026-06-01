@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors } from '../../lib/ThemeContext'
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system'
 import { Asset } from 'expo-asset'
@@ -210,6 +211,7 @@ async function generarCertificadoPDF(nombreCompleto: string, cursoTitulo: string
 }
 
 export default function UniversityCurso() {
+  const c = useColors()
   const { id: cursoId } = useLocalSearchParams<{ id: string }>()
 
   const [curso, setCurso] = useState<Curso | null>(null)
@@ -299,7 +301,7 @@ export default function UniversityCurso() {
   const siguiente = primeraLeccionPendiente()
 
   return (
-    <ScrollView style={estilos.container} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 40 }}>
       {/* Header del curso */}
       <View style={estilos.header}>
         <TouchableOpacity onPress={() => router.back()} style={estilos.backBtn}>

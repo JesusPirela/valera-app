@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../../lib/supabase'
+import { useColors } from '../../lib/ThemeContext'
 
 const INTRO_KEY = '@vu_intro_seen'
 
@@ -52,6 +53,7 @@ function VideoEmbed({ url }: { url: string }) {
 }
 
 export default function University() {
+  const c = useColors()
   const [cursos, setCursos] = useState<CursoCard[]>([])
   const [totalPuntos, setTotalPuntos] = useState(0)
   const [nombreUsuario, setNombreUsuario] = useState('')
@@ -132,7 +134,7 @@ export default function University() {
   const enProgreso = cursos.filter((c) => c.completadas > 0 && !c.tieneCertificado).length
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
       {/* ── Modal de video de introducción ── */}
       <Modal visible={showIntro} transparent animationType="fade" onRequestClose={cerrarIntro}>
         <View style={estilos.modalOverlay}>
@@ -158,7 +160,7 @@ export default function University() {
         </View>
       </Modal>
 
-      <ScrollView style={estilos.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 40 }}>
         {/* Header */}
         <View style={estilos.header}>
           <View style={estilos.headerLogo}>

@@ -136,6 +136,7 @@ export default function ProspectadorLayout() {
           shadowRadius: 8,
           elevation: 12,
         },
+        contentStyle: { backgroundColor: darkMode ? '#0d1b2a' : '#f0f4f5' },
         tabBarLabelStyle: {
           fontSize: 9,
           fontWeight: '600',

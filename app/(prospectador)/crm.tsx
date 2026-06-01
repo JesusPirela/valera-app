@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { useColors } from '../../lib/ThemeContext'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
@@ -95,6 +96,7 @@ const SORT_LABELS: Record<SortBy, string> = {
 }
 
 export default function CRM() {
+  const c = useColors()
   const queryClient = useQueryClient()
   const [busqueda, setBusqueda]           = useState('')
   const [estadoFiltro, setEstadoFiltro]   = useState<string | null>(null)
@@ -325,7 +327,7 @@ export default function CRM() {
   return (
     <>
       <OfflineBanner />
-      <View style={s.container}>
+      <View style={[s.container, { backgroundColor: c.bg }]}>
 
         {/* ── KPI strip ── */}
         <View style={s.kpiStrip}>
