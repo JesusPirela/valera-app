@@ -100,6 +100,7 @@ export default function UniversityLeccion() {
   const [yaCompletada, setYaCompletada] = useState(false)
   const [completando, setCompletando] = useState(false)
   const [resultado, setResultado] = useState<{ curso_completado: boolean; certificado_nuevo: boolean } | null>(null)
+  const [esCertificacion, setEsCertificacion] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // Estado por tarea (texto de respuesta y archivo seleccionado)
@@ -120,14 +121,17 @@ export default function UniversityLeccion() {
       { data: lecData },
       { data: tareasData },
       { data: progData },
+      { data: cursoData },
     ] = await Promise.all([
       supabase.from('vu_lecciones').select('*').eq('id', id).single(),
       supabase.from('vu_tareas').select('*').eq('leccion_id', id).order('created_at'),
       supabase.from('vu_progreso').select('id').eq('user_id', user.id).eq('leccion_id', id).maybeSingle(),
+      cursoId ? supabase.from('vu_cursos').select('es_certificacion').eq('id', cursoId).maybeSingle() : Promise.resolve({ data: null }),
     ])
 
     setLeccion(lecData)
     setTareas(tareasData ?? [])
+    setEsCertificacion(!!(cursoData as any)?.es_certificacion)
     setYaCompletada(!!progData)
 
     // Cargar entregas del usuario para las tareas de esta lección
@@ -383,13 +387,19 @@ export default function UniversityLeccion() {
           <View style={estilos.cursoDoneCard}>
             <Text style={estilos.cursoDoneIcon}>🎓</Text>
             <Text style={estilos.cursoDoneTitle}>¡Curso completado!</Text>
-            <Text style={estilos.cursoDoneSub}>Ganaste 60 puntos y tu certificado ya está disponible</Text>
-            <TouchableOpacity
-              style={estilos.btnVerCurso}
-              onPress={() => router.push(`/(prospectador)/university-curso?id=${cursoId}`)}
-            >
-              <Text style={estilos.btnVerCursoText}>Ver certificado →</Text>
-            </TouchableOpacity>
+            {esCertificacion ? (
+              <>
+                <Text style={estilos.cursoDoneSub}>Ganaste 60 puntos y tu certificado ya está disponible</Text>
+                <TouchableOpacity
+                  style={estilos.btnVerCurso}
+                  onPress={() => router.push(`/(prospectador)/university-curso?id=${cursoId}`)}
+                >
+                  <Text style={estilos.btnVerCursoText}>Ver certificado →</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text style={estilos.cursoDoneSub}>¡Excelente trabajo! Ganaste XP y Valera Coins por completar este curso.</Text>
+            )}
           </View>
         )}
 
