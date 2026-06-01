@@ -387,7 +387,7 @@ export default function DetallePropiedad() {
       if (propiedad.m2 != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2}</span><span class="car-lbl">m2</span></div>`)
       if (propiedad.estacionamientos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.estacionamientos}</span><span class="car-lbl">Estacionamientos</span></div>`)
 
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${propiedad.codigo ?? 'ficha'}</title><style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; }
         .header { background: #1a6470; padding: 24px 28px 20px; }
