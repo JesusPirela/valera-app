@@ -82,11 +82,11 @@ async function getConteosDiarios(uid: string): Promise<Map<string, number>> {
       supabase.from('clientes').select('id')
         .eq('responsable_id', uid).gte('created_at', start).lt('created_at', end),
       supabase.from('recordatorios').select('id')
-        .eq('user_id', uid).eq('completado', true).gte('updated_at', start).lt('updated_at', end),
+        .eq('user_id', uid).eq('completado', true).gte('completado_at', start).lt('completado_at', end),
       supabase.from('interacciones').select('id')
         .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
       supabase.from('vu_progreso').select('id')
-        .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
+        .eq('user_id', uid).gte('completada_at', start).lt('completada_at', end),
     ])
     m.set('propiedad',   propRes.data?.length  ?? 0)
     m.set('crm',         crmRes.data?.length   ?? 0)
