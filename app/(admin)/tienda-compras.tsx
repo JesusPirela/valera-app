@@ -65,7 +65,11 @@ export default function TiendaCompras() {
 
   async function cargar() {
     setLoading(true)
-    const { data } = await supabase.rpc('get_compras_tienda')
+    const { data, error } = await supabase.rpc('get_compras_tienda')
+    if (error) {
+      alerta('Error al cargar compras: ' + error.message)
+      console.error('[Tienda]', error)
+    }
     setCompras((data ?? []) as Compra[])
     setLoading(false)
   }
