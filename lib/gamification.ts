@@ -196,13 +196,36 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
 export async function sincronizarMisionesBase(userId: string): Promise<void> {
   const hoy = getHoyMX()
 
-  const { data: stats } = await supabase
-    .from('user_stats')
-    .select('total_propiedades, total_clientes, total_seguimientos, total_interacciones, total_cursos')
-    .eq('id', userId)
-    .maybeSingle()
+  const [statsRes, certRes] = await Promise.all([
+    supabase
+      .from('user_stats')
+      .select('total_propiedades, total_clientes, total_seguimientos, total_interacciones, total_cursos')
+      .eq('id', userId)
+      .maybeSingle(),
+    // Contar cursos completados directamente desde la fuente de verdad
+    supabase
+      .from('vu_certificados')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId),
+  ])
 
-  if (!stats) return
+  if (!statsRes.data) return
+
+  // total_cursos: usar el mayor entre user_stats y los certificados reales
+  // (user_stats puede estar desincronizado si el usuario completó cursos antes del fix)
+  const cursosReales = Math.max(
+    (statsRes.data as any).total_cursos ?? 0,
+    certRes.count ?? 0,
+  )
+  const statsConsolidados = { ...(statsRes.data as any), total_cursos: cursosReales }
+
+  // Si hay diferencia, actualizar user_stats para dejarlo en sync
+  if (cursosReales > ((statsRes.data as any).total_cursos ?? 0)) {
+    await supabase
+      .from('user_stats')
+      .update({ total_cursos: cursosReales })
+      .eq('id', userId)
+  }
 
   const { data: misiones } = await supabase
     .from('misiones')
@@ -216,7 +239,7 @@ export async function sincronizarMisionesBase(userId: string): Promise<void> {
     const campoStats = STATS_CAMPO[m.categoria]
     if (!campoStats) continue
 
-    const progresoCorrecto = Math.min((stats as any)[campoStats] ?? 0, m.meta)
+    const progresoCorrecto = Math.min(statsConsolidados[campoStats] ?? 0, m.meta)
     if (progresoCorrecto === 0) continue
 
     const { data: um } = await supabase
