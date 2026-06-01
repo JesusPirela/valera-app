@@ -330,30 +330,30 @@ export default function CRM() {
       <View style={[s.container, { backgroundColor: c.bg }]}>
 
         {/* ── KPI strip ── */}
-        <View style={s.kpiStrip}>
+        <View style={[s.kpiStrip, { backgroundColor: c.card, borderBottomColor: c.border }]}>
           <TouchableOpacity style={s.kpiItem} onPress={() => { setEstadoFiltro(null); setOpFiltro(null) }}>
             <Text style={[s.kpiNum, { color: '#3b82f6' }]}>{activos}</Text>
-            <Text style={s.kpiLbl}>ACTIVOS</Text>
+            <Text style={[s.kpiLbl, { color: c.textMute }]}>ACTIVOS</Text>
           </TouchableOpacity>
-          <View style={s.kpiDiv} />
+          <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
           <TouchableOpacity style={s.kpiItem} onPress={() => setEstadoFiltro('cita_agendada')}>
             <Text style={[s.kpiNum, { color: '#f59e0b' }]}>{citas}</Text>
-            <Text style={s.kpiLbl}>CITAS</Text>
+            <Text style={[s.kpiLbl, { color: c.textMute }]}>CITAS</Text>
           </TouchableOpacity>
-          <View style={s.kpiDiv} />
+          <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
           <View style={s.kpiItem}>
-            <Text style={[s.kpiNum, vencidos > 0 ? { color: '#ef4444' } : { color: '#cbd5e1' }]}>{vencidos}</Text>
-            <Text style={s.kpiLbl}>VENCIDOS</Text>
+            <Text style={[s.kpiNum, vencidos > 0 ? { color: '#ef4444' } : { color: c.border }]}>{vencidos}</Text>
+            <Text style={[s.kpiLbl, { color: c.textMute }]}>VENCIDOS</Text>
           </View>
-          <View style={s.kpiDiv} />
+          <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
           <TouchableOpacity style={s.kpiItem} onPress={() => setEstadoFiltro('compro')}>
             <Text style={[s.kpiNum, { color: '#10b981' }]}>{cerrados}</Text>
-            <Text style={s.kpiLbl}>CERRADOS</Text>
+            <Text style={[s.kpiLbl, { color: c.textMute }]}>CERRADOS</Text>
           </TouchableOpacity>
         </View>
 
         {/* ── Funnel bar ── */}
-        <View style={s.funnelWrap}>
+        <View style={[s.funnelWrap, { backgroundColor: c.card }]}>
           <View style={s.funnelBar}>
             {total === 0 ? (
               <View style={[s.funnelSeg, { flex: 1, backgroundColor: '#e2e8f0' }]} />
@@ -382,7 +382,7 @@ export default function CRM() {
                 return (
                   <View key={e} style={s.legendItem}>
                     <View style={[s.legendDot, { backgroundColor: info.color }]} />
-                    <Text style={s.legendTxt}>{info.label} ({conteos[e]})</Text>
+                    <Text style={[s.legendTxt, { color: c.textSub }]}>{info.label} ({conteos[e]})</Text>
                   </View>
                 )
               })}
@@ -393,10 +393,10 @@ export default function CRM() {
         {/* ── Stage chips ── */}
         <ScrollView
           horizontal showsHorizontalScrollIndicator={false}
-          style={s.stagePipe} contentContainerStyle={s.stagePipeContent}
+          style={[s.stagePipe, { backgroundColor: c.card, borderBottomColor: c.border }]} contentContainerStyle={s.stagePipeContent}
         >
           <TouchableOpacity
-            style={[s.stageChip, estadoFiltro === null && s.stageChipAll]}
+            style={[s.stageChip, { backgroundColor: c.bg, borderColor: c.border }, estadoFiltro === null && s.stageChipAll]}
             onPress={() => setEstadoFiltro(null)}
           >
             <Text style={[s.stageChipTxt, estadoFiltro === null && { color: '#fff', fontWeight: '700' }]}>
@@ -409,7 +409,7 @@ export default function CRM() {
             return (
               <TouchableOpacity
                 key={e}
-                style={[s.stageChip, activo && { backgroundColor: info.color, borderColor: info.color }]}
+                style={[s.stageChip, { backgroundColor: c.bg, borderColor: c.border }, activo && { backgroundColor: info.color, borderColor: info.color }]}
                 onPress={() => setEstadoFiltro(activo ? null : e)}
               >
                 <View style={[s.stageDot, { backgroundColor: activo ? '#fff' : info.color }]} />
@@ -426,12 +426,12 @@ export default function CRM() {
 
         {/* ── Search + sort + nuevo ── */}
         <View style={s.searchRow}>
-          <View style={s.searchWrap}>
-            <Ionicons name="search-outline" size={15} color="#94a3b8" style={{ marginRight: 8 }} />
+          <View style={[s.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
+            <Ionicons name="search-outline" size={15} color={c.textMute} style={{ marginRight: 8 }} />
             <TextInput
-              style={s.searchInput}
+              style={[s.searchInput, { color: c.text }]}
               placeholder="Buscar nombre, teléfono, empresa..."
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={c.textMute}
               value={busqueda}
               onChangeText={setBusqueda}
               autoCapitalize="none"
@@ -439,14 +439,14 @@ export default function CRM() {
               clearButtonMode="while-editing"
             />
           </View>
-          <TouchableOpacity style={s.sortBtn} onPress={() => setShowSort(true)}>
+          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setShowSort(true)}>
             <Ionicons name="funnel-outline" size={15} color="#1a6470" />
             {sortBy !== 'reciente' && <View style={s.sortDot} />}
           </TouchableOpacity>
-          <TouchableOpacity style={s.sortBtn} onPress={() => setVistaExcel(v => !v)}>
+          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setVistaExcel(v => !v)}>
             <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
           </TouchableOpacity>
-          <TouchableOpacity style={s.sortBtn} onPress={abrirImport}>
+          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
             <Ionicons name="cloud-upload-outline" size={15} color="#1a6470" />
           </TouchableOpacity>
           <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
@@ -455,7 +455,7 @@ export default function CRM() {
         </View>
 
         {/* ── Operacion tabs ── */}
-        <View style={s.opRow}>
+        <View style={[s.opRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>
           {([null, 'venta', 'renta'] as const).map(op => {
             const label = op === null ? 'Todos' : op === 'venta' ? '🏠 Venta' : '🔑 Renta'
             const cnt   = op === null ? total : clientes.filter(c => c.tipo_operacion === op).length
@@ -624,7 +624,7 @@ export default function CRM() {
 
               return (
                 <TouchableOpacity
-                  style={s.card}
+                  style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}
                   onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
                   activeOpacity={0.8}
                 >
@@ -637,7 +637,7 @@ export default function CRM() {
                         <Text style={[s.avatarTxt, { color: info.color }]}>{inits}</Text>
                       </View>
                       <View style={s.cardHeadInfo}>
-                        <Text style={s.cardNombre} numberOfLines={1}>{item.nombre}</Text>
+                        <Text style={[s.cardNombre, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
                         <View style={s.cardSubRow}>
                           {item.nivel_interes
                             ? <View style={[s.fuenteTag, { backgroundColor: item.nivel_interes === 'alto' ? '#fee2e2' : item.nivel_interes === 'medio' ? '#fef3c7' : '#dbeafe' }]}>
@@ -722,7 +722,7 @@ export default function CRM() {
       {/* ── Sort bottom sheet ── */}
       <Modal visible={showSort} transparent animationType="slide" onRequestClose={() => setShowSort(false)}>
         <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setShowSort(false)}>
-          <View style={s.sortSheet}>
+          <View style={[s.sortSheet, { backgroundColor: c.card }]}>
             <View style={s.sortHandle} />
             <Text style={s.sortTitle}>Ordenar leads</Text>
             {(['reciente', 'nombre', 'contacto'] as SortBy[]).map(opt => (
@@ -751,7 +751,7 @@ export default function CRM() {
       {/* ── Column filter modal ── */}
       <Modal visible={excelFilterModal !== null} transparent animationType="slide" onRequestClose={() => setExcelFilterModal(null)}>
         <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setExcelFilterModal(null)}>
-          <View style={s.sortSheet}>
+          <View style={[s.sortSheet, { backgroundColor: c.card }]}>
             <View style={s.sortHandle} />
             <Text style={s.sortTitle}>{excelFilterModal?.label ?? ''}</Text>
             {excelFilterModal?.options.map(opt => {
