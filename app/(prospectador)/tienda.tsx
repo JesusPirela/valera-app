@@ -4,7 +4,6 @@ import {
   ActivityIndicator, Alert, Platform,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { comprarItem, getCoinsDisplay } from '../../lib/gamification'
 
@@ -20,16 +19,42 @@ type StoreItem = {
   orden: number
 }
 
+type Compra = {
+  id: string
+  created_at: string
+  costo_coins: number
+  estado: string
+  notas_admin: string | null
+  store_items: { nombre: string; icono: string } | null
+}
+
 function alerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
   else Alert.alert('Tienda', msg)
 }
 
+function formatFecha(iso: string) {
+  return new Date(iso).toLocaleDateString('es-MX', {
+    timeZone: 'America/Mexico_City',
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+const ESTADO_CONFIG: Record<string, { label: string; color: string; bg: string; icono: string }> = {
+  pendiente:  { label: 'Pendiente',  color: '#c9a84c', bg: '#1a1500', icono: '⏳' },
+  entregado:  { label: 'Entregado',  color: '#2ecc71', bg: '#0d2018', icono: '✅' },
+  rechazado:  { label: 'Rechazado',  color: '#e74c3c', bg: '#1f0a0a', icono: '❌' },
+}
+
 export default function Tienda() {
-  const [userId, setUserId]     = useState<string | null>(null)
-  const [coins, setCoins]       = useState(0)
-  const [items, setItems]       = useState<StoreItem[]>([])
-  const [loading, setLoading]   = useState(true)
+  const [userId, setUserId]       = useState<string | null>(null)
+  const [coins, setCoins]         = useState(0)
+  const [items, setItems]         = useState<StoreItem[]>([])
+  const [compras, setCompras]     = useState<Compra[]>([])
+  const [tab, setTab]             = useState<'tienda' | 'historial'>('tienda')
+  const [loading, setLoading]     = useState(true)
+  const [loadingHistorial, setLoadingHistorial] = useState(false)
   const [comprando, setComprando] = useState<string | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
@@ -40,13 +65,18 @@ export default function Tienda() {
     if (!user) { setLoading(false); return }
     setUserId(user.id)
 
-    const [statsRes, itemsRes] = await Promise.all([
+    const [statsRes, itemsRes, comprasRes] = await Promise.all([
       supabase.from('user_stats').select('valera_coins').eq('id', user.id).maybeSingle(),
       supabase.from('store_items').select('*').eq('disponible', true).order('orden'),
+      supabase.from('store_compras')
+        .select('id, created_at, costo_coins, estado, notas_admin, store_items(nombre, icono)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
     ])
 
     setCoins(statsRes.data?.valera_coins ?? 0)
     setItems((itemsRes.data ?? []) as StoreItem[])
+    setCompras((comprasRes.data ?? []) as Compra[])
     setLoading(false)
   }
 
@@ -63,6 +93,7 @@ export default function Tienda() {
     if (ok) {
       setCoins(prev => prev - item.costo_coins)
       alerta(`¡Compraste "${item.nombre}"! 🎉\nEl equipo de Valera te contactará para entregar tu recompensa.`)
+      cargar()
     } else {
       alerta(error ?? 'Error al procesar la compra')
     }
@@ -75,7 +106,7 @@ export default function Tienda() {
   )
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1, backgroundColor: DARK }}>
 
       {/* Header */}
       <View style={s.header}>
@@ -89,65 +120,139 @@ export default function Tienda() {
         </View>
       </View>
 
-      <Text style={s.hint}>
-        💡 Tras comprar, el equipo de Valera te contactará para entregar tu recompensa.
-      </Text>
+      {/* Tabs */}
+      <View style={s.tabRow}>
+        <TouchableOpacity
+          style={[s.tabBtn, tab === 'tienda' && s.tabBtnActive]}
+          onPress={() => setTab('tienda')}
+        >
+          <Text style={[s.tabTxt, tab === 'tienda' && s.tabTxtActive]}>🛒 Artículos</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.tabBtn, tab === 'historial' && s.tabBtnActive]}
+          onPress={() => setTab('historial')}
+        >
+          <Text style={[s.tabTxt, tab === 'historial' && s.tabTxtActive]}>
+            📋 Mis Compras
+            {compras.filter(c => c.estado === 'pendiente').length > 0 && (
+              <Text style={s.tabBadge}> {compras.filter(c => c.estado === 'pendiente').length}</Text>
+            )}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-      {/* Items */}
-      <View style={s.grid}>
-        {items.map(item => {
-          const puedePagar = coins >= item.costo_coins
-          const cargando   = comprando === item.id
-          return (
-            <View key={item.id} style={s.card}>
-              <View style={s.cardIconWrap}>
-                <Text style={s.cardIcon}>{item.icono}</Text>
-              </View>
-              <Text style={s.cardNombre}>{item.nombre}</Text>
-              <Text style={s.cardDesc} numberOfLines={2}>{item.descripcion}</Text>
-              <View style={s.cardBottom}>
-                <View style={s.costBadge}>
-                  <Text style={s.costTxt}>{item.costo_coins.toLocaleString()} 💰</Text>
+      {tab === 'tienda' ? (
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+
+          <Text style={s.hint}>
+            💡 Tras comprar, el equipo de Valera te contactará para entregar tu recompensa.
+          </Text>
+
+          {/* Items */}
+          <View style={s.grid}>
+            {items.map(item => {
+              const puedePagar = coins >= item.costo_coins
+              const cargando   = comprando === item.id
+              return (
+                <View key={item.id} style={s.card}>
+                  <View style={s.cardIconWrap}>
+                    <Text style={s.cardIcon}>{item.icono}</Text>
+                  </View>
+                  <Text style={s.cardNombre}>{item.nombre}</Text>
+                  <Text style={s.cardDesc} numberOfLines={2}>{item.descripcion}</Text>
+                  <View style={s.cardBottom}>
+                    <View style={s.costBadge}>
+                      <Text style={s.costTxt}>{item.costo_coins.toLocaleString()} 💰</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[s.buyBtn, !puedePagar && s.buyBtnDisabled]}
+                      onPress={() => handleCompra(item)}
+                      disabled={!puedePagar || !!comprando}
+                    >
+                      {cargando
+                        ? <ActivityIndicator size="small" color="#fff" />
+                        : <Text style={s.buyBtnTxt}>{puedePagar ? 'Canjear' : 'Sin saldo'}</Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <TouchableOpacity
-                  style={[s.buyBtn, !puedePagar && s.buyBtnDisabled]}
-                  onPress={() => handleCompra(item)}
-                  disabled={!puedePagar || !!comprando}
-                >
-                  {cargando
-                    ? <ActivityIndicator size="small" color="#fff" />
-                    : <Text style={s.buyBtnTxt}>{puedePagar ? 'Canjear' : 'Sin saldo'}</Text>
-                  }
-                </TouchableOpacity>
-              </View>
-            </View>
-          )
-        })}
-      </View>
-
-      {/* Cómo ganar coins */}
-      <View style={s.howCard}>
-        <Text style={s.howTitle}>¿Cómo ganar Valera Coins?</Text>
-        {getCoinsDisplay().map(({ icono, label, coins }) => (
-          <View key={label} style={s.howRow}>
-            <Text style={s.howIcn}>{icono}</Text>
-            <Text style={s.howTxt}>{label}</Text>
-            <Text style={s.howVal}>+{coins} coins</Text>
+              )
+            })}
           </View>
-        ))}
-        <View style={s.howRow}>
-          <Text style={s.howIcn}>🔥</Text>
-          <Text style={s.howTxt}>Acceso diario</Text>
-          <Text style={s.howVal}>+5 coins</Text>
-        </View>
-        <View style={s.howRow}>
-          <Text style={s.howIcn}>🎯</Text>
-          <Text style={s.howTxt}>Completar misión</Text>
-          <Text style={s.howVal}>bonus coins</Text>
-        </View>
-      </View>
 
-    </ScrollView>
+          {/* Cómo ganar coins */}
+          <View style={s.howCard}>
+            <Text style={s.howTitle}>¿Cómo ganar Valera Coins?</Text>
+            {getCoinsDisplay().map(({ icono, label, coins: c }) => (
+              <View key={label} style={s.howRow}>
+                <Text style={s.howIcn}>{icono}</Text>
+                <Text style={s.howTxt}>{label}</Text>
+                <Text style={s.howVal}>+{c} coins</Text>
+              </View>
+            ))}
+            <View style={s.howRow}>
+              <Text style={s.howIcn}>🔥</Text>
+              <Text style={s.howTxt}>Acceso diario</Text>
+              <Text style={s.howVal}>+5 coins</Text>
+            </View>
+            <View style={s.howRow}>
+              <Text style={s.howIcn}>🎯</Text>
+              <Text style={s.howTxt}>Completar misión</Text>
+              <Text style={s.howVal}>bonus coins</Text>
+            </View>
+          </View>
+
+        </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+
+          {compras.length === 0 ? (
+            <View style={s.emptyHistorial}>
+              <Text style={s.emptyIcn}>🛍️</Text>
+              <Text style={s.emptyTxt}>Aún no has realizado compras</Text>
+              <Text style={s.emptySub}>Tus pedidos aparecerán aquí una vez que canjees tus Valera Coins</Text>
+            </View>
+          ) : (
+            compras.map(c => {
+              const cfg    = ESTADO_CONFIG[c.estado] ?? ESTADO_CONFIG.pendiente
+              const item   = c.store_items
+              return (
+                <View key={c.id} style={[s.compraCard, { borderColor: cfg.color + '44' }]}>
+                  <View style={s.compraTop}>
+                    <View style={[s.compraIconWrap, { backgroundColor: cfg.bg }]}>
+                      <Text style={s.compraIconTxt}>{item?.icono ?? '🎁'}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.compraNombre}>{item?.nombre ?? 'Artículo'}</Text>
+                      <Text style={s.compraFecha}>{formatFecha(c.created_at)}</Text>
+                    </View>
+                    <View style={[s.estadoBadge, { backgroundColor: cfg.bg, borderColor: cfg.color + '66' }]}>
+                      <Text style={[s.estadoTxt, { color: cfg.color }]}>{cfg.icono} {cfg.label}</Text>
+                    </View>
+                  </View>
+
+                  <View style={s.compraBot}>
+                    <Text style={s.compraCosto}>💰 {c.costo_coins.toLocaleString()} coins</Text>
+                  </View>
+
+                  {c.notas_admin ? (
+                    <View style={[s.notaAdmin, { borderColor: cfg.color + '33' }]}>
+                      <Text style={s.notaAdminLbl}>📝 Mensaje del equipo:</Text>
+                      <Text style={s.notaAdminTxt}>{c.notas_admin}</Text>
+                    </View>
+                  ) : c.estado === 'pendiente' ? (
+                    <Text style={s.pendienteTxt}>
+                      El equipo de Valera procesará tu solicitud pronto.
+                    </Text>
+                  ) : null}
+                </View>
+              )
+            })
+          )}
+
+        </ScrollView>
+      )}
+    </View>
   )
 }
 
@@ -156,8 +261,6 @@ const CARD = '#111f2e'
 const GOLD = '#c9a84c'
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: DARK },
-
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     padding: 20, backgroundColor: '#122030',
@@ -172,6 +275,19 @@ const s = StyleSheet.create({
   },
   coinsIcn: { fontSize: 18 },
   coinsVal: { fontSize: 16, fontWeight: '800', color: GOLD },
+
+  tabRow: {
+    flexDirection: 'row', backgroundColor: '#0d1b2a',
+    borderBottomWidth: 1, borderBottomColor: '#1e3448',
+  },
+  tabBtn: {
+    flex: 1, paddingVertical: 12, alignItems: 'center',
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  tabBtnActive: { borderBottomColor: GOLD },
+  tabTxt:       { fontSize: 13, fontWeight: '600', color: '#556a7a' },
+  tabTxtActive: { color: GOLD },
+  tabBadge:     { color: '#e74c3c', fontWeight: '800' },
 
   hint: { fontSize: 12, color: '#556a7a', paddingHorizontal: 16, paddingVertical: 10, lineHeight: 18 },
 
@@ -188,8 +304,8 @@ const s = StyleSheet.create({
   cardNombre: { fontSize: 15, fontWeight: '800', color: '#fff', marginBottom: 4 },
   cardDesc:   { fontSize: 12, color: '#7a9ab5', lineHeight: 17, marginBottom: 12 },
   cardBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  costBadge: { backgroundColor: '#1a1500', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
-  costTxt:   { color: GOLD, fontSize: 13, fontWeight: '700' },
+  costBadge:  { backgroundColor: '#1a1500', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  costTxt:    { color: GOLD, fontSize: 13, fontWeight: '700' },
   buyBtn: {
     backgroundColor: GOLD, borderRadius: 10,
     paddingHorizontal: 16, paddingVertical: 9,
@@ -206,4 +322,41 @@ const s = StyleSheet.create({
   howIcn: { fontSize: 18, width: 28 },
   howTxt: { flex: 1, fontSize: 13, color: '#c0d0dc' },
   howVal: { fontSize: 13, fontWeight: '700', color: GOLD },
+
+  // Historial
+  emptyHistorial: { alignItems: 'center', paddingTop: 60, gap: 10 },
+  emptyIcn:  { fontSize: 48 },
+  emptyTxt:  { fontSize: 16, fontWeight: '700', color: '#c0d0dc' },
+  emptySub:  { fontSize: 13, color: '#556a7a', textAlign: 'center', lineHeight: 19 },
+
+  compraCard: {
+    backgroundColor: CARD, borderRadius: 16, padding: 16,
+    borderWidth: 1, marginBottom: 12,
+  },
+  compraTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  compraIconWrap: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  compraIconTxt: { fontSize: 22 },
+  compraNombre:  { fontSize: 14, fontWeight: '800', color: '#fff', marginBottom: 3 },
+  compraFecha:   { fontSize: 11, color: '#556a7a' },
+
+  estadoBadge: {
+    borderRadius: 10, paddingHorizontal: 9, paddingVertical: 5,
+    borderWidth: 1, alignSelf: 'flex-start',
+  },
+  estadoTxt: { fontSize: 11, fontWeight: '700' },
+
+  compraBot: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  compraCosto: { fontSize: 13, color: GOLD, fontWeight: '700' },
+
+  notaAdmin: {
+    backgroundColor: '#0d1b2a', borderRadius: 10, padding: 10,
+    borderWidth: 1, marginTop: 4,
+  },
+  notaAdminLbl: { fontSize: 11, color: '#7a9ab5', fontWeight: '700', marginBottom: 4 },
+  notaAdminTxt: { fontSize: 13, color: '#c0d0dc', lineHeight: 18 },
+
+  pendienteTxt: { fontSize: 11, color: '#556a7a', fontStyle: 'italic', marginTop: 4 },
 })
