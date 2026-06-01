@@ -475,12 +475,12 @@ export default function ProspectadorPropiedades() {
                 </Text>
               </>
             )}
-            <View style={[styles.searchWrapper, { backgroundColor: darkMode ? 'rgba(255,255,255,0.15)' : '#fff' }]}>
+            <View style={[styles.searchWrapper, { backgroundColor: darkMode ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.95)' }]}>
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
-                style={[styles.searchInput, { color: darkMode ? '#fff' : '#333' }]}
+                style={[styles.searchInput, { color: darkMode ? '#fff' : '#1a1a2e' }]}
                 placeholder="Buscar por título, código o dirección..."
-                placeholderTextColor="#aaa"
+                placeholderTextColor={darkMode ? 'rgba(255,255,255,0.6)' : '#666'}
                 value={busqueda}
                 onChangeText={setBusqueda}
                 autoCapitalize="none"
