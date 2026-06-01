@@ -450,7 +450,7 @@ export default function ProspectadorPropiedades() {
       <View style={styles.container}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 12 : statusBarHeight + 2, paddingBottom: 6 }]}>
+        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 20 : statusBarHeight + 8, paddingBottom: 14 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
             {!isWeb ? (
               <View style={styles.headerTopRow}>
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center' as const,
   },
   webGridScroll: {
-    paddingBottom: 32,
+    paddingBottom: 100,
     paddingHorizontal: 16,
     paddingTop: 8,
   },
@@ -796,13 +796,13 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   headerSaludo: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
     color: '#fff',
-    marginBottom: 0,
+    marginBottom: 2,
   },
   headerSubtitulo: {
-    fontSize: 10,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.75)',
   },
   headerIcono: {
@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
   },
   headerIconoText: { fontSize: 18 },
   headerLogo: { width: 75, height: 26 },
-  headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',

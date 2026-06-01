@@ -63,3 +63,42 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 }
 
 export const useTheme = () => useContext(ThemeContext)
+
+const DARK = {
+  bg:          '#0d1b2a',
+  bg2:         '#0a1520',
+  card:        '#111f2e',
+  border:      '#1e3448',
+  text:        '#e8f0f4',
+  textSub:     '#7a9ab5',
+  textMute:    '#556a7a',
+  input:       '#111f2e',
+  inputBorder: '#1e3448',
+  inputText:   '#e8f0f4',
+  placeholder: '#556a7a',
+  icon:        '#7a9ab5',
+  divider:     '#1e3448',
+  tabBar:      '#111f2e',
+}
+const LIGHT = {
+  bg:          '#f0f4f5',
+  bg2:         '#ffffff',
+  card:        '#ffffff',
+  border:      '#e2e8f0',
+  text:        '#1a1a2e',
+  textSub:     '#555',
+  textMute:    '#94a3b8',
+  input:       '#ffffff',
+  inputBorder: '#dde8e9',
+  inputText:   '#1a1a2e',
+  placeholder: '#94a3b8',
+  icon:        '#888',
+  divider:     '#f0f0f0',
+  tabBar:      '#ffffff',
+}
+
+export type AppColors = typeof DARK
+export function useColors(): AppColors {
+  const { darkMode } = useContext(ThemeContext)
+  return darkMode ? DARK : LIGHT
+}

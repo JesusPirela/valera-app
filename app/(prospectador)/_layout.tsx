@@ -115,7 +115,7 @@ export default function ProspectadorLayout() {
     )
   }
 
-  const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : 64
+  const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 72 : 64
 
   return (
     <>
@@ -128,8 +128,8 @@ export default function ProspectadorLayout() {
           borderTopColor: '#e8eef0',
           borderTopWidth: 1,
           height: TAB_BAR_HEIGHT,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-          paddingTop: 6,
+          paddingBottom: Platform.OS === 'ios' ? 24 : Platform.OS === 'web' ? 12 : 8,
+          paddingTop: Platform.OS === 'web' ? 8 : 6,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.06,
