@@ -26,6 +26,13 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
+      - name: Create .htaccess for SPA routing
+        run: |
+          echo 'Options -MultiViews' > dist/.htaccess
+          echo 'RewriteEngine On' >> dist/.htaccess
+          echo 'RewriteCond %{REQUEST_FILENAME} !-f' >> dist/.htaccess
+          echo 'RewriteRule ^ index.html [QR,L]' >> dist/.htaccess
+
       - name: Install lftp
         run: sudo apt-get install -y lftp
 
