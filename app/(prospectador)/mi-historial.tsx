@@ -74,17 +74,27 @@ export default function MiHistorial() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 
-    const [perfil, stats, sesiones, txs] = await Promise.all([
+    const [perfil, stats, sesiones, txs, propiedades, clientes, seguimientos, interacciones, cursos] = await Promise.all([
       supabase.from('profiles').select('nombre, created_at').eq('id', user.id).maybeSingle(),
-      supabase.from('user_stats').select('*').eq('id', user.id).maybeSingle(),
+      supabase.from('user_stats').select('xp, valera_coins, streak_dias, total_ventas').eq('id', user.id).maybeSingle(),
       supabase.from('user_sessions').select('inicio, fin').eq('user_id', user.id),
       supabase.from('coin_transactions').select('cantidad').eq('user_id', user.id),
+      // Conteos reales desde tablas fuente (más confiables que user_stats counters)
+      supabase.from('propiedad_publicacion').select('propiedad_id', { count: 'exact', head: true }).eq('user_id', user.id),
+      supabase.from('clientes').select('id', { count: 'exact', head: true }).eq('responsable_id', user.id),
+      supabase.from('recordatorios').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('completado', true),
+      supabase.from('interacciones').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+      supabase.from('vu_certificados').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     ])
 
+    // Calcular horas con los mismos topes que el SQL: null fin → 30 min, máx 4h por sesión
+    const MAX_SESION_MIN = 240
+    const NULL_FIN_MIN   = 30
     const horasMin = (sesiones.data ?? []).reduce((acc: number, s: any) => {
-      const fin = s.fin ? new Date(s.fin) : new Date()
-      const min = (fin.getTime() - new Date(s.inicio).getTime()) / 60000
-      return acc + Math.max(0, min)
+      const inicioMs = new Date(s.inicio).getTime()
+      const finMs    = s.fin ? new Date(s.fin).getTime() : inicioMs + NULL_FIN_MIN * 60000
+      const raw      = (finMs - inicioMs) / 60000
+      return acc + Math.min(Math.max(0, raw), MAX_SESION_MIN)
     }, 0)
 
     const coinsG = (txs.data ?? []).filter((t: any) => t.cantidad > 0).reduce((a: number, t: any) => a + t.cantidad, 0)
@@ -95,12 +105,12 @@ export default function MiHistorial() {
       xp:                  stats.data?.xp ?? 0,
       valera_coins:        stats.data?.valera_coins ?? 0,
       streak_dias:         stats.data?.streak_dias ?? 0,
-      total_propiedades:   stats.data?.total_propiedades ?? 0,
-      total_clientes:      stats.data?.total_clientes ?? 0,
-      total_cursos:        stats.data?.total_cursos ?? 0,
-      total_seguimientos:  stats.data?.total_seguimientos ?? 0,
+      total_propiedades:   propiedades.count  ?? 0,
+      total_clientes:      clientes.count     ?? 0,
+      total_cursos:        cursos.count       ?? 0,
+      total_seguimientos:  seguimientos.count ?? 0,
       total_ventas:        stats.data?.total_ventas ?? 0,
-      total_interacciones: stats.data?.total_interacciones ?? 0,
+      total_interacciones: interacciones.count ?? 0,
       created_at:          perfil.data?.created_at ?? new Date().toISOString(),
       horas_conectado:     Math.round(horasMin),
       coins_ganados:       coinsG,
