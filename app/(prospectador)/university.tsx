@@ -266,7 +266,9 @@ export default function University() {
                     onPress={() => router.push(`/(prospectador)/university-curso?id=${curso.id}`)}
                   >
                     <Text style={estilos.btnEntrarText}>
-                      {curso.tieneCertificado && curso.es_certificacion ? '🏆 Ver certificado' : curso.completadas > 0 ? '▶ Continuar' : '▶ Comenzar'}
+                      {curso.tieneCertificado
+                        ? (curso.es_certificacion ? '🏆 Ver certificado' : '✅ Curso completado')
+                        : (curso.completadas > 0 ? '▶ Continuar' : '▶ Comenzar')}
                     </Text>
                   </TouchableOpacity>
                 </View>
