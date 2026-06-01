@@ -87,7 +87,7 @@ function UserBarChart({ nombre, dias, width: W }: { nombre: string; dias: { fech
 
 export default function ConexionUsuarios() {
   const [usuarios, setUsuarios]   = useState<UserConexion[]>([])
-  const [periodo, setPeriodo]     = useState<7 | 30>(7)
+  const [periodo, setPeriodo]     = useState<1 | 7 | 30>(7)
   const [loading, setLoading]     = useState(true)
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
   const { width }                 = useWindowDimensions()
@@ -95,7 +95,7 @@ export default function ConexionUsuarios() {
 
   useFocusEffect(useCallback(() => { cargar(7) }, []))
 
-  async function cargar(dias: 7 | 30) {
+  async function cargar(dias: 1 | 7 | 30) {
     setLoading(true)
     setErrorMsg(null)
     const { data, error } = await supabase.rpc('get_conexion_todos_usuarios', { p_dias: dias })
@@ -126,7 +126,7 @@ export default function ConexionUsuarios() {
     setLoading(false)
   }
 
-  async function cambiarPeriodo(p: 7 | 30) {
+  async function cambiarPeriodo(p: 1 | 7 | 30) {
     setPeriodo(p)
     await cargar(p)
   }
@@ -143,18 +143,17 @@ export default function ConexionUsuarios() {
           <Text style={ss.sub}>Horas de conexión por prospectador</Text>
         </View>
         <View style={ss.periodoRow}>
-          <TouchableOpacity
-            style={[ss.periodoPill, periodo === 7 && ss.periodoPillActive]}
-            onPress={() => cambiarPeriodo(7)}
-          >
-            <Text style={[ss.periodoPillTxt, periodo === 7 && ss.periodoPillActiveTxt]}>7 días</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[ss.periodoPill, periodo === 30 && ss.periodoPillActive]}
-            onPress={() => cambiarPeriodo(30)}
-          >
-            <Text style={[ss.periodoPillTxt, periodo === 30 && ss.periodoPillActiveTxt]}>30 días</Text>
-          </TouchableOpacity>
+          {([1, 7, 30] as const).map(p => (
+            <TouchableOpacity
+              key={p}
+              style={[ss.periodoPill, periodo === p && ss.periodoPillActive]}
+              onPress={() => cambiarPeriodo(p)}
+            >
+              <Text style={[ss.periodoPillTxt, periodo === p && ss.periodoPillActiveTxt]}>
+                {p === 1 ? 'Hoy' : `${p} días`}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
