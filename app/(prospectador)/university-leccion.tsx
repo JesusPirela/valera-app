@@ -6,6 +6,7 @@ import {
 import { WebView } from 'react-native-webview'
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { registrarAccion } from '../../lib/gamification'
 
 type Leccion = {
   id: string
@@ -149,13 +150,21 @@ export default function UniversityLeccion() {
     if (!leccion || !cursoId || yaCompletada || completando) return
     setCompletando(true)
     try {
+      const { data: { user } } = await supabase.auth.getUser()
       const { data, error } = await supabase.rpc('completar_leccion', {
         p_leccion_id: leccion.id,
         p_curso_id: cursoId,
       })
-      if (!error && data) {
+      if (!error && data && !data.ya_completada) {
         setYaCompletada(true)
         setResultado({ curso_completado: data.curso_completado, certificado_nuevo: data.certificado_nuevo })
+        // Disparar misiones y gamificación (XP + coins + misión diaria 'curso')
+        if (user) {
+          await registrarAccion(user.id, 'completar_leccion')
+          if (data.curso_completado) {
+            await registrarAccion(user.id, 'completar_curso')
+          }
+        }
       }
     } finally {
       setCompletando(false)
