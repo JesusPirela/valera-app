@@ -39,7 +39,8 @@
       "Bash(supabase projects *)",
       "Bash(where supabase *)",
       "Bash(xargs grep -l \"notificado_24h\\\\|notificado_2h\")",
-      "WebSearch"
+      "WebSearch",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")"
     ]
   }
 }
