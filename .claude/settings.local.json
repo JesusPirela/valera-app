@@ -40,7 +40,8 @@
       "Bash(where supabase *)",
       "Bash(xargs grep -l \"notificado_24h\\\\|notificado_2h\")",
       "WebSearch",
-      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")"
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('node engines:', p.engines\\); console.log\\('expo version:', p.dependencies?.expo\\)\")"
     ]
   }
 }
