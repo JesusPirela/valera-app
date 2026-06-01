@@ -237,6 +237,26 @@ export default function DetalleCliente() {
     })
     if (nuevoEstado === 'cita_agendada') registrarAccion(user!.id, 'agendar_cita').catch(() => {})
     if (nuevoEstado === 'compro') registrarAccion(user!.id, 'cerrar_venta').catch(() => {})
+
+    // Crear / actualizar entrada en coordinación de citas al agendar
+    if (nuevoEstado === 'cita_agendada' || nuevoEstado === 'cita_por_agendar') {
+      const estadoCita = nuevoEstado === 'cita_agendada' ? 'en_coordinacion' : 'por_contactar'
+      // Solo insertar si no existe ya una cita activa para este cliente
+      const { data: existe } = await supabase
+        .from('citas_coordinacion')
+        .select('id')
+        .eq('cliente_id', id)
+        .not('estado', 'in', '("realizada","cancelada")')
+        .maybeSingle()
+      if (!existe) {
+        supabase.from('citas_coordinacion').insert({
+          cliente_id: id,
+          prospectador_id: user!.id,
+          estado: estadoCita,
+        }).then(() => {})
+      }
+    }
+
     refetch()
   }
 
