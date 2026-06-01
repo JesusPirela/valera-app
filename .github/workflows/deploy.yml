@@ -45,6 +45,6 @@ jobs:
             set net:max-retries 5;
             set net:reconnect-interval-base 5;
             open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ftp://45.137.159.251;
-            mirror --reverse --delete --verbose --exclude=.git ./dist/ /public_html/;
+            mirror --reverse --delete --verbose --exclude=.git --exclude=.htaccess ./dist/ /public_html/;
             put dist/.htaccess -o /public_html/.htaccess;
           "
