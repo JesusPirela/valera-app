@@ -74,7 +74,9 @@ function iniciales(nombre: string) {
 }
 
 export function abrirWhatsApp(telefono: string, nombre: string) {
-  const phone = telefono.replace(/\D/g, '')
+  let phone = telefono.replace(/\D/g, '')
+  // Normalizar: si ya empieza con 52 y tiene más de 12 dígitos, quitar el 52 extra
+  if (phone.startsWith('5252')) phone = phone.slice(2)
   const num = phone.length === 10 ? `52${phone}` : phone
   const msg = encodeURIComponent(`Hola ${nombre}, te contacto de Valera Real Estate. ¿Cómo estás?`)
   const url = `https://wa.me/${num}?text=${msg}`
