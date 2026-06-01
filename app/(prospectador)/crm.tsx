@@ -8,7 +8,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { OfflineBanner } from '../../components/OfflineBanner'
-import * as DocumentPicker from 'expo-document-picker'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
 
 type Cliente = {
@@ -271,10 +270,15 @@ export default function CRM() {
       }
       input.click()
     } else {
-      const result = await DocumentPicker.getDocumentAsync({ type: ['text/csv', '*/*'] })
-      if (result.canceled) return
-      const { default: FileSystem } = await import('expo-file-system')
-      procesar(await FileSystem.readAsStringAsync(result.assets[0].uri))
+      try {
+        const DocumentPicker = await import('expo-document-picker')
+        const result = await DocumentPicker.getDocumentAsync({ type: ['text/csv', '*/*'] })
+        if (result.canceled) return
+        const { default: FileSystem } = await import('expo-file-system')
+        procesar(await FileSystem.readAsStringAsync(result.assets[0].uri))
+      } catch {
+        // módulo nativo no disponible en este build
+      }
     }
   }
 
