@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Platform, Alert, Image,
+  TextInput, ActivityIndicator, Platform, Alert, Image, Switch,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
@@ -28,7 +28,7 @@ function mostrarAlerta(msg: string) {
 }
 
 export default function Perfil() {
-  const { setPrimaryColor } = useTheme()
+  const { setPrimaryColor, darkMode, toggleDarkMode } = useTheme()
 
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
@@ -167,7 +167,7 @@ export default function Perfil() {
   if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 60 }}>
+    <ScrollView style={[s.container, darkMode && { backgroundColor: '#0d1b2a' }]} contentContainerStyle={{ paddingBottom: 60 }}>
       {/* Avatar */}
       <View style={[s.headerBg, { backgroundColor: colorAcento }]}>
         <View style={s.avatarWrap}>
@@ -298,6 +298,25 @@ export default function Perfil() {
           )}
         </TouchableOpacity>
 
+        {/* Apariencia */}
+        <Text style={s.seccion}>APARIENCIA</Text>
+        <View style={[s.modoRow, darkMode && { backgroundColor: '#111f2e', borderColor: '#1e3448' }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.modoTitulo, darkMode && { color: '#fff' }]}>
+              {darkMode ? '🌙 Modo oscuro' : '☀️ Modo claro'}
+            </Text>
+            <Text style={[s.modoSub, darkMode && { color: '#7a9ab5' }]}>
+              {darkMode ? 'La app usa fondos oscuros' : 'La app usa fondos claros'}
+            </Text>
+          </View>
+          <Switch
+            value={darkMode}
+            onValueChange={toggleDarkMode}
+            trackColor={{ false: '#dde8e9', true: colorAcento + '88' }}
+            thumbColor={darkMode ? colorAcento : '#aaa'}
+          />
+        </View>
+
         {/* Color de acento */}
         <Text style={s.seccion}>COLOR DE LA APLICACIÓN</Text>
         <Text style={s.label}>Elige tu color principal</Text>
@@ -387,6 +406,15 @@ const s = StyleSheet.create({
     paddingVertical: 14, alignItems: 'center', marginBottom: 16,
   },
   btnFotoText: { fontSize: 14, fontWeight: '700' },
+  modoRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#fff', borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: '#dde8e9', marginBottom: 8,
+    // darkMode override se aplica inline
+  },
+  modoTitulo: { fontSize: 14, fontWeight: '700', color: '#1a1a2e', marginBottom: 2 },
+  modoSub:    { fontSize: 12, color: '#888' },
+
   coloresGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 14 },
   colorBtn: {
     width: 44, height: 44, borderRadius: 22,

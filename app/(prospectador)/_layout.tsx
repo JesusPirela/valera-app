@@ -14,7 +14,7 @@ type IoniconsName = React.ComponentProps<typeof Ionicons>['name']
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
   const [showCrmPopup, setShowCrmPopup] = useState(true)
-  const { primaryColor: colorAcento } = useTheme()
+  const { primaryColor: colorAcento, darkMode } = useTheme()
   const pathname = usePathname()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(false)
@@ -122,9 +122,9 @@ export default function ProspectadorLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colorAcento,
-        tabBarInactiveTintColor: '#9eafb2',
+        tabBarInactiveTintColor: darkMode ? '#556a7a' : '#9eafb2',
         tabBarStyle: {
-          backgroundColor: '#fff',
+          backgroundColor: darkMode ? '#111f2e' : '#fff',
           borderTopColor: '#e8eef0',
           borderTopWidth: 1,
           height: TAB_BAR_HEIGHT,
