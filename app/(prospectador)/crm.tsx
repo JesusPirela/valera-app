@@ -351,10 +351,12 @@ export default function CRM() {
         </View>
 
         {/* ── Funnel bar ── */}
-        {total > 0 && (
-          <View style={s.funnelWrap}>
-            <View style={s.funnelBar}>
-              {ORDEN_ESTADOS.map(e => {
+        <View style={s.funnelWrap}>
+          <View style={s.funnelBar}>
+            {total === 0 ? (
+              <View style={[s.funnelSeg, { flex: 1, backgroundColor: '#e2e8f0' }]} />
+            ) : (
+              ORDEN_ESTADOS.map(e => {
                 const n = conteos[e]
                 if (n === 0) return null
                 const info = estadoInfo(e)
@@ -366,8 +368,12 @@ export default function CRM() {
                     activeOpacity={0.75}
                   />
                 )
-              })}
-            </View>
+              })
+            )}
+          </View>
+          {total === 0 && !isLoading ? (
+            <Text style={s.funnelEmpty}>Agrega tu primer lead para ver el embudo de ventas</Text>
+          ) : (
             <View style={s.funnelLegend}>
               {ORDEN_ESTADOS.filter(e => conteos[e] > 0).map(e => {
                 const info = estadoInfo(e)
@@ -379,8 +385,8 @@ export default function CRM() {
                 )
               })}
             </View>
-          </View>
-        )}
+          )}
+        </View>
 
         {/* ── Stage chips ── */}
         <ScrollView
@@ -806,9 +812,10 @@ const s = StyleSheet.create({
   funnelLegend: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8,
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  legendDot:  { width: 7, height: 7, borderRadius: 4 },
-  legendTxt:  { fontSize: 10, color: '#64748b', fontWeight: '500' },
+  legendItem:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot:    { width: 7, height: 7, borderRadius: 4 },
+  legendTxt:    { fontSize: 10, color: '#64748b', fontWeight: '500' },
+  funnelEmpty:  { fontSize: 11, color: '#94a3b8', marginTop: 6, fontStyle: 'italic' },
 
   // ── Stage chips ─────────────────────────────────────────────────
   stagePipe:        { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
