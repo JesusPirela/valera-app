@@ -44,7 +44,7 @@ function alerta(msg: string) {
 export default function TiendaCompras() {
   const [compras, setCompras]       = useState<Compra[]>([])
   const [loading, setLoading]       = useState(true)
-  const [filtro, setFiltro]         = useState<'todas' | 'pendiente' | 'entregado'>('pendiente')
+  const [filtro, setFiltro]         = useState<'todas' | 'pendiente' | 'entregado' | 'rechazado'>('pendiente')
 
   // Modal de atención
   const [modal, setModal]           = useState(false)
@@ -55,6 +55,11 @@ export default function TiendaCompras() {
   // Mini-form de lead
   const [nombreLead, setNombreLead] = useState('')
   const [telLead, setTelLead]       = useState('')
+
+  // Rechazo
+  const [modalRechazo, setModalRechazo] = useState(false)
+  const [motivoRechazo, setMotivoRechazo] = useState('')
+  const [compraRechazo, setCompraRechazo] = useState<Compra | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -88,6 +93,26 @@ export default function TiendaCompras() {
     cargar()
   }
 
+  function abrirRechazo(c: Compra) {
+    setCompraRechazo(c)
+    setMotivoRechazo('Lo sentimos, en este momento no podemos procesar tu solicitud. Tus Valera Coins han sido reintegrados.')
+    setModalRechazo(true)
+  }
+
+  async function rechazar() {
+    if (!compraRechazo) return
+    if (!motivoRechazo.trim()) { alerta('Escribe el motivo del rechazo.'); return }
+    setEnviando(true)
+    const { error } = await supabase.rpc('admin_rechazar_compra', {
+      p_compra_id: compraRechazo.id,
+      p_motivo:    motivoRechazo.trim(),
+    })
+    setEnviando(false)
+    if (error) { alerta('Error: ' + error.message); return }
+    setModalRechazo(false)
+    cargar()
+  }
+
   async function registrarLead() {
     if (!seleccionada) return
     if (!nombreLead.trim()) { alerta('El nombre del lead es obligatorio.'); return }
@@ -108,6 +133,7 @@ export default function TiendaCompras() {
 
   const lista = compras.filter(c => filtro === 'todas' ? true : c.estado === filtro)
   const pendientes = compras.filter(c => c.estado === 'pendiente').length
+  const rechazadas = compras.filter(c => c.estado === 'rechazado').length
 
   if (loading) return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
@@ -132,7 +158,7 @@ export default function TiendaCompras() {
 
       {/* Filtros */}
       <View style={s.filtroRow}>
-        {([['todas', 'Todas'], ['pendiente', '⏳ Pendientes'], ['entregado', '✅ Entregadas']] as const).map(([val, lbl]) => (
+        {([['todas', 'Todas'], ['pendiente', '⏳ Pendientes'], ['entregado', '✅ Entregadas'], ['rechazado', '❌ Rechazadas']] as const).map(([val, lbl]) => (
           <TouchableOpacity
             key={val}
             style={[s.filtroBtn, filtro === val && s.filtroBtnActivo]}
@@ -156,8 +182,10 @@ export default function TiendaCompras() {
                 <Text style={s.itemNombre}>{c.item_nombre}</Text>
                 <Text style={s.userName}>👤 {c.user_nombre}</Text>
               </View>
-              <View style={[s.estadoBadge, c.estado === 'entregado' ? s.badgeOk : s.badgePending]}>
-                <Text style={s.estadoTxt}>{c.estado === 'entregado' ? '✅ Entregado' : '⏳ Pendiente'}</Text>
+              <View style={[s.estadoBadge, c.estado === 'entregado' ? s.badgeOk : c.estado === 'rechazado' ? s.badgeRechazado : s.badgePending]}>
+                <Text style={s.estadoTxt}>
+                  {c.estado === 'entregado' ? '✅ Entregado' : c.estado === 'rechazado' ? '❌ Rechazado' : '⏳ Pendiente'}
+                </Text>
               </View>
             </View>
 
@@ -173,9 +201,14 @@ export default function TiendaCompras() {
             ) : null}
 
             {c.estado === 'pendiente' && (
-              <TouchableOpacity style={s.btnAtender} onPress={() => abrirModal(c)}>
-                <Text style={s.btnAtenderTxt}>Atender entrega</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                <TouchableOpacity style={[s.btnAtender, { flex: 1 }]} onPress={() => abrirModal(c)}>
+                  <Text style={s.btnAtenderTxt}>✅ Atender</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.btnAtender, s.btnRechazar]} onPress={() => abrirRechazo(c)}>
+                  <Text style={s.btnAtenderTxt}>❌ Rechazar</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         ))}
@@ -269,6 +302,49 @@ export default function TiendaCompras() {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Modal de rechazo */}
+      <Modal visible={modalRechazo} animationType="slide" transparent onRequestClose={() => setModalRechazo(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalSheet, { paddingBottom: 40 }]}>
+            <Text style={[s.modalTitle, { color: '#c0392b' }]}>❌ Rechazar compra</Text>
+            {compraRechazo && (
+              <View style={s.modalInfo}>
+                <Text style={s.modalInfoIcono}>{compraRechazo.item_icono}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.modalInfoNombre}>{compraRechazo.item_nombre}</Text>
+                  <Text style={s.modalInfoUser}>👤 {compraRechazo.user_nombre} · 💰 {compraRechazo.costo_coins} coins</Text>
+                </View>
+              </View>
+            )}
+            <Text style={s.seccionTitle}>Motivo del rechazo</Text>
+            <Text style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+              Los Valera Coins serán devueltos automáticamente al usuario.
+            </Text>
+            <TextInput
+              style={[s.input, { height: 90, textAlignVertical: 'top' }]}
+              value={motivoRechazo}
+              onChangeText={setMotivoRechazo}
+              multiline
+              numberOfLines={3}
+              placeholder="Explica el motivo del rechazo..."
+            />
+            <TouchableOpacity
+              style={[s.btnEnviar, { backgroundColor: '#c0392b', marginTop: 12 }, enviando && { opacity: 0.6 }]}
+              onPress={rechazar}
+              disabled={enviando}
+            >
+              {enviando
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={s.btnEnviarTxt}>❌ Rechazar y devolver coins</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity style={s.btnCancelar} onPress={() => setModalRechazo(false)}>
+              <Text style={s.btnCancelarTxt}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -304,8 +380,9 @@ const s = StyleSheet.create({
   itemNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
   userName: { fontSize: 12, color: '#666', marginTop: 2 },
   estadoBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  badgePending: { backgroundColor: '#fff3e0' },
-  badgeOk:      { backgroundColor: '#e8f5e9' },
+  badgePending:   { backgroundColor: '#fff3e0' },
+  badgeOk:        { backgroundColor: '#e8f5e9' },
+  badgeRechazado: { backgroundColor: '#fdecea' },
   estadoTxt: { fontSize: 11, fontWeight: '700' },
 
   cardMeta: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
@@ -314,9 +391,10 @@ const s = StyleSheet.create({
 
   btnAtender: {
     backgroundColor: '#1a6470', borderRadius: 10,
-    paddingVertical: 10, alignItems: 'center', marginTop: 4,
+    paddingVertical: 10, alignItems: 'center',
   },
-  btnAtenderTxt: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  btnRechazar:   { backgroundColor: '#c0392b' },
+  btnAtenderTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },

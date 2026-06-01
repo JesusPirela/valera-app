@@ -429,37 +429,19 @@ function pick(a: CfgAccion) { return { coins: a.coins, xp: a.xp } }
 
 // ── Comprar item de la tienda ──────────────────────────────────
 export async function comprarItem(
-  userId: string,
+  _userId: string,
   itemId: string,
   nombre: string,
   costo: number
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const { data: ok, error } = await supabase.rpc('gastar_coins', {
-      p_user_id:  userId,
-      p_cantidad: costo,
-      p_concepto: `Tienda: ${nombre}`,
+    const { data, error } = await supabase.rpc('comprar_item_tienda', {
+      p_item_id: itemId,
+      p_nombre:  nombre,
+      p_costo:   costo,
     })
-    if (error || !ok) return { ok: false, error: 'No tienes suficientes Valera Coins' }
-
-    const { data: perfil } = await supabase
-      .from('profiles').select('nombre').eq('id', userId).maybeSingle()
-    const userNombre = perfil?.nombre ?? 'Un prospectador'
-
-    const { data: compra } = await supabase
-      .from('store_compras')
-      .insert({ user_id: userId, item_id: itemId, costo_coins: costo })
-      .select('id')
-      .single()
-
-    await supabase.rpc('notificar_admins_compra_tienda', {
-      p_user_id:     userId,
-      p_user_nombre: userNombre,
-      p_item_nombre: nombre,
-      p_compra_id:   compra?.id ?? null,
-      p_costo_coins: costo,
-    }).catch(() => {})
-
+    if (error) return { ok: false, error: error.message }
+    if (!data?.ok) return { ok: false, error: data?.error ?? 'Error al procesar la compra' }
     return { ok: true }
   } catch (e: any) {
     return { ok: false, error: e.message }

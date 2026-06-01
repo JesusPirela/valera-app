@@ -7,12 +7,14 @@ import { useFocusEffect } from 'expo-router'
 import Svg, { Rect, Text as SvgText, Line } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
 
-type ActividadDiaria = {
-  propiedades_hoy: number
-  clientes_hoy: number
-  interacciones_hoy: number
-  seguimientos_hoy: number
-  clientes_modificados_hoy: number
+type ActividadPeriodo = {
+  clientes_nuevos:        number
+  propiedades_publicadas: number
+  seguimientos:           number
+  interacciones:          number
+  cursos_completados:     number
+  primer_movimiento:      string | null
+  ultimo_movimiento:      string | null
 }
 
 type ConexionDia = { fecha: string; minutos: number }
@@ -30,6 +32,14 @@ function formatMinutos(min: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
+function formatFechaCorta(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('es-MX', {
+    timeZone: 'America/Mexico_City',
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 function BarChart({ data, label }: { data: ConexionDia[]; label: string }) {
   const { width } = useWindowDimensions()
   const W = Math.min(width - 48, 520)
@@ -39,28 +49,22 @@ function BarChart({ data, label }: { data: ConexionDia[]; label: string }) {
   const chartH = H - padT - padB
 
   if (!data.length) return (
-    <Text style={{ color: '#556a7a', textAlign: 'center', paddingVertical: 20 }}>Sin datos</Text>
+    <Text style={{ color: '#556a7a', textAlign: 'center', paddingVertical: 20 }}>Sin datos de conexión</Text>
   )
 
   const maxMin = Math.max(...data.map(d => d.minutos), 30)
   const barW   = Math.max(6, Math.min(32, (chartW / data.length) * 0.65))
   const gap    = chartW / data.length
-
-  const ticks = [0, Math.round(maxMin / 2), maxMin]
+  const ticks  = [0, Math.round(maxMin / 2), maxMin]
 
   return (
     <View>
       <Text style={s.chartLabel}>{label}</Text>
       <Svg width={W} height={H}>
-        {/* Líneas de guía */}
         {ticks.map(t => {
           const y = padT + chartH - (t / maxMin) * chartH
-          return (
-            <Line key={t} x1={padL} y1={y} x2={W - padR} y2={y} stroke="#1e3448" strokeWidth={1} />
-          )
+          return <Line key={t} x1={padL} y1={y} x2={W - padR} y2={y} stroke="#1e3448" strokeWidth={1} />
         })}
-
-        {/* Labels eje Y */}
         {ticks.map(t => {
           const y = padT + chartH - (t / maxMin) * chartH
           return (
@@ -69,21 +73,14 @@ function BarChart({ data, label }: { data: ConexionDia[]; label: string }) {
             </SvgText>
           )
         })}
-
-        {/* Barras */}
         {data.map((d, i) => {
-          const x = padL + i * gap + (gap - barW) / 2
+          const x    = padL + i * gap + (gap - barW) / 2
           const barH = Math.max(2, (d.minutos / maxMin) * chartH)
-          const y = padT + chartH - barH
-          const dia = new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
-          return (
-            <Rect key={d.fecha} x={x} y={y} width={barW} height={barH} rx={3} fill={TEAL} opacity={0.85} />
-          )
+          const y    = padT + chartH - barH
+          return <Rect key={d.fecha} x={x} y={y} width={barW} height={barH} rx={3} fill={TEAL} opacity={0.85} />
         })}
-
-        {/* Labels eje X */}
         {data.map((d, i) => {
-          const x = padL + i * gap + gap / 2
+          const x   = padL + i * gap + gap / 2
           const dia = new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
           return (
             <SvgText key={`xl-${d.fecha}`} x={x} y={H - 6} fill="#556a7a" fontSize={8} textAnchor="middle">
@@ -98,26 +95,31 @@ function BarChart({ data, label }: { data: ConexionDia[]; label: string }) {
 
 export default function MiActividad() {
   const [userId, setUserId]           = useState<string | null>(null)
-  const [actividad, setActividad]     = useState<ActividadDiaria | null>(null)
-  const [periodo, setPeriodo]         = useState<'hoy' | 'semana' | 'mes'>('semana')
+  const [periodo, setPeriodo]         = useState<'hoy' | 'semana' | 'mes'>('hoy')
+  const [actividad, setActividad]     = useState<ActividadPeriodo | null>(null)
   const [conexionData, setConexionData] = useState<ConexionDia[]>([])
   const [loading, setLoading]         = useState(true)
+  const [cargandoPeriodo, setCargandoPeriodo] = useState(false)
 
-  useFocusEffect(useCallback(() => { cargar() }, []))
+  useFocusEffect(useCallback(() => { cargar('hoy') }, []))
 
-  async function cargar() {
+  async function cargar(p: 'hoy' | 'semana' | 'mes') {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
     setUserId(user.id)
-
-    const [actRes] = await Promise.all([
-      supabase.rpc('get_actividad_diaria'),
+    setPeriodo(p)
+    await Promise.all([
+      cargarActividad(user.id, p),
+      cargarConexion(user.id, p),
     ])
-    setActividad((actRes.data?.[0] as ActividadDiaria) ?? null)
-
-    await cargarConexion(user.id, periodo)
     setLoading(false)
+  }
+
+  async function cargarActividad(uid: string, p: 'hoy' | 'semana' | 'mes') {
+    const dias = p === 'hoy' ? 1 : p === 'semana' ? 7 : 30
+    const { data } = await supabase.rpc('get_actividad_periodo', { p_dias: dias, p_user_id: uid })
+    setActividad((data?.[0] as ActividadPeriodo) ?? null)
   }
 
   async function cargarConexion(uid: string, p: 'hoy' | 'semana' | 'mes') {
@@ -127,13 +129,22 @@ export default function MiActividad() {
   }
 
   async function cambiarPeriodo(p: 'hoy' | 'semana' | 'mes') {
+    if (p === periodo || !userId) return
     setPeriodo(p)
-    if (userId) await cargarConexion(userId, p)
+    setCargandoPeriodo(true)
+    await Promise.all([
+      cargarActividad(userId, p),
+      cargarConexion(userId, p),
+    ])
+    setCargandoPeriodo(false)
   }
 
-  // Fecha local del dispositivo (México), no UTC
-  const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
-  const totalHoyMinutos = conexionData.find(d => d.fecha === hoy)?.minutos ?? 0
+  const totalMinutos   = conexionData.reduce((a, d) => a + d.minutos, 0)
+  const periodoLabel   = periodo === 'hoy' ? 'hoy' : periodo === 'semana' ? 'los últimos 7 días' : 'los últimos 30 días'
+  const chartLabel     = periodo === 'hoy' ? 'Hoy (minutos)' : periodo === 'semana' ? 'Últimos 7 días (min/día)' : 'Últimos 30 días (min/día)'
+  const fechaHoyLabel  = new Date().toLocaleDateString('es-MX', {
+    timeZone: 'America/Mexico_City', weekday: 'long', day: 'numeric', month: 'long',
+  })
 
   if (loading) return (
     <View style={{ flex: 1, backgroundColor: DARK, justifyContent: 'center', alignItems: 'center' }}>
@@ -144,63 +155,83 @@ export default function MiActividad() {
   return (
     <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }}>
 
-      {/* Header */}
+      {/* Header con selector de período */}
       <View style={s.header}>
-        <Text style={s.title}>Mi Actividad</Text>
-        <Text style={s.sub}>Resumen del día y tiempo conectado</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={s.title}>Mi Actividad</Text>
+          <Text style={s.sub}>
+            {periodo === 'hoy' ? fechaHoyLabel : periodo === 'semana' ? 'Últimos 7 días' : 'Últimos 30 días'}
+          </Text>
+        </View>
+        <View style={s.periodoRow}>
+          {(['hoy', 'semana', 'mes'] as const).map(p => (
+            <TouchableOpacity
+              key={p}
+              style={[s.periodoPill, periodo === p && s.periodoPillActive]}
+              onPress={() => cambiarPeriodo(p)}
+            >
+              <Text style={[s.periodoPillTxt, periodo === p && s.periodoPillActiveTxt]}>
+                {p === 'hoy' ? 'Hoy' : p === 'semana' ? '7d' : '30d'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
-      {/* Resumen del día */}
+      {cargandoPeriodo && (
+        <View style={{ alignItems: 'center', paddingVertical: 12 }}>
+          <ActivityIndicator size="small" color={GOLD} />
+        </View>
+      )}
+
+      {/* Estadísticas del período */}
       <View style={s.sectionCard}>
-        <Text style={s.sectionTitle}>
-          📊 Resumen de hoy — {new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long', day: 'numeric', month: 'long' })}
-        </Text>
+        <Text style={s.sectionTitle}>📊 Actividad de {periodoLabel}</Text>
         <View style={s.statsGrid}>
-          <StatBox icon="🏠" label="Publicadas" val={actividad?.propiedades_hoy ?? 0} />
-          <StatBox icon="👤" label="Clientes nuevos" val={actividad?.clientes_hoy ?? 0} />
-          <StatBox icon="🔄" label="Clientes modificados" val={actividad?.clientes_modificados_hoy ?? 0} />
-          <StatBox icon="💬" label="Interacciones" val={actividad?.interacciones_hoy ?? 0} />
-          <StatBox icon="✅" label="Seguimientos" val={actividad?.seguimientos_hoy ?? 0} />
-          <StatBox icon="⏱️" label="Conectado hoy" val={formatMinutos(totalHoyMinutos)} isText />
+          <StatBox icon="🏠" label="Publicadas"      val={actividad?.propiedades_publicadas ?? 0} />
+          <StatBox icon="👤" label="Clientes nuevos" val={actividad?.clientes_nuevos ?? 0} />
+          <StatBox icon="💬" label="Interacciones"   val={actividad?.interacciones ?? 0} />
+          <StatBox icon="✅" label="Seguimientos"    val={actividad?.seguimientos ?? 0} />
+          <StatBox icon="📚" label="Cursos"          val={actividad?.cursos_completados ?? 0} />
+          <StatBox icon="⏱️" label="Conectado"       val={formatMinutos(totalMinutos)} isText />
         </View>
+
+        {/* Primer y último movimiento */}
+        {(actividad?.primer_movimiento || actividad?.ultimo_movimiento) ? (
+          <View style={s.movimientoRow}>
+            <View style={s.movimientoItem}>
+              <Text style={s.movimientoLbl}>⏰ Primer movimiento</Text>
+              <Text style={s.movimientoVal}>{formatFechaCorta(actividad?.primer_movimiento ?? null)}</Text>
+            </View>
+            <View style={s.movimientoDivider} />
+            <View style={s.movimientoItem}>
+              <Text style={s.movimientoLbl}>🏁 Último movimiento</Text>
+              <Text style={s.movimientoVal}>{formatFechaCorta(actividad?.ultimo_movimiento ?? null)}</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={s.sinActividad}>
+            <Text style={s.sinActividadTxt}>Sin actividad registrada en este período</Text>
+          </View>
+        )}
       </View>
 
-      {/* Gráfica de conexión */}
+      {/* Gráfica de tiempo conectado */}
       <View style={s.sectionCard}>
-        <View style={s.sectionRow}>
-          <Text style={[s.sectionTitle, { flex: 1, marginBottom: 0 }]}>⏱️ Tiempo conectado</Text>
-          <View style={s.periodoRow}>
-            {(['hoy', 'semana', 'mes'] as const).map(p => (
-              <TouchableOpacity
-                key={p}
-                style={[s.periodoPill, periodo === p && s.periodoPillActive]}
-                onPress={() => cambiarPeriodo(p)}
-              >
-                <Text style={[s.periodoPillTxt, periodo === p && s.periodoPillActiveTxt]}>
-                  {p === 'hoy' ? 'Hoy' : p === 'semana' ? '7 días' : '30 días'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+        <Text style={s.sectionTitle}>⏱️ Tiempo conectado</Text>
 
         {conexionData.length === 0 ? (
           <View style={s.emptyConexion}>
             <Text style={s.emptyConexionIcn}>⏱️</Text>
-            <Text style={s.emptyConexionTxt}>El registro de tiempo conectado comenzó con la última actualización de la app.</Text>
+            <Text style={s.emptyConexionTxt}>Sin datos de conexión para este período.</Text>
             <Text style={s.emptyConexionSub}>Los datos aparecerán a medida que uses la app.</Text>
           </View>
         ) : (
           <>
-            <BarChart
-              data={conexionData}
-              label={periodo === 'hoy' ? 'Hoy (minutos)' : periodo === 'semana' ? 'Últimos 7 días (minutos por día)' : 'Últimos 30 días (minutos por día)'}
-            />
+            <BarChart data={conexionData} label={chartLabel} />
             <View style={s.totalRow}>
-              <Text style={s.totalLabel}>Total {periodo === 'hoy' ? 'hoy' : periodo === 'semana' ? 'semana' : 'mes'}</Text>
-              <Text style={s.totalVal}>
-                {formatMinutos(conexionData.reduce((a, d) => a + d.minutos, 0))}
-              </Text>
+              <Text style={s.totalLabel}>Total {periodoLabel}</Text>
+              <Text style={s.totalVal}>{formatMinutos(totalMinutos)}</Text>
             </View>
           </>
         )}
@@ -222,16 +253,18 @@ function StatBox({ icon, label, val, isText }: { icon: string; label: string; va
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: DARK },
-  header: { padding: 20, backgroundColor: '#122030', borderBottomWidth: 1, borderBottomColor: MID },
-  title: { fontSize: 20, fontWeight: '900', color: '#fff' },
-  sub:   { fontSize: 12, color: '#7a9ab5', marginTop: 2 },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 16, backgroundColor: '#122030', borderBottomWidth: 1, borderBottomColor: MID,
+  },
+  title: { fontSize: 18, fontWeight: '900', color: '#fff' },
+  sub:   { fontSize: 11, color: '#7a9ab5', marginTop: 2 },
 
   sectionCard: {
     backgroundColor: CARD, borderRadius: 16, margin: 16, marginBottom: 0,
     padding: 16, borderWidth: 1, borderColor: MID,
   },
   sectionTitle: { fontSize: 14, fontWeight: '800', color: '#fff', marginBottom: 12 },
-  sectionRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
 
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statBox: {
@@ -242,14 +275,29 @@ const s = StyleSheet.create({
   statVal:   { fontSize: 20, fontWeight: '800', color: GOLD },
   statLabel: { fontSize: 10, color: '#7a9ab5', textAlign: 'center', marginTop: 2 },
 
-  periodoRow:        { flexDirection: 'row', gap: 6 },
-  periodoPill:       { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: MID },
-  periodoPillActive: { backgroundColor: TEAL },
-  periodoPillTxt:    { fontSize: 11, color: '#7a9ab5', fontWeight: '600' },
+  periodoRow:           { flexDirection: 'row', gap: 6 },
+  periodoPill:          { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: MID },
+  periodoPillActive:    { backgroundColor: TEAL },
+  periodoPillTxt:       { fontSize: 11, color: '#7a9ab5', fontWeight: '600' },
   periodoPillActiveTxt: { color: '#fff' },
 
+  movimientoRow: {
+    flexDirection: 'row', marginTop: 14, paddingTop: 14,
+    borderTopWidth: 1, borderTopColor: MID,
+  },
+  movimientoItem:    { flex: 1 },
+  movimientoDivider: { width: 1, backgroundColor: MID, marginHorizontal: 12 },
+  movimientoLbl:     { fontSize: 10, color: '#556a7a', marginBottom: 4 },
+  movimientoVal:     { fontSize: 12, fontWeight: '700', color: '#c0d0da' },
+
+  sinActividad:    { marginTop: 12, alignItems: 'center', paddingVertical: 8 },
+  sinActividadTxt: { fontSize: 12, color: '#556a7a' },
+
   chartLabel: { fontSize: 11, color: '#556a7a', marginBottom: 4 },
-  totalRow:   { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: MID },
+  totalRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: MID,
+  },
   totalLabel: { fontSize: 13, color: '#7a9ab5' },
   totalVal:   { fontSize: 14, fontWeight: '800', color: GOLD },
 
