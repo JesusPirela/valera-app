@@ -23,15 +23,6 @@ jobs:
       - name: Build web
         run: npx expo export --platform web
 
-      - name: Create .htaccess for SPA routing
-        run: |
-          cat > dist/.htaccess << 'EOF'
-          Options -MultiViews
-          RewriteEngine On
-          RewriteCond %{REQUEST_FILENAME} !-f
-          RewriteRule ^ index.html [QR,L]
-          EOF
-
       - name: Install lftp
         run: sudo apt-get install -y lftp
 
