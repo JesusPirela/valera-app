@@ -37,10 +37,17 @@ jobs:
           lftp -c "
             set ftp:passive-mode true;
             set ftp:ssl-allow no;
-            set net:timeout 60;
-            set net:max-retries 5;
-            set net:reconnect-interval-base 5;
+            set ftp:ssl-force false;
+            set ftp:ssl-protect-data false;
+            set ssl:verify-certificate false;
+            set net:timeout 120;
+            set net:max-retries 10;
+            set net:reconnect-interval-base 10;
+            set net:reconnect-interval-multiplier 1;
             open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ftp://45.137.159.251;
-            mirror --reverse --delete --verbose --exclude=.git --exclude=.htaccess ./dist/ /public_html/;
+            mirror --reverse --delete --verbose --continue --parallel=2 --exclude=.git --exclude=.htaccess ./dist/ /public_html/;
             put dist/.htaccess -o /public_html/.htaccess;
           "
+        timeout-minutes: 30
+        env:
+          LFTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}

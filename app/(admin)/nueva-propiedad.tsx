@@ -136,7 +136,6 @@ function parsearFicha(texto: string) {
 
 export default function NuevaPropiedad() {
   const [titulo, setTitulo] = useState('')
-  const [colonia, setColonia] = useState('')
   const [tituloEditado, setTituloEditado] = useState(false)
   const [descripcion, setDescripcion] = useState('')
   const [precio, setPrecio] = useState('')
@@ -166,7 +165,7 @@ export default function NuevaPropiedad() {
   const [mejorando, setMejorando] = useState(false)
   const [guardado, setGuardado] = useState(false)
 
-  // Auto-generar título cuando cambian tipo / operación / colonia
+  // Auto-generar título cuando cambian tipo / operación / dirección
   useEffect(() => {
     if (tituloEditado) return
     const tipoLabel: Record<string, string> = {
@@ -174,8 +173,8 @@ export default function NuevaPropiedad() {
     }
     const opLabel: Record<string, string> = { venta: 'Venta', renta: 'Renta' }
     const base = `${tipoLabel[tipo] ?? tipo} en ${opLabel[operacion] ?? operacion}`
-    setTitulo(colonia.trim() ? `${base} en ${colonia.trim()}` : base)
-  }, [tipo, operacion, colonia, tituloEditado])
+    setTitulo(direccion.trim() ? `${base} en ${direccion.trim()}` : base)
+  }, [tipo, operacion, direccion, tituloEditado])
 
   function aplicarFicha() {
     if (!ficha.trim()) return
@@ -544,15 +543,6 @@ export default function NuevaPropiedad() {
           </TouchableOpacity>
         )}
 
-        <Text style={styles.label}>Colonia / Fraccionamiento</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Ej. Juriquilla, Santa Fe, Lomas..."
-          value={colonia}
-          onChangeText={v => { setColonia(v); setTituloEditado(false) }}
-          autoCapitalize="words"
-        />
-
         <Text style={styles.label}>Título *</Text>
         <TextInput
           style={styles.input}
@@ -566,7 +556,7 @@ export default function NuevaPropiedad() {
           style={styles.input}
           placeholder="Ej. Calle Valera 123, Piso 2"
           value={direccion}
-          onChangeText={setDireccion}
+          onChangeText={v => { setDireccion(v); setTituloEditado(false) }}
           maxLength={200}
         />
 
