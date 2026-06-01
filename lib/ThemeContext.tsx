@@ -21,7 +21,7 @@ const ThemeContext = createContext<ThemeCtx>({
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [primaryColor, setPrimaryColor] = useState(DEFAULT_COLOR)
-  const [darkMode, setDarkMode]         = useState(true)
+  const [darkMode, setDarkMode]         = useState(false)
 
   // Cargar preferencia guardada al iniciar
   useEffect(() => {

@@ -136,6 +136,8 @@ function parsearFicha(texto: string) {
 
 export default function NuevaPropiedad() {
   const [titulo, setTitulo] = useState('')
+  const [colonia, setColonia] = useState('')
+  const [tituloEditado, setTituloEditado] = useState(false)
   const [descripcion, setDescripcion] = useState('')
   const [precio, setPrecio] = useState('')
   const [direccion, setDireccion] = useState('')
@@ -164,6 +166,17 @@ export default function NuevaPropiedad() {
   const [mejorando, setMejorando] = useState(false)
   const [guardado, setGuardado] = useState(false)
 
+  // Auto-generar título cuando cambian tipo / operación / colonia
+  useEffect(() => {
+    if (tituloEditado) return
+    const tipoLabel: Record<string, string> = {
+      casa: 'Casa', departamento: 'Departamento', local: 'Local', terreno: 'Terreno',
+    }
+    const opLabel: Record<string, string> = { venta: 'Venta', renta: 'Renta' }
+    const base = `${tipoLabel[tipo] ?? tipo} en ${opLabel[operacion] ?? operacion}`
+    setTitulo(colonia.trim() ? `${base} en ${colonia.trim()}` : base)
+  }, [tipo, operacion, colonia, tituloEditado])
+
   function aplicarFicha() {
     if (!ficha.trim()) return
     const r = parsearFicha(ficha)
@@ -188,6 +201,7 @@ export default function NuevaPropiedad() {
     if (r.estacionamientos != null) partes.push(`${r.estacionamientos} est.`)
     setFichaMsg(partes.length > 0 ? `✓ Detectado: ${partes.join(' · ')}` : '⚠ No se detectaron campos. Revisa el formato.')
     setMostrarFicha(false)
+    setTituloEditado(false)
   }
 
   async function seleccionarImagenes() {
@@ -530,12 +544,21 @@ export default function NuevaPropiedad() {
           </TouchableOpacity>
         )}
 
+        <Text style={styles.label}>Colonia / Fraccionamiento</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ej. Juriquilla, Santa Fe, Lomas..."
+          value={colonia}
+          onChangeText={v => { setColonia(v); setTituloEditado(false) }}
+          autoCapitalize="words"
+        />
+
         <Text style={styles.label}>Título *</Text>
         <TextInput
           style={styles.input}
-          placeholder="Ej. Casa en la colonia Roma"
+          placeholder="Ej. Casa en Venta en Juriquilla"
           value={titulo}
-          onChangeText={setTitulo}
+          onChangeText={v => { setTitulo(v); setTituloEditado(true) }}
         />
 
         <Text style={styles.label}>Dirección *</Text>
