@@ -81,10 +81,15 @@ BEGIN
       CONTINUE;
     END IF;
 
-    -- Calcular nuevo estado
-    v_prog  := LEAST(v_count, m.meta);
+    -- Calcular progreso: tomar el MAYOR entre lo guardado hoy y el conteo real
+    IF NOT um_exists OR um_fecha IS NULL OR um_fecha < p_fecha THEN
+      v_prog := LEAST(v_count, m.meta);
+    ELSE
+      v_prog := GREATEST(COALESCE(um_prog, 0), LEAST(v_count, m.meta));
+    END IF;
+
     v_compl := v_prog >= m.meta;
-    v_nueva := v_compl AND NOT (um_exists AND um_compl);
+    v_nueva := v_compl AND NOT (um_exists AND um_compl AND um_fecha = p_fecha);
 
     IF NOT um_exists THEN
       INSERT INTO public.user_misiones
@@ -97,12 +102,12 @@ BEGIN
         progreso         = v_prog,
         completada       = v_compl,
         fecha_reset      = p_fecha,
-        fecha_completada = CASE WHEN v_compl AND NOT um_compl THEN NOW() ELSE fecha_completada END
+        fecha_completada = CASE WHEN v_nueva THEN NOW() ELSE fecha_completada END
       WHERE id = um_id;
     END IF;
 
     IF v_nueva THEN
-      RETURN NEXT ROW(m.id, true, m.recompensa_xp, m.recompensa_coins);
+      RETURN QUERY SELECT m.id, TRUE::BOOLEAN, m.recompensa_xp, m.recompensa_coins;
     END IF;
   END LOOP;
 END;
