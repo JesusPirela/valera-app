@@ -50,9 +50,16 @@ function iniciales(nombre: string) {
   return nombre.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 }
 
+function normalizarTelefono(tel: string): string {
+  let phone = tel.replace(/\D/g, '')
+  if (phone.startsWith('5252')) phone = phone.slice(2)
+  if (phone.startsWith('521') && phone.length === 13) phone = '52' + phone.slice(3)
+  if (phone.length === 10) phone = '52' + phone
+  return phone
+}
+
 function abrirWhatsApp(telefono: string, nombre: string) {
-  const phone = telefono.replace(/\D/g, '')
-  const num = phone.length === 10 ? `52${phone}` : phone
+  const num = normalizarTelefono(telefono)
   const msg = encodeURIComponent(`Hola ${nombre}, te contacto de Valera Real Estate. ¿Cómo estás?`)
   const url = `https://wa.me/${num}?text=${msg}`
   if (Platform.OS === 'web') window.open(url, '_blank')
@@ -427,7 +434,7 @@ export default function AdminCRM() {
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.actionCall}
-                            onPress={() => Linking.openURL(`tel:${item.telefono}`)}
+                            onPress={() => Linking.openURL(`tel:${normalizarTelefono(item.telefono)}`)}
                           >
                             <Ionicons name="call-outline" size={12} color="#1a6470" />
                             <Text style={styles.actionCallText}>Llamar</Text>

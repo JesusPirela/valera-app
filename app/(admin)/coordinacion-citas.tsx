@@ -82,6 +82,13 @@ function iniciales(nombre: string) {
   return nombre.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 }
 
+function normalizarTel(tel: string): string {
+  let phone = tel.replace(/\D/g, '')
+  if (phone.startsWith('5252')) phone = phone.slice(2)
+  if (phone.startsWith('521') && phone.length === 13) phone = '52' + phone.slice(3)
+  return phone || tel
+}
+
 // ─── Modal edición ────────────────────────────────────────────────────────────
 
 function ModalEdicion({
@@ -137,7 +144,7 @@ function ModalEdicion({
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.clienteNombre}>{cliente.nombre}</Text>
-              <Text style={s.clienteTel}>{cliente.telefono}</Text>
+              <Text style={s.clienteTel}>{normalizarTel(cliente.telefono)}</Text>
             </View>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={22} color="#94a3b8" />
@@ -624,7 +631,7 @@ export default function CoordinacionCitas() {
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={s.cardNombre} numberOfLines={1}>{item.clientes.nombre}</Text>
-                      <Text style={s.cardTel}>{item.clientes.telefono}</Text>
+                      <Text style={s.cardTel}>{normalizarTel(item.clientes.telefono)}</Text>
                     </View>
                     <View style={[s.estadoBadge, { backgroundColor: inf.bg }]}>
                       <Ionicons name={inf.icon as any} size={10} color={inf.color} />
