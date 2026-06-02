@@ -358,6 +358,7 @@ export default function ProspectadorPropiedades() {
         key={item.id}
         style={[
           styles.card,
+          { backgroundColor: c.card, borderColor: c.border },
           item.exclusiva && styles.cardExclusiva,
           item.destacada && !item.exclusiva && styles.cardDestacada,
           width != null && { width },

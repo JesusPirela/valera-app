@@ -138,7 +138,7 @@ export default function University() {
       {/* ── Modal de video de introducción ── */}
       <Modal visible={showIntro} transparent animationType="fade" onRequestClose={cerrarIntro}>
         <View style={estilos.modalOverlay}>
-          <View style={estilos.modalCard}>
+          <View style={[estilos.modalCard, { backgroundColor: c.card }]}>
             <View style={estilos.modalHeader}>
               <Text style={estilos.modalTitulo}>🎓 {introTitulo}</Text>
               <TouchableOpacity onPress={cerrarIntro} style={estilos.modalCloseBtn}>
@@ -177,35 +177,35 @@ export default function University() {
         </View>
 
         {/* Bienvenida */}
-        <View style={estilos.bienvenida}>
-          <Text style={estilos.bienvenidaText}>¡Hola, {nombreUsuario}!</Text>
-          <Text style={estilos.bienvenidaSub}>Sigue aprendiendo y ganando puntos</Text>
+        <View style={[estilos.bienvenida, { backgroundColor: c.card, borderBottomColor: c.border }]}>
+          <Text style={[estilos.bienvenidaText, { color: c.text }]}>¡Hola, {nombreUsuario}!</Text>
+          <Text style={[estilos.bienvenidaSub, { color: c.textMute }]}>Sigue aprendiendo y ganando puntos</Text>
         </View>
 
         {/* Stats */}
-        <View style={estilos.statsRow}>
-          <View style={estilos.statCard}>
+        <View style={[estilos.statsRow, { backgroundColor: c.bg }]}>
+          <View style={[estilos.statCard, { backgroundColor: c.card }]}>
             <Text style={estilos.statNum}>{cursos.length}</Text>
-            <Text style={estilos.statLabel}>Disponibles</Text>
+            <Text style={[estilos.statLabel, { color: c.textMute }]}>Disponibles</Text>
           </View>
-          <View style={[estilos.statCard, { borderColor: '#e65100' }]}>
+          <View style={[estilos.statCard, { backgroundColor: c.card, borderColor: '#e65100' }]}>
             <Text style={[estilos.statNum, { color: '#e65100' }]}>{enProgreso}</Text>
-            <Text style={estilos.statLabel}>En progreso</Text>
+            <Text style={[estilos.statLabel, { color: c.textMute }]}>En progreso</Text>
           </View>
-          <View style={[estilos.statCard, { borderColor: '#2e7d32' }]}>
-            <Text style={[estilos.statNum, { color: '#2e7d32' }]}>{cursos.filter(c => c.tieneCertificado).length}</Text>
-            <Text style={estilos.statLabel}>Completados</Text>
+          <View style={[estilos.statCard, { backgroundColor: c.card, borderColor: '#2e7d32' }]}>
+            <Text style={[estilos.statNum, { color: '#2e7d32' }]}>{cursos.filter(cv => cv.tieneCertificado).length}</Text>
+            <Text style={[estilos.statLabel, { color: c.textMute }]}>Completados</Text>
           </View>
-          <View style={[estilos.statCard, { borderColor: '#c9a84c' }]}>
+          <View style={[estilos.statCard, { backgroundColor: c.card, borderColor: '#c9a84c' }]}>
             <Text style={[estilos.statNum, { color: '#c9a84c' }]}>{totalCerts}</Text>
-            <Text style={estilos.statLabel}>Certificados</Text>
+            <Text style={[estilos.statLabel, { color: c.textMute }]}>Certificados</Text>
           </View>
         </View>
 
         {/* Ver intro de nuevo */}
         {introUrl ? (
           <TouchableOpacity
-            style={estilos.btnVerIntro}
+            style={[estilos.btnVerIntro, { backgroundColor: c.card, borderColor: c.border }]}
             onPress={() => setShowIntro(true)}
           >
             <Text style={estilos.btnVerIntroText}>▶ Ver video de introducción</Text>
@@ -230,7 +230,7 @@ export default function University() {
             return (
               <TouchableOpacity
                 key={curso.id}
-                style={estilos.card}
+                style={[estilos.card, { backgroundColor: c.card, borderColor: c.border }]}
                 onPress={() => router.push(`/(prospectador)/university-curso?id=${curso.id}`)}
                 activeOpacity={0.85}
               >
@@ -251,13 +251,13 @@ export default function University() {
                     <Text style={estilos.categoriaText}>{curso.categoria}</Text>
                     {curso.tieneCertificado && <Text style={estilos.certBadge}>{curso.es_certificacion ? '🏆 Completado' : '✅ Completado'}</Text>}
                   </View>
-                  <Text style={estilos.cardTitulo}>{curso.titulo}</Text>
+                  <Text style={[estilos.cardTitulo, { color: c.text }]}>{curso.titulo}</Text>
                   {curso.descripcion_corta && (
-                    <Text style={estilos.cardDesc} numberOfLines={2}>{curso.descripcion_corta}</Text>
+                    <Text style={[estilos.cardDesc, { color: c.textSub }]} numberOfLines={2}>{curso.descripcion_corta}</Text>
                   )}
                   <View style={estilos.metaRow}>
-                    <Text style={estilos.metaText}>👤 {curso.instructor}</Text>
-                    {curso.duracion_texto && <Text style={estilos.metaText}>⏱ {curso.duracion_texto}</Text>}
+                    <Text style={[estilos.metaText, { color: c.textMute }]}>👤 {curso.instructor}</Text>
+                    {curso.duracion_texto && <Text style={[estilos.metaText, { color: c.textMute }]}>⏱ {curso.duracion_texto}</Text>}
                   </View>
                   <View style={estilos.progresoRow}>
                     <BarraProgreso pct={pct} />

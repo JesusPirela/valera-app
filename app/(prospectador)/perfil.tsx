@@ -6,7 +6,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
-import { useTheme } from '../../lib/ThemeContext'
+import { useTheme, useColors } from '../../lib/ThemeContext'
 import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
 
 const COLORES_PRESET = [
@@ -29,6 +29,7 @@ function mostrarAlerta(msg: string) {
 
 export default function Perfil() {
   const { setPrimaryColor, darkMode, toggleDarkMode } = useTheme()
+  const c = useColors()
 
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
@@ -188,7 +189,7 @@ export default function Perfil() {
         const info = infoNivel(stats.xp)
         const titulo = tituloPorNivel(nivel)
         return (
-          <View style={[s.statsCard, { borderColor: colorAcento + '44' }]}>
+          <View style={[s.statsCard, { backgroundColor: c.card, borderColor: colorAcento + '44' }]}>
             <View style={s.statsTop}>
               <View style={[s.nivelBadge, { backgroundColor: colorAcento }]}>
                 <Text style={s.nivelNum}>{nivel}</Text>
@@ -203,20 +204,20 @@ export default function Perfil() {
                 <Text style={s.barLabel}>{info.xpActual} / {info.xpNecesario} XP para nivel {nivel + 1}</Text>
               </View>
             </View>
-            <View style={s.statsRow}>
+            <View style={[s.statsRow, { borderTopColor: c.border }]}>
               <View style={s.statItem}>
-                <Text style={s.statVal}>💰 {stats.valera_coins.toLocaleString()}</Text>
-                <Text style={s.statLbl}>Valera Coins</Text>
+                <Text style={[s.statVal, { color: c.text }]}>💰 {stats.valera_coins.toLocaleString()}</Text>
+                <Text style={[s.statLbl, { color: c.textMute }]}>Valera Coins</Text>
               </View>
-              <View style={s.statDivider} />
+              <View style={[s.statDivider, { backgroundColor: c.border }]} />
               <View style={s.statItem}>
-                <Text style={s.statVal}>🔥 {stats.streak_dias}</Text>
-                <Text style={s.statLbl}>Días seguidos</Text>
+                <Text style={[s.statVal, { color: c.text }]}>🔥 {stats.streak_dias}</Text>
+                <Text style={[s.statLbl, { color: c.textMute }]}>Días seguidos</Text>
               </View>
-              <View style={s.statDivider} />
+              <View style={[s.statDivider, { backgroundColor: c.border }]} />
               <View style={s.statItem}>
-                <Text style={s.statVal}>🏠 {stats.total_propiedades}</Text>
-                <Text style={s.statLbl}>Propiedades</Text>
+                <Text style={[s.statVal, { color: c.text }]}>🏠 {stats.total_propiedades}</Text>
+                <Text style={[s.statLbl, { color: c.textMute }]}>Propiedades</Text>
               </View>
             </View>
           </View>
@@ -227,20 +228,22 @@ export default function Perfil() {
         {/* Info básica */}
         <Text style={s.seccion}>INFORMACIÓN BÁSICA</Text>
 
-        <Text style={s.label}>Nombre completo</Text>
+        <Text style={[s.label, { color: c.textSub }]}>Nombre completo</Text>
         <TextInput
-          style={s.input}
+          style={[s.input, { backgroundColor: c.card, borderColor: c.border, color: c.text }]}
           value={nombre}
           onChangeText={setNombre}
           placeholder="Tu nombre"
+          placeholderTextColor={c.textMute}
         />
 
-        <Text style={s.label}>Teléfono</Text>
+        <Text style={[s.label, { color: c.textSub }]}>Teléfono</Text>
         <TextInput
-          style={s.input}
+          style={[s.input, { backgroundColor: c.card, borderColor: c.border, color: c.text }]}
           value={telefono}
           onChangeText={setTelefono}
           placeholder="+52 000 000 0000"
+          placeholderTextColor={c.textMute}
           keyboardType="phone-pad"
         />
 
@@ -252,7 +255,7 @@ export default function Perfil() {
           {AVATARES_PRESET.map(e => (
             <TouchableOpacity
               key={e}
-              style={[s.emojiBtn, avatarEmoji === e && !avatarMostrado && { borderColor: colorAcento, borderWidth: 3 }]}
+              style={[s.emojiBtn, { backgroundColor: c.card, borderColor: c.border }, avatarEmoji === e && !avatarMostrado && { borderColor: colorAcento, borderWidth: 3 }]}
               onPress={() => seleccionarEmoji(e)}
             >
               <Text style={s.emojiBtnText}>{e}</Text>

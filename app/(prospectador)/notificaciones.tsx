@@ -14,7 +14,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { useColors } from '../../lib/ThemeContext'
+import { useColors, useTheme } from '../../lib/ThemeContext'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const SWIPE_THRESHOLD = -80
@@ -74,6 +74,7 @@ type NotifItemProps = {
 
 function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
   const c = useColors()
+  const { darkMode } = useTheme()
   const swipeX = useRef(new Animated.Value(0)).current
   const deleteOpacity = swipeX.interpolate({
     inputRange: [-120, -20],
@@ -137,6 +138,14 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
             esExclusiva && styles.cardExclusiva,
             esExclusiva && !item.leida && styles.cardExclusivaNoLeida,
             navegable && styles.cardNavegable,
+            // Dark mode — sobreescribe fondos claros
+            darkMode && !item.leida && !esRecordatorio && !esDestacada && !esExclusiva && { backgroundColor: '#172030' },
+            darkMode && esRecordatorio && { backgroundColor: '#1e1609', borderColor: '#c0660a' },
+            darkMode && esRecordatorio && !item.leida && { backgroundColor: '#261e0a' },
+            darkMode && esDestacada && { backgroundColor: '#1e1b07', borderColor: '#b09010' },
+            darkMode && esDestacada && !item.leida && { backgroundColor: '#262107' },
+            darkMode && esExclusiva && { backgroundColor: '#1e0d0d', borderColor: '#c0392b' },
+            darkMode && esExclusiva && !item.leida && { backgroundColor: '#250d0d' },
           ]}
           onPress={() => onPress(item)}
           activeOpacity={0.75}
@@ -176,7 +185,7 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
             </View>
           </View>
 
-          <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido]}>
+          <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido, darkMode && { color: c.textSub }]}>
             {item.mensaje}
           </Text>
 
