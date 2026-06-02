@@ -304,7 +304,6 @@ function ModalNuevaCita({
   async function guardar() {
     if (!clienteId) { Alert.alert('Requerido', 'Selecciona un cliente.'); return }
     setGuardando(true)
-    const { data: { user } } = await supabase.auth.getUser()
     const { error } = await supabase.from('citas_coordinacion').insert({
       cliente_id: clienteId,
       prospectador_id: null,
@@ -466,6 +465,7 @@ export default function CoordinacionCitas() {
   const [admins, setAdmins]           = useState<Profile[]>([])
   const [loading, setLoading]         = useState(true)
   const [filtroEstado, setFiltroEstado] = useState<EstadoCita | null>(null)
+  const [filtroAdmin, setFiltroAdmin]   = useState<string | null>(null)
   const [citaEditando, setCitaEditando] = useState<Cita | null>(null)
   const [modalNueva, setModalNueva]   = useState(false)
   const mountedRef                    = useRef(true)
@@ -516,9 +516,13 @@ export default function CoordinacionCitas() {
     return acc
   }, {})
 
-  const citasFiltradas = filtroEstado
-    ? citas.filter(c => c.estado === filtroEstado)
-    : citas
+  const citasFiltradas = citas
+    .filter(c => !filtroEstado || c.estado === filtroEstado)
+    .filter(c => {
+      if (!filtroAdmin) return true
+      if (filtroAdmin === 'sin_asignar') return !c.coordinado_por
+      return c.coordinado_por === filtroAdmin
+    })
 
   // ── Urgentes: coordinadas con fecha próxima (< 48h) ───────
   const ahora = Date.now()
@@ -553,6 +557,52 @@ export default function CoordinacionCitas() {
           <Text style={s.kpiLbl}>PRÓXIMAS 48H</Text>
         </View>
       </View>
+
+      {/* ── Filtro por admin ── */}
+      {admins.length > 1 && (
+        <ScrollView
+          horizontal showsHorizontalScrollIndicator={false}
+          style={s.adminBarWrap} contentContainerStyle={s.adminBarContent}
+        >
+          <TouchableOpacity
+            style={[s.adminFilterChip, filtroAdmin === null && s.adminFilterChipActivo]}
+            onPress={() => setFiltroAdmin(null)}
+          >
+            <Ionicons name="people-outline" size={12} color={filtroAdmin === null ? '#fff' : '#1a6470'} />
+            <Text style={[s.adminFilterTxt, filtroAdmin === null && { color: '#fff', fontWeight: '700' }]}>
+              Todos · {citas.length}
+            </Text>
+          </TouchableOpacity>
+          {admins.map(a => {
+            const activo = filtroAdmin === a.id
+            const cnt = citas.filter(c => c.coordinado_por === a.id).length
+            const sinAsignar = citas.filter(c => !c.coordinado_por).length
+            return (
+              <TouchableOpacity
+                key={a.id}
+                style={[s.adminFilterChip, activo && s.adminFilterChipActivo]}
+                onPress={() => setFiltroAdmin(activo ? null : a.id)}
+              >
+                <Ionicons name="person-outline" size={12} color={activo ? '#fff' : '#1a6470'} />
+                <Text style={[s.adminFilterTxt, activo && { color: '#fff', fontWeight: '700' }]}>
+                  {a.nombre} · {cnt}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+          {citas.some(c => !c.coordinado_por) && (
+            <TouchableOpacity
+              style={[s.adminFilterChip, filtroAdmin === 'sin_asignar' && s.adminFilterChipActivo]}
+              onPress={() => setFiltroAdmin(filtroAdmin === 'sin_asignar' ? null : 'sin_asignar')}
+            >
+              <Ionicons name="help-circle-outline" size={12} color={filtroAdmin === 'sin_asignar' ? '#fff' : '#94a3b8'} />
+              <Text style={[s.adminFilterTxt, { color: filtroAdmin === 'sin_asignar' ? '#fff' : '#94a3b8' }, filtroAdmin === 'sin_asignar' && { fontWeight: '700' }]}>
+                Sin asignar · {citas.filter(c => !c.coordinado_por).length}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      )}
 
       {/* ── Tabs de estado ── */}
       <ScrollView
@@ -861,4 +911,15 @@ const s = StyleSheet.create({
   },
   clienteRowNombre: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
   clienteRowTel:    { fontSize: 12, color: '#94a3b8', marginTop: 2 },
+
+  // Barra de filtro por admin
+  adminBarWrap:    { flexGrow: 0, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  adminBarContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 6, flexDirection: 'row' },
+  adminFilterChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 20, borderWidth: 1, borderColor: '#d4e8ea', backgroundColor: '#fff',
+  },
+  adminFilterChipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  adminFilterTxt: { fontSize: 12, color: '#1a6470', fontWeight: '500' },
 })
