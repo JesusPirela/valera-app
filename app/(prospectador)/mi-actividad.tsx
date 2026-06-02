@@ -139,7 +139,10 @@ export default function MiActividad() {
     setCargandoPeriodo(false)
   }
 
-  const totalMinutos   = conexionData.reduce((a, d) => a + d.minutos, 0)
+  const totalMinutos   = Math.min(
+    conexionData.reduce((a, d) => a + d.minutos, 0),
+    periodo === 'hoy' ? 1440 : Infinity
+  )
   const periodoLabel   = periodo === 'hoy' ? 'hoy' : periodo === 'semana' ? 'los últimos 7 días' : 'los últimos 30 días'
   const chartLabel     = periodo === 'hoy' ? 'Hoy (minutos)' : periodo === 'semana' ? 'Últimos 7 días (min/día)' : 'Últimos 30 días (min/día)'
   const fechaHoyLabel  = new Date().toLocaleDateString('es-MX', {

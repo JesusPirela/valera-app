@@ -3,6 +3,9 @@
 -- si un usuario tenía muchas sesiones cortas/repetidas en el mismo día.
 
 -- ── 1. get_horas_conexion (vista del prospectador) ────────────────────────────
+-- Bug anterior: usaba NOW()-N días (ventana rodante de 24h) en lugar del
+-- inicio del día en CDMX. Eso devolvía 2 fechas distintas para "hoy",
+-- y el frontend las sumaba superando 1440 min.
 CREATE OR REPLACE FUNCTION public.get_horas_conexion(
   p_user_id UUID DEFAULT NULL,
   p_dias    INTEGER DEFAULT 30
@@ -10,7 +13,9 @@ CREATE OR REPLACE FUNCTION public.get_horas_conexion(
 RETURNS TABLE (fecha DATE, minutos NUMERIC)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
-DECLARE v_user_id UUID;
+DECLARE
+  v_user_id UUID;
+  v_desde   TIMESTAMPTZ;
 BEGIN
   v_user_id := COALESCE(p_user_id, auth.uid());
 
@@ -19,6 +24,12 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Access denied';
   END IF;
+
+  -- Inicio del día (p_dias-1) días atrás en hora CDMX, convertido a UTC
+  v_desde := (
+    ((NOW() AT TIME ZONE 'America/Mexico_City')::DATE - (p_dias - 1))::TIMESTAMP
+    AT TIME ZONE 'America/Mexico_City'
+  ) AT TIME ZONE 'UTC';
 
   RETURN QUERY
   SELECT
@@ -36,7 +47,7 @@ BEGIN
     ) AS minutos
   FROM public.user_sessions s
   WHERE s.user_id = v_user_id
-    AND s.inicio >= (NOW() - (p_dias || ' days')::INTERVAL)
+    AND s.inicio >= v_desde
   GROUP BY DATE(s.inicio AT TIME ZONE 'America/Mexico_City')
   ORDER BY DATE(s.inicio AT TIME ZONE 'America/Mexico_City');
 END;
