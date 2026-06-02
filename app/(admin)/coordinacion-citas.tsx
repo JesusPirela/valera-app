@@ -152,23 +152,30 @@ function ModalEdicion({
     cita?.fecha_cita ? new Date(cita.fecha_cita).toISOString().slice(0, 16) : ''
   )
   const [coordinadorId, setCoordinadorId] = useState(cita?.coordinado_por ?? '')
+  const [telefono, setTelefono]       = useState(cita?.clientes?.telefono ?? '')
   const [guardando, setGuardando]     = useState(false)
 
   async function guardar() {
     if (!cita) return
     setGuardando(true)
-    const payload: Record<string, unknown> = {
+    const mostrarError = (msg: string) => {
+      if (Platform.OS === 'web') window.alert(msg)
+      else Alert.alert('Error', msg)
+    }
+    // Actualizar teléfono del cliente si cambió
+    if (telefono.trim() && telefono.trim() !== cita.clientes.telefono) {
+      const { error: errTel } = await supabase
+        .from('clientes').update({ telefono: telefono.trim() }).eq('id', cita.cliente_id)
+      if (errTel) { mostrarError(errTel.message); setGuardando(false); return }
+    }
+    const { error } = await supabase.from('citas_coordinacion').update({
       estado,
       notas: notas.trim() || null,
       coordinado_por: coordinadorId || null,
       fecha_cita: fechaTexto ? new Date(fechaTexto).toISOString() : null,
-    }
-    const { error } = await supabase.from('citas_coordinacion').update(payload).eq('id', cita.id)
+    }).eq('id', cita.id)
     setGuardando(false)
-    if (error) {
-      Alert.alert('Error', error.message)
-      return
-    }
+    if (error) { mostrarError(error.message); return }
     onGuardar()
     onClose()
   }
@@ -191,7 +198,14 @@ function ModalEdicion({
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.clienteNombre}>{cliente.nombre}</Text>
-              <Text style={s.clienteTel}>{normalizarTel(cliente.telefono)}</Text>
+              <TextInput
+                style={s.telInput}
+                value={telefono}
+                onChangeText={setTelefono}
+                keyboardType="phone-pad"
+                placeholder="Teléfono"
+                placeholderTextColor="#94a3b8"
+              />
             </View>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={22} color="#94a3b8" />
@@ -978,6 +992,10 @@ const s = StyleSheet.create({
   clienteHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
   clienteNombre:{ fontSize: 16, fontWeight: '700', color: '#0f172a' },
   clienteTel:   { fontSize: 13, color: '#64748b', marginTop: 2 },
+  telInput: {
+    fontSize: 13, color: '#64748b', marginTop: 2,
+    borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingVertical: 2,
+  },
 
   fieldLabel: { fontSize: 13, fontWeight: '700', color: '#475569', marginBottom: 8 },
   input: {
