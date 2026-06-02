@@ -421,7 +421,7 @@ export default function DetallePropiedad() {
         ${imagenes.length > 0 ? `<div class="seccion">Fotos</div><div class="fotos">${imagenesHTML}</div>` : ''}
         ${cars.length > 0 ? `<div class="seccion">Caracteristicas</div><div class="cars">${cars.join('')}</div>` : ''}
         ${propiedad.descripcion ? `<div class="seccion">Descripcion</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
-        ${subidoPor ? `<div class="asesor"><div class="asesor-nombre">${esc(subidoPor.nombre)}</div>${subidoPor.telefono ? `<div class="asesor-tel">${esc(subidoPor.telefono)}</div>` : ''}</div>` : ''}
+        ${subidoPor ? `<div class="asesor"><div class="asesor-nombre">${esc(subidoPor.nombre)}</div></div>` : ''}
         <div class="footer">Valera Real Estate · valerarealestate.com</div>
       </div>
       </body></html>`
@@ -434,9 +434,12 @@ export default function DetallePropiedad() {
       } else {
         const Print = await import('expo-print')
         const ShareLib = await import('expo-sharing')
+        const FileSystemLib = await import('expo-file-system')
         const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 })
         const nombreArchivo = `${propiedad.codigo ?? 'ficha'}.pdf`
-        await ShareLib.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: nombreArchivo })
+        const destUri = FileSystemLib.FileSystem.cacheDirectory + nombreArchivo
+        await FileSystemLib.FileSystem.copyAsync({ from: uri, to: destUri })
+        await ShareLib.shareAsync(destUri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: nombreArchivo })
       }
     } catch {
       if (Platform.OS === 'web') window.alert('No se pudo generar el PDF.')
