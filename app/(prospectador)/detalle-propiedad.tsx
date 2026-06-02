@@ -582,8 +582,10 @@ export default function DetallePropiedad() {
       : ''
     const mensaje = `Hola, quiero coordinar una cita para *${clienteParaCita.nombre}* (${clienteParaCita.telefono}) para la propiedad *${propiedad.codigo}*${constructoraStr} el *${fechaStr}*.`
     if (subidoPor?.telefono) {
-      const raw = subidoPor.telefono.replace(/\D/g, '')
-      const tel = raw.startsWith('52') && raw.length === 12 ? raw : `52${raw}`
+      let phone = subidoPor.telefono.replace(/\D/g, '')
+      if (phone.startsWith('5252')) phone = phone.slice(2)
+      if (phone.startsWith('521') && phone.length === 13) phone = '52' + phone.slice(3)
+      const tel = phone.length === 10 ? `52${phone}` : phone
       Linking.openURL(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`)
     } else {
       // Sin teléfono del asesor: abrir WhatsApp sin destinatario, el prospectador elige a quién enviar
