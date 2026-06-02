@@ -72,9 +72,13 @@ function parsearFicha(texto: string) {
       direccion = partes[1].trim()
     } else {
       titulo = primera
-      // Extrae "Juriquilla" de "Venta de Casa en Juriquilla"
-      const mLoc = primera.match(/\ben\s+([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+(?:(?:[,\s]+(?:de\s+)?)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+)*)$/i)
-      if (mLoc) direccion = mLoc[1].trim()
+      // Extrae la ubicación tomando todo lo que sigue al último " en ",
+      // ignorando si el resultado es solo "Venta" o "Renta"
+      const enIdx = primera.toLowerCase().lastIndexOf(' en ')
+      if (enIdx !== -1) {
+        const candidato = primera.slice(enIdx + 4).trim()
+        if (!/^(venta|renta)$/i.test(candidato)) direccion = candidato
+      }
     }
   }
 
