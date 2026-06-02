@@ -421,7 +421,6 @@ export default function DetallePropiedad() {
         ${imagenes.length > 0 ? `<div class="seccion">Fotos</div><div class="fotos">${imagenesHTML}</div>` : ''}
         ${cars.length > 0 ? `<div class="seccion">Caracteristicas</div><div class="cars">${cars.join('')}</div>` : ''}
         ${propiedad.descripcion ? `<div class="seccion">Descripcion</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
-        ${subidoPor ? `<div class="asesor"><div class="asesor-nombre">${esc(subidoPor.nombre)}</div></div>` : ''}
         <div class="footer">Valera Real Estate · valerarealestate.com</div>
       </div>
       </body></html>`
