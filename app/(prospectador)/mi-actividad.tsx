@@ -125,7 +125,11 @@ export default function MiActividad() {
   async function cargarConexion(uid: string, p: 'hoy' | 'semana' | 'mes') {
     const dias = p === 'hoy' ? 1 : p === 'semana' ? 7 : 30
     const { data } = await supabase.rpc('get_horas_conexion', { p_user_id: uid, p_dias: dias })
-    setConexionData((data ?? []).map((d: any) => ({ fecha: d.fecha, minutos: Number(d.minutos) })))
+    // Cap defensivo por día: ningún día puede superar 1440 min (24h)
+    setConexionData((data ?? []).map((d: any) => ({
+      fecha: d.fecha,
+      minutos: Math.min(Number(d.minutos), 1440),
+    })))
   }
 
   async function cambiarPeriodo(p: 'hoy' | 'semana' | 'mes') {
@@ -139,9 +143,10 @@ export default function MiActividad() {
     setCargandoPeriodo(false)
   }
 
-  const totalMinutos   = Math.min(
+  const MAX_MINUTOS_PERIODO = { hoy: 1440, semana: 7 * 1440, mes: 30 * 1440 }
+  const totalMinutos = Math.min(
     conexionData.reduce((a, d) => a + d.minutos, 0),
-    periodo === 'hoy' ? 1440 : Infinity
+    MAX_MINUTOS_PERIODO[periodo]
   )
   const periodoLabel   = periodo === 'hoy' ? 'hoy' : periodo === 'semana' ? 'los últimos 7 días' : 'los últimos 30 días'
   const chartLabel     = periodo === 'hoy' ? 'Hoy (minutos)' : periodo === 'semana' ? 'Últimos 7 días (min/día)' : 'Últimos 30 días (min/día)'

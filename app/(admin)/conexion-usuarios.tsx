@@ -116,7 +116,7 @@ export default function ConexionUsuarios() {
     const map = new Map<string, UserConexion>()
     for (const r of rows) {
       if (!map.has(r.user_id)) map.set(r.user_id, { user_id: r.user_id, nombre: r.nombre, dias: [] })
-      map.get(r.user_id)!.dias.push({ fecha: r.fecha, minutos: r.minutos })
+      map.get(r.user_id)!.dias.push({ fecha: r.fecha, minutos: Math.min(r.minutos, 1440) })
     }
     setUsuarios(Array.from(map.values()).sort((a, b) => {
       const ta = a.dias.reduce((s, d) => s + d.minutos, 0)
