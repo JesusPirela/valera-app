@@ -572,6 +572,14 @@ export default function DetallePropiedad() {
       fecha_hora: recordatorioFecha.toISOString(),
     })
 
+    await supabase.from('citas_coordinacion').insert({
+      cliente_id: clienteParaCita.id,
+      prospectador_id: user.id,
+      propiedad_id: propiedad.id,
+      estado: 'coordinada',
+      fecha_cita: fechaCita.toISOString(),
+    })
+
     cerrarModalCita()
 
     const fechaStr = fechaCita.toLocaleString('es-MX', {
