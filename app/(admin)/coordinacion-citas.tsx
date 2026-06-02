@@ -276,16 +276,23 @@ function ModalNuevaCita({
   onClose: () => void
   onGuardar: () => void
 }) {
-  const [busqueda, setBusqueda]         = useState('')
-  const [clientes, setClientes]         = useState<{ id: string; nombre: string; telefono: string }[]>([])
-  const [clienteId, setClienteId]       = useState('')
+  const [busqueda, setBusqueda]           = useState('')
+  const [clientes, setClientes]           = useState<{ id: string; nombre: string; telefono: string }[]>([])
+  const [clienteId, setClienteId]         = useState('')
   const [clienteNombre, setClienteNombre] = useState('')
-  const [estado, setEstado]             = useState<EstadoCita>('por_contactar')
-  const [notas, setNotas]               = useState('')
-  const [fechaTexto, setFechaTexto]     = useState('')
+  const [estado, setEstado]               = useState<EstadoCita>('por_contactar')
+  const [notas, setNotas]                 = useState('')
+  const [fechaTexto, setFechaTexto]       = useState('')
   const [coordinadorId, setCoordinadorId] = useState('')
-  const [guardando, setGuardando]       = useState(false)
-  const [buscando, setBuscando]         = useState(false)
+  const [prospectadorId, setProspectadorId] = useState('')
+  const [prospectadores, setProspectadores] = useState<Profile[]>([])
+  const [guardando, setGuardando]         = useState(false)
+  const [buscando, setBuscando]           = useState(false)
+
+  useEffect(() => {
+    supabase.from('profiles').select('id, nombre').eq('role', 'prospectador')
+      .then(({ data }) => setProspectadores(data ?? []))
+  }, [])
 
   useEffect(() => {
     if (busqueda.trim().length < 2) { setClientes([]); return }
@@ -306,7 +313,7 @@ function ModalNuevaCita({
     setGuardando(true)
     const { error } = await supabase.from('citas_coordinacion').insert({
       cliente_id: clienteId,
-      prospectador_id: null,
+      prospectador_id: prospectadorId || null,
       coordinado_por: coordinadorId || null,
       estado,
       notas: notas.trim() || null,
@@ -425,6 +432,31 @@ function ModalNuevaCita({
                       onPress={() => setCoordinadorId(a.id)}
                     >
                       <Text style={[s.adminChipTxt, activo && { color: '#fff' }]}>{a.nombre}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+            </ScrollView>
+
+            {/* Prospectador */}
+            <Text style={s.fieldLabel}>Prospectador</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+              <View style={{ flexDirection: 'row', gap: 8, paddingRight: 8 }}>
+                <TouchableOpacity
+                  style={[s.adminChip, !prospectadorId && s.adminChipActivo]}
+                  onPress={() => setProspectadorId('')}
+                >
+                  <Text style={[s.adminChipTxt, !prospectadorId && { color: '#fff' }]}>Sin asignar</Text>
+                </TouchableOpacity>
+                {prospectadores.map(p => {
+                  const activo = prospectadorId === p.id
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[s.adminChip, activo && s.adminChipActivo]}
+                      onPress={() => setProspectadorId(p.id)}
+                    >
+                      <Text style={[s.adminChipTxt, activo && { color: '#fff' }]}>{p.nombre}</Text>
                     </TouchableOpacity>
                   )
                 })}
