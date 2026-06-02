@@ -89,6 +89,53 @@ function normalizarTel(tel: string): string {
   return phone || tel
 }
 
+// ─── Dropdown selector ───────────────────────────────────────────────────────
+
+function DropdownSelector({
+  label, value, options, onSelect, placeholder = 'Sin asignar',
+}: {
+  label: string
+  value: string
+  options: { id: string; nombre: string }[]
+  onSelect: (id: string) => void
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const selected = options.find(o => o.id === value)
+
+  return (
+    <>
+      <Text style={s.fieldLabel}>{label}</Text>
+      <TouchableOpacity style={s.dropdownBtn} onPress={() => setOpen(true)}>
+        <Text style={[s.dropdownBtnTxt, !selected && { color: '#94a3b8' }]}>
+          {selected ? selected.nombre : placeholder}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color="#94a3b8" />
+      </TouchableOpacity>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <TouchableOpacity style={s.ddOverlay} activeOpacity={1} onPress={() => setOpen(false)}>
+          <View style={s.ddSheet}>
+            <Text style={s.ddTitle}>{label}</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <TouchableOpacity style={s.ddOption} onPress={() => { onSelect(''); setOpen(false) }}>
+                <Text style={[s.ddOptionTxt, !value && { color: '#1a6470', fontWeight: '700' }]}>{placeholder}</Text>
+                {!value && <Ionicons name="checkmark" size={16} color="#1a6470" />}
+              </TouchableOpacity>
+              {options.filter(o => o.nombre?.trim()).map(o => (
+                <TouchableOpacity key={o.id} style={s.ddOption} onPress={() => { onSelect(o.id); setOpen(false) }}>
+                  <Text style={[s.ddOptionTxt, value === o.id && { color: '#1a6470', fontWeight: '700' }]}>{o.nombre}</Text>
+                  {value === o.id && <Ionicons name="checkmark" size={16} color="#1a6470" />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  )
+}
+
 // ─── Modal edición ────────────────────────────────────────────────────────────
 
 function ModalEdicion({
@@ -200,30 +247,12 @@ function ModalEdicion({
               />
             )}
 
-            {/* Coordinador */}
-            <Text style={s.fieldLabel}>Coordinado por</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-              <View style={{ flexDirection: 'row', gap: 8, paddingRight: 8 }}>
-                <TouchableOpacity
-                  style={[s.adminChip, !coordinadorId && s.adminChipActivo]}
-                  onPress={() => setCoordinadorId('')}
-                >
-                  <Text style={[s.adminChipTxt, !coordinadorId && { color: '#fff' }]}>Sin asignar</Text>
-                </TouchableOpacity>
-                {admins.map(a => {
-                  const activo = coordinadorId === a.id
-                  return (
-                    <TouchableOpacity
-                      key={a.id}
-                      style={[s.adminChip, activo && s.adminChipActivo]}
-                      onPress={() => setCoordinadorId(a.id)}
-                    >
-                      <Text style={[s.adminChipTxt, activo && { color: '#fff' }]}>{a.nombre}</Text>
-                    </TouchableOpacity>
-                  )
-                })}
-              </View>
-            </ScrollView>
+            <DropdownSelector
+              label="Coordinado por"
+              value={coordinadorId}
+              options={admins.filter(a => a.nombre?.trim())}
+              onSelect={setCoordinadorId}
+            />
 
             {/* Notas */}
             <Text style={s.fieldLabel}>Notas de coordinación</Text>
@@ -290,8 +319,8 @@ function ModalNuevaCita({
   const [buscando, setBuscando]           = useState(false)
 
   useEffect(() => {
-    supabase.from('profiles').select('id, nombre').eq('role', 'prospectador')
-      .then(({ data }) => setProspectadores(data ?? []))
+    supabase.from('profiles').select('id, nombre').neq('role', 'admin')
+      .then(({ data }) => setProspectadores((data ?? []).filter(p => p.nombre?.trim())))
   }, [])
 
   useEffect(() => {
@@ -413,55 +442,19 @@ function ModalNuevaCita({
               />
             )}
 
-            {/* Coordinador */}
-            <Text style={s.fieldLabel}>Coordinado por</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-              <View style={{ flexDirection: 'row', gap: 8, paddingRight: 8 }}>
-                <TouchableOpacity
-                  style={[s.adminChip, !coordinadorId && s.adminChipActivo]}
-                  onPress={() => setCoordinadorId('')}
-                >
-                  <Text style={[s.adminChipTxt, !coordinadorId && { color: '#fff' }]}>Sin asignar</Text>
-                </TouchableOpacity>
-                {admins.map(a => {
-                  const activo = coordinadorId === a.id
-                  return (
-                    <TouchableOpacity
-                      key={a.id}
-                      style={[s.adminChip, activo && s.adminChipActivo]}
-                      onPress={() => setCoordinadorId(a.id)}
-                    >
-                      <Text style={[s.adminChipTxt, activo && { color: '#fff' }]}>{a.nombre}</Text>
-                    </TouchableOpacity>
-                  )
-                })}
-              </View>
-            </ScrollView>
+            <DropdownSelector
+              label="Coordinado por"
+              value={coordinadorId}
+              options={admins.filter(a => a.nombre?.trim())}
+              onSelect={setCoordinadorId}
+            />
 
-            {/* Prospectador */}
-            <Text style={s.fieldLabel}>Prospectador</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-              <View style={{ flexDirection: 'row', gap: 8, paddingRight: 8 }}>
-                <TouchableOpacity
-                  style={[s.adminChip, !prospectadorId && s.adminChipActivo]}
-                  onPress={() => setProspectadorId('')}
-                >
-                  <Text style={[s.adminChipTxt, !prospectadorId && { color: '#fff' }]}>Sin asignar</Text>
-                </TouchableOpacity>
-                {prospectadores.map(p => {
-                  const activo = prospectadorId === p.id
-                  return (
-                    <TouchableOpacity
-                      key={p.id}
-                      style={[s.adminChip, activo && s.adminChipActivo]}
-                      onPress={() => setProspectadorId(p.id)}
-                    >
-                      <Text style={[s.adminChipTxt, activo && { color: '#fff' }]}>{p.nombre}</Text>
-                    </TouchableOpacity>
-                  )
-                })}
-              </View>
-            </ScrollView>
+            <DropdownSelector
+              label="Prospectador"
+              value={prospectadorId}
+              options={prospectadores}
+              onSelect={setProspectadorId}
+            />
 
             {/* Notas */}
             <Text style={s.fieldLabel}>Notas</Text>
@@ -943,6 +936,27 @@ const s = StyleSheet.create({
   },
   clienteRowNombre: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
   clienteRowTel:    { fontSize: 12, color: '#94a3b8', marginTop: 2 },
+
+  // Dropdown
+  dropdownBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1,
+    borderColor: '#e2e8f0', paddingHorizontal: 14, paddingVertical: 11, marginBottom: 14,
+  },
+  dropdownBtnTxt: { fontSize: 14, color: '#1e293b', flex: 1 },
+  ddOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', paddingHorizontal: 24 },
+  ddSheet: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 20,
+    maxHeight: 380,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
+  },
+  ddTitle:     { fontSize: 15, fontWeight: '800', color: '#0f172a', marginBottom: 12 },
+  ddOption: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+  },
+  ddOptionTxt: { fontSize: 14, color: '#334155' },
 
   // Barra de filtro por admin
   adminBarWrap:    { flexGrow: 0, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
