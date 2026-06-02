@@ -342,12 +342,17 @@ function ModalNuevaCita({
 
   async function guardar() {
     setGuardando(true)
+    const mostrarError = (msg: string) => {
+      if (Platform.OS === 'web') window.alert(msg)
+      else Alert.alert('Error', msg)
+    }
+
     try {
       let idFinal = clienteId
 
       if (modoNuevo) {
         if (!nuevoNombre.trim() || !nuevoTelefono.trim()) {
-          Alert.alert('Requerido', 'Nombre y teléfono son obligatorios.')
+          mostrarError('Nombre y teléfono son obligatorios.')
           setGuardando(false)
           return
         }
@@ -364,10 +369,14 @@ function ModalNuevaCita({
           })
           .select('id')
           .single()
-        if (errCliente) { Alert.alert('Error al crear cliente', errCliente.message); setGuardando(false); return }
+        if (errCliente) {
+          mostrarError(`Error al crear cliente: ${errCliente.message}`)
+          setGuardando(false)
+          return
+        }
         idFinal = nuevo.id
       } else if (!clienteId) {
-        Alert.alert('Requerido', 'Selecciona o crea un cliente.')
+        mostrarError('Selecciona o crea un cliente.')
         setGuardando(false)
         return
       }
@@ -380,11 +389,15 @@ function ModalNuevaCita({
         notas: notas.trim() || null,
         fecha_cita: fechaTexto ? new Date(fechaTexto).toISOString() : null,
       })
-      if (error) { Alert.alert('Error', error.message); setGuardando(false); return }
+      if (error) {
+        mostrarError(`Error al crear cita: ${error.message}`)
+        setGuardando(false)
+        return
+      }
       onGuardar()
       onClose()
     } catch (e: any) {
-      Alert.alert('Error', e.message)
+      mostrarError(e.message)
     } finally {
       setGuardando(false)
     }
