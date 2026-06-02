@@ -645,10 +645,10 @@ export default function CRM() {
                           {item.nivel_interes
                             ? <View style={[s.fuenteTag, {
                                 backgroundColor: item.nivel_interes === 'alto'
-                                  ? (darkMode ? 'rgba(185,28,28,0.22)' : '#fee2e2')
+                                  ? (darkMode ? '#2d0f0f' : '#fee2e2')
                                   : item.nivel_interes === 'medio'
-                                  ? (darkMode ? 'rgba(146,64,14,0.22)' : '#fef3c7')
-                                  : (darkMode ? 'rgba(30,64,175,0.22)' : '#dbeafe'),
+                                  ? (darkMode ? '#271c07' : '#fef3c7')
+                                  : (darkMode ? '#0d1e3d' : '#dbeafe'),
                               }]}>
                                 <Text style={[s.fuenteTagTxt, {
                                   color: item.nivel_interes === 'alto'
@@ -663,16 +663,16 @@ export default function CRM() {
                             : null
                           }
                           {item.fuente_lead
-                            ? <View style={[s.fuenteTag, { backgroundColor: c.border }]}>
+                            ? <View style={[s.fuenteTag, { backgroundColor: darkMode ? c.bg : '#f1f5f9' }]}>
                                 <Text style={[s.fuenteTagTxt, { color: c.textSub }]}>{item.fuente_lead}</Text>
                               </View>
                             : null
                           }
                         </View>
                       </View>
-                      <View style={[s.estadoBadge, { backgroundColor: darkMode ? info.color + '28' : info.bg }]}>
+                      <View style={[s.estadoBadge, { backgroundColor: darkMode ? info.color + '40' : info.bg }]}>
                         <View style={[s.estadoDot, { backgroundColor: info.color }]} />
-                        <Text style={[s.estadoTxt, { color: darkMode ? info.color + 'ee' : info.color }]} numberOfLines={1}>{info.label}</Text>
+                        <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
                       </View>
                     </View>
 
@@ -697,9 +697,9 @@ export default function CRM() {
                     {/* ── Recordatorio ── */}
                     {rec && (
                       <View style={[s.recRow,
-                        recVenc ? { backgroundColor: darkMode ? 'rgba(239,68,68,0.13)' : '#fef2f2' }
-                        : recHoy ? { backgroundColor: darkMode ? 'rgba(217,119,6,0.13)' : '#fffbeb' }
-                        : { backgroundColor: darkMode ? 'rgba(26,100,112,0.15)' : '#f0fdfa' },
+                        recVenc ? { backgroundColor: darkMode ? '#2a0e0e' : '#fef2f2' }
+                        : recHoy ? { backgroundColor: darkMode ? '#27190a' : '#fffbeb' }
+                        : { backgroundColor: darkMode ? '#091e20' : '#f0fdfa' },
                       ]}>
                         <Ionicons
                           name={recVenc ? 'warning-outline' : recHoy ? 'alarm-outline' : 'calendar-outline'}
@@ -721,18 +721,18 @@ export default function CRM() {
                     {/* ── Acciones ── */}
                     <View style={s.actions}>
                       <TouchableOpacity
-                        style={[s.actionWa, darkMode && { backgroundColor: 'rgba(22,163,74,0.1)', borderColor: 'rgba(22,163,74,0.28)' }]}
+                        style={[s.actionWa, darkMode && { backgroundColor: '#0b2016', borderColor: '#1a6b38' }]}
                         onPress={() => abrirWhatsApp(item.telefono, item.nombre)}
                       >
-                        <Ionicons name="logo-whatsapp" size={14} color="#16a34a" />
-                        <Text style={s.actionWaTxt}>WhatsApp</Text>
+                        <Ionicons name="logo-whatsapp" size={14} color={darkMode ? '#22c55e' : '#16a34a'} />
+                        <Text style={[s.actionWaTxt, darkMode && { color: '#22c55e' }]}>WhatsApp</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={[s.actionCall, darkMode && { backgroundColor: 'rgba(3,105,161,0.1)', borderColor: 'rgba(3,105,161,0.28)' }]}
+                        style={[s.actionCall, darkMode && { backgroundColor: '#091929', borderColor: '#0e5282' }]}
                         onPress={() => llamar(item.telefono)}
                       >
-                        <Ionicons name="call-outline" size={14} color="#0369a1" />
-                        <Text style={s.actionCallTxt}>Llamar</Text>
+                        <Ionicons name="call-outline" size={14} color={darkMode ? '#38bdf8' : '#0369a1'} />
+                        <Text style={[s.actionCallTxt, darkMode && { color: '#38bdf8' }]}>Llamar</Text>
                       </TouchableOpacity>
                     </View>
 
