@@ -161,10 +161,15 @@ export default function AdminCRM() {
 
   const todosClientes = secciones.flatMap((s) => s.data)
   const totalGlobal = todosClientes.length
-  const calientes = todosClientes.filter(c => c.estado === 'seguimiento_cierre' || c.estado === 'cita_agendada').length
-  const comprados = todosClientes.filter(c => c.estado === 'compro').length
+  // Pipeline chips: respetar el filtro de operación activo
+  const clientesParaPipeline = operacionFiltro
+    ? todosClientes.filter(c => c.tipo_operacion === operacionFiltro)
+    : todosClientes
+  const totalPipeline = clientesParaPipeline.length
+  const enProceso = clientesParaPipeline.filter(c => c.estado === 'seguimiento_cierre' || c.estado === 'cita_agendada').length
+  const comprados = clientesParaPipeline.filter(c => c.estado === 'compro').length
   const conteosPorEstado = ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
-    acc[e] = todosClientes.filter((c) => c.estado === e).length
+    acc[e] = clientesParaPipeline.filter((c) => c.estado === e).length
     return acc
   }, {})
 
@@ -244,22 +249,22 @@ export default function AdminCRM() {
       {/* Stats banner */}
       <View style={styles.statsBanner}>
         <View style={styles.statItem}>
-          <Text style={[styles.statNum, { color: '#1a6470' }]}>{totalGlobal}</Text>
+          <Text style={[styles.statNum, { color: '#c9a84c' }]}>{totalGlobal}</Text>
           <Text style={styles.statLabel}>Leads</Text>
         </View>
         <View style={styles.statSep} />
         <View style={styles.statItem}>
-          <Text style={[styles.statNum, { color: '#6a1b9a' }]}>{calientes}</Text>
-          <Text style={styles.statLabel}>Calientes</Text>
+          <Text style={[styles.statNum, { color: '#e07bb5' }]}>{enProceso}</Text>
+          <Text style={styles.statLabel}>En proceso</Text>
         </View>
         <View style={styles.statSep} />
         <View style={styles.statItem}>
-          <Text style={[styles.statNum, { color: '#2e7d32' }]}>{comprados}</Text>
+          <Text style={[styles.statNum, { color: '#4cdb8a' }]}>{comprados}</Text>
           <Text style={styles.statLabel}>Cerrados</Text>
         </View>
         <View style={styles.statSep} />
         <View style={styles.statItem}>
-          <Text style={[styles.statNum, { color: '#1a6470' }]}>{secciones.length}</Text>
+          <Text style={[styles.statNum, { color: '#c9a84c' }]}>{secciones.length}</Text>
           <Text style={styles.statLabel}>Asesores</Text>
         </View>
       </View>
@@ -285,7 +290,7 @@ export default function AdminCRM() {
         >
           <View style={[styles.pipelineDot, { backgroundColor: estadoFiltro === null ? '#c9a84c' : '#aaa' }]} />
           <View>
-            <Text style={[styles.pipelineCount, estadoFiltro === null && styles.pipelineCountAll]}>{totalGlobal}</Text>
+            <Text style={[styles.pipelineCount, estadoFiltro === null && styles.pipelineCountAll]}>{totalPipeline}</Text>
             <Text style={[styles.pipelineLabel, estadoFiltro === null && styles.pipelineLabelAll]}>Todos</Text>
           </View>
         </TouchableOpacity>
@@ -582,15 +587,15 @@ const styles = StyleSheet.create({
   pipelineContent: { paddingHorizontal: 10, paddingVertical: 10, gap: 6, flexDirection: 'row' },
   pipelineChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 10, paddingVertical: 7,
+    paddingHorizontal: 12, paddingVertical: 9,
     borderRadius: 20, borderWidth: 1.5, borderColor: '#e8e8e8',
     backgroundColor: '#fafafa', minWidth: 75,
   },
   pipelineChipAll: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   pipelineDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
-  pipelineCount: { fontSize: 15, fontWeight: '800', color: '#444', lineHeight: 17 },
+  pipelineCount: { fontSize: 15, fontWeight: '800', color: '#444', lineHeight: 18 },
   pipelineCountAll: { color: '#fff' },
-  pipelineLabel: { fontSize: 9, color: '#999', fontWeight: '500', lineHeight: 11 },
+  pipelineLabel: { fontSize: 10, color: '#888', fontWeight: '600', lineHeight: 13 },
   pipelineLabelAll: { color: '#c9a84c' },
 
   // Search
