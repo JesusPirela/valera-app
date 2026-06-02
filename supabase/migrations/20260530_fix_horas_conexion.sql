@@ -29,16 +29,20 @@ BEGIN
   RETURN QUERY
   SELECT
     DATE(s.inicio AT TIME ZONE 'America/Mexico_City') AS fecha,
-    ROUND(
-      SUM(
-        EXTRACT(EPOCH FROM (
-          LEAST(
-            COALESCE(s.fin, s.inicio + INTERVAL '30 minutes'),
-            s.inicio + INTERVAL '4 hours'
-          ) - s.inicio
-        )) / 60
-      )::NUMERIC,
-    0) AS minutos
+    -- Cap diario: ningún día puede superar 1440 minutos (24 horas)
+    LEAST(
+      ROUND(
+        SUM(
+          EXTRACT(EPOCH FROM (
+            LEAST(
+              COALESCE(s.fin, s.inicio + INTERVAL '30 minutes'),
+              s.inicio + INTERVAL '4 hours'
+            ) - s.inicio
+          )) / 60
+        )::NUMERIC,
+      0),
+      1440
+    ) AS minutos
   FROM public.user_sessions s
   WHERE s.user_id = v_user_id
     AND s.inicio >= (NOW() - (p_dias || ' days')::INTERVAL)
