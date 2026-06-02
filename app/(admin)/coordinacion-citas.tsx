@@ -309,6 +309,9 @@ function ModalNuevaCita({
   const [clientes, setClientes]           = useState<{ id: string; nombre: string; telefono: string }[]>([])
   const [clienteId, setClienteId]         = useState('')
   const [clienteNombre, setClienteNombre] = useState('')
+  const [modoNuevo, setModoNuevo]         = useState(false)
+  const [nuevoNombre, setNuevoNombre]     = useState('')
+  const [nuevoTelefono, setNuevoTelefono] = useState('')
   const [estado, setEstado]               = useState<EstadoCita>('por_contactar')
   const [notas, setNotas]                 = useState('')
   const [fechaTexto, setFechaTexto]       = useState('')
@@ -338,20 +341,53 @@ function ModalNuevaCita({
   }, [busqueda])
 
   async function guardar() {
-    if (!clienteId) { Alert.alert('Requerido', 'Selecciona un cliente.'); return }
     setGuardando(true)
-    const { error } = await supabase.from('citas_coordinacion').insert({
-      cliente_id: clienteId,
-      prospectador_id: prospectadorId || null,
-      coordinado_por: coordinadorId || null,
-      estado,
-      notas: notas.trim() || null,
-      fecha_cita: fechaTexto ? new Date(fechaTexto).toISOString() : null,
-    })
-    setGuardando(false)
-    if (error) { Alert.alert('Error', error.message); return }
-    onGuardar()
-    onClose()
+    try {
+      let idFinal = clienteId
+
+      if (modoNuevo) {
+        if (!nuevoNombre.trim() || !nuevoTelefono.trim()) {
+          Alert.alert('Requerido', 'Nombre y teléfono son obligatorios.')
+          setGuardando(false)
+          return
+        }
+        const { data: { user } } = await supabase.auth.getUser()
+        const responsableId = prospectadorId || user!.id
+        const { data: nuevo, error: errCliente } = await supabase
+          .from('clientes')
+          .insert({
+            nombre: nuevoNombre.trim(),
+            telefono: nuevoTelefono.trim(),
+            fuente_lead: 'otro',
+            estado: 'por_perfilar',
+            responsable_id: responsableId,
+          })
+          .select('id')
+          .single()
+        if (errCliente) { Alert.alert('Error al crear cliente', errCliente.message); setGuardando(false); return }
+        idFinal = nuevo.id
+      } else if (!clienteId) {
+        Alert.alert('Requerido', 'Selecciona o crea un cliente.')
+        setGuardando(false)
+        return
+      }
+
+      const { error } = await supabase.from('citas_coordinacion').insert({
+        cliente_id: idFinal,
+        prospectador_id: prospectadorId || null,
+        coordinado_por: coordinadorId || null,
+        estado,
+        notas: notas.trim() || null,
+        fecha_cita: fechaTexto ? new Date(fechaTexto).toISOString() : null,
+      })
+      if (error) { Alert.alert('Error', error.message); setGuardando(false); return }
+      onGuardar()
+      onClose()
+    } catch (e: any) {
+      Alert.alert('Error', e.message)
+    } finally {
+      setGuardando(false)
+    }
   }
 
   return (
@@ -365,35 +401,75 @@ function ModalNuevaCita({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            {/* Buscar cliente */}
-            <Text style={s.fieldLabel}>Cliente *</Text>
-            {clienteId ? (
-              <View style={s.clienteSeleccionado}>
-                <Text style={s.clienteSelNombre}>{clienteNombre}</Text>
-                <TouchableOpacity onPress={() => { setClienteId(''); setClienteNombre(''); setBusqueda('') }}>
-                  <Ionicons name="close-circle" size={18} color="#94a3b8" />
-                </TouchableOpacity>
-              </View>
-            ) : (
+            {/* Toggle buscar / crear */}
+            <View style={s.modoToggle}>
+              <TouchableOpacity
+                style={[s.modoBtn, !modoNuevo && s.modoBtnActivo]}
+                onPress={() => { setModoNuevo(false); setNuevoNombre(''); setNuevoTelefono('') }}
+              >
+                <Ionicons name="search-outline" size={13} color={!modoNuevo ? '#fff' : '#64748b'} />
+                <Text style={[s.modoBtnTxt, !modoNuevo && { color: '#fff', fontWeight: '700' }]}>Buscar existente</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modoBtn, modoNuevo && s.modoBtnActivo]}
+                onPress={() => { setModoNuevo(true); setClienteId(''); setClienteNombre(''); setBusqueda('') }}
+              >
+                <Ionicons name="person-add-outline" size={13} color={modoNuevo ? '#fff' : '#64748b'} />
+                <Text style={[s.modoBtnTxt, modoNuevo && { color: '#fff', fontWeight: '700' }]}>Crear nuevo</Text>
+              </TouchableOpacity>
+            </View>
+
+            {modoNuevo ? (
               <>
+                <Text style={s.fieldLabel}>Nombre *</Text>
                 <TextInput
-                  style={[s.input, { marginBottom: 6 }]}
-                  placeholder="Buscar por nombre..."
-                  value={busqueda}
-                  onChangeText={setBusqueda}
+                  style={[s.input, { marginBottom: 10 }]}
+                  placeholder="Nombre completo"
+                  value={nuevoNombre}
+                  onChangeText={setNuevoNombre}
                   autoCapitalize="words"
                 />
-                {buscando && <ActivityIndicator size="small" color="#1a6470" style={{ marginBottom: 8 }} />}
-                {clientes.map(c => (
-                  <TouchableOpacity
-                    key={c.id}
-                    style={s.clienteRow}
-                    onPress={() => { setClienteId(c.id); setClienteNombre(c.nombre); setClientes([]) }}
-                  >
-                    <Text style={s.clienteRowNombre}>{c.nombre}</Text>
-                    <Text style={s.clienteRowTel}>{c.telefono}</Text>
-                  </TouchableOpacity>
-                ))}
+                <Text style={s.fieldLabel}>Teléfono *</Text>
+                <TextInput
+                  style={[s.input, { marginBottom: 14 }]}
+                  placeholder="Ej. 7821954946"
+                  value={nuevoTelefono}
+                  onChangeText={setNuevoTelefono}
+                  keyboardType="phone-pad"
+                />
+              </>
+            ) : (
+              <>
+                <Text style={s.fieldLabel}>Cliente *</Text>
+                {clienteId ? (
+                  <View style={s.clienteSeleccionado}>
+                    <Text style={s.clienteSelNombre}>{clienteNombre}</Text>
+                    <TouchableOpacity onPress={() => { setClienteId(''); setClienteNombre(''); setBusqueda('') }}>
+                      <Ionicons name="close-circle" size={18} color="#94a3b8" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <TextInput
+                      style={[s.input, { marginBottom: 6 }]}
+                      placeholder="Buscar por nombre..."
+                      value={busqueda}
+                      onChangeText={setBusqueda}
+                      autoCapitalize="words"
+                    />
+                    {buscando && <ActivityIndicator size="small" color="#1a6470" style={{ marginBottom: 8 }} />}
+                    {clientes.map(c => (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={s.clienteRow}
+                        onPress={() => { setClienteId(c.id); setClienteNombre(c.nombre); setClientes([]) }}
+                      >
+                        <Text style={s.clienteRowNombre}>{c.nombre}</Text>
+                        <Text style={s.clienteRowTel}>{c.telefono}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
               </>
             )}
 
@@ -936,6 +1012,15 @@ const s = StyleSheet.create({
   },
   clienteRowNombre: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
   clienteRowTel:    { fontSize: 12, color: '#94a3b8', marginTop: 2 },
+
+  // Toggle buscar/crear
+  modoToggle: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  modoBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc',
+  },
+  modoBtnActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  modoBtnTxt: { fontSize: 12, color: '#64748b', fontWeight: '500' },
 
   // Dropdown
   dropdownBtn: {
