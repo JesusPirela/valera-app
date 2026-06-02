@@ -93,7 +93,10 @@ export default function ConexionUsuarios() {
   const { width }                 = useWindowDimensions()
   const chartW                    = Math.min(width - 80, 480)
 
-  useFocusEffect(useCallback(() => { cargar(7) }, []))
+  useFocusEffect(useCallback(() => {
+    setPeriodo(7)
+    cargar(7)
+  }, []))
 
   async function cargar(dias: 1 | 7 | 30) {
     setLoading(true)

@@ -380,11 +380,7 @@ export default function AdminCRM() {
                     <TouchableOpacity
                       key={item.id}
                       style={styles.card}
-                      onPress={() =>
-                        item.responsable_id === currentUserId
-                          ? router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)
-                          : router.push(`/(admin)/detalle-cliente?id=${item.id}`)
-                      }
+                      onPress={() => router.push(`/(admin)/detalle-cliente?id=${item.id}`)}
                       activeOpacity={0.82}
                     >
                       <View style={[styles.cardAccent, { backgroundColor: info.color }]} />
