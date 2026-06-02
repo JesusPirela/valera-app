@@ -3,7 +3,7 @@
     "name": "Valera App",
     "slug": "valera-app",
     "scheme": "valera-app",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.valerarealestate.app",
-      "buildNumber": "2",
+      "buildNumber": "4",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Valera necesita acceso a tu galería para guardar imágenes de propiedades.",
         "NSPhotoLibraryAddUsageDescription": "Valera necesita permiso para guardar imágenes en tu galería.",
@@ -24,7 +24,7 @@
     },
     "android": {
       "package": "com.valerarealestate.app",
-      "versionCode": 2,
+      "versionCode": 10,
       "softwareKeyboardLayoutMode": "pan",
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
