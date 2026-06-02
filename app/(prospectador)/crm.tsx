@@ -6,7 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
-import { useColors } from '../../lib/ThemeContext'
+import { useColors, useTheme } from '../../lib/ThemeContext'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
@@ -97,6 +97,7 @@ const SORT_LABELS: Record<SortBy, string> = {
 
 export default function CRM() {
   const c = useColors()
+  const { darkMode } = useTheme()
   const queryClient = useQueryClient()
   const [busqueda, setBusqueda]           = useState('')
   const [estadoFiltro, setEstadoFiltro]   = useState<string | null>(null)
@@ -354,9 +355,9 @@ export default function CRM() {
 
         {/* ── Funnel bar ── */}
         <View style={[s.funnelWrap, { backgroundColor: c.card }]}>
-          <View style={s.funnelBar}>
+          <View style={[s.funnelBar, { backgroundColor: darkMode ? c.border : '#e2e8f0' }]}>
             {total === 0 ? (
-              <View style={[s.funnelSeg, { flex: 1, backgroundColor: '#e2e8f0' }]} />
+              <View style={[s.funnelSeg, { flex: 1, backgroundColor: c.border }]} />
             ) : (
               ORDEN_ESTADOS.map(e => {
                 const n = conteos[e]
@@ -399,7 +400,7 @@ export default function CRM() {
             style={[s.stageChip, { backgroundColor: c.bg, borderColor: c.border }, estadoFiltro === null && s.stageChipAll]}
             onPress={() => setEstadoFiltro(null)}
           >
-            <Text style={[s.stageChipTxt, estadoFiltro === null && { color: '#fff', fontWeight: '700' }]}>
+            <Text style={[s.stageChipTxt, { color: c.textSub }, estadoFiltro === null && { color: '#fff', fontWeight: '700' }]}>
               Todos · {total}
             </Text>
           </TouchableOpacity>
@@ -413,10 +414,10 @@ export default function CRM() {
                 onPress={() => setEstadoFiltro(activo ? null : e)}
               >
                 <View style={[s.stageDot, { backgroundColor: activo ? '#fff' : info.color }]} />
-                <Text style={[s.stageChipTxt, activo && { color: '#fff', fontWeight: '700' }]}>
+                <Text style={[s.stageChipTxt, { color: c.textSub }, activo && { color: '#fff', fontWeight: '700' }]}>
                   {info.label}
                 </Text>
-                <Text style={[s.stageCnt, activo && { color: 'rgba(255,255,255,0.75)' }]}>
+                <Text style={[s.stageCnt, { color: c.textMute }, activo && { color: 'rgba(255,255,255,0.75)' }]}>
                   {conteos[e]}
                 </Text>
               </TouchableOpacity>
@@ -462,9 +463,9 @@ export default function CRM() {
             const activo = opFiltro === op
             return (
               <TouchableOpacity key={String(op)} style={[s.opTab, activo && s.opTabActivo]} onPress={() => setOpFiltro(op)}>
-                <Text style={[s.opTabTxt, activo && s.opTabTxtActivo]}>{label}</Text>
-                <View style={[s.opTabBadge, activo && s.opTabBadgeActivo]}>
-                  <Text style={[s.opTabBadgeTxt, activo && { color: '#1a6470' }]}>{cnt}</Text>
+                <Text style={[s.opTabTxt, { color: c.textMute }, activo && s.opTabTxtActivo]}>{label}</Text>
+                <View style={[s.opTabBadge, { backgroundColor: c.border }, activo && s.opTabBadgeActivo]}>
+                  <Text style={[s.opTabBadgeTxt, { color: c.textMute }, activo && { color: '#1a6470' }]}>{cnt}</Text>
                 </View>
               </TouchableOpacity>
             )
@@ -532,7 +533,7 @@ export default function CRM() {
             return (
               <TouchableOpacity
                 key={item.id}
-                style={[s.excelTr, idx % 2 !== 0 && s.excelTrAlt]}
+                style={[s.excelTr, { borderBottomColor: c.border }, idx % 2 !== 0 && { backgroundColor: darkMode ? '#0a1827' : '#f8fafc' }]}
                 onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
                 activeOpacity={0.75}
               >
@@ -540,13 +541,13 @@ export default function CRM() {
                   const cs = cStyle(col)
                   switch (col.id) {
                     case 'nombre':
-                      return <Text key={col.id} style={[s.excelTd, s.excelTdBold, cs]} numberOfLines={1}>{item.nombre}</Text>
+                      return <Text key={col.id} style={[s.excelTd, s.excelTdBold, { color: c.text }, cs]} numberOfLines={1}>{item.nombre}</Text>
                     case 'telefono':
-                      return <Text key={col.id} style={[s.excelTd, cs]} numberOfLines={1}>{item.telefono}</Text>
+                      return <Text key={col.id} style={[s.excelTd, { color: c.textSub }, cs]} numberOfLines={1}>{item.telefono}</Text>
                     case 'estado':
                       return (
                         <View key={col.id} style={[s.excelTdCell, cs]}>
-                          <View style={[s.excelEstadoPill, { backgroundColor: info.bg }]}>
+                          <View style={[s.excelEstadoPill, { backgroundColor: darkMode ? info.color + '28' : info.bg }]}>
                             <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: info.color }} />
                             <Text style={{ fontSize: 11, color: info.color, fontWeight: '700' }} numberOfLines={1}>{info.label}</Text>
                           </View>
@@ -556,12 +557,14 @@ export default function CRM() {
                       return (
                         <View key={col.id} style={[s.excelTdCell, cs]}>
                           {item.tipo_operacion
-                            ? <View style={[s.excelOpTag, item.tipo_operacion === 'venta' ? s.excelOpVenta : s.excelOpRenta]}>
-                                <Text style={[s.excelOpTxt, { color: item.tipo_operacion === 'venta' ? '#1a6470' : '#7c3aed' }]}>
+                            ? <View style={[s.excelOpTag, item.tipo_operacion === 'venta'
+                                ? { backgroundColor: darkMode ? 'rgba(26,100,112,0.22)' : '#e0f4f5' }
+                                : { backgroundColor: darkMode ? 'rgba(124,58,237,0.22)' : '#f3e8ff' }]}>
+                                <Text style={[s.excelOpTxt, { color: item.tipo_operacion === 'venta' ? '#1a9aaa' : '#a78bfa' }]}>
                                   {item.tipo_operacion === 'venta' ? '🏠 Venta' : '🔑 Renta'}
                                 </Text>
                               </View>
-                            : <Text style={s.excelNull}>—</Text>
+                            : <Text style={[s.excelNull, { color: c.border }]}>—</Text>
                           }
                         </View>
                       )
@@ -569,14 +572,14 @@ export default function CRM() {
                       return (
                         <View key={col.id} style={[s.excelTdCell, cs]}>
                           {item.nivel_interes
-                            ? <Text style={s.excelTd} numberOfLines={1}>{NIVEL_INTERES_LABEL[item.nivel_interes]}</Text>
-                            : <Text style={s.excelNull}>—</Text>
+                            ? <Text style={[s.excelTd, { color: c.textSub }]} numberOfLines={1}>{NIVEL_INTERES_LABEL[item.nivel_interes]}</Text>
+                            : <Text style={[s.excelNull, { color: c.border }]}>—</Text>
                           }
                         </View>
                       )
                     case 'fecha':
                       return (
-                        <Text key={col.id} style={[s.excelTd, s.excelTdDate, cs]} numberOfLines={1}>
+                        <Text key={col.id} style={[s.excelTd, s.excelTdDate, { color: c.textMute }, cs]} numberOfLines={1}>
                           {new Date(item.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: '2-digit' })}
                         </Text>
                       )
@@ -598,7 +601,7 @@ export default function CRM() {
           if (isWeb) {
             return (
               <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 12 }}>
-                <View style={s.excelTableWrap}>{table}</View>
+                <View style={[s.excelTableWrap, { backgroundColor: c.card }]}>{table}</View>
               </ScrollView>
             )
           }
@@ -640,48 +643,64 @@ export default function CRM() {
                         <Text style={[s.cardNombre, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
                         <View style={s.cardSubRow}>
                           {item.nivel_interes
-                            ? <View style={[s.fuenteTag, { backgroundColor: item.nivel_interes === 'alto' ? '#fee2e2' : item.nivel_interes === 'medio' ? '#fef3c7' : '#dbeafe' }]}>
-                                <Text style={[s.fuenteTagTxt, { color: item.nivel_interes === 'alto' ? '#b91c1c' : item.nivel_interes === 'medio' ? '#92400e' : '#1e40af' }]}>
+                            ? <View style={[s.fuenteTag, {
+                                backgroundColor: item.nivel_interes === 'alto'
+                                  ? (darkMode ? 'rgba(185,28,28,0.22)' : '#fee2e2')
+                                  : item.nivel_interes === 'medio'
+                                  ? (darkMode ? 'rgba(146,64,14,0.22)' : '#fef3c7')
+                                  : (darkMode ? 'rgba(30,64,175,0.22)' : '#dbeafe'),
+                              }]}>
+                                <Text style={[s.fuenteTagTxt, {
+                                  color: item.nivel_interes === 'alto'
+                                    ? (darkMode ? '#f87171' : '#b91c1c')
+                                    : item.nivel_interes === 'medio'
+                                    ? (darkMode ? '#fbbf24' : '#92400e')
+                                    : (darkMode ? '#93c5fd' : '#1e40af'),
+                                }]}>
                                   {NIVEL_INTERES_LABEL[item.nivel_interes]}
                                 </Text>
                               </View>
                             : null
                           }
                           {item.fuente_lead
-                            ? <View style={s.fuenteTag}>
-                                <Text style={s.fuenteTagTxt}>{item.fuente_lead}</Text>
+                            ? <View style={[s.fuenteTag, { backgroundColor: c.border }]}>
+                                <Text style={[s.fuenteTagTxt, { color: c.textSub }]}>{item.fuente_lead}</Text>
                               </View>
                             : null
                           }
                         </View>
                       </View>
-                      <View style={[s.estadoBadge, { backgroundColor: info.bg }]}>
+                      <View style={[s.estadoBadge, { backgroundColor: darkMode ? info.color + '28' : info.bg }]}>
                         <View style={[s.estadoDot, { backgroundColor: info.color }]} />
-                        <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
+                        <Text style={[s.estadoTxt, { color: darkMode ? info.color + 'ee' : info.color }]} numberOfLines={1}>{info.label}</Text>
                       </View>
                     </View>
 
                     {/* ── Meta ── */}
                     <View style={s.metaRow}>
                       <View style={s.metaItem}>
-                        <Ionicons name="call-outline" size={11} color="#94a3b8" />
-                        <Text style={s.metaTxt}>{item.telefono}</Text>
+                        <Ionicons name="call-outline" size={11} color={c.textMute} />
+                        <Text style={[s.metaTxt, { color: c.textSub }]}>{item.telefono}</Text>
                       </View>
                       {item.tipo_operacion && (
                         <View style={s.metaItem}>
-                          <Ionicons name="home-outline" size={11} color="#94a3b8" />
-                          <Text style={[s.metaTxt, { textTransform: 'capitalize' }]}>{item.tipo_operacion}</Text>
+                          <Ionicons name="home-outline" size={11} color={c.textMute} />
+                          <Text style={[s.metaTxt, { color: c.textSub, textTransform: 'capitalize' }]}>{item.tipo_operacion}</Text>
                         </View>
                       )}
                       <View style={s.metaTime}>
-                        <Ionicons name="time-outline" size={11} color="#94a3b8" />
-                        <Text style={s.metaTxt}>{tiempoRelativo(item.created_at)}</Text>
+                        <Ionicons name="time-outline" size={11} color={c.textMute} />
+                        <Text style={[s.metaTxt, { color: c.textMute }]}>{tiempoRelativo(item.created_at)}</Text>
                       </View>
                     </View>
 
                     {/* ── Recordatorio ── */}
                     {rec && (
-                      <View style={[s.recRow, recVenc ? s.recVenc : recHoy ? s.recHoy : s.recProx]}>
+                      <View style={[s.recRow,
+                        recVenc ? { backgroundColor: darkMode ? 'rgba(239,68,68,0.13)' : '#fef2f2' }
+                        : recHoy ? { backgroundColor: darkMode ? 'rgba(217,119,6,0.13)' : '#fffbeb' }
+                        : { backgroundColor: darkMode ? 'rgba(26,100,112,0.15)' : '#f0fdfa' },
+                      ]}>
                         <Ionicons
                           name={recVenc ? 'warning-outline' : recHoy ? 'alarm-outline' : 'calendar-outline'}
                           size={12}
@@ -701,11 +720,17 @@ export default function CRM() {
 
                     {/* ── Acciones ── */}
                     <View style={s.actions}>
-                      <TouchableOpacity style={s.actionWa} onPress={() => abrirWhatsApp(item.telefono, item.nombre)}>
+                      <TouchableOpacity
+                        style={[s.actionWa, darkMode && { backgroundColor: 'rgba(22,163,74,0.1)', borderColor: 'rgba(22,163,74,0.28)' }]}
+                        onPress={() => abrirWhatsApp(item.telefono, item.nombre)}
+                      >
                         <Ionicons name="logo-whatsapp" size={14} color="#16a34a" />
                         <Text style={s.actionWaTxt}>WhatsApp</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={s.actionCall} onPress={() => llamar(item.telefono)}>
+                      <TouchableOpacity
+                        style={[s.actionCall, darkMode && { backgroundColor: 'rgba(3,105,161,0.1)', borderColor: 'rgba(3,105,161,0.28)' }]}
+                        onPress={() => llamar(item.telefono)}
+                      >
                         <Ionicons name="call-outline" size={14} color="#0369a1" />
                         <Text style={s.actionCallTxt}>Llamar</Text>
                       </TouchableOpacity>
@@ -723,21 +748,21 @@ export default function CRM() {
       <Modal visible={showSort} transparent animationType="slide" onRequestClose={() => setShowSort(false)}>
         <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setShowSort(false)}>
           <View style={[s.sortSheet, { backgroundColor: c.card }]}>
-            <View style={s.sortHandle} />
-            <Text style={s.sortTitle}>Ordenar leads</Text>
+            <View style={[s.sortHandle, { backgroundColor: c.border }]} />
+            <Text style={[s.sortTitle, { color: c.text }]}>Ordenar leads</Text>
             {(['reciente', 'nombre', 'contacto'] as SortBy[]).map(opt => (
               <TouchableOpacity
                 key={opt}
-                style={s.sortOpt}
+                style={[s.sortOpt, { borderBottomColor: c.border }]}
                 onPress={() => { setSortBy(opt); setShowSort(false) }}
               >
                 <View style={s.sortOptLeft}>
                   <Ionicons
                     name={opt === 'reciente' ? 'time-outline' : opt === 'nombre' ? 'text-outline' : 'calendar-outline'}
                     size={16}
-                    color={sortBy === opt ? '#1a6470' : '#94a3b8'}
+                    color={sortBy === opt ? '#1a6470' : c.textMute}
                   />
-                  <Text style={[s.sortOptTxt, sortBy === opt && { color: '#1a6470', fontWeight: '700' }]}>
+                  <Text style={[s.sortOptTxt, { color: c.textSub }, sortBy === opt && { color: '#1a9aaa', fontWeight: '700' }]}>
                     {SORT_LABELS[opt]}
                   </Text>
                 </View>
@@ -752,19 +777,19 @@ export default function CRM() {
       <Modal visible={excelFilterModal !== null} transparent animationType="slide" onRequestClose={() => setExcelFilterModal(null)}>
         <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setExcelFilterModal(null)}>
           <View style={[s.sortSheet, { backgroundColor: c.card }]}>
-            <View style={s.sortHandle} />
-            <Text style={s.sortTitle}>{excelFilterModal?.label ?? ''}</Text>
+            <View style={[s.sortHandle, { backgroundColor: c.border }]} />
+            <Text style={[s.sortTitle, { color: c.text }]}>{excelFilterModal?.label ?? ''}</Text>
             {excelFilterModal?.options.map(opt => {
               const active = getColFilterValue(excelFilterModal!.col) === opt.value
               return (
                 <TouchableOpacity
                   key={String(opt.value)}
-                  style={s.sortOpt}
+                  style={[s.sortOpt, { borderBottomColor: c.border }]}
                   onPress={() => applyColFilter(excelFilterModal!.col, opt.value)}
                 >
                   <View style={s.sortOptLeft}>
                     {opt.color && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: opt.color }} />}
-                    <Text style={[s.sortOptTxt, active && { color: '#1a6470', fontWeight: '700' }]}>{opt.label}</Text>
+                    <Text style={[s.sortOptTxt, { color: c.textSub }, active && { color: '#1a9aaa', fontWeight: '700' }]}>{opt.label}</Text>
                   </View>
                   {active && <Ionicons name="checkmark-circle" size={18} color="#1a6470" />}
                 </TouchableOpacity>
