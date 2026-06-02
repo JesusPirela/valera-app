@@ -76,29 +76,54 @@ export default function RootLayout() {
 
   useEffect(() => {
     let sessionId: string | null = null
+    let iniciando = false  // guard contra llamadas concurrentes
 
     async function iniciarSesion() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase
-        .from('user_sessions')
-        .insert({ user_id: user.id })
-        .select('id')
-        .single()
-      sessionId = data?.id ?? null
+      if (sessionId || iniciando) return  // ya hay sesión activa o está creándose
+      iniciando = true
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const { data } = await supabase
+          .from('user_sessions')
+          .insert({ user_id: user.id })
+          .select('id')
+          .single()
+        sessionId = data?.id ?? null
+      } finally {
+        iniciando = false
+      }
     }
 
     async function cerrarSesion() {
       if (!sessionId) return
-      await supabase.from('user_sessions').update({ fin: new Date().toISOString() }).eq('id', sessionId)
-      sessionId = null
+      const id = sessionId
+      sessionId = null  // limpiar antes del await para evitar doble cierre
+      await supabase.from('user_sessions').update({ fin: new Date().toISOString() }).eq('id', id)
+    }
+
+    // En web: visibilitychange es más fiable que AppState para detectar
+    // cuando el usuario minimiza o cierra la pestaña
+    let removeWebListeners: (() => void) | null = null
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const onVisibility = () => {
+        if (document.hidden) cerrarSesion()
+        else iniciarSesion()
+      }
+      const onUnload = () => cerrarSesion()
+      document.addEventListener('visibilitychange', onVisibility)
+      window.addEventListener('beforeunload', onUnload)
+      removeWebListeners = () => {
+        document.removeEventListener('visibilitychange', onVisibility)
+        window.removeEventListener('beforeunload', onUnload)
+      }
     }
 
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         supabase.auth.startAutoRefresh()
-        iniciarSesion()
-      } else {
+        iniciarSesion()  // el guard evita duplicados
+      } else if (state === 'background' || state === 'inactive') {
         supabase.auth.stopAutoRefresh()
         cerrarSesion()
       }
@@ -137,6 +162,8 @@ export default function RootLayout() {
       clearTimeout(fallbackTimer)
       appStateSub.remove()
       subscription.unsubscribe()
+      removeWebListeners?.()
+      cerrarSesion()
     }
   }, [])
 

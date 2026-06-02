@@ -38,7 +38,7 @@ BEGIN
       ROUND(SUM(
         EXTRACT(EPOCH FROM (
           LEAST(
-            COALESCE(s.fin, s.inicio + INTERVAL '30 minutes'),
+            COALESCE(s.fin, s.inicio + INTERVAL '10 minutes'),
             s.inicio + INTERVAL '4 hours'
           ) - s.inicio
         )) / 60
@@ -79,7 +79,7 @@ BEGIN
       ROUND(SUM(
         EXTRACT(EPOCH FROM (
           LEAST(
-            COALESCE(s.fin, s.inicio + INTERVAL '30 minutes'),
+            COALESCE(s.fin, s.inicio + INTERVAL '10 minutes'),
             s.inicio + INTERVAL '4 hours'
           ) - s.inicio
         )) / 60
