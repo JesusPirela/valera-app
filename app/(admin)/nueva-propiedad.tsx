@@ -231,7 +231,7 @@ export default function NuevaPropiedad() {
   // Marcar imágenes como draggable via DOM usando nativeID
   useEffect(() => {
     if (Platform.OS !== 'web') return
-    setTimeout(() => {
+    const id = setTimeout(() => {
       imagenes.forEach((_, index) => {
         const el = document.getElementById(`drag-img-nueva-${index}`)
         if (el) {
@@ -240,6 +240,7 @@ export default function NuevaPropiedad() {
         }
       })
     }, 100)
+    return () => clearTimeout(id)
   }, [imagenes])
 
   useEffect(() => {
@@ -308,9 +309,10 @@ export default function NuevaPropiedad() {
     }
 
     let container: HTMLElement | null = null
+    let timerId: ReturnType<typeof setTimeout> | null = null
     function tryAttachGrid() {
       container = document.getElementById('drag-grid-nueva')
-      if (!container) { setTimeout(tryAttachGrid, 100); return }
+      if (!container) { timerId = setTimeout(tryAttachGrid, 100); return }
       container.addEventListener('dragstart', onDragStart)
       container.addEventListener('dragover', onDragOver)
       container.addEventListener('dragend', onDragEnd)
@@ -319,6 +321,7 @@ export default function NuevaPropiedad() {
     tryAttachGrid()
 
     return () => {
+      if (timerId) clearTimeout(timerId)
       if (container) {
         container.removeEventListener('dragstart', onDragStart)
         container.removeEventListener('dragover', onDragOver)

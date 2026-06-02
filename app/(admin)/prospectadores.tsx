@@ -46,6 +46,21 @@ type CoinsModal = {
   coinsActuales: number
 }
 
+type CrmEstadoCount = { estado: string; count: number }
+type CrmFuenteCount = { fuente: string; count: number }
+type CrmMetricas = {
+  userId: string | null
+  nombre: string
+  totalLeads: number
+  leadsActivos: number
+  cerrados: number
+  leadsEsteMes: number
+  porEstado: CrmEstadoCount[]
+  porFuente: CrmFuenteCount[]
+  totalInteracciones: number
+  recordatoriosPendientes: number
+}
+
 const ROL_LABEL: Record<string, string> = {
   nuevo:             'Nuevo',
   prospectador:      'Prospectador',
@@ -69,6 +84,60 @@ const ROLES_SELECTOR: { value: RolUsuario; label: string }[] = [
   { value: 'prospectador',      label: 'Prospectador' },
   { value: 'prospectador_plus', label: 'Plus' },
 ]
+
+const ESTADO_LABEL: Record<string, string> = {
+  por_perfilar: 'Por perfilar',
+  primer_contacto: '1er contacto',
+  cita_por_agendar: 'Cita p/agendar',
+  cita_agendada: 'Cita agendada',
+  cita_a_futuro: 'Cita a futuro',
+  seguimiento_cierre: 'Seg. cierre',
+  compro: 'Compró',
+  no_contesta: 'No contesta',
+  descartado: 'Descartado',
+}
+
+const ESTADO_COLOR: Record<string, string> = {
+  por_perfilar: '#888',
+  primer_contacto: '#2196F3',
+  cita_por_agendar: '#FF9800',
+  cita_agendada: '#1a6470',
+  cita_a_futuro: '#9C27B0',
+  seguimiento_cierre: '#FFC107',
+  compro: '#4CAF50',
+  no_contesta: '#F44336',
+  descartado: '#ccc',
+}
+
+const FUENTE_LABEL: Record<string, string> = {
+  referido: 'Referido',
+  redes_sociales: 'Redes sociales',
+  sitio_web: 'Sitio web',
+  llamada_fria: 'Llamada fría',
+  evento: 'Evento',
+  marketplace: 'Marketplace',
+  tokko: 'Tokko',
+  campana_fb: 'Campaña FB',
+  grupo_fb: 'Grupo FB',
+  sheets: 'Importación',
+  admin: 'Admin',
+  otro: 'Otro',
+}
+
+function BarraMetrica({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
+        <Text style={{ fontSize: 12, color: '#555', flex: 1 }}>{label}</Text>
+        <Text style={{ fontSize: 12, fontWeight: '700', color, marginLeft: 8 }}>{count} <Text style={{ color: '#aaa', fontWeight: '400' }}>({pct}%)</Text></Text>
+      </View>
+      <View style={{ height: 7, backgroundColor: '#f0f0f0', borderRadius: 4 }}>
+        <View style={{ height: 7, width: `${pct}%` as any, backgroundColor: color, borderRadius: 4 }} />
+      </View>
+    </View>
+  )
+}
 
 function tiempoRelativo(fechaISO: string): string {
   const ahora = new Date()
@@ -131,6 +200,10 @@ export default function Prospectadores() {
   const [ajustandoCoins, setAjustandoCoins] = useState(false)
   const [coinsTxs, setCoinsTxs]             = useState<CoinTx[]>([])
   const [loadingTxs, setLoadingTxs]         = useState(false)
+
+  // Modal de métricas CRM
+  const [crmModal, setCrmModal]   = useState<CrmMetricas | null>(null)
+  const [loadingCrm, setLoadingCrm] = useState(false)
 
   async function cargar() {
     setLoading(true)
@@ -229,6 +302,61 @@ export default function Prospectadores() {
     setLoadingTxs(false)
   }
 
+  async function abrirCrmModal(userId: string | null, nombre: string) {
+    setLoadingCrm(true)
+    try {
+      let q = supabase.from('clientes').select('estado, fuente_lead, created_at')
+      if (userId) q = q.eq('responsable_id', userId)
+      const { data: clientes } = await q
+
+      const estadoMap: Record<string, number> = {}
+      const fuenteMap: Record<string, number> = {}
+      let leadsActivos = 0, cerrados = 0, leadsEsteMes = 0
+      const mesInicio = new Date()
+      mesInicio.setDate(1); mesInicio.setHours(0, 0, 0, 0)
+
+      for (const c of clientes ?? []) {
+        estadoMap[c.estado] = (estadoMap[c.estado] ?? 0) + 1
+        const f = c.fuente_lead ?? 'otro'
+        fuenteMap[f] = (fuenteMap[f] ?? 0) + 1
+        if (c.estado !== 'descartado' && c.estado !== 'compro') leadsActivos++
+        if (c.estado === 'compro') cerrados++
+        if (new Date(c.created_at) >= mesInicio) leadsEsteMes++
+      }
+
+      let qi = supabase.from('interacciones').select('id', { count: 'exact', head: true })
+      if (userId) qi = qi.eq('user_id', userId)
+      const { count: intCount } = await qi
+
+      let qr = supabase.from('recordatorios').select('id', { count: 'exact', head: true }).eq('completado', false)
+      if (userId) qr = qr.eq('user_id', userId)
+      const { count: recCount } = await qr
+
+      const porEstado = Object.entries(estadoMap)
+        .map(([estado, count]) => ({ estado, count }))
+        .sort((a, b) => b.count - a.count)
+      const porFuente = Object.entries(fuenteMap)
+        .map(([fuente, count]) => ({ fuente, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+
+      setCrmModal({
+        userId,
+        nombre,
+        totalLeads: clientes?.length ?? 0,
+        leadsActivos,
+        cerrados,
+        leadsEsteMes,
+        porEstado,
+        porFuente,
+        totalInteracciones: intCount ?? 0,
+        recordatoriosPendientes: recCount ?? 0,
+      })
+    } finally {
+      setLoadingCrm(false)
+    }
+  }
+
   async function aplicarAjuste(signo: 1 | -1) {
     if (!coinsModal) return
     const cantidad = parseInt(cantidadStr, 10)
@@ -262,6 +390,16 @@ export default function Prospectadores() {
       </TouchableOpacity>
       <TouchableOpacity style={styles.btnNuevo} onPress={abrirModal}>
         <Text style={styles.btnNuevoText}>+ Nuevo prospectador</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.btnDashboardGeneral, loadingCrm && { opacity: 0.6 }]}
+        onPress={() => !loadingCrm && abrirCrmModal(null, 'Todos los usuarios')}
+        disabled={loadingCrm}
+      >
+        <Text style={styles.btnDashboardGeneralText}>
+          {loadingCrm ? 'Cargando...' : '📊 Dashboard CRM General'}
+        </Text>
       </TouchableOpacity>
 
       {loading ? (
@@ -300,12 +438,21 @@ export default function Prospectadores() {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                style={styles.coinsBtnSmall}
-                onPress={() => abrirCoinsModal(item)}
-              >
-                <Text style={styles.coinsBtnSmallText}>💰 {(item.valera_coins ?? 0).toLocaleString()}</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                <TouchableOpacity
+                  style={styles.coinsBtnSmall}
+                  onPress={() => abrirCoinsModal(item)}
+                >
+                  <Text style={styles.coinsBtnSmallText}>💰 {(item.valera_coins ?? 0).toLocaleString()}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.crmBtnSmall}
+                  onPress={() => !loadingCrm && abrirCrmModal(item.id, item.nombre ?? item.email)}
+                  disabled={loadingCrm}
+                >
+                  <Text style={styles.crmBtnSmallText}>📊 CRM</Text>
+                </TouchableOpacity>
+              </View>
 
               {editandoRolId === item.id && (
                 <View style={styles.rolPickerContainer}>
@@ -342,6 +489,100 @@ export default function Prospectadores() {
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         />
       )}
+
+      {/* Modal métricas CRM */}
+      <Modal
+        visible={!!crmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCrmModal(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { maxHeight: '88%', paddingBottom: 0 }]}>
+            <Text style={styles.modalTitulo}>📊 Métricas CRM</Text>
+            <Text style={styles.modalSubtitulo}>{crmModal?.nombre}</Text>
+
+            {/* 4 stat cards */}
+            <View style={styles.crmStatsRow}>
+              <View style={styles.crmStatBox}>
+                <Text style={styles.crmStatNum}>{crmModal?.totalLeads ?? 0}</Text>
+                <Text style={styles.crmStatLabel}>Total leads</Text>
+              </View>
+              <View style={styles.crmStatBox}>
+                <Text style={styles.crmStatNum}>{crmModal?.leadsActivos ?? 0}</Text>
+                <Text style={styles.crmStatLabel}>Activos</Text>
+              </View>
+              <View style={[styles.crmStatBox, { borderColor: '#4CAF50' }]}>
+                <Text style={[styles.crmStatNum, { color: '#4CAF50' }]}>{crmModal?.cerrados ?? 0}</Text>
+                <Text style={styles.crmStatLabel}>Compras</Text>
+              </View>
+              <View style={styles.crmStatBox}>
+                <Text style={styles.crmStatNum}>{crmModal?.leadsEsteMes ?? 0}</Text>
+                <Text style={styles.crmStatLabel}>Este mes</Text>
+              </View>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              {/* Pipeline por estado */}
+              {(crmModal?.porEstado.length ?? 0) > 0 && (
+                <>
+                  <Text style={styles.crmSectionTitle}>Pipeline por estado</Text>
+                  {crmModal!.porEstado.map(({ estado, count }) => (
+                    <BarraMetrica
+                      key={estado}
+                      label={ESTADO_LABEL[estado] ?? estado}
+                      count={count}
+                      total={crmModal!.totalLeads}
+                      color={ESTADO_COLOR[estado] ?? '#888'}
+                    />
+                  ))}
+                </>
+              )}
+
+              {/* Fuentes */}
+              {(crmModal?.porFuente.length ?? 0) > 0 && (
+                <>
+                  <Text style={styles.crmSectionTitle}>Fuentes de lead</Text>
+                  {crmModal!.porFuente.map(({ fuente, count }) => (
+                    <BarraMetrica
+                      key={fuente}
+                      label={FUENTE_LABEL[fuente] ?? fuente}
+                      count={count}
+                      total={crmModal!.totalLeads}
+                      color="#1a6470"
+                    />
+                  ))}
+                </>
+              )}
+
+              {/* Actividad */}
+              <Text style={styles.crmSectionTitle}>Actividad</Text>
+              <View style={styles.crmActividadRow}>
+                <View style={styles.crmActividadBox}>
+                  <Text style={styles.crmActividadNum}>{crmModal?.totalInteracciones ?? 0}</Text>
+                  <Text style={styles.crmActividadLabel}>Interacciones{'\n'}registradas</Text>
+                </View>
+                <View style={[styles.crmActividadBox, (crmModal?.recordatoriosPendientes ?? 0) > 0 && { borderColor: '#FF9800' }]}>
+                  <Text style={[styles.crmActividadNum, (crmModal?.recordatoriosPendientes ?? 0) > 0 && { color: '#FF9800' }]}>
+                    {crmModal?.recordatoriosPendientes ?? 0}
+                  </Text>
+                  <Text style={styles.crmActividadLabel}>Recordatorios{'\n'}pendientes</Text>
+                </View>
+              </View>
+
+              {crmModal?.totalLeads === 0 && (
+                <Text style={[styles.emptySubtitle, { textAlign: 'center', marginTop: 16 }]}>
+                  Sin leads registrados aún.
+                </Text>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity style={[styles.btnCerrar, { borderRadius: 0, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }]} onPress={() => setCrmModal(null)}>
+              <Text style={styles.btnCerrarText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal gestión de coins */}
       <Modal
@@ -784,9 +1025,74 @@ const styles = StyleSheet.create({
   btnCerrarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
   // Coins modal
+  btnDashboardGeneral: {
+    borderWidth: 1.5,
+    borderColor: '#1a6470',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  btnDashboardGeneralText: { color: '#1a6470', fontSize: 15, fontWeight: '700' },
+
+  // CRM modal
+  crmBtnSmall: {
+    backgroundColor: '#e8f4f6',
+    borderWidth: 1,
+    borderColor: '#1a6470',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  crmBtnSmallText: { color: '#1a6470', fontSize: 12, fontWeight: '700' },
+
+  crmStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  crmStatBox: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    padding: 10,
+    alignItems: 'center',
+  },
+  crmStatNum: { fontSize: 22, fontWeight: '800', color: '#1a6470' },
+  crmStatLabel: { fontSize: 10, color: '#888', marginTop: 2, textAlign: 'center' },
+
+  crmSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1a6470',
+    marginTop: 16,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    paddingBottom: 4,
+  },
+
+  crmActividadRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  crmActividadBox: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    padding: 14,
+    alignItems: 'center',
+  },
+  crmActividadNum: { fontSize: 26, fontWeight: '800', color: '#1a6470' },
+  crmActividadLabel: { fontSize: 11, color: '#888', marginTop: 4, textAlign: 'center', lineHeight: 15 },
+
   coinsBtnSmall: {
-    alignSelf: 'flex-start',
-    marginTop: 8,
     backgroundColor: '#fffbea',
     borderWidth: 1,
     borderColor: '#c9a84c',
