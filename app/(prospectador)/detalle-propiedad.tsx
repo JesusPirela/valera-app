@@ -775,12 +775,11 @@ export default function DetallePropiedad() {
         }
       }
       setDescargando(false)
-      if (errores.length > 0) console.warn('[Galería] Errores:', errores)
       Alert.alert(
         guardadas > 0 ? 'Listo' : 'Error',
         guardadas > 0
           ? `${guardadas} de ${imagenes.length} imágenes guardadas en tu galería.`
-          : `No se pudo guardar ninguna imagen. Verifica que la app tenga acceso completo a Fotos en Configuración.`
+          : `No se pudo guardar ninguna imagen.\n\nError: ${errores[0] ?? 'desconocido'}`
       )
     }
   }
