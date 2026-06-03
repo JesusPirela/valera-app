@@ -684,7 +684,7 @@ export default function DetallePropiedad() {
       // Guardar en galería para adjuntar desde WhatsApp
       let guardadas = 0
       if (uris.length > 0) {
-        const { status } = await MediaLibrary.requestPermissionsAsync()
+        const { status } = await MediaLibrary.requestPermissionsAsync(true)
         if (status === 'granted') {
           for (const uri of uris) {
             try { await MediaLibrary.saveToLibraryAsync(uri); guardadas++ } catch { /* skip */ }
@@ -743,9 +743,14 @@ export default function DetallePropiedad() {
         setDescargando(false)
       }
     } else {
-      const { status } = await MediaLibrary.requestPermissionsAsync()
+      // writeOnly: true → solicita solo permiso de "Agregar fotos" en iOS (menos restrictivo)
+      const { status, accessPrivileges } = await MediaLibrary.requestPermissionsAsync(true)
       if (status !== 'granted') {
-        Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería para guardar las imágenes.')
+        Alert.alert(
+          'Permiso requerido',
+          'Ve a Configuración → Valera → Fotos y permite "Agregar fotos" para guardar imágenes.',
+          [{ text: 'OK' }]
+        )
         setDescargando(false)
         return
       }
@@ -753,8 +758,12 @@ export default function DetallePropiedad() {
       let guardadas = 0
       for (let i = 0; i < imagenes.length; i++) {
         try {
-          const dest = `${FileSystem.cacheDirectory}${propiedad.codigo ?? 'prop'}-${i + 1}.jpg`
-          const { uri } = await FileSystem.downloadAsync(imagenes[i].url, dest)
+          const url = imagenes[i].url
+          // Detectar extensión real desde la URL
+          const ext = url.split('?')[0].split('.').pop()?.toLowerCase() ?? 'jpg'
+          const extValida = ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext) ? ext : 'jpg'
+          const dest = `${FileSystem.cacheDirectory}${propiedad.codigo ?? 'prop'}-${i + 1}.${extValida}`
+          const { uri } = await FileSystem.downloadAsync(url, dest)
           await MediaLibrary.saveToLibraryAsync(uri)
           guardadas++
         } catch {
