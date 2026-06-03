@@ -102,7 +102,7 @@ function formatearFichaWhatsApp(p: Propiedad): string {
 
 export default function DetallePropiedad() {
   const { id } = useLocalSearchParams<{ id: string }>()
-  const { width: SCREEN_WIDTH } = useWindowDimensions()
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions()
   const isOnline = useNetworkStatus()
   const queryClient = useQueryClient()
   const [imagenActual, setImagenActual] = useState(0)
@@ -112,6 +112,8 @@ export default function DetallePropiedad() {
   const [notaGuardada, setNotaGuardada] = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
   const scrollRef = useRef<ScrollView>(null)
+  const [lightboxVisible, setLightboxVisible] = useState(false)
+  const [lightboxIndex, setLightboxIndex]     = useState(0)
 
   const { data: detalle, isLoading } = useQuery({
     queryKey: ['detalle-propiedad', id],
@@ -225,6 +227,19 @@ export default function DetallePropiedad() {
     registrarActividad('vista')
     cargarPublicacion()
   }, [id])
+
+  // Teclado para lightbox en web
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !lightboxVisible) return
+    const len = propiedad?.propiedad_imagenes?.length ?? 0
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape')      setLightboxVisible(false)
+      if (e.key === 'ArrowRight')  setLightboxIndex(i => Math.min(len - 1, i + 1))
+      if (e.key === 'ArrowLeft')   setLightboxIndex(i => Math.max(0, i - 1))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightboxVisible, propiedad])
 
   async function cargarPublicacion() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -794,12 +809,17 @@ export default function DetallePropiedad() {
             }}
           >
             {imagenes.map((img, i) => (
-              <Image
+              <TouchableOpacity
                 key={i}
-                source={{ uri: img.url }}
-                style={[styles.imagen, { width: SCREEN_WIDTH }]}
-                resizeMode="cover"
-              />
+                activeOpacity={0.92}
+                onPress={() => { setLightboxIndex(i); setLightboxVisible(true) }}
+              >
+                <Image
+                  source={{ uri: img.url }}
+                  style={[styles.imagen, { width: SCREEN_WIDTH }]}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
             ))}
           </ScrollView>
 
@@ -1079,6 +1099,73 @@ export default function DetallePropiedad() {
           <Text style={styles.volverText}>← Volver a propiedades</Text>
         </TouchableOpacity>
       </View>
+
+      {/* ── Lightbox de imágenes ── */}
+      <Modal
+        visible={lightboxVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLightboxVisible(false)}
+        statusBarTranslucent
+      >
+        <View style={styles.lbOverlay}>
+          {/* Cerrar */}
+          <TouchableOpacity style={styles.lbClose} onPress={() => setLightboxVisible(false)}>
+            <Text style={styles.lbCloseTxt}>✕</Text>
+          </TouchableOpacity>
+
+          {/* Contador */}
+          {imagenes.length > 1 && (
+            <Text style={styles.lbCounter}>{lightboxIndex + 1} / {imagenes.length}</Text>
+          )}
+
+          {/* Imagen principal — click fuera cierra */}
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{ flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center' }}
+            onPress={() => setLightboxVisible(false)}
+          >
+            <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+              <Image
+                source={{ uri: imagenes[lightboxIndex]?.url }}
+                style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.72 }}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          </TouchableOpacity>
+
+          {/* Flechas */}
+          {imagenes.length > 1 && lightboxIndex > 0 && (
+            <TouchableOpacity style={[styles.lbArrow, styles.lbArrowLeft]} onPress={() => setLightboxIndex(i => i - 1)}>
+              <Text style={styles.lbArrowTxt}>‹</Text>
+            </TouchableOpacity>
+          )}
+          {imagenes.length > 1 && lightboxIndex < imagenes.length - 1 && (
+            <TouchableOpacity style={[styles.lbArrow, styles.lbArrowRight]} onPress={() => setLightboxIndex(i => i + 1)}>
+              <Text style={styles.lbArrowTxt}>›</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Miniaturas */}
+          {imagenes.length > 1 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.lbThumbs}
+              contentContainerStyle={{ paddingHorizontal: 12, gap: 6, alignItems: 'center' }}
+            >
+              {imagenes.map((img, i) => (
+                <TouchableOpacity key={i} onPress={() => setLightboxIndex(i)}>
+                  <Image
+                    source={{ uri: img.url }}
+                    style={[styles.lbThumb, i === lightboxIndex && styles.lbThumbActive]}
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
 
       {/* Modal selección de cliente / fecha de cita */}
       <Modal
@@ -1744,5 +1831,67 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
     fontWeight: '600' as const,
+  },
+
+  // ── Lightbox ──────────────────────────────────────────────────
+  lbOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.96)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lbClose: {
+    position: 'absolute',
+    top: 48,
+    right: 20,
+    zIndex: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lbCloseTxt: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  lbCounter: {
+    position: 'absolute',
+    top: 56,
+    alignSelf: 'center',
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    fontWeight: '600',
+    zIndex: 10,
+  },
+  lbArrow: {
+    position: 'absolute',
+    top: '42%' as any,
+    width: 48,
+    height: 60,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  lbArrowLeft:  { left: 10 },
+  lbArrowRight: { right: 10 },
+  lbArrowTxt:   { color: '#fff', fontSize: 36, fontWeight: '300', lineHeight: 42 },
+  lbThumbs: {
+    position: 'absolute',
+    bottom: 36,
+    width: '100%',
+    maxHeight: 72,
+  },
+  lbThumb: {
+    width: 58,
+    height: 58,
+    borderRadius: 8,
+    opacity: 0.45,
+  },
+  lbThumbActive: {
+    opacity: 1,
+    borderWidth: 2.5,
+    borderColor: '#fff',
+    borderRadius: 8,
   },
 })
