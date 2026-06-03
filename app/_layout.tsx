@@ -10,6 +10,33 @@ import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
 import { Ionicons } from '@expo/vector-icons'
 import Constants from 'expo-constants'
+import * as Notifications from 'expo-notifications'
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+})
+
+async function registrarPushToken(userId: string) {
+  if (Platform.OS === 'web') return
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync()
+    let finalStatus = existing
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync()
+      finalStatus = status
+    }
+    if (finalStatus !== 'granted') return
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? 'c8a64954-8c24-4d51-829d-55ede1f5fb6d'
+    const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data
+    await supabase.from('profiles').update({ push_token: token }).eq('id', userId)
+  } catch (e) {
+    console.warn('[Push] Error registrando token:', e)
+  }
+}
 
 const STORE_URL_ANDROID = 'https://play.google.com/store/apps/details?id=com.valerarealestate.app'
 const STORE_URL_IOS = 'https://apps.apple.com/app/id6769195695'
@@ -144,10 +171,14 @@ export default function RootLayout() {
         clearTimeout(fallbackTimer)
         setSession(session)
         setLoading(false)
-        if (session) iniciarSesion()
+        if (session) {
+          iniciarSesion()
+          registrarPushToken(session.user.id)
+        }
       } else if (event === 'SIGNED_IN') {
         setSession(session)
         iniciarSesion()
+        if (session?.user?.id) registrarPushToken(session.user.id)
       } else if (event === 'TOKEN_REFRESHED') {
         setSession(session)
       } else if (event === 'SIGNED_OUT') {

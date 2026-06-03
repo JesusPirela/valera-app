@@ -1,6 +1,19 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+async function enviarPushExpo(mensajes: { to: string; title: string; body: string }[]) {
+  if (!mensajes.length) return
+  try {
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(mensajes),
+    })
+  } catch (e) {
+    console.error('[Push] Error enviando:', e)
+  }
+}
+
 serve(async (_req) => {
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -8,7 +21,6 @@ serve(async (_req) => {
   )
 
   const ahora = new Date()
-  // Ventana de ±20 min alrededor de cada umbral (cron corre cada 30 min)
   const VENTANA_MS = 20 * 60 * 1000
 
   const notificaciones: {
@@ -39,7 +51,6 @@ serve(async (_req) => {
       hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City',
     })
     const descripcion = rec.descripcion ? ` — ${rec.descripcion}` : ''
-
     notificaciones.push({
       user_id: rec.user_id,
       titulo: '⏰ Recordatorio mañana',
@@ -47,11 +58,7 @@ serve(async (_req) => {
       tipo: 'recordatorio',
       leida: false,
     })
-
-    await supabase
-      .from('recordatorios')
-      .update({ notificado_24h: true })
-      .eq('id', rec.id)
+    await supabase.from('recordatorios').update({ notificado_24h: true }).eq('id', rec.id)
   }
 
   // ─── Recordatorios a 2 horas ─────────────────────────────────────────────
@@ -74,7 +81,6 @@ serve(async (_req) => {
       hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City',
     })
     const descripcion = rec.descripcion ? ` — ${rec.descripcion}` : ''
-
     notificaciones.push({
       user_id: rec.user_id,
       titulo: '⏰ Cita en 2 horas',
@@ -82,19 +88,31 @@ serve(async (_req) => {
       tipo: 'recordatorio',
       leida: false,
     })
-
-    await supabase
-      .from('recordatorios')
-      .update({ notificado_2h: true })
-      .eq('id', rec.id)
+    await supabase.from('recordatorios').update({ notificado_2h: true }).eq('id', rec.id)
   }
 
-  // ─── Insertar todas las notificaciones de este ciclo ─────────────────────
+  // ─── Insertar notificaciones en DB ───────────────────────────────────────
   if (notificaciones.length > 0) {
-    const { error: errInsert } = await supabase
-      .from('notificaciones')
-      .insert(notificaciones)
+    const { error: errInsert } = await supabase.from('notificaciones').insert(notificaciones)
     if (errInsert) console.error('Error inserting notificaciones:', errInsert.message)
+
+    // ─── Enviar push a cada usuario ──────────────────────────────────────
+    const userIds = [...new Set(notificaciones.map(n => n.user_id))]
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, push_token')
+      .in('id', userIds)
+      .not('push_token', 'is', null)
+
+    const pushMensajes = notificaciones
+      .map(n => {
+        const profile = profiles?.find(p => p.id === n.user_id)
+        if (!profile?.push_token) return null
+        return { to: profile.push_token, title: n.titulo, body: n.mensaje, sound: 'default' }
+      })
+      .filter(Boolean) as { to: string; title: string; body: string; sound: string }[]
+
+    await enviarPushExpo(pushMensajes)
   }
 
   return new Response(
