@@ -743,35 +743,45 @@ export default function DetallePropiedad() {
         setDescargando(false)
       }
     } else {
-      // writeOnly: true → solicita solo permiso de "Agregar fotos" en iOS (menos restrictivo)
-      const { status, accessPrivileges } = await MediaLibrary.requestPermissionsAsync(true)
+      // Pedir permiso completo (no writeOnly) para mayor compatibilidad en iOS
+      const { status } = await MediaLibrary.requestPermissionsAsync()
       if (status !== 'granted') {
         Alert.alert(
           'Permiso requerido',
-          'Ve a Configuración → Valera → Fotos y permite "Agregar fotos" para guardar imágenes.',
-          [{ text: 'OK' }]
+          'Ve a Configuración → Valera → Fotos y selecciona "Todas las fotos" para guardar imágenes.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Abrir Configuración', onPress: () => Linking.openSettings() },
+          ]
         )
         setDescargando(false)
         return
       }
 
       let guardadas = 0
+      const errores: string[] = []
       for (let i = 0; i < imagenes.length; i++) {
         try {
           const url = imagenes[i].url
-          // Detectar extensión real desde la URL
           const ext = url.split('?')[0].split('.').pop()?.toLowerCase() ?? 'jpg'
           const extValida = ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext) ? ext : 'jpg'
-          const dest = `${FileSystem.cacheDirectory}${propiedad.codigo ?? 'prop'}-${i + 1}.${extValida}`
-          const { uri } = await FileSystem.downloadAsync(url, dest)
-          await MediaLibrary.saveToLibraryAsync(uri)
+          const dest = `${FileSystem.documentDirectory}${propiedad.codigo ?? 'prop'}-${i + 1}.${extValida}`
+          const { uri, status: dlStatus } = await FileSystem.downloadAsync(url, dest)
+          if (dlStatus !== 200) { errores.push(`img${i + 1}: HTTP ${dlStatus}`); continue }
+          await MediaLibrary.createAssetAsync(uri)
           guardadas++
-        } catch {
-          // continuar con las demás
+        } catch (e: any) {
+          errores.push(`img${i + 1}: ${e?.message ?? e}`)
         }
       }
       setDescargando(false)
-      Alert.alert('Listo', `${guardadas} de ${imagenes.length} imágenes guardadas en tu galería.`)
+      if (errores.length > 0) console.warn('[Galería] Errores:', errores)
+      Alert.alert(
+        guardadas > 0 ? 'Listo' : 'Error',
+        guardadas > 0
+          ? `${guardadas} de ${imagenes.length} imágenes guardadas en tu galería.`
+          : `No se pudo guardar ninguna imagen. Verifica que la app tenga acceso completo a Fotos en Configuración.`
+      )
     }
   }
 
