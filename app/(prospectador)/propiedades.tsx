@@ -454,10 +454,11 @@ export default function ProspectadorPropiedades() {
         {/* Header unificado con búsqueda */}
         <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 24 : statusBarHeight + 12, paddingBottom: 18 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
-            {!isWeb ? (
-              <View style={styles.headerTopRow}>
-                <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
-                <View style={{ flex: 1, marginLeft: 12 }}>
+            {/* Logo + saludo — visible en mobile y web */}
+            <View style={styles.headerTopRow}>
+              <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
+              {!isWeb && (
+                <View style={{ flex: 1, marginLeft: 14 }}>
                   <Text style={styles.headerSaludo}>
                     {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
                   </Text>
@@ -465,8 +466,9 @@ export default function ProspectadorPropiedades() {
                     {propiedades.length > 0 ? `${propiedades.length} propiedades disponibles` : 'Cargando...'}
                   </Text>
                 </View>
-              </View>
-            ) : (
+              )}
+            </View>
+            {isWeb && (
               <>
                 <Text style={styles.headerSaludo}>
                   {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
@@ -796,7 +798,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerIconoText: { fontSize: 18 },
-  headerLogo: { width: 75, height: 26 },
+  headerLogo: { width: 140, height: 48 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   searchWrapper: {
     flexDirection: 'row',
