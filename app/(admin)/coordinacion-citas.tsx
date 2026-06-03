@@ -661,7 +661,7 @@ export default function CoordinacionCitas() {
   ).length
 
   return (
-    <View style={s.container}>
+    <ScrollView style={s.container} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
 
       {/* ── Botón volver ── */}
       <TouchableOpacity
@@ -785,12 +785,8 @@ export default function CoordinacionCitas() {
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={citasFiltradas}
-          keyExtractor={item => item.id}
-          contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
-          showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => {
+        <View style={{ padding: 14, paddingBottom: 100 }}>
+          {citasFiltradas.map((item) => {
             const inf       = ESTADOS_CITA[item.estado]
             const esCitaHoy = item.fecha_cita &&
               new Date(item.fecha_cita).toDateString() === new Date().toDateString()
@@ -878,8 +874,8 @@ export default function CoordinacionCitas() {
                 </View>
               </TouchableOpacity>
             )
-          }}
-        />
+          })}
+        </View>
       )}
 
       {/* ── FAB nueva cita ── */}
@@ -901,20 +897,14 @@ export default function CoordinacionCitas() {
           onGuardar={cargar}
         />
       )}
-    </View>
+    </ScrollView>
   )
 }
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container: {
-    flex: 1, backgroundColor: '#f1f5f9',
-    ...(Platform.OS === 'web' ? {
-      position: 'absolute' as any,
-      top: 0, left: 0, right: 0, bottom: 0,
-    } : {}),
-  },
+  container: { flex: 1, backgroundColor: '#f1f5f9' },
 
   // KPI
   kpiStrip: {
