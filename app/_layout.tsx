@@ -200,7 +200,25 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loading) return
-    if (!session) router.replace('/(auth)/login')
+    if (!session) {
+      router.replace('/(auth)/login')
+      return
+    }
+    // Al recargar la página, verificar el rol y redirigir al home correcto
+    // Esto evita que un usuario normal acceda a rutas de admin por URL
+    supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.role === 'admin') {
+          router.replace('/(admin)/propiedades')
+        } else {
+          router.replace('/(prospectador)/propiedades')
+        }
+      })
+      .catch(() => {})
   }, [loading])
 
   if (loading || !fontsLoaded) {
