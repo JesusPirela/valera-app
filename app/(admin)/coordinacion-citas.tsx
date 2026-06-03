@@ -4,7 +4,7 @@ import {
   TextInput, ActivityIndicator, ScrollView, Platform, Alert,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router, Stack } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -662,6 +662,16 @@ export default function CoordinacionCitas() {
 
   return (
     <View style={s.container}>
+      <Stack.Screen options={{
+        headerLeft: () => (
+          <TouchableOpacity
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}
+            style={{ paddingLeft: 8, paddingRight: 4 }}
+          >
+            <Text style={{ color: '#c9a84c', fontSize: 22, fontWeight: '700' }}>‹</Text>
+          </TouchableOpacity>
+        ),
+      }} />
 
       {/* ── KPI strip ── */}
       <View style={s.kpiStrip}>
