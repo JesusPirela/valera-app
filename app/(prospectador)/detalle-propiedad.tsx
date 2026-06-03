@@ -593,16 +593,8 @@ export default function DetallePropiedad() {
       ? ` (${propiedad.nombre_constructora})`
       : ''
     const mensaje = `Hola, quiero coordinar una cita para *${clienteParaCita.nombre}* (${clienteParaCita.telefono}) para la propiedad *${propiedad.codigo}*${constructoraStr} el *${fechaStr}*.`
-    if (subidoPor?.telefono) {
-      let phone = subidoPor.telefono.replace(/\D/g, '')
-      if (phone.startsWith('5252')) phone = phone.slice(2)
-      if (phone.startsWith('521') && phone.length === 13) phone = '52' + phone.slice(3)
-      const tel = phone.length === 10 ? `52${phone}` : phone
-      Linking.openURL(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`)
-    } else {
-      // Sin teléfono del asesor: abrir WhatsApp sin destinatario, el prospectador elige a quién enviar
-      Linking.openURL(`https://wa.me/?text=${encodeURIComponent(mensaje)}`)
-    }
+    // Abrir WhatsApp sin destinatario — el prospectador elige a quién enviar
+    Linking.openURL(`https://wa.me/?text=${encodeURIComponent(mensaje)}`)
   }
 
   async function compartirEnWhatsApp() {
@@ -868,9 +860,6 @@ export default function DetallePropiedad() {
               🏗 {propiedad.nombre_constructora ?? 'Constructora'}
             </Text>
           )}
-          {subidoPor && (
-            <Text style={styles.asesorBadge}>👤 {subidoPor.nombre}</Text>
-          )}
         </View>
 
         {/* Título y precio */}
@@ -878,31 +867,6 @@ export default function DetallePropiedad() {
         <Text style={styles.precio}>{formatPrecio(propiedad.precio)}</Text>
         <Text style={styles.direccion}>{propiedad.direccion}</Text>
 
-        {/* Contactar asesor + Generar flyer */}
-        <View style={styles.accionesRapidas}>
-          {subidoPor?.telefono && (
-            <>
-              <TouchableOpacity
-                style={[styles.accionBtn, { backgroundColor: '#25d366' }]}
-                onPress={() => {
-                  const raw = subidoPor.telefono!.replace(/\D/g, '')
-                  const tel = raw.startsWith('52') && raw.length === 12 ? raw : `52${raw}`
-                  const url = `https://wa.me/${tel}?text=${encodeURIComponent(`Hola, te contacto sobre la propiedad ${propiedad.codigo}: ${propiedad.titulo}`)}`
-                  if (Platform.OS === 'web') window.open(url, '_blank')
-                  else Linking.openURL(url)
-                }}
-              >
-                <Text style={styles.accionBtnText}>📱 WhatsApp asesor</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.accionBtn, { backgroundColor: '#1a6470' }]}
-                onPress={() => Linking.openURL(`tel:${subidoPor.telefono}`)}
-              >
-                <Text style={styles.accionBtnText}>📞 Llamar</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
 
         {/* Características */}
         {(propiedad.recamaras != null || propiedad.banos != null || propiedad.m2 != null || propiedad.estacionamientos != null) && (
@@ -1062,9 +1026,7 @@ export default function DetallePropiedad() {
           onPress={abrirModalCita}
           disabled={!propiedad}
         >
-          <Text style={styles.btnCitaText}>
-            📅 Coordinar cita{subidoPor ? ` con ${subidoPor.nombre}` : ''}
-          </Text>
+          <Text style={styles.btnCitaText}>📅 Coordinar cita</Text>
         </TouchableOpacity>
 
         {/* Botón solicitar diseño con André */}
