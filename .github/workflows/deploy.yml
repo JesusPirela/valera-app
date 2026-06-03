@@ -29,18 +29,17 @@ jobs:
       - name: Create .htaccess for SPA routing
         run: echo 'ErrorDocument 404 /index.html' > dist/.htaccess
 
-      - name: Install lftp
-        run: sudo apt-get install -y lftp
-
-      - name: Deploy via FTP
-        run: |
-          lftp -c "
-            set ftp:passive-mode true;
-            set ftp:ssl-allow no;
-            set net:timeout 60;
-            set net:max-retries 5;
-            set net:reconnect-interval-base 5;
-            open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ftp://45.137.159.251;
-            mirror --reverse --delete --parallel=5 --exclude=.git --exclude=.htaccess ./dist/ /public_html/;
-            put dist/.htaccess -o /public_html/.htaccess;
-          "
+      - name: Deploy via FTP (solo archivos cambiados)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: 45.137.159.251
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: /public_html/
+          protocol: ftp
+          port: 21
+          timeout: 60000
+          exclude: |
+            **/.git*
+            **/.git*/**
