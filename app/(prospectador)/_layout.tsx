@@ -11,6 +11,30 @@ const LOGO = require('../../assets/logo.png')
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name']
 
+function HoverTabIcon({ name, nameFocused, focused, color }: {
+  name: IoniconsName; nameFocused: IoniconsName; focused: boolean; color: string
+}) {
+  const [hovered, setHovered] = useState(false)
+  const isWeb = Platform.OS === 'web'
+  return (
+    <View
+      style={{
+        alignItems: 'center', justifyContent: 'center',
+        transform: [{ scale: hovered && isWeb ? 1.28 : 1 }],
+        // @ts-ignore – CSS transitions en React Native Web
+        transitionDuration: isWeb ? '140ms' : undefined,
+        transitionProperty: isWeb ? 'transform' : undefined,
+        transitionTimingFunction: isWeb ? 'ease-out' : undefined,
+      }}
+      // @ts-ignore – eventos de mouse solo en web
+      onMouseEnter={isWeb ? () => setHovered(true) : undefined}
+      onMouseLeave={isWeb ? () => setHovered(false) : undefined}
+    >
+      <Ionicons name={focused ? nameFocused : name} size={focused ? 26 : 24} color={color} />
+    </View>
+  )
+}
+
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
   const [showCrmPopup, setShowCrmPopup] = useState(true)
@@ -111,7 +135,7 @@ export default function ProspectadorLayout() {
 
   function tabIcon(name: IoniconsName, nameFocused: IoniconsName) {
     return ({ color, focused }: { color: string; focused: boolean }) => (
-      <Ionicons name={focused ? nameFocused : name} size={24} color={color} />
+      <HoverTabIcon name={name} nameFocused={nameFocused} focused={focused} color={color} />
     )
   }
 
@@ -124,8 +148,8 @@ export default function ProspectadorLayout() {
         tabBarActiveTintColor: colorAcento,
         tabBarInactiveTintColor: darkMode ? '#556a7a' : '#9eafb2',
         tabBarStyle: {
-          backgroundColor: darkMode ? '#111f2e' : '#fff',
-          borderTopColor: '#e8eef0',
+          backgroundColor: darkMode ? '#1b3045' : '#fff',
+          borderTopColor: darkMode ? '#2a4560' : '#e8eef0',
           borderTopWidth: 1,
           height: TAB_BAR_HEIGHT,
           paddingBottom: Platform.OS === 'ios' ? 24 : Platform.OS === 'web' ? 12 : 8,
@@ -148,7 +172,7 @@ export default function ProspectadorLayout() {
         headerTitle: () => (
           <Image
             source={LOGO}
-            style={{ width: 100, height: 44 }}
+            style={{ width: 130, height: 54 }}
             resizeMode="contain"
           />
         ),
