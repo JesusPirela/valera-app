@@ -5,7 +5,10 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { comprarItem, getCoinsDisplay } from '../../lib/gamification'
+import { comprarItem, getCoinsDisplay, registrarPremioRuleta, calcularNivel } from '../../lib/gamification'
+import { RuletaModal, checkMilestone, type Premio } from '../../components/RuletaModal'
+
+const COSTO_COFRE = 100
 
 type StoreItem = {
   id: string
@@ -55,7 +58,11 @@ export default function Tienda() {
   const [tab, setTab]             = useState<'tienda' | 'historial'>('tienda')
   const [loading, setLoading]     = useState(true)
   const [loadingHistorial, setLoadingHistorial] = useState(false)
-  const [comprando, setComprando] = useState<string | null>(null)
+  const [comprando, setComprando]       = useState<string | null>(null)
+  const [showRuleta, setShowRuleta]     = useState(false)
+  const [ruletaMilestone, setRuletaMilestone] = useState(false)
+  const [milestoneNivel, setMilestoneNivel]   = useState<number | undefined>()
+  const [abriendoCofre, setAbriendoCofre]     = useState(false)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -74,10 +81,20 @@ export default function Tienda() {
         .order('created_at', { ascending: false }),
     ])
 
+    const xp     = (statsRes.data as any)?.xp ?? 0
+    const nivel  = calcularNivel(xp)
     setCoins(statsRes.data?.valera_coins ?? 0)
     setItems((itemsRes.data ?? []) as StoreItem[])
     setCompras((comprasRes.data ?? []) as Compra[])
     setLoading(false)
+
+    // Verificar si hay un milestone de nivel pendiente (cada 10 niveles)
+    const milestone = await checkMilestone(nivel)
+    if (milestone) {
+      setMilestoneNivel(milestone)
+      setRuletaMilestone(true)
+      setShowRuleta(true)
+    }
   }
 
   async function handleCompra(item: StoreItem) {
@@ -97,6 +114,36 @@ export default function Tienda() {
     } else {
       alerta(error ?? 'Error al procesar la compra')
     }
+  }
+
+  async function abrirCofre() {
+    if (coins < COSTO_COFRE) {
+      alerta(`Necesitas ${COSTO_COFRE} Valera Coins para abrir el cofre. Tienes ${coins}.`)
+      return
+    }
+    setAbriendoCofre(true)
+    // Descontar coins antes de mostrar la ruleta
+    const { error } = await supabase.rpc('gastar_coins', {
+      p_user_id: userId,
+      p_cantidad: COSTO_COFRE,
+      p_concepto: 'Cofre ruleta 🎰',
+    })
+    setAbriendoCofre(false)
+    if (error) { alerta('Error al abrir el cofre'); return }
+    setCoins(prev => prev - COSTO_COFRE)
+    setRuletaMilestone(false)
+    setMilestoneNivel(undefined)
+    setShowRuleta(true)
+  }
+
+  async function onGanarPremio(premio: Premio) {
+    await registrarPremioRuleta(
+      premio.tipo,
+      premio.nombre,
+      ruletaMilestone ? 0 : COSTO_COFRE,
+      ruletaMilestone
+    )
+    cargar()
   }
 
   if (loading) return (
@@ -147,6 +194,30 @@ export default function Tienda() {
           <Text style={s.hint}>
             💡 Tras comprar, el equipo de Valera te contactará para entregar tu recompensa.
           </Text>
+
+          {/* Cofre / Ruleta */}
+          <TouchableOpacity
+            style={[s.cofreCard, (abriendoCofre || coins < COSTO_COFRE) && s.cofreCardDis]}
+            onPress={abrirCofre}
+            disabled={abriendoCofre || coins < COSTO_COFRE}
+          >
+            <View style={s.cofreLeft}>
+              <Text style={s.cofreIcn}>🎁</Text>
+              <View>
+                <Text style={s.cofreNombre}>Cofre Misterioso</Text>
+                <Text style={s.cofreSub}>Gira la ruleta y gana una recompensa sorpresa</Text>
+              </View>
+            </View>
+            <View style={s.cofreCosto}>
+              {abriendoCofre
+                ? <ActivityIndicator size="small" color="#c9a84c" />
+                : <>
+                    <Text style={s.cofreCostoNum}>{COSTO_COFRE}</Text>
+                    <Text style={s.cofreCostoIcn}>💰</Text>
+                  </>
+              }
+            </View>
+          </TouchableOpacity>
 
           {/* Items */}
           <View style={s.grid}>
@@ -252,6 +323,13 @@ export default function Tienda() {
 
         </ScrollView>
       )}
+      <RuletaModal
+        visible={showRuleta}
+        esMilestone={ruletaMilestone}
+        nivel={milestoneNivel}
+        onClose={() => setShowRuleta(false)}
+        onGanar={onGanarPremio}
+      />
     </View>
   )
 }
@@ -290,6 +368,21 @@ const s = StyleSheet.create({
   tabBadge:     { color: '#e74c3c', fontWeight: '800' },
 
   hint: { fontSize: 12, color: '#556a7a', paddingHorizontal: 16, paddingVertical: 10, lineHeight: 18 },
+
+  cofreCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 12, marginBottom: 4, padding: 16,
+    backgroundColor: '#1a1500', borderRadius: 16,
+    borderWidth: 1.5, borderColor: GOLD,
+  },
+  cofreCardDis: { opacity: 0.5 },
+  cofreLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  cofreIcn:   { fontSize: 32 },
+  cofreNombre:{ fontSize: 15, fontWeight: '800', color: GOLD },
+  cofreSub:   { fontSize: 11, color: '#7a9ab5', marginTop: 2 },
+  cofreCosto: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#0d1b2a', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  cofreCostoNum: { fontSize: 16, fontWeight: '900', color: GOLD },
+  cofreCostoIcn: { fontSize: 16 },
 
   grid: { padding: 12, gap: 12 },
   card: {

@@ -450,6 +450,28 @@ export function getCoinsDisplay(): { icono: string; label: string; coins: number
 }
 function pick(a: CfgAccion) { return { coins: a.coins, xp: a.xp } }
 
+// ── Ruleta / Cofre ────────────────────────────────────────────
+export async function registrarPremioRuleta(
+  tipo: string,
+  nombre: string,
+  costo: number,
+  esMilestone: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('registrar_premio_ruleta', {
+      p_tipo_premio:  tipo,
+      p_nombre_premio: nombre,
+      p_costo_coins:  costo,
+      p_es_milestone: esMilestone,
+    })
+    if (error) return { ok: false, error: error.message }
+    if (!data?.ok) return { ok: false, error: data?.error ?? 'Error al registrar premio' }
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e.message }
+  }
+}
+
 // ── Comprar item de la tienda ──────────────────────────────────
 export async function comprarItem(
   _userId: string,
