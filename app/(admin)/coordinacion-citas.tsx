@@ -910,7 +910,10 @@ export default function CoordinacionCitas() {
 const s = StyleSheet.create({
   container: {
     flex: 1, backgroundColor: '#f1f5f9',
-    ...(Platform.OS === 'web' ? { width: '100%', minHeight: '100vh' as any } : {}),
+    ...(Platform.OS === 'web' ? {
+      position: 'absolute' as any,
+      top: 0, left: 0, right: 0, bottom: 0,
+    } : {}),
   },
 
   // KPI
