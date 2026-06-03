@@ -798,7 +798,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerIconoText: { fontSize: 18 },
-  headerLogo: { width: 140, height: 48 },
+  headerLogo: { width: 200, height: 68 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   searchWrapper: {
     flexDirection: 'row',
