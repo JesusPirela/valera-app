@@ -148,7 +148,15 @@ export default function Tienda() {
       ruletaMilestone ? 0 : ruletaCfg.costo,
       ruletaMilestone
     )
-    cargar()
+    // Refrescar compras en silencio (sin loading que desmonta el modal)
+    if (userId) {
+      const { data } = await supabase
+        .from('store_compras')
+        .select('id, created_at, costo_coins, estado, notas_admin, store_items(nombre, icono)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+      setCompras((data ?? []) as Compra[])
+    }
   }
 
   if (loading) return (
