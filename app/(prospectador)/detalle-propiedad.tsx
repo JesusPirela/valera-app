@@ -137,26 +137,13 @@ export default function DetallePropiedad() {
       if (error) throw error
 
       let subidoPor: SubidoPor | null = null
-      let uploaderPhone: string | null = null
 
-      // Siempre resolver perfil del uploader para usar su teléfono como fallback
+      // Usar siempre el perfil del admin que creó la propiedad para coordinar citas
       if (data.created_by) {
         const { data: perfil } = await supabase
           .from('profiles').select('nombre, telefono').eq('id', data.created_by).maybeSingle()
         if (perfil) {
-          uploaderPhone = perfil.telefono ?? null
           subidoPor = { nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null }
-        }
-      }
-
-      if (data.asesor_id) {
-        const { data: asesor } = await supabase
-          .from('asesores').select('nombre, telefono').eq('id', data.asesor_id).maybeSingle()
-        if (asesor) {
-          subidoPor = {
-            nombre: asesor.nombre ?? 'Asesor',
-            telefono: asesor.telefono ?? uploaderPhone,
-          }
         }
       }
 
