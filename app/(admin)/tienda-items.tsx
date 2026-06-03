@@ -311,29 +311,32 @@ export default function TiendaItems() {
 
             {ruletaCfg?.premios.map((p, i) => (
               <View key={p.id} style={s.ruletaRow}>
+                {/* Selector de artículo de la tienda */}
+                <Text style={[s.lbl, { marginTop: 0, marginBottom: 6 }]}>Premio {i + 1}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {items.map(item => {
+                      const sel = p.tipo === item.tipo && p.nombre === item.nombre
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={[s.itemChip, sel && s.itemChipSel]}
+                          onPress={() => setRuletaCfg(c => {
+                            if (!c) return c
+                            const premios = [...c.premios]
+                            premios[i] = { ...premios[i], nombre: item.nombre, icono: item.icono, tipo: item.tipo }
+                            return { ...c, premios }
+                          })}
+                        >
+                          <Text style={s.itemChipIcn}>{item.icono}</Text>
+                          <Text style={[s.itemChipTxt, sel && { color: '#fff' }]} numberOfLines={1}>{item.nombre}</Text>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+                </ScrollView>
                 <View style={s.ruletaRowLeft}>
-                  <TextInput
-                    style={[s.inputNum, { width: 44 }]}
-                    value={p.icono}
-                    onChangeText={v => setRuletaCfg(c => {
-                      if (!c) return c
-                      const premios = [...c.premios]
-                      premios[i] = { ...premios[i], icono: v }
-                      return { ...c, premios }
-                    })}
-                    maxLength={4}
-                  />
-                  <TextInput
-                    style={[s.input, { flex: 1, marginBottom: 0 }]}
-                    value={p.nombre}
-                    onChangeText={v => setRuletaCfg(c => {
-                      if (!c) return c
-                      const premios = [...c.premios]
-                      premios[i] = { ...premios[i], nombre: v }
-                      return { ...c, premios }
-                    })}
-                    placeholder="Nombre del premio"
-                  />
+                  <Text style={[s.ruletaSeleccionado]}>{p.icono} {p.nombre}</Text>
                 </View>
                 <View style={s.ruletaRowProbs}>
                   <View style={s.ruletaProb}>
@@ -502,8 +505,13 @@ const s = StyleSheet.create({
   btnNuevo:    { backgroundColor: '#c9a84c', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   btnNuevoTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
 
-  ruletaRow: { marginBottom: 10, backgroundColor: '#f5f8f9', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#dde8e9' },
+  ruletaRow: { marginBottom: 12, backgroundColor: '#f5f8f9', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#dde8e9' },
   ruletaRowLeft: { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' },
+  ruletaSeleccionado: { fontSize: 13, fontWeight: '700', color: '#1a6470', marginBottom: 4 },
+  itemChip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#ddd', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#fff' },
+  itemChipSel: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  itemChipIcn: { fontSize: 14 },
+  itemChipTxt: { fontSize: 12, color: '#555', maxWidth: 90 },
   ruletaRowProbs: { flexDirection: 'row', gap: 8 },
   ruletaProb: { flex: 1, alignItems: 'center' },
   ruletaProbLbl: { fontSize: 10, color: '#888', fontWeight: '700', marginBottom: 4, textTransform: 'uppercase' },

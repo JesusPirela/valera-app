@@ -341,8 +341,11 @@ export default function Tienda() {
         esMilestone={ruletaMilestone}
         nivel={milestoneNivel}
         premios={ruletaCfg.premios}
+        costoGirar={ruletaCfg.costo}
+        puedePagar={coins >= ruletaCfg.costo}
         onClose={() => setShowRuleta(false)}
         onGanar={onGanarPremio}
+        onGirarOtraVez={abrirCofre}
       />
     </View>
   )

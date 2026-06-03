@@ -73,11 +73,14 @@ interface Props {
   esMilestone?: boolean
   nivel?: number
   premios?: Premio[]
+  costoGirar?: number        // costo en coins para girar otra vez (solo cofre)
+  puedePagar?: boolean       // si tiene saldo para volver a girar
   onClose: () => void
   onGanar: (premio: Premio) => void
+  onGirarOtraVez?: () => void // undefined = no mostrar el botón
 }
 
-export function RuletaModal({ visible, esMilestone = false, nivel, premios: premiosProp, onClose, onGanar }: Props) {
+export function RuletaModal({ visible, esMilestone = false, nivel, premios: premiosProp, costoGirar, puedePagar = true, onClose, onGanar, onGirarOtraVez }: Props) {
   const [fase, setFase]       = useState<'listo' | 'girando' | 'resultado'>('listo')
   const [activoIdx, setActivo] = useState(-1)
   const [ganador, setGanador] = useState<Premio | null>(null)
@@ -162,9 +165,28 @@ export function RuletaModal({ visible, esMilestone = false, nivel, premios: prem
               <Text style={rs.resultTxt}>¡Ganaste!</Text>
               <Text style={rs.resultPremio}>{ganador?.nombre}</Text>
               <Text style={rs.resultSub}>El equipo Valera te lo entregará pronto 🎁</Text>
-              <TouchableOpacity style={rs.doneBtn} onPress={onClose}>
-                <Text style={rs.doneTxt}>¡Genial! Cerrar</Text>
-              </TouchableOpacity>
+              <View style={rs.resultBtns}>
+                {onGirarOtraVez && !esMilestone && (
+                  <TouchableOpacity
+                    style={[rs.otraVezBtn, !puedePagar && rs.otraVezBtnDis]}
+                    onPress={() => {
+                      if (!puedePagar) return
+                      setFase('listo')
+                      setActivo(-1)
+                      setGanador(null)
+                      onGirarOtraVez()
+                    }}
+                    disabled={!puedePagar}
+                  >
+                    <Text style={rs.otraVezTxt}>
+                      🎰 Otra vez{costoGirar ? ` (${costoGirar} 💰)` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={rs.doneBtn} onPress={onClose}>
+                  <Text style={rs.doneTxt}>Cerrar</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
             <TouchableOpacity
@@ -221,6 +243,10 @@ const rs = StyleSheet.create({
   resultTxt:   { fontSize: 22, fontWeight: '900', color: '#fff', textAlign: 'center', marginBottom: 2 },
   resultPremio:{ fontSize: 18, fontWeight: '800', color: GOLD, textAlign: 'center', marginBottom: 8 },
   resultSub:   { fontSize: 12, color: '#7a9ab5', textAlign: 'center', marginBottom: 20, lineHeight: 17 },
-  doneBtn:     { backgroundColor: '#1a6470', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 40, width: '100%', alignItems: 'center' },
-  doneTxt:     { color: '#fff', fontSize: 16, fontWeight: '800' },
+  resultBtns:    { width: '100%', gap: 10 },
+  otraVezBtn:    { backgroundColor: GOLD, borderRadius: 14, paddingVertical: 13, alignItems: 'center', width: '100%' },
+  otraVezBtnDis: { opacity: 0.4 },
+  otraVezTxt:    { color: '#0d1b2a', fontSize: 15, fontWeight: '800' },
+  doneBtn:       { backgroundColor: '#1e3448', borderRadius: 14, paddingVertical: 13, alignItems: 'center', width: '100%', borderWidth: 1, borderColor: '#2a4560' },
+  doneTxt:       { color: '#7a9ab5', fontSize: 15, fontWeight: '700' },
 })
