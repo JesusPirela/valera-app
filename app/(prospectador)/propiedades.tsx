@@ -452,32 +452,20 @@ export default function ProspectadorPropiedades() {
       <View style={[styles.container, { backgroundColor: c.bg }]}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 24 : statusBarHeight + 12, paddingBottom: 18 }]}>
+        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 10 : statusBarHeight + 8, paddingBottom: 12 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
-            {/* Logo + saludo — visible en mobile y web */}
-            <View style={styles.headerTopRow}>
+            {/* Logo + saludo en la misma fila */}
+            <View style={[styles.headerTopRow, { marginBottom: 8 }]}>
               <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
-              {!isWeb && (
-                <View style={{ flex: 1, marginLeft: 14 }}>
-                  <Text style={styles.headerSaludo}>
-                    {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
-                  </Text>
-                  <Text style={styles.headerSubtitulo}>
-                    {propiedades.length > 0 ? `${propiedades.length} propiedades disponibles` : 'Cargando...'}
-                  </Text>
-                </View>
-              )}
-            </View>
-            {isWeb && (
-              <>
+              <View style={{ flex: 1, marginLeft: 14, justifyContent: 'center' }}>
                 <Text style={styles.headerSaludo}>
                   {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
                 </Text>
                 <Text style={styles.headerSubtitulo}>
                   {propiedades.length > 0 ? `${propiedades.length} propiedades disponibles` : 'Cargando...'}
                 </Text>
-              </>
-            )}
+              </View>
+            </View>
             <View style={[styles.searchWrapper, { backgroundColor: darkMode ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.95)' }]}>
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
@@ -798,7 +786,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerIconoText: { fontSize: 18 },
-  headerLogo: { width: 200, height: 68 },
+  headerLogo: { width: 110, height: 38 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   searchWrapper: {
     flexDirection: 'row',
