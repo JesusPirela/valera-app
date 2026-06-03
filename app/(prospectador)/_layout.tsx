@@ -6,6 +6,39 @@ import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
 import { trackLoginDiario } from '../../lib/gamification'
 import { programarRecordatorios } from '../../lib/notificaciones-locales'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+const CRM_POPUP_KEY = '@valera_crm_popup'
+const MAX_POPUP_DIA = 2
+
+async function conteoPopupHoy(): Promise<number> {
+  try {
+    const hoy = new Date().toLocaleDateString('es-MX')
+    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(CRM_POPUP_KEY)
+      if (!raw) return 0
+      const d = JSON.parse(raw)
+      return d.fecha === hoy ? (d.count ?? 0) : 0
+    }
+    const raw = await AsyncStorage.getItem(CRM_POPUP_KEY)
+    if (!raw) return 0
+    const d = JSON.parse(raw)
+    return d.fecha === hoy ? (d.count ?? 0) : 0
+  } catch { return 0 }
+}
+
+async function incrementarConteoPopup() {
+  try {
+    const hoy = new Date().toLocaleDateString('es-MX')
+    const count = (await conteoPopupHoy()) + 1
+    const payload = JSON.stringify({ fecha: hoy, count })
+    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+      localStorage.setItem(CRM_POPUP_KEY, payload)
+    } else {
+      await AsyncStorage.setItem(CRM_POPUP_KEY, payload)
+    }
+  } catch {}
+}
 
 const LOGO = require('../../assets/logo.png')
 
@@ -37,7 +70,7 @@ function HoverTabIcon({ name, nameFocused, focused, color }: {
 
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
-  const [showCrmPopup, setShowCrmPopup] = useState(true)
+  const [showCrmPopup, setShowCrmPopup] = useState(false)
   const { primaryColor: colorAcento, darkMode } = useTheme()
   const pathname = usePathname()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -46,6 +79,16 @@ export default function ProspectadorLayout() {
   useEffect(() => {
     mountedRef.current = true
     return () => { mountedRef.current = false }
+  }, [])
+
+  // Mostrar popup CRM máximo 2 veces por día
+  useEffect(() => {
+    conteoPopupHoy().then(count => {
+      if (count < MAX_POPUP_DIA) {
+        setShowCrmPopup(true)
+        incrementarConteoPopup()
+      }
+    })
   }, [])
 
   async function cargarNoLeidas() {
