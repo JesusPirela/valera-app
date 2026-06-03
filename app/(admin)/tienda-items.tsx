@@ -51,6 +51,12 @@ function confirmar(msg: string, onOk: () => void) {
   ])
 }
 
+type PremioConfig = {
+  id: string; nombre: string; icono: string; tipo: string
+  prob_cofre: number; prob_milestone: number
+}
+type RuletaCfg = { costo: number; premios: PremioConfig[] }
+
 export default function TiendaItems() {
   const [items, setItems]         = useState<StoreItem[]>([])
   const [loading, setLoading]     = useState(true)
@@ -60,13 +66,42 @@ export default function TiendaItems() {
   const [guardando, setGuardando] = useState(false)
   const [aplicando, setAplicando] = useState(false)
 
+  // Configuración de ruleta
+  const [ruletaCfg, setRuletaCfg]       = useState<RuletaCfg | null>(null)
+  const [ruletaModal, setRuletaModal]   = useState(false)
+  const [guardandoRuleta, setGuardandoRuleta] = useState(false)
+
   useFocusEffect(useCallback(() => { cargar() }, []))
 
   async function cargar() {
     setLoading(true)
-    const { data } = await supabase.from('store_items').select('*').order('orden')
-    setItems((data ?? []) as StoreItem[])
+    const [itemsRes, cfgRes] = await Promise.all([
+      supabase.from('store_items').select('*').order('orden'),
+      supabase.from('app_config').select('value').eq('key', 'ruleta_config').maybeSingle(),
+    ])
+    setItems((itemsRes.data ?? []) as StoreItem[])
+    if (cfgRes.data?.value) {
+      try { setRuletaCfg(JSON.parse(cfgRes.data.value)) } catch {}
+    }
     setLoading(false)
+  }
+
+  async function guardarRuleta() {
+    if (!ruletaCfg) return
+    // Validar que las probs sumen ~100 para cada tipo
+    const sumCofre     = ruletaCfg.premios.reduce((a, p) => a + p.prob_cofre, 0)
+    const sumMilestone = ruletaCfg.premios.reduce((a, p) => a + p.prob_milestone, 0)
+    if (Math.abs(sumCofre - 100) > 1 || Math.abs(sumMilestone - 100) > 1) {
+      alerta(`Las probabilidades deben sumar 100%.\nCofre: ${sumCofre.toFixed(1)}%\nMilestone: ${sumMilestone.toFixed(1)}%`)
+      return
+    }
+    setGuardandoRuleta(true)
+    const { error } = await supabase.from('app_config')
+      .upsert({ key: 'ruleta_config', value: JSON.stringify(ruletaCfg) }, { onConflict: 'key' })
+    setGuardandoRuleta(false)
+    if (error) { alerta('Error: ' + error.message); return }
+    setRuletaModal(false)
+    alerta('✅ Configuración de ruleta guardada')
   }
 
   function abrirNuevo() {
@@ -204,6 +239,9 @@ export default function TiendaItems() {
               : <Text style={s.btnBaseTxt}>⚙️ Config</Text>
             }
           </TouchableOpacity>
+          <TouchableOpacity style={s.btnRuleta} onPress={() => ruletaCfg && setRuletaModal(true)}>
+            <Text style={s.btnRuletaTxt}>🎰 Ruleta</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={s.btnNuevo} onPress={abrirNuevo}>
             <Text style={s.btnNuevoTxt}>＋ Nuevo</Text>
           </TouchableOpacity>
@@ -251,6 +289,109 @@ export default function TiendaItems() {
           </View>
         ))}
       </ScrollView>
+
+      {/* Modal configuración ruleta */}
+      <Modal visible={ruletaModal} animationType="slide" transparent onRequestClose={() => setRuletaModal(false)}>
+        <View style={s.overlay}>
+          <ScrollView style={s.sheet} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+            <Text style={s.modalTitle}>🎰 Configuración de Ruleta</Text>
+
+            <Text style={s.lbl}>Costo del Cofre (coins)</Text>
+            <TextInput
+              style={s.inputNum}
+              value={String(ruletaCfg?.costo ?? 100)}
+              onChangeText={v => setRuletaCfg(c => c ? { ...c, costo: parseInt(v) || 0 } : c)}
+              keyboardType="numeric"
+            />
+
+            <Text style={[s.lbl, { marginTop: 16 }]}>Premios y probabilidades</Text>
+            <Text style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
+              Prob. Cofre y Milestone deben sumar 100% cada una.
+            </Text>
+
+            {ruletaCfg?.premios.map((p, i) => (
+              <View key={p.id} style={s.ruletaRow}>
+                <View style={s.ruletaRowLeft}>
+                  <TextInput
+                    style={[s.inputNum, { width: 44 }]}
+                    value={p.icono}
+                    onChangeText={v => setRuletaCfg(c => {
+                      if (!c) return c
+                      const premios = [...c.premios]
+                      premios[i] = { ...premios[i], icono: v }
+                      return { ...c, premios }
+                    })}
+                    maxLength={4}
+                  />
+                  <TextInput
+                    style={[s.input, { flex: 1, marginBottom: 0 }]}
+                    value={p.nombre}
+                    onChangeText={v => setRuletaCfg(c => {
+                      if (!c) return c
+                      const premios = [...c.premios]
+                      premios[i] = { ...premios[i], nombre: v }
+                      return { ...c, premios }
+                    })}
+                    placeholder="Nombre del premio"
+                  />
+                </View>
+                <View style={s.ruletaRowProbs}>
+                  <View style={s.ruletaProb}>
+                    <Text style={s.ruletaProbLbl}>Cofre %</Text>
+                    <TextInput
+                      style={s.inputNum}
+                      value={String(p.prob_cofre)}
+                      onChangeText={v => setRuletaCfg(c => {
+                        if (!c) return c
+                        const premios = [...c.premios]
+                        premios[i] = { ...premios[i], prob_cofre: parseFloat(v) || 0 }
+                        return { ...c, premios }
+                      })}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={s.ruletaProb}>
+                    <Text style={s.ruletaProbLbl}>Nivel %</Text>
+                    <TextInput
+                      style={s.inputNum}
+                      value={String(p.prob_milestone)}
+                      onChangeText={v => setRuletaCfg(c => {
+                        if (!c) return c
+                        const premios = [...c.premios]
+                        premios[i] = { ...premios[i], prob_milestone: parseFloat(v) || 0 }
+                        return { ...c, premios }
+                      })}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
+
+            {ruletaCfg && (
+              <View style={s.ruletaSumas}>
+                <Text style={s.ruletaSumasTxt}>
+                  Suma Cofre: {ruletaCfg.premios.reduce((a, p) => a + p.prob_cofre, 0).toFixed(1)}%
+                  {'   '}
+                  Suma Nivel: {ruletaCfg.premios.reduce((a, p) => a + p.prob_milestone, 0).toFixed(1)}%
+                </Text>
+              </View>
+            )}
+
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.btnCancelar} onPress={() => setRuletaModal(false)}>
+                <Text style={s.btnCancelarTxt}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.btnGuardar, guardandoRuleta && { opacity: 0.6 }]} onPress={guardarRuleta} disabled={guardandoRuleta}>
+                {guardandoRuleta
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={s.btnGuardarTxt}>Guardar ruleta</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
 
       {/* Modal edición / nuevo */}
       <Modal visible={modal} animationType="slide" transparent onRequestClose={() => setModal(false)}>
@@ -356,8 +497,18 @@ const s = StyleSheet.create({
   headerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
   btnBase:     { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', minWidth: 72, alignItems: 'center' },
   btnBaseTxt:  { color: '#fff', fontWeight: '700', fontSize: 13 },
+  btnRuleta:   { backgroundColor: 'rgba(201,168,76,0.25)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: '#c9a84c', alignItems: 'center' },
+  btnRuletaTxt:{ color: '#c9a84c', fontWeight: '700', fontSize: 13 },
   btnNuevo:    { backgroundColor: '#c9a84c', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   btnNuevoTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
+
+  ruletaRow: { marginBottom: 10, backgroundColor: '#f5f8f9', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#dde8e9' },
+  ruletaRowLeft: { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' },
+  ruletaRowProbs: { flexDirection: 'row', gap: 8 },
+  ruletaProb: { flex: 1, alignItems: 'center' },
+  ruletaProbLbl: { fontSize: 10, color: '#888', fontWeight: '700', marginBottom: 4, textTransform: 'uppercase' },
+  ruletaSumas: { backgroundColor: '#e8f5e9', borderRadius: 8, padding: 10, marginTop: 8 },
+  ruletaSumasTxt: { fontSize: 13, fontWeight: '700', color: '#2e7d32', textAlign: 'center' },
 
   card: {
     backgroundColor: '#fff', borderRadius: 14, marginBottom: 10,

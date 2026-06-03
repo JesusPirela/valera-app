@@ -6,9 +6,7 @@ import {
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { comprarItem, getCoinsDisplay, registrarPremioRuleta, calcularNivel } from '../../lib/gamification'
-import { RuletaModal, checkMilestone, type Premio } from '../../components/RuletaModal'
-
-const COSTO_COFRE = 100
+import { RuletaModal, checkMilestone, CONFIG_DEFAULT, type Premio, type RuletaConfig } from '../../components/RuletaModal'
 
 type StoreItem = {
   id: string
@@ -59,10 +57,11 @@ export default function Tienda() {
   const [loading, setLoading]     = useState(true)
   const [loadingHistorial, setLoadingHistorial] = useState(false)
   const [comprando, setComprando]       = useState<string | null>(null)
-  const [showRuleta, setShowRuleta]     = useState(false)
+  const [showRuleta, setShowRuleta]           = useState(false)
   const [ruletaMilestone, setRuletaMilestone] = useState(false)
   const [milestoneNivel, setMilestoneNivel]   = useState<number | undefined>()
   const [abriendoCofre, setAbriendoCofre]     = useState(false)
+  const [ruletaCfg, setRuletaCfg]             = useState<RuletaConfig>(CONFIG_DEFAULT)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -72,17 +71,23 @@ export default function Tienda() {
     if (!user) { setLoading(false); return }
     setUserId(user.id)
 
-    const [statsRes, itemsRes, comprasRes] = await Promise.all([
-      supabase.from('user_stats').select('valera_coins').eq('id', user.id).maybeSingle(),
+    const [statsRes, itemsRes, comprasRes, cfgRes] = await Promise.all([
+      supabase.from('user_stats').select('valera_coins, xp').eq('id', user.id).maybeSingle(),
       supabase.from('store_items').select('*').eq('disponible', true).order('orden'),
       supabase.from('store_compras')
         .select('id, created_at, costo_coins, estado, notas_admin, store_items(nombre, icono)')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
+      supabase.from('app_config').select('value').eq('key', 'ruleta_config').maybeSingle(),
     ])
 
-    const xp     = (statsRes.data as any)?.xp ?? 0
-    const nivel  = calcularNivel(xp)
+    // Cargar config de ruleta desde Supabase
+    if (cfgRes.data?.value) {
+      try { setRuletaCfg(JSON.parse(cfgRes.data.value)) } catch {}
+    }
+
+    const xp    = (statsRes.data as any)?.xp ?? 0
+    const nivel = calcularNivel(xp)
     setCoins(statsRes.data?.valera_coins ?? 0)
     setItems((itemsRes.data ?? []) as StoreItem[])
     setCompras((comprasRes.data ?? []) as Compra[])
@@ -117,20 +122,20 @@ export default function Tienda() {
   }
 
   async function abrirCofre() {
-    if (coins < COSTO_COFRE) {
-      alerta(`Necesitas ${COSTO_COFRE} Valera Coins para abrir el cofre. Tienes ${coins}.`)
+    const costo = ruletaCfg.costo
+    if (coins < costo) {
+      alerta(`Necesitas ${costo} Valera Coins para abrir el cofre. Tienes ${coins}.`)
       return
     }
     setAbriendoCofre(true)
-    // Descontar coins antes de mostrar la ruleta
     const { error } = await supabase.rpc('gastar_coins', {
       p_user_id: userId,
-      p_cantidad: COSTO_COFRE,
+      p_cantidad: costo,
       p_concepto: 'Cofre ruleta 🎰',
     })
     setAbriendoCofre(false)
     if (error) { alerta('Error al abrir el cofre'); return }
-    setCoins(prev => prev - COSTO_COFRE)
+    setCoins(prev => prev - ruletaCfg.costo)
     setRuletaMilestone(false)
     setMilestoneNivel(undefined)
     setShowRuleta(true)
@@ -140,7 +145,7 @@ export default function Tienda() {
     await registrarPremioRuleta(
       premio.tipo,
       premio.nombre,
-      ruletaMilestone ? 0 : COSTO_COFRE,
+      ruletaMilestone ? 0 : ruletaCfg.costo,
       ruletaMilestone
     )
     cargar()
@@ -197,9 +202,9 @@ export default function Tienda() {
 
           {/* Cofre / Ruleta */}
           <TouchableOpacity
-            style={[s.cofreCard, (abriendoCofre || coins < COSTO_COFRE) && s.cofreCardDis]}
+            style={[s.cofreCard, (abriendoCofre || coins < ruletaCfg.costo) && s.cofreCardDis]}
             onPress={abrirCofre}
-            disabled={abriendoCofre || coins < COSTO_COFRE}
+            disabled={abriendoCofre || coins < ruletaCfg.costo}
           >
             <View style={s.cofreLeft}>
               <Text style={s.cofreIcn}>🎁</Text>
@@ -212,7 +217,7 @@ export default function Tienda() {
               {abriendoCofre
                 ? <ActivityIndicator size="small" color="#c9a84c" />
                 : <>
-                    <Text style={s.cofreCostoNum}>{COSTO_COFRE}</Text>
+                    <Text style={s.cofreCostoNum}>{ruletaCfg.costo}</Text>
                     <Text style={s.cofreCostoIcn}>💰</Text>
                   </>
               }
@@ -327,6 +332,7 @@ export default function Tienda() {
         visible={showRuleta}
         esMilestone={ruletaMilestone}
         nivel={milestoneNivel}
+        premios={ruletaCfg.premios}
         onClose={() => setShowRuleta(false)}
         onGanar={onGanarPremio}
       />

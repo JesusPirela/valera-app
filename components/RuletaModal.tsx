@@ -7,34 +7,38 @@ export type Premio = {
   nombre: string
   icono: string
   tipo: string
+  prob_cofre: number
+  prob_milestone: number
 }
 
-// Los 8 premios ordenados de más a menos probable
-export const PREMIOS: Premio[] = [
-  { id: 'sorteo',     nombre: 'Entrada sorteo',  icono: '🎟️', tipo: 'sorteo'        },
-  { id: 'plantilla',  nombre: 'Pack plantillas',  icono: '📋', tipo: 'plantilla'      },
-  { id: 'boost',      nombre: 'Boost 3 días',     icono: '🚀', tipo: 'boost'          },
-  { id: 'lead_meta',  nombre: 'Lead Meta Ads',    icono: '📱', tipo: 'lead_meta'      },
-  { id: 'curso',      nombre: 'Acceso curso',     icono: '🎓', tipo: 'curso_premium'  },
-  { id: 'lead_prem',  nombre: 'Lead Premium',     icono: '⭐', tipo: 'lead_premium'   },
-  { id: 'merch',      nombre: 'Merch Valera',     icono: '👕', tipo: 'merch'          },
-  { id: 'comision',   nombre: 'Comisión extra',   icono: '💰', tipo: 'comision_extra' },
-]
+export type RuletaConfig = {
+  costo: number
+  premios: Premio[]
+}
 
-// Probabilidades para el cofre de coins (pagado)
-const PROB_COFRE     = [30, 22, 18, 13, 10, 5, 1.5, 0.5]
-// Probabilidades para recompensa de milestone (gratis, peores chances en items caros)
-const PROB_MILESTONE = [35, 25, 20, 12, 6, 1.5, 0.4, 0.1]
+// Config por defecto (se sobreescribe con la de Supabase)
+export const CONFIG_DEFAULT: RuletaConfig = {
+  costo: 100,
+  premios: [
+    { id: 'sorteo',    nombre: 'Entrada sorteo',  icono: '🎟️', tipo: 'sorteo',        prob_cofre: 30,   prob_milestone: 35   },
+    { id: 'plantilla', nombre: 'Pack plantillas',  icono: '📋', tipo: 'plantilla',      prob_cofre: 22,   prob_milestone: 25   },
+    { id: 'boost',     nombre: 'Boost 3 días',     icono: '🚀', tipo: 'boost',          prob_cofre: 18,   prob_milestone: 20   },
+    { id: 'lead_meta', nombre: 'Lead Meta Ads',    icono: '📱', tipo: 'lead_meta',      prob_cofre: 13,   prob_milestone: 12   },
+    { id: 'curso',     nombre: 'Acceso curso',     icono: '🎓', tipo: 'curso_premium',  prob_cofre: 10,   prob_milestone: 6    },
+    { id: 'lead_prem', nombre: 'Lead Premium',     icono: '⭐', tipo: 'lead_premium',   prob_cofre: 5,    prob_milestone: 1.5  },
+    { id: 'merch',     nombre: 'Merch Valera',     icono: '👕', tipo: 'merch',          prob_cofre: 1.5,  prob_milestone: 0.4  },
+    { id: 'comision',  nombre: 'Comisión extra',   icono: '💰', tipo: 'comision_extra', prob_cofre: 0.5,  prob_milestone: 0.1  },
+  ],
+}
 
-export function sortearPremio(esMilestone: boolean): Premio {
-  const probs = esMilestone ? PROB_MILESTONE : PROB_COFRE
-  const rand  = Math.random() * 100
+export function sortearPremio(premios: Premio[], esMilestone: boolean): Premio {
+  const rand = Math.random() * 100
   let acum = 0
-  for (let i = 0; i < PREMIOS.length; i++) {
-    acum += probs[i]
-    if (rand <= acum) return PREMIOS[i]
+  for (const p of premios) {
+    acum += esMilestone ? p.prob_milestone : p.prob_cofre
+    if (rand <= acum) return p
   }
-  return PREMIOS[0]
+  return premios[0]
 }
 
 // ── Milestone storage ────────────────────────────────────────────────────────
@@ -68,14 +72,17 @@ interface Props {
   visible: boolean
   esMilestone?: boolean
   nivel?: number
+  premios?: Premio[]
   onClose: () => void
   onGanar: (premio: Premio) => void
 }
 
-export function RuletaModal({ visible, esMilestone = false, nivel, onClose, onGanar }: Props) {
+export function RuletaModal({ visible, esMilestone = false, nivel, premios: premiosProp, onClose, onGanar }: Props) {
   const [fase, setFase]       = useState<'listo' | 'girando' | 'resultado'>('listo')
   const [activoIdx, setActivo] = useState(-1)
   const [ganador, setGanador] = useState<Premio | null>(null)
+
+  const premios = premiosProp ?? CONFIG_DEFAULT.premios
 
   useEffect(() => {
     if (!visible) { setFase('listo'); setActivo(-1); setGanador(null) }
@@ -85,10 +92,10 @@ export function RuletaModal({ visible, esMilestone = false, nivel, onClose, onGa
     if (fase !== 'listo') return
     setFase('girando')
 
-    const premio     = sortearPremio(esMilestone)
-    const ganadorIdx = PREMIOS.findIndex(p => p.id === premio.id)
-    const n          = PREMIOS.length   // 8
-    const totalSteps = 3 * n + ganadorIdx  // 3 vueltas completas + llegar al ganador
+    const premio     = sortearPremio(premios, esMilestone)
+    const ganadorIdx = premios.findIndex(p => p.id === premio.id)
+    const n          = premios.length
+    const totalSteps = 3 * n + ganadorIdx
 
     let step = 0
 
@@ -119,21 +126,20 @@ export function RuletaModal({ visible, esMilestone = false, nivel, onClose, onGa
     : 'Gira la ruleta para descubrir tu premio'
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={fase === 'resultado' ? onClose : undefined}>
-      <View style={rs.overlay}>
-        <View style={rs.card}>
-          {fase === 'resultado' && (
-            <TouchableOpacity style={rs.closeBtn} onPress={onClose}>
-              <Text style={rs.closeTxt}>✕</Text>
-            </TouchableOpacity>
-          )}
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      {/* Tocar fuera del card siempre cierra */}
+      <TouchableOpacity style={rs.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={rs.card} onPress={() => {}}>
+          <TouchableOpacity style={rs.closeBtn} onPress={onClose}>
+            <Text style={rs.closeTxt}>✕</Text>
+          </TouchableOpacity>
 
           <Text style={rs.titulo}>{titulo}</Text>
           <Text style={rs.sub}>{sub}</Text>
 
           {/* Cuadrícula 4×2 de premios */}
           <View style={rs.grid}>
-            {PREMIOS.map((p, i) => {
+            {premios.map((p, i) => {
               const activo  = i === activoIdx
               const ganando = ganador?.id === p.id
               return (
@@ -153,10 +159,11 @@ export function RuletaModal({ visible, esMilestone = false, nivel, onClose, onGa
           {fase === 'resultado' ? (
             <View style={rs.result}>
               <Text style={rs.resultIcn}>{ganador?.icono}</Text>
-              <Text style={rs.resultTxt}>¡Ganaste {ganador?.nombre}!</Text>
+              <Text style={rs.resultTxt}>¡Ganaste!</Text>
+              <Text style={rs.resultPremio}>{ganador?.nombre}</Text>
               <Text style={rs.resultSub}>El equipo Valera te lo entregará pronto 🎁</Text>
               <TouchableOpacity style={rs.doneBtn} onPress={onClose}>
-                <Text style={rs.doneTxt}>¡Genial!</Text>
+                <Text style={rs.doneTxt}>¡Genial! Cerrar</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -168,8 +175,8 @@ export function RuletaModal({ visible, esMilestone = false, nivel, onClose, onGa
               <Text style={rs.spinTxt}>{fase === 'girando' ? '🌀 Girando...' : '🎰 ¡Girar!'}</Text>
             </TouchableOpacity>
           )}
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   )
 }
@@ -209,10 +216,11 @@ const rs = StyleSheet.create({
   spinBtnDis: { opacity: 0.5 },
   spinTxt:    { color: DARK, fontSize: 16, fontWeight: '900' },
 
-  result:     { alignItems: 'center', marginTop: 4 },
-  resultIcn:  { fontSize: 48, marginBottom: 8 },
-  resultTxt:  { fontSize: 18, fontWeight: '800', color: GOLD, textAlign: 'center', marginBottom: 4 },
-  resultSub:  { fontSize: 12, color: '#7a9ab5', textAlign: 'center', marginBottom: 16, lineHeight: 17 },
-  doneBtn:    { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 32 },
-  doneTxt:    { color: '#fff', fontSize: 15, fontWeight: '700' },
+  result:      { alignItems: 'center', marginTop: 4, width: '100%' },
+  resultIcn:   { fontSize: 56, marginBottom: 8 },
+  resultTxt:   { fontSize: 22, fontWeight: '900', color: '#fff', textAlign: 'center', marginBottom: 2 },
+  resultPremio:{ fontSize: 18, fontWeight: '800', color: GOLD, textAlign: 'center', marginBottom: 8 },
+  resultSub:   { fontSize: 12, color: '#7a9ab5', textAlign: 'center', marginBottom: 20, lineHeight: 17 },
+  doneBtn:     { backgroundColor: '#1a6470', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 40, width: '100%', alignItems: 'center' },
+  doneTxt:     { color: '#fff', fontSize: 16, fontWeight: '800' },
 })
