@@ -33,17 +33,11 @@ jobs:
       - name: Create .htaccess for SPA routing
         run: printf 'ErrorDocument 404 /index.html\n' > dist/.htaccess
 
-      - name: Install lftp
-        run: sudo apt-get install -y lftp
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass rsync
 
-      - name: Deploy via SFTP
+      - name: Deploy via rsync over SSH
         run: |
-          lftp -d -c "
-            set sftp:auto-confirm yes;
-            set sftp:connect-program 'ssh -a -x -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
-            set net:timeout 60;
-            set net:max-retries 1;
-            open sftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@45.137.159.251:65002;
-            ls;
-            quit
-          " 2>&1 || true
+          sshpass -p "${{ secrets.FTP_PASSWORD }}" rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 65002" \
+            dist/ ${{ secrets.FTP_USERNAME }}@45.137.159.251:/home/${{ secrets.FTP_USERNAME }}/public_html/
