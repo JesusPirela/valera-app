@@ -70,6 +70,9 @@ export default function TiendaItems() {
   const [ruletaCfg, setRuletaCfg]       = useState<RuletaCfg | null>(null)
   const [ruletaModal, setRuletaModal]   = useState(false)
   const [guardandoRuleta, setGuardandoRuleta] = useState(false)
+  // rawProbs guarda el texto exacto mientras el usuario escribe (ej. "1." o "0.5")
+  // para no borrar el punto decimal antes de terminar de escribir
+  const [rawProbs, setRawProbs] = useState<Record<string, string>>({})
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -86,20 +89,55 @@ export default function TiendaItems() {
     setLoading(false)
   }
 
+  function abrirRuletaModal() {
+    if (!ruletaCfg) return
+    // Inicializar rawProbs con los valores actuales como strings
+    const raw: Record<string, string> = {}
+    ruletaCfg.premios.forEach(p => {
+      raw[`${p.id}_c`] = String(p.prob_cofre)
+      raw[`${p.id}_m`] = String(p.prob_milestone)
+    })
+    setRawProbs(raw)
+    setRuletaModal(true)
+  }
+
+  function setProb(id: string, campo: 'c' | 'm', texto: string, idx: number) {
+    // Guardar el string crudo para mostrar en el input
+    setRawProbs(r => ({ ...r, [`${id}_${campo}`]: texto }))
+    // Actualizar el número solo si el string es un número válido (no solo "1." etc.)
+    const n = parseFloat(texto)
+    if (!isNaN(n)) {
+      setRuletaCfg(c => {
+        if (!c) return c
+        const premios = [...c.premios]
+        if (campo === 'c') premios[idx] = { ...premios[idx], prob_cofre: n }
+        else               premios[idx] = { ...premios[idx], prob_milestone: n }
+        return { ...c, premios }
+      })
+    }
+  }
+
   async function guardarRuleta() {
     if (!ruletaCfg) return
-    // Validar que las probs sumen ~100 para cada tipo
-    const sumCofre     = ruletaCfg.premios.reduce((a, p) => a + p.prob_cofre, 0)
-    const sumMilestone = ruletaCfg.premios.reduce((a, p) => a + p.prob_milestone, 0)
+    // Parsear rawProbs para obtener los valores finales antes de validar
+    const premiosFinales = ruletaCfg.premios.map(p => ({
+      ...p,
+      prob_cofre:     parseFloat(rawProbs[`${p.id}_c`] ?? String(p.prob_cofre))     || 0,
+      prob_milestone: parseFloat(rawProbs[`${p.id}_m`] ?? String(p.prob_milestone)) || 0,
+    }))
+    const sumCofre     = premiosFinales.reduce((a, p) => a + p.prob_cofre, 0)
+    const sumMilestone = premiosFinales.reduce((a, p) => a + p.prob_milestone, 0)
     if (Math.abs(sumCofre - 100) > 1 || Math.abs(sumMilestone - 100) > 1) {
       alerta(`Las probabilidades deben sumar 100%.\nCofre: ${sumCofre.toFixed(1)}%\nMilestone: ${sumMilestone.toFixed(1)}%`)
       return
     }
+    const cfgFinal = { ...ruletaCfg, premios: premiosFinales }
     setGuardandoRuleta(true)
     const { error } = await supabase.from('app_config')
-      .upsert({ key: 'ruleta_config', value: JSON.stringify(ruletaCfg) }, { onConflict: 'key' })
+      .upsert({ key: 'ruleta_config', value: JSON.stringify(cfgFinal) }, { onConflict: 'key' })
     setGuardandoRuleta(false)
     if (error) { alerta('Error: ' + error.message); return }
+    setRuletaCfg(cfgFinal)
     setRuletaModal(false)
     alerta('✅ Configuración de ruleta guardada')
   }
@@ -239,7 +277,7 @@ export default function TiendaItems() {
               : <Text style={s.btnBaseTxt}>⚙️ Config</Text>
             }
           </TouchableOpacity>
-          <TouchableOpacity style={s.btnRuleta} onPress={() => ruletaCfg && setRuletaModal(true)}>
+          <TouchableOpacity style={s.btnRuleta} onPress={abrirRuletaModal}>
             <Text style={s.btnRuletaTxt}>🎰 Ruleta</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.btnNuevo} onPress={abrirNuevo}>
@@ -353,28 +391,18 @@ export default function TiendaItems() {
                     <Text style={s.ruletaProbLbl}>Cofre %</Text>
                     <TextInput
                       style={s.inputNum}
-                      value={String(p.prob_cofre)}
-                      onChangeText={v => setRuletaCfg(c => {
-                        if (!c) return c
-                        const premios = [...c.premios]
-                        premios[i] = { ...premios[i], prob_cofre: parseFloat(v) || 0 }
-                        return { ...c, premios }
-                      })}
-                      keyboardType="numeric"
+                      value={rawProbs[`${p.id}_c`] ?? String(p.prob_cofre)}
+                      onChangeText={v => setProb(p.id, 'c', v, i)}
+                      keyboardType="decimal-pad"
                     />
                   </View>
                   <View style={s.ruletaProb}>
                     <Text style={s.ruletaProbLbl}>Nivel %</Text>
                     <TextInput
                       style={s.inputNum}
-                      value={String(p.prob_milestone)}
-                      onChangeText={v => setRuletaCfg(c => {
-                        if (!c) return c
-                        const premios = [...c.premios]
-                        premios[i] = { ...premios[i], prob_milestone: parseFloat(v) || 0 }
-                        return { ...c, premios }
-                      })}
-                      keyboardType="numeric"
+                      value={rawProbs[`${p.id}_m`] ?? String(p.prob_milestone)}
+                      onChangeText={v => setProb(p.id, 'm', v, i)}
+                      keyboardType="decimal-pad"
                     />
                   </View>
                 </View>
@@ -384,17 +412,21 @@ export default function TiendaItems() {
             {ruletaCfg && (
               <TouchableOpacity
                 style={s.btnAgregarPremio}
-                onPress={() => setRuletaCfg(c => c ? {
-                  ...c,
-                  premios: [...c.premios, {
-                    id: `nuevo_${Date.now()}`,
-                    nombre: items[0]?.nombre ?? 'Nuevo premio',
-                    icono: items[0]?.icono ?? '🎁',
-                    tipo: items[0]?.tipo ?? 'otro',
-                    prob_cofre: 0,
-                    prob_milestone: 0,
-                  }],
-                } : c)}
+                onPress={() => {
+                  const newId = `nuevo_${Date.now()}`
+                  setRuletaCfg(c => c ? {
+                    ...c,
+                    premios: [...c.premios, {
+                      id: newId,
+                      nombre: items[0]?.nombre ?? 'Nuevo premio',
+                      icono: items[0]?.icono ?? '🎁',
+                      tipo: items[0]?.tipo ?? 'otro',
+                      prob_cofre: 0,
+                      prob_milestone: 0,
+                    }],
+                  } : c)
+                  setRawProbs(r => ({ ...r, [`${newId}_c`]: '0', [`${newId}_m`]: '0' }))
+                }}
               >
                 <Text style={s.btnAgregarPremioTxt}>＋ Agregar premio</Text>
               </TouchableOpacity>
