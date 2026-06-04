@@ -267,11 +267,6 @@ export default function AdminCRM() {
           <Text style={[styles.statNum, { color: '#c9a84c' }]}>{secciones.length}</Text>
           <Text style={styles.statLabel}>Asesores</Text>
         </View>
-        <View style={styles.statSep} />
-        <TouchableOpacity style={styles.statItem} onPress={() => router.push('/(admin)/campaign-leads')}>
-          <Text style={[styles.statNum, { color: '#e07bb5' }]}>📣</Text>
-          <Text style={styles.statLabel}>Campaña</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Filtro Venta / Renta */}
@@ -317,6 +312,11 @@ export default function AdminCRM() {
           )
         })}
       </ScrollView>
+
+      {/* Botón leads de campaña */}
+      <TouchableOpacity style={styles.btnCampana} onPress={() => router.push('/(admin)/campaign-leads')}>
+        <Text style={styles.btnCampanaTxt}>📣 Leads de Campaña</Text>
+      </TouchableOpacity>
 
       {/* Búsqueda + botón exportar + botón nuevo */}
       <View style={styles.searchRow}>
@@ -604,6 +604,12 @@ const styles = StyleSheet.create({
   pipelineLabelAll: { color: '#c9a84c' },
 
   // Search
+  btnCampana: {
+    marginHorizontal: 12, marginTop: 8, marginBottom: 2,
+    backgroundColor: '#e8f4f5', borderRadius: 10, borderWidth: 1, borderColor: '#1a6470',
+    paddingVertical: 10, alignItems: 'center',
+  },
+  btnCampanaTxt: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
   searchRow: { flexDirection: 'row', gap: 10, padding: 12, alignItems: 'center' },
   searchWrap: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
