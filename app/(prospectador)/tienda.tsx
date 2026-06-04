@@ -34,6 +34,16 @@ function alerta(msg: string) {
   else Alert.alert('Tienda', msg)
 }
 
+function esRuletaPremio(notas: string | null): boolean {
+  return !!(notas?.includes('Premio cofre ruleta') || notas?.includes('Premio ruleta milestone'))
+}
+
+function nombreRuletaPremio(notas: string | null): string {
+  if (!notas) return 'Premio ruleta'
+  const m = notas.match(/(?:Premio cofre ruleta|Premio ruleta milestone): (.+)/)
+  return m ? m[1] : 'Premio ruleta'
+}
+
 function formatFecha(iso: string) {
   return new Date(iso).toLocaleDateString('es-MX', {
     timeZone: 'America/Mexico_City',
@@ -142,10 +152,11 @@ export default function Tienda() {
   }
 
   async function onGanarPremio(premio: Premio) {
+    // Coins ya descontados por abrirCofre() — pasar 0 para evitar doble deducción
     await registrarPremioRuleta(
       premio.tipo,
       premio.nombre,
-      ruletaMilestone ? 0 : ruletaCfg.costo,
+      0,
       ruletaMilestone
     )
     // Refrescar compras en silencio (sin loading que desmonta el modal)
@@ -298,16 +309,27 @@ export default function Tienda() {
             </View>
           ) : (
             compras.map(c => {
-              const cfg    = ESTADO_CONFIG[c.estado] ?? ESTADO_CONFIG.pendiente
-              const item   = c.store_items
+              const cfg       = ESTADO_CONFIG[c.estado] ?? ESTADO_CONFIG.pendiente
+              const item      = c.store_items
+              const esRuleta  = esRuletaPremio(c.notas_admin)
+              const esMilestone = c.notas_admin?.includes('milestone') ?? false
+              const nombre    = esRuleta ? nombreRuletaPremio(c.notas_admin) : (item?.nombre ?? 'Artículo')
+              const icono     = esRuleta ? (esMilestone ? '🏆' : '🎰') : (item?.icono ?? '🎁')
               return (
                 <View key={c.id} style={[s.compraCard, { borderColor: cfg.color + '44' }]}>
                   <View style={s.compraTop}>
                     <View style={[s.compraIconWrap, { backgroundColor: cfg.bg }]}>
-                      <Text style={s.compraIconTxt}>{item?.icono ?? '🎁'}</Text>
+                      <Text style={s.compraIconTxt}>{icono}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={s.compraNombre}>{item?.nombre ?? 'Artículo'}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Text style={s.compraNombre}>{nombre}</Text>
+                        {esRuleta && (
+                          <View style={s.ruletaBadge}>
+                            <Text style={s.ruletaBadgeTxt}>{esMilestone ? 'NIVEL' : 'COFRE'}</Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={s.compraFecha}>{formatFecha(c.created_at)}</Text>
                     </View>
                     <View style={[s.estadoBadge, { backgroundColor: cfg.bg, borderColor: cfg.color + '66' }]}>
@@ -316,13 +338,21 @@ export default function Tienda() {
                   </View>
 
                   <View style={s.compraBot}>
-                    <Text style={s.compraCosto}>💰 {c.costo_coins.toLocaleString()} coins</Text>
+                    <Text style={s.compraCosto}>
+                      {c.costo_coins > 0 ? `💰 ${c.costo_coins.toLocaleString()} coins` : '🎁 Premio gratis'}
+                    </Text>
                   </View>
 
-                  {c.notas_admin ? (
+                  {/* Solo mostrar notas del admin si NO son un note de sistema de la ruleta */}
+                  {!esRuleta && c.notas_admin ? (
                     <View style={[s.notaAdmin, { borderColor: cfg.color + '33' }]}>
                       <Text style={s.notaAdminLbl}>📝 Mensaje del equipo:</Text>
                       <Text style={s.notaAdminTxt}>{c.notas_admin}</Text>
+                    </View>
+                  ) : c.estado === 'entregado' && esRuleta && c.notas_admin ? (
+                    <View style={[s.notaAdmin, { borderColor: cfg.color + '33' }]}>
+                      <Text style={s.notaAdminLbl}>📝 Mensaje del equipo:</Text>
+                      <Text style={s.notaAdminTxt}>{c.notas_admin.replace(/^[🎰🏆] Premio (?:cofre ruleta|ruleta milestone): .+\n?/, '')}</Text>
                     </View>
                   ) : c.estado === 'pendiente' ? (
                     <Text style={s.pendienteTxt}>
@@ -469,4 +499,11 @@ const s = StyleSheet.create({
   notaAdminTxt: { fontSize: 13, color: '#c0d0dc', lineHeight: 18 },
 
   pendienteTxt: { fontSize: 11, color: '#556a7a', fontStyle: 'italic', marginTop: 4 },
+
+  ruletaBadge: {
+    backgroundColor: '#1a1500', borderRadius: 4,
+    paddingHorizontal: 5, paddingVertical: 2,
+    borderWidth: 1, borderColor: GOLD + '66',
+  },
+  ruletaBadgeTxt: { fontSize: 9, fontWeight: '800', color: GOLD, letterSpacing: 1 },
 })
