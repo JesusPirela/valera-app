@@ -178,24 +178,22 @@ export default function TiendaCompras() {
       </View>
 
       {/* Filtros */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={s.filtroRow}>
-          {([
-            ['todas',     'Todas'],
-            ['pendiente', `⏳ Pendientes${pendientes > 0 ? ` (${pendientes})` : ''}`],
-            ['entregado', '✅ Entregadas'],
-            ['rechazado', '❌ Rechazadas'],
-            ['ruleta',    `🎰 Ruleta${ruletaPendientes > 0 ? ` (${ruletaPendientes})` : ''}`],
-          ] as const).map(([val, lbl]) => (
-            <TouchableOpacity
-              key={val}
-              style={[s.filtroBtn, filtro === val && s.filtroBtnActivo]}
-              onPress={() => setFiltro(val)}
-            >
-              <Text style={[s.filtroTxt, filtro === val && s.filtroTxtActivo]}>{lbl}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtroScroll} contentContainerStyle={s.filtroRow}>
+        {([
+          ['todas',     'Todas'],
+          ['pendiente', `⏳ Pendientes${pendientes > 0 ? ` (${pendientes})` : ''}`],
+          ['entregado', '✅ Entregadas'],
+          ['rechazado', '❌ Rechazadas'],
+          ['ruleta',    `🎰 Ruleta${ruletaPendientes > 0 ? ` (${ruletaPendientes})` : ''}`],
+        ] as const).map(([val, lbl]) => (
+          <TouchableOpacity
+            key={val}
+            style={[s.filtroBtn, filtro === val && s.filtroBtnActivo]}
+            onPress={() => setFiltro(val)}
+          >
+            <Text style={[s.filtroTxt, filtro === val && s.filtroTxtActivo]}>{lbl}</Text>
+          </TouchableOpacity>
+        ))}
       </ScrollView>
 
       <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
@@ -401,10 +399,11 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
 
-  filtroRow: { flexDirection: 'row', gap: 6, padding: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e8eef0' },
-  filtroBtn: { flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
+  filtroScroll: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e8eef0' },
+  filtroRow:    { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' },
+  filtroBtn:    { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
   filtroBtnActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  filtroTxt: { fontSize: 12, fontWeight: '600', color: '#666' },
+  filtroTxt:       { fontSize: 12, fontWeight: '600', color: '#666' },
   filtroTxtActivo: { color: '#fff' },
 
   emptyBox: { alignItems: 'center', paddingVertical: 60 },
