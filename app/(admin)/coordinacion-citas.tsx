@@ -998,7 +998,7 @@ const s = StyleSheet.create({
 
   // FAB
   fab: {
-    position: 'absolute', bottom: 28, right: 20,
+    position: 'absolute', top: 16, right: 20,
     width: 58, height: 58, borderRadius: 29,
     backgroundColor: '#1a6470', alignItems: 'center', justifyContent: 'center',
     shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 },
