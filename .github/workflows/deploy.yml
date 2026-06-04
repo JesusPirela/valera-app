@@ -33,14 +33,15 @@ jobs:
       - name: Create .htaccess for SPA routing
         run: printf 'ErrorDocument 404 /index.html\n' > dist/.htaccess
 
-      - name: Deploy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          port: 21
-          local-dir: ./dist/
-          server-dir: ./
-          dangerous-clean-slate: false
+      - name: Install lftp
+        run: sudo apt-get install -y lftp
+
+      - name: Deploy via SFTP
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          lftp -e "set sftp:auto-confirm yes; set net:timeout 30; mirror --reverse --delete --verbose ./dist/ ./; bye" \
+               -u "$FTP_USER,$FTP_PASSWORD" \
+               sftp://$FTP_HOST
