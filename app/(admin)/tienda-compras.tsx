@@ -47,7 +47,7 @@ function alerta(msg: string) {
 export default function TiendaCompras() {
   const [compras, setCompras]       = useState<Compra[]>([])
   const [loading, setLoading]       = useState(true)
-  const [filtro, setFiltro]         = useState<'todas' | 'pendiente' | 'entregado' | 'rechazado' | 'ruleta'>('pendiente')
+  const [filtro, setFiltro]         = useState<'todas' | 'pendiente' | 'entregado' | 'rechazado' | 'cofre'>('pendiente')
 
   // Modal de atención
   const [modal, setModal]           = useState(false)
@@ -79,8 +79,8 @@ export default function TiendaCompras() {
 
   function abrirModal(c: Compra) {
     setSeleccionada(c)
-    const msgDefault = c.es_ruleta
-      ? `¡Felicidades! Tu premio "${c.nombre_premio ?? c.item_nombre}" de la ruleta está siendo procesado. El equipo Valera te contactará pronto. 🎉`
+    const msgDefault = esCofre(c)
+      ? `¡Felicidades! Tu premio del cofre "${c.nombre_premio ?? c.item_nombre}" está siendo procesado. El equipo Valera te contactará pronto. 🎉`
       : (MENSAJES_DEFAULT[c.item_tipo] ?? `Tu recompensa "${c.item_nombre}" ha sido procesada. ¡Gracias por tu esfuerzo!`)
     setMensaje(msgDefault)
     setNombreLead('')
@@ -141,17 +141,19 @@ export default function TiendaCompras() {
     cargar()
   }
 
+  const esCofre = (c: Compra) => c.es_ruleta === true || c.costo_coins === 0
+
   const lista = compras.filter(c => {
-    if (filtro === 'ruleta')    return c.es_ruleta
-    if (filtro === 'todas')     return !c.es_ruleta
-    if (filtro === 'pendiente') return !c.es_ruleta && c.estado === 'pendiente'
-    if (filtro === 'entregado') return !c.es_ruleta && c.estado === 'entregado'
-    if (filtro === 'rechazado') return !c.es_ruleta && c.estado === 'rechazado'
+    if (filtro === 'cofre')     return esCofre(c)
+    if (filtro === 'todas')     return !esCofre(c)
+    if (filtro === 'pendiente') return !esCofre(c) && c.estado === 'pendiente'
+    if (filtro === 'entregado') return !esCofre(c) && c.estado === 'entregado'
+    if (filtro === 'rechazado') return !esCofre(c) && c.estado === 'rechazado'
     return true
   })
-  const pendientes       = compras.filter(c => !c.es_ruleta && c.estado === 'pendiente').length
-  const ruletaPendientes = compras.filter(c =>  c.es_ruleta && c.estado === 'pendiente').length
-  const rechazadas       = compras.filter(c => c.estado === 'rechazado').length
+  const pendientes      = compras.filter(c => !esCofre(c) && c.estado === 'pendiente').length
+  const cofrePendientes = compras.filter(c =>  esCofre(c) && c.estado === 'pendiente').length
+  const rechazadas      = compras.filter(c => c.estado === 'rechazado').length
 
   if (loading) return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
@@ -181,7 +183,7 @@ export default function TiendaCompras() {
           ['pendiente', `⏳ Pendientes${pendientes > 0 ? ` (${pendientes})` : ''}`],
           ['entregado', '✅ Entregadas'],
           ['rechazado', '❌ Rechazadas'],
-          ['ruleta',    `🎰 Ruleta${ruletaPendientes > 0 ? ` (${ruletaPendientes})` : ''}`],
+          ['cofre',     `🎁 Cofre${cofrePendientes > 0 ? ` (${cofrePendientes})` : ''}`],
         ] as const).map(([val, lbl]) => (
           <TouchableOpacity
             key={val}
@@ -199,8 +201,9 @@ export default function TiendaCompras() {
             <Text style={s.emptyTxt}>No hay compras {filtro === 'pendiente' ? 'pendientes' : filtro === 'entregado' ? 'entregadas' : ''}.</Text>
           </View>
         ) : lista.map(c => {
-          const nombre = c.es_ruleta ? (c.nombre_premio ?? 'Premio ruleta') : c.item_nombre
-          const icono  = c.es_ruleta ? (c.es_milestone ? '🏆' : '🎰') : c.item_icono
+          const esCofr = esCofre(c)
+          const nombre = esCofr ? (c.nombre_premio ?? c.item_nombre ?? 'Premio cofre') : c.item_nombre
+          const icono  = esCofr ? (c.es_milestone ? '🏆' : '🎁') : c.item_icono
           return (
           <View key={c.id} style={[s.card, c.estado === 'entregado' && s.cardEntregada]}>
             <View style={s.cardTop}>
@@ -208,7 +211,7 @@ export default function TiendaCompras() {
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <Text style={s.itemNombre}>{nombre}</Text>
-                  {c.es_ruleta && (
+                  {esCofr && (
                     <View style={{ backgroundColor: '#1a1500', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: '#c9a84c66' }}>
                       <Text style={{ fontSize: 9, fontWeight: '800', color: '#c9a84c', letterSpacing: 1 }}>{c.es_milestone ? 'NIVEL' : 'COFRE'}</Text>
                     </View>
@@ -259,11 +262,11 @@ export default function TiendaCompras() {
 
                 {/* Info compra */}
                 <View style={s.modalInfo}>
-                  <Text style={s.modalInfoIcono}>{seleccionada.es_ruleta ? (seleccionada.es_milestone ? '🏆' : '🎰') : seleccionada.item_icono}</Text>
+                  <Text style={s.modalInfoIcono}>{esCofre(seleccionada) ? (seleccionada.es_milestone ? '🏆' : '🎁') : seleccionada.item_icono}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.modalInfoNombre}>{seleccionada.es_ruleta ? (seleccionada.nombre_premio ?? seleccionada.item_nombre) : seleccionada.item_nombre}</Text>
+                    <Text style={s.modalInfoNombre}>{esCofre(seleccionada) ? (seleccionada.nombre_premio ?? seleccionada.item_nombre) : seleccionada.item_nombre}</Text>
                     <Text style={s.modalInfoUser}>Usuario: {seleccionada.user_nombre}</Text>
-                    {!seleccionada.es_ruleta && seleccionada.item_descripcion ? (
+                    {!esCofre(seleccionada) && seleccionada.item_descripcion ? (
                       <Text style={s.modalInfoDesc}>{seleccionada.item_descripcion}</Text>
                     ) : null}
                   </View>

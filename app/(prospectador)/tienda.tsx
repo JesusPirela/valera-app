@@ -32,6 +32,11 @@ type Compra = {
   store_items: { nombre: string; icono: string } | null
 }
 
+// Detecta premios del cofre: columna dedicada O costo 0 (items regulares cuestan ≥1)
+function esCofre(c: Compra): boolean {
+  return c.es_ruleta === true || c.costo_coins === 0
+}
+
 function alerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
   else Alert.alert('Tienda', msg)
@@ -56,7 +61,7 @@ export default function Tienda() {
   const [coins, setCoins]         = useState(0)
   const [items, setItems]         = useState<StoreItem[]>([])
   const [compras, setCompras]     = useState<Compra[]>([])
-  const [tab, setTab]             = useState<'tienda' | 'historial' | 'ruleta'>('tienda')
+  const [tab, setTab]             = useState<'tienda' | 'historial' | 'cofre'>('tienda')
   const [loading, setLoading]     = useState(true)
   const [loadingHistorial, setLoadingHistorial] = useState(false)
   const [comprando, setComprando]       = useState<string | null>(null)
@@ -198,19 +203,19 @@ export default function Tienda() {
         >
           <Text style={[s.tabTxt, tab === 'historial' && s.tabTxtActive]}>
             📋 Mis Compras
-            {compras.filter(c => !c.es_ruleta && c.estado === 'pendiente').length > 0 && (
-              <Text style={s.tabBadge}> {compras.filter(c => !c.es_ruleta && c.estado === 'pendiente').length}</Text>
+            {compras.filter(c => !esCofre(c) && c.estado === 'pendiente').length > 0 && (
+              <Text style={s.tabBadge}> {compras.filter(c => !esCofre(c) && c.estado === 'pendiente').length}</Text>
             )}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[s.tabBtn, tab === 'ruleta' && s.tabBtnActive]}
-          onPress={() => setTab('ruleta')}
+          style={[s.tabBtn, tab === 'cofre' && s.tabBtnActive]}
+          onPress={() => setTab('cofre')}
         >
-          <Text style={[s.tabTxt, tab === 'ruleta' && s.tabTxtActive]}>
-            🎰 Ruleta
-            {compras.filter(c => c.es_ruleta && c.estado === 'pendiente').length > 0 && (
-              <Text style={s.tabBadge}> {compras.filter(c => c.es_ruleta && c.estado === 'pendiente').length}</Text>
+          <Text style={[s.tabTxt, tab === 'cofre' && s.tabTxtActive]}>
+            🎁 Cofre
+            {compras.filter(c => esCofre(c) && c.estado === 'pendiente').length > 0 && (
+              <Text style={s.tabBadge}> {compras.filter(c => esCofre(c) && c.estado === 'pendiente').length}</Text>
             )}
           </Text>
         </TouchableOpacity>
@@ -300,14 +305,14 @@ export default function Tienda() {
       ) : tab === 'historial' ? (
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
 
-          {compras.filter(c => !c.es_ruleta).length === 0 ? (
+          {compras.filter(c => !esCofre(c)).length === 0 ? (
             <View style={s.emptyHistorial}>
               <Text style={s.emptyIcn}>🛍️</Text>
               <Text style={s.emptyTxt}>Aún no has realizado compras</Text>
               <Text style={s.emptySub}>Tus pedidos aparecerán aquí una vez que canjees tus Valera Coins</Text>
             </View>
           ) : (
-            compras.filter(c => !c.es_ruleta).map(c => {
+            compras.filter(c => !esCofre(c)).map(c => {
               const cfg    = ESTADO_CONFIG[c.estado] ?? ESTADO_CONFIG.pendiente
               const item   = c.store_items
               const nombre = item?.nombre ?? 'Artículo'
@@ -350,19 +355,19 @@ export default function Tienda() {
 
         </ScrollView>
       ) : (
-        // ── Tab Ruleta ──────────────────────────────────────────────
+        // ── Tab Cofre ──────────────────────────────────────────────
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-          {compras.filter(c => c.es_ruleta).length === 0 ? (
+          {compras.filter(c => esCofre(c)).length === 0 ? (
             <View style={s.emptyHistorial}>
-              <Text style={s.emptyIcn}>🎰</Text>
-              <Text style={s.emptyTxt}>Sin premios de ruleta aún</Text>
+              <Text style={s.emptyIcn}>🎁</Text>
+              <Text style={s.emptyTxt}>Sin premios del cofre aún</Text>
               <Text style={s.emptySub}>Abre un cofre desde la tienda para ganar recompensas</Text>
             </View>
           ) : (
-            compras.filter(c => c.es_ruleta).map(c => {
+            compras.filter(c => esCofre(c)).map(c => {
               const cfg    = ESTADO_CONFIG[c.estado] ?? ESTADO_CONFIG.pendiente
-              const nombre = c.nombre_premio ?? 'Premio ruleta'
-              const icono  = c.es_milestone ? '🏆' : '🎰'
+              const nombre = c.nombre_premio ?? (c.store_items?.nombre ?? 'Premio cofre')
+              const icono  = c.es_milestone ? '🏆' : '🎁'
               return (
                 <View key={c.id} style={[s.compraCard, { borderColor: cfg.color + '44' }]}>
                   <View style={s.compraTop}>
