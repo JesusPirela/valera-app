@@ -21,10 +21,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Verify files
+        run: ls app/\(admin\)/
 
       - name: Build web
         run: npx expo export --platform web --clear
@@ -38,14 +40,12 @@ jobs:
           ErrorDocument 404 /index.html
           Options -Indexes
 
-          # No cachear el HTML para que siempre cargue el bundle nuevo
           <FilesMatch "\.html$">
             Header set Cache-Control "no-cache, no-store, must-revalidate"
             Header set Pragma "no-cache"
             Header set Expires 0
           </FilesMatch>
 
-          # Cachear assets estáticos con hash (JS, CSS, imágenes)
           <FilesMatch "\.(js|css|png|jpg|ico|woff2)$">
             Header set Cache-Control "public, max-age=31536000, immutable"
           </FilesMatch>
