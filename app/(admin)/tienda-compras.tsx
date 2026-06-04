@@ -44,7 +44,7 @@ function alerta(msg: string) {
 export default function TiendaCompras() {
   const [compras, setCompras]       = useState<Compra[]>([])
   const [loading, setLoading]       = useState(true)
-  const [filtro, setFiltro]         = useState<'todas' | 'pendiente' | 'entregado' | 'rechazado'>('pendiente')
+  const [filtro, setFiltro]         = useState<'todas' | 'pendiente' | 'entregado' | 'rechazado' | 'ruleta'>('pendiente')
 
   // Modal de atención
   const [modal, setModal]           = useState(false)
@@ -135,8 +135,25 @@ export default function TiendaCompras() {
     cargar()
   }
 
-  const lista = compras.filter(c => filtro === 'todas' ? true : c.estado === filtro)
-  const pendientes = compras.filter(c => c.estado === 'pendiente').length
+  function esRuleta(notas: string | null) {
+    return !!(notas?.includes('Premio cofre ruleta') || notas?.includes('Premio ruleta milestone'))
+  }
+  function nombreRuleta(notas: string | null): string {
+    if (!notas) return 'Premio ruleta'
+    const m = notas.match(/(?:Premio cofre ruleta|Premio ruleta milestone): (.+)/)
+    return m ? m[1] : 'Premio ruleta'
+  }
+
+  const lista = compras.filter(c => {
+    if (filtro === 'ruleta')   return esRuleta(c.notas_admin)
+    if (filtro === 'todas')    return !esRuleta(c.notas_admin)
+    if (filtro === 'pendiente') return !esRuleta(c.notas_admin) && c.estado === 'pendiente'
+    if (filtro === 'entregado') return !esRuleta(c.notas_admin) && c.estado === 'entregado'
+    if (filtro === 'rechazado') return !esRuleta(c.notas_admin) && c.estado === 'rechazado'
+    return true
+  })
+  const pendientes = compras.filter(c => !esRuleta(c.notas_admin) && c.estado === 'pendiente').length
+  const ruletaPendientes = compras.filter(c => esRuleta(c.notas_admin) && c.estado === 'pendiente').length
   const rechazadas = compras.filter(c => c.estado === 'rechazado').length
 
   if (loading) return (
@@ -161,29 +178,49 @@ export default function TiendaCompras() {
       </View>
 
       {/* Filtros */}
-      <View style={s.filtroRow}>
-        {([['todas', 'Todas'], ['pendiente', '⏳ Pendientes'], ['entregado', '✅ Entregadas'], ['rechazado', '❌ Rechazadas']] as const).map(([val, lbl]) => (
-          <TouchableOpacity
-            key={val}
-            style={[s.filtroBtn, filtro === val && s.filtroBtnActivo]}
-            onPress={() => setFiltro(val)}
-          >
-            <Text style={[s.filtroTxt, filtro === val && s.filtroTxtActivo]}>{lbl}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={s.filtroRow}>
+          {([
+            ['todas',     'Todas'],
+            ['pendiente', `⏳ Pendientes${pendientes > 0 ? ` (${pendientes})` : ''}`],
+            ['entregado', '✅ Entregadas'],
+            ['rechazado', '❌ Rechazadas'],
+            ['ruleta',    `🎰 Ruleta${ruletaPendientes > 0 ? ` (${ruletaPendientes})` : ''}`],
+          ] as const).map(([val, lbl]) => (
+            <TouchableOpacity
+              key={val}
+              style={[s.filtroBtn, filtro === val && s.filtroBtnActivo]}
+              onPress={() => setFiltro(val)}
+            >
+              <Text style={[s.filtroTxt, filtro === val && s.filtroTxtActivo]}>{lbl}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
 
       <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
         {lista.length === 0 ? (
           <View style={s.emptyBox}>
             <Text style={s.emptyTxt}>No hay compras {filtro === 'pendiente' ? 'pendientes' : filtro === 'entregado' ? 'entregadas' : ''}.</Text>
           </View>
-        ) : lista.map(c => (
+        ) : lista.map(c => {
+          const esDeRuleta = esRuleta(c.notas_admin)
+          const esMilestone = c.notas_admin?.includes('milestone') ?? false
+          const nombre = esDeRuleta ? nombreRuleta(c.notas_admin) : c.item_nombre
+          const icono  = esDeRuleta ? (esMilestone ? '🏆' : '🎰') : c.item_icono
+          return (
           <View key={c.id} style={[s.card, c.estado === 'entregado' && s.cardEntregada]}>
             <View style={s.cardTop}>
-              <Text style={s.itemIcono}>{c.item_icono}</Text>
+              <Text style={s.itemIcono}>{icono}</Text>
               <View style={{ flex: 1 }}>
-                <Text style={s.itemNombre}>{c.item_nombre}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Text style={s.itemNombre}>{nombre}</Text>
+                  {esDeRuleta && (
+                    <View style={{ backgroundColor: '#1a1500', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: '#c9a84c66' }}>
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#c9a84c', letterSpacing: 1 }}>{esMilestone ? 'NIVEL' : 'COFRE'}</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={s.userName}>👤 {c.user_nombre}</Text>
               </View>
               <View style={[s.estadoBadge, c.estado === 'entregado' ? s.badgeOk : c.estado === 'rechazado' ? s.badgeRechazado : s.badgePending]}>
@@ -215,7 +252,8 @@ export default function TiendaCompras() {
               </View>
             )}
           </View>
-        ))}
+          )
+        })}
       </ScrollView>
 
       {/* Modal de atención */}
