@@ -2,12 +2,13 @@ import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { supabase } from './supabase'
 
-// Configurar cómo se muestran las notificaciones cuando la app está abierta
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
+    shouldShowAlert:  true,
+    shouldPlaySound:  true,
+    shouldSetBadge:   true,
+    shouldShowBanner: true,
+    shouldShowList:   true,
   }),
 })
 
@@ -35,13 +36,12 @@ export async function programarRecordatorios() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
 
-  // Traer recordatorios pendientes de los próximos 7 días
-  const ahora = new Date()
+  const ahora  = new Date()
   const en7dias = new Date(ahora.getTime() + 7 * 24 * 60 * 60 * 1000)
 
   const { data: recordatorios } = await supabase
     .from('recordatorios')
-    .select('id, titulo, descripcion, fecha_hora, cliente_id')
+    .select('id, titulo, descripcion, fecha_hora, cliente_id, clientes(nombre)')
     .eq('user_id', user.id)
     .eq('completado', false)
     .gte('fecha_hora', ahora.toISOString())
@@ -51,32 +51,50 @@ export async function programarRecordatorios() {
   if (!recordatorios) return
 
   for (const rec of recordatorios) {
-    const fechaHora = new Date(rec.fecha_hora)
-    const segs = (fechaHora.getTime() - Date.now()) / 1000
-    if (segs < 10) continue // Demasiado pronto
+    const fechaHora     = new Date(rec.fecha_hora)
+    const segs          = (fechaHora.getTime() - Date.now()) / 1000
+    if (segs < 10) continue
 
-    // Notificación en el momento exacto
+    const cliente       = (rec.clientes as any)?.nombre ?? null
+    const nombreCliente = cliente ? `con ${cliente}` : ''
+    const data          = { tipo: 'recordatorio', recordatorio_id: rec.id, cliente_id: rec.cliente_id }
+
+    // ── Notificación exacta ──────────────────────────────────────
     await Notifications.scheduleNotificationAsync({
       content: {
         title: `⏰ ${rec.titulo}`,
-        body: rec.descripcion ?? 'Tienes un seguimiento pendiente.',
+        body:  [nombreCliente, rec.descripcion].filter(Boolean).join(' · ') || 'Seguimiento pendiente',
         sound: true,
-        data: { tipo: 'recordatorio', recordatorio_id: rec.id, cliente_id: rec.cliente_id },
+        data,
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fechaHora },
     })
 
-    // Aviso anticipado 1 hora antes (si quedan más de 65 min)
+    // ── Aviso 15 minutos antes ───────────────────────────────────
+    if (segs > 20 * 60) {
+      const quinceMins = new Date(fechaHora.getTime() - 15 * 60 * 1000)
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `⏱ En 15 min: ${rec.titulo}`,
+          body:  `Tienes un seguimiento ${nombreCliente} en 15 minutos.`,
+          sound: true,
+          data,
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: quinceMins },
+      })
+    }
+
+    // ── Aviso 1 hora antes ───────────────────────────────────────
     if (segs > 65 * 60) {
-      const unaHoraAntes = new Date(fechaHora.getTime() - 60 * 60 * 1000)
+      const unaHora = new Date(fechaHora.getTime() - 60 * 60 * 1000)
       await Notifications.scheduleNotificationAsync({
         content: {
           title: `🔔 En 1 hora: ${rec.titulo}`,
-          body: 'Tienes un seguimiento en 1 hora.',
+          body:  `Tienes un seguimiento ${nombreCliente} en 1 hora.`,
           sound: true,
-          data: { tipo: 'recordatorio', recordatorio_id: rec.id, cliente_id: rec.cliente_id },
+          data,
         },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: unaHoraAntes },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: unaHora },
       })
     }
   }

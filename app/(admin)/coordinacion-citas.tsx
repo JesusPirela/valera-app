@@ -674,13 +674,19 @@ export default function CoordinacionCitas() {
   return (
     <ScrollView style={s.container} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
 
-      {/* ── Botón volver ── */}
-      <TouchableOpacity
-        style={{ paddingHorizontal: 16, paddingVertical: 10, alignSelf: 'flex-start' }}
-        onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}
-      >
-        <Text style={{ color: '#1a6470', fontSize: 15, fontWeight: '600' }}>← Volver</Text>
-      </TouchableOpacity>
+      {/* ── Barra superior: volver + acceso a proyectos ── */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 }}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
+          <Text style={{ color: '#1a6470', fontSize: 15, fontWeight: '600' }}>← Volver</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}
+          onPress={() => router.push('/(admin)/proyectos')}
+        >
+          <Ionicons name="briefcase-outline" size={15} color="#c9a84c" />
+          <Text style={{ color: '#c9a84c', fontWeight: '800', fontSize: 13 }}>Dashboard de Proyectos</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* ── KPI strip ── */}
       <View style={s.kpiStrip}>

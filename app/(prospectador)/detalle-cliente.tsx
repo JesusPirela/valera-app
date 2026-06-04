@@ -9,6 +9,7 @@ import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ORDEN_ESTADOS } from './crm'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { registrarAccion } from '../../lib/gamification'
+import { programarRecordatorios } from '../../lib/notificaciones-locales'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -291,6 +292,23 @@ export default function DetalleCliente() {
     refetch()
   }
 
+  async function aplazar15min(recId: string, fechaActual: string) {
+    const nueva = new Date(new Date(fechaActual).getTime() + 15 * 60 * 1000)
+    const { error } = await supabase.from('recordatorios')
+      .update({ fecha_hora: nueva.toISOString() }).eq('id', recId)
+    if (!error) { refetch(); programarRecordatorios() }
+  }
+
+  async function hacerManana(recId: string, fechaActual: string) {
+    const base = new Date(fechaActual)
+    const manana = new Date()
+    manana.setDate(manana.getDate() + 1)
+    manana.setHours(base.getHours(), base.getMinutes(), 0, 0)
+    const { error } = await supabase.from('recordatorios')
+      .update({ fecha_hora: manana.toISOString() }).eq('id', recId)
+    if (!error) { refetch(); programarRecordatorios() }
+  }
+
   async function completarRecordatorio(recId: string) {
     const { error } = await supabase.from('recordatorios').update({ completado: true }).eq('id', recId)
     queryClient.setQueryData(['detalle-cliente', id], (old: typeof data) => {
@@ -555,9 +573,17 @@ export default function DetalleCliente() {
                 <Text style={styles.recFecha}>{formatFechaHora(r.fecha_hora)}</Text>
                 {r.descripcion ? <Text style={styles.recDesc}>{r.descripcion}</Text> : null}
               </View>
-              <TouchableOpacity style={styles.recDoneBtn} onPress={() => completarRecordatorio(r.id)}>
-                <Ionicons name="checkmark-circle-outline" size={24} color={info.color} />
-              </TouchableOpacity>
+              <View style={styles.recActions}>
+                <TouchableOpacity style={styles.recAplazarBtn} onPress={() => aplazar15min(r.id, r.fecha_hora)}>
+                  <Text style={styles.recAplazarTxt}>+15 min</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.recMananaBtn} onPress={() => hacerManana(r.id, r.fecha_hora)}>
+                  <Text style={styles.recMananaTxt}>Mañana</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.recDoneBtn} onPress={() => completarRecordatorio(r.id)}>
+                  <Ionicons name="checkmark-circle-outline" size={24} color={info.color} />
+                </TouchableOpacity>
+              </View>
             </View>
           )
         })}
@@ -849,7 +875,12 @@ const styles = StyleSheet.create({
   recDesc: { fontSize: 12, color: '#666', marginTop: 3 },
   recVencidoPill: { backgroundColor: '#fde8e8', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
   recVencidoTxt: { fontSize: 10, color: '#e53935', fontWeight: '700' },
-  recDoneBtn: { padding: 4, flexShrink: 0 },
+  recActions:    { flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 },
+  recAplazarBtn: { backgroundColor: '#fff3cd', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: '#ffc107' },
+  recAplazarTxt: { fontSize: 10, fontWeight: '700', color: '#856404' },
+  recMananaBtn:  { backgroundColor: '#e8f4f5', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: '#1a6470' },
+  recMananaTxt:  { fontSize: 10, fontWeight: '700', color: '#1a6470' },
+  recDoneBtn:    { padding: 4, flexShrink: 0 },
   recCompletadosLabel: { fontSize: 12, color: '#bbb', marginTop: 4, textAlign: 'center' },
 
   // Timeline
