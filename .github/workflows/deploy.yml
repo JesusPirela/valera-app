@@ -33,11 +33,12 @@ jobs:
       - name: Create .htaccess for SPA routing
         run: printf 'ErrorDocument 404 /index.html\n' > dist/.htaccess
 
-      - name: Install sshpass
-        run: sudo apt-get install -y sshpass rsync
-
-      - name: Deploy via rsync over SSH
+      - name: Push dist/ a rama web-build
         run: |
-          sshpass -p "${{ secrets.FTP_PASSWORD }}" rsync -avz --delete \
-            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 22" \
-            dist/ ${{ secrets.FTP_USERNAME }}@45.137.159.251:/home/${{ secrets.FTP_USERNAME }}/public_html/
+          cd dist
+          git init
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add -A
+          git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
+          git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:web-build
