@@ -62,6 +62,9 @@ END;
 $$;
 
 -- get_compras_tienda actualizada: retorna columnas dedicadas + seguridad admin
+-- Usa LANGUAGE sql para evitar ambigüedad de OUT parameters con columnas del SELECT
+DROP FUNCTION IF EXISTS public.get_compras_tienda();
+
 CREATE OR REPLACE FUNCTION public.get_compras_tienda()
 RETURNS TABLE(
   id UUID, user_id UUID, costo_coins INTEGER, estado TEXT,
@@ -70,28 +73,32 @@ RETURNS TABLE(
   item_nombre TEXT, item_icono TEXT, item_tipo TEXT, item_descripcion TEXT,
   es_ruleta BOOLEAN, es_milestone BOOLEAN, nombre_premio TEXT
 )
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+LANGUAGE sql SECURITY DEFINER SET search_path = public
 AS $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin') THEN
-    RAISE EXCEPTION 'Access denied';
-  END IF;
-  RETURN QUERY
   SELECT
-    sc.id, sc.user_id, sc.costo_coins, sc.estado,
-    sc.notas_admin, sc.atendido_at, sc.created_at,
-    COALESCE(pr.nombre, 'Usuario')                                         AS user_nombre,
-    pr.avatar_url                                                           AS user_avatar,
-    COALESCE(si.nombre, sc.nombre_premio, 'Premio Ruleta')                 AS item_nombre,
-    COALESCE(si.icono, CASE WHEN sc.es_milestone THEN '🏆' ELSE '🎰' END) AS item_icono,
+    sc.id,
+    sc.user_id,
+    sc.costo_coins,
+    sc.estado,
+    sc.notas_admin,
+    sc.atendido_at,
+    sc.created_at,
+    COALESCE(pr.nombre, 'Usuario')                                          AS user_nombre,
+    pr.avatar_url                                                            AS user_avatar,
+    COALESCE(si.nombre, sc.nombre_premio, 'Premio Ruleta')                  AS item_nombre,
+    COALESCE(si.icono, CASE WHEN sc.es_milestone THEN '🏆' ELSE '🎰' END)  AS item_icono,
     COALESCE(si.tipo, CASE WHEN sc.es_ruleta THEN 'ruleta' ELSE 'otro' END) AS item_tipo,
-    si.descripcion                                                          AS item_descripcion,
-    sc.es_ruleta, sc.es_milestone, sc.nombre_premio
+    si.descripcion                                                           AS item_descripcion,
+    sc.es_ruleta,
+    sc.es_milestone,
+    sc.nombre_premio
   FROM store_compras sc
   JOIN profiles pr ON pr.id = sc.user_id
   LEFT JOIN store_items si ON si.id = sc.item_id
+  WHERE EXISTS (
+    SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+  )
   ORDER BY sc.created_at DESC;
-END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.registrar_premio_ruleta TO authenticated;
