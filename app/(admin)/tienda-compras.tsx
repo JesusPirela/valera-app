@@ -227,7 +227,7 @@ export default function TiendaCompras() {
             </View>
 
             <View style={s.cardMeta}>
-              <Text style={s.metaTxt}>💰 {c.costo_coins.toLocaleString()} coins</Text>
+              <Text style={s.metaTxt}>{esCofr ? '🎁 Premio de cofre' : `💰 ${c.costo_coins.toLocaleString()} coins`}</Text>
               <Text style={s.metaTxt}>
                 {new Date(c.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </Text>
