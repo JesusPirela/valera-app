@@ -20,6 +20,8 @@ type Compra = {
   item_icono: string
   item_tipo: string
   item_descripcion: string | null
+  tipo_compra: string | null
+  nombre_premio: string | null
 }
 
 const MENSAJES_DEFAULT: Record<string, string> = {
@@ -76,7 +78,10 @@ export default function TiendaCompras() {
 
   function abrirModal(c: Compra) {
     setSeleccionada(c)
-    setMensaje(MENSAJES_DEFAULT[c.item_tipo] ?? `Tu recompensa "${c.item_nombre}" ha sido procesada. ¡Gracias por tu esfuerzo!`)
+    const nombreDisplay = c.tipo_compra?.startsWith('ruleta') && c.nombre_premio
+      ? c.nombre_premio
+      : c.item_nombre
+    setMensaje(MENSAJES_DEFAULT[c.item_tipo] ?? `Tu recompensa "${nombreDisplay}" ha sido procesada. ¡Gracias por tu esfuerzo!`)
     setNombreLead('')
     setTelLead('')
     setModal(true)
@@ -181,9 +186,22 @@ export default function TiendaCompras() {
         ) : lista.map(c => (
           <View key={c.id} style={[s.card, c.estado === 'entregado' && s.cardEntregada]}>
             <View style={s.cardTop}>
-              <Text style={s.itemIcono}>{c.item_icono}</Text>
+              <Text style={s.itemIcono}>
+                {c.tipo_compra?.startsWith('ruleta') ? (c.tipo_compra === 'ruleta_milestone' ? '🏆' : '🎰') : c.item_icono}
+              </Text>
               <View style={{ flex: 1 }}>
-                <Text style={s.itemNombre}>{c.item_nombre}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Text style={s.itemNombre}>
+                    {c.tipo_compra?.startsWith('ruleta') && c.nombre_premio ? c.nombre_premio : c.item_nombre}
+                  </Text>
+                  {c.tipo_compra?.startsWith('ruleta') && (
+                    <View style={s.ruletaBadge}>
+                      <Text style={s.ruletaBadgeTxt}>
+                        {c.tipo_compra === 'ruleta_milestone' ? '🏆 NIVEL' : '🎰 RULETA'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={s.userName}>👤 {c.user_nombre}</Text>
               </View>
               <View style={[s.estadoBadge, c.estado === 'entregado' ? s.badgeOk : c.estado === 'rechazado' ? s.badgeRechazado : s.badgePending]}>
@@ -392,6 +410,8 @@ const s = StyleSheet.create({
   cardMeta: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   metaTxt: { fontSize: 12, color: '#888' },
   notaAdmin: { fontSize: 12, color: '#555', fontStyle: 'italic', marginBottom: 6 },
+  ruletaBadge: { backgroundColor: '#fff8e1', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#c9a84c66' },
+  ruletaBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#c9a84c', letterSpacing: 0.5 },
 
   btnAtender: {
     backgroundColor: '#1a6470', borderRadius: 10,

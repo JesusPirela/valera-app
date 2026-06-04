@@ -26,6 +26,8 @@ type Compra = {
   costo_coins: number
   estado: string
   notas_admin: string | null
+  tipo_compra: string | null
+  nombre_premio: string | null
   store_items: { nombre: string; icono: string } | null
 }
 
@@ -84,7 +86,7 @@ export default function Tienda() {
       supabase.from('user_stats').select('valera_coins, xp').eq('id', user.id).maybeSingle(),
       supabase.from('store_items').select('*').eq('disponible', true).order('orden'),
       supabase.from('store_compras')
-        .select('id, created_at, costo_coins, estado, notas_admin, store_items(nombre, icono)')
+        .select('id, created_at, costo_coins, estado, notas_admin, tipo_compra, nombre_premio, store_items(nombre, icono)')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
       supabase.from('app_config').select('value').eq('key', 'ruleta_config').maybeSingle(),
@@ -155,18 +157,15 @@ export default function Tienda() {
   }
 
   async function onGanarPremio(premio: Premio) {
-    // Coins ya descontados por abrirCofre() — pasar 0 para evitar doble deducción
-    await registrarPremioRuleta(
-      premio.tipo,
-      premio.nombre,
-      0,
-      ruletaMilestone
-    )
+    const result = await registrarPremioRuleta(premio.tipo, premio.nombre, 0, ruletaMilestone)
+    if (!result.ok) {
+      alerta(`No se pudo registrar tu premio "${premio.nombre}". Captura pantalla y contacta al equipo.\n\nError: ${result.error ?? 'desconocido'}`)
+    }
     // Refrescar compras en silencio (sin loading que desmonta el modal)
     if (userId) {
       const { data } = await supabase
         .from('store_compras')
-        .select('id, created_at, costo_coins, estado, notas_admin, store_items(nombre, icono)')
+        .select('id, created_at, costo_coins, estado, notas_admin, tipo_compra, nombre_premio, store_items(nombre, icono)')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
       setCompras((data ?? []) as Compra[])
@@ -307,12 +306,14 @@ export default function Tienda() {
             </View>
           ) : (
             compras.map(c => {
-              const cfg       = ESTADO_CONFIG[c.estado] ?? ESTADO_CONFIG.pendiente
-              const item      = c.store_items
-              const esRuleta  = esRuletaPremio(c.notas_admin)
-              const esMilestone = c.notas_admin?.includes('milestone') ?? false
-              const nombre    = esRuleta ? nombreRuletaPremio(c.notas_admin) : (item?.nombre ?? 'Artículo')
-              const icono     = esRuleta ? (esMilestone ? '🏆' : '🎰') : (item?.icono ?? '🎁')
+              const cfg         = ESTADO_CONFIG[c.estado] ?? ESTADO_CONFIG.pendiente
+              const item        = c.store_items
+              const esRuleta    = c.tipo_compra?.startsWith('ruleta') || esRuletaPremio(c.notas_admin)
+              const esMilestone = c.tipo_compra === 'ruleta_milestone' || (c.notas_admin?.includes('milestone') ?? false)
+              const nombre      = esRuleta
+                ? (c.nombre_premio ?? nombreRuletaPremio(c.notas_admin))
+                : (item?.nombre ?? 'Artículo')
+              const icono       = esRuleta ? (esMilestone ? '🏆' : '🎰') : (item?.icono ?? '🎁')
               return (
                 <View key={c.id} style={[s.compraCard, { borderColor: cfg.color + '44' }]}>
                   <View style={s.compraTop}>
