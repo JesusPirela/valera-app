@@ -39,5 +39,5 @@ jobs:
       - name: Deploy via rsync over SSH
         run: |
           sshpass -p "${{ secrets.FTP_PASSWORD }}" rsync -avz --delete \
-            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 65002" \
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 22" \
             dist/ ${{ secrets.FTP_USERNAME }}@45.137.159.251:/home/${{ secrets.FTP_USERNAME }}/public_html/

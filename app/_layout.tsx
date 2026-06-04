@@ -214,6 +214,8 @@ export default function RootLayout() {
       .then(({ data }) => {
         if (data?.role === 'admin') {
           router.replace('/(admin)/propiedades')
+        } else if (data?.role === 'nuevo' || data?.role === 'prospectador' || data?.role === 'prospectador_plus') {
+          router.replace('/(prospectador)/propiedades')
         } else {
           router.replace('/(prospectador)/propiedades')
         }
