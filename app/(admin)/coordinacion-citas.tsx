@@ -675,18 +675,27 @@ export default function CoordinacionCitas() {
     <View style={{ flex: 1, backgroundColor: '#f1f5f9' }}>
     <ScrollView style={s.container} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
 
-      {/* ── Barra superior: volver + acceso a proyectos ── */}
+      {/* ── Barra superior: volver + acceso a proyectos + nueva cita ── */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 }}>
         <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
           <Text style={{ color: '#1a6470', fontSize: 15, fontWeight: '600' }}>← Volver</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}
-          onPress={() => router.push('/(admin)/proyectos')}
-        >
-          <Ionicons name="briefcase-outline" size={15} color="#c9a84c" />
-          <Text style={{ color: '#c9a84c', fontWeight: '800', fontSize: 13 }}>Dashboard de Proyectos</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}
+            onPress={() => router.push('/(admin)/proyectos')}
+          >
+            <Ionicons name="briefcase-outline" size={15} color="#c9a84c" />
+            <Text style={{ color: '#c9a84c', fontWeight: '800', fontSize: 13 }}>Proyectos</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#059669', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}
+            onPress={() => setModalNueva(true)}
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>Nueva cita</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── KPI strip ── */}
@@ -916,11 +925,6 @@ export default function CoordinacionCitas() {
         />
       )}
     </ScrollView>
-
-      {/* ── FAB nueva cita ── */}
-      <TouchableOpacity style={s.fab} onPress={() => setModalNueva(true)}>
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
     </View>
   )
 }
