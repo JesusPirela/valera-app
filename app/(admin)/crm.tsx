@@ -267,6 +267,11 @@ export default function AdminCRM() {
           <Text style={[styles.statNum, { color: '#c9a84c' }]}>{secciones.length}</Text>
           <Text style={styles.statLabel}>Asesores</Text>
         </View>
+        <View style={styles.statSep} />
+        <TouchableOpacity style={styles.statItem} onPress={() => router.push('/(admin)/campaign-leads')}>
+          <Text style={[styles.statNum, { color: '#e07bb5' }]}>📣</Text>
+          <Text style={styles.statLabel}>Campaña</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Filtro Venta / Renta */}
