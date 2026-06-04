@@ -3,7 +3,7 @@ import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
   Platform, Animated, Easing, ActivityIndicator,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { BlurView } from 'expo-blur'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -400,22 +400,10 @@ export function RuletaModal({
                   })}
                 </Animated.View>
 
-                {/* Degradado izquierdo — desvanece los items del lado */}
-                <LinearGradient
-                  colors={[DARK, DARK, 'transparent']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={cs.fadeLeft}
-                  pointerEvents="none"
-                />
-                {/* Degradado derecho */}
-                <LinearGradient
-                  colors={['transparent', DARK, DARK]}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={cs.fadeRight}
-                  pointerEvents="none"
-                />
+                {/* Blur lateral izquierdo */}
+                <BlurView intensity={80} tint="dark" style={cs.fadeLeft} pointerEvents="none" />
+                {/* Blur lateral derecho */}
+                <BlurView intensity={80} tint="dark" style={cs.fadeRight} pointerEvents="none" />
               </View>
             </View>
           )}
