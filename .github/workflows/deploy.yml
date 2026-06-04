@@ -38,11 +38,12 @@ jobs:
 
       - name: Deploy via SFTP
         run: |
-          lftp -c "
+          lftp -d -c "
             set sftp:auto-confirm yes;
-            set net:timeout 120;
-            set net:max-retries 2;
+            set sftp:connect-program 'ssh -a -x -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null';
+            set net:timeout 60;
+            set net:max-retries 1;
             open sftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@45.137.159.251:65002;
-            mirror --reverse --delete --verbose dist/ /public_html/;
+            ls;
             quit
-          "
+          " 2>&1 || true
