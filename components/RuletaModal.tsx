@@ -400,10 +400,18 @@ export function RuletaModal({
                   })}
                 </Animated.View>
 
-                {/* Blur lateral izquierdo */}
-                <BlurView intensity={80} tint="dark" style={cs.fadeLeft} pointerEvents="none" />
-                {/* Blur lateral derecho */}
-                <BlurView intensity={80} tint="dark" style={cs.fadeRight} pointerEvents="none" />
+                {/* Blur lateral — web usa backdropFilter CSS, nativo usa BlurView sin tint oscuro */}
+                {Platform.OS === 'web' ? (
+                  <>
+                    <View style={[cs.fadeLeft,  { backdropFilter: 'blur(7px)', WebkitBackdropFilter: 'blur(7px)' } as any]} pointerEvents="none" />
+                    <View style={[cs.fadeRight, { backdropFilter: 'blur(7px)', WebkitBackdropFilter: 'blur(7px)' } as any]} pointerEvents="none" />
+                  </>
+                ) : (
+                  <>
+                    <BlurView intensity={55} tint="default" style={cs.fadeLeft}  pointerEvents="none" />
+                    <BlurView intensity={55} tint="default" style={cs.fadeRight} pointerEvents="none" />
+                  </>
+                )}
               </View>
             </View>
           )}
