@@ -644,6 +644,11 @@ export default function CoordinacionCitas() {
     return acc
   }, {})
 
+  const enProceso = (conteos.por_contactar ?? 0)
+    + (conteos.primer_contacto ?? 0)
+    + (conteos.en_coordinacion ?? 0)
+    + (conteos.reagendada ?? 0)
+
   const citasFiltradas = citas
     .filter(c => !filtroEstado || c.estado === filtroEstado)
     .filter(c => {
@@ -686,6 +691,11 @@ export default function CoordinacionCitas() {
         <TouchableOpacity style={s.kpiItem} onPress={() => setFiltroEstado('coordinada')}>
           <Text style={[s.kpiNum, { color: '#059669' }]}>{conteos.coordinada ?? 0}</Text>
           <Text style={s.kpiLbl}>COORDINADAS</Text>
+        </TouchableOpacity>
+        <View style={s.kpiDiv} />
+        <TouchableOpacity style={s.kpiItem} onPress={() => setFiltroEstado(null)}>
+          <Text style={[s.kpiNum, enProceso > 0 ? { color: '#7c3aed' } : { color: '#cbd5e1' }]}>{enProceso}</Text>
+          <Text style={s.kpiLbl}>EN PROCESO</Text>
         </TouchableOpacity>
         <View style={s.kpiDiv} />
         <View style={s.kpiItem}>
@@ -912,8 +922,8 @@ const s = StyleSheet.create({
     paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
   },
   kpiItem: { flex: 1, alignItems: 'center', gap: 2 },
-  kpiNum:  { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
-  kpiLbl:  { fontSize: 9, color: '#94a3b8', fontWeight: '700', letterSpacing: 0.5 },
+  kpiNum:  { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  kpiLbl:  { fontSize: 8, color: '#94a3b8', fontWeight: '700', letterSpacing: 0.5 },
   kpiDiv:  { width: 1, backgroundColor: '#e2e8f0', marginVertical: 6 },
 
   // Tabs
