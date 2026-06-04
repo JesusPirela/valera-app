@@ -70,7 +70,6 @@ export default function Tienda() {
   const [showRuleta, setShowRuleta]           = useState(false)
   const [ruletaMilestone, setRuletaMilestone] = useState(false)
   const [milestoneNivel, setMilestoneNivel]   = useState<number | undefined>()
-  const [abriendoCofre, setAbriendoCofre]     = useState(false)
   const [ruletaCfg, setRuletaCfg]             = useState<RuletaConfig>(CONFIG_DEFAULT)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
@@ -131,24 +130,28 @@ export default function Tienda() {
     }
   }
 
-  async function abrirCofre() {
+  // Solo abre el modal — las monedas se descuentan cuando el usuario toca "ABRIR COFRE"
+  function abrirCofre() {
+    setRuletaMilestone(false)
+    setMilestoneNivel(undefined)
+    setShowRuleta(true)
+  }
+
+  // Llamado por el modal cuando el usuario confirma abrir (toca el botón interno)
+  async function onConfirmarAbrir(): Promise<boolean> {
     const costo = ruletaCfg.costo
     if (coins < costo) {
       alerta(`Necesitas ${costo} Valera Coins para abrir el cofre. Tienes ${coins}.`)
-      return
+      return false
     }
-    setAbriendoCofre(true)
     const { error } = await supabase.rpc('gastar_coins', {
       p_user_id: userId,
       p_cantidad: costo,
       p_concepto: 'Cofre ruleta 🎰',
     })
-    setAbriendoCofre(false)
-    if (error) { alerta('Error al abrir el cofre'); return }
-    setCoins(prev => prev - ruletaCfg.costo)
-    setRuletaMilestone(false)
-    setMilestoneNivel(undefined)
-    setShowRuleta(true)
+    if (error) { alerta('Error al abrir el cofre'); return false }
+    setCoins(prev => prev - costo)
+    return true
   }
 
   async function onGanarPremio(premio: Premio) {
@@ -221,25 +224,20 @@ export default function Tienda() {
 
           {/* Cofre / Ruleta */}
           <TouchableOpacity
-            style={[s.cofreCard, (abriendoCofre || coins < ruletaCfg.costo) && s.cofreCardDis]}
+            style={[s.cofreCard, coins < ruletaCfg.costo && s.cofreCardDis]}
             onPress={abrirCofre}
-            disabled={abriendoCofre || coins < ruletaCfg.costo}
+            disabled={coins < ruletaCfg.costo}
           >
             <View style={s.cofreLeft}>
               <Text style={s.cofreIcn}>🎁</Text>
               <View>
                 <Text style={s.cofreNombre}>Cofre Misterioso</Text>
-                <Text style={s.cofreSub}>Gira la ruleta y gana una recompensa sorpresa</Text>
+                <Text style={s.cofreSub}>Abre el cofre y gana una recompensa sorpresa</Text>
               </View>
             </View>
             <View style={s.cofreCosto}>
-              {abriendoCofre
-                ? <ActivityIndicator size="small" color="#c9a84c" />
-                : <>
-                    <Text style={s.cofreCostoNum}>{ruletaCfg.costo}</Text>
-                    <Text style={s.cofreCostoIcn}>💰</Text>
-                  </>
-              }
+              <Text style={s.cofreCostoNum}>{ruletaCfg.costo}</Text>
+              <Text style={s.cofreCostoIcn}>💰</Text>
             </View>
           </TouchableOpacity>
 
@@ -373,9 +371,10 @@ export default function Tienda() {
         premios={ruletaCfg.premios}
         costoGirar={ruletaCfg.costo}
         puedePagar={coins >= ruletaCfg.costo}
+        onConfirmarAbrir={onConfirmarAbrir}
         onClose={() => setShowRuleta(false)}
         onGanar={onGanarPremio}
-        onGirarOtraVez={abrirCofre}
+        onGirarOtraVez={ruletaMilestone ? undefined : () => {}}
       />
     </View>
   )

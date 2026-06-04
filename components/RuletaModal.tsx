@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
-  Platform, Animated, Easing,
+  Platform, Animated, Easing, ActivityIndicator,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
@@ -133,6 +133,7 @@ interface Props {
   premios?: Premio[]
   costoGirar?: number
   puedePagar?: boolean
+  onConfirmarAbrir?: () => Promise<boolean>  // descuenta coins; retorna false si no pudo
   onClose: () => void
   onGanar: (premio: Premio) => void
   onGirarOtraVez?: () => void
@@ -141,13 +142,15 @@ interface Props {
 export function RuletaModal({
   visible, esMilestone = false, nivel,
   premios: premiosProp, costoGirar, puedePagar = true,
+  onConfirmarAbrir,
   onClose, onGanar, onGirarOtraVez,
 }: Props) {
   const premios = premiosProp ?? CONFIG_DEFAULT.premios
 
-  const [fase, setFase]       = useState<Fase>('listo')
-  const [strip, setStrip]     = useState<Premio[]>([])
-  const [ganador, setGanador] = useState<Premio | null>(null)
+  const [fase, setFase]           = useState<Fase>('listo')
+  const [strip, setStrip]         = useState<Premio[]>([])
+  const [ganador, setGanador]     = useState<Premio | null>(null)
+  const [confirmando, setConfirmando] = useState(false)
 
   const scrollX    = useRef(new Animated.Value(0)).current
   const chestScale = useRef(new Animated.Value(1)).current
@@ -192,6 +195,7 @@ export function RuletaModal({
       setStrip([])
       setGanador(null)
       resetAll()
+      setConfirmando(false)
     } else {
       startGlowLoop()
     }
@@ -199,7 +203,14 @@ export function RuletaModal({
 
   const chestRotInterp = chestRot.interpolate({ inputRange: [-1, 1], outputRange: ['-14deg', '14deg'] })
 
-  function abrirCofre() {
+  async function abrirCofre() {
+    // Confirmar pago solo para cofres (no milestone)
+    if (onConfirmarAbrir && !esMilestone) {
+      setConfirmando(true)
+      const ok = await onConfirmarAbrir()
+      setConfirmando(false)
+      if (!ok) return
+    }
     glowLoop.current?.stop()
     setFase('abriendo')
 
@@ -334,10 +345,17 @@ export function RuletaModal({
               </View>
 
               {fase === 'listo' && (
-                <TouchableOpacity style={cs.openBtn} onPress={abrirCofre}>
-                  <Text style={cs.openBtnTxt}>
-                    {esMilestone ? '★  ABRIR PREMIO  ★' : 'ABRIR COFRE'}
-                  </Text>
+                <TouchableOpacity
+                  style={[cs.openBtn, confirmando && { opacity: 0.7 }]}
+                  onPress={abrirCofre}
+                  disabled={confirmando}
+                >
+                  {confirmando
+                    ? <ActivityIndicator color={DARK} size="small" />
+                    : <Text style={cs.openBtnTxt}>
+                        {esMilestone ? '★  ABRIR PREMIO  ★' : 'ABRIR COFRE'}
+                      </Text>
+                  }
                 </TouchableOpacity>
               )}
               {fase === 'abriendo' && (
