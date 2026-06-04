@@ -40,9 +40,9 @@ jobs:
         run: |
           lftp -c "
             set sftp:auto-confirm yes;
-            set net:timeout 60;
-            set net:max-retries 3;
-            open sftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@45.137.159.251;
+            set net:timeout 120;
+            set net:max-retries 2;
+            open sftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@45.137.159.251:65002;
             mirror --reverse --delete --verbose dist/ /public_html/;
             quit
           "
