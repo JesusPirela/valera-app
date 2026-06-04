@@ -31,7 +31,7 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Create .htaccess for SPA routing
-        run: printf 'ErrorDocument 404 /index.html\nOptions -Indexes\n' > dist/.htaccess
+        run: printf 'ErrorDocument 404 /index.html\n' > dist/.htaccess
 
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
