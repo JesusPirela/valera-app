@@ -1003,6 +1003,7 @@ const s = StyleSheet.create({
     backgroundColor: '#1a6470', alignItems: 'center', justifyContent: 'center',
     shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25, shadowRadius: 10, elevation: 8,
+    zIndex: 100,
   },
 
   // Modal / Sheet
