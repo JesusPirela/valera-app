@@ -595,14 +595,14 @@ const cs = StyleSheet.create({
     borderTopWidth: 2, borderBottomWidth: 2, borderColor: '#2a475e',
     position: 'relative',
   },
-  // Degradados laterales — ocultan los items lejanos al centro
+  // Blur lateral — cubre solo los extremos, deja 3 items visibles en el centro
   fadeLeft: {
     position: 'absolute', top: 0, bottom: 0, left: 0,
-    width: 170, zIndex: 5,
+    width: 110, zIndex: 5,
   },
   fadeRight: {
     position: 'absolute', top: 0, bottom: 0, right: 0,
-    width: 170, zIndex: 5,
+    width: 110, zIndex: 5,
   },
   stripRow: { flexDirection: 'row', paddingVertical: 6, gap: ITEM_GAP },
   stripItem: {
