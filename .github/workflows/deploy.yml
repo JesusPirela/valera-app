@@ -33,7 +33,7 @@ jobs:
       - name: Create .htaccess for SPA routing
         run: printf 'ErrorDocument 404 /index.html\n' > dist/.htaccess
 
-      - name: Push dist/ a rama web-build
+      - name: Push dist/ a rama web-build (Hostinger)
         run: |
           cd dist
           git init
