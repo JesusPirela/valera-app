@@ -65,7 +65,7 @@ export default function Tienda() {
   const [coins, setCoins]         = useState(0)
   const [items, setItems]         = useState<StoreItem[]>([])
   const [compras, setCompras]     = useState<Compra[]>([])
-  const [tab, setTab]             = useState<'tienda' | 'historial'>('tienda')
+  const [tab, setTab]             = useState<'tienda' | 'historial' | 'ruleta'>('tienda')
   const [loading, setLoading]     = useState(true)
   const [loadingHistorial, setLoadingHistorial] = useState(false)
   const [comprando, setComprando]       = useState<string | null>(null)
@@ -207,8 +207,19 @@ export default function Tienda() {
         >
           <Text style={[s.tabTxt, tab === 'historial' && s.tabTxtActive]}>
             📋 Mis Compras
-            {compras.filter(c => c.estado === 'pendiente').length > 0 && (
-              <Text style={s.tabBadge}> {compras.filter(c => c.estado === 'pendiente').length}</Text>
+            {compras.filter(c => !esRuletaPremio(c.notas_admin) && c.estado === 'pendiente').length > 0 && (
+              <Text style={s.tabBadge}> {compras.filter(c => !esRuletaPremio(c.notas_admin) && c.estado === 'pendiente').length}</Text>
+            )}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.tabBtn, tab === 'ruleta' && s.tabBtnActive]}
+          onPress={() => setTab('ruleta')}
+        >
+          <Text style={[s.tabTxt, tab === 'ruleta' && s.tabTxtActive]}>
+            🎰 Ruleta
+            {compras.filter(c => esRuletaPremio(c.notas_admin) && c.estado === 'pendiente').length > 0 && (
+              <Text style={s.tabBadge}> {compras.filter(c => esRuletaPremio(c.notas_admin) && c.estado === 'pendiente').length}</Text>
             )}
           </Text>
         </TouchableOpacity>
@@ -295,17 +306,17 @@ export default function Tienda() {
           </View>
 
         </ScrollView>
-      ) : (
+      ) : tab === 'historial' ? (
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
 
-          {compras.length === 0 ? (
+          {compras.filter(c => !esRuletaPremio(c.notas_admin)).length === 0 ? (
             <View style={s.emptyHistorial}>
               <Text style={s.emptyIcn}>🛍️</Text>
               <Text style={s.emptyTxt}>Aún no has realizado compras</Text>
               <Text style={s.emptySub}>Tus pedidos aparecerán aquí una vez que canjees tus Valera Coins</Text>
             </View>
           ) : (
-            compras.map(c => {
+            compras.filter(c => !esRuletaPremio(c.notas_admin)).map(c => {
               const cfg         = ESTADO_CONFIG[c.estado] ?? ESTADO_CONFIG.pendiente
               const item        = c.store_items
               const esRuleta    = c.tipo_compra?.startsWith('ruleta') || esRuletaPremio(c.notas_admin)
@@ -363,6 +374,53 @@ export default function Tienda() {
             })
           )}
 
+        </ScrollView>
+      ) : (
+        // ── Tab Ruleta ──────────────────────────────────────────────
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          {compras.filter(c => esRuletaPremio(c.notas_admin)).length === 0 ? (
+            <View style={s.emptyHistorial}>
+              <Text style={s.emptyIcn}>🎰</Text>
+              <Text style={s.emptyTxt}>Sin premios de ruleta aún</Text>
+              <Text style={s.emptySub}>Abre un cofre desde la tienda para ganar recompensas</Text>
+            </View>
+          ) : (
+            compras.filter(c => esRuletaPremio(c.notas_admin)).map(c => {
+              const cfg         = ESTADO_CONFIG[c.estado] ?? ESTADO_CONFIG.pendiente
+              const esMilestone = c.notas_admin?.includes('milestone') ?? false
+              const nombre      = nombreRuletaPremio(c.notas_admin)
+              const icono       = esMilestone ? '🏆' : '🎰'
+              return (
+                <View key={c.id} style={[s.compraCard, { borderColor: cfg.color + '44' }]}>
+                  <View style={s.compraTop}>
+                    <View style={[s.compraIconWrap, { backgroundColor: cfg.bg }]}>
+                      <Text style={s.compraIconTxt}>{icono}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Text style={s.compraNombre}>{nombre}</Text>
+                        <View style={s.ruletaBadge}>
+                          <Text style={s.ruletaBadgeTxt}>{esMilestone ? 'NIVEL' : 'COFRE'}</Text>
+                        </View>
+                      </View>
+                      <Text style={s.compraFecha}>{formatFecha(c.created_at)}</Text>
+                    </View>
+                    <View style={[s.estadoBadge, { backgroundColor: cfg.bg, borderColor: cfg.color + '66' }]}>
+                      <Text style={[s.estadoTxt, { color: cfg.color }]}>{cfg.icono} {cfg.label}</Text>
+                    </View>
+                  </View>
+                  <View style={s.compraBot}>
+                    <Text style={s.compraCosto}>
+                      {c.costo_coins > 0 ? `💰 ${c.costo_coins.toLocaleString()} coins` : '🎁 Premio gratis'}
+                    </Text>
+                  </View>
+                  {c.estado === 'pendiente' && (
+                    <Text style={s.pendienteTxt}>El equipo de Valera procesará tu recompensa pronto.</Text>
+                  )}
+                </View>
+              )
+            })
+          )}
         </ScrollView>
       )}
       <RuletaModal

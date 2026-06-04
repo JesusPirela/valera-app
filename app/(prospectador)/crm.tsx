@@ -141,16 +141,19 @@ export default function CRM() {
   }, [clientes])
 
   // ── KPIs ──────────────────────────────────────────────────────
-  const total    = clientes.length
-  const activos  = clientes.filter(c => c.estado !== 'descartado' && c.estado !== 'compro').length
-  const citas    = clientes.filter(c => c.estado === 'cita_agendada').length
-  const vencidos = clientes.filter(c =>
+  // Base filtrada por operación para que KPIs y chips sean consistentes con la lista
+  const clientesBase = opFiltro ? clientes.filter(c => c.tipo_operacion === opFiltro) : clientes
+
+  const total    = clientesBase.length
+  const activos  = clientesBase.filter(c => c.estado !== 'descartado' && c.estado !== 'compro').length
+  const citas    = clientesBase.filter(c => c.estado === 'cita_agendada').length
+  const vencidos = clientesBase.filter(c =>
     (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora) < new Date())
   ).length
-  const cerrados = clientes.filter(c => c.estado === 'compro').length
+  const cerrados = clientesBase.filter(c => c.estado === 'compro').length
 
   const conteos = ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
-    acc[e] = clientes.filter(c => c.estado === e).length
+    acc[e] = clientesBase.filter(c => c.estado === e).length
     return acc
   }, {})
 
@@ -459,7 +462,7 @@ export default function CRM() {
         <View style={[s.opRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>
           {([null, 'venta', 'renta'] as const).map(op => {
             const label = op === null ? 'Todos' : op === 'venta' ? '🏠 Venta' : '🔑 Renta'
-            const cnt   = op === null ? total : clientes.filter(c => c.tipo_operacion === op).length
+            const cnt   = op === null ? clientes.length : clientes.filter(c => c.tipo_operacion === op).length
             const activo = opFiltro === op
             return (
               <TouchableOpacity key={String(op)} style={[s.opTab, activo && s.opTabActivo]} onPress={() => setOpFiltro(op)}>

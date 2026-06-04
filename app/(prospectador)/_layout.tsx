@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Text, TouchableOpacity, Image, View, Platform, Modal, StyleSheet } from 'react-native'
 import { Tabs, usePathname, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import * as Notifications from 'expo-notifications'
 import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
 import { trackLoginDiario } from '../../lib/gamification'
@@ -153,6 +154,14 @@ export default function ProspectadorLayout() {
     // Programar alarmas de recordatorios
     programarRecordatorios().catch(() => {})
 
+    // Deep link al tocar una notificación: navegar al cliente relacionado
+    const subNotif = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data as any
+      if (data?.tipo === 'recordatorio' && data?.cliente_id) {
+        router.push(`/(prospectador)/detalle-cliente?id=${data.cliente_id}`)
+      }
+    })
+
     cargarNoLeidas()
     verificarRecordatorios()
 
@@ -173,6 +182,7 @@ export default function ProspectadorLayout() {
     return () => {
       supabase.removeChannel(channel)
       if (pollingRef.current) clearInterval(pollingRef.current)
+      subNotif.remove()
     }
   }, [])
 

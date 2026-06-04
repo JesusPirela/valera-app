@@ -3,7 +3,7 @@ import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
   Platform, Animated, Easing, ActivityIndicator,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { BlurView } from 'expo-blur'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -400,22 +400,18 @@ export function RuletaModal({
                   })}
                 </Animated.View>
 
-                {/* Degradado izquierdo — desvanece los items del lado */}
-                <LinearGradient
-                  colors={[DARK, DARK, 'transparent']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={cs.fadeLeft}
-                  pointerEvents="none"
-                />
-                {/* Degradado derecho */}
-                <LinearGradient
-                  colors={['transparent', DARK, DARK]}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={cs.fadeRight}
-                  pointerEvents="none"
-                />
+                {/* Blur lateral — web usa backdropFilter CSS, nativo usa BlurView sin tint oscuro */}
+                {Platform.OS === 'web' ? (
+                  <>
+                    <View style={[cs.fadeLeft,  { backdropFilter: 'blur(7px)', WebkitBackdropFilter: 'blur(7px)' } as any]} pointerEvents="none" />
+                    <View style={[cs.fadeRight, { backdropFilter: 'blur(7px)', WebkitBackdropFilter: 'blur(7px)' } as any]} pointerEvents="none" />
+                  </>
+                ) : (
+                  <>
+                    <BlurView intensity={55} tint="default" style={cs.fadeLeft}  pointerEvents="none" />
+                    <BlurView intensity={55} tint="default" style={cs.fadeRight} pointerEvents="none" />
+                  </>
+                )}
               </View>
             </View>
           )}
@@ -599,14 +595,14 @@ const cs = StyleSheet.create({
     borderTopWidth: 2, borderBottomWidth: 2, borderColor: '#2a475e',
     position: 'relative',
   },
-  // Degradados laterales — ocultan los items lejanos al centro
+  // Blur lateral — cubre solo los extremos, deja 3 items visibles en el centro
   fadeLeft: {
     position: 'absolute', top: 0, bottom: 0, left: 0,
-    width: 170, zIndex: 5,
+    width: 110, zIndex: 5,
   },
   fadeRight: {
     position: 'absolute', top: 0, bottom: 0, right: 0,
-    width: 170, zIndex: 5,
+    width: 110, zIndex: 5,
   },
   stripRow: { flexDirection: 'row', paddingVertical: 6, gap: ITEM_GAP },
   stripItem: {
