@@ -311,8 +311,18 @@ export default function TiendaItems() {
 
             {ruletaCfg?.premios.map((p, i) => (
               <View key={p.id} style={s.ruletaRow}>
-                {/* Selector de artículo de la tienda */}
-                <Text style={[s.lbl, { marginTop: 0, marginBottom: 6 }]}>Premio {i + 1}</Text>
+                {/* Cabecera fila con botón eliminar */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={[s.lbl, { marginTop: 0, marginBottom: 0 }]}>Premio {i + 1}</Text>
+                  <TouchableOpacity
+                    onPress={() => confirmar(`¿Eliminar el premio "${p.nombre}"?`, () =>
+                      setRuletaCfg(c => c ? { ...c, premios: c.premios.filter((_, idx) => idx !== i) } : c)
+                    )}
+                    style={s.btnEliminarPremio}
+                  >
+                    <Text style={s.btnEliminarPremioTxt}>🗑️ Eliminar</Text>
+                  </TouchableOpacity>
+                </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
                   <View style={{ flexDirection: 'row', gap: 6 }}>
                     {items.map(item => {
@@ -370,6 +380,25 @@ export default function TiendaItems() {
                 </View>
               </View>
             ))}
+
+            {ruletaCfg && (
+              <TouchableOpacity
+                style={s.btnAgregarPremio}
+                onPress={() => setRuletaCfg(c => c ? {
+                  ...c,
+                  premios: [...c.premios, {
+                    id: `nuevo_${Date.now()}`,
+                    nombre: items[0]?.nombre ?? 'Nuevo premio',
+                    icono: items[0]?.icono ?? '🎁',
+                    tipo: items[0]?.tipo ?? 'otro',
+                    prob_cofre: 0,
+                    prob_milestone: 0,
+                  }],
+                } : c)}
+              >
+                <Text style={s.btnAgregarPremioTxt}>＋ Agregar premio</Text>
+              </TouchableOpacity>
+            )}
 
             {ruletaCfg && (
               <View style={s.ruletaSumas}>
@@ -506,6 +535,10 @@ const s = StyleSheet.create({
   btnNuevoTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
 
   ruletaRow: { marginBottom: 12, backgroundColor: '#f5f8f9', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#dde8e9' },
+  btnEliminarPremio: { backgroundColor: '#fef0f0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#fca5a5' },
+  btnEliminarPremioTxt: { fontSize: 12, color: '#dc2626', fontWeight: '700' },
+  btnAgregarPremio: { borderWidth: 1.5, borderColor: '#1a6470', borderRadius: 10, borderStyle: 'dashed', paddingVertical: 12, alignItems: 'center', marginBottom: 12 },
+  btnAgregarPremioTxt: { fontSize: 14, color: '#1a6470', fontWeight: '700' },
   ruletaRowLeft: { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' },
   ruletaSeleccionado: { fontSize: 13, fontWeight: '700', color: '#1a6470', marginBottom: 4 },
   itemChip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#ddd', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#fff' },
