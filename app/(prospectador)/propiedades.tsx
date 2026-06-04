@@ -138,7 +138,9 @@ export default function ProspectadorPropiedades() {
           .from('propiedades')
           .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, created_at, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
+          .limit(1, { referencedTable: 'propiedad_imagenes' }),
         supabase.from('propiedad_publicacion').select('propiedad_id, veces_publicada, fecha_publicacion').eq('user_id', userId),
       ])
 

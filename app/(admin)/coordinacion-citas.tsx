@@ -672,6 +672,7 @@ export default function CoordinacionCitas() {
   ).length
 
   return (
+    <View style={{ flex: 1, backgroundColor: '#f1f5f9' }}>
     <ScrollView style={s.container} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
 
       {/* ── Barra superior: volver + acceso a proyectos ── */}
@@ -900,11 +901,6 @@ export default function CoordinacionCitas() {
         </View>
       )}
 
-      {/* ── FAB nueva cita ── */}
-      <TouchableOpacity style={s.fab} onPress={() => setModalNueva(true)}>
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
-
       {/* ── Modales ── */}
       <ModalEdicion
         cita={citaEditando}
@@ -920,6 +916,12 @@ export default function CoordinacionCitas() {
         />
       )}
     </ScrollView>
+
+      {/* ── FAB nueva cita ── */}
+      <TouchableOpacity style={s.fab} onPress={() => setModalNueva(true)}>
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
+    </View>
   )
 }
 
