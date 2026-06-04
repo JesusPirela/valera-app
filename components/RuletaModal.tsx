@@ -3,6 +3,7 @@ import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
   Platform, Animated, Easing, ActivityIndicator,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -398,6 +399,23 @@ export function RuletaModal({
                     )
                   })}
                 </Animated.View>
+
+                {/* Degradado izquierdo — desvanece los items del lado */}
+                <LinearGradient
+                  colors={[DARK, DARK, 'transparent']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={cs.fadeLeft}
+                  pointerEvents="none"
+                />
+                {/* Degradado derecho */}
+                <LinearGradient
+                  colors={['transparent', DARK, DARK]}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={cs.fadeRight}
+                  pointerEvents="none"
+                />
               </View>
             </View>
           )}
@@ -579,6 +597,16 @@ const cs = StyleSheet.create({
     width: STRIP_W, overflow: 'hidden',
     backgroundColor: DARK,
     borderTopWidth: 2, borderBottomWidth: 2, borderColor: '#2a475e',
+    position: 'relative',
+  },
+  // Degradados laterales — ocultan los items lejanos al centro
+  fadeLeft: {
+    position: 'absolute', top: 0, bottom: 0, left: 0,
+    width: 170, zIndex: 5,
+  },
+  fadeRight: {
+    position: 'absolute', top: 0, bottom: 0, right: 0,
+    width: 170, zIndex: 5,
   },
   stripRow: { flexDirection: 'row', paddingVertical: 6, gap: ITEM_GAP },
   stripItem: {
