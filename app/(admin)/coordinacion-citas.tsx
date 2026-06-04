@@ -592,7 +592,7 @@ export default function CoordinacionCitas() {
   const [citas, setCitas]             = useState<Cita[]>([])
   const [admins, setAdmins]           = useState<Profile[]>([])
   const [loading, setLoading]         = useState(true)
-  const [filtroEstado, setFiltroEstado] = useState<EstadoCita | null>(null)
+  const [filtroEstado, setFiltroEstado] = useState<EstadoCita | 'en_proceso' | null>(null)
   const [filtroAdmin, setFiltroAdmin]   = useState<string | null>(null)
   const [citaEditando, setCitaEditando] = useState<Cita | null>(null)
   const [modalNueva, setModalNueva]   = useState(false)
@@ -649,8 +649,14 @@ export default function CoordinacionCitas() {
     + (conteos.en_coordinacion ?? 0)
     + (conteos.reagendada ?? 0)
 
+  const ESTADOS_EN_PROCESO: EstadoCita[] = ['por_contactar', 'primer_contacto', 'en_coordinacion', 'reagendada']
+
   const citasFiltradas = citas
-    .filter(c => !filtroEstado || c.estado === filtroEstado)
+    .filter(c => {
+      if (!filtroEstado) return true
+      if (filtroEstado === 'en_proceso') return ESTADOS_EN_PROCESO.includes(c.estado)
+      return c.estado === filtroEstado
+    })
     .filter(c => {
       if (!filtroAdmin) return true
       if (filtroAdmin === 'sin_asignar') return !c.coordinado_por
@@ -693,7 +699,7 @@ export default function CoordinacionCitas() {
           <Text style={s.kpiLbl}>COORDINADAS</Text>
         </TouchableOpacity>
         <View style={s.kpiDiv} />
-        <TouchableOpacity style={s.kpiItem} onPress={() => setFiltroEstado(null)}>
+        <TouchableOpacity style={s.kpiItem} onPress={() => setFiltroEstado('en_proceso')}>
           <Text style={[s.kpiNum, enProceso > 0 ? { color: '#7c3aed' } : { color: '#cbd5e1' }]}>{enProceso}</Text>
           <Text style={s.kpiLbl}>EN PROCESO</Text>
         </TouchableOpacity>
@@ -791,7 +797,7 @@ export default function CoordinacionCitas() {
         <View style={s.empty}>
           <Ionicons name="calendar-outline" size={40} color="#cbd5e1" />
           <Text style={s.emptyTxt}>
-            {filtroEstado ? `Sin citas en "${ESTADOS_CITA[filtroEstado].label}"` : 'Sin citas registradas'}
+            {filtroEstado === 'en_proceso' ? 'Sin citas en proceso' : filtroEstado ? `Sin citas en "${ESTADOS_CITA[filtroEstado].label}"` : 'Sin citas registradas'}
           </Text>
         </View>
       ) : (
