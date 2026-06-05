@@ -7,7 +7,7 @@ export type ZonaPin = {
   coords: [number, number]
   count: number
   color: string
-  propiedades?: { direccion: string }[]
+  propiedades?: { direccion: string; lat?: number | null; lng?: number | null }[]
 }
 
 const SUBZONAS: Record<string, { label: string; coords: [number, number]; keywords: string[] }[]> = {
@@ -114,31 +114,50 @@ export default function MiniMapa({ zonas, onZonaPress }: Props) {
     }
 
     const props = zona.propiedades ?? []
-    const subZonas = SUBZONAS[zona.key] ?? []
-    const matched = new Set<number>()
+    const propsConCoords = props.filter(p => p.lat && p.lng)
+    const propsSinCoords = props.filter(p => !p.lat || !p.lng)
 
-    const subZonasConConteo = subZonas.map(sz => {
-      const indices: number[] = []
-      props.forEach((p, i) => {
-        if (sz.keywords.some(kw => p.direccion.toLowerCase().includes(kw.toLowerCase()))) {
-          indices.push(i); matched.add(i)
-        }
+    // Propiedades con coordenadas exactas → pin individual
+    propsConCoords.forEach(p => {
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="background:${zona.color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer"></div>`,
+        iconSize: [14, 14], iconAnchor: [7, 7],
       })
-      return { ...sz, count: indices.length }
-    }).filter(sz => sz.count > 0)
-
-    const otrasCount = props.filter((_, i) => !matched.has(i)).length
-    const toRender = [...subZonasConConteo]
-    if (otrasCount > 0) toRender.push({ label: 'Otras zonas', coords: view.center, keywords: [], count: otrasCount })
-    if (toRender.length === 0) toRender.push({ label: zona.label, coords: view.center, keywords: [], count: zona.count })
-
-    toRender.forEach(sz => {
-      const icon = L.divIcon({ className: '', html: pinHTML(sz.count, zona.color, 44), iconSize: [44, 44], iconAnchor: [22, 22] })
-      const m = L.marker(sz.coords, { icon })
+      const m = L.marker([p.lat!, p.lng!], { icon })
         .addTo(map)
-        .bindTooltip(`<b>${sz.label}</b><br/>${sz.count} propiedad${sz.count !== 1 ? 'es' : ''}`, { direction: 'top', offset: [0, -26] })
+        .bindTooltip(p.direccion, { direction: 'top', offset: [0, -10] })
       markersRef.current.push(m)
     })
+
+    // Propiedades sin coordenadas → agrupar por sub-zona con keywords
+    if (propsSinCoords.length > 0) {
+      const subZonas = SUBZONAS[zona.key] ?? []
+      const matched = new Set<number>()
+      const subZonasConConteo = subZonas.map(sz => {
+        const indices: number[] = []
+        propsSinCoords.forEach((p, i) => {
+          if (sz.keywords.some(kw => p.direccion.toLowerCase().includes(kw.toLowerCase()))) {
+            indices.push(i); matched.add(i)
+          }
+        })
+        return { ...sz, count: indices.length }
+      }).filter(sz => sz.count > 0)
+
+      const otrasCount = propsSinCoords.filter((_, i) => !matched.has(i)).length
+      const toRender = [...subZonasConConteo]
+      if (otrasCount > 0) toRender.push({ label: 'Sin ubicación exacta', coords: view.center, keywords: [], count: otrasCount })
+      if (toRender.length === 0 && propsConCoords.length === 0)
+        toRender.push({ label: zona.label, coords: view.center, keywords: [], count: zona.count })
+
+      toRender.forEach(sz => {
+        const icon = L.divIcon({ className: '', html: pinHTML(sz.count, zona.color, 44), iconSize: [44, 44], iconAnchor: [22, 22] })
+        const m = L.marker(sz.coords, { icon })
+          .addTo(map)
+          .bindTooltip(`<b>${sz.label}</b><br/>${sz.count} propiedad${sz.count !== 1 ? 'es' : ''}`, { direction: 'top', offset: [0, -26] })
+        markersRef.current.push(m)
+      })
+    }
   }
 
   function initMap(L: any) {

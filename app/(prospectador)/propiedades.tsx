@@ -38,6 +38,8 @@ type Propiedad = {
   tipo: string | null
   estado: string | null
   zona: 'queretaro' | 'monterrey' | 'puebla' | null
+  lat: number | null
+  lng: number | null
   destacada: boolean
   destacada_mensaje: string | null
   exclusiva: boolean
@@ -137,7 +139,7 @@ export default function ProspectadorPropiedades() {
         supabase.from('profiles').select('role, nombre').eq('id', userId).single(),
         supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, created_at, propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, created_at, propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .order('created_at', { ascending: false })
           .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
@@ -347,7 +349,7 @@ export default function ProspectadorPropiedades() {
       coords: z.coords,
       color: z.color,
       count: propsZona.length,
-      propiedades: propsZona.map(p => ({ direccion: p.direccion })),
+      propiedades: propsZona.map(p => ({ direccion: p.direccion, lat: p.lat, lng: p.lng })),
     }
   }).filter(z => z.count > 0)
 

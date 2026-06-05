@@ -154,6 +154,11 @@ export default function NuevaPropiedad() {
   const [m2, setM2] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
   const [zona, setZona] = useState<'queretaro' | 'monterrey' | 'puebla' | null>(null)
+  const [lat, setLat] = useState<number | null>(null)
+  const [lng, setLng] = useState<number | null>(null)
+  const [geoQuery, setGeoQuery] = useState('')
+  const [geoResults, setGeoResults] = useState<any[]>([])
+  const [geoLoading, setGeoLoading] = useState(false)
   const [asesorId, setAsesorId] = useState<string | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
@@ -181,6 +186,35 @@ export default function NuevaPropiedad() {
     const base = `${tipoLabel[tipo] ?? tipo} en ${opLabel[operacion] ?? operacion}`
     setTitulo(direccion.trim() ? `${base} en ${direccion.trim()}` : base)
   }, [tipo, operacion, direccion, tituloEditado])
+
+  useEffect(() => {
+    if (!geoQuery.trim() || geoQuery.length < 4) { setGeoResults([]); return }
+    const t = setTimeout(async () => {
+      setGeoLoading(true)
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geoQuery + ' Mexico')}&format=json&limit=5&countrycodes=mx`,
+          { headers: { 'User-Agent': 'valera-app/1.0' } }
+        )
+        setGeoResults(await res.json())
+      } catch { setGeoResults([]) }
+      finally { setGeoLoading(false) }
+    }, 600)
+    return () => clearTimeout(t)
+  }, [geoQuery])
+
+  function seleccionarUbicacion(r: any) {
+    const partes = r.display_name.split(',').slice(0, 4).join(', ').trim()
+    setDireccion(partes)
+    setGeoQuery(partes)
+    setLat(parseFloat(r.lat))
+    setLng(parseFloat(r.lon))
+    setGeoResults([])
+    const dn = r.display_name.toLowerCase()
+    if (dn.includes('querétaro') || dn.includes('queretaro')) setZona('queretaro')
+    else if (dn.includes('monterrey') || dn.includes('nuevo león') || dn.includes('nuevo leon')) setZona('monterrey')
+    else if (dn.includes('puebla')) setZona('puebla')
+  }
 
   function aplicarFicha() {
     if (!ficha.trim()) return
@@ -432,6 +466,8 @@ export default function NuevaPropiedad() {
           es_constructora: esConstructora,
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
           created_by: user.id,
+          lat: lat ?? null,
+          lng: lng ?? null,
         })
 
       console.log('[nueva-propiedad] resultado insert — error:', errorPropiedad)
@@ -561,13 +597,34 @@ export default function NuevaPropiedad() {
         />
 
         <Text style={styles.label}>Dirección *</Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-          placeholder="Ej. Calle Valera 123, Piso 2"
-          value={direccion}
-          onChangeText={v => { setDireccion(v); setTituloEditado(false) }}
-          maxLength={200}
-        />
+        <View>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TextInput
+              style={[styles.input, { flex: 1, backgroundColor: c.input, borderColor: lat ? '#22a35e' : c.inputBorder, color: c.inputText }]}
+              placeholder="Ej. Corregidora, Querétaro"
+              value={geoQuery}
+              onChangeText={v => { setGeoQuery(v); setDireccion(v); setTituloEditado(false); setLat(null); setLng(null) }}
+              maxLength={200}
+            />
+            {geoLoading && <ActivityIndicator size="small" color="#1976D2" style={{ marginLeft: 8 }} />}
+          </View>
+          {lat !== null && (
+            <Text style={{ fontSize: 11, color: '#22a35e', marginTop: 2, marginBottom: 4 }}>✓ Ubicación guardada en el mapa</Text>
+          )}
+          {geoResults.length > 0 && (
+            <View style={{ backgroundColor: c.input, borderRadius: 8, borderWidth: 1, borderColor: c.inputBorder, marginTop: 2, zIndex: 999 }}>
+              {geoResults.map((r: any, i: number) => (
+                <TouchableOpacity
+                  key={i}
+                  style={{ padding: 10, borderBottomWidth: i < geoResults.length - 1 ? 1 : 0, borderBottomColor: c.inputBorder }}
+                  onPress={() => seleccionarUbicacion(r)}
+                >
+                  <Text style={{ fontSize: 13, color: c.inputText }} numberOfLines={2}>📍 {r.display_name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
 
         <Text style={styles.label}>Operación</Text>
         <PillSelector
