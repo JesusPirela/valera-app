@@ -339,13 +339,17 @@ export default function ProspectadorPropiedades() {
 
   const propiedadesPorZona = vistaZonas ? agruparPorZona(propiedadesFiltradas) : []
 
-  const zonasParaMapa = ZONAS_CONFIG.map(z => ({
-    key: z.key,
-    label: z.label,
-    coords: z.coords,
-    color: z.color,
-    count: propiedades.filter(p => p.zona === z.key).length,
-  })).filter(z => z.count > 0)
+  const zonasParaMapa = ZONAS_CONFIG.map(z => {
+    const propsZona = propiedades.filter(p => p.zona === z.key)
+    return {
+      key: z.key,
+      label: z.label,
+      coords: z.coords,
+      color: z.color,
+      count: propsZona.length,
+      propiedades: propsZona.map(p => ({ direccion: p.direccion })),
+    }
+  }).filter(z => z.count > 0)
 
   function handleZonaMapPress(key: string) {
     const config = ZONAS_CONFIG.find(z => z.key === key)
