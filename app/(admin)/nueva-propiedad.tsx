@@ -193,8 +193,7 @@ export default function NuevaPropiedad() {
       setGeoLoading(true)
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geoQuery + ' Mexico')}&format=json&limit=5&countrycodes=mx`,
-          { headers: { 'User-Agent': 'valera-app/1.0' } }
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geoQuery + ' Mexico')}&format=json&limit=5&countrycodes=mx`
         )
         setGeoResults(await res.json())
       } catch { setGeoResults([]) }
@@ -597,34 +596,35 @@ export default function NuevaPropiedad() {
         />
 
         <Text style={styles.label}>Dirección *</Text>
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <TextInput
-              style={[styles.input, { flex: 1, backgroundColor: c.input, borderColor: lat ? '#22a35e' : c.inputBorder, color: c.inputText }]}
-              placeholder="Ej. Corregidora, Querétaro"
-              value={geoQuery}
-              onChangeText={v => { setGeoQuery(v); setDireccion(v); setTituloEditado(false); setLat(null); setLng(null) }}
-              maxLength={200}
-            />
-            {geoLoading && <ActivityIndicator size="small" color="#1976D2" style={{ marginLeft: 8 }} />}
-          </View>
-          {lat !== null && (
-            <Text style={{ fontSize: 11, color: '#22a35e', marginTop: 2, marginBottom: 4 }}>✓ Ubicación guardada en el mapa</Text>
-          )}
-          {geoResults.length > 0 && (
-            <View style={{ backgroundColor: c.input, borderRadius: 8, borderWidth: 1, borderColor: c.inputBorder, marginTop: 2, zIndex: 999 }}>
-              {geoResults.map((r: any, i: number) => (
-                <TouchableOpacity
-                  key={i}
-                  style={{ padding: 10, borderBottomWidth: i < geoResults.length - 1 ? 1 : 0, borderBottomColor: c.inputBorder }}
-                  onPress={() => seleccionarUbicacion(r)}
-                >
-                  <Text style={{ fontSize: 13, color: c.inputText }} numberOfLines={2}>📍 {r.display_name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+          <TextInput
+            style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: c.input, borderColor: lat ? '#22a35e' : c.inputBorder, color: c.inputText }]}
+            placeholder="Ej. Corregidora, Querétaro"
+            value={geoQuery}
+            onChangeText={v => { setGeoQuery(v); setDireccion(v); setTituloEditado(false); setLat(null); setLng(null) }}
+            maxLength={200}
+          />
+          {geoLoading && <ActivityIndicator size="small" color="#1976D2" style={{ marginLeft: 8 }} />}
         </View>
+        {lat !== null && (
+          <Text style={{ fontSize: 11, color: '#22a35e', marginBottom: 8 }}>✓ Ubicación confirmada en el mapa</Text>
+        )}
+        {geoResults.length > 0 && (
+          <View style={{ borderRadius: 8, borderWidth: 1, borderColor: '#1976D2', marginBottom: 12, overflow: 'hidden' }}>
+            <Text style={{ fontSize: 11, color: '#1976D2', fontWeight: '700', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 }}>
+              Selecciona una ubicación:
+            </Text>
+            {geoResults.map((r: any, i: number) => (
+              <TouchableOpacity
+                key={i}
+                style={{ padding: 10, backgroundColor: i % 2 === 0 ? c.input : c.bg, borderTopWidth: 1, borderTopColor: c.inputBorder }}
+                onPress={() => seleccionarUbicacion(r)}
+              >
+                <Text style={{ fontSize: 13, color: c.inputText }} numberOfLines={2}>📍 {r.display_name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.label}>Operación</Text>
         <PillSelector
