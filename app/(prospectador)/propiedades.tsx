@@ -26,6 +26,7 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 const LOGO = require('../../assets/logo.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
+import MiniMapa from '../../components/MiniMapa'
 
 type Propiedad = {
   id: string
@@ -67,10 +68,10 @@ type PropiedadesData = {
 }
 
 const ZONAS_CONFIG = [
-  { key: 'queretaro', label: 'Querétaro' },
-  { key: 'monterrey', label: 'Monterrey' },
-  { key: 'puebla', label: 'Puebla' },
-] as const
+  { key: 'queretaro' as const, label: 'Querétaro', coords: [20.5888, -100.3899] as [number, number], color: '#1976D2' },
+  { key: 'monterrey' as const, label: 'Monterrey', coords: [25.6866, -100.3161] as [number, number], color: '#D84315' },
+  { key: 'puebla'    as const, label: 'Puebla',    coords: [19.0414, -98.2063]  as [number, number], color: '#2E7D32' },
+]
 
 function FiltroChip({ label, active, onPress, color }: { label: string; active: boolean; onPress: () => void; color: string }) {
   return (
@@ -337,6 +338,20 @@ export default function ProspectadorPropiedades() {
   }
 
   const propiedadesPorZona = vistaZonas ? agruparPorZona(propiedadesFiltradas) : []
+
+  const zonasParaMapa = ZONAS_CONFIG.map(z => ({
+    key: z.key,
+    label: z.label,
+    coords: z.coords,
+    color: z.color,
+    count: propiedades.filter(p => p.zona === z.key).length,
+  })).filter(z => z.count > 0)
+
+  function handleZonaMapPress(key: string) {
+    const config = ZONAS_CONFIG.find(z => z.key === key)
+    if (!config) return
+    setZonasExpandidas(prev => { const s = new Set(prev); s.add(config.label); return s })
+  }
 
   function limpiarFiltros() {
     setFiltroOperacion(null)
@@ -648,6 +663,7 @@ export default function ProspectadorPropiedades() {
           </View>
         ) : vistaZonas ? (
           <ScrollView contentContainerStyle={{ paddingBottom: 24, paddingTop: 8 }}>
+            <MiniMapa zonas={zonasParaMapa} onZonaPress={handleZonaMapPress} />
             {propiedadesPorZona.map(([zona, props]) => {
               const expandida = zonasExpandidas.has(zona)
               return (
