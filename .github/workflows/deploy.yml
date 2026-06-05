@@ -62,4 +62,10 @@ jobs:
           git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:web-build
 
       - name: Notificar a Hostinger para deploy automático
-        run: curl -X POST https://webhooks.hostinger.com/deploy/5f91d5e7333f0f2dc75f800fef8e3930
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -H "X-GitHub-Delivery: $(cat /proc/sys/kernel/random/uuid 2>/dev/null || echo deploy)" \
+            -d "{\"ref\":\"refs/heads/web-build\",\"repository\":{\"full_name\":\"${{ github.repository }}\"}}" \
+            https://webhooks.hostinger.com/deploy/5f91d5e7333f0f2dc75f800fef8e3930 || true
