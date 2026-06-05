@@ -43,15 +43,15 @@ type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
 
 const NAV_ITEMS = [
-  { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1a6470' },
-  { label: 'CRM', icon: '📒', route: '/(admin)/crm', color: '#0f4c5c' },
-  { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#059669' },
-  { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#2a8a7a' },
-  { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#1a7060' },
-  { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#145560' },
-{ label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#c9a84c' },
-  { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#6a1b9a' },
-  { label: 'Tienda', icon: '🛒', route: '/(admin)/tienda-compras', color: '#c9a84c' },
+  { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2' },
+  { label: 'CRM', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
+  { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32' },
+  { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2' },
+  { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F' },
+  { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828' },
+  { label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#F57F17' },
+  { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#AD1457' },
+  { label: 'Tienda', icon: '🛒', route: '/(admin)/tienda-compras', color: '#558B2F' },
 ]
 
 export default function AdminPropiedades() {
