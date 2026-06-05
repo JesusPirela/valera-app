@@ -60,3 +60,6 @@ jobs:
           git add -A
           git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
           git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:web-build
+
+      - name: Notificar a Hostinger para deploy automático
+        run: curl -X POST https://webhooks.hostinger.com/deploy/5f91d5e7333f0f2dc75f800fef8e3930
