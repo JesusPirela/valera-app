@@ -16,6 +16,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 type Propiedad = {
   id: string
@@ -55,6 +56,7 @@ const NAV_ITEMS = [
 ]
 
 export default function AdminPropiedades() {
+  const c = useColors()
   const [propiedades, setPropiedades] = useState<Propiedad[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [loading, setLoading] = useState(true)
@@ -185,7 +187,7 @@ export default function AdminPropiedades() {
   const cardWidth = isWeb ? (contentWidth - 16 * (numCols - 1)) / numCols : undefined
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: c.bg }]}>
 
       {/* Grid de navegación */}
       <View style={styles.navGrid}>
@@ -202,12 +204,12 @@ export default function AdminPropiedades() {
       </View>
 
       {/* Barra de búsqueda con ícono */}
-      <View style={styles.searchRow}>
+      <View style={[styles.searchRow, { backgroundColor: c.card, borderColor: c.inputBorder }]}>
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: c.inputText }]}
           placeholder="Buscar por código, título o dirección..."
-          placeholderTextColor="#aaa"
+          placeholderTextColor={c.placeholder}
           value={busqueda}
           onChangeText={setBusqueda}
           autoCapitalize="none"
@@ -229,7 +231,7 @@ export default function AdminPropiedades() {
       </TouchableOpacity>
 
       {mostrarFiltros && (
-        <View style={styles.filtrosPanel}>
+        <View style={[styles.filtrosPanel, { backgroundColor: c.card, borderColor: c.border }]}>
           <Text style={styles.filtroLabel}>Operación</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <FiltroChip label="Todas" active={filtroOperacion === null} onPress={() => setFiltroOperacion(null)} />
@@ -280,7 +282,7 @@ export default function AdminPropiedades() {
               const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
               const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
               return (
-                <View key={item.id} style={[styles.card, item.destacada && styles.cardDestacada, cardWidth ? { width: cardWidth } : undefined]}>
+                <View key={item.id} style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada, cardWidth ? { width: cardWidth } : undefined]}>
                 {/* Imagen con badges superpuestos */}
                 <View style={styles.imagenWrapper}>
                   {primera?.url ? (
@@ -377,7 +379,7 @@ export default function AdminPropiedades() {
             const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
             const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
             return (
-              <View style={[styles.card, item.destacada && styles.cardDestacada]}>
+              <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada]}>
                 <View style={styles.imagenWrapper}>
                   {primera?.url ? (
                     <Image source={{ uri: primera.url }} style={styles.cardImagen} />
@@ -496,7 +498,7 @@ export default function AdminPropiedades() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 16, paddingTop: 16, backgroundColor: '#f0f5f5' },
+  container: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
   webGridScroll: { paddingBottom: 32, paddingHorizontal: 16, paddingTop: 8, width: '100%' },
   webGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 16 },
 

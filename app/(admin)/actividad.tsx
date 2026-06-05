@@ -11,6 +11,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 type Registro = {
   id: string
@@ -47,6 +48,8 @@ function nombreCorto(nombre: string | null, email: string): string {
 }
 
 export default function ActividadAdmin() {
+  const c = useColors()
+  const s = makeStyles(c)
   const [registros, setRegistros] = useState<Registro[]>([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState<FiltroTipo>('todos')
@@ -79,10 +82,10 @@ export default function ActividadAdmin() {
   function FiltroChip({ label, value }: { label: string; value: FiltroTipo }) {
     return (
       <TouchableOpacity
-        style={[styles.chip, filtro === value && styles.chipActive]}
+        style={[s.chip, filtro === value && s.chipActive]}
         onPress={() => setFiltro(value)}
       >
-        <Text style={[styles.chipText, filtro === value && styles.chipTextActive]}>
+        <Text style={[s.chipText, filtro === value && s.chipTextActive]}>
           {label}
         </Text>
       </TouchableOpacity>
@@ -90,32 +93,32 @@ export default function ActividadAdmin() {
   }
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
-        <Text style={styles.backBtnText}>← Volver</Text>
+    <View style={s.container}>
+      <TouchableOpacity style={s.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
+        <Text style={s.backBtnText}>← Volver</Text>
       </TouchableOpacity>
       {/* Resumen estadísticas */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNum}>{prospectadoresActivos}</Text>
-          <Text style={styles.statLabel}>Prospectadores{'\n'}activos</Text>
+      <View style={s.statsRow}>
+        <View style={s.statCard}>
+          <Text style={s.statNum}>{prospectadoresActivos}</Text>
+          <Text style={s.statLabel}>Prospectadores{'\n'}activos</Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statNum, styles.statNumDescarga]}>{totalDescargas}</Text>
-          <Text style={styles.statLabel}>Descargas{'\n'}totales</Text>
+        <View style={s.statCard}>
+          <Text style={[s.statNum, s.statNumDescarga]}>{totalDescargas}</Text>
+          <Text style={s.statLabel}>Descargas{'\n'}totales</Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statNum, styles.statNumVista]}>{totalVistas}</Text>
-          <Text style={styles.statLabel}>Vistas{'\n'}totales</Text>
+        <View style={s.statCard}>
+          <Text style={[s.statNum, s.statNumVista]}>{totalVistas}</Text>
+          <Text style={s.statLabel}>Vistas{'\n'}totales</Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statNum, styles.statNumDescarga]}>{prospectadoresConDescargas}</Text>
-          <Text style={styles.statLabel}>Con al menos{'\n'}1 descarga</Text>
+        <View style={s.statCard}>
+          <Text style={[s.statNum, s.statNumDescarga]}>{prospectadoresConDescargas}</Text>
+          <Text style={s.statLabel}>Con al menos{'\n'}1 descarga</Text>
         </View>
       </View>
 
       {/* Filtros */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtrosRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtrosRow}>
         <FiltroChip label="Todos" value="todos" />
         <FiltroChip label="Solo descargas" value="descarga" />
         <FiltroChip label="Solo vistas" value="vista" />
@@ -124,9 +127,9 @@ export default function ActividadAdmin() {
       {loading ? (
         <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : registrosFiltrados.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>Sin actividad registrada</Text>
-          <Text style={styles.emptySubtitle}>
+        <View style={s.emptyContainer}>
+          <Text style={s.emptyTitle}>Sin actividad registrada</Text>
+          <Text style={s.emptySubtitle}>
             Aquí aparecerán las vistas y descargas de los prospectadores.
           </Text>
         </View>
@@ -136,125 +139,127 @@ export default function ActividadAdmin() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => (
-            <View style={styles.row}>
-              <View style={styles.rowLeft}>
-                <Text style={styles.email} numberOfLines={1}>
+            <View style={s.row}>
+              <View style={s.rowLeft}>
+                <Text style={s.email} numberOfLines={1}>
                   {nombreCorto(item.prospectador_nombre, item.prospectador_email)}
                 </Text>
-                <Text style={styles.propiedad} numberOfLines={1}>
+                <Text style={s.propiedad} numberOfLines={1}>
                   {item.propiedad_codigo} · {item.propiedad_titulo}
                 </Text>
               </View>
-              <View style={styles.rowRight}>
+              <View style={s.rowRight}>
                 <View style={[
-                  styles.tipoBadge,
-                  item.tipo === 'descarga' ? styles.tipoBadgeDescarga : styles.tipoBadgeVista,
+                  s.tipoBadge,
+                  item.tipo === 'descarga' ? s.tipoBadgeDescarga : s.tipoBadgeVista,
                 ]}>
                   <Text style={[
-                    styles.tipoText,
-                    item.tipo === 'descarga' ? styles.tipoTextDescarga : styles.tipoTextVista,
+                    s.tipoText,
+                    item.tipo === 'descarga' ? s.tipoTextDescarga : s.tipoTextVista,
                   ]}>
                     {item.tipo === 'descarga' ? '↓ Descarga' : '👁 Vista'}
                   </Text>
                 </View>
-                <Text style={styles.tiempo}>{tiempoRelativo(item.created_at)}</Text>
+                <Text style={s.tiempo}>{tiempoRelativo(item.created_at)}</Text>
               </View>
             </View>
           )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={() => <View style={s.separator} />}
         />
       )}
     </View>
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 16 },
-  backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
-  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
+function makeStyles(c: AppColors) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg, padding: 16 },
+    backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
+    backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
 
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 14,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#eee',
-  },
-  statNum: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1a6470',
-  },
-  statNumDescarga: { color: '#c8960c' },
-  statNumVista: { color: '#1a6470' },
-  statLabel: {
-    fontSize: 10,
-    color: '#999',
-    textAlign: 'center',
-    marginTop: 2,
-    lineHeight: 13,
-  },
+    statsRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 14,
+    },
+    statCard: {
+      flex: 1,
+      backgroundColor: c.card,
+      borderRadius: 12,
+      padding: 12,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    statNum: {
+      fontSize: 22,
+      fontWeight: '800',
+      color: '#1a6470',
+    },
+    statNumDescarga: { color: '#c8960c' },
+    statNumVista: { color: '#1a6470' },
+    statLabel: {
+      fontSize: 10,
+      color: c.textMute,
+      textAlign: 'center',
+      marginTop: 2,
+      lineHeight: 13,
+    },
 
-  filtrosRow: {
-    flexDirection: 'row',
-    marginBottom: 14,
-  },
-  chip: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    marginRight: 8,
-    backgroundColor: '#fff',
-  },
-  chipActive: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  chipText: { fontSize: 13, color: '#555' },
-  chipTextActive: { color: '#fff', fontWeight: '600' },
+    filtrosRow: {
+      flexDirection: 'row',
+      marginBottom: 14,
+    },
+    chip: {
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      marginRight: 8,
+      backgroundColor: c.card,
+    },
+    chipActive: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+    chipText: { fontSize: 13, color: c.textSub },
+    chipTextActive: { color: '#fff', fontWeight: '600' },
 
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a6470', marginBottom: 8 },
-  emptySubtitle: { fontSize: 14, color: '#999', textAlign: 'center', lineHeight: 20 },
+    emptyContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 32,
+    },
+    emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a6470', marginBottom: 8 },
+    emptySubtitle: { fontSize: 14, color: c.textMute, textAlign: 'center', lineHeight: 20 },
 
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  rowLeft: { flex: 1, marginRight: 12 },
-  email: { fontSize: 13, fontWeight: '700', color: '#1a6470', marginBottom: 3 },
-  propiedad: { fontSize: 12, color: '#888' },
+    row: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: c.card,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 10,
+    },
+    rowLeft: { flex: 1, marginRight: 12 },
+    email: { fontSize: 13, fontWeight: '700', color: '#1a6470', marginBottom: 3 },
+    propiedad: { fontSize: 12, color: c.textMute },
 
-  rowRight: { alignItems: 'flex-end', gap: 4 },
-  tipoBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  tipoBadgeDescarga: { backgroundColor: '#fff3c4' },
-  tipoBadgeVista: { backgroundColor: '#dbeeff' },
-  tipoText: { fontSize: 11, fontWeight: '700' },
-  tipoTextDescarga: { color: '#7a5500' },
-  tipoTextVista: { color: '#1a6470' },
-  tiempo: { fontSize: 11, color: '#bbb' },
+    rowRight: { alignItems: 'flex-end', gap: 4 },
+    tipoBadge: {
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    tipoBadgeDescarga: { backgroundColor: '#fff3c4' },
+    tipoBadgeVista: { backgroundColor: '#dbeeff' },
+    tipoText: { fontSize: 11, fontWeight: '700' },
+    tipoTextDescarga: { color: '#7a5500' },
+    tipoTextVista: { color: '#1a6470' },
+    tiempo: { fontSize: 11, color: c.textMute },
 
-  separator: {
-    height: 6,
-  },
-})
+    separator: {
+      height: 6,
+    },
+  })
+}

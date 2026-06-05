@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 import { ESTADOS, ORDEN_ESTADOS as ORDEN_ESTADOS_BASE } from '../(prospectador)/crm'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
 
@@ -69,6 +70,7 @@ function abrirWhatsApp(telefono: string, nombre: string) {
 type UsuarioSimple = { id: string; nombre: string }
 
 export default function AdminCRM() {
+  const c = useColors()
   const [secciones, setSecciones] = useState<Seccion[]>([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
@@ -244,7 +246,7 @@ export default function AdminCRM() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: c.bg }]}>
 
       {/* Stats banner */}
       <View style={styles.statsBanner}>
@@ -270,7 +272,7 @@ export default function AdminCRM() {
       </View>
 
       {/* Filtro Venta / Renta */}
-      <View style={styles.operacionRow}>
+      <View style={[styles.operacionRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>
         {([null, 'venta', 'renta'] as const).map((op) => {
           const activo = operacionFiltro === op
           const label = op === null ? 'Todos' : op === 'venta' ? 'Venta' : 'Renta'
@@ -283,7 +285,7 @@ export default function AdminCRM() {
       </View>
 
       {/* Pipeline chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pipelineScroll} contentContainerStyle={styles.pipelineContent}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.pipelineScroll, { backgroundColor: c.card, borderBottomColor: c.border }]} contentContainerStyle={styles.pipelineContent}>
         <TouchableOpacity
           style={[styles.pipelineChip, estadoFiltro === null && styles.pipelineChipAll]}
           onPress={() => setEstadoFiltro(null)}
@@ -320,11 +322,12 @@ export default function AdminCRM() {
 
       {/* Búsqueda + botón exportar + botón nuevo */}
       <View style={styles.searchRow}>
-        <View style={styles.searchWrap}>
+        <View style={[styles.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
           <Ionicons name="search-outline" size={16} color="#9eafb2" style={{ marginRight: 8 }} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: c.inputText }]}
             placeholder="Buscar cliente o asesor..."
+            placeholderTextColor={c.placeholder}
             value={busqueda}
             onChangeText={setBusqueda}
             autoCapitalize="none"
@@ -362,7 +365,7 @@ export default function AdminCRM() {
               <View key={sec.title} style={styles.seccion}>
                 {/* Cabecera del prospectador */}
                 <TouchableOpacity
-                  style={styles.secHeader}
+                  style={[styles.secHeader, { backgroundColor: c.card }]}
                   onPress={() => setSeccionesColapsadas((prev) => {
                     const s = new Set(prev)
                     s.has(sec.title) ? s.delete(sec.title) : s.add(sec.title)
@@ -389,7 +392,7 @@ export default function AdminCRM() {
                   return (
                     <TouchableOpacity
                       key={item.id}
-                      style={styles.card}
+                      style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}
                       onPress={() => router.push(`/(admin)/detalle-cliente?id=${item.id}`)}
                       activeOpacity={0.82}
                     >
@@ -400,7 +403,7 @@ export default function AdminCRM() {
                             <Text style={[styles.avatarText, { color: info.color }]}>{initials}</Text>
                           </View>
                           <View style={styles.cardInfo}>
-                            <Text style={styles.cardNombre} numberOfLines={1}>{item.nombre}</Text>
+                            <Text style={[styles.cardNombre, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
                             <Text style={styles.cardSub} numberOfLines={1}>
                               {item.empresa ? item.empresa : item.telefono}
                             </Text>
@@ -462,7 +465,7 @@ export default function AdminCRM() {
       {/* Modal nuevo cliente */}
       <Modal visible={modalNuevo} animationType="slide" transparent onRequestClose={() => setModalNuevo(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { backgroundColor: c.card }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitulo}>Nuevo cliente</Text>
               <TouchableOpacity onPress={() => setModalNuevo(false)}>
@@ -471,16 +474,16 @@ export default function AdminCRM() {
             </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <Text style={styles.mLabel}>Nombre *</Text>
-              <TextInput style={styles.mInput} placeholder="Nombre completo" value={nuevoNombre} onChangeText={setNuevoNombre} autoCapitalize="words" />
+              <TextInput style={[styles.mInput, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]} placeholder="Nombre completo" value={nuevoNombre} onChangeText={setNuevoNombre} autoCapitalize="words" />
 
               <Text style={styles.mLabel}>Teléfono *</Text>
-              <TextInput style={styles.mInput} placeholder="10 dígitos" value={nuevoTelefono} onChangeText={setNuevoTelefono} keyboardType="phone-pad" />
+              <TextInput style={[styles.mInput, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]} placeholder="10 dígitos" value={nuevoTelefono} onChangeText={setNuevoTelefono} keyboardType="phone-pad" />
 
               <Text style={styles.mLabel}>Email</Text>
-              <TextInput style={styles.mInput} placeholder="correo@ejemplo.com" value={nuevoEmail} onChangeText={setNuevoEmail} keyboardType="email-address" autoCapitalize="none" />
+              <TextInput style={[styles.mInput, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]} placeholder="correo@ejemplo.com" value={nuevoEmail} onChangeText={setNuevoEmail} keyboardType="email-address" autoCapitalize="none" />
 
               <Text style={styles.mLabel}>Empresa</Text>
-              <TextInput style={styles.mInput} placeholder="Empresa (opcional)" value={nuevoEmpresa} onChangeText={setNuevoEmpresa} />
+              <TextInput style={[styles.mInput, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]} placeholder="Empresa (opcional)" value={nuevoEmpresa} onChangeText={setNuevoEmpresa} />
 
               <Text style={styles.mLabel}>Tipo de operación</Text>
               <View style={styles.mRow}>
@@ -637,7 +640,7 @@ const styles = StyleSheet.create({
   seccion: { marginHorizontal: 12, marginTop: 14 },
   secHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 6,
+    borderRadius: 14, padding: 14, marginBottom: 6,
     shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 5, elevation: 2,
   },
   secHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
@@ -651,9 +654,9 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    backgroundColor: '#fff', borderRadius: 14, marginBottom: 8,
+    borderRadius: 14, marginBottom: 8,
     flexDirection: 'row', overflow: 'hidden',
-    borderWidth: 1, borderColor: '#e8eef0',
+    borderWidth: 1,
     shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 1,
   },
   cardAccent: { width: 4, flexShrink: 0 },
@@ -695,11 +698,11 @@ const styles = StyleSheet.create({
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40, maxHeight: '90%' },
+  modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e' },
   mLabel: { fontSize: 11, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6, marginTop: 14 },
-  mInput: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1a2e30', backgroundColor: '#f5f7f8' },
+  mInput: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
   mRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   mChip: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
   mChipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },

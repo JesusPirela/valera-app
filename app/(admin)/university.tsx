@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 type Stats = {
   total_cursos: number
@@ -34,6 +35,7 @@ function confirmar(msg: string): Promise<boolean> {
 }
 
 export default function AdminUniversity() {
+  const c = useColors()
   const [stats, setStats] = useState<Stats | null>(null)
   const [cursos, setCursos] = useState<CursoAdmin[]>([])
   const [loading, setLoading] = useState(true)
@@ -93,7 +95,7 @@ export default function AdminUniversity() {
   }
 
   return (
-    <ScrollView style={estilos.container} contentContainerStyle={{ paddingBottom: 48 }}>
+    <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 48 }}>
       {/* Header */}
       <View style={estilos.header}>
         <TouchableOpacity onPress={() => router.back()}>
@@ -114,10 +116,10 @@ export default function AdminUniversity() {
         <>
           {/* Stats */}
           <View style={estilos.statsGrid}>
-            <StatCard icon="📚" label="Total cursos"   value={stats?.total_cursos ?? 0} />
-            <StatCard icon="✅" label="Publicados"     value={stats?.cursos_publicados ?? 0} color="#2e7d32" />
-            <StatCard icon="🏆" label="Certificados"  value={stats?.total_cert ?? 0} color="#c9a84c" />
-            <StatCard icon="⭐" label="Puntos dados"  value={stats?.total_puntos ?? 0} color="#6a1b9a" />
+            <StatCard icon="📚" label="Total cursos"   value={stats?.total_cursos ?? 0} bg={c.card} />
+            <StatCard icon="✅" label="Publicados"     value={stats?.cursos_publicados ?? 0} color="#2e7d32" bg={c.card} />
+            <StatCard icon="🏆" label="Certificados"  value={stats?.total_cert ?? 0} color="#c9a84c" bg={c.card} />
+            <StatCard icon="⭐" label="Puntos dados"  value={stats?.total_puntos ?? 0} color="#6a1b9a" bg={c.card} />
           </View>
 
           {/* Entregas pendientes — acceso rápido */}
@@ -134,31 +136,33 @@ export default function AdminUniversity() {
           )}
 
           <TouchableOpacity
-            style={estilos.btnEntregasLink}
+            style={[estilos.btnEntregasLink, { backgroundColor: c.card, borderColor: '#1a6470' }]}
             onPress={() => router.push('/(admin)/university-entregas')}
           >
             <Text style={estilos.btnEntregasLinkText}>📥 Ver todas las entregas de tareas</Text>
           </TouchableOpacity>
 
           {/* ── Config video de introducción ── */}
-          <View style={estilos.configCard}>
-            <Text style={estilos.configTitle}>🎬 Video de introducción</Text>
-            <Text style={estilos.configSub}>Este video aparece como pop-up cuando los prospectadores entran por primera vez a Valera University.</Text>
+          <View style={[estilos.configCard, { backgroundColor: c.card, borderColor: c.border }]}>
+            <Text style={[estilos.configTitle, { color: c.text }]}>🎬 Video de introducción</Text>
+            <Text style={[estilos.configSub, { color: c.textMute }]}>Este video aparece como pop-up cuando los prospectadores entran por primera vez a Valera University.</Text>
 
-            <Text style={estilos.label}>Título del video</Text>
+            <Text style={[estilos.label, { color: c.textSub }]}>Título del video</Text>
             <TextInput
-              style={estilos.input}
+              style={[estilos.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               value={introTitulo}
               onChangeText={setIntroTitulo}
               placeholder="Bienvenido a Valera University"
+              placeholderTextColor={c.placeholder}
             />
 
-            <Text style={estilos.label}>URL de YouTube</Text>
+            <Text style={[estilos.label, { color: c.textSub }]}>URL de YouTube</Text>
             <TextInput
-              style={estilos.input}
+              style={[estilos.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               value={introUrl}
               onChangeText={setIntroUrl}
               placeholder="https://youtu.be/... o https://youtube.com/watch?v=..."
+              placeholderTextColor={c.placeholder}
               autoCapitalize="none"
             />
 
@@ -178,14 +182,14 @@ export default function AdminUniversity() {
 
           {/* Ranking */}
           {stats?.ranking && stats.ranking.length > 0 && (
-            <View style={estilos.rankCard}>
+            <View style={[estilos.rankCard, { backgroundColor: c.card, borderColor: c.border }]}>
               <Text style={estilos.sectionTitle}>🏅 Top alumnos</Text>
               {stats.ranking.slice(0, 5).map((r, i) => (
-                <View key={i} style={estilos.rankRow}>
+                <View key={i} style={[estilos.rankRow, { borderBottomColor: c.divider }]}>
                   <Text style={estilos.rankPos}>#{i + 1}</Text>
-                  <Text style={estilos.rankNombre}>{r.nombre ?? 'Usuario'}</Text>
-                  <Text style={estilos.rankPuntos}>⭐ {r.puntos} pts</Text>
-                  <Text style={estilos.rankCerts}>🏆 {r.certs}</Text>
+                  <Text style={[estilos.rankNombre, { color: c.text }]}>{r.nombre ?? 'Usuario'}</Text>
+                  <Text style={[estilos.rankPuntos, { color: c.textMute }]}>⭐ {r.puntos} pts</Text>
+                  <Text style={[estilos.rankCerts, { color: c.textMute }]}>🏆 {r.certs}</Text>
                 </View>
               ))}
             </View>
@@ -209,15 +213,15 @@ export default function AdminUniversity() {
             </View>
           ) : (
             cursos.map((curso) => (
-              <View key={curso.id} style={estilos.cursoCard}>
-                <View style={estilos.cursoHeader}>
+              <View key={curso.id} style={[estilos.cursoCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={[estilos.cursoHeader, { borderBottomColor: c.divider }]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={estilos.cursoTitulo}>{curso.titulo}</Text>
+                    <Text style={[estilos.cursoTitulo, { color: c.text }]}>{curso.titulo}</Text>
                     <View style={estilos.cursoMeta}>
-                      <Text style={estilos.cursoMetaText}>{curso.categoria}</Text>
-                      <Text style={estilos.cursoMetaText}>· {curso.nivel}</Text>
-                      <Text style={estilos.cursoMetaText}>· {curso.totalLecciones} lecciones</Text>
-                      <Text style={estilos.cursoMetaText}>· 🏆 {curso.totalCerts}</Text>
+                      <Text style={[estilos.cursoMetaText, { color: c.textMute }]}>{curso.categoria}</Text>
+                      <Text style={[estilos.cursoMetaText, { color: c.textMute }]}>· {curso.nivel}</Text>
+                      <Text style={[estilos.cursoMetaText, { color: c.textMute }]}>· {curso.totalLecciones} lecciones</Text>
+                      <Text style={[estilos.cursoMetaText, { color: c.textMute }]}>· 🏆 {curso.totalCerts}</Text>
                     </View>
                   </View>
                 </View>
@@ -247,9 +251,9 @@ export default function AdminUniversity() {
   )
 }
 
-function StatCard({ icon, label, value, color = '#1a6470' }: { icon: string; label: string; value: number; color?: string }) {
+function StatCard({ icon, label, value, color = '#1a6470', bg }: { icon: string; label: string; value: number; color?: string; bg?: string }) {
   return (
-    <View style={[estilos.statCard, { borderColor: color }]}>
+    <View style={[estilos.statCard, { borderColor: color }, bg ? { backgroundColor: bg } : {}]}>
       <Text style={estilos.statIcon}>{icon}</Text>
       <Text style={[estilos.statValue, { color }]}>{value.toLocaleString()}</Text>
       <Text style={estilos.statLabel}>{label}</Text>
@@ -258,7 +262,7 @@ function StatCard({ icon, label, value, color = '#1a6470' }: { icon: string; lab
 }
 
 const estilos = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f4f5' },
+  container: { flex: 1 },
   header: { backgroundColor: '#1a6470', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
   backText: { color: '#c9a84c', fontSize: 14, fontWeight: '600', marginBottom: 12 },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

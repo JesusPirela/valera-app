@@ -6,15 +6,13 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import Svg, { Rect, Text as SvgText, Line } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 type ConexionRow = { user_id: string; nombre: string; fecha: string; minutos: number }
 type UserConexion = { user_id: string; nombre: string; dias: { fecha: string; minutos: number }[] }
 
-const DARK  = '#f5f5f5'
-const CARD  = '#fff'
 const TEAL  = '#1a6470'
 const GOLD  = '#c9a84c'
-const BORDER = '#eee'
 
 function formatMinutos(min: number): string {
   if (min < 60) return `${min}m`
@@ -66,7 +64,6 @@ function UserBarChart({ nombre, dias, width: W }: { nombre: string; dias: { fech
           const x    = padL + i * gap + (gap - barW) / 2
           const barH = Math.max(2, (d.minutos / maxMin) * chartH)
           const y    = padT + chartH - barH
-          const dia  = new Date(d.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
           return (
             <Rect key={d.fecha} x={x} y={y} width={barW} height={barH} rx={2} fill={TEAL} opacity={0.8} />
           )
@@ -86,6 +83,7 @@ function UserBarChart({ nombre, dias, width: W }: { nombre: string; dias: { fech
 }
 
 export default function ConexionUsuarios() {
+  const c = useColors()
   const [usuarios, setUsuarios]   = useState<UserConexion[]>([])
   const [periodo, setPeriodo]     = useState<1 | 7 | 30>(7)
   const [loading, setLoading]     = useState(true)
@@ -135,24 +133,24 @@ export default function ConexionUsuarios() {
   }
 
   return (
-    <ScrollView style={ss.container} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView style={[ss.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 40 }}>
       <TouchableOpacity style={ss.backBtn} onPress={() => router.back()}>
         <Text style={ss.backTxt}>← Volver</Text>
       </TouchableOpacity>
 
       <View style={ss.header}>
         <View>
-          <Text style={ss.title}>Tiempo conectado</Text>
-          <Text style={ss.sub}>Horas de conexión por prospectador</Text>
+          <Text style={[ss.title, { color: c.text }]}>Tiempo conectado</Text>
+          <Text style={[ss.sub, { color: c.textMute }]}>Horas de conexión por prospectador</Text>
         </View>
         <View style={ss.periodoRow}>
           {([1, 7, 30] as const).map(p => (
             <TouchableOpacity
               key={p}
-              style={[ss.periodoPill, periodo === p && ss.periodoPillActive]}
+              style={[ss.periodoPill, { backgroundColor: c.card }, periodo === p && ss.periodoPillActive]}
               onPress={() => cambiarPeriodo(p)}
             >
-              <Text style={[ss.periodoPillTxt, periodo === p && ss.periodoPillActiveTxt]}>
+              <Text style={[ss.periodoPillTxt, { color: c.textMute }, periodo === p && ss.periodoPillActiveTxt]}>
                 {p === 1 ? 'Hoy' : `${p} días`}
               </Text>
             </TouchableOpacity>
@@ -168,22 +166,22 @@ export default function ConexionUsuarios() {
         </View>
       ) : usuarios.length === 0 ? (
         <View style={ss.empty}>
-          <Text style={ss.emptyTxt}>Sin conexiones registradas en este periodo.</Text>
-          <Text style={[ss.emptyTxt, { fontSize: 12, marginTop: 6 }]}>
+          <Text style={[ss.emptyTxt, { color: c.textMute }]}>Sin conexiones registradas en este periodo.</Text>
+          <Text style={[ss.emptyTxt, { fontSize: 12, marginTop: 6, color: c.textMute }]}>
             El tracking comenzó hoy — los datos se acumulan con cada sesión.
           </Text>
         </View>
       ) : (
         <>
           {/* Resumen tabla */}
-          <View style={ss.card}>
+          <View style={[ss.card, { backgroundColor: c.card, borderColor: c.border }]}>
             <Text style={ss.cardTitle}>Resumen</Text>
             {usuarios.map(u => {
               const total = u.dias.reduce((s, d) => s + d.minutos, 0)
               const maxGlobal = Math.max(...usuarios.map(x => x.dias.reduce((s, d) => s + d.minutos, 0)))
               return (
                 <View key={u.user_id} style={ss.rankRow}>
-                  <Text style={ss.rankNombre} numberOfLines={1}>{u.nombre}</Text>
+                  <Text style={[ss.rankNombre, { color: c.text }]} numberOfLines={1}>{u.nombre}</Text>
                   <MiniBar minutos={total} maxMin={maxGlobal} />
                   <Text style={ss.rankTotal}>{formatMinutos(total)}</Text>
                 </View>
@@ -192,7 +190,7 @@ export default function ConexionUsuarios() {
           </View>
 
           {/* Gráficas por usuario */}
-          <View style={ss.card}>
+          <View style={[ss.card, { backgroundColor: c.card, borderColor: c.border }]}>
             <Text style={ss.cardTitle}>Detalle por usuario</Text>
             {usuarios.map(u => (
               <UserBarChart key={u.user_id} nombre={u.nombre} dias={u.dias} width={chartW} />
@@ -205,7 +203,7 @@ export default function ConexionUsuarios() {
 }
 
 const ss = StyleSheet.create({
-  container: { flex: 1, backgroundColor: DARK },
+  container: { flex: 1 },
   backBtn:   { padding: 16, paddingBottom: 0 },
   backTxt:   { color: TEAL, fontSize: 15, fontWeight: '600' },
 
@@ -213,25 +211,25 @@ const ss = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     padding: 16, paddingTop: 8,
   },
-  title: { fontSize: 20, fontWeight: '900', color: '#1a1a2e' },
-  sub:   { fontSize: 12, color: '#888', marginTop: 2 },
+  title: { fontSize: 20, fontWeight: '900' },
+  sub:   { fontSize: 12, marginTop: 2 },
 
   periodoRow:        { flexDirection: 'row', gap: 6 },
-  periodoPill:       { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: '#e8eef0' },
+  periodoPill:       { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   periodoPillActive: { backgroundColor: TEAL },
-  periodoPillTxt:    { fontSize: 12, color: '#888', fontWeight: '600' },
+  periodoPillTxt:    { fontSize: 12, fontWeight: '600' },
   periodoPillActiveTxt: { color: '#fff' },
 
-  card: { backgroundColor: CARD, borderRadius: 16, margin: 16, marginBottom: 0, padding: 16, borderWidth: 1, borderColor: BORDER },
+  card: { borderRadius: 16, margin: 16, marginBottom: 0, padding: 16, borderWidth: 1 },
   cardTitle: { fontSize: 14, fontWeight: '800', color: TEAL, marginBottom: 14 },
 
   rankRow:    { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  rankNombre: { width: 110, fontSize: 12, color: '#1a1a2e', fontWeight: '600' },
+  rankNombre: { width: 110, fontSize: 12, fontWeight: '600' },
   rankTotal:  { fontSize: 12, fontWeight: '800', color: TEAL, width: 48, textAlign: 'right' },
 
-  userName:  { fontSize: 13, fontWeight: '700', color: '#1a1a2e', marginBottom: 0 },
-  userTotal: { fontSize: 11, color: '#888', marginBottom: 4 },
+  userName:  { fontSize: 13, fontWeight: '700', marginBottom: 0 },
+  userTotal: { fontSize: 11, marginBottom: 4 },
 
   empty:    { alignItems: 'center', justifyContent: 'center', marginTop: 60 },
-  emptyTxt: { fontSize: 15, color: '#aaa' },
+  emptyTxt: { fontSize: 15 },
 })

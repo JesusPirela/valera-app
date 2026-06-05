@@ -17,6 +17,7 @@ import {
 import { router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
 import AsesorPicker from '../../components/ui/AsesorPicker'
@@ -139,6 +140,7 @@ function parsearFicha(texto: string) {
 }
 
 export default function NuevaPropiedad() {
+  const c = useColors()
   const [titulo, setTitulo] = useState('')
   const [tituloEditado, setTituloEditado] = useState(false)
   const [descripcion, setDescripcion] = useState('')
@@ -460,7 +462,7 @@ export default function NuevaPropiedad() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView style={[styles.container, { backgroundColor: c.bg }]} keyboardShouldPersistTaps="handled">
         <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
           <Text style={styles.backBtnText}>← Volver</Text>
         </TouchableOpacity>
@@ -552,7 +554,7 @@ export default function NuevaPropiedad() {
 
         <Text style={styles.label}>Título *</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
           placeholder="Ej. Casa en Venta en Juriquilla"
           value={titulo}
           onChangeText={v => { setTitulo(v); setTituloEditado(true) }}
@@ -560,7 +562,7 @@ export default function NuevaPropiedad() {
 
         <Text style={styles.label}>Dirección *</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
           placeholder="Ej. Calle Valera 123, Piso 2"
           value={direccion}
           onChangeText={v => { setDireccion(v); setTituloEditado(false) }}
@@ -626,7 +628,7 @@ export default function NuevaPropiedad() {
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>M²</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               placeholder="Ej. 120"
               value={m2}
               onChangeText={setM2}
@@ -642,7 +644,7 @@ export default function NuevaPropiedad() {
 
         <Text style={styles.label}>Precio (MXN)</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
           placeholder="Ej. 2500000"
           value={precio}
           onChangeText={setPrecio}
@@ -699,7 +701,7 @@ export default function NuevaPropiedad() {
         </View>
         {esConstructora && (
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
             placeholder="Nombre de la constructora"
             value={nombreConstructora}
             onChangeText={setNombreConstructora}
@@ -731,19 +733,16 @@ export default function NuevaPropiedad() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, padding: 24 },
   backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
   backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
   label: { fontSize: 14, fontWeight: '600', color: '#1a6470', marginBottom: 6, marginTop: 16 },
   input: {
-    backgroundColor: '#fff',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ddd',
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#1a6470',
   },
   textArea: { height: 100, paddingTop: 12 },
   imagenPicker: {

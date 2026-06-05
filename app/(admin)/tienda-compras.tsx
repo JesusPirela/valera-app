@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 type Compra = {
   id: string
@@ -45,6 +46,7 @@ function alerta(msg: string) {
 }
 
 export default function TiendaCompras() {
+  const c = useColors()
   const [compras, setCompras]       = useState<Compra[]>([])
   const [loading, setLoading]       = useState(true)
   const [filtro, setFiltro]         = useState<'todas' | 'pendiente' | 'entregado' | 'rechazado' | 'cofre'>('pendiente')
@@ -77,11 +79,11 @@ export default function TiendaCompras() {
     setLoading(false)
   }
 
-  function abrirModal(c: Compra) {
-    setSeleccionada(c)
-    const msgDefault = esCofre(c)
-      ? `¡Felicidades! Tu premio del cofre "${c.nombre_premio ?? c.item_nombre}" está siendo procesado. El equipo Valera te contactará pronto. 🎉`
-      : (MENSAJES_DEFAULT[c.item_tipo] ?? `Tu recompensa "${c.item_nombre}" ha sido procesada. ¡Gracias por tu esfuerzo!`)
+  function abrirModal(compraArg: Compra) {
+    setSeleccionada(compraArg)
+    const msgDefault = esCofre(compraArg)
+      ? `¡Felicidades! Tu premio del cofre "${compraArg.nombre_premio ?? compraArg.item_nombre}" está siendo procesado. El equipo Valera te contactará pronto. 🎉`
+      : (MENSAJES_DEFAULT[compraArg.item_tipo] ?? `Tu recompensa "${compraArg.item_nombre}" ha sido procesada. ¡Gracias por tu esfuerzo!`)
     setMensaje(msgDefault)
     setNombreLead('')
     setTelLead('')
@@ -103,8 +105,8 @@ export default function TiendaCompras() {
     cargar()
   }
 
-  function abrirRechazo(c: Compra) {
-    setCompraRechazo(c)
+  function abrirRechazo(compraArg: Compra) {
+    setCompraRechazo(compraArg)
     setMotivoRechazo('Lo sentimos, en este momento no podemos procesar tu solicitud. Tus Valera Coins han sido reintegrados.')
     setModalRechazo(true)
   }
@@ -141,28 +143,28 @@ export default function TiendaCompras() {
     cargar()
   }
 
-  const esCofre = (c: Compra) => c.es_ruleta === true || c.costo_coins === 0
+  const esCofre = (comp: Compra) => comp.es_ruleta === true || comp.costo_coins === 0
 
-  const lista = compras.filter(c => {
-    if (filtro === 'cofre')     return esCofre(c)
-    if (filtro === 'todas')     return !esCofre(c)
-    if (filtro === 'pendiente') return !esCofre(c) && c.estado === 'pendiente'
-    if (filtro === 'entregado') return !esCofre(c) && c.estado === 'entregado'
-    if (filtro === 'rechazado') return !esCofre(c) && c.estado === 'rechazado'
+  const lista = compras.filter(comp => {
+    if (filtro === 'cofre')     return esCofre(comp)
+    if (filtro === 'todas')     return !esCofre(comp)
+    if (filtro === 'pendiente') return !esCofre(comp) && comp.estado === 'pendiente'
+    if (filtro === 'entregado') return !esCofre(comp) && comp.estado === 'entregado'
+    if (filtro === 'rechazado') return !esCofre(comp) && comp.estado === 'rechazado'
     return true
   })
-  const pendientes      = compras.filter(c => !esCofre(c) && c.estado === 'pendiente').length
-  const cofrePendientes = compras.filter(c =>  esCofre(c) && c.estado === 'pendiente').length
-  const rechazadas      = compras.filter(c => c.estado === 'rechazado').length
+  const pendientes      = compras.filter(comp => !esCofre(comp) && comp.estado === 'pendiente').length
+  const cofrePendientes = compras.filter(comp =>  esCofre(comp) && comp.estado === 'pendiente').length
+  const rechazadas      = compras.filter(comp => comp.estado === 'rechazado').length
 
   if (loading) return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg }}>
       <ActivityIndicator size="large" color="#1a6470" />
     </View>
   )
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f0f4f5' }}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
       {/* Header */}
       <View style={s.header}>
         <View>
@@ -177,7 +179,7 @@ export default function TiendaCompras() {
       </View>
 
       {/* Filtros */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtroScroll} contentContainerStyle={s.filtroRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[s.filtroScroll, { backgroundColor: c.card, borderBottomColor: c.border }]} contentContainerStyle={s.filtroRow}>
         {([
           ['todas',     'Todas'],
           ['pendiente', `⏳ Pendientes${pendientes > 0 ? ` (${pendientes})` : ''}`],
@@ -200,49 +202,49 @@ export default function TiendaCompras() {
           <View style={s.emptyBox}>
             <Text style={s.emptyTxt}>No hay compras {filtro === 'pendiente' ? 'pendientes' : filtro === 'entregado' ? 'entregadas' : ''}.</Text>
           </View>
-        ) : lista.map(c => {
-          const esCofr = esCofre(c)
-          const nombre = esCofr ? (c.nombre_premio ?? c.item_nombre ?? 'Premio cofre') : c.item_nombre
-          const icono  = esCofr ? (c.es_milestone ? '🏆' : '🎁') : c.item_icono
+        ) : lista.map(compra => {
+          const esCofr = esCofre(compra)
+          const nombre = esCofr ? (compra.nombre_premio ?? compra.item_nombre ?? 'Premio cofre') : compra.item_nombre
+          const icono  = esCofr ? (compra.es_milestone ? '🏆' : '🎁') : compra.item_icono
           return (
-          <View key={c.id} style={[s.card, c.estado === 'entregado' && s.cardEntregada]}>
+          <View key={compra.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }, compra.estado === 'entregado' && s.cardEntregada]}>
             <View style={s.cardTop}>
               <Text style={s.itemIcono}>{icono}</Text>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <Text style={s.itemNombre}>{nombre}</Text>
+                  <Text style={[s.itemNombre, { color: c.text }]}>{nombre}</Text>
                   {esCofr && (
                     <View style={{ backgroundColor: '#1a1500', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: '#c9a84c66' }}>
-                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#c9a84c', letterSpacing: 1 }}>{c.es_milestone ? 'NIVEL' : 'COFRE'}</Text>
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#c9a84c', letterSpacing: 1 }}>{compra.es_milestone ? 'NIVEL' : 'COFRE'}</Text>
                     </View>
                   )}
                 </View>
-                <Text style={s.userName}>👤 {c.user_nombre}</Text>
+                <Text style={[s.userName, { color: c.textSub }]}>👤 {compra.user_nombre}</Text>
               </View>
-              <View style={[s.estadoBadge, c.estado === 'entregado' ? s.badgeOk : c.estado === 'rechazado' ? s.badgeRechazado : s.badgePending]}>
+              <View style={[s.estadoBadge, compra.estado === 'entregado' ? s.badgeOk : compra.estado === 'rechazado' ? s.badgeRechazado : s.badgePending]}>
                 <Text style={s.estadoTxt}>
-                  {c.estado === 'entregado' ? '✅ Entregado' : c.estado === 'rechazado' ? '❌ Rechazado' : '⏳ Pendiente'}
+                  {compra.estado === 'entregado' ? '✅ Entregado' : compra.estado === 'rechazado' ? '❌ Rechazado' : '⏳ Pendiente'}
                 </Text>
               </View>
             </View>
 
             <View style={s.cardMeta}>
-              <Text style={s.metaTxt}>{esCofr ? '🎁 Premio de cofre' : `💰 ${c.costo_coins.toLocaleString()} coins`}</Text>
-              <Text style={s.metaTxt}>
-                {new Date(c.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              <Text style={[s.metaTxt, { color: c.textMute }]}>{esCofr ? '🎁 Premio de cofre' : `💰 ${compra.costo_coins.toLocaleString()} coins`}</Text>
+              <Text style={[s.metaTxt, { color: c.textMute }]}>
+                {new Date(compra.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </Text>
             </View>
 
-            {c.estado === 'entregado' && c.notas_admin ? (
-              <Text style={s.notaAdmin} numberOfLines={2}>📝 {c.notas_admin}</Text>
+            {compra.estado === 'entregado' && compra.notas_admin ? (
+              <Text style={[s.notaAdmin, { color: c.textSub }]} numberOfLines={2}>📝 {compra.notas_admin}</Text>
             ) : null}
 
-            {c.estado === 'pendiente' && (
+            {compra.estado === 'pendiente' && (
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-                <TouchableOpacity style={[s.btnAtender, { flex: 1 }]} onPress={() => abrirModal(c)}>
+                <TouchableOpacity style={[s.btnAtender, { flex: 1 }]} onPress={() => abrirModal(compra)}>
                   <Text style={s.btnAtenderTxt}>✅ Atender</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.btnAtender, s.btnRechazar]} onPress={() => abrirRechazo(c)}>
+                <TouchableOpacity style={[s.btnAtender, s.btnRechazar]} onPress={() => abrirRechazo(compra)}>
                   <Text style={s.btnAtenderTxt}>❌ Rechazar</Text>
                 </TouchableOpacity>
               </View>
@@ -255,7 +257,7 @@ export default function TiendaCompras() {
       {/* Modal de atención */}
       <Modal visible={modal} animationType="slide" transparent onRequestClose={() => setModal(false)}>
         <View style={s.modalOverlay}>
-          <ScrollView style={s.modalSheet} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+          <ScrollView style={[s.modalSheet, { backgroundColor: c.card }]} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
             {seleccionada && (
               <>
                 <Text style={s.modalTitle}>Atender compra</Text>
@@ -281,7 +283,7 @@ export default function TiendaCompras() {
                     </Text>
                     <Text style={s.fieldLabel}>Nombre del lead *</Text>
                     <TextInput
-                      style={s.input}
+                      style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                       value={nombreLead}
                       onChangeText={setNombreLead}
                       placeholder="Nombre completo"
@@ -289,7 +291,7 @@ export default function TiendaCompras() {
                     />
                     <Text style={s.fieldLabel}>Teléfono *</Text>
                     <TextInput
-                      style={s.input}
+                      style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                       value={telLead}
                       onChangeText={setTelLead}
                       placeholder="442 000 0000"
@@ -397,7 +399,7 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
 
-  filtroScroll: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e8eef0' },
+  filtroScroll: { flexGrow: 0, borderBottomWidth: 1 },
   filtroRow:    { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' },
   filtroBtn:    { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
   filtroBtnActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
@@ -408,8 +410,8 @@ const s = StyleSheet.create({
   emptyTxt: { fontSize: 15, color: '#aaa' },
 
   card: {
-    backgroundColor: '#fff', borderRadius: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: '#e0eaec', padding: 14,
+    borderRadius: 14, marginBottom: 10,
+    borderWidth: 1, padding: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2,
   },
   cardEntregada: { opacity: 0.75, borderColor: '#c8e6c9' },
@@ -440,7 +442,7 @@ const s = StyleSheet.create({
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 20, maxHeight: '92%',
   },
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#1a6470', marginBottom: 16 },
@@ -461,8 +463,8 @@ const s = StyleSheet.create({
 
   fieldLabel: { fontSize: 12, fontWeight: '700', color: '#666', marginBottom: 5, marginTop: 8, textTransform: 'uppercase' },
   input: {
-    backgroundColor: '#f5f8f9', borderRadius: 10, borderWidth: 1, borderColor: '#dde8e9',
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1a1a2e',
+    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
   },
 
   btnRegistrarLead: {

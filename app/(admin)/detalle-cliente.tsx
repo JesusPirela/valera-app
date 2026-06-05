@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 import { ESTADOS } from '../(prospectador)/crm'
 
 function abrirWhatsApp(telefono: string, nombre: string) {
@@ -90,6 +91,7 @@ function formatFechaHora(fechaISO: string) {
 }
 
 export default function AdminDetalleCliente() {
+  const c = useColors()
   const { id } = useLocalSearchParams<{ id: string }>()
 
   const [cliente, setCliente] = useState<Cliente | null>(null)
@@ -108,19 +110,19 @@ export default function AdminDetalleCliente() {
 
   async function cargar() {
     setLoading(true)
-    const [{ data: c }, { data: i }, { data: r }] = await Promise.all([
+    const [{ data: cData }, { data: i }, { data: r }] = await Promise.all([
       supabase.from('clientes').select('*').eq('id', id).single(),
       supabase.from('interacciones').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
       supabase.from('recordatorios').select('*').eq('cliente_id', id).order('fecha_hora', { ascending: true }),
     ])
-    if (c) {
+    if (cData) {
       let responsableNombre: string | null = null
-      if (c.responsable_id) {
+      if (cData.responsable_id) {
         const { data: perfil } = await supabase
-          .from('profiles').select('nombre').eq('id', c.responsable_id).maybeSingle()
+          .from('profiles').select('nombre').eq('id', cData.responsable_id).maybeSingle()
         responsableNombre = perfil?.nombre ?? null
       }
-      setCliente({ ...c, responsable_nombre: responsableNombre })
+      setCliente({ ...cData, responsable_nombre: responsableNombre })
     }
     setInteracciones(i ?? [])
     setRecordatorios(r ?? [])
@@ -186,8 +188,8 @@ export default function AdminDetalleCliente() {
 
   if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
   if (!cliente) return (
-    <View style={styles.container}>
-      <Text style={{ padding: 24, color: '#aaa' }}>Cliente no encontrado.</Text>
+    <View style={[styles.container, { backgroundColor: c.bg }]}>
+      <Text style={{ padding: 24, color: c.textMute }}>Cliente no encontrado.</Text>
     </View>
   )
 
@@ -196,7 +198,7 @@ export default function AdminDetalleCliente() {
   const recCompletados = recordatorios.filter((r) => r.completado)
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={styles.content}>
 
       {/* Back + acciones rápidas */}
       <View style={styles.topBar}>
@@ -217,10 +219,10 @@ export default function AdminDetalleCliente() {
       </View>
 
       {/* Info principal */}
-      <View style={styles.clienteCard}>
+      <View style={[styles.clienteCard, { backgroundColor: c.card }]}>
         <View style={styles.clienteTop}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.clienteNombre}>{cliente.nombre}</Text>
+            <Text style={[styles.clienteNombre, { color: c.text }]}>{cliente.nombre}</Text>
             {cliente.empresa ? <Text style={styles.clienteEmpresa}>{cliente.empresa}</Text> : null}
           </View>
           <View style={[styles.estadoBadge, { backgroundColor: info.bg }]}>
@@ -459,7 +461,7 @@ export default function AdminDetalleCliente() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2f5f8' },
+  container: { flex: 1 },
   content: { padding: 16, paddingBottom: 52 },
 
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
@@ -489,11 +491,11 @@ const styles = StyleSheet.create({
   readonlyText: { fontSize: 12, color: '#b8860b', fontWeight: '600' },
 
   clienteCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14,
+    borderRadius: 16, padding: 16, marginBottom: 14,
     shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
   },
   clienteTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14, gap: 12 },
-  clienteNombre: { fontSize: 20, fontWeight: '800', color: '#1a1a2e' },
+  clienteNombre: { fontSize: 20, fontWeight: '800' },
   clienteEmpresa: { fontSize: 13, color: '#9eafb2', marginTop: 3 },
   estadoBadge: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, flexShrink: 0 },
   estadoText: { fontSize: 12, fontWeight: '700' },

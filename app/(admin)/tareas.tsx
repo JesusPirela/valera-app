@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 type UserProfile = { id: string; nombre: string }
 
@@ -140,6 +141,7 @@ function CalendarioPicker({ fecha, onChange }: { fecha: Date; onChange: (d: Date
 
 // ─── Pantalla principal ──────────────────────────────────────────────────────
 export default function AdminTareas() {
+  const c = useColors()
   const [tareas,     setTareas]     = useState<Tarea[]>([])
   const [loading,    setLoading]    = useState(true)
   const [modal,      setModal]      = useState(false)
@@ -295,12 +297,12 @@ export default function AdminTareas() {
     cargar()
   }
 
-  if (loading) return <View style={s.centered}><ActivityIndicator size="large" color="#1a6470" /></View>
+  if (loading) return <View style={[s.centered, { backgroundColor: c.bg }]}><ActivityIndicator size="large" color="#1a6470" /></View>
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f0f4f5' }}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: c.card, borderBottomColor: c.border }]}>
         <Text style={s.headerTitle}>Tareas Diarias</Text>
         <TouchableOpacity style={s.crearBtn} onPress={abrirModal}>
           <Ionicons name="add" size={18} color="#fff" />
@@ -325,17 +327,17 @@ export default function AdminTareas() {
           const abierta = expandida === tarea.id
 
           return (
-            <View key={tarea.id} style={s.card}>
+            <View key={tarea.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
               <TouchableOpacity onPress={() => setExpandida(abierta ? null : tarea.id)} activeOpacity={0.8}>
                 <View style={s.cardHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.cardTitulo}>{tarea.titulo}</Text>
-                    {tarea.descripcion ? <Text style={s.cardDesc} numberOfLines={abierta ? undefined : 1}>{tarea.descripcion}</Text> : null}
+                    <Text style={[s.cardTitulo, { color: c.text }]}>{tarea.titulo}</Text>
+                    {tarea.descripcion ? <Text style={[s.cardDesc, { color: c.textMute }]} numberOfLines={abierta ? undefined : 1}>{tarea.descripcion}</Text> : null}
                     <View style={s.chipRow}>
                       <Text style={s.tipoChip}>{TIPOS.find(t => t.key === tarea.tipo)?.label ?? tarea.tipo}</Text>
                       {tarea.meta_cantidad > 1 && <Text style={s.metaChip}>Meta: {tarea.meta_cantidad}</Text>}
                       {tarea.fecha_limite && (
-                        <Text style={s.fechaChip}>
+                        <Text style={[s.fechaChip, { color: c.textSub, backgroundColor: c.divider }]}>
                           📅 {new Date(tarea.fecha_limite).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </Text>
                       )}
@@ -346,11 +348,11 @@ export default function AdminTareas() {
                     <Text style={s.pctSub}>{completadas}/{asigs.length}</Text>
                   </View>
                 </View>
-                <View style={s.globalBar}><View style={[s.globalBarFill, { width: `${pct}%` as any }]} /></View>
+                <View style={[s.globalBar, { backgroundColor: c.border }]}><View style={[s.globalBarFill, { width: `${pct}%` as any }]} /></View>
               </TouchableOpacity>
 
               {abierta && (
-                <View style={s.listaUsuarios}>
+                <View style={[s.listaUsuarios, { borderTopColor: c.divider }]}>
                   <Text style={s.listaHeader}>Progreso por usuario</Text>
                   {asigs.length === 0 && <Text style={s.sinUsuarios}>Sin usuarios asignados</Text>}
                   {asigs.map(a => {
@@ -364,9 +366,9 @@ export default function AdminTareas() {
                           </Text>
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={s.usuarioNombre}>{a.nombre}</Text>
+                          <Text style={[s.usuarioNombre, { color: c.text }]}>{a.nombre}</Text>
                           {medible && (
-                            <View style={s.usuarioBar}>
+                            <View style={[s.usuarioBar, { backgroundColor: c.border }]}>
                               <View style={[s.usuarioBarFill, { width: `${pctU}%` as any, backgroundColor: a.completada ? '#2a8a5a' : '#1a6470' }]} />
                             </View>
                           )}
@@ -398,31 +400,31 @@ export default function AdminTareas() {
       {/* Modal crear tarea */}
       <Modal visible={modal} animationType="slide" transparent onRequestClose={() => setModal(false)}>
         <View style={s.overlay}>
-          <View style={s.sheet}>
+          <View style={[s.sheet, { backgroundColor: c.card }]}>
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitulo}>Nueva tarea</Text>
               <TouchableOpacity onPress={() => setModal(false)}>
-                <Text style={s.sheetCerrar}>✕</Text>
+                <Text style={[s.sheetCerrar, { color: c.textMute }]}>✕</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <Text style={s.fieldLabel}>Título *</Text>
-              <TextInput style={s.input} placeholder="Ej: Publicar 20 propiedades hoy" value={titulo} onChangeText={setTitulo} />
+              <TextInput style={[s.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]} placeholder="Ej: Publicar 20 propiedades hoy" placeholderTextColor={c.placeholder} value={titulo} onChangeText={setTitulo} />
 
               <Text style={s.fieldLabel}>Descripción</Text>
-              <TextInput style={[s.input, { minHeight: 60 }]} placeholder="Instrucciones adicionales..." value={descripcion} onChangeText={setDescripcion} multiline textAlignVertical="top" />
+              <TextInput style={[s.input, { minHeight: 60, borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]} placeholder="Instrucciones adicionales..." placeholderTextColor={c.placeholder} value={descripcion} onChangeText={setDescripcion} multiline textAlignVertical="top" />
 
               <Text style={s.fieldLabel}>Tipo de tarea</Text>
               {TIPOS.map(t => (
                 <TouchableOpacity
                   key={t.key}
-                  style={[s.tipoOpt, tipo === t.key && s.tipoOptActivo]}
+                  style={[s.tipoOpt, { borderColor: c.border }, tipo === t.key && s.tipoOptActivo]}
                   onPress={() => setTipo(t.key)}
                 >
                   <Ionicons name={t.icon} size={18} color={tipo === t.key ? '#fff' : '#1a6470'} />
                   <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={[s.tipoOptLabel, tipo === t.key && { color: '#fff' }]}>{t.label}</Text>
+                    <Text style={[s.tipoOptLabel, { color: c.text }, tipo === t.key && { color: '#fff' }]}>{t.label}</Text>
                     <Text style={[s.tipoOptHint, tipo === t.key && { color: 'rgba(255,255,255,0.7)' }]}>{t.hint}</Text>
                   </View>
                   {tipo === t.key && <Ionicons name="checkmark-circle" size={18} color="#c9a84c" />}
@@ -432,7 +434,7 @@ export default function AdminTareas() {
               {tipo !== 'manual' && (
                 <>
                   <Text style={s.fieldLabel}>Cantidad meta</Text>
-                  <TextInput style={s.input} placeholder="Ej: 20" value={metaCant} onChangeText={setMetaCant} keyboardType="numeric" />
+                  <TextInput style={[s.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]} placeholder="Ej: 20" placeholderTextColor={c.placeholder} value={metaCant} onChangeText={setMetaCant} keyboardType="numeric" />
                 </>
               )}
 
@@ -455,7 +457,7 @@ export default function AdminTareas() {
                 {(['todos', 'seleccion'] as const).map(op => (
                   <TouchableOpacity
                     key={op}
-                    style={[s.asignarOpt, paraQuien === op && s.asignarOptActivo]}
+                    style={[s.asignarOpt, { borderColor: c.border }, paraQuien === op && s.asignarOptActivo]}
                     onPress={() => setParaQuien(op)}
                   >
                     <Text style={[s.asignarOptTxt, paraQuien === op && { color: '#fff' }]}>
@@ -466,16 +468,16 @@ export default function AdminTareas() {
               </View>
 
               {paraQuien === 'seleccion' && (
-                <View style={s.usuariosSelect}>
+                <View style={[s.usuariosSelect, { borderColor: c.border }]}>
                   {usuarios.length === 0 && <Text style={s.sinUsuarios}>No hay usuarios registrados</Text>}
                   {usuarios.map(u => {
                     const sel = seleccionados.includes(u.id)
                     return (
-                      <TouchableOpacity key={u.id} style={[s.usuarioSelRow, sel && s.usuarioSelActivo]} onPress={() => toggleSel(u.id)}>
+                      <TouchableOpacity key={u.id} style={[s.usuarioSelRow, { borderBottomColor: c.divider }, sel && s.usuarioSelActivo]} onPress={() => toggleSel(u.id)}>
                         <View style={[s.avatarSm, { backgroundColor: sel ? '#d4f0e2' : '#e8f2f4' }]}>
                           <Text style={[s.avatarSmTxt, { color: sel ? '#2a8a5a' : '#1a6470' }]}>{(u.nombre ?? '?')[0].toUpperCase()}</Text>
                         </View>
-                        <Text style={[s.usuarioSelNombre, sel && { color: '#2a8a5a', fontWeight: '700' }]}>{u.nombre ?? 'Sin nombre'}</Text>
+                        <Text style={[s.usuarioSelNombre, { color: c.text }, sel && { color: '#2a8a5a', fontWeight: '700' }]}>{u.nombre ?? 'Sin nombre'}</Text>
                         {sel && <Ionicons name="checkmark-circle" size={18} color="#2a8a5a" />}
                       </TouchableOpacity>
                     )
@@ -533,27 +535,27 @@ const s = StyleSheet.create({
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: TEAL, marginBottom: 6 },
   emptySub: { fontSize: 14, color: '#8a9ea0', textAlign: 'center' },
-  card: { backgroundColor: '#fff', borderRadius: 16, marginBottom: 12, marginTop: 4, borderWidth: 1, borderColor: '#e0eaec', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
+  card: { borderRadius: 16, marginBottom: 12, marginTop: 4, borderWidth: 1, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 16, gap: 12 },
-  cardTitulo: { fontSize: 15, fontWeight: '700', color: '#1a2e30', marginBottom: 3 },
-  cardDesc: { fontSize: 13, color: '#888', lineHeight: 18, marginBottom: 6 },
+  cardTitulo: { fontSize: 15, fontWeight: '700', marginBottom: 3 },
+  cardDesc: { fontSize: 13, lineHeight: 18, marginBottom: 6 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   tipoChip: { fontSize: 10, fontWeight: '600', color: TEAL, backgroundColor: '#e8f2f4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   metaChip: { fontSize: 10, fontWeight: '600', color: '#6a4c00', backgroundColor: '#fff3cd', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  fechaChip: { fontSize: 10, fontWeight: '600', color: '#555', backgroundColor: '#f0f0f0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  fechaChip: { fontSize: 10, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   pctBadge: { alignItems: 'center', minWidth: 50 },
   pctText: { fontSize: 20, fontWeight: '800', color: TEAL },
   pctSub: { fontSize: 10, color: '#8a9ea0', marginTop: 1 },
-  globalBar: { height: 6, backgroundColor: '#e0eaec', marginHorizontal: 16, marginBottom: 12, borderRadius: 3 },
+  globalBar: { height: 6, marginHorizontal: 16, marginBottom: 12, borderRadius: 3 },
   globalBarFill: { height: 6, backgroundColor: GOLD, borderRadius: 3 },
-  listaUsuarios: { borderTopWidth: 1, borderTopColor: '#f0f4f5', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  listaUsuarios: { borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
   listaHeader: { fontSize: 11, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
   sinUsuarios: { fontSize: 13, color: '#aaa', fontStyle: 'italic', textAlign: 'center', paddingVertical: 8 },
   usuarioRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   avatarTxt: { fontSize: 14, fontWeight: '700' },
-  usuarioNombre: { fontSize: 13, fontWeight: '600', color: '#1a2e30', marginBottom: 3 },
-  usuarioBar: { height: 5, backgroundColor: '#e0eaec', borderRadius: 3 },
+  usuarioNombre: { fontSize: 13, fontWeight: '600', marginBottom: 3 },
+  usuarioBar: { height: 5, borderRadius: 3 },
   usuarioBarFill: { height: 5, borderRadius: 3 },
   statusWrap: { minWidth: 60, alignItems: 'flex-end' },
   doneBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#d4f0e2', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
@@ -562,30 +564,30 @@ const s = StyleSheet.create({
   desactivarBtn: { marginTop: 8, paddingVertical: 8, alignItems: 'center' },
   desactivarTxt: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 36, maxHeight: '94%' },
+  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 36, maxHeight: '94%' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   sheetTitulo: { fontSize: 18, fontWeight: '800', color: TEAL },
-  sheetCerrar: { fontSize: 18, color: '#888', paddingHorizontal: 6 },
+  sheetCerrar: { fontSize: 18, paddingHorizontal: 6 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6, marginTop: 14 },
-  input: { borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1a2e30', backgroundColor: '#fafcfc' },
-  tipoOpt: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
+  input: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
+  tipoOpt: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
   tipoOptActivo: { backgroundColor: TEAL, borderColor: TEAL },
-  tipoOptLabel: { fontSize: 14, fontWeight: '700', color: '#1a2e30' },
+  tipoOptLabel: { fontSize: 14, fontWeight: '700' },
   tipoOptHint: { fontSize: 11, color: '#8a9ea0', marginTop: 1 },
   fechaToggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 },
   fechaToggleBtn: { borderWidth: 1.5, borderColor: TEAL, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   fechaToggleBtnActivo: { backgroundColor: TEAL },
   fechaToggleTxt: { fontSize: 12, fontWeight: '700', color: TEAL },
   asignarRow: { flexDirection: 'row', gap: 8 },
-  asignarOpt: { flex: 1, alignItems: 'center', borderWidth: 1.5, borderColor: '#e0eaec', borderRadius: 10, paddingVertical: 10 },
+  asignarOpt: { flex: 1, alignItems: 'center', borderWidth: 1.5, borderRadius: 10, paddingVertical: 10 },
   asignarOptActivo: { backgroundColor: TEAL, borderColor: TEAL },
   asignarOptTxt: { fontSize: 13, fontWeight: '700', color: TEAL },
-  usuariosSelect: { marginTop: 10, borderWidth: 1, borderColor: '#e0eaec', borderRadius: 12, overflow: 'hidden' },
-  usuarioSelRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f0f4f5' },
+  usuariosSelect: { marginTop: 10, borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
+  usuarioSelRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1 },
   usuarioSelActivo: { backgroundColor: '#f3fbf6' },
   avatarSm: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   avatarSmTxt: { fontSize: 12, fontWeight: '700' },
-  usuarioSelNombre: { flex: 1, fontSize: 14, color: '#1a2e30' },
+  usuarioSelNombre: { flex: 1, fontSize: 14 },
   guardarBtn: { backgroundColor: GOLD, borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 20 },
   guardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
 })
