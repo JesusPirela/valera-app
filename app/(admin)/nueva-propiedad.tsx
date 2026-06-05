@@ -188,17 +188,18 @@ export default function NuevaPropiedad() {
   }, [tipo, operacion, direccion, tituloEditado])
 
   useEffect(() => {
-    if (!geoQuery.trim() || geoQuery.length < 4) { setGeoResults([]); return }
+    if (!geoQuery.trim() || geoQuery.length < 3) { setGeoResults([]); return }
     const t = setTimeout(async () => {
       setGeoLoading(true)
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geoQuery + ' Mexico')}&format=json&limit=5&countrycodes=mx`
         )
-        setGeoResults(await res.json())
+        const data = await res.json()
+        setGeoResults(Array.isArray(data) ? data : [])
       } catch { setGeoResults([]) }
       finally { setGeoLoading(false) }
-    }, 600)
+    }, 400)
     return () => clearTimeout(t)
   }, [geoQuery])
 
@@ -606,6 +607,9 @@ export default function NuevaPropiedad() {
           />
           {geoLoading && <ActivityIndicator size="small" color="#1976D2" style={{ marginLeft: 8 }} />}
         </View>
+        {geoLoading && (
+          <Text style={{ fontSize: 11, color: '#1976D2', marginBottom: 4 }}>🔍 Buscando ubicación...</Text>
+        )}
         {lat !== null && (
           <Text style={{ fontSize: 11, color: '#22a35e', marginBottom: 8 }}>✓ Ubicación confirmada en el mapa</Text>
         )}
