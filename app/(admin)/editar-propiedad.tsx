@@ -63,6 +63,11 @@ export default function EditarPropiedad() {
   const [m2, setM2] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
   const [zona, setZona] = useState<'queretaro' | 'monterrey' | 'puebla' | null>(null)
+  const [lat, setLat] = useState<number | null>(null)
+  const [lng, setLng] = useState<number | null>(null)
+  const [geoQuery, setGeoQuery] = useState('')
+  const [geoResults, setGeoResults] = useState<any[]>([])
+  const [geoLoading, setGeoLoading] = useState(false)
   const [asesorId, setAsesorId] = useState<string | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
@@ -81,7 +86,7 @@ export default function EditarPropiedad() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, recamaras, banos, m2, estacionamientos, asesor_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
+      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, m2, estacionamientos, asesor_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
       .eq('id', id)
       .single()
 
@@ -95,6 +100,9 @@ export default function EditarPropiedad() {
     setDescripcion(data.descripcion ?? '')
     setPrecio(data.precio != null ? String(data.precio) : '')
     setDireccion(data.direccion ?? '')
+    setGeoQuery(data.direccion ?? '')
+    setLat((data as any).lat ?? null)
+    setLng((data as any).lng ?? null)
     setOperacion((data.operacion as 'venta' | 'renta') ?? 'venta')
     setTipo((data.tipo as 'casa' | 'departamento' | 'local') ?? 'casa')
     setEstado((data.estado as 'disponible' | 'vendida') ?? 'disponible')
@@ -120,6 +128,35 @@ export default function EditarPropiedad() {
 
   function quitarImagenNueva(uri: string) {
     setImagenesNuevas((prev) => prev.filter((u) => u !== uri))
+  }
+
+  useEffect(() => {
+    if (!geoQuery.trim() || geoQuery.length < 3) { setGeoResults([]); return }
+    const t = setTimeout(async () => {
+      setGeoLoading(true)
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geoQuery + ' Mexico')}&format=json&limit=5&countrycodes=mx`
+        )
+        const data = await res.json()
+        setGeoResults(Array.isArray(data) ? data : [])
+      } catch { setGeoResults([]) }
+      finally { setGeoLoading(false) }
+    }, 400)
+    return () => clearTimeout(t)
+  }, [geoQuery])
+
+  function seleccionarUbicacion(r: any) {
+    const partes = r.display_name.split(',').slice(0, 4).join(', ').trim()
+    setDireccion(partes)
+    setGeoQuery(partes)
+    setLat(parseFloat(r.lat))
+    setLng(parseFloat(r.lon))
+    setGeoResults([])
+    const dn = r.display_name.toLowerCase()
+    if (dn.includes('querétaro') || dn.includes('queretaro')) setZona('queretaro')
+    else if (dn.includes('monterrey') || dn.includes('nuevo león') || dn.includes('nuevo leon')) setZona('monterrey')
+    else if (dn.includes('puebla')) setZona('puebla')
   }
 
   useEffect(() => {
@@ -245,6 +282,8 @@ export default function EditarPropiedad() {
           exclusiva,
           es_constructora: esConstructora,
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
+          lat: lat ?? null,
+          lng: lng ?? null,
         })
         .eq('id', id)
         .select('id')
@@ -348,7 +387,34 @@ export default function EditarPropiedad() {
         <TextInput style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={titulo} onChangeText={setTitulo} maxLength={100} />
 
         <Text style={styles.label}>Dirección *</Text>
-        <TextInput style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={direccion} onChangeText={setDireccion} maxLength={200} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+          <TextInput
+            style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: c.input, borderColor: lat ? '#22a35e' : c.inputBorder, color: c.inputText }]}
+            placeholder="Ej. Corregidora, Querétaro"
+            value={geoQuery}
+            onChangeText={v => { setGeoQuery(v); setDireccion(v); setLat(null); setLng(null) }}
+            maxLength={200}
+          />
+          {geoLoading && <ActivityIndicator size="small" color="#1976D2" style={{ marginLeft: 8 }} />}
+        </View>
+        {geoLoading && <Text style={{ fontSize: 11, color: '#1976D2', marginBottom: 4 }}>🔍 Buscando ubicación...</Text>}
+        {lat !== null && <Text style={{ fontSize: 11, color: '#22a35e', marginBottom: 8 }}>✓ Ubicación confirmada en el mapa</Text>}
+        {geoResults.length > 0 && (
+          <View style={{ borderRadius: 8, borderWidth: 1, borderColor: '#1976D2', marginBottom: 12, overflow: 'hidden' }}>
+            <Text style={{ fontSize: 11, color: '#1976D2', fontWeight: '700', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 }}>
+              Selecciona una ubicación:
+            </Text>
+            {geoResults.map((r: any, i: number) => (
+              <TouchableOpacity
+                key={i}
+                style={{ padding: 10, backgroundColor: i % 2 === 0 ? c.input : c.bg, borderTopWidth: 1, borderTopColor: c.inputBorder }}
+                onPress={() => seleccionarUbicacion(r)}
+              >
+                <Text style={{ fontSize: 13, color: c.inputText }} numberOfLines={2}>📍 {r.display_name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.label}>Operación</Text>
         <PillSelector
