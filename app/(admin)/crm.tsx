@@ -588,7 +588,7 @@ const styles = StyleSheet.create({
   operacionTabTextActivo: { color: '#1a6470' },
 
   // Pipeline
-  pipelineScroll: { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#edf0f3' },
+  pipelineScroll: { flexGrow: 0, flexShrink: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#edf0f3' },
   pipelineContent: { paddingHorizontal: 10, paddingVertical: 10, gap: 6, flexDirection: 'row' },
   pipelineChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -605,11 +605,12 @@ const styles = StyleSheet.create({
 
   // Search
   btnCampana: {
-    marginHorizontal: 12, marginTop: 8, marginBottom: 2,
-    backgroundColor: '#e8f4f5', borderRadius: 10, borderWidth: 1, borderColor: '#1a6470',
-    paddingVertical: 10, alignItems: 'center',
+    marginHorizontal: 12, marginTop: 8, marginBottom: 4,
+    backgroundColor: '#1a6470', borderRadius: 10,
+    paddingVertical: 11, alignItems: 'center',
+    flexShrink: 0,
   },
-  btnCampanaTxt: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
+  btnCampanaTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
   searchRow: { flexDirection: 'row', gap: 10, padding: 12, alignItems: 'center' },
   searchWrap: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
