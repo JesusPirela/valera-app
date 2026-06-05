@@ -61,7 +61,7 @@ jobs:
           git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
           git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:web-build
 
-      - name: Notificar a Hostinger
+      - name: Notificar a Hostinger para desplegar
         run: |
           curl -s -w "\nHTTP: %{http_code}" -X POST \
             -H "Content-Type: application/json" \
