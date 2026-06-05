@@ -435,16 +435,17 @@ export default function DetallePropiedad() {
       } else {
         const Print = await import('expo-print')
         const ShareLib = await import('expo-sharing')
-        const FileSystemLib = await import('expo-file-system')
         const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 })
-        const nombreArchivo = `${propiedad.codigo ?? 'ficha'}.pdf`
-        const destUri = FileSystemLib.FileSystem.cacheDirectory + nombreArchivo
-        await FileSystemLib.FileSystem.copyAsync({ from: uri, to: destUri })
-        await ShareLib.shareAsync(destUri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: nombreArchivo })
+        const isAvailable = await ShareLib.isAvailableAsync()
+        if (!isAvailable) {
+          Alert.alert('Error', 'Compartir no está disponible en este dispositivo.')
+          return
+        }
+        await ShareLib.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: propiedad.codigo ?? 'ficha' })
       }
-    } catch {
+    } catch (e: any) {
       if (Platform.OS === 'web') window.alert('No se pudo generar el PDF.')
-      else Alert.alert('Error', 'No se pudo generar la ficha PDF.')
+      else Alert.alert('Error', `No se pudo generar la ficha PDF.\n\n${e?.message ?? ''}`)
     } finally {
       setGenerandoPDF(false)
     }
@@ -502,9 +503,11 @@ export default function DetallePropiedad() {
     setNuevoTelefono('')
     setModalCitaVisible(true)
     setLoadingClientes(true)
+    const { data: { user } } = await supabase.auth.getUser()
     const { data } = await supabase
       .from('clientes')
       .select('id, nombre, telefono, estado')
+      .eq('responsable_id', user?.id)
       .order('nombre', { ascending: true })
     setClientesCRM(data ?? [])
     setLoadingClientes(false)
