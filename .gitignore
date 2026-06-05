@@ -43,3 +43,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local scripts with credentials
+scripts/insert_batch.js
+scripts/parse_leads.js
