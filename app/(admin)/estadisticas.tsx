@@ -378,7 +378,7 @@ export default function Estadisticas() {
                   centerText={String(propDist.length)}
                   centerSub="total"
                 />
-                <PieLegend slices={} total={} textColor={c.text} />
+                <PieLegend slices={slicesTipo} total={propDist.length} textColor={c.text} />
               </View>
             </Card>
 
@@ -390,7 +390,7 @@ export default function Estadisticas() {
                   centerText={String(propDist.length)}
                   centerSub="total"
                 />
-                <PieLegend slices={} total={} textColor={c.text} />
+                <PieLegend slices={slicesOp} total={propDist.length} textColor={c.text} />
               </View>
             </Card>
           </View>
@@ -403,7 +403,7 @@ export default function Estadisticas() {
                 centerText={String(propDist.length)}
                 centerSub="propiedades"
               />
-              <PieLegend slices={} total={} textColor={c.text} />
+              <PieLegend slices={slicesEst} total={propDist.length} textColor={c.text} />
             </View>
           </Card>
         </>
@@ -419,7 +419,7 @@ export default function Estadisticas() {
               centerText={String(clienteDist.length)}
               centerSub="clientes"
             />
-            <PieLegend slices={} total={} textColor={c.text} />
+            <PieLegend slices={slicesCRM} total={clienteDist.length} textColor={c.text} />
           </View>
         </Card>
       )}
@@ -434,7 +434,7 @@ export default function Estadisticas() {
               centerText={String(resumen.total_vistas + resumen.total_descargas)}
               centerSub="acciones"
             />
-            <PieLegend slices={} total={} textColor={c.text} />
+            <PieLegend slices={slicesEngagement} total={resumen.total_vistas + resumen.total_descargas} textColor={c.text} />
           </View>
         </Card>
       )}
