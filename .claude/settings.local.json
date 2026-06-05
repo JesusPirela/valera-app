@@ -41,7 +41,15 @@
       "Bash(xargs grep -l \"notificado_24h\\\\|notificado_2h\")",
       "WebSearch",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\)\")",
-      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('node engines:', p.engines\\); console.log\\('expo version:', p.dependencies?.expo\\)\")"
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('node engines:', p.engines\\); console.log\\('expo version:', p.dependencies?.expo\\)\")",
+      "Bash(powershell -Command \"\\(Get-Content 'app/\\(admin\\)/estadisticas.tsx'\\) -replace '<Card titulo=\\\\\"', '<Card bg={c.card} titulo=\\\\\"' | Set-Content 'app/\\(admin\\)/estadisticas.tsx'\")",
+      "Bash(powershell -Command \"\\(Get-Content 'app/\\(admin\\)/prospectadores.tsx'\\) -replace 'style=\\\\{styles\\\\.modalBox\\\\}', 'style={[styles.modalBox, { backgroundColor: c.card }]}' | Set-Content 'app/\\(admin\\)/prospectadores.tsx'\")",
+      "Bash(powershell -Command \"\\(Get-Content 'app/\\(admin\\)/tienda-compras.tsx'\\) -replace 'style=\\\\{s\\\\.modalSheet\\\\}', 'style={[s.modalSheet, { backgroundColor: c.card }]}' | Set-Content 'app/\\(admin\\)/tienda-compras.tsx'\")",
+      "Bash(powershell -Command ' *)",
+      "Bash(powershell -Command \"\\(Get-Content 'app/\\(admin\\)/tienda-items.tsx'\\) -replace 'setRuletaCfg\\\\\\(c =>', 'setRuletaCfg\\(cfg =>' -replace '\\\\.\\\\.\\\\.\\(c\\)\\\\b', '...\\(cfg\\)' | Set-Content 'app/\\(admin\\)/tienda-items.tsx'\")",
+      "Bash(powershell -Command \"\\(Get-Content 'app/\\(admin\\)/tienda-items.tsx'\\) -replace 'style=\\\\{s\\\\.input\\\\}', 'style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}' -replace 'style=\\\\{s\\\\.inputNum\\\\}', 'style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}' | Set-Content 'app/\\(admin\\)/tienda-items.tsx'\")",
+      "Bash(python3 -c ' *)",
+      "Bash(git rm *)"
     ]
   }
 }
