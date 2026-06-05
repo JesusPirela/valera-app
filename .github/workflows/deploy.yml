@@ -12,6 +12,8 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -46,13 +48,22 @@ jobs:
           </FilesMatch>
           EOF
 
-      - name: Deploy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          local-dir: ./dist/
-          server-dir: /public_html/
-          dangerous-clean-slate: true
+      - name: Push dist/ a rama web-build
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          cp -r dist /tmp/dist-build
+          git fetch origin web-build 2>/dev/null || true
+          git checkout -B web-build origin/web-build 2>/dev/null || git checkout --orphan web-build
+          git rm -rf . > /dev/null 2>&1 || true
+          cp -r /tmp/dist-build/. .
+          git add -A
+          git diff --staged --quiet || git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
+          git push origin web-build
+
+      - name: Notificar a Hostinger
+        run: |
+          curl -s -w "\nHTTP: %{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"ref":"refs/heads/web-build"}' \
+            https://webhooks.hostinger.com/deploy/62de3af8ceb4a3832a5b6f3f2351bdc6
