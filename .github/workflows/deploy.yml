@@ -63,14 +63,11 @@ jobs:
 
       - name: Deploy via SSH a Hostinger
         env:
-          FTP_HOST: ${{ secrets.FTP_HOST }}
-          FTP_USER: ${{ secrets.FTP_USER }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          sudo apt-get install -y sshpass rsync
-          sshpass -p "$FTP_PASSWORD" rsync -avz --delete \
-            -e "ssh -o StrictHostKeyChecking=no -p 65002" \
-            ./dist/ "$FTP_USER@$FTP_HOST:~/" || \
-          sshpass -p "$FTP_PASSWORD" rsync -avz --delete \
-            -e "ssh -o StrictHostKeyChecking=no -p 22" \
-            ./dist/ "$FTP_USER@$FTP_HOST:~/"
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p 65002" \
+            ./dist/ u399235911@45.137.159.251:~/public_html/
