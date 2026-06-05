@@ -61,13 +61,11 @@ jobs:
           git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
           git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:web-build
 
-      - name: Deploy via SSH a Hostinger
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Notificar a Hostinger
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p 65002" \
-            ./dist/ u399235911@45.137.159.251:~/public_html/
+          curl -s -w "\nHTTP: %{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -H "X-GitHub-Delivery: deploy-$(date +%s)" \
+            -d "{\"ref\":\"refs/heads/web-build\",\"repository\":{\"full_name\":\"${{ github.repository }}\"}}" \
+            https://webhooks.hostinger.com/deploy/5f91d5e7333f0f2dc75f800fef8e3930
