@@ -53,13 +53,16 @@ jobs:
 
       - name: Push dist/ a rama web-build (Hostinger)
         run: |
-          cd dist
-          git init
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
+          cp -r dist /tmp/dist-build
+          git fetch origin web-build 2>/dev/null || true
+          git checkout -B web-build origin/web-build 2>/dev/null || git checkout --orphan web-build
+          git rm -rf . > /dev/null 2>&1 || true
+          cp -r /tmp/dist-build/. .
           git add -A
-          git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
-          git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:web-build
+          git diff --staged --quiet || git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
+          git push origin web-build
 
       - name: Notificar a Hostinger para desplegar
         run: |
