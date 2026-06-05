@@ -681,7 +681,7 @@ export default function CoordinacionCitas() {
           <Text style={{ color: '#1a6470', fontSize: 15, fontWeight: '600' }}>← Volver</Text>
         </TouchableOpacity>
         <TouchableOpacity style={{ backgroundColor: '#e74c3c', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}>
-          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>🧪 Prueba</Text>
+          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>🧪 Test</Text>
         </TouchableOpacity>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <TouchableOpacity
