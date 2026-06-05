@@ -680,6 +680,9 @@ export default function CoordinacionCitas() {
         <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
           <Text style={{ color: '#1a6470', fontSize: 15, fontWeight: '600' }}>← Volver</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={{ backgroundColor: '#e74c3c', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}>
+          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>🧪 Prueba</Text>
+        </TouchableOpacity>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }}
