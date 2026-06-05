@@ -49,8 +49,7 @@ const NAV_ITEMS = [
   { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#2a8a7a' },
   { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#1a7060' },
   { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#145560' },
-  { label: 'Conexión', icon: '⏱️', route: '/(admin)/conexion-usuarios', color: '#0f4c5c' },
-  { label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#c9a84c' },
+{ label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#c9a84c' },
   { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#6a1b9a' },
   { label: 'Tienda', icon: '🛒', route: '/(admin)/tienda-compras', color: '#c9a84c' },
 ]
