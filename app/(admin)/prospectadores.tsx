@@ -15,6 +15,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { adminAjustarMonedas } from '../../lib/gamification'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus'
 
@@ -173,6 +174,7 @@ function copiarAlPortapapeles(texto: string) {
 }
 
 export default function Prospectadores() {
+  const c = useColors()
   const [lista, setLista] = useState<Prospectador[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -384,7 +386,7 @@ export default function Prospectadores() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: c.bg }]}>
       <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
         <Text style={styles.backBtnText}>← Volver</Text>
       </TouchableOpacity>
@@ -415,15 +417,15 @@ export default function Prospectadores() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
               <View style={styles.cardMainRow}>
                 <View style={styles.cardIcon}>
                   <Text style={styles.cardIconText}>{(item.nombre || item.email)[0].toUpperCase()}</Text>
                 </View>
                 <View style={styles.cardInfo}>
-                  <Text style={styles.cardNombre}>{item.nombre || item.email}</Text>
-                  {item.nombre ? <Text style={styles.cardEmail}>{item.email}</Text> : null}
-                  <Text style={styles.cardFecha}>Alta: {tiempoRelativo(item.created_at)}</Text>
+                  <Text style={[styles.cardNombre, { color: c.text }]}>{item.nombre || item.email}</Text>
+                  {item.nombre ? <Text style={[styles.cardEmail, { color: c.textMute }]}>{item.email}</Text> : null}
+                  <Text style={[styles.cardFecha, { color: c.textMute }]}>Alta: {tiempoRelativo(item.created_at)}</Text>
                   <Text style={[styles.cardFecha, { color: item.last_seen ? '#1a6470' : '#bbb' }]}>
                     {item.last_seen ? `Última conexión: ${tiempoRelativo(item.last_seen)}` : 'Sin conexión registrada'}
                   </Text>
@@ -455,8 +457,8 @@ export default function Prospectadores() {
               </View>
 
               {editandoRolId === item.id && (
-                <View style={styles.rolPickerContainer}>
-                  <Text style={styles.rolPickerLabel}>Cambiar rol:</Text>
+                <View style={[styles.rolPickerContainer, { borderTopColor: c.divider }]}>
+                  <Text style={[styles.rolPickerLabel, { color: c.textMute }]}>Cambiar rol:</Text>
                   <View style={styles.rolPickerPills}>
                     {ROLES_SELECTOR.map(r => {
                       const activo = item.role === r.value
@@ -592,7 +594,7 @@ export default function Prospectadores() {
         onRequestClose={() => setCoinsModal(null)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
+          <View style={[styles.modalBox, { backgroundColor: c.card }]}>
             <Text style={styles.modalTitulo}>💰 Valera Coins</Text>
             <Text style={styles.modalSubtitulo}>{coinsModal?.nombre}</Text>
             <View style={styles.coinsSaldoRow}>
@@ -623,7 +625,7 @@ export default function Prospectadores() {
               <>
                 <Text style={styles.inputLabel}>Cantidad de coins</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]}
                   placeholder="Ej: 100"
                   value={cantidadStr}
                   onChangeText={setCantidadStr}
@@ -631,7 +633,7 @@ export default function Prospectadores() {
                 />
                 <Text style={styles.inputLabel}>Concepto / Razón</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]}
                   placeholder="Ej: Bono por cierre del mes"
                   value={conceptoCoins}
                   onChangeText={setConceptoCoins}
@@ -699,7 +701,7 @@ export default function Prospectadores() {
         onRequestClose={cerrarModal}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
+          <View style={[styles.modalBox, { backgroundColor: c.card }]}>
 
             {credenciales ? (
               <>
@@ -743,7 +745,7 @@ export default function Prospectadores() {
 
                 <Text style={styles.inputLabel}>Nombre</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]}
                   placeholder="Nombre completo"
                   value={nombre}
                   onChangeText={setNombre}
@@ -753,7 +755,7 @@ export default function Prospectadores() {
 
                 <Text style={styles.inputLabel}>Email</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]}
                   placeholder="correo@ejemplo.com"
                   value={email}
                   onChangeText={setEmail}
@@ -774,10 +776,10 @@ export default function Prospectadores() {
                     autoCorrect={false}
                   />
                   <TouchableOpacity
-                    style={styles.verBtn}
+                    style={[styles.verBtn, { borderColor: c.border }]}
                     onPress={() => setVerPassword(v => !v)}
                   >
-                    <Text style={styles.verBtnText}>{verPassword ? 'Ocultar' : 'Ver'}</Text>
+                    <Text style={[styles.verBtnText, { color: c.textSub }]}>{verPassword ? 'Ocultar' : 'Ver'}</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -839,7 +841,7 @@ export default function Prospectadores() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 16 },
+  container: { flex: 1, padding: 16 },
   backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
   backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
 
@@ -857,11 +859,9 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 13, color: '#aaa' },
 
   card: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#eee',
   },
   cardMainRow: {
     flexDirection: 'row',
@@ -878,9 +878,9 @@ const styles = StyleSheet.create({
   },
   cardIconText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cardInfo: { flex: 1 },
-  cardNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
-  cardEmail:  { fontSize: 11, color: '#aaa', marginTop: 1 },
-  cardFecha:  { fontSize: 11, color: '#aaa', marginTop: 2 },
+  cardNombre: { fontSize: 15, fontWeight: '700' },
+  cardEmail:  { fontSize: 11, marginTop: 1 },
+  cardFecha:  { fontSize: 11, marginTop: 2 },
 
   rolBadge: {
     borderRadius: 6,
@@ -949,7 +949,6 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalBox: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -961,24 +960,20 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 11,
     fontSize: 14,
-    color: '#1a6470',
     marginBottom: 14,
-    backgroundColor: '#fafafa',
   },
   passwordRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   verBtn: {
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
-  verBtnText: { fontSize: 13, color: '#555' },
+  verBtnText: { fontSize: 13 },
   generarBtn: { alignSelf: 'flex-start', marginBottom: 20 },
   generarText: { fontSize: 12, color: '#c9a84c', fontWeight: '600' },
 

@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 type TareaDraft = {
   id?: string
@@ -90,6 +91,7 @@ function TareaEditor({ tarea, onChange, onQuitar }: {
 }
 
 export default function UniversityCursoForm() {
+  const c = useColors()
   const { id: cursoId } = useLocalSearchParams<{ id?: string }>()
   const esEdicion = !!cursoId
 
@@ -311,7 +313,7 @@ export default function UniversityCursoForm() {
   const leccionesVisibles = lecciones.filter((l) => !l._borrar)
 
   return (
-    <ScrollView style={estilos.container} contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
+    <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
       <View style={estilos.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={estilos.backText}>← Volver</Text>
@@ -323,22 +325,22 @@ export default function UniversityCursoForm() {
         <Text style={estilos.seccion}>DATOS DEL CURSO</Text>
 
         <Text style={estilos.label}>Título *</Text>
-        <TextInput style={estilos.input} value={titulo} onChangeText={setTitulo} placeholder="Ej. Introducción a Valera Real Estate" />
+        <TextInput style={[estilos.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={titulo} onChangeText={setTitulo} placeholder="Ej. Introducción a Valera Real Estate" />
 
         <Text style={estilos.label}>Descripción corta</Text>
-        <TextInput style={estilos.input} value={descripcionCorta} onChangeText={setDescripcionCorta} placeholder="Descripción visible en la tarjeta del curso" />
+        <TextInput style={[estilos.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={descripcionCorta} onChangeText={setDescripcionCorta} placeholder="Descripción visible en la tarjeta del curso" />
 
         <Text style={estilos.label}>Descripción completa</Text>
-        <TextInput style={[estilos.input, estilos.inputMulti]} value={descripcion} onChangeText={setDescripcion} placeholder="Qué aprenderán los prospectadores..." multiline numberOfLines={4} textAlignVertical="top" />
+        <TextInput style={[estilos.input, estilos.inputMulti, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={descripcion} onChangeText={setDescripcion} placeholder="Qué aprenderán los prospectadores..." multiline numberOfLines={4} textAlignVertical="top" />
 
         <Text style={estilos.label}>Instructor</Text>
-        <TextInput style={estilos.input} value={instructor} onChangeText={setInstructor} placeholder="Valera University" />
+        <TextInput style={[estilos.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={instructor} onChangeText={setInstructor} placeholder="Valera University" />
 
         <Text style={estilos.label}>Duración estimada</Text>
-        <TextInput style={estilos.input} value={duracionTexto} onChangeText={setDuracionTexto} placeholder="Ej. ~60 min · 4 lecciones" />
+        <TextInput style={[estilos.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={duracionTexto} onChangeText={setDuracionTexto} placeholder="Ej. ~60 min · 4 lecciones" />
 
         <Text style={estilos.label}>URL portada (imagen)</Text>
-        <TextInput style={estilos.input} value={imagenUrl} onChangeText={setImagenUrl} placeholder="https://..." autoCapitalize="none" />
+        <TextInput style={[estilos.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={imagenUrl} onChangeText={setImagenUrl} placeholder="https://..." autoCapitalize="none" />
 
         <Text style={estilos.label}>Categoría</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
@@ -393,7 +395,7 @@ export default function UniversityCursoForm() {
         )}
 
         {leccionesVisibles.map((lec, idx) => (
-          <View key={lec._key} style={estilos.leccionCard}>
+          <View key={lec._key} style={[estilos.leccionCard, { backgroundColor: c.card, borderColor: c.border }]}>
             <View style={estilos.leccionCardHeader}>
               <View style={estilos.leccionNum}><Text style={estilos.leccionNumText}>{idx + 1}</Text></View>
               <Text style={estilos.leccionLabel}>Lección {idx + 1}</Text>
@@ -448,7 +450,7 @@ export default function UniversityCursoForm() {
 }
 
 const estilos = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f4f5' },
+  container: { flex: 1 },
   header: { backgroundColor: '#1a6470', padding: 20, paddingTop: 16, gap: 8 },
   backText: { color: '#c9a84c', fontSize: 14, fontWeight: '600' },
   titulo: { color: '#fff', fontSize: 20, fontWeight: '800' },
@@ -456,7 +458,7 @@ const estilos = StyleSheet.create({
   seccion: { fontSize: 11, fontWeight: '700', color: '#1a6470', letterSpacing: 1, marginBottom: 12, marginTop: 8 },
   seccionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 8 },
   label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
-  input: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#ddd', paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1a1a2e', marginBottom: 14 },
+  input: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, marginBottom: 14 },
   inputMulti: { height: 100, textAlignVertical: 'top' },
   chip: { borderWidth: 1, borderColor: '#ddd', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: '#fff' },
   chipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
@@ -467,7 +469,7 @@ const estilos = StyleSheet.create({
   btnAgregar: { backgroundColor: '#1a6470', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   btnAgregarText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   leccionesEmpty: { color: '#aaa', textAlign: 'center', paddingVertical: 24, fontSize: 13 },
-  leccionCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#dde8e9' },
+  leccionCard: { borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1 },
   leccionCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 },
   leccionNum: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#1a6470', alignItems: 'center', justifyContent: 'center' },
   leccionNumText: { color: '#c9a84c', fontSize: 12, fontWeight: '800' },

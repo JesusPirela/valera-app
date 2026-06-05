@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 type Mision = {
   id: string
@@ -58,6 +59,7 @@ const MISION_VACIA: Omit<Mision, 'id'> = {
 }
 
 export default function AdminMisiones() {
+  const c = useColors()
   const [misiones, setMisiones] = useState<Mision[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroTipo, setFiltroTipo] = useState<'todas' | 'diaria' | 'base'>('todas')
@@ -168,13 +170,13 @@ export default function AdminMisiones() {
       : [['Misiones Diarias', diarias], ['Misiones Base (progresivas)', bases]]
 
   if (loading) return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg }}>
       <ActivityIndicator size="large" color="#1a6470" />
     </View>
   )
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f0f4f5' }}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
       {/* Header */}
       <View style={s.pageHeader}>
         <View>
@@ -187,14 +189,14 @@ export default function AdminMisiones() {
       </View>
 
       {/* Filtro tipo */}
-      <View style={s.filtroRow}>
+      <View style={[s.filtroRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>
         {(['todas', 'diaria', 'base'] as const).map(t => (
           <TouchableOpacity
             key={t}
-            style={[s.filtroBtn, filtroTipo === t && s.filtroBtnActivo]}
+            style={[s.filtroBtn, { borderColor: c.border }, filtroTipo === t && s.filtroBtnActivo]}
             onPress={() => setFiltroTipo(t)}
           >
-            <Text style={[s.filtroTxt, filtroTipo === t && s.filtroTxtActivo]}>
+            <Text style={[s.filtroTxt, { color: c.textSub }, filtroTipo === t && s.filtroTxtActivo]}>
               {t === 'todas' ? 'Todas' : t === 'diaria' ? '⏰ Diarias' : '⭐ Base'}
             </Text>
           </TouchableOpacity>
@@ -206,7 +208,7 @@ export default function AdminMisiones() {
           <View key={titulo}>
             <Text style={s.grupoTitle}>{titulo} ({items.length})</Text>
             {items.map(m => (
-              <View key={m.id} style={[s.card, !m.activa && s.cardInactiva]}>
+              <View key={m.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }, !m.activa && s.cardInactiva]}>
                 <View style={s.cardTop}>
                   <Text style={s.cardIcono}>{m.icono}</Text>
                   <View style={{ flex: 1 }}>
@@ -214,25 +216,25 @@ export default function AdminMisiones() {
                       <View style={[s.tipoBadge, { backgroundColor: TIPO_COLOR[m.tipo] }]}>
                         <Text style={s.tipoBadgeTxt}>{m.tipo}</Text>
                       </View>
-                      <View style={s.catBadge}>
-                        <Text style={s.catBadgeTxt}>{CAT_LABEL[m.categoria] ?? m.categoria}</Text>
+                      <View style={[s.catBadge, { backgroundColor: c.bg }]}>
+                        <Text style={[s.catBadgeTxt, { color: c.textSub }]}>{CAT_LABEL[m.categoria] ?? m.categoria}</Text>
                       </View>
                     </View>
-                    <Text style={[s.cardTitulo, !m.activa && { color: '#aaa' }]}>{m.titulo}</Text>
-                    {m.descripcion ? <Text style={s.cardDesc} numberOfLines={2}>{m.descripcion}</Text> : null}
+                    <Text style={[s.cardTitulo, { color: c.text }, !m.activa && { color: c.textMute }]}>{m.titulo}</Text>
+                    {m.descripcion ? <Text style={[s.cardDesc, { color: c.textMute }]} numberOfLines={2}>{m.descripcion}</Text> : null}
                   </View>
                 </View>
 
-                <View style={s.cardStats}>
-                  <Text style={s.statItem}>Meta: <Text style={s.statVal}>{m.meta}</Text></Text>
-                  <Text style={s.statItem}>XP: <Text style={[s.statVal, { color: '#1a6b3a' }]}>+{m.recompensa_xp}</Text></Text>
-                  <Text style={s.statItem}>Coins: <Text style={[s.statVal, { color: '#c9a84c' }]}>+{m.recompensa_coins} 💰</Text></Text>
-                  <Text style={s.statItem}>Orden: <Text style={s.statVal}>{m.orden}</Text></Text>
+                <View style={[s.cardStats, { borderTopColor: c.divider }]}>
+                  <Text style={[s.statItem, { color: c.textSub }]}>Meta: <Text style={[s.statVal, { color: c.text }]}>{m.meta}</Text></Text>
+                  <Text style={[s.statItem, { color: c.textSub }]}>XP: <Text style={[s.statVal, { color: '#1a6b3a' }]}>+{m.recompensa_xp}</Text></Text>
+                  <Text style={[s.statItem, { color: c.textSub }]}>Coins: <Text style={[s.statVal, { color: '#c9a84c' }]}>+{m.recompensa_coins} 💰</Text></Text>
+                  <Text style={[s.statItem, { color: c.textSub }]}>Orden: <Text style={[s.statVal, { color: c.text }]}>{m.orden}</Text></Text>
                 </View>
 
                 <View style={s.cardFooter}>
                   <View style={s.switchRow}>
-                    <Text style={s.switchLabel}>{m.activa ? 'Activa' : 'Inactiva'}</Text>
+                    <Text style={[s.switchLabel, { color: c.textSub }]}>{m.activa ? 'Activa' : 'Inactiva'}</Text>
                     <Switch
                       value={m.activa}
                       onValueChange={() => toggleActiva(m)}
@@ -241,7 +243,7 @@ export default function AdminMisiones() {
                     />
                   </View>
                   <View style={s.acciones}>
-                    <TouchableOpacity style={s.btnEditar} onPress={() => abrirEditar(m)}>
+                    <TouchableOpacity style={[s.btnEditar, { backgroundColor: c.bg }]} onPress={() => abrirEditar(m)}>
                       <Text style={s.btnEditarTxt}>✏️ Editar</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={s.btnEliminar} onPress={() => eliminar(m)}>
@@ -258,19 +260,19 @@ export default function AdminMisiones() {
       {/* Modal de edición / nueva misión */}
       <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
         <View style={s.modalOverlay}>
-          <ScrollView style={s.modalSheet} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+          <ScrollView style={[s.modalSheet, { backgroundColor: c.card }]} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
             <Text style={s.modalTitle}>{editando ? 'Editar misión' : 'Nueva misión'}</Text>
 
             {/* Tipo */}
-            <Text style={s.fieldLabel}>Tipo</Text>
+            <Text style={[s.fieldLabel, { color: c.textSub }]}>Tipo</Text>
             <View style={s.chipRow}>
               {(['diaria', 'base'] as const).map(t => (
                 <TouchableOpacity
                   key={t}
-                  style={[s.chip, form.tipo === t && { backgroundColor: TIPO_COLOR[t], borderColor: TIPO_COLOR[t] }]}
+                  style={[s.chip, { borderColor: c.border, backgroundColor: c.input }, form.tipo === t && { backgroundColor: TIPO_COLOR[t], borderColor: TIPO_COLOR[t] }]}
                   onPress={() => setForm(f => ({ ...f, tipo: t }))}
                 >
-                  <Text style={[s.chipTxt, form.tipo === t && { color: '#fff' }]}>
+                  <Text style={[s.chipTxt, { color: c.textSub }, form.tipo === t && { color: '#fff' }]}>
                     {t === 'diaria' ? '⏰ Diaria' : '⭐ Base'}
                   </Text>
                 </TouchableOpacity>
@@ -278,48 +280,51 @@ export default function AdminMisiones() {
             </View>
 
             {/* Categoría */}
-            <Text style={s.fieldLabel}>Categoría</Text>
+            <Text style={[s.fieldLabel, { color: c.textSub }]}>Categoría</Text>
             <View style={s.chipRow}>
-              {CATEGORIAS.map(c => (
+              {CATEGORIAS.map(cat => (
                 <TouchableOpacity
-                  key={c}
-                  style={[s.chip, form.categoria === c && s.chipActivo]}
-                  onPress={() => setForm(f => ({ ...f, categoria: c }))}
+                  key={cat}
+                  style={[s.chip, { borderColor: c.border, backgroundColor: c.input }, form.categoria === cat && s.chipActivo]}
+                  onPress={() => setForm(f => ({ ...f, categoria: cat }))}
                 >
-                  <Text style={[s.chipTxt, form.categoria === c && { color: '#fff' }]}>
-                    {CAT_LABEL[c]}
+                  <Text style={[s.chipTxt, { color: c.textSub }, form.categoria === cat && { color: '#fff' }]}>
+                    {CAT_LABEL[cat]}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             {/* Icono */}
-            <Text style={s.fieldLabel}>Icono (emoji)</Text>
+            <Text style={[s.fieldLabel, { color: c.textSub }]}>Icono (emoji)</Text>
             <TextInput
-              style={s.input}
+              style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               value={form.icono}
               onChangeText={v => setForm(f => ({ ...f, icono: v }))}
               placeholder="🎯"
+              placeholderTextColor={c.placeholder}
               maxLength={4}
             />
 
             {/* Título */}
-            <Text style={s.fieldLabel}>Título *</Text>
+            <Text style={[s.fieldLabel, { color: c.textSub }]}>Título *</Text>
             <TextInput
-              style={s.input}
+              style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               value={form.titulo}
               onChangeText={v => setForm(f => ({ ...f, titulo: v }))}
               placeholder="Nombre de la misión"
+              placeholderTextColor={c.placeholder}
               autoCapitalize="sentences"
             />
 
             {/* Descripción */}
-            <Text style={s.fieldLabel}>Descripción</Text>
+            <Text style={[s.fieldLabel, { color: c.textSub }]}>Descripción</Text>
             <TextInput
-              style={[s.input, { height: 72, textAlignVertical: 'top' }]}
+              style={[s.input, { height: 72, textAlignVertical: 'top', backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               value={form.descripcion ?? ''}
               onChangeText={v => setForm(f => ({ ...f, descripcion: v }))}
               placeholder="Detalle de lo que debe hacer el usuario"
+              placeholderTextColor={c.placeholder}
               multiline
               numberOfLines={3}
             />
@@ -327,36 +332,36 @@ export default function AdminMisiones() {
             {/* Meta, XP, Coins, Orden */}
             <View style={s.numRow}>
               <View style={s.numField}>
-                <Text style={s.fieldLabel}>Meta</Text>
+                <Text style={[s.fieldLabel, { color: c.textSub }]}>Meta</Text>
                 <TextInput
-                  style={s.inputNum}
+                  style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                   value={String(form.meta)}
                   onChangeText={v => setForm(f => ({ ...f, meta: parseInt(v) || 1 }))}
                   keyboardType="numeric"
                 />
               </View>
               <View style={s.numField}>
-                <Text style={s.fieldLabel}>XP</Text>
+                <Text style={[s.fieldLabel, { color: c.textSub }]}>XP</Text>
                 <TextInput
-                  style={s.inputNum}
+                  style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                   value={String(form.recompensa_xp)}
                   onChangeText={v => setForm(f => ({ ...f, recompensa_xp: parseInt(v) || 0 }))}
                   keyboardType="numeric"
                 />
               </View>
               <View style={s.numField}>
-                <Text style={s.fieldLabel}>Coins 💰</Text>
+                <Text style={[s.fieldLabel, { color: c.textSub }]}>Coins 💰</Text>
                 <TextInput
-                  style={s.inputNum}
+                  style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                   value={String(form.recompensa_coins)}
                   onChangeText={v => setForm(f => ({ ...f, recompensa_coins: parseInt(v) || 0 }))}
                   keyboardType="numeric"
                 />
               </View>
               <View style={s.numField}>
-                <Text style={s.fieldLabel}>Orden</Text>
+                <Text style={[s.fieldLabel, { color: c.textSub }]}>Orden</Text>
                 <TextInput
-                  style={s.inputNum}
+                  style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                   value={String(form.orden)}
                   onChangeText={v => setForm(f => ({ ...f, orden: parseInt(v) || 0 }))}
                   keyboardType="numeric"
@@ -366,7 +371,7 @@ export default function AdminMisiones() {
 
             {/* Activa */}
             <View style={s.switchRowModal}>
-              <Text style={s.fieldLabel}>Misión activa</Text>
+              <Text style={[s.fieldLabel, { color: c.textSub }]}>Misión activa</Text>
               <Switch
                 value={form.activa}
                 onValueChange={v => setForm(f => ({ ...f, activa: v }))}
@@ -377,8 +382,8 @@ export default function AdminMisiones() {
 
             {/* Botones */}
             <View style={s.modalBtns}>
-              <TouchableOpacity style={s.btnCancelar} onPress={() => setModalVisible(false)}>
-                <Text style={s.btnCancelarTxt}>Cancelar</Text>
+              <TouchableOpacity style={[s.btnCancelar, { borderColor: c.border }]} onPress={() => setModalVisible(false)}>
+                <Text style={[s.btnCancelarTxt, { color: c.textSub }]}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[s.btnGuardar, guardando && { opacity: 0.6 }]}
@@ -408,41 +413,41 @@ const s = StyleSheet.create({
   btnNueva: { backgroundColor: '#c9a84c', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   btnNuevaText: { color: '#fff', fontWeight: '800', fontSize: 14 },
 
-  filtroRow: { flexDirection: 'row', gap: 8, padding: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e8eef0' },
-  filtroBtn: { flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
+  filtroRow: { flexDirection: 'row', gap: 8, padding: 12, borderBottomWidth: 1 },
+  filtroBtn: { flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
   filtroBtnActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  filtroTxt: { fontSize: 13, fontWeight: '600', color: '#666' },
+  filtroTxt: { fontSize: 13, fontWeight: '600' },
   filtroTxtActivo: { color: '#fff' },
 
   grupoTitle: { fontSize: 13, fontWeight: '800', color: '#1a6470', marginTop: 16, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   card: {
-    backgroundColor: '#fff', borderRadius: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: '#e0eaec',
+    borderRadius: 14, marginBottom: 10,
+    borderWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2,
     padding: 14,
   },
-  cardInactiva: { opacity: 0.6, borderColor: '#ddd' },
+  cardInactiva: { opacity: 0.6 },
 
   cardTop: { flexDirection: 'row', gap: 10, marginBottom: 8 },
   cardIcono: { fontSize: 28, width: 36, textAlign: 'center' },
   badgeRow: { flexDirection: 'row', gap: 6, marginBottom: 4 },
   tipoBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   tipoBadgeTxt: { color: '#fff', fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
-  catBadge: { backgroundColor: '#f0f4f5', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
-  catBadgeTxt: { fontSize: 11, color: '#555' },
-  cardTitulo: { fontSize: 14, fontWeight: '700', color: '#1a1a2e', marginBottom: 2 },
-  cardDesc: { fontSize: 12, color: '#888', lineHeight: 16 },
+  catBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  catBadgeTxt: { fontSize: 11 },
+  cardTitulo: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  cardDesc: { fontSize: 12, lineHeight: 16 },
 
-  cardStats: { flexDirection: 'row', gap: 12, flexWrap: 'wrap', marginBottom: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
-  statItem: { fontSize: 12, color: '#666' },
-  statVal: { fontWeight: '700', color: '#1a1a2e' },
+  cardStats: { flexDirection: 'row', gap: 12, flexWrap: 'wrap', marginBottom: 10, paddingTop: 8, borderTopWidth: 1 },
+  statItem: { fontSize: 12 },
+  statVal: { fontWeight: '700' },
 
   cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  switchLabel: { fontSize: 13, color: '#555', fontWeight: '600' },
+  switchLabel: { fontSize: 13, fontWeight: '600' },
   acciones: { flexDirection: 'row', gap: 8 },
-  btnEditar: { backgroundColor: '#e8f4f5', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
+  btnEditar: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
   btnEditarTxt: { fontSize: 13, color: '#1a6470', fontWeight: '600' },
   btnEliminar: { backgroundColor: '#fef0f0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   btnEliminarTxt: { fontSize: 14 },
@@ -450,34 +455,34 @@ const s = StyleSheet.create({
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 20, maxHeight: '92%',
   },
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#1a6470', marginBottom: 20 },
 
-  fieldLabel: { fontSize: 12, fontWeight: '700', color: '#666', marginBottom: 6, marginTop: 12, textTransform: 'uppercase', letterSpacing: 0.3 },
+  fieldLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6, marginTop: 12, textTransform: 'uppercase', letterSpacing: 0.3 },
   input: {
-    backgroundColor: '#f5f8f9', borderRadius: 10, borderWidth: 1, borderColor: '#dde8e9',
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: '#1a1a2e',
+    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15,
   },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderWidth: 1, borderColor: '#ddd', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#fff' },
+  chip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
   chipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  chipTxt: { fontSize: 13, color: '#555' },
+  chipTxt: { fontSize: 13 },
 
   numRow: { flexDirection: 'row', gap: 10 },
   numField: { flex: 1 },
   inputNum: {
-    backgroundColor: '#f5f8f9', borderRadius: 10, borderWidth: 1, borderColor: '#dde8e9',
-    paddingHorizontal: 10, paddingVertical: 10, fontSize: 15, color: '#1a1a2e', textAlign: 'center',
+    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 10, paddingVertical: 10, fontSize: 15, textAlign: 'center',
   },
 
   switchRowModal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
 
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 24 },
-  btnCancelar: { flex: 1, borderWidth: 1.5, borderColor: '#ddd', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  btnCancelarTxt: { color: '#555', fontWeight: '600', fontSize: 15 },
+  btnCancelar: { flex: 1, borderWidth: 1.5, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  btnCancelarTxt: { fontWeight: '600', fontSize: 15 },
   btnGuardar: { flex: 2, backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   btnGuardarTxt: { color: '#fff', fontWeight: '700', fontSize: 15 },
 })

@@ -6,6 +6,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const SWIPE_THRESHOLD = -80
@@ -177,6 +178,7 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
 }
 
 export default function AdminNotificaciones() {
+  const c = useColors()
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([])
   const [loading, setLoading] = useState(true)
   const [marcandoTodas, setMarcandoTodas] = useState(false)
@@ -232,7 +234,7 @@ export default function AdminNotificaciones() {
   const hayNoLeidas = notificaciones.some((n) => !n.leida)
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: c.bg }]}>
       <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
         <Text style={styles.backBtnText}>← Volver</Text>
       </TouchableOpacity>
@@ -254,7 +256,7 @@ export default function AdminNotificaciones() {
       ) : notificaciones.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>Sin notificaciones</Text>
-          <Text style={styles.emptySubtitle}>
+          <Text style={[styles.emptySubtitle, { color: c.textMute }]}>
             Aquí aparecerán los avisos del sistema y actividad del equipo.
           </Text>
         </View>
@@ -278,7 +280,7 @@ export default function AdminNotificaciones() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, padding: 16 },
   backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
   backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
   marcarTodasBtn: {
@@ -289,7 +291,7 @@ const styles = StyleSheet.create({
   marcarTodasText: { fontSize: 13, color: '#1a6470', fontWeight: '600' },
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1a6470', marginBottom: 8, textAlign: 'center' },
-  emptySubtitle: { fontSize: 14, color: '#999', textAlign: 'center', lineHeight: 20 },
+  emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
   swipeContainer: {
     position: 'relative',

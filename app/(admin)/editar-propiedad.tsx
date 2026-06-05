@@ -17,6 +17,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
 import AsesorPicker from '../../components/ui/AsesorPicker'
@@ -47,6 +48,7 @@ const ESTACIONAMIENTOS_OPTIONS = [
 ]
 
 export default function EditarPropiedad() {
+  const c = useColors()
   const { id } = useLocalSearchParams<{ id: string }>()
 
   const [titulo, setTitulo] = useState('')
@@ -281,7 +283,7 @@ export default function EditarPropiedad() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg }}>
         <ActivityIndicator size="large" color="#1a6470" />
       </View>
     )
@@ -294,7 +296,7 @@ export default function EditarPropiedad() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView style={[styles.container, { backgroundColor: c.bg }]} keyboardShouldPersistTaps="handled">
         <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
           <Text style={styles.backBtnText}>← Volver</Text>
         </TouchableOpacity>
@@ -343,10 +345,10 @@ export default function EditarPropiedad() {
         )}
 
         <Text style={styles.label}>Título *</Text>
-        <TextInput style={styles.input} value={titulo} onChangeText={setTitulo} maxLength={100} />
+        <TextInput style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={titulo} onChangeText={setTitulo} maxLength={100} />
 
         <Text style={styles.label}>Dirección *</Text>
-        <TextInput style={styles.input} value={direccion} onChangeText={setDireccion} maxLength={200} />
+        <TextInput style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={direccion} onChangeText={setDireccion} maxLength={200} />
 
         <Text style={styles.label}>Operación</Text>
         <PillSelector
@@ -400,7 +402,7 @@ export default function EditarPropiedad() {
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>M²</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               placeholder="Ej. 120"
               value={m2}
               onChangeText={setM2}
@@ -416,7 +418,7 @@ export default function EditarPropiedad() {
 
         <Text style={styles.label}>Precio (MXN)</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
           value={precio}
           onChangeText={setPrecio}
           keyboardType="numeric"
@@ -472,7 +474,7 @@ export default function EditarPropiedad() {
         </View>
         {esConstructora && (
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
             placeholder="Nombre de la constructora"
             value={nombreConstructora}
             onChangeText={setNombreConstructora}
@@ -501,20 +503,17 @@ export default function EditarPropiedad() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, padding: 24 },
   backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
   backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
   screenTitle: { fontSize: 24, fontWeight: 'bold', color: '#1a6470', marginTop: 16, marginBottom: 8 },
   label: { fontSize: 14, fontWeight: '600', color: '#1a6470', marginBottom: 6, marginTop: 16 },
   input: {
-    backgroundColor: '#fff',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ddd',
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#1a6470',
   },
   textArea: { height: 100, paddingTop: 12 },
   imagenPicker: {

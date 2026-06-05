@@ -4,6 +4,7 @@ import {
   ActivityIndicator, TextInput, Platform, Alert,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 import { supabase } from '../../lib/supabase'
 
 type Entrega = {
@@ -45,6 +46,7 @@ function mostrarAlerta(msg: string) {
 }
 
 export default function AdminEntregas() {
+  const c = useColors()
   const [entregas, setEntregas] = useState<Entrega[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState<string>('pendiente')
@@ -163,13 +165,13 @@ export default function AdminEntregas() {
   const filtros = ['pendiente', 'aprobada', 'necesita_mejorar']
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: c.bg2 }]}>
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: c.card, borderBottomColor: c.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Text style={s.backText}>← Volver</Text>
         </TouchableOpacity>
-        <Text style={s.titulo}>Entregas de Tareas</Text>
+        <Text style={[s.titulo, { color: c.text }]}>Entregas de Tareas</Text>
       </View>
 
       {/* Filtros */}
@@ -200,7 +202,7 @@ export default function AdminEntregas() {
             const form = getForm(e.id)
             const color = ESTADO_COLORS[e.estado]
             return (
-              <View key={e.id} style={s.card}>
+              <View key={e.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
                 {/* Card header */}
                 <TouchableOpacity
                   style={s.cardHeader}
@@ -217,7 +219,7 @@ export default function AdminEntregas() {
                     <Text style={s.estadoBadgeText}>{ESTADO_LABELS[e.estado]}</Text>
                   </View>
                   <View style={s.cardInfo}>
-                    <Text style={s.cardUsuario}>{e.usuario_nombre ?? 'Usuario'}</Text>
+                    <Text style={[s.cardUsuario, { color: c.text }]}>{e.usuario_nombre ?? 'Usuario'}</Text>
                     <Text style={s.cardTarea}>{e.tarea_titulo ?? 'Tarea'}</Text>
                     <Text style={s.cardMeta}>
                       {e.curso_titulo} › {e.leccion_titulo}
@@ -347,15 +349,15 @@ export default function AdminEntregas() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f0f' },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: '#222',
+    borderBottomWidth: 1,
   },
   backBtn: { padding: 4 },
   backText: { color: '#c9a84c', fontSize: 14 },
-  titulo: { color: '#fff', fontSize: 20, fontWeight: '700', flex: 1 },
+  titulo: { fontSize: 20, fontWeight: '700', flex: 1 },
   filtros: {
     flexDirection: 'row', gap: 8, paddingHorizontal: 16,
     paddingVertical: 12, flexWrap: 'wrap',
@@ -369,8 +371,8 @@ const s = StyleSheet.create({
   emptyText: { color: '#666', fontSize: 15 },
   lista: { padding: 16, gap: 12, paddingBottom: 40 },
   card: {
-    backgroundColor: '#1a1a1a', borderRadius: 12,
-    overflow: 'hidden', borderWidth: 1, borderColor: '#222',
+    borderRadius: 12,
+    overflow: 'hidden', borderWidth: 1,
   },
   cardHeader: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14,
@@ -381,7 +383,7 @@ const s = StyleSheet.create({
   },
   estadoBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   cardInfo: { flex: 1, gap: 2 },
-  cardUsuario: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  cardUsuario: { fontSize: 15, fontWeight: '700' },
   cardTarea: { color: '#c9a84c', fontSize: 13, fontWeight: '600' },
   cardMeta: { color: '#888', fontSize: 12 },
   cardFecha: { color: '#555', fontSize: 11, marginTop: 2 },

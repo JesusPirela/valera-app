@@ -10,6 +10,7 @@ import {
 import Svg, { Path, Text as SvgText } from 'react-native-svg'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 // ─── Types ───────────────────────────────────────────────
 type Resumen = {
@@ -122,14 +123,14 @@ function DonutChart({ slices, size = 160, centerText, centerSub }: {
   )
 }
 
-function PieLegend({ slices, total }: { slices: Slice[]; total: number }) {
+function PieLegend({ slices, total, textColor }: { slices: Slice[]; total: number; textColor?: string }) {
   return (
     <View style={{ gap: 7, flex: 1, justifyContent: 'center' }}>
       {slices.map((s, i) => (
         <View key={i} style={styles.legendRow}>
           <View style={[styles.legendDot, { backgroundColor: s.color }]} />
-          <Text style={styles.legendLabel} numberOfLines={1}>{s.label}</Text>
-          <Text style={styles.legendVal}>{s.value}</Text>
+          <Text style={[styles.legendLabel, textColor ? { color: textColor } : {}]} numberOfLines={1}>{s.label}</Text>
+          <Text style={[styles.legendVal, textColor ? { color: textColor } : {}]}>{s.value}</Text>
           <Text style={styles.legendPct}>
             {total > 0 ? `${Math.round((s.value / total) * 100)}%` : '0%'}
           </Text>
@@ -140,13 +141,13 @@ function PieLegend({ slices, total }: { slices: Slice[]; total: number }) {
 }
 
 // ─── Barra actividad ─────────────────────────────────────
-function BarActividad({ dia, valor, max }: { dia: string; valor: number; max: number }) {
+function BarActividad({ dia, valor, max, trackBg }: { dia: string; valor: number; max: number; trackBg?: string }) {
   const pct = max > 0 ? valor / max : 0
   const barH = Math.max(pct * 80, valor > 0 ? 4 : 0)
   return (
     <View style={styles.barCol}>
       <Text style={styles.barNum}>{valor > 0 ? valor : ''}</Text>
-      <View style={styles.barTrack}>
+      <View style={[styles.barTrack, { backgroundColor: trackBg ?? '#f0f0f0' }]}>
         <View style={[styles.barFill, { height: barH }]} />
       </View>
       <Text style={styles.barDia}>{dia}</Text>
@@ -155,8 +156,8 @@ function BarActividad({ dia, valor, max }: { dia: string; valor: number; max: nu
 }
 
 // ─── Ranking row ─────────────────────────────────────────
-function RankRow({ pos, label, sublabel, valor, max, color }: {
-  pos: number; label: string; sublabel?: string; valor: number; max: number; color: string
+function RankRow({ pos, label, sublabel, valor, max, color, textColor, trackBg }: {
+  pos: number; label: string; sublabel?: string; valor: number; max: number; color: string; textColor?: string; trackBg?: string
 }) {
   const pct = max > 0 ? valor / max : 0
   return (
@@ -164,11 +165,11 @@ function RankRow({ pos, label, sublabel, valor, max, color }: {
       <Text style={styles.rankPos}>{pos}</Text>
       <View style={{ flex: 1 }}>
         <View style={styles.rankTopRow}>
-          <Text style={styles.rankLabel} numberOfLines={1}>{label}</Text>
+          <Text style={[styles.rankLabel, textColor ? { color: textColor } : {}]} numberOfLines={1}>{label}</Text>
           <Text style={[styles.rankVal, { color }]}>{valor}</Text>
         </View>
         {sublabel && <Text style={styles.rankSub}>{sublabel}</Text>}
-        <View style={styles.rankTrack}>
+        <View style={[styles.rankTrack, trackBg ? { backgroundColor: trackBg } : { backgroundColor: '#f0f0f0' }]}>
           <View style={[styles.rankFill, { width: `${Math.max(pct * 100, 3)}%` as any, backgroundColor: color }]} />
         </View>
       </View>
@@ -177,9 +178,9 @@ function RankRow({ pos, label, sublabel, valor, max, color }: {
 }
 
 // ─── Card wrapper ─────────────────────────────────────────
-function Card({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
+function Card({ titulo, children, bg }: { titulo?: string; children: React.ReactNode; bg?: string }) {
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, bg ? { backgroundColor: bg } : {}]}>
       {titulo && <Text style={styles.cardTitulo}>{titulo}</Text>}
       {children}
     </View>
@@ -210,6 +211,7 @@ function fechaDesde(periodo: Periodo): string | null {
 
 // ─── Pantalla principal ───────────────────────────────────
 export default function Estadisticas() {
+  const c = useColors()
   const [stats, setStats] = useState<Estadisticas | null>(null)
   const [propDist, setPropDist] = useState<{ tipo: string | null; operacion: string | null; estado: string | null }[]>([])
   const [clienteDist, setClienteDist] = useState<{ estado: string }[]>([])
@@ -234,17 +236,17 @@ export default function Estadisticas() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: c.bg }]}>
         <ActivityIndicator size="large" color={C.teal} />
-        <Text style={styles.loadingText}>Cargando estadísticas…</Text>
+        <Text style={[styles.loadingText, { color: c.textMute }]}>Cargando estadísticas…</Text>
       </View>
     )
   }
 
   if (!stats) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>No se pudieron cargar las estadísticas.</Text>
+      <View style={[styles.centered, { backgroundColor: c.bg }]}>
+        <Text style={[styles.errorText, { color: c.textMute }]}>No se pudieron cargar las estadísticas.</Text>
         <TouchableOpacity onPress={cargar} style={styles.reintentarBtn}>
           <Text style={styles.reintentarText}>Reintentar</Text>
         </TouchableOpacity>
@@ -326,13 +328,13 @@ export default function Estadisticas() {
   const maxProsp = top_prospectadores.length > 0 ? top_prospectadores[0].total : 1
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 48 }}>
+    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 48 }}>
       <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
         <Text style={styles.backBtnText}>← Volver</Text>
       </TouchableOpacity>
 
       <View style={styles.pageHeader}>
-        <Text style={styles.pageTitle}>Estadísticas</Text>
+        <Text style={[styles.pageTitle, { color: c.text }]}>Estadísticas</Text>
         <TouchableOpacity
           style={styles.conexionBtn}
           onPress={() => router.push('/(admin)/conexion-usuarios' as any)}
@@ -346,10 +348,10 @@ export default function Estadisticas() {
         {PERIODOS.map(p => (
           <TouchableOpacity
             key={p.value}
-            style={[styles.periodoBtn, periodo === p.value && styles.periodoBtnActivo]}
+            style={[styles.periodoBtn, { backgroundColor: c.card, borderColor: c.border }, periodo === p.value && styles.periodoBtnActivo]}
             onPress={() => { setPeriodo(p.value); cargar(p.value) }}
           >
-            <Text style={[styles.periodoBtnText, periodo === p.value && styles.periodoBtnTextActivo]}>
+            <Text style={[styles.periodoBtnText, { color: c.textMute }, periodo === p.value && styles.periodoBtnTextActivo]}>
               {p.label}
             </Text>
           </TouchableOpacity>
@@ -358,17 +360,17 @@ export default function Estadisticas() {
 
       {/* KPI Cards */}
       <View style={styles.kpiGrid}>
-        <KpiCard label="Propiedades" value={resumen.total_propiedades} color={C.teal} icon="🏠" />
-        <KpiCard label="Prospectadores" value={resumen.total_prospectadores} color={C.green} icon="👥" />
-        <KpiCard label="Vistas" value={resumen.total_vistas} color={C.blue} icon="👁" />
-        <KpiCard label="Descargas" value={resumen.total_descargas} color={C.amber} icon="📥" />
+        <KpiCard label="Propiedades" value={resumen.total_propiedades} color={C.teal} icon="🏠" bg={c.card} />
+        <KpiCard label="Prospectadores" value={resumen.total_prospectadores} color={C.green} icon="👥" bg={c.card} />
+        <KpiCard label="Vistas" value={resumen.total_vistas} color={C.blue} icon="👁" bg={c.card} />
+        <KpiCard label="Descargas" value={resumen.total_descargas} color={C.amber} icon="📥" bg={c.card} />
       </View>
 
       {/* Propiedades: tipo y operación */}
       {propDist.length > 0 && (
         <>
           <View style={styles.rowCards}>
-            <Card titulo="Por tipo">
+            <Card bg={c.card} titulo="Por tipo">
               <View style={styles.pieRow}>
                 <DonutChart
                   slices={slicesTipo}
@@ -376,11 +378,11 @@ export default function Estadisticas() {
                   centerText={String(propDist.length)}
                   centerSub="total"
                 />
-                <PieLegend slices={slicesTipo} total={propDist.length} />
+                <PieLegend slices={} total={} textColor={c.text} />
               </View>
             </Card>
 
-            <Card titulo="Por operación">
+            <Card bg={c.card} titulo="Por operación">
               <View style={styles.pieRow}>
                 <DonutChart
                   slices={slicesOp}
@@ -388,12 +390,12 @@ export default function Estadisticas() {
                   centerText={String(propDist.length)}
                   centerSub="total"
                 />
-                <PieLegend slices={slicesOp} total={propDist.length} />
+                <PieLegend slices={} total={} textColor={c.text} />
               </View>
             </Card>
           </View>
 
-          <Card titulo="Por estado">
+          <Card bg={c.card} titulo="Por estado">
             <View style={styles.pieRowCenter}>
               <DonutChart
                 slices={slicesEst}
@@ -401,7 +403,7 @@ export default function Estadisticas() {
                 centerText={String(propDist.length)}
                 centerSub="propiedades"
               />
-              <PieLegend slices={slicesEst} total={propDist.length} />
+              <PieLegend slices={} total={} textColor={c.text} />
             </View>
           </Card>
         </>
@@ -409,7 +411,7 @@ export default function Estadisticas() {
 
       {/* CRM */}
       {slicesCRM.length > 0 && (
-        <Card titulo="Clientes CRM — por etapa">
+        <Card bg={c.card} titulo="Clientes CRM — por etapa">
           <View style={styles.pieRowCenter}>
             <DonutChart
               slices={slicesCRM}
@@ -417,14 +419,14 @@ export default function Estadisticas() {
               centerText={String(clienteDist.length)}
               centerSub="clientes"
             />
-            <PieLegend slices={slicesCRM} total={clienteDist.length} />
+            <PieLegend slices={} total={} textColor={c.text} />
           </View>
         </Card>
       )}
 
       {/* Engagement */}
       {(resumen.total_vistas > 0 || resumen.total_descargas > 0) && (
-        <Card titulo="Vistas vs Descargas">
+        <Card bg={c.card} titulo="Vistas vs Descargas">
           <View style={styles.pieRowCenter}>
             <DonutChart
               slices={slicesEngagement}
@@ -432,26 +434,26 @@ export default function Estadisticas() {
               centerText={String(resumen.total_vistas + resumen.total_descargas)}
               centerSub="acciones"
             />
-            <PieLegend slices={slicesEngagement} total={resumen.total_vistas + resumen.total_descargas} />
+            <PieLegend slices={} total={} textColor={c.text} />
           </View>
         </Card>
       )}
 
       {/* Actividad 7 días */}
-      <Card titulo="Actividad — últimos 7 días">
+      <Card bg={c.card} titulo="Actividad — últimos 7 días">
         {actividad_7dias.length === 0 ? (
           <Text style={styles.sinDatos}>Sin actividad reciente</Text>
         ) : (
           <View style={styles.barChartRow}>
             {actividad_7dias.map((d) => (
-              <BarActividad key={d.dia} dia={d.dia} valor={d.total} max={maxAct} />
+              <BarActividad key={d.dia} dia={d.dia} valor={d.total} max={maxAct} trackBg={c.border} />
             ))}
           </View>
         )}
       </Card>
 
       {/* Top propiedades */}
-      <Card titulo="Propiedades más activas">
+      <Card bg={c.card} titulo="Propiedades más activas">
         {top_propiedades.length === 0 ? (
           <Text style={styles.sinDatos}>Sin datos aún</Text>
         ) : (
@@ -464,13 +466,15 @@ export default function Estadisticas() {
               valor={p.total}
               max={maxProp}
               color={C.teal}
+              textColor={c.text}
+              trackBg={c.border}
             />
           ))
         )}
       </Card>
 
       {/* Top prospectadores */}
-      <Card titulo="Prospectadores más activos">
+      <Card bg={c.card} titulo="Prospectadores más activos">
         {top_prospectadores.length === 0 ? (
           <Text style={styles.sinDatos}>Sin datos aún</Text>
         ) : (
@@ -483,6 +487,8 @@ export default function Estadisticas() {
               valor={p.total}
               max={maxProsp}
               color={C.amber}
+              textColor={c.text}
+              trackBg={c.border}
             />
           ))
         )}
@@ -491,9 +497,9 @@ export default function Estadisticas() {
   )
 }
 
-function KpiCard({ label, value, color, icon }: { label: string; value: number; color: string; icon: string }) {
+function KpiCard({ label, value, color, icon, bg }: { label: string; value: number; color: string; icon: string; bg?: string }) {
   return (
-    <View style={[styles.kpiCard, { borderLeftColor: color }]}>
+    <View style={[styles.kpiCard, { borderLeftColor: color }, bg ? { backgroundColor: bg } : {}]}>
       <Text style={styles.kpiIcon}>{icon}</Text>
       <Text style={[styles.kpiNum, { color }]}>{value}</Text>
       <Text style={styles.kpiLabel}>{label}</Text>
@@ -502,10 +508,10 @@ function KpiCard({ label, value, color, icon }: { label: string; value: number; 
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f2f5', paddingHorizontal: 16 },
+  container: { flex: 1, paddingHorizontal: 16 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  loadingText: { color: '#aaa', marginTop: 12, fontSize: 13 },
-  errorText: { color: '#aaa', fontSize: 15, marginBottom: 16 },
+  loadingText: { marginTop: 12, fontSize: 13 },
+  errorText: { fontSize: 15, marginBottom: 16 },
   reintentarBtn: { borderWidth: 1, borderColor: C.teal, borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10 },
   reintentarText: { color: C.teal, fontWeight: '600' },
 
@@ -529,7 +535,6 @@ const styles = StyleSheet.create({
   kpiCard: {
     flex: 1,
     minWidth: '45%',
-    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
     borderLeftWidth: 4,
@@ -545,7 +550,6 @@ const styles = StyleSheet.create({
 
   // Cards
   card: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 18,
     marginBottom: 14,
@@ -575,14 +579,14 @@ const styles = StyleSheet.create({
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   legendDot: { width: 10, height: 10, borderRadius: 3 },
   legendLabel: { flex: 1, fontSize: 12, color: '#555' },
-  legendVal: { fontSize: 13, fontWeight: '700', color: '#1a2e35', width: 28, textAlign: 'right' },
+  legendVal: { fontSize: 13, fontWeight: '700', width: 28, textAlign: 'right' },
   legendPct: { fontSize: 11, color: '#bbb', width: 34, textAlign: 'right' },
 
   // Bar chart vertical
   barChartRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', height: 120 },
   barCol: { alignItems: 'center', flex: 1 },
   barNum: { fontSize: 10, color: C.teal, fontWeight: '700', marginBottom: 3, height: 14 },
-  barTrack: { width: 28, height: 80, justifyContent: 'flex-end', backgroundColor: '#f0f0f0', borderRadius: 6, overflow: 'hidden' },
+  barTrack: { width: 28, height: 80, justifyContent: 'flex-end', borderRadius: 6, overflow: 'hidden' },
   barFill: { width: '100%', backgroundColor: C.teal, borderRadius: 6 },
   barDia: { fontSize: 10, color: '#aaa', marginTop: 5, textAlign: 'center' },
 
@@ -590,10 +594,10 @@ const styles = StyleSheet.create({
   rankRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
   rankPos: { fontSize: 16, fontWeight: '800', color: '#ddd', width: 22, textAlign: 'center' },
   rankTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 },
-  rankLabel: { fontSize: 14, fontWeight: '700', color: '#1a2e35', flex: 1 },
+  rankLabel: { fontSize: 14, fontWeight: '700', flex: 1 },
   rankVal: { fontSize: 15, fontWeight: '800' },
   rankSub: { fontSize: 11, color: '#bbb', marginBottom: 5 },
-  rankTrack: { height: 6, backgroundColor: '#f0f0f0', borderRadius: 3, overflow: 'hidden' },
+  rankTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   rankFill: { height: '100%', borderRadius: 3 },
 
   sinDatos: { fontSize: 13, color: '#ccc', textAlign: 'center', paddingVertical: 12 },

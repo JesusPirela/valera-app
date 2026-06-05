@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useColors, AppColors } from '../../lib/ThemeContext'
 
 type StoreItem = {
   id: string
@@ -58,6 +59,7 @@ type PremioConfig = {
 type RuletaCfg = { costo: number; premios: PremioConfig[] }
 
 export default function TiendaItems() {
+  const c = useColors()
   const [items, setItems]         = useState<StoreItem[]>([])
   const [loading, setLoading]     = useState(true)
   const [modal, setModal]         = useState(false)
@@ -107,12 +109,12 @@ export default function TiendaItems() {
     // Actualizar el número solo si el string es un número válido (no solo "1." etc.)
     const n = parseFloat(texto)
     if (!isNaN(n)) {
-      setRuletaCfg(c => {
-        if (!c) return c
-        const premios = [...c.premios]
+      setRuletaCfg(cfg => {
+        if (!cfg) return cfg
+        const premios = [...cfg.premios]
         if (campo === 'c') premios[idx] = { ...premios[idx], prob_cofre: n }
         else               premios[idx] = { ...premios[idx], prob_milestone: n }
-        return { ...c, premios }
+        return { ...cfg, premios }
       })
     }
   }
@@ -260,7 +262,7 @@ export default function TiendaItems() {
   )
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f0f4f5' }}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
       <View style={s.header}>
         <View>
           <Text style={s.headerTitle}>Artículos de la Tienda</Text>
@@ -288,12 +290,12 @@ export default function TiendaItems() {
 
       <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
         {items.map(item => (
-          <View key={item.id} style={[s.card, !item.disponible && s.cardInactiva]}>
+          <View key={item.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }, !item.disponible && s.cardInactiva]}>
             <View style={s.cardTop}>
               <Text style={s.icono}>{item.icono}</Text>
               <View style={{ flex: 1 }}>
-                <Text style={[s.nombre, !item.disponible && { color: '#aaa' }]}>{item.nombre}</Text>
-                {item.descripcion ? <Text style={s.desc} numberOfLines={2}>{item.descripcion}</Text> : null}
+                <Text style={[s.nombre, { color: c.text }, !item.disponible && { color: c.textMute }]}>{item.nombre}</Text>
+                {item.descripcion ? <Text style={[s.desc, { color: c.textMute }]} numberOfLines={2}>{item.descripcion}</Text> : null}
                 <Text style={s.tipo}>{TIPOS.find(t => t.value === item.tipo)?.label ?? item.tipo}</Text>
               </View>
               <View style={s.costoBox}>
@@ -331,14 +333,14 @@ export default function TiendaItems() {
       {/* Modal configuración ruleta */}
       <Modal visible={ruletaModal} animationType="slide" transparent onRequestClose={() => setRuletaModal(false)}>
         <View style={s.overlay}>
-          <ScrollView style={s.sheet} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+          <ScrollView style={[s.sheet, { backgroundColor: c.card }]} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
             <Text style={s.modalTitle}>🎰 Configuración de Ruleta</Text>
 
             <Text style={s.lbl}>Costo del Cofre (coins)</Text>
             <TextInput
-              style={s.inputNum}
+              style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               value={String(ruletaCfg?.costo ?? 100)}
-              onChangeText={v => setRuletaCfg(c => c ? { ...c, costo: parseInt(v) || 0 } : c)}
+              onChangeText={v => setRuletaCfg(cfg => cfg ? { ...cfg, costo: parseInt(v) || 0 } : cfg)}
               keyboardType="numeric"
             />
 
@@ -354,7 +356,7 @@ export default function TiendaItems() {
                   <Text style={[s.lbl, { marginTop: 0, marginBottom: 0 }]}>Premio {i + 1}</Text>
                   <TouchableOpacity
                     onPress={() => confirmar(`¿Eliminar el premio "${p.nombre}"?`, () =>
-                      setRuletaCfg(c => c ? { ...c, premios: c.premios.filter((_, idx) => idx !== i) } : c)
+                      setRuletaCfg(cfg => cfg ? { ...cfg, premios: cfg.premios.filter((_, idx) => idx !== i) } : cfg)
                     )}
                     style={s.btnEliminarPremio}
                   >
@@ -369,11 +371,11 @@ export default function TiendaItems() {
                         <TouchableOpacity
                           key={item.id}
                           style={[s.itemChip, sel && s.itemChipSel]}
-                          onPress={() => setRuletaCfg(c => {
-                            if (!c) return c
-                            const premios = [...c.premios]
+                          onPress={() => setRuletaCfg(cfg => {
+                            if (!cfg) return cfg
+                            const premios = [...cfg.premios]
                             premios[i] = { ...premios[i], nombre: item.nombre, icono: item.icono, tipo: item.tipo }
-                            return { ...c, premios }
+                            return { ...cfg, premios }
                           })}
                         >
                           <Text style={s.itemChipIcn}>{item.icono}</Text>
@@ -390,7 +392,7 @@ export default function TiendaItems() {
                   <View style={s.ruletaProb}>
                     <Text style={s.ruletaProbLbl}>Cofre %</Text>
                     <TextInput
-                      style={s.inputNum}
+                      style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                       value={rawProbs[`${p.id}_c`] ?? String(p.prob_cofre)}
                       onChangeText={v => setProb(p.id, 'c', v, i)}
                       keyboardType="decimal-pad"
@@ -399,7 +401,7 @@ export default function TiendaItems() {
                   <View style={s.ruletaProb}>
                     <Text style={s.ruletaProbLbl}>Nivel %</Text>
                     <TextInput
-                      style={s.inputNum}
+                      style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                       value={rawProbs[`${p.id}_m`] ?? String(p.prob_milestone)}
                       onChangeText={v => setProb(p.id, 'm', v, i)}
                       keyboardType="decimal-pad"
@@ -414,9 +416,9 @@ export default function TiendaItems() {
                 style={s.btnAgregarPremio}
                 onPress={() => {
                   const newId = `nuevo_${Date.now()}`
-                  setRuletaCfg(c => c ? {
-                    ...c,
-                    premios: [...c.premios, {
+                  setRuletaCfg(cfg => cfg ? {
+                    ...cfg,
+                    premios: [...cfg.premios, {
                       id: newId,
                       nombre: items[0]?.nombre ?? 'Nuevo premio',
                       icono: items[0]?.icono ?? '🎁',
@@ -424,7 +426,7 @@ export default function TiendaItems() {
                       prob_cofre: 0,
                       prob_milestone: 0,
                     }],
-                  } : c)
+                  } : cfg)
                   setRawProbs(r => ({ ...r, [`${newId}_c`]: '0', [`${newId}_m`]: '0' }))
                 }}
               >
@@ -460,14 +462,14 @@ export default function TiendaItems() {
       {/* Modal edición / nuevo */}
       <Modal visible={modal} animationType="slide" transparent onRequestClose={() => setModal(false)}>
         <View style={s.overlay}>
-          <ScrollView style={s.sheet} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+          <ScrollView style={[s.sheet, { backgroundColor: c.card }]} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
             <Text style={s.modalTitle}>{editando ? 'Editar artículo' : 'Nuevo artículo'}</Text>
 
             <Text style={s.lbl}>Icono (emoji)</Text>
-            <TextInput style={s.input} value={form.icono} onChangeText={v => setForm(f => ({ ...f, icono: v }))} maxLength={4} />
+            <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={form.icono} onChangeText={v => setForm(f => ({ ...f, icono: v }))} maxLength={4} />
 
             <Text style={s.lbl}>Nombre *</Text>
-            <TextInput style={s.input} value={form.nombre} onChangeText={v => setForm(f => ({ ...f, nombre: v }))} placeholder="Nombre del artículo" autoCapitalize="sentences" />
+            <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={form.nombre} onChangeText={v => setForm(f => ({ ...f, nombre: v }))} placeholder="Nombre del artículo" autoCapitalize="sentences" />
 
             <Text style={s.lbl}>Descripción</Text>
             <TextInput
@@ -497,7 +499,7 @@ export default function TiendaItems() {
               <View style={{ flex: 1 }}>
                 <Text style={s.lbl}>Costo (coins) *</Text>
                 <TextInput
-                  style={s.inputNum}
+                  style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                   value={String(form.costo_coins)}
                   onChangeText={v => setForm(f => ({ ...f, costo_coins: parseInt(v) || 0 }))}
                   keyboardType="numeric"
@@ -506,7 +508,7 @@ export default function TiendaItems() {
               <View style={{ flex: 1 }}>
                 <Text style={s.lbl}>Stock (vacío = ilimitado)</Text>
                 <TextInput
-                  style={s.inputNum}
+                  style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                   value={form.stock != null ? String(form.stock) : ''}
                   onChangeText={v => setForm(f => ({ ...f, stock: v === '' ? null : parseInt(v) || null }))}
                   keyboardType="numeric"
@@ -516,7 +518,7 @@ export default function TiendaItems() {
               <View style={{ flex: 1 }}>
                 <Text style={s.lbl}>Orden</Text>
                 <TextInput
-                  style={s.inputNum}
+                  style={[s.inputNum, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                   value={String(form.orden)}
                   onChangeText={v => setForm(f => ({ ...f, orden: parseInt(v) || 0 }))}
                   keyboardType="numeric"
@@ -584,16 +586,16 @@ const s = StyleSheet.create({
   ruletaSumasTxt: { fontSize: 13, fontWeight: '700', color: '#2e7d32', textAlign: 'center' },
 
   card: {
-    backgroundColor: '#fff', borderRadius: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: '#e0eaec', padding: 14,
+    borderRadius: 14, marginBottom: 10,
+    borderWidth: 1, padding: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2,
   },
   cardInactiva: { opacity: 0.55, borderColor: '#ddd' },
 
   cardTop:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   icono:    { fontSize: 30 },
-  nombre:   { fontSize: 15, fontWeight: '700', color: '#1a1a2e', marginBottom: 2 },
-  desc:     { fontSize: 12, color: '#888', lineHeight: 16, marginBottom: 3 },
+  nombre:   { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  desc:     { fontSize: 12, lineHeight: 16, marginBottom: 3 },
   tipo:     { fontSize: 11, color: '#1a6470', fontWeight: '600' },
 
   costoBox: { alignItems: 'center', backgroundColor: '#fff8e1', borderRadius: 10, padding: 8, minWidth: 64 },
@@ -612,20 +614,20 @@ const s = StyleSheet.create({
 
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 20, maxHeight: '92%',
   },
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#1a6470', marginBottom: 16 },
 
   lbl: { fontSize: 12, fontWeight: '700', color: '#666', marginBottom: 5, marginTop: 12, textTransform: 'uppercase' },
   input: {
-    backgroundColor: '#f5f8f9', borderRadius: 10, borderWidth: 1, borderColor: '#dde8e9',
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1a1a2e',
+    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
   },
   numRow:   { flexDirection: 'row', gap: 10 },
   inputNum: {
-    backgroundColor: '#f5f8f9', borderRadius: 10, borderWidth: 1, borderColor: '#dde8e9',
-    paddingHorizontal: 10, paddingVertical: 10, fontSize: 14, color: '#1a1a2e', textAlign: 'center',
+    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 10, paddingVertical: 10, fontSize: 14, textAlign: 'center',
   },
 
   chip:      { borderWidth: 1, borderColor: '#ddd', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#fff' },
