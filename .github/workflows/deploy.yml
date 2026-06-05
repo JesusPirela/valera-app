@@ -61,6 +61,18 @@ jobs:
           git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
           git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:web-build
 
+      - name: Deploy via SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 65002" \
+            ./dist/ ${{ secrets.FTP_USER }}@${{ secrets.FTP_HOST }}:~/public_html/ || \
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 22" \
+            ./dist/ ${{ secrets.FTP_USER }}@${{ secrets.FTP_HOST }}:~/public_html/
+
       - name: Notificar a Hostinger para desplegar
         run: |
           curl -s -w "\nHTTP: %{http_code}" -X POST \
