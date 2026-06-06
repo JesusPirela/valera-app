@@ -187,14 +187,31 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   }
 
   function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}}[], color: string) {
-    // Group by rounded coordinates (same location = same key)
+    // Group by rounded coordinates
     const groups = new Map<string, typeof items>()
     items.forEach(item => {
       const key = `${item.coords[0].toFixed(4)},${item.coords[1].toFixed(4)}`
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(item)
     })
-    groups.forEach(group => addIndivPins(L, map, group, color))
+    groups.forEach(group => {
+      if (group.length === 1) {
+        addIndivPins(L, map, group, color)
+        return
+      }
+      // Spread multiple pins around the same point in a small spiral
+      const center = group[0].coords
+      const R = 0.0008 // ~80m radius
+      const lngF = 1 / Math.cos(center[0] * Math.PI / 180)
+      group.forEach((item, i) => {
+        const angle = (2 * Math.PI / group.length) * i - Math.PI / 2
+        const offsetCoords: [number, number] = [
+          center[0] + Math.cos(angle) * R,
+          center[1] + Math.sin(angle) * R * lngF,
+        ]
+        addIndivPins(L, map, [{ coords: offsetCoords, p: item.p }], color)
+      })
+    })
   }
 
   function setBackBtn(L: any, map: any, label: string, onClick: () => void) {
