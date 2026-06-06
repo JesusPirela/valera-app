@@ -82,7 +82,7 @@ type Props = {
 // ── Spread non-geocoded props around a center using golden-ratio spiral ──────
 function spreadCoords(center: [number, number], count: number): [number, number][] {
   const PHI = (1 + Math.sqrt(5)) / 2
-  const baseR = 0.012
+  const baseR = 0.007
   const lngFactor = 1 / Math.cos(center[0] * Math.PI / 180)
   return Array.from({ length: count }, (_, i) => {
     const angle = 2 * Math.PI * PHI * i
