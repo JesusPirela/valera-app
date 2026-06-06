@@ -692,32 +692,6 @@ export default function ProspectadorPropiedades() {
                 onPropiedadPress={id => router.push(`/(prospectador)/detalle-propiedad?id=${id}` as any)}
               />
             </View>
-            <View style={{ height: 32, backgroundColor: '#f5f5f5' }} />
-            <View style={{ paddingHorizontal: isWeb ? 24 : 0 }}>
-            {propiedadesPorZona.map(([zona, props]) => {
-              const expandida = zonasExpandidas.has(zona)
-              return (
-                <View key={zona} style={styles.zonaSection}>
-                  <TouchableOpacity style={styles.zonaHeader} onPress={() => toggleZona(zona)} activeOpacity={0.7}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.zonaNombre, { color: primaryColor }]}>{zona}</Text>
-                      <Text style={styles.zonaCount}>{props.length} propiedad{props.length !== 1 ? 'es' : ''}</Text>
-                    </View>
-                    <Ionicons
-                      name={expandida ? 'chevron-up-outline' : 'chevron-down-outline'}
-                      size={20}
-                      color={primaryColor}
-                    />
-                  </TouchableOpacity>
-                  {expandida && (
-                    <View style={isWeb ? styles.webGrid : styles.zonaContent}>
-                      {props.map(p => renderPropiedad(p, cardWidth))}
-                    </View>
-                  )}
-                </View>
-              )
-            })}
-            </View>
           </ScrollView>
         ) : isWeb ? (
           <ScrollView contentContainerStyle={styles.webGridScroll}>
