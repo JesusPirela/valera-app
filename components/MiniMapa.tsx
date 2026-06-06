@@ -95,16 +95,18 @@ function naturalSpread(center: [number, number], count: number, R = 0.007): [num
   })
 }
 
-// Dispersión uniforme en círculo — para expandir cluster al hacer click
+// Espiral Fibonacci — para expandir cluster al hacer click
 function uniformSpread(center: [number, number], count: number): [number, number][] {
   if (count <= 1) return [center]
+  const PHI = (1 + Math.sqrt(5)) / 2
   const R = 0.0015
   const lngFactor = 1 / Math.cos(center[0] * Math.PI / 180)
   return Array.from({ length: count }, (_, i) => {
-    const angle = (2 * Math.PI * i) / count - Math.PI / 2
+    const angle = 2 * Math.PI * PHI * i
+    const r = R * Math.sqrt((i + 1) / count)
     return [
-      center[0] + Math.cos(angle) * R,
-      center[1] + Math.sin(angle) * R * lngFactor,
+      center[0] + Math.cos(angle) * r,
+      center[1] + Math.sin(angle) * r * lngFactor,
     ] as [number, number]
   })
 }
