@@ -355,7 +355,7 @@ export default function ProspectadorPropiedades() {
       coords: z.coords,
       color: z.color,
       count: propsZona.length,
-      propiedades: propsZona.map(p => ({ direccion: p.direccion, lat: p.lat, lng: p.lng })),
+      propiedades: propsZona.map(p => ({ id: p.id, titulo: p.titulo, precio: p.precio, tipo: p.tipo, direccion: p.direccion, lat: p.lat, lng: p.lng })),
     }
   }).filter(z => z.count > 0)
 

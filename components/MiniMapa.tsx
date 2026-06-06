@@ -7,7 +7,15 @@ export type ZonaPin = {
   coords: [number, number]
   count: number
   color: string
-  propiedades?: { direccion: string; lat?: number | null; lng?: number | null }[]
+  propiedades?: {
+    id: string
+    titulo: string
+    precio: number | null
+    tipo: string | null
+    direccion: string
+    lat?: number | null
+    lng?: number | null
+  }[]
 }
 
 export type PropiedadCoord = {
@@ -205,7 +213,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     }).filter(c => c.matching.length > 0)
 
     const otras = props.filter((_, i) => !matched.has(i))
-    if (otras.length > 0) clusters.push({ label: 'Otras zonas', coords: view.center, keywords: [], matching: otras })
+    if (otras.length > 0) clusters.push({ label: 'Sin zona específica', coords: view.center, keywords: [], matching: otras })
 
     // Also show geocoded pins directly (they have exact coords)
     const geocodedInCity = coordsRef.current.filter(p => p.zona === zona.key)
@@ -242,21 +250,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
 
     matching.forEach((p, i) => {
       const coords: [number, number] = (p.lat && p.lng) ? [p.lat, p.lng] : spread[i]
-      // Try to find full data in coordsRef
-      const full = coordsRef.current.find(c => c.direccion === p.direccion && c.zona === zona.key)
-      if (full) {
-        addIndivPin(L, map, coords, full, color)
-      } else {
-        const icon = L.divIcon({
-          className: '',
-          html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
-          iconSize: [14, 14], iconAnchor: [7, 7],
-        })
-        const m = L.marker(coords, { icon })
-          .addTo(map)
-          .bindTooltip(`📍 ${p.direccion}`, { direction: 'top' })
-        markersRef.current.push(m)
-      }
+      addIndivPin(L, map, coords, p, color)
     })
   }
 
