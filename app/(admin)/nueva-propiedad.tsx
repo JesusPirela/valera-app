@@ -21,6 +21,7 @@ import { useColors, AppColors } from '../../lib/ThemeContext'
 import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
 import AsesorPicker from '../../components/ui/AsesorPicker'
+import { COLONIAS } from '../../lib/colonias'
 
 function generarUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -187,13 +188,19 @@ export default function NuevaPropiedad() {
     setTitulo(direccion.trim() ? `${base} en ${direccion.trim()}` : base)
   }, [tipo, operacion, direccion, tituloEditado])
 
+  const coloniasSugeridas = geoQuery.length >= 2
+    ? COLONIAS.filter(c => c.label.toLowerCase().includes(geoQuery.toLowerCase()))
+    : []
+
   useEffect(() => {
     if (!geoQuery.trim() || geoQuery.length < 3) { setGeoResults([]); return }
+    const cityHint = zona === 'queretaro' ? 'Querétaro' : zona === 'monterrey' ? 'Monterrey' : zona === 'puebla' ? 'Puebla' : ''
+    const q = `${geoQuery}${cityHint ? ' ' + cityHint : ''} Mexico`
     const t = setTimeout(async () => {
       setGeoLoading(true)
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geoQuery + ' Mexico')}&format=json&limit=5&countrycodes=mx`
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&countrycodes=mx`
         )
         const data = await res.json()
         setGeoResults(Array.isArray(data) ? data : [])
@@ -201,14 +208,19 @@ export default function NuevaPropiedad() {
       finally { setGeoLoading(false) }
     }, 400)
     return () => clearTimeout(t)
-  }, [geoQuery])
+  }, [geoQuery, zona])
+
+  function seleccionarColoniaPredefinida(c: typeof COLONIAS[0]) {
+    const texto = `${c.label}, ${c.ciudad}, México`
+    setDireccion(texto); setGeoQuery(texto)
+    setLat(c.lat); setLng(c.lng)
+    setZona(c.zona); setGeoResults([])
+  }
 
   function seleccionarUbicacion(r: any) {
     const partes = r.display_name.split(',').slice(0, 4).join(', ').trim()
-    setDireccion(partes)
-    setGeoQuery(partes)
-    setLat(parseFloat(r.lat))
-    setLng(parseFloat(r.lon))
+    setDireccion(partes); setGeoQuery(partes)
+    setLat(parseFloat(r.lat)); setLng(parseFloat(r.lon))
     setGeoResults([])
     const dn = r.display_name.toLowerCase()
     if (dn.includes('querétaro') || dn.includes('queretaro')) setZona('queretaro')
@@ -608,16 +620,30 @@ export default function NuevaPropiedad() {
           />
           {geoLoading && <ActivityIndicator size="small" color="#1976D2" style={{ marginLeft: 8 }} />}
         </View>
-        {geoLoading && (
-          <Text style={{ fontSize: 11, color: '#1976D2', marginBottom: 4 }}>🔍 Buscando ubicación...</Text>
+        {geoLoading && <Text style={{ fontSize: 11, color: '#1976D2', marginBottom: 4 }}>🔍 Buscando...</Text>}
+        {lat !== null && <Text style={{ fontSize: 11, color: '#22a35e', marginBottom: 8 }}>✓ Ubicación confirmada en el mapa</Text>}
+
+        {coloniasSugeridas.length > 0 && (
+          <View style={{ borderRadius: 8, borderWidth: 1, borderColor: '#22a35e', marginBottom: 8, overflow: 'hidden' }}>
+            <Text style={{ fontSize: 11, color: '#22a35e', fontWeight: '700', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 }}>
+              📌 Colonias conocidas:
+            </Text>
+            {coloniasSugeridas.slice(0, 5).map((col, i) => (
+              <TouchableOpacity
+                key={col.label}
+                style={{ padding: 10, backgroundColor: i % 2 === 0 ? c.input : c.bg, borderTopWidth: 1, borderTopColor: c.inputBorder }}
+                onPress={() => seleccionarColoniaPredefinida(col)}
+              >
+                <Text style={{ fontSize: 13, color: c.inputText }}>📌 {col.label} — {col.ciudad}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
-        {lat !== null && (
-          <Text style={{ fontSize: 11, color: '#22a35e', marginBottom: 8 }}>✓ Ubicación confirmada en el mapa</Text>
-        )}
+
         {geoResults.length > 0 && (
           <View style={{ borderRadius: 8, borderWidth: 1, borderColor: '#1976D2', marginBottom: 12, overflow: 'hidden' }}>
             <Text style={{ fontSize: 11, color: '#1976D2', fontWeight: '700', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 }}>
-              Selecciona una ubicación:
+              🔍 Resultados de búsqueda:
             </Text>
             {geoResults.map((r: any, i: number) => (
               <TouchableOpacity
