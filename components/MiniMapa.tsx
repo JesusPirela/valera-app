@@ -10,6 +10,17 @@ export type ZonaPin = {
   propiedades?: { direccion: string; lat?: number | null; lng?: number | null }[]
 }
 
+export type PropiedadCoord = {
+  id: string
+  lat: number
+  lng: number
+  direccion: string
+  zona: string | null
+  titulo: string
+  precio: number | null
+  tipo: string | null
+}
+
 const SUBZONAS: Record<string, { label: string; coords: [number, number]; keywords: string[] }[]> = {
   queretaro: [
     { label: 'Corregidora',      coords: [20.5167, -100.4417], keywords: ['corregidora'] },
@@ -43,17 +54,6 @@ const CITY_VIEW: Record<string, { center: [number, number]; zoom: number }> = {
   puebla:    { center: [19.05,  -98.26],  zoom: 10 },
 }
 
-type PropiedadCoord = {
-  id: string
-  lat: number
-  lng: number
-  direccion: string
-  zona: string | null
-  titulo: string
-  precio: number | null
-  tipo: string | null
-}
-
 type Props = {
   zonas: ZonaPin[]
   onZonaPress: (key: string) => void
@@ -61,13 +61,26 @@ type Props = {
   onPropiedadPress?: (id: string) => void
 }
 
+// ── Spread non-geocoded props around a center using golden-ratio spiral ──────
+function spreadCoords(center: [number, number], count: number): [number, number][] {
+  const PHI = (1 + Math.sqrt(5)) / 2
+  const baseR = 0.012
+  const lngFactor = 1 / Math.cos(center[0] * Math.PI / 180)
+  return Array.from({ length: count }, (_, i) => {
+    const angle = 2 * Math.PI * PHI * i
+    const r = baseR * Math.sqrt((i + 1) / count)
+    return [center[0] + Math.cos(angle) * r, center[1] + Math.sin(angle) * r * lngFactor] as [number, number]
+  })
+}
+
 export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = [], onPropiedadPress }: Props) {
-  const containerRef  = useRef<any>(null)
+  const containerRef     = useRef<any>(null)
   const mapRef           = useRef<any>(null)
   const markersRef       = useRef<any[]>([])
-  const indivMarkersRef  = useRef<any[]>([])
   const backCtrlRef      = useRef<any>(null)
-  const drillRef         = useRef<string | null>(null)
+  // view levels: 'mexico' | 'city' | 'subzona'
+  const viewRef          = useRef<'mexico' | 'city' | 'subzona'>('mexico')
+  const cityRef          = useRef<string | null>(null)
   const onPressRef       = useRef(onZonaPress)
   const zonasRef         = useRef(zonas)
   const coordsRef        = useRef(propiedadesConCoords)
@@ -77,140 +90,169 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   coordsRef.current      = propiedadesConCoords
   onPropiedadRef.current = onPropiedadPress
 
+  // ── helpers ─────────────────────────────────────────────────────────────────
+
   function clearMarkers() {
     markersRef.current.forEach(m => m.remove())
     markersRef.current = []
   }
 
-  function formatPrecio(precio: number | null) {
-    if (!precio) return 'Precio a consultar'
-    return `$${precio.toLocaleString('es-MX')} MXN`
-  }
-
-  function renderIndivPins(L: any, map: any, props: PropiedadCoord[]) {
-    indivMarkersRef.current.forEach(m => m.remove())
-    indivMarkersRef.current = []
-    props.forEach(p => {
-      const color = zonasRef.current.find(z => z.key === p.zona)?.color ?? '#1976D2'
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="background:${color};width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);cursor:pointer"></div>`,
-        iconSize: [12, 12], iconAnchor: [6, 6],
-      })
-      const tipoLabel: Record<string, string> = { casa: '🏠 Casa', departamento: '🏢 Depto', local: '🏪 Local', terreno: '🏗 Terreno' }
-      const popup = L.popup({ maxWidth: 220, className: '' }).setContent(
-        `<div style="font-family:sans-serif;padding:4px">
-          <div style="font-weight:700;font-size:13px;color:#1a1a1a;margin-bottom:4px;line-height:1.3">${p.titulo}</div>
-          <div style="font-size:12px;color:#555;margin-bottom:2px">${tipoLabel[p.tipo ?? ''] ?? p.tipo ?? ''}</div>
-          <div style="font-size:13px;font-weight:600;color:#1976D2;margin-bottom:6px">${formatPrecio(p.precio)}</div>
-          <div style="font-size:11px;color:#888;margin-bottom:8px">📍 ${p.direccion}</div>
-          <button onclick="window.__mapaVerPropiedad && window.__mapaVerPropiedad('${p.id}')"
-            style="background:${color};color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;width:100%">
-            Ver propiedad →
-          </button>
-        </div>`
-      )
-      const m = L.marker([p.lat, p.lng], { icon }).addTo(map).bindPopup(popup)
-      indivMarkersRef.current.push(m)
-    })
-  }
-
-  function pinHTML(count: number, color: string, size: number) {
+  function clusterHTML(count: number, color: string, size = 52) {
     const fs = size >= 50 ? 15 : 13
     return `<div style="background:${color};color:#fff;border-radius:50%;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${fs}px;box-shadow:0 3px 12px rgba(0,0,0,0.35);border:3px solid #fff;cursor:pointer">${count}</div>`
   }
 
+  function propiedadPopup(L: any, p: {id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}, color: string) {
+    const tipoLabel: Record<string, string> = { casa: '🏠 Casa', departamento: '🏢 Depto', local: '🏪 Local', terreno: '🏗 Terreno' }
+    const precio = p.precio ? `$${p.precio.toLocaleString('es-MX')} MXN` : 'Precio a consultar'
+    return L.popup({ maxWidth: 220 }).setContent(
+      `<div style="font-family:sans-serif;padding:4px">
+        <div style="font-weight:700;font-size:13px;color:#1a1a1a;margin-bottom:4px;line-height:1.3">${p.titulo}</div>
+        <div style="font-size:12px;color:#555;margin-bottom:2px">${tipoLabel[p.tipo ?? ''] ?? ''}</div>
+        <div style="font-size:13px;font-weight:600;color:${color};margin-bottom:6px">${precio}</div>
+        <div style="font-size:11px;color:#888;margin-bottom:8px">📍 ${p.direccion}</div>
+        <button onclick="window.__mapaVerPropiedad&&window.__mapaVerPropiedad('${p.id}')"
+          style="background:${color};color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;width:100%">
+          Ver propiedad →
+        </button>
+      </div>`
+    )
+  }
+
+  function addIndivPin(L: any, map: any, coords: [number,number], p: {id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}, color: string) {
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
+      iconSize: [14, 14], iconAnchor: [7, 7],
+    })
+    const m = L.marker(coords, { icon }).addTo(map).bindPopup(propiedadPopup(L, p, color))
+    markersRef.current.push(m)
+  }
+
+  function setBackBtn(L: any, map: any, label: string, onClick: () => void) {
+    if (backCtrlRef.current) { backCtrlRef.current.remove(); backCtrlRef.current = null }
+    const Ctrl = L.Control.extend({
+      onAdd() {
+        const btn = L.DomUtil.create('button', '')
+        btn.innerHTML = `← ${label}`
+        btn.style.cssText = 'background:#1976D2;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.25);margin:8px'
+        L.DomEvent.on(btn, 'click', (e: Event) => { L.DomEvent.stopPropagation(e); onClick() })
+        return btn
+      },
+      onRemove() {},
+    })
+    backCtrlRef.current = new Ctrl({ position: 'topleft' })
+    backCtrlRef.current.addTo(map)
+  }
+
+  // ── Level 1: Mexico overview ─────────────────────────────────────────────────
+
   function showMexico(L: any, map: any) {
-    drillRef.current = null
+    viewRef.current = 'mexico'
+    cityRef.current = null
     if (backCtrlRef.current) { backCtrlRef.current.remove(); backCtrlRef.current = null }
     clearMarkers()
     map.flyTo([22.5, -102.55], 5, { duration: 0.8 })
     renderCityPins(L, map, zonasRef.current)
-    renderIndivPins(L, map, coordsRef.current)
   }
 
   function renderCityPins(L: any, map: any, data: ZonaPin[]) {
     clearMarkers()
     data.forEach(z => {
-      const icon = L.divIcon({ className: '', html: pinHTML(z.count, z.color, 52), iconSize: [52, 52], iconAnchor: [26, 26] })
+      const icon = L.divIcon({ className: '', html: clusterHTML(z.count, z.color, 52), iconSize: [52, 52], iconAnchor: [26, 26] })
       const m = L.marker(z.coords, { icon })
         .addTo(map)
-        .bindTooltip(`<b>${z.label}</b><br/>${z.count} propiedad${z.count !== 1 ? 'es' : ''}`, { direction: 'top', offset: [0, -30] })
+        .bindTooltip(`<b>${z.label}</b><br/>${z.count} propiedades`, { direction: 'top', offset: [0, -30] })
         .on('click', () => {
           onPressRef.current(z.key)
-          if (CITY_VIEW[z.key] && SUBZONAS[z.key]) drillIntoCity(L, map, z)
+          if (CITY_VIEW[z.key]) showCity(L, map, z)
         })
       markersRef.current.push(m)
     })
   }
 
-  function drillIntoCity(L: any, map: any, zona: ZonaPin) {
-    drillRef.current = zona.key
+  // ── Level 2: City — sub-zone clusters ────────────────────────────────────────
+
+  function showCity(L: any, map: any, zona: ZonaPin) {
+    viewRef.current = 'city'
+    cityRef.current = zona.key
     const view = CITY_VIEW[zona.key]
     map.flyTo(view.center, view.zoom, { duration: 0.8 })
     clearMarkers()
-
-    if (!backCtrlRef.current) {
-      const Ctrl = L.Control.extend({
-        onAdd() {
-          const btn = L.DomUtil.create('button', '')
-          btn.innerHTML = '← Volver'
-          btn.style.cssText = 'background:#1976D2;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.25);margin:8px'
-          L.DomEvent.on(btn, 'click', (e: Event) => { L.DomEvent.stopPropagation(e); showMexico(L, map) })
-          return btn
-        },
-        onRemove() {},
-      })
-      backCtrlRef.current = new Ctrl({ position: 'topleft' })
-      backCtrlRef.current.addTo(map)
-    }
+    setBackBtn(L, map, 'México', () => showMexico(L, map))
 
     const props = zona.propiedades ?? []
-    const propsConCoords = props.filter(p => p.lat && p.lng)
-    const propsSinCoords = props.filter(p => !p.lat || !p.lng)
+    const subZonas = SUBZONAS[zona.key] ?? []
+    const matched = new Set<number>()
 
-    // Propiedades con coordenadas exactas → pin individual
-    propsConCoords.forEach(p => {
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="background:${zona.color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer"></div>`,
-        iconSize: [14, 14], iconAnchor: [7, 7],
+    // Build sub-zone clusters
+    const clusters = subZonas.map(sz => {
+      const matching: typeof props = []
+      props.forEach((p, i) => {
+        if (sz.keywords.some(kw => p.direccion.toLowerCase().includes(kw.toLowerCase()))) {
+          matching.push(p); matched.add(i)
+        }
       })
-      const m = L.marker([p.lat!, p.lng!], { icon })
+      return { ...sz, matching }
+    }).filter(c => c.matching.length > 0)
+
+    const otras = props.filter((_, i) => !matched.has(i))
+    if (otras.length > 0) clusters.push({ label: 'Otras zonas', coords: view.center, keywords: [], matching: otras })
+
+    // Also show geocoded pins directly (they have exact coords)
+    const geocodedInCity = coordsRef.current.filter(p => p.zona === zona.key)
+    geocodedInCity.forEach(p => addIndivPin(L, map, [p.lat, p.lng], p, zona.color))
+
+    // Show cluster pins
+    const color = zona.color
+    clusters.forEach(c => {
+      const icon = L.divIcon({ className: '', html: clusterHTML(c.matching.length, color, 44), iconSize: [44, 44], iconAnchor: [22, 22] })
+      const m = L.marker(c.coords, { icon })
         .addTo(map)
-        .bindTooltip(p.direccion, { direction: 'top', offset: [0, -10] })
+        .bindTooltip(`<b>${c.label}</b><br/>${c.matching.length} propiedades`, { direction: 'top', offset: [0, -26] })
+        .on('click', () => showSubZona(L, map, c, color, zona))
       markersRef.current.push(m)
     })
 
-    // Propiedades sin coordenadas → agrupar por sub-zona con keywords
-    if (propsSinCoords.length > 0) {
-      const subZonas = SUBZONAS[zona.key] ?? []
-      const matched = new Set<number>()
-      const subZonasConConteo = subZonas.map(sz => {
-        const indices: number[] = []
-        propsSinCoords.forEach((p, i) => {
-          if (sz.keywords.some(kw => p.direccion.toLowerCase().includes(kw.toLowerCase()))) {
-            indices.push(i); matched.add(i)
-          }
-        })
-        return { ...sz, count: indices.length }
-      }).filter(sz => sz.count > 0)
-
-      const otrasCount = propsSinCoords.filter((_, i) => !matched.has(i)).length
-      const toRender = [...subZonasConConteo]
-      if (otrasCount > 0) toRender.push({ label: 'Sin ubicación exacta', coords: view.center, keywords: [], count: otrasCount })
-      if (toRender.length === 0 && propsConCoords.length === 0)
-        toRender.push({ label: zona.label, coords: view.center, keywords: [], count: zona.count })
-
-      toRender.forEach(sz => {
-        const icon = L.divIcon({ className: '', html: pinHTML(sz.count, zona.color, 44), iconSize: [44, 44], iconAnchor: [22, 22] })
-        const m = L.marker(sz.coords, { icon })
-          .addTo(map)
-          .bindTooltip(`<b>${sz.label}</b><br/>${sz.count} propiedad${sz.count !== 1 ? 'es' : ''}`, { direction: 'top', offset: [0, -26] })
-        markersRef.current.push(m)
-      })
+    if (clusters.length === 0 && geocodedInCity.length === 0) {
+      // No sub-zones matched — show all as individual spread pins
+      const spread = spreadCoords(view.center, props.length)
+      props.forEach((p, i) => addIndivPin(L, map, spread[i], { id: '', titulo: p.direccion, tipo: null, precio: null, direccion: p.direccion }, color))
     }
   }
+
+  // ── Level 3: Sub-zone — individual pins ──────────────────────────────────────
+
+  function showSubZona(L: any, map: any, cluster: {label:string;coords:[number,number];matching:ZonaPin['propiedades']}, color: string, zona: ZonaPin) {
+    viewRef.current = 'subzona'
+    clearMarkers()
+    map.flyTo(cluster.coords, 13, { duration: 0.8 })
+    setBackBtn(L, map, zona.label, () => showCity(L, map, zona))
+
+    const matching = cluster.matching ?? []
+    const spread = spreadCoords(cluster.coords, matching.length)
+
+    matching.forEach((p, i) => {
+      const coords: [number, number] = (p.lat && p.lng) ? [p.lat, p.lng] : spread[i]
+      // Try to find full data in coordsRef
+      const full = coordsRef.current.find(c => c.direccion === p.direccion && c.zona === zona.key)
+      if (full) {
+        addIndivPin(L, map, coords, full, color)
+      } else {
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
+          iconSize: [14, 14], iconAnchor: [7, 7],
+        })
+        const m = L.marker(coords, { icon })
+          .addTo(map)
+          .bindTooltip(`📍 ${p.direccion}`, { direction: 'top' })
+        markersRef.current.push(m)
+      }
+    })
+  }
+
+  // ── Mount ────────────────────────────────────────────────────────────────────
 
   function initMap(L: any) {
     const el = containerRef.current as unknown as HTMLElement
@@ -219,7 +261,6 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     mapRef.current = map
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map)
     renderCityPins(L, map, zonasRef.current)
-    renderIndivPins(L, map, coordsRef.current)
   }
 
   useEffect(() => {
@@ -245,11 +286,9 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
       }
     }
 
-    tryInit()
+    tryInit();
 
-    ;(window as any).__mapaVerPropiedad = (id: string) => {
-      onPropiedadRef.current?.(id)
-    }
+    ;(window as any).__mapaVerPropiedad = (id: string) => onPropiedadRef.current?.(id)
 
     return () => {
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
@@ -261,16 +300,9 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   useEffect(() => {
     if (Platform.OS !== 'web') return
     const L = (window as any).L
-    if (!L || !mapRef.current || drillRef.current) return
+    if (!L || !mapRef.current || viewRef.current !== 'mexico') return
     renderCityPins(L, mapRef.current, zonas)
   }, [zonas])
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return
-    const L = (window as any).L
-    if (!L || !mapRef.current || drillRef.current) return
-    renderIndivPins(L, mapRef.current, propiedadesConCoords)
-  }, [propiedadesConCoords])
 
   if (Platform.OS !== 'web') return null
 
