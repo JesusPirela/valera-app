@@ -887,8 +887,10 @@ export default function DetallePropiedad() {
               <TouchableOpacity
                 style={[styles.accionBtn, { backgroundColor: '#25d366' }]}
                 onPress={() => {
-                  const raw = subidoPor.telefono!.replace(/\D/g, '')
-                  const tel = raw.startsWith('52') && raw.length === 12 ? raw : `52${raw}`
+                  let phone = subidoPor.telefono!.replace(/\D/g, '')
+                  if (phone.startsWith('5252')) phone = phone.slice(2)
+                  if (phone.startsWith('521') && phone.length === 13) phone = '52' + phone.slice(3)
+                  const tel = phone.length === 10 ? `52${phone}` : phone
                   const url = `https://wa.me/${tel}?text=${encodeURIComponent(`Hola, te contacto sobre la propiedad ${propiedad.codigo}: ${propiedad.titulo}`)}`
                   if (Platform.OS === 'web') window.open(url, '_blank')
                   else Linking.openURL(url)
