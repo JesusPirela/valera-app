@@ -44,19 +44,24 @@ const CITY_VIEW: Record<string, { center: [number, number]; zoom: number }> = {
 }
 
 type PropiedadCoord = {
+  id: string
   lat: number
   lng: number
   direccion: string
   zona: string | null
+  titulo: string
+  precio: number | null
+  tipo: string | null
 }
 
 type Props = {
   zonas: ZonaPin[]
   onZonaPress: (key: string) => void
   propiedadesConCoords?: PropiedadCoord[]
+  onPropiedadPress?: (id: string) => void
 }
 
-export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = [] }: Props) {
+export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = [], onPropiedadPress }: Props) {
   const containerRef  = useRef<any>(null)
   const mapRef           = useRef<any>(null)
   const markersRef       = useRef<any[]>([])
@@ -66,29 +71,46 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   const onPressRef       = useRef(onZonaPress)
   const zonasRef         = useRef(zonas)
   const coordsRef        = useRef(propiedadesConCoords)
+  const onPropiedadRef   = useRef(onPropiedadPress)
   onPressRef.current     = onZonaPress
   zonasRef.current       = zonas
   coordsRef.current      = propiedadesConCoords
+  onPropiedadRef.current = onPropiedadPress
 
   function clearMarkers() {
     markersRef.current.forEach(m => m.remove())
     markersRef.current = []
   }
 
+  function formatPrecio(precio: number | null) {
+    if (!precio) return 'Precio a consultar'
+    return `$${precio.toLocaleString('es-MX')} MXN`
+  }
+
   function renderIndivPins(L: any, map: any, props: PropiedadCoord[]) {
     indivMarkersRef.current.forEach(m => m.remove())
     indivMarkersRef.current = []
     props.forEach(p => {
-      const zonaConf = CITY_VIEW[p.zona ?? '']
-      const color = zonas.find(z => z.key === p.zona)?.color ?? '#1976D2'
+      const color = zonasRef.current.find(z => z.key === p.zona)?.color ?? '#1976D2'
       const icon = L.divIcon({
         className: '',
-        html: `<div style="background:${color};width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
-        iconSize: [10, 10], iconAnchor: [5, 5],
+        html: `<div style="background:${color};width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);cursor:pointer"></div>`,
+        iconSize: [12, 12], iconAnchor: [6, 6],
       })
-      const m = L.marker([p.lat, p.lng], { icon })
-        .addTo(map)
-        .bindTooltip(p.direccion, { direction: 'top', offset: [0, -8] })
+      const tipoLabel: Record<string, string> = { casa: '🏠 Casa', departamento: '🏢 Depto', local: '🏪 Local', terreno: '🏗 Terreno' }
+      const popup = L.popup({ maxWidth: 220, className: '' }).setContent(
+        `<div style="font-family:sans-serif;padding:4px">
+          <div style="font-weight:700;font-size:13px;color:#1a1a1a;margin-bottom:4px;line-height:1.3">${p.titulo}</div>
+          <div style="font-size:12px;color:#555;margin-bottom:2px">${tipoLabel[p.tipo ?? ''] ?? p.tipo ?? ''}</div>
+          <div style="font-size:13px;font-weight:600;color:#1976D2;margin-bottom:6px">${formatPrecio(p.precio)}</div>
+          <div style="font-size:11px;color:#888;margin-bottom:8px">📍 ${p.direccion}</div>
+          <button onclick="window.__mapaVerPropiedad && window.__mapaVerPropiedad('${p.id}')"
+            style="background:${color};color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;width:100%">
+            Ver propiedad →
+          </button>
+        </div>`
+      )
+      const m = L.marker([p.lat, p.lng], { icon }).addTo(map).bindPopup(popup)
       indivMarkersRef.current.push(m)
     })
   }
@@ -225,9 +247,14 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
 
     tryInit()
 
+    ;(window as any).__mapaVerPropiedad = (id: string) => {
+      onPropiedadRef.current?.(id)
+    }
+
     return () => {
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
       markersRef.current = []; backCtrlRef.current = null
+      delete (window as any).__mapaVerPropiedad
     }
   }, [])
 

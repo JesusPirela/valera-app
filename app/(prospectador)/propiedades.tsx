@@ -670,7 +670,21 @@ export default function ProspectadorPropiedades() {
         ) : vistaZonas ? (
           <ScrollView contentContainerStyle={{ paddingBottom: 24, paddingTop: 8 }}>
             <View style={isWeb ? { marginHorizontal: -24 } : undefined}>
-              <MiniMapa zonas={zonasParaMapa} onZonaPress={handleZonaMapPress} propiedadesConCoords={propiedades.filter(p => p.lat && p.lng).map(p => ({ lat: p.lat!, lng: p.lng!, direccion: p.direccion, zona: p.zona }))} />
+              <MiniMapa
+                zonas={zonasParaMapa}
+                onZonaPress={handleZonaMapPress}
+                propiedadesConCoords={propiedades.filter(p => p.lat && p.lng).map(p => ({
+                  id: p.id,
+                  lat: p.lat!,
+                  lng: p.lng!,
+                  direccion: p.direccion,
+                  zona: p.zona,
+                  titulo: p.titulo,
+                  precio: p.precio,
+                  tipo: p.tipo,
+                }))}
+                onPropiedadPress={id => router.push(`/(prospectador)/detalle-propiedad?id=${id}` as any)}
+              />
             </View>
             {propiedadesPorZona.map(([zona, props]) => {
               const expandida = zonasExpandidas.has(zona)
