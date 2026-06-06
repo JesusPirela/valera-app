@@ -156,27 +156,8 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     markersRef.current.push(m)
   }
 
-  function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}}[], color: string) {
-    // Group by rounded coordinates (same location)
-    const groups = new Map<string, typeof items>()
-    items.forEach(item => {
-      const key = `${item.coords[0].toFixed(4)},${item.coords[1].toFixed(4)}`
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key)!.push(item)
-    })
-
-    groups.forEach(group => {
-      if (group.length === 1) {
-        addIndivPin(L, map, group[0].coords, group[0].p, color)
-        return
-      }
-      // Spread using Fibonacci spiral — looks natural, not circular
-      const center = group[0].coords
-      const offset = spreadCoords(center, group.length)
-      group.forEach((item, i) => {
-        addIndivPin(L, map, offset[i], item.p, color)
-      })
-    })
+  function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}; real?: boolean}[], color: string) {
+    items.forEach(item => addIndivPin(L, map, item.coords, item.p, color))
   }
 
   function setBackBtn(L: any, map: any, label: string, onClick: () => void) {
