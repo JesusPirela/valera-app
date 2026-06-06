@@ -188,7 +188,13 @@ export default function ProspectadorPropiedades() {
     for (const p of queryData.propiedades) {
       queryClient.setQueryData(
         ['detalle-propiedad', p.id],
-        (old: unknown) => old ?? { propiedad: p, subidoPor: null, nombreUsuario: queryData.nombreUsuario }
+        (old: unknown) => {
+          // Si ya existe data con imágenes completas, no sobreescribir
+          const existing = old as any
+          if (existing?.propiedad?.propiedad_imagenes?.length > 0) return old
+          // Pre-popular sin imágenes para que el detalle las cargue siempre frescas
+          return { propiedad: { ...p, propiedad_imagenes: [] }, subidoPor: null, nombreUsuario: queryData.nombreUsuario }
+        }
       )
     }
   }, [queryData?.propiedades])
