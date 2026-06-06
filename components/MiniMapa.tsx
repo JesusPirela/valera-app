@@ -43,25 +43,54 @@ const CITY_VIEW: Record<string, { center: [number, number]; zoom: number }> = {
   puebla:    { center: [19.05,  -98.26],  zoom: 10 },
 }
 
+type PropiedadCoord = {
+  lat: number
+  lng: number
+  direccion: string
+  zona: string | null
+}
+
 type Props = {
   zonas: ZonaPin[]
   onZonaPress: (key: string) => void
+  propiedadesConCoords?: PropiedadCoord[]
 }
 
-export default function MiniMapa({ zonas, onZonaPress }: Props) {
+export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = [] }: Props) {
   const containerRef  = useRef<any>(null)
-  const mapRef        = useRef<any>(null)
-  const markersRef    = useRef<any[]>([])
-  const backCtrlRef   = useRef<any>(null)
-  const drillRef      = useRef<string | null>(null)
-  const onPressRef    = useRef(onZonaPress)
-  const zonasRef      = useRef(zonas)
-  onPressRef.current  = onZonaPress
-  zonasRef.current    = zonas
+  const mapRef           = useRef<any>(null)
+  const markersRef       = useRef<any[]>([])
+  const indivMarkersRef  = useRef<any[]>([])
+  const backCtrlRef      = useRef<any>(null)
+  const drillRef         = useRef<string | null>(null)
+  const onPressRef       = useRef(onZonaPress)
+  const zonasRef         = useRef(zonas)
+  const coordsRef        = useRef(propiedadesConCoords)
+  onPressRef.current     = onZonaPress
+  zonasRef.current       = zonas
+  coordsRef.current      = propiedadesConCoords
 
   function clearMarkers() {
     markersRef.current.forEach(m => m.remove())
     markersRef.current = []
+  }
+
+  function renderIndivPins(L: any, map: any, props: PropiedadCoord[]) {
+    indivMarkersRef.current.forEach(m => m.remove())
+    indivMarkersRef.current = []
+    props.forEach(p => {
+      const zonaConf = CITY_VIEW[p.zona ?? '']
+      const color = zonas.find(z => z.key === p.zona)?.color ?? '#1976D2'
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="background:${color};width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
+        iconSize: [10, 10], iconAnchor: [5, 5],
+      })
+      const m = L.marker([p.lat, p.lng], { icon })
+        .addTo(map)
+        .bindTooltip(p.direccion, { direction: 'top', offset: [0, -8] })
+      indivMarkersRef.current.push(m)
+    })
   }
 
   function pinHTML(count: number, color: string, size: number) {
@@ -75,6 +104,7 @@ export default function MiniMapa({ zonas, onZonaPress }: Props) {
     clearMarkers()
     map.flyTo([22.5, -102.55], 5, { duration: 0.8 })
     renderCityPins(L, map, zonasRef.current)
+    renderIndivPins(L, map, coordsRef.current)
   }
 
   function renderCityPins(L: any, map: any, data: ZonaPin[]) {
@@ -167,6 +197,7 @@ export default function MiniMapa({ zonas, onZonaPress }: Props) {
     mapRef.current = map
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map)
     renderCityPins(L, map, zonasRef.current)
+    renderIndivPins(L, map, coordsRef.current)
   }
 
   useEffect(() => {
@@ -207,12 +238,19 @@ export default function MiniMapa({ zonas, onZonaPress }: Props) {
     renderCityPins(L, mapRef.current, zonas)
   }, [zonas])
 
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const L = (window as any).L
+    if (!L || !mapRef.current || drillRef.current) return
+    renderIndivPins(L, mapRef.current, propiedadesConCoords)
+  }, [propiedadesConCoords])
+
   if (Platform.OS !== 'web') return null
 
   return (
     <View
       ref={containerRef}
-      style={{ height: 300, borderRadius: 12, overflow: 'hidden', marginBottom: 8, backgroundColor: '#dde8ee' }}
+      style={{ height: 450, borderRadius: 12, overflow: 'hidden', marginBottom: 8, backgroundColor: '#dde8ee' }}
     />
   )
 }

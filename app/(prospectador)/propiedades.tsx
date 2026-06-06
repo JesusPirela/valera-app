@@ -669,7 +669,9 @@ export default function ProspectadorPropiedades() {
           </View>
         ) : vistaZonas ? (
           <ScrollView contentContainerStyle={{ paddingBottom: 24, paddingTop: 8 }}>
-            <MiniMapa zonas={zonasParaMapa} onZonaPress={handleZonaMapPress} />
+            <View style={isWeb ? { marginHorizontal: -24 } : undefined}>
+              <MiniMapa zonas={zonasParaMapa} onZonaPress={handleZonaMapPress} propiedadesConCoords={propiedades.filter(p => p.lat && p.lng).map(p => ({ lat: p.lat!, lng: p.lng!, direccion: p.direccion, zona: p.zona }))} />
+            </View>
             {propiedadesPorZona.map(([zona, props]) => {
               const expandida = zonasExpandidas.has(zona)
               return (
