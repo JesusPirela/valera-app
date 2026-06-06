@@ -186,9 +186,43 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
         cluster.remove()
         const idx = markersRef.current.indexOf(cluster)
         if (idx > -1) markersRef.current.splice(idx, 1)
-        // Desplegar individuales en espiral Fibonacci (patrón natural)
+
+        // Desplegar individuales en espiral Fibonacci
         const spread = spreadCoords(c, group.length)
-        group.forEach((item, i) => addIndivPin(L, map, spread[i], item.p, color))
+        const spreadMarkers: any[] = []
+        group.forEach((item, i) => {
+          const icon = L.divIcon({
+            className: '',
+            html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
+            iconSize: [14, 14], iconAnchor: [7, 7],
+          })
+          const m = L.marker(spread[i], { icon }).addTo(map).bindPopup(propiedadPopup(L, item.p, color))
+          spreadMarkers.push(m)
+          markersRef.current.push(m)
+        })
+
+        // Pin de cerrar en el centro
+        const closeIcon = L.divIcon({
+          className: '',
+          html: `<div style="background:#555;color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer">✕</div>`,
+          iconSize: [26, 26], iconAnchor: [13, 13],
+        })
+        const closeMarker = L.marker(c, { icon: closeIcon }).addTo(map)
+          .bindTooltip('Cerrar', { direction: 'top', offset: [0, -16] })
+        spreadMarkers.push(closeMarker)
+        markersRef.current.push(closeMarker)
+
+        closeMarker.on('click', () => {
+          // Quitar todos los pins del grupo + cerrar
+          spreadMarkers.forEach(m => {
+            m.remove()
+            const i = markersRef.current.indexOf(m)
+            if (i > -1) markersRef.current.splice(i, 1)
+          })
+          // Restaurar el cluster
+          cluster.addTo(map)
+          markersRef.current.push(cluster)
+        })
       })
     })
   }
