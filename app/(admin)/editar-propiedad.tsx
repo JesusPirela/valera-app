@@ -78,6 +78,7 @@ export default function EditarPropiedad() {
   const [isDragging, setIsDragging] = useState(false)
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
+  const [guardadoOk, setGuardadoOk] = useState(false)
   const [mejorando, setMejorando] = useState(false)
 
   useEffect(() => { cargarPropiedad() }, [id])
@@ -310,9 +311,10 @@ export default function EditarPropiedad() {
         if (error) throw error
       }
 
-      Alert.alert('Éxito', 'Propiedad actualizada.', [
-        { text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades') },
-      ])
+      setGuardadoOk(true)
+      setTimeout(() => {
+        router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')
+      }, 1500)
     } catch (err: any) {
       Alert.alert('Error', err.message || 'No se pudo actualizar la propiedad.')
     } finally {
@@ -548,10 +550,16 @@ export default function EditarPropiedad() {
           />
         )}
 
+        {guardadoOk && (
+          <View style={{ backgroundColor: '#22a35e', borderRadius: 10, padding: 14, marginBottom: 12, alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>✓ Cambios guardados correctamente</Text>
+          </View>
+        )}
+
         <TouchableOpacity
-          style={[styles.button, guardando && styles.buttonDisabled]}
+          style={[styles.button, (guardando || guardadoOk) && styles.buttonDisabled]}
           onPress={handleGuardar}
-          disabled={guardando}
+          disabled={guardando || guardadoOk}
         >
           {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Guardar cambios</Text>}
         </TouchableOpacity>
