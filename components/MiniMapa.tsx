@@ -170,17 +170,11 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
         addIndivPin(L, map, group[0].coords, group[0].p, color)
         return
       }
-      // Spread each pin in a circle around the shared point
+      // Spread using Fibonacci spiral — looks natural, not circular
       const center = group[0].coords
-      const R = 0.0025
-      const lngF = 1 / Math.cos(center[0] * Math.PI / 180)
+      const offset = spreadCoords(center, group.length)
       group.forEach((item, i) => {
-        const angle = (2 * Math.PI / group.length) * i - Math.PI / 2
-        const spread: [number, number] = [
-          center[0] + Math.cos(angle) * R,
-          center[1] + Math.sin(angle) * R * lngF,
-        ]
-        addIndivPin(L, map, spread, item.p, color)
+        addIndivPin(L, map, offset[i], item.p, color)
       })
     })
   }
@@ -270,7 +264,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     })
   }
 
-  // ── Level 2: City — sub-zone clusters ────────────────────────────────────────
+  // ── Level 2: City — todos los pins individuales directamente ────────────────
 
   function showCity(L: any, map: any, zona: ZonaPin) {
     viewRef.current = 'city'
@@ -281,54 +275,10 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     setBackBtn(L, map, 'México', () => showMexico(L, map))
 
     const props = zona.propiedades ?? []
-    const subZonas = SUBZONAS[zona.key] ?? []
-    const matched = new Set<number>()
-
-    // Build sub-zone clusters
-    const clusters = subZonas.map(sz => {
-      const matching: typeof props = []
-      props.forEach((p, i) => {
-        if (sz.keywords.some(kw => p.direccion.toLowerCase().includes(kw.toLowerCase()))) {
-          matching.push(p); matched.add(i)
-        }
-      })
-      return { ...sz, matching }
-    }).filter(c => c.matching.length > 0)
-
-    const otras = props.filter((_, i) => !matched.has(i))
-    if (otras.length > 0) clusters.push({ label: 'Sin zona específica', coords: view.center, keywords: [], matching: otras })
-
-    // Show cluster pins only — individual pins appear when clicking a cluster
     const color = zona.color
-    if (clusters.length > 0) {
-      clusters.forEach(c => {
-        const icon = L.divIcon({ className: '', html: clusterHTML(c.matching.length, color, 44), iconSize: [44, 44], iconAnchor: [22, 22] })
-        const m = L.marker(c.coords, { icon })
-          .addTo(map)
-          .bindTooltip(`<b>${c.label}</b><br/>${c.matching.length} propiedades`, { direction: 'top', offset: [0, -26] })
-          .on('click', () => showSubZona(L, map, c, color, zona))
-        markersRef.current.push(m)
-      })
-    } else {
-      // No sub-zones — show all as individual pins directly
-      const spread = spreadCoords(view.center, props.length)
-      const items = props.map((p, i) => ({ coords: (p.lat && p.lng) ? [p.lat, p.lng] as [number,number] : spread[i], p }))
-      renderGroupedPins(L, map, items, color)
-    }
-  }
+    const spread = spreadCoords(view.center, props.length)
 
-  // ── Level 3: Sub-zone — individual pins ──────────────────────────────────────
-
-  function showSubZona(L: any, map: any, cluster: {label:string;coords:[number,number];matching:ZonaPin['propiedades']}, color: string, zona: ZonaPin) {
-    viewRef.current = 'subzona'
-    clearMarkers()
-    map.flyTo(cluster.coords, 13, { duration: 0.8 })
-    setBackBtn(L, map, zona.label, () => showCity(L, map, zona))
-
-    const matching = cluster.matching ?? []
-    const spread = spreadCoords(cluster.coords, matching.length)
-
-    const items = matching.map((p, i) => ({
+    const items = props.map((p, i) => ({
       coords: (p.lat && p.lng) ? [p.lat, p.lng] as [number,number] : spread[i],
       p,
     }))
