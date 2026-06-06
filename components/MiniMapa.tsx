@@ -186,13 +186,9 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
         cluster.remove()
         const idx = markersRef.current.indexOf(cluster)
         if (idx > -1) markersRef.current.splice(idx, 1)
-        // Desplegar individuales en pequeño círculo
-        const R = 0.0004
-        const lngF = 1 / Math.cos(c[0] * Math.PI / 180)
-        group.forEach((item, i) => {
-          const angle = (2 * Math.PI / group.length) * i - Math.PI / 2
-          addIndivPin(L, map, [c[0] + Math.cos(angle) * R, c[1] + Math.sin(angle) * R * lngF], item.p, color)
-        })
+        // Desplegar individuales en espiral Fibonacci (patrón natural)
+        const spread = spreadCoords(c, group.length)
+        group.forEach((item, i) => addIndivPin(L, map, spread[i], item.p, color))
       })
     })
   }
