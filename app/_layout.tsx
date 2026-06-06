@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Session } from '@supabase/supabase-js'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { queryClient, persister } from '../lib/queryClient'
-import { ThemeProvider } from '../lib/ThemeContext'
+import { ThemeProvider, useColors } from '../lib/ThemeContext'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
 import { Ionicons } from '@expo/vector-icons'
@@ -61,6 +61,31 @@ async function checkForUpdate() {
       await Updates.reloadAsync()
     }
   } catch { /* ignorar errores de red al verificar actualizaciones */ }
+}
+
+function WebThemeCSS() {
+  const c = useColors()
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return
+    const id = 'valera-theme-css'
+    let el = document.getElementById(id) as HTMLStyleElement | null
+    if (!el) {
+      el = document.createElement('style')
+      el.id = id
+      document.head.appendChild(el)
+    }
+    el.textContent = `
+      input, textarea, select {
+        color: ${c.inputText} !important;
+        background-color: ${c.input} !important;
+        caret-color: ${c.inputText} !important;
+      }
+      input::placeholder, textarea::placeholder {
+        color: ${c.placeholder} !important;
+      }
+    `
+  }, [c.inputText, c.input, c.placeholder])
+  return null
 }
 
 export default function RootLayout() {
@@ -233,6 +258,7 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider>
+      <WebThemeCSS />
       <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
