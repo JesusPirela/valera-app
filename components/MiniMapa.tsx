@@ -93,17 +93,6 @@ function uniformSpread(center: [number, number], count: number): [number, number
   })
 }
 
-// Spread para props sin geocodificación (espiral Fibonacci)
-function spreadCoords(center: [number, number], count: number): [number, number][] {
-  const PHI = (1 + Math.sqrt(5)) / 2
-  const baseR = 0.007
-  const lngFactor = 1 / Math.cos(center[0] * Math.PI / 180)
-  return Array.from({ length: count }, (_, i) => {
-    const angle = 2 * Math.PI * PHI * i
-    const r = baseR * Math.sqrt((i + 1) / count)
-    return [center[0] + Math.cos(angle) * r, center[1] + Math.sin(angle) * r * lngFactor] as [number, number]
-  })
-}
 
 export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = [], onPropiedadPress }: Props) {
   const containerRef     = useRef<any>(null)
@@ -296,7 +285,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     })
   }
 
-  // ── Level 2: City — pins individuales con clusters por ubicación repetida ────
+  // ── Level 2: City — solo pins con coordenadas reales ───────────────────────
 
   function showCity(L: any, map: any, zona: ZonaPin) {
     viewRef.current = 'city'
@@ -308,12 +297,12 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
 
     const props = zona.propiedades ?? []
     const color = zona.color
-    const spread = spreadCoords(view.center, props.length)
 
-    const items = props.map((p, i) => ({
-      coords: (p.lat && p.lng) ? [p.lat, p.lng] as [number,number] : spread[i],
-      p,
-    }))
+    // Solo propiedades con coordenadas reales — no inventar posiciones
+    const items = props
+      .filter(p => p.lat && p.lng)
+      .map(p => ({ coords: [p.lat!, p.lng!] as [number, number], p }))
+
     renderGroupedPins(L, map, items, color)
   }
 
