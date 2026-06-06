@@ -201,28 +201,17 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
           markersRef.current.push(m)
         })
 
-        // Pin de cerrar en el centro
-        const closeIcon = L.divIcon({
-          className: '',
-          html: `<div style="background:#555;color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer">✕</div>`,
-          iconSize: [26, 26], iconAnchor: [13, 13],
-        })
-        const closeMarker = L.marker(c, { icon: closeIcon }).addTo(map)
-          .bindTooltip('Cerrar', { direction: 'top', offset: [0, -16] })
-        spreadMarkers.push(closeMarker)
-        markersRef.current.push(closeMarker)
-
-        closeMarker.on('click', () => {
-          // Quitar todos los pins del grupo + cerrar
+        // Click en el fondo del mapa → cerrar grupo y restaurar cluster
+        const collapse = () => {
           spreadMarkers.forEach(m => {
             m.remove()
             const i = markersRef.current.indexOf(m)
             if (i > -1) markersRef.current.splice(i, 1)
           })
-          // Restaurar el cluster
           cluster.addTo(map)
           markersRef.current.push(cluster)
-        })
+        }
+        map.once('click', collapse)
       })
     })
   }
