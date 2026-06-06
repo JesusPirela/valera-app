@@ -59,9 +59,11 @@ type NotifItemProps = {
   item: Notificacion
   onPress: (item: Notificacion) => void
   onDelete: (id: string) => void
+  cardBg?: string
+  textColor?: string
 }
 
-function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
+function NotifItem({ item, onPress, onDelete, cardBg, textColor }: NotifItemProps) {
   const swipeX = useRef(new Animated.Value(0)).current
   const deleteOpacity = swipeX.interpolate({
     inputRange: [-120, -20],
@@ -115,6 +117,7 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
         <TouchableOpacity
           style={[
             styles.card,
+            cardBg ? { backgroundColor: cardBg } : {},
             !item.leida && styles.cardNoLeida,
             esCliente   && styles.cardCliente,
             esCliente   && !item.leida && styles.cardClienteNoLeida,
@@ -137,6 +140,7 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
               )}
               <Text style={[
                 styles.cardTitulo,
+                textColor ? { color: textColor } : {},
                 !item.leida && styles.cardTituloNoLeido,
                 esCliente   && styles.cardTituloCliente,
                 esDestacada && styles.cardTituloDestacada,
@@ -158,7 +162,7 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
             </View>
           </View>
 
-          <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido]}>
+          <Text style={[styles.cardMensaje, textColor ? { color: textColor } : {}, !item.leida && styles.cardMensajeNoLeido]}>
             {item.mensaje}
           </Text>
 
@@ -270,6 +274,8 @@ export default function AdminNotificaciones() {
               item={item}
               onPress={handlePress}
               onDelete={eliminarNotificacion}
+              cardBg={c.card}
+              textColor={c.textSub}
             />
           )}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
@@ -320,13 +326,13 @@ const styles = StyleSheet.create({
   cardTopRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
   icono: { fontSize: 16, flexShrink: 0 },
   puntito: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1a6470', flexShrink: 0 },
-  cardTitulo: { fontSize: 14, fontWeight: '600', color: '#555', flex: 1 },
+  cardTitulo: { fontSize: 14, fontWeight: '600', color: '#888', flex: 1 },
   cardTituloNoLeido: { color: '#1a6470' },
   tiempo: { fontSize: 11, color: '#aaa' },
   deleteBtn: { padding: 2 },
   deleteBtnText: { fontSize: 13, color: '#bbb', fontWeight: '700' },
   cardMensaje: { fontSize: 14, color: '#888', lineHeight: 20 },
-  cardMensajeNoLeido: { color: '#333' },
+  cardMensajeNoLeido: { color: '#555' },
   tapHint: { fontSize: 11, color: '#7a9ee8', marginTop: 6 },
 
   // Nuevo cliente — verde

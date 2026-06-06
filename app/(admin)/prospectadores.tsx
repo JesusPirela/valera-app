@@ -130,7 +130,7 @@ function BarraMetrica({ label, count, total, color }: { label: string; count: nu
   return (
     <View style={{ marginBottom: 10 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
-        <Text style={{ fontSize: 12, color: '#555', flex: 1 }}>{label}</Text>
+        <Text style={{ fontSize: 12, color: '#888', flex: 1 }}>{label}</Text>
         <Text style={{ fontSize: 12, fontWeight: '700', color, marginLeft: 8 }}>{count} <Text style={{ color: '#aaa', fontWeight: '400' }}>({pct}%)</Text></Text>
       </View>
       <View style={{ height: 7, backgroundColor: '#f0f0f0', borderRadius: 4 }}>
@@ -623,7 +623,7 @@ export default function Prospectadores() {
 
             {coinsTab === 'ajustar' ? (
               <>
-                <Text style={styles.inputLabel}>Cantidad de coins</Text>
+                <Text style={[styles.inputLabel, { color: c.textSub }]}>Cantidad de coins</Text>
                 <TextInput
                   style={[styles.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]}
                   placeholder="Ej: 100"
@@ -631,7 +631,7 @@ export default function Prospectadores() {
                   onChangeText={setCantidadStr}
                   keyboardType="number-pad"
                 />
-                <Text style={styles.inputLabel}>Concepto / Razón</Text>
+                <Text style={[styles.inputLabel, { color: c.textSub }]}>Concepto / Razón</Text>
                 <TextInput
                   style={[styles.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]}
                   placeholder="Ej: Bono por cierre del mes"
@@ -672,7 +672,7 @@ export default function Prospectadores() {
                   [...coinsTxs].reverse().map(tx => (
                     <View key={tx.id} style={styles.txRow}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.txConcepto}>{tx.concepto}</Text>
+                        <Text style={[styles.txConcepto, { color: c.text }]}>{tx.concepto}</Text>
                         <Text style={styles.txFecha}>
                           {new Date(tx.created_at).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </Text>
@@ -743,7 +743,7 @@ export default function Prospectadores() {
                   Se creará la cuenta y podrás darle las credenciales.
                 </Text>
 
-                <Text style={styles.inputLabel}>Nombre</Text>
+                <Text style={[styles.inputLabel, { color: c.textSub }]}>Nombre</Text>
                 <TextInput
                   style={[styles.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]}
                   placeholder="Nombre completo"
@@ -753,7 +753,7 @@ export default function Prospectadores() {
                   maxLength={80}
                 />
 
-                <Text style={styles.inputLabel}>Email</Text>
+                <Text style={[styles.inputLabel, { color: c.textSub }]}>Email</Text>
                 <TextInput
                   style={[styles.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]}
                   placeholder="correo@ejemplo.com"
@@ -764,7 +764,7 @@ export default function Prospectadores() {
                   autoCorrect={false}
                 />
 
-                <Text style={styles.inputLabel}>Contraseña</Text>
+                <Text style={[styles.inputLabel, { color: c.textSub }]}>Contraseña</Text>
                 <View style={styles.passwordRow}>
                   <TextInput
                     style={[styles.input, { flex: 1, marginBottom: 0 }]}
@@ -790,7 +790,7 @@ export default function Prospectadores() {
                   <Text style={styles.generarText}>Generar contraseña segura</Text>
                 </TouchableOpacity>
 
-                <Text style={styles.inputLabel}>Rol</Text>
+                <Text style={[styles.inputLabel, { color: c.textSub }]}>Rol</Text>
                 <View style={styles.rolCreacionRow}>
                   {ROLES_SELECTOR.map(r => {
                     const activo = rolCreacion === r.value
@@ -957,7 +957,7 @@ const styles = StyleSheet.create({
   modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a6470', marginBottom: 4 },
   modalSubtitulo: { fontSize: 13, color: '#888', marginBottom: 20, lineHeight: 18 },
 
-  inputLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
+  inputLabel: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
   input: {
     borderWidth: 1,
     borderRadius: 10,
@@ -1122,7 +1122,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
     borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
   },
-  txConcepto: { fontSize: 13, color: '#1a1a2e', fontWeight: '600' },
+  txConcepto: { fontSize: 13, fontWeight: '600' },
   txFecha:    { fontSize: 11, color: '#aaa', marginTop: 2 },
   txCantidad: { fontSize: 14, fontWeight: '800' },
 })

@@ -502,14 +502,14 @@ const cal = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   navBtn: { padding: 6 },
   navArrow: { fontSize: 22, color: '#1a6470', fontWeight: '700' },
-  mesAnio: { fontSize: 14, fontWeight: '700', color: '#1a2e30' },
+  mesAnio: { fontSize: 14, fontWeight: '700', color: '#555' },
   semanaRow: { flexDirection: 'row', marginBottom: 4 },
   diaSemana: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#8a9ea0' },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   celda: { width: `${100 / 7}%` as any, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
   celdaSel: { backgroundColor: '#1a6470' },
   celdaHoy: { borderWidth: 1.5, borderColor: '#1a6470' },
-  celdaTxt: { fontSize: 13, color: '#1a2e30', fontWeight: '500' },
+  celdaTxt: { fontSize: 13, color: '#555', fontWeight: '500' },
   celdaTxtSel: { color: '#fff', fontWeight: '700' },
   celdaTxtHoy: { color: '#1a6470', fontWeight: '700' },
   horaWrap: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#e0eaec' },
@@ -517,8 +517,8 @@ const cal = StyleSheet.create({
   horaRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
   horaBtn: { backgroundColor: '#e0eaec', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   horaBtnTxt: { fontSize: 18, color: '#1a6470', fontWeight: '700' },
-  horaVal: { fontSize: 20, fontWeight: '700', color: '#1a2e30', minWidth: 32, textAlign: 'center' },
-  horaSep: { fontSize: 20, fontWeight: '700', color: '#1a2e30' },
+  horaVal: { fontSize: 20, fontWeight: '700', color: '#555', minWidth: 32, textAlign: 'center' as const },
+  horaSep: { fontSize: 20, fontWeight: '700', color: '#555' },
 })
 
 // ─── Estilos pantalla ────────────────────────────────────────────────────────
@@ -527,7 +527,7 @@ const GOLD = '#c9a84c'
 
 const s = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e0eaec' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
   headerTitle: { fontSize: 20, fontWeight: '800', color: TEAL },
   crearBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: TEAL, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
   crearText: { color: '#fff', fontSize: 13, fontWeight: '700' },

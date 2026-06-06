@@ -378,7 +378,7 @@ export default function AdminCRM() {
                       <Text style={styles.secAvatarText}>{initProsp}</Text>
                     </View>
                     <View>
-                      <Text style={styles.secNombre}>{sec.title}</Text>
+                      <Text style={[styles.secNombre, { color: c.text }]}>{sec.title}</Text>
                       <Text style={styles.secSub}>{sec.data.length} mostrando · {totalSec} total</Text>
                     </View>
                   </View>
@@ -467,7 +467,7 @@ export default function AdminCRM() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: c.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitulo}>Nuevo cliente</Text>
+              <Text style={[styles.modalTitulo, { color: c.text }]}>Nuevo cliente</Text>
               <TouchableOpacity onPress={() => setModalNuevo(false)}>
                 <Ionicons name="close" size={22} color="#9eafb2" />
               </TouchableOpacity>
@@ -534,7 +534,7 @@ export default function AdminCRM() {
                           {(u.nombre ?? '?')[0].toUpperCase()}
                         </Text>
                       </View>
-                      <Text style={[styles.mUsuarioNombre, nuevoUserId === u.id && { color: '#2a8a5a', fontWeight: '700' }]}>
+                      <Text style={[styles.mUsuarioNombre, { color: c.text }, nuevoUserId === u.id && { color: '#2a8a5a', fontWeight: '700' }]}>
                         {u.nombre}
                       </Text>
                       {nuevoUserId === u.id && <Ionicons name="checkmark-circle" size={18} color="#2a8a5a" />}
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#e2e8ea', paddingHorizontal: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
-  searchInput: { flex: 1, paddingVertical: 11, fontSize: 14, color: '#1a1a2e' },
+  searchInput: { flex: 1, paddingVertical: 11, fontSize: 14 },
   btnExportar: {
     backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0',
     width: 46, height: 46, alignItems: 'center', justifyContent: 'center',
@@ -649,7 +649,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a6470', alignItems: 'center', justifyContent: 'center',
   },
   secAvatarText: { color: '#c9a84c', fontSize: 16, fontWeight: '800' },
-  secNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
+  secNombre: { fontSize: 15, fontWeight: '700' },
   secSub: { fontSize: 11, color: '#aaa', marginTop: 1 },
 
   // Card
@@ -665,7 +665,7 @@ const styles = StyleSheet.create({
   avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   avatarText: { fontSize: 14, fontWeight: '800' },
   cardInfo: { flex: 1, minWidth: 0 },
-  cardNombre: { fontSize: 14, fontWeight: '700', color: '#1a1a2e' },
+  cardNombre: { fontSize: 14, fontWeight: '700' },
   cardSub: { fontSize: 11, color: '#9eafb2', marginTop: 1 },
 
   estadoBadge: {
@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
-  modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e' },
+  modalTitulo: { fontSize: 18, fontWeight: '800' },
   mLabel: { fontSize: 11, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6, marginTop: 14 },
   mInput: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
   mRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -713,13 +713,13 @@ const styles = StyleSheet.create({
   mUsuarioRowActivo: { backgroundColor: '#f0fcf6' },
   mAvatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   mAvatarTxt: { fontSize: 14, fontWeight: '700' },
-  mUsuarioNombre: { flex: 1, fontSize: 14, color: '#1a2e30' },
+  mUsuarioNombre: { flex: 1, fontSize: 14 },
   mGuardarBtn: { backgroundColor: '#c9a84c', borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 22 },
   mGuardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
 
   // Modal import
   modalBox: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40 },
-  mTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 16 },
+  mTitle: { fontSize: 18, fontWeight: '800', marginBottom: 16 },
   mFieldLabel: { fontSize: 11, fontWeight: '700', color: '#8a9ea0', textTransform: 'uppercase' as const, letterSpacing: 0.6, marginBottom: 6 },
   mUsuarioAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#e0f4f5', alignItems: 'center', justifyContent: 'center' },
   mUsuarioAvatarTxt: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
@@ -729,9 +729,9 @@ const styles = StyleSheet.create({
   importErrorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#fef2f2', borderRadius: 12, padding: 14, marginBottom: 16 },
   importErrorTxt: { flex: 1, fontSize: 13, color: '#b91c1c', lineHeight: 18 },
   importInfoRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  importInfoTxt:  { fontSize: 15, fontWeight: '700', color: '#0f172a' },
+  importInfoTxt:  { fontSize: 15, fontWeight: '700' },
   importRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  importRowNombre: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  importRowNombre: { fontSize: 14, fontWeight: '700' },
   importRowSub:    { fontSize: 12, color: '#64748b', marginTop: 2 },
   importMas:       { fontSize: 12, color: '#94a3b8', paddingTop: 8, textAlign: 'center' as const },
   importHint: { fontSize: 11, color: '#94a3b8', lineHeight: 16, marginVertical: 12, textAlign: 'center' as const },

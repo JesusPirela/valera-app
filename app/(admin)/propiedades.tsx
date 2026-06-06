@@ -175,7 +175,7 @@ export default function AdminPropiedades() {
   function FiltroChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
     return (
       <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
-        <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+        <Text style={[styles.chipText, { color: c.textSub }, active && styles.chipTextActive]}>{label}</Text>
       </TouchableOpacity>
     )
   }
@@ -232,19 +232,19 @@ export default function AdminPropiedades() {
 
       {mostrarFiltros && (
         <View style={[styles.filtrosPanel, { backgroundColor: c.card, borderColor: c.border }]}>
-          <Text style={styles.filtroLabel}>Operación</Text>
+          <Text style={[styles.filtroLabel, { color: c.textMute }]}>Operación</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <FiltroChip label="Todas" active={filtroOperacion === null} onPress={() => setFiltroOperacion(null)} />
             <FiltroChip label="Venta" active={filtroOperacion === 'venta'} onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')} />
             <FiltroChip label="Renta" active={filtroOperacion === 'renta'} onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')} />
           </ScrollView>
-          <Text style={styles.filtroLabel}>Estado</Text>
+          <Text style={[styles.filtroLabel, { color: c.textMute }]}>Estado</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <FiltroChip label="Todos" active={filtroEstado === null} onPress={() => setFiltroEstado(null)} />
             <FiltroChip label="Disponible" active={filtroEstado === 'disponible'} onPress={() => setFiltroEstado(filtroEstado === 'disponible' ? null : 'disponible')} />
             <FiltroChip label="Vendida" active={filtroEstado === 'vendida'} onPress={() => setFiltroEstado(filtroEstado === 'vendida' ? null : 'vendida')} />
           </ScrollView>
-          <Text style={styles.filtroLabel}>Tipo</Text>
+          <Text style={[styles.filtroLabel, { color: c.textMute }]}>Tipo</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)} />
             <FiltroChip label="Casa" active={filtroTipo === 'casa'} onPress={() => setFiltroTipo(filtroTipo === 'casa' ? null : 'casa')} />
@@ -252,7 +252,7 @@ export default function AdminPropiedades() {
             <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')} />
             <FiltroChip label="Terreno" active={filtroTipo === 'terreno'} onPress={() => setFiltroTipo(filtroTipo === 'terreno' ? null : 'terreno')} />
           </ScrollView>
-          <Text style={styles.filtroLabel}>Precio</Text>
+          <Text style={[styles.filtroLabel, { color: c.textMute }]}>Precio</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)} />
             <FiltroChip label="↑ Menor" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} />
@@ -319,7 +319,7 @@ export default function AdminPropiedades() {
                   ) : null}
 
                   {item.tipo && (
-                    <Text style={styles.cardTipo}>
+                    <Text style={[styles.cardTipo, { color: c.textMute }]}>
                       {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
                       {item.operacion ? ` · ${item.operacion}` : ''}
                     </Text>
@@ -331,8 +331,8 @@ export default function AdminPropiedades() {
                     </Text>
                   )}
 
-                  <Text style={styles.cardTitulo}>{item.titulo}</Text>
-                  <Text style={styles.cardDireccion} numberOfLines={1}>📍 {item.direccion}</Text>
+                  <Text style={[styles.cardTitulo, { color: c.text }]}>{item.titulo}</Text>
+                  <Text style={[styles.cardDireccion, { color: c.textMute }]} numberOfLines={1}>📍 {item.direccion}</Text>
 
                   {tieneMeta && (
                     <View style={styles.metaRow}>
@@ -407,7 +407,7 @@ export default function AdminPropiedades() {
                     <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
                   ) : null}
                   {item.tipo && (
-                    <Text style={styles.cardTipo}>
+                    <Text style={[styles.cardTipo, { color: c.textMute }]}>
                       {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
                       {item.operacion ? ` · ${item.operacion}` : ''}
                     </Text>
@@ -417,8 +417,8 @@ export default function AdminPropiedades() {
                       🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
                     </Text>
                   )}
-                  <Text style={styles.cardTitulo}>{item.titulo}</Text>
-                  <Text style={styles.cardDireccion} numberOfLines={1}>📍 {item.direccion}</Text>
+                  <Text style={[styles.cardTitulo, { color: c.text }]}>{item.titulo}</Text>
+                  <Text style={[styles.cardDireccion, { color: c.textMute }]} numberOfLines={1}>📍 {item.direccion}</Text>
                   {tieneMeta && (
                     <View style={styles.metaRow}>
                       {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
@@ -462,7 +462,7 @@ export default function AdminPropiedades() {
             <Text style={styles.modalSubtitulo}>
               {propSeleccionada?.codigo} – {propSeleccionada?.titulo}
             </Text>
-            <Text style={styles.modalLabel}>Mensaje para los prospectadores (opcional)</Text>
+            <Text style={[styles.modalLabel, { color: c.textSub }]}>Mensaje para los prospectadores (opcional)</Text>
             <TextInput
               style={styles.modalInput}
               placeholder="Ej: Se están agendando muchas citas en esta propiedad..."
@@ -545,7 +545,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#1a2e30',
   },
   clearBtn: { padding: 4 },
   clearBtnText: { color: '#aaa', fontSize: 16 },
@@ -566,7 +565,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#dde8e9',
   },
-  filtroLabel: { fontSize: 11, fontWeight: '700', color: '#888', marginBottom: 6, marginTop: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  filtroLabel: { fontSize: 11, fontWeight: '700', marginBottom: 6, marginTop: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   chipRow: { flexDirection: 'row', marginBottom: 2 },
   chip: {
     borderWidth: 1,
@@ -578,7 +577,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   chipActive: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  chipText: { fontSize: 12, color: '#555' },
+  chipText: { fontSize: 12 },
   chipTextActive: { color: '#fff', fontWeight: '600' },
   limpiarBtn: { marginTop: 10, alignSelf: 'flex-end' },
   limpiarText: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
@@ -683,7 +682,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f5e07a',
   },
-  cardTipo: { fontSize: 11, color: '#888', marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '600' },
+  cardTipo: { fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '600' },
   constructoraBadge: {
     alignSelf: 'flex-start',
     backgroundColor: '#e8f4fd',
@@ -696,8 +695,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     overflow: 'hidden',
   },
-  cardTitulo: { fontSize: 16, fontWeight: '700', color: '#1a2e30', marginBottom: 4 },
-  cardDireccion: { fontSize: 13, color: '#888', marginBottom: 10 },
+  cardTitulo: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  cardDireccion: { fontSize: 13, marginBottom: 10 },
   metaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 12 },
   metaItem: {
     fontSize: 12,
@@ -764,7 +763,7 @@ const styles = StyleSheet.create({
   },
   modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a6470', marginBottom: 4 },
   modalSubtitulo: { fontSize: 13, color: '#888', marginBottom: 16 },
-  modalLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 8 },
+  modalLabel: { fontSize: 13, fontWeight: '600', marginBottom: 8 },
   modalInput: {
     borderWidth: 1,
     borderColor: '#dde8e9',
@@ -772,7 +771,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#1a2e30',
     minHeight: 80,
     marginBottom: 8,
   },
