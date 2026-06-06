@@ -79,7 +79,23 @@ type Props = {
   onPropiedadPress?: (id: string) => void
 }
 
-// Dispersión uniforme en círculo (ángulos equidistantes)
+// Pseudo-aleatorio determinista por índice (se ve natural, no geométrico)
+function seeded(n: number) { const x = Math.sin(n + 1) * 10000; return x - Math.floor(x) }
+
+function naturalSpread(center: [number, number], count: number, R = 0.007): [number, number][] {
+  if (count <= 1) return [center]
+  const lngFactor = 1 / Math.cos(center[0] * Math.PI / 180)
+  return Array.from({ length: count }, (_, i) => {
+    const r = R * (0.25 + 0.75 * seeded(i * 3))
+    const angle = 2 * Math.PI * seeded(i * 3 + 1)
+    return [
+      center[0] + Math.cos(angle) * r,
+      center[1] + Math.sin(angle) * r * lngFactor,
+    ] as [number, number]
+  })
+}
+
+// Dispersión uniforme en círculo — para expandir cluster al hacer click
 function uniformSpread(center: [number, number], count: number): [number, number][] {
   if (count <= 1) return [center]
   const R = 0.0015
@@ -298,10 +314,11 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     const props = zona.propiedades ?? []
     const color = zona.color
 
-    // Solo propiedades con coordenadas reales — no inventar posiciones
-    const items = props
-      .filter(p => p.lat && p.lng)
-      .map(p => ({ coords: [p.lat!, p.lng!] as [number, number], p }))
+    const spread = naturalSpread(view.center, props.length)
+    const items = props.map((p, i) => ({
+      coords: (p.lat && p.lng) ? [p.lat, p.lng] as [number, number] : spread[i],
+      p,
+    }))
 
     renderGroupedPins(L, map, items, color)
   }
