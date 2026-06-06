@@ -117,7 +117,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   const mapRef           = useRef<any>(null)
   const markersRef       = useRef<any[]>([])
   const backCtrlRef      = useRef<any>(null)
-  const expandedGroupRef = useRef<{ clusterMarker: any; indivMarkers: any[] } | null>(null)
+  const expandedGroupRef = useRef<{ clusterMarker: any; indivMarkers: any[] }[]>([])
   // view levels: 'mexico' | 'city' | 'subzona'
   const viewRef          = useRef<'mexico' | 'city' | 'subzona'>('mexico')
   const cityRef          = useRef<string | null>(null)
@@ -132,20 +132,11 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
 
   // ── helpers ─────────────────────────────────────────────────────────────────
 
-  function collapseGroup() {
-    if (!expandedGroupRef.current) return
-    const { clusterMarker, indivMarkers } = expandedGroupRef.current
-    indivMarkers.forEach(m => { try { m.remove() } catch {} })
-    if (mapRef.current) try { clusterMarker.addTo(mapRef.current) } catch {}
-    expandedGroupRef.current = null
-  }
-
   function clearMarkers() {
-    // Limpiar grupo expandido sin restaurar el cluster (vamos a borrar todo)
-    if (expandedGroupRef.current) {
-      expandedGroupRef.current.indivMarkers.forEach(m => { try { m.remove() } catch {} })
-      expandedGroupRef.current = null
-    }
+    expandedGroupRef.current.forEach(({ indivMarkers }) =>
+      indivMarkers.forEach(m => { try { m.remove() } catch {} })
+    )
+    expandedGroupRef.current = []
     markersRef.current.forEach(m => { try { m.remove() } catch {} })
     markersRef.current = []
     if (mapRef.current) {
@@ -191,13 +182,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   }
 
   function expandCluster(L: any, map: any, clusterMarker: any, group: {coords:[number,number]; p: any}[], color: string) {
-    // Colapsar grupo anterior si existe
-    if (expandedGroupRef.current) {
-      expandedGroupRef.current.indivMarkers.forEach(m => { try { m.remove() } catch {} })
-      // No restaurar el cluster anterior porque ya sería otro
-    }
-
-    // Quitar el cluster del mapa (queda en memoria para restaurar)
+    // Quitar el cluster del mapa (los individuales quedan hasta volver a México)
     try { clusterMarker.remove() } catch {}
 
     const center = group[0].coords
@@ -214,7 +199,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
       indivMarkers.push(m)
     })
 
-    expandedGroupRef.current = { clusterMarker, indivMarkers }
+    expandedGroupRef.current.push({ clusterMarker, indivMarkers })
   }
 
   // Renderiza pins individuales agrupando los que comparten coordenada exacta
@@ -335,11 +320,6 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     L._currentMap = map
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map)
     renderCityPins(L, map, zonasRef.current)
-
-    // Click en fondo colapsa grupo expandido
-    map.on('click', () => {
-      if (expandedGroupRef.current) collapseGroup()
-    })
   }
 
   useEffect(() => {
@@ -371,7 +351,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
 
     return () => {
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
-      markersRef.current = []; backCtrlRef.current = null; expandedGroupRef.current = null
+      markersRef.current = []; backCtrlRef.current = null; expandedGroupRef.current = []
       delete (window as any).__mapaVerPropiedad
     }
   }, [])
