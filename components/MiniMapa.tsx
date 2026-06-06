@@ -79,7 +79,21 @@ type Props = {
   onPropiedadPress?: (id: string) => void
 }
 
-// ── Spread non-geocoded props around a center using golden-ratio spiral ──────
+// Dispersión uniforme en círculo (ángulos equidistantes)
+function uniformSpread(center: [number, number], count: number): [number, number][] {
+  if (count <= 1) return [center]
+  const R = 0.0015
+  const lngFactor = 1 / Math.cos(center[0] * Math.PI / 180)
+  return Array.from({ length: count }, (_, i) => {
+    const angle = (2 * Math.PI * i) / count - Math.PI / 2
+    return [
+      center[0] + Math.cos(angle) * R,
+      center[1] + Math.sin(angle) * R * lngFactor,
+    ] as [number, number]
+  })
+}
+
+// Spread para props sin geocodificación (espiral Fibonacci)
 function spreadCoords(center: [number, number], count: number): [number, number][] {
   const PHI = (1 + Math.sqrt(5)) / 2
   const baseR = 0.007
@@ -96,6 +110,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   const mapRef           = useRef<any>(null)
   const markersRef       = useRef<any[]>([])
   const backCtrlRef      = useRef<any>(null)
+  const expandedGroupRef = useRef<{ clusterMarker: any; indivMarkers: any[] } | null>(null)
   // view levels: 'mexico' | 'city' | 'subzona'
   const viewRef          = useRef<'mexico' | 'city' | 'subzona'>('mexico')
   const cityRef          = useRef<string | null>(null)
@@ -110,10 +125,22 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
 
   // ── helpers ─────────────────────────────────────────────────────────────────
 
+  function collapseGroup() {
+    if (!expandedGroupRef.current) return
+    const { clusterMarker, indivMarkers } = expandedGroupRef.current
+    indivMarkers.forEach(m => { try { m.remove() } catch {} })
+    if (mapRef.current) try { clusterMarker.addTo(mapRef.current) } catch {}
+    expandedGroupRef.current = null
+  }
+
   function clearMarkers() {
+    // Limpiar grupo expandido sin restaurar el cluster (vamos a borrar todo)
+    if (expandedGroupRef.current) {
+      expandedGroupRef.current.indivMarkers.forEach(m => { try { m.remove() } catch {} })
+      expandedGroupRef.current = null
+    }
     markersRef.current.forEach(m => { try { m.remove() } catch {} })
     markersRef.current = []
-    // Eliminar cualquier marker que haya escapado del ref (ej. el que fue clickeado)
     if (mapRef.current) {
       const extras: any[] = []
       mapRef.current.eachLayer((layer: any) => {
@@ -145,8 +172,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     )
   }
 
-
-  function addIndivPin(L: any, map: any, coords: [number,number], p: {id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}, color: string) {
+  function addIndivPin(L: any, map: any, coords: [number,number], p: {id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}, color: string): any {
     const icon = L.divIcon({
       className: '',
       html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
@@ -154,10 +180,65 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     })
     const m = L.marker(coords, { icon }).addTo(map).bindPopup(propiedadPopup(L, p, color))
     markersRef.current.push(m)
+    return m
   }
 
-  function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}}[], color: string) {
-    items.forEach(item => addIndivPin(L, map, item.coords, item.p, color))
+  function expandCluster(L: any, map: any, clusterMarker: any, group: {coords:[number,number]; p: any}[], color: string) {
+    // Colapsar grupo anterior si existe
+    if (expandedGroupRef.current) {
+      expandedGroupRef.current.indivMarkers.forEach(m => { try { m.remove() } catch {} })
+      // No restaurar el cluster anterior porque ya sería otro
+    }
+
+    // Quitar el cluster del mapa (queda en memoria para restaurar)
+    try { clusterMarker.remove() } catch {}
+
+    const center = group[0].coords
+    const coords = uniformSpread(center, group.length)
+    const indivMarkers: any[] = []
+
+    group.forEach((item, i) => {
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
+        iconSize: [14, 14], iconAnchor: [7, 7],
+      })
+      const m = L.marker(coords[i], { icon }).addTo(map).bindPopup(propiedadPopup(L, item.p, color))
+      indivMarkers.push(m)
+    })
+
+    expandedGroupRef.current = { clusterMarker, indivMarkers }
+  }
+
+  // Renderiza pins individuales agrupando los que comparten coordenada exacta
+  function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p: any}[], color: string) {
+    const groups = new Map<string, {coords:[number,number]; p: any}[]>()
+    items.forEach(item => {
+      const key = `${item.coords[0].toFixed(5)},${item.coords[1].toFixed(5)}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(item)
+    })
+
+    groups.forEach((group) => {
+      const center = group[0].coords
+      if (group.length === 1) {
+        addIndivPin(L, map, center, group[0].p, color)
+      } else {
+        // Pin cluster numerado
+        const icon = L.divIcon({
+          className: '',
+          html: clusterHTML(group.length, color, 44),
+          iconSize: [44, 44],
+          iconAnchor: [22, 22],
+        })
+        const m = L.marker(center, { icon }).addTo(map)
+        markersRef.current.push(m)
+        m.on('click', (e: any) => {
+          L.DomEvent.stopPropagation(e)
+          expandCluster(L, map, m, group, color)
+        })
+      }
+    })
   }
 
   function setBackBtn(L: any, map: any, label: string, onClick: () => void) {
@@ -189,36 +270,6 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     backCtrlRef.current.addTo(map)
   }
 
-  function addFullscreenBtn(L: any) {
-    const fsCtrl = L.Control.extend({
-      onAdd(map: any) {
-        const btn = L.DomUtil.create('button', '')
-        btn.innerHTML = '⛶'
-        btn.title = 'Pantalla completa'
-        btn.style.cssText = 'background:#fff;color:#333;border:2px solid #ccc;width:34px;height:34px;border-radius:6px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);line-height:1'
-        L.DomEvent.on(btn, 'click', (e: Event) => {
-          L.DomEvent.stopPropagation(e)
-          const el = containerRef.current as unknown as HTMLElement
-          if (!el) return
-          if (!document.fullscreenElement) {
-            el.requestFullscreen?.()
-            btn.innerHTML = '✕'
-          } else {
-            document.exitFullscreen?.()
-            btn.innerHTML = '⛶'
-          }
-        })
-        document.addEventListener('fullscreenchange', () => {
-          btn.innerHTML = document.fullscreenElement ? '✕' : '⛶'
-          if (mapRef.current) setTimeout(() => mapRef.current.invalidateSize(), 100)
-        })
-        return btn
-      },
-      onRemove() {},
-    })
-    new fsCtrl({ position: 'topright' }).addTo(L._currentMap || mapRef.current)
-  }
-
   // ── Level 1: Mexico overview ─────────────────────────────────────────────────
 
   function showMexico(L: any, map: any) {
@@ -245,7 +296,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     })
   }
 
-  // ── Level 2: City — todos los pins individuales directamente ────────────────
+  // ── Level 2: City — pins individuales con clusters por ubicación repetida ────
 
   function showCity(L: any, map: any, zona: ZonaPin) {
     viewRef.current = 'city'
@@ -276,7 +327,11 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     L._currentMap = map
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map)
     renderCityPins(L, map, zonasRef.current)
-    addFullscreenBtn(L)
+
+    // Click en fondo colapsa grupo expandido
+    map.on('click', () => {
+      if (expandedGroupRef.current) collapseGroup()
+    })
   }
 
   useEffect(() => {
@@ -308,7 +363,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
 
     return () => {
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
-      markersRef.current = []; backCtrlRef.current = null
+      markersRef.current = []; backCtrlRef.current = null; expandedGroupRef.current = null
       delete (window as any).__mapaVerPropiedad
     }
   }, [])

@@ -12,7 +12,6 @@ import {
   Image,
   View,
   FlatList,
-  Switch,
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
@@ -546,29 +545,25 @@ export default function EditarPropiedad() {
         <AsesorPicker value={asesorId} onChange={setAsesorId} />
 
         <View style={styles.exclusivaRow}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.exclusivaLabel}>Propiedad exclusiva</Text>
             <Text style={styles.exclusivaDesc}>Solo visible para Prospectadores Plus</Text>
           </View>
-          <Switch
-            value={exclusiva}
-            onValueChange={setExclusiva}
-            trackColor={{ false: '#ddd', true: '#c0392b' }}
-            thumbColor={exclusiva ? '#fff' : '#f4f3f4'}
-          />
+          <TouchableOpacity onPress={() => setExclusiva(v => !v)} activeOpacity={0.8}
+            style={{ width: 50, height: 28, borderRadius: 14, backgroundColor: exclusiva ? '#c0392b' : '#555', padding: 3, justifyContent: 'center', overflow: 'hidden' }}>
+            <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', alignSelf: exclusiva ? 'flex-end' : 'flex-start' }} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.exclusivaRow}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.exclusivaLabel}>Propiedad de constructora</Text>
             <Text style={styles.exclusivaDesc}>Desarrollo en construcción o con unidades nuevas</Text>
           </View>
-          <Switch
-            value={esConstructora}
-            onValueChange={setEsConstructora}
-            trackColor={{ false: '#ddd', true: '#1a6470' }}
-            thumbColor={esConstructora ? '#fff' : '#f4f3f4'}
-          />
+          <TouchableOpacity onPress={() => setEsConstructora(v => !v)} activeOpacity={0.8}
+            style={{ width: 50, height: 28, borderRadius: 14, backgroundColor: esConstructora ? '#1a6470' : '#555', padding: 3, justifyContent: 'center', overflow: 'hidden' }}>
+            <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', alignSelf: esConstructora ? 'flex-end' : 'flex-start' }} />
+          </TouchableOpacity>
         </View>
         {esConstructora && (
           <TextInput
