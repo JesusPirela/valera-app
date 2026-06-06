@@ -157,63 +157,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   }
 
   function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}}[], color: string) {
-    const groups = new Map<string, typeof items>()
-    items.forEach(item => {
-      const key = `${item.coords[0]},${item.coords[1]}`
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key)!.push(item)
-    })
-
-    groups.forEach(group => {
-      if (group.length === 1) {
-        addIndivPin(L, map, group[0].coords, group[0].p, color)
-        return
-      }
-
-      // Múltiples en el mismo punto → pin numerado, al click se despliegan
-      const c = group[0].coords
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="background:${color};color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4);cursor:pointer">${group.length}</div>`,
-        iconSize: [30, 30], iconAnchor: [15, 15],
-      })
-      const cluster = L.marker(c, { icon }).addTo(map)
-        .bindTooltip(`${group.length} propiedades — toca para ver`, { direction: 'top', offset: [0, -18] })
-      markersRef.current.push(cluster)
-
-      cluster.on('click', () => {
-        // Quitar el cluster
-        cluster.remove()
-        const idx = markersRef.current.indexOf(cluster)
-        if (idx > -1) markersRef.current.splice(idx, 1)
-
-        // Desplegar individuales en espiral Fibonacci
-        const spread = spreadCoords(c, group.length)
-        const spreadMarkers: any[] = []
-        group.forEach((item, i) => {
-          const icon = L.divIcon({
-            className: '',
-            html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
-            iconSize: [14, 14], iconAnchor: [7, 7],
-          })
-          const m = L.marker(spread[i], { icon }).addTo(map).bindPopup(propiedadPopup(L, item.p, color))
-          spreadMarkers.push(m)
-          markersRef.current.push(m)
-        })
-
-        // Click en el fondo del mapa → cerrar grupo y restaurar cluster
-        const collapse = () => {
-          spreadMarkers.forEach(m => {
-            m.remove()
-            const i = markersRef.current.indexOf(m)
-            if (i > -1) markersRef.current.splice(i, 1)
-          })
-          cluster.addTo(map)
-          markersRef.current.push(cluster)
-        }
-        map.once('click', collapse)
-      })
-    })
+    items.forEach(item => addIndivPin(L, map, item.coords, item.p, color))
   }
 
   function setBackBtn(L: any, map: any, label: string, onClick: () => void) {
