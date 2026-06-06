@@ -150,8 +150,21 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     const Ctrl = L.Control.extend({
       onAdd() {
         const btn = L.DomUtil.create('button', '')
-        btn.innerHTML = `← ${label}`
-        btn.style.cssText = 'background:#1976D2;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.25);margin:8px'
+        btn.innerHTML = `&#8592; Volver a ${label}`
+        btn.style.cssText = [
+          'background:#1976D2',
+          'color:#fff',
+          'border:none',
+          'padding:10px 18px',
+          'border-radius:10px',
+          'font-weight:800',
+          'font-size:14px',
+          'cursor:pointer',
+          'box-shadow:0 3px 10px rgba(0,0,0,0.35)',
+          'margin:10px',
+          'letter-spacing:0.3px',
+          'white-space:nowrap',
+        ].join(';')
         L.DomEvent.on(btn, 'click', (e: Event) => { L.DomEvent.stopPropagation(e); onClick() })
         return btn
       },
@@ -159,6 +172,36 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     })
     backCtrlRef.current = new Ctrl({ position: 'topleft' })
     backCtrlRef.current.addTo(map)
+  }
+
+  function addFullscreenBtn(L: any) {
+    const fsCtrl = L.Control.extend({
+      onAdd(map: any) {
+        const btn = L.DomUtil.create('button', '')
+        btn.innerHTML = '⛶'
+        btn.title = 'Pantalla completa'
+        btn.style.cssText = 'background:#fff;color:#333;border:2px solid #ccc;width:34px;height:34px;border-radius:6px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);line-height:1'
+        L.DomEvent.on(btn, 'click', (e: Event) => {
+          L.DomEvent.stopPropagation(e)
+          const el = containerRef.current as unknown as HTMLElement
+          if (!el) return
+          if (!document.fullscreenElement) {
+            el.requestFullscreen?.()
+            btn.innerHTML = '✕'
+          } else {
+            document.exitFullscreen?.()
+            btn.innerHTML = '⛶'
+          }
+        })
+        document.addEventListener('fullscreenchange', () => {
+          btn.innerHTML = document.fullscreenElement ? '✕' : '⛶'
+          if (mapRef.current) setTimeout(() => mapRef.current.invalidateSize(), 100)
+        })
+        return btn
+      },
+      onRemove() {},
+    })
+    new fsCtrl({ position: 'topright' }).addTo(L._currentMap || mapRef.current)
   }
 
   // ── Level 1: Mexico overview ─────────────────────────────────────────────────
@@ -261,8 +304,10 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     if (!el || mapRef.current) return
     const map = L.map(el, { center: [22.5, -102.55], zoom: 5, attributionControl: false })
     mapRef.current = map
+    L._currentMap = map
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map)
     renderCityPins(L, map, zonasRef.current)
+    addFullscreenBtn(L)
   }
 
   useEffect(() => {
@@ -311,7 +356,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   return (
     <View
       ref={containerRef}
-      style={{ height: 450, borderRadius: 12, overflow: 'hidden', marginBottom: 8, backgroundColor: '#dde8ee' }}
+      style={{ height: 520, borderRadius: 12, overflow: 'hidden', marginBottom: 8, backgroundColor: '#dde8ee' }}
     />
   )
 }
