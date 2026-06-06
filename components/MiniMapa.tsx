@@ -356,7 +356,10 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   return (
     <View
       ref={containerRef}
-      style={{ height: 520, borderRadius: 12, overflow: 'hidden', marginBottom: 8, backgroundColor: '#dde8ee' }}
+      style={Platform.OS === 'web'
+        ? ({ height: 'calc(100vh - 160px)', width: '100%', borderRadius: 0, overflow: 'hidden', marginBottom: 0, backgroundColor: '#dde8ee' } as any)
+        : { height: 520, borderRadius: 12, overflow: 'hidden', marginBottom: 8, backgroundColor: '#dde8ee' }
+      }
     />
   )
 }
