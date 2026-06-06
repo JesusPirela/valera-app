@@ -569,7 +569,7 @@ export default function NuevaPropiedad() {
           )
         )}
         {Platform.OS === 'web' ? (
-          <View nativeID="dropzone-nueva" style={[styles.imagenPicker, isDragging && styles.imagenPickerDragging]}>
+          <View nativeID="dropzone-nueva" style={[styles.imagenPicker, { backgroundColor: c.card, borderColor: isDragging ? '#1a6470' : c.border }, isDragging && styles.imagenPickerDragging]}>
             {/* @ts-ignore */}
             <input
               type="file"
@@ -578,13 +578,13 @@ export default function NuevaPropiedad() {
               onChange={handleFileInput}
               style={{ position: 'absolute', width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
             />
-            <Text style={styles.imagenPickerText}>
+            <Text style={[styles.imagenPickerText, { color: c.textMute }]}>
               {isDragging ? '📂 Suelta las fotos aquí' : '📁 Arrastra fotos aquí o haz clic para seleccionar'}
             </Text>
           </View>
         ) : (
-          <TouchableOpacity style={styles.imagenPicker} onPress={seleccionarImagenes}>
-            <Text style={styles.imagenPickerText}>+ Agregar fotos</Text>
+          <TouchableOpacity style={[styles.imagenPicker, { backgroundColor: c.card, borderColor: c.border }]} onPress={seleccionarImagenes}>
+            <Text style={[styles.imagenPickerText, { color: c.textMute }]}>+ Agregar fotos</Text>
           </TouchableOpacity>
         )}
 
@@ -807,16 +807,14 @@ const styles = StyleSheet.create({
   },
   textArea: { height: 100, paddingTop: 12 },
   imagenPicker: {
-    backgroundColor: '#e8e8e8',
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#ddd',
     borderStyle: 'dashed',
     paddingVertical: 40,
     alignItems: 'center',
     marginBottom: 4,
   },
-  imagenPickerText: { color: '#888', fontSize: 15 },
+  imagenPickerText: { fontSize: 15 },
   imagenPickerDragging: { borderColor: '#1a6470', backgroundColor: '#e8f4f5', borderStyle: 'solid' },
   miniatura: { position: 'relative', marginRight: 10 },
   miniaturaImg: { width: 100, height: 100, borderRadius: 10 },
