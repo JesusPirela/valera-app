@@ -156,8 +156,28 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     markersRef.current.push(m)
   }
 
-  function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}; real?: boolean}[], color: string) {
-    items.forEach(item => addIndivPin(L, map, item.coords, item.p, color))
+  function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}}[], color: string) {
+    // Agrupar solo por coordenadas EXACTAS
+    const groups = new Map<string, typeof items>()
+    items.forEach(item => {
+      const key = `${item.coords[0]},${item.coords[1]}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(item)
+    })
+    groups.forEach(group => {
+      if (group.length === 1) {
+        addIndivPin(L, map, group[0].coords, group[0].p, color)
+        return
+      }
+      // Misma ubicación exacta → pequeño spread solo para ese grupo
+      const c = group[0].coords
+      const R = 0.0004
+      const lngF = 1 / Math.cos(c[0] * Math.PI / 180)
+      group.forEach((item, i) => {
+        const angle = (2 * Math.PI / group.length) * i - Math.PI / 2
+        addIndivPin(L, map, [c[0] + Math.cos(angle) * R, c[1] + Math.sin(angle) * R * lngF], item.p, color)
+      })
+    })
   }
 
   function setBackBtn(L: any, map: any, label: string, onClick: () => void) {
