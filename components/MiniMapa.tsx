@@ -145,14 +145,56 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     )
   }
 
-  function addIndivPin(L: any, map: any, coords: [number,number], p: {id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}, color: string) {
+  function addIndivPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}}[], color: string) {
+    const count = items.length
+    const size = count > 1 ? 28 : 14
     const icon = L.divIcon({
       className: '',
-      html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
-      iconSize: [14, 14], iconAnchor: [7, 7],
+      html: count > 1
+        ? `<div style="background:${color};color:#fff;border-radius:50%;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer">${count}</div>`
+        : `<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
+      iconSize: [size, size], iconAnchor: [size/2, size/2],
     })
-    const m = L.marker(coords, { icon }).addTo(map).bindPopup(propiedadPopup(L, p, color))
+    const popup = count === 1
+      ? propiedadPopup(L, items[0].p, color)
+      : multiPopup(L, items.map(i => i.p), color)
+    const m = L.marker(items[0].coords, { icon }).addTo(map).bindPopup(popup)
     markersRef.current.push(m)
+  }
+
+  function multiPopup(L: any, props: {id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}[], color: string) {
+    const tipoLabel: Record<string, string> = { casa: '🏠', departamento: '🏢', local: '🏪', terreno: '🏗' }
+    const items = props.map(p =>
+      `<div style="border-bottom:1px solid #eee;padding:8px 0">
+        <div style="font-weight:700;font-size:12px;color:#1a1a1a;margin-bottom:2px">${p.titulo}</div>
+        <div style="font-size:11px;color:#555;margin-bottom:4px">${tipoLabel[p.tipo ?? ''] ?? ''} ${p.precio ? '$' + p.precio.toLocaleString('es-MX') + ' MXN' : 'Consultar'}</div>
+        <button onclick="window.__mapaVerPropiedad&&window.__mapaVerPropiedad('${p.id}')"
+          style="background:${color};color:#fff;border:none;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer">
+          Ver →
+        </button>
+      </div>`
+    ).join('')
+    return L.popup({ maxWidth: 240, maxHeight: 320 }).setContent(
+      `<div style="font-family:sans-serif;padding:4px">
+        <div style="font-weight:800;font-size:12px;color:#888;margin-bottom:6px">${props.length} propiedades en esta ubicación</div>
+        <div style="max-height:280px;overflow-y:auto">${items}</div>
+      </div>`
+    )
+  }
+
+  function addIndivPin(L: any, map: any, coords: [number,number], p: {id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}, color: string) {
+    addIndivPins(L, map, [{ coords, p }], color)
+  }
+
+  function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}}[], color: string) {
+    // Group by rounded coordinates (same location = same key)
+    const groups = new Map<string, typeof items>()
+    items.forEach(item => {
+      const key = `${item.coords[0].toFixed(4)},${item.coords[1].toFixed(4)}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(item)
+    })
+    groups.forEach(group => addIndivPins(L, map, group, color))
   }
 
   function setBackBtn(L: any, map: any, label: string, onClick: () => void) {
@@ -301,10 +343,11 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     const matching = cluster.matching ?? []
     const spread = spreadCoords(cluster.coords, matching.length)
 
-    matching.forEach((p, i) => {
-      const coords: [number, number] = (p.lat && p.lng) ? [p.lat, p.lng] : spread[i]
-      addIndivPin(L, map, coords, p, color)
-    })
+    const items = matching.map((p, i) => ({
+      coords: (p.lat && p.lng) ? [p.lat, p.lng] as [number,number] : spread[i],
+      p,
+    }))
+    renderGroupedPins(L, map, items, color)
   }
 
   // ── Mount ────────────────────────────────────────────────────────────────────
