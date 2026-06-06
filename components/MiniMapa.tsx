@@ -145,71 +145,42 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     )
   }
 
-  function addIndivPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}}[], color: string) {
-    const count = items.length
-    const size = count > 1 ? 28 : 14
+
+  function addIndivPin(L: any, map: any, coords: [number,number], p: {id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}, color: string) {
     const icon = L.divIcon({
       className: '',
-      html: count > 1
-        ? `<div style="background:${color};color:#fff;border-radius:50%;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer">${count}</div>`
-        : `<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
-      iconSize: [size, size], iconAnchor: [size/2, size/2],
+      html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
+      iconSize: [14, 14], iconAnchor: [7, 7],
     })
-    const popup = count === 1
-      ? propiedadPopup(L, items[0].p, color)
-      : multiPopup(L, items.map(i => i.p), color)
-    const m = L.marker(items[0].coords, { icon }).addTo(map).bindPopup(popup)
+    const m = L.marker(coords, { icon }).addTo(map).bindPopup(propiedadPopup(L, p, color))
     markersRef.current.push(m)
   }
 
-  function multiPopup(L: any, props: {id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}[], color: string) {
-    const tipoLabel: Record<string, string> = { casa: '🏠', departamento: '🏢', local: '🏪', terreno: '🏗' }
-    const items = props.map(p =>
-      `<div style="border-bottom:1px solid #eee;padding:8px 0">
-        <div style="font-weight:700;font-size:12px;color:#1a1a1a;margin-bottom:2px">${p.titulo}</div>
-        <div style="font-size:11px;color:#555;margin-bottom:4px">${tipoLabel[p.tipo ?? ''] ?? ''} ${p.precio ? '$' + p.precio.toLocaleString('es-MX') + ' MXN' : 'Consultar'}</div>
-        <button onclick="window.__mapaVerPropiedad&&window.__mapaVerPropiedad('${p.id}')"
-          style="background:${color};color:#fff;border:none;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer">
-          Ver →
-        </button>
-      </div>`
-    ).join('')
-    return L.popup({ maxWidth: 240, maxHeight: 320 }).setContent(
-      `<div style="font-family:sans-serif;padding:4px">
-        <div style="font-weight:800;font-size:12px;color:#888;margin-bottom:6px">${props.length} propiedades en esta ubicación</div>
-        <div style="max-height:280px;overflow-y:auto">${items}</div>
-      </div>`
-    )
-  }
-
-  function addIndivPin(L: any, map: any, coords: [number,number], p: {id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}, color: string) {
-    addIndivPins(L, map, [{ coords, p }], color)
-  }
-
   function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}}[], color: string) {
-    // Group by rounded coordinates
+    // Group by rounded coordinates (same location)
     const groups = new Map<string, typeof items>()
     items.forEach(item => {
       const key = `${item.coords[0].toFixed(4)},${item.coords[1].toFixed(4)}`
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(item)
     })
+
     groups.forEach(group => {
       if (group.length === 1) {
-        addIndivPins(L, map, group, color)
+        addIndivPin(L, map, group[0].coords, group[0].p, color)
         return
       }
-      // Spread multiple pins around the same point in a small spiral
+      // Spread each pin in a circle around the shared point
       const center = group[0].coords
-      const R = 0.0008 // ~80m radius
+      const R = 0.0006
       const lngF = 1 / Math.cos(center[0] * Math.PI / 180)
       group.forEach((item, i) => {
         const angle = (2 * Math.PI / group.length) * i - Math.PI / 2
-        const offsetCoords: [number, number] = [
+        const spread: [number, number] = [
           center[0] + Math.cos(angle) * R,
           center[1] + Math.sin(angle) * R * lngF,
         ]
-        addIndivPins(L, map, [{ coords: offsetCoords, p: item.p }], color)
+        addIndivPin(L, map, spread, item.p, color)
       })
     })
   }
