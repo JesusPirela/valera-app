@@ -513,8 +513,9 @@ export default function NuevaPropiedad() {
           {mostrarFicha && (
             <View style={{ marginTop: 8 }}>
               <TextInput
-                style={[styles.input, { height: 130, paddingTop: 10 }]}
+                style={[styles.input, { height: 130, paddingTop: 10, backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                 placeholder={'Pega aquí la ficha completa de la propiedad y detectaremos automáticamente:\ntítulo, precio, m², recámaras, baños, estacionamientos...'}
+                placeholderTextColor={c.placeholder}
                 value={ficha}
                 onChangeText={setFicha}
                 multiline
@@ -723,8 +724,9 @@ export default function NuevaPropiedad() {
           </TouchableOpacity>
         </View>
         <TextInput
-          style={[styles.input, styles.textArea]}
+          style={[styles.input, styles.textArea, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
           placeholder="Detalles de la propiedad..."
+          placeholderTextColor={c.placeholder}
           value={descripcion}
           onChangeText={setDescripcion}
           multiline
