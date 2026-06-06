@@ -157,25 +157,42 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   }
 
   function renderGroupedPins(L: any, map: any, items: {coords:[number,number]; p:{id:string;titulo:string;tipo:string|null;precio:number|null;direccion:string}}[], color: string) {
-    // Agrupar solo por coordenadas EXACTAS
     const groups = new Map<string, typeof items>()
     items.forEach(item => {
       const key = `${item.coords[0]},${item.coords[1]}`
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(item)
     })
+
     groups.forEach(group => {
       if (group.length === 1) {
         addIndivPin(L, map, group[0].coords, group[0].p, color)
         return
       }
-      // Misma ubicación exacta → pequeño spread solo para ese grupo
+
+      // Múltiples en el mismo punto → pin numerado, al click se despliegan
       const c = group[0].coords
-      const R = 0.0004
-      const lngF = 1 / Math.cos(c[0] * Math.PI / 180)
-      group.forEach((item, i) => {
-        const angle = (2 * Math.PI / group.length) * i - Math.PI / 2
-        addIndivPin(L, map, [c[0] + Math.cos(angle) * R, c[1] + Math.sin(angle) * R * lngF], item.p, color)
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="background:${color};color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4);cursor:pointer">${group.length}</div>`,
+        iconSize: [30, 30], iconAnchor: [15, 15],
+      })
+      const cluster = L.marker(c, { icon }).addTo(map)
+        .bindTooltip(`${group.length} propiedades — toca para ver`, { direction: 'top', offset: [0, -18] })
+      markersRef.current.push(cluster)
+
+      cluster.on('click', () => {
+        // Quitar el cluster
+        cluster.remove()
+        const idx = markersRef.current.indexOf(cluster)
+        if (idx > -1) markersRef.current.splice(idx, 1)
+        // Desplegar individuales en pequeño círculo
+        const R = 0.0004
+        const lngF = 1 / Math.cos(c[0] * Math.PI / 180)
+        group.forEach((item, i) => {
+          const angle = (2 * Math.PI / group.length) * i - Math.PI / 2
+          addIndivPin(L, map, [c[0] + Math.cos(angle) * R, c[1] + Math.sin(angle) * R * lngF], item.p, color)
+        })
       })
     })
   }
