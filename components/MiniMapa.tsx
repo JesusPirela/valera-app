@@ -172,7 +172,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
       }
       // Spread each pin in a circle around the shared point
       const center = group[0].coords
-      const R = 0.0006
+      const R = 0.0025
       const lngF = 1 / Math.cos(center[0] * Math.PI / 180)
       group.forEach((item, i) => {
         const angle = (2 * Math.PI / group.length) * i - Math.PI / 2
@@ -298,25 +298,22 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     const otras = props.filter((_, i) => !matched.has(i))
     if (otras.length > 0) clusters.push({ label: 'Sin zona específica', coords: view.center, keywords: [], matching: otras })
 
-    // Also show geocoded pins directly (they have exact coords)
-    const geocodedInCity = coordsRef.current.filter(p => p.zona === zona.key)
-    geocodedInCity.forEach(p => addIndivPin(L, map, [p.lat, p.lng], p, zona.color))
-
-    // Show cluster pins
+    // Show cluster pins only — individual pins appear when clicking a cluster
     const color = zona.color
-    clusters.forEach(c => {
-      const icon = L.divIcon({ className: '', html: clusterHTML(c.matching.length, color, 44), iconSize: [44, 44], iconAnchor: [22, 22] })
-      const m = L.marker(c.coords, { icon })
-        .addTo(map)
-        .bindTooltip(`<b>${c.label}</b><br/>${c.matching.length} propiedades`, { direction: 'top', offset: [0, -26] })
-        .on('click', () => showSubZona(L, map, c, color, zona))
-      markersRef.current.push(m)
-    })
-
-    if (clusters.length === 0 && geocodedInCity.length === 0) {
-      // No sub-zones matched — show all as individual spread pins
+    if (clusters.length > 0) {
+      clusters.forEach(c => {
+        const icon = L.divIcon({ className: '', html: clusterHTML(c.matching.length, color, 44), iconSize: [44, 44], iconAnchor: [22, 22] })
+        const m = L.marker(c.coords, { icon })
+          .addTo(map)
+          .bindTooltip(`<b>${c.label}</b><br/>${c.matching.length} propiedades`, { direction: 'top', offset: [0, -26] })
+          .on('click', () => showSubZona(L, map, c, color, zona))
+        markersRef.current.push(m)
+      })
+    } else {
+      // No sub-zones — show all as individual pins directly
       const spread = spreadCoords(view.center, props.length)
-      props.forEach((p, i) => addIndivPin(L, map, spread[i], { id: '', titulo: p.direccion, tipo: null, precio: null, direccion: p.direccion }, color))
+      const items = props.map((p, i) => ({ coords: (p.lat && p.lng) ? [p.lat, p.lng] as [number,number] : spread[i], p }))
+      renderGroupedPins(L, map, items, color)
     }
   }
 
