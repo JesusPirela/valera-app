@@ -178,10 +178,10 @@ function RankRow({ pos, label, sublabel, valor, max, color, textColor, trackBg }
 }
 
 // ─── Card wrapper ─────────────────────────────────────────
-function Card({ titulo, children, bg }: { titulo?: string; children: React.ReactNode; bg?: string }) {
+function Card({ titulo, children, bg, titleColor }: { titulo?: string; children: React.ReactNode; bg?: string; titleColor?: string }) {
   return (
     <View style={[styles.card, bg ? { backgroundColor: bg } : {}]}>
-      {titulo && <Text style={styles.cardTitulo}>{titulo}</Text>}
+      {titulo && <Text style={[styles.cardTitulo, titleColor ? { color: titleColor } : {}]}>{titulo}</Text>}
       {children}
     </View>
   )
@@ -360,17 +360,17 @@ export default function Estadisticas() {
 
       {/* KPI Cards */}
       <View style={styles.kpiGrid}>
-        <KpiCard label="Propiedades" value={resumen.total_propiedades} color={C.teal} icon="🏠" bg={c.card} />
-        <KpiCard label="Prospectadores" value={resumen.total_prospectadores} color={C.green} icon="👥" bg={c.card} />
-        <KpiCard label="Vistas" value={resumen.total_vistas} color={C.blue} icon="👁" bg={c.card} />
-        <KpiCard label="Descargas" value={resumen.total_descargas} color={C.amber} icon="📥" bg={c.card} />
+        <KpiCard label="Propiedades" value={resumen.total_propiedades} color={C.teal} icon="🏠" bg={c.card} labelColor={c.textMute} />
+        <KpiCard label="Prospectadores" value={resumen.total_prospectadores} color={C.green} icon="👥" bg={c.card} labelColor={c.textMute} />
+        <KpiCard label="Vistas" value={resumen.total_vistas} color={C.blue} icon="👁" bg={c.card} labelColor={c.textMute} />
+        <KpiCard label="Descargas" value={resumen.total_descargas} color={C.amber} icon="📥" bg={c.card} labelColor={c.textMute} />
       </View>
 
       {/* Propiedades: tipo y operación */}
       {propDist.length > 0 && (
         <>
           <View style={styles.rowCards}>
-            <Card bg={c.card} titulo="Por tipo">
+            <Card bg={c.card} titulo="Por tipo" titleColor={c.textMute}>
               <View style={styles.pieRow}>
                 <DonutChart
                   slices={slicesTipo}
@@ -382,7 +382,7 @@ export default function Estadisticas() {
               </View>
             </Card>
 
-            <Card bg={c.card} titulo="Por operación">
+            <Card bg={c.card} titulo="Por operación" titleColor={c.textMute}>
               <View style={styles.pieRow}>
                 <DonutChart
                   slices={slicesOp}
@@ -395,7 +395,7 @@ export default function Estadisticas() {
             </Card>
           </View>
 
-          <Card bg={c.card} titulo="Por estado">
+          <Card bg={c.card} titulo="Por estado" titleColor={c.textMute}>
             <View style={styles.pieRowCenter}>
               <DonutChart
                 slices={slicesEst}
@@ -411,7 +411,7 @@ export default function Estadisticas() {
 
       {/* CRM */}
       {slicesCRM.length > 0 && (
-        <Card bg={c.card} titulo="Clientes CRM — por etapa">
+        <Card bg={c.card} titulo="Clientes CRM — por etapa" titleColor={c.textMute}>
           <View style={styles.pieRowCenter}>
             <DonutChart
               slices={slicesCRM}
@@ -426,7 +426,7 @@ export default function Estadisticas() {
 
       {/* Engagement */}
       {(resumen.total_vistas > 0 || resumen.total_descargas > 0) && (
-        <Card bg={c.card} titulo="Vistas vs Descargas">
+        <Card bg={c.card} titulo="Vistas vs Descargas" titleColor={c.textMute}>
           <View style={styles.pieRowCenter}>
             <DonutChart
               slices={slicesEngagement}
@@ -440,7 +440,7 @@ export default function Estadisticas() {
       )}
 
       {/* Actividad 7 días */}
-      <Card bg={c.card} titulo="Actividad — últimos 7 días">
+      <Card bg={c.card} titulo="Actividad — últimos 7 días" titleColor={c.textMute}>
         {actividad_7dias.length === 0 ? (
           <Text style={styles.sinDatos}>Sin actividad reciente</Text>
         ) : (
@@ -453,7 +453,7 @@ export default function Estadisticas() {
       </Card>
 
       {/* Top propiedades */}
-      <Card bg={c.card} titulo="Propiedades más activas">
+      <Card bg={c.card} titulo="Propiedades más activas" titleColor={c.textMute}>
         {top_propiedades.length === 0 ? (
           <Text style={styles.sinDatos}>Sin datos aún</Text>
         ) : (
@@ -474,7 +474,7 @@ export default function Estadisticas() {
       </Card>
 
       {/* Top prospectadores */}
-      <Card bg={c.card} titulo="Prospectadores más activos">
+      <Card bg={c.card} titulo="Prospectadores más activos" titleColor={c.textMute}>
         {top_prospectadores.length === 0 ? (
           <Text style={styles.sinDatos}>Sin datos aún</Text>
         ) : (
@@ -497,12 +497,12 @@ export default function Estadisticas() {
   )
 }
 
-function KpiCard({ label, value, color, icon, bg }: { label: string; value: number; color: string; icon: string; bg?: string }) {
+function KpiCard({ label, value, color, icon, bg, labelColor }: { label: string; value: number; color: string; icon: string; bg?: string; labelColor?: string }) {
   return (
     <View style={[styles.kpiCard, { borderLeftColor: color }, bg ? { backgroundColor: bg } : {}]}>
       <Text style={styles.kpiIcon}>{icon}</Text>
       <Text style={[styles.kpiNum, { color }]}>{value}</Text>
-      <Text style={styles.kpiLabel}>{label}</Text>
+      <Text style={[styles.kpiLabel, labelColor ? { color: labelColor } : {}]}>{label}</Text>
     </View>
   )
 }
@@ -518,7 +518,7 @@ const styles = StyleSheet.create({
   backBtn: { alignSelf: 'flex-start', paddingVertical: 14, paddingRight: 12 },
   backBtnText: { color: C.teal, fontSize: 15, fontWeight: '600' },
   pageHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  pageTitle: { fontSize: 24, fontWeight: '800', color: '#1a2e35' },
+  pageTitle: { fontSize: 24, fontWeight: '800' },
   conexionBtn: {
     backgroundColor: '#e8f5f6', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
     borderWidth: 1, borderColor: '#1a6470',
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
   },
   kpiIcon: { fontSize: 22, marginBottom: 6 },
   kpiNum: { fontSize: 30, fontWeight: '800', lineHeight: 34 },
-  kpiLabel: { fontSize: 12, color: '#999', marginTop: 3, fontWeight: '600' },
+  kpiLabel: { fontSize: 12, marginTop: 3, fontWeight: '600' },
 
   // Cards
   card: {
@@ -562,7 +562,6 @@ const styles = StyleSheet.create({
   cardTitulo: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#999',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     marginBottom: 16,
@@ -578,8 +577,8 @@ const styles = StyleSheet.create({
   // Legend
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   legendDot: { width: 10, height: 10, borderRadius: 3 },
-  legendLabel: { flex: 1, fontSize: 12, color: '#555' },
-  legendVal: { fontSize: 13, fontWeight: '700', width: 28, textAlign: 'right' },
+  legendLabel: { flex: 1, fontSize: 12 },
+  legendVal: { fontSize: 13, fontWeight: '700', width: 28, textAlign: 'right' as const },
   legendPct: { fontSize: 11, color: '#bbb', width: 34, textAlign: 'right' },
 
   // Bar chart vertical

@@ -192,7 +192,7 @@ export default function TiendaCompras() {
             style={[s.filtroBtn, filtro === val && s.filtroBtnActivo]}
             onPress={() => setFiltro(val)}
           >
-            <Text style={[s.filtroTxt, filtro === val && s.filtroTxtActivo]}>{lbl}</Text>
+            <Text style={[s.filtroTxt, { color: c.textSub }, filtro === val && s.filtroTxtActivo]}>{lbl}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -266,7 +266,7 @@ export default function TiendaCompras() {
                 <View style={s.modalInfo}>
                   <Text style={s.modalInfoIcono}>{esCofre(seleccionada) ? (seleccionada.es_milestone ? '🏆' : '🎁') : seleccionada.item_icono}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.modalInfoNombre}>{esCofre(seleccionada) ? (seleccionada.nombre_premio ?? seleccionada.item_nombre) : seleccionada.item_nombre}</Text>
+                    <Text style={[s.modalInfoNombre, { color: c.text }]}>{esCofre(seleccionada) ? (seleccionada.nombre_premio ?? seleccionada.item_nombre) : seleccionada.item_nombre}</Text>
                     <Text style={s.modalInfoUser}>Usuario: {seleccionada.user_nombre}</Text>
                     {!esCofre(seleccionada) && seleccionada.item_descripcion ? (
                       <Text style={s.modalInfoDesc}>{seleccionada.item_descripcion}</Text>
@@ -277,11 +277,11 @@ export default function TiendaCompras() {
                 {/* Si es tipo lead: registrar cliente */}
                 {ES_LEAD(seleccionada.item_tipo) && (
                   <View style={s.seccion}>
-                    <Text style={s.seccionTitle}>👤 Registrar lead al usuario</Text>
+                    <Text style={[s.seccionTitle, { color: c.text }]}>👤 Registrar lead al usuario</Text>
                     <Text style={s.seccionDesc}>
                       Al registrar el lead, el cliente aparecerá directamente en el CRM del prospectador y recibirá una notificación automática.
                     </Text>
-                    <Text style={s.fieldLabel}>Nombre del lead *</Text>
+                    <Text style={[s.fieldLabel, { color: c.textSub }]}>Nombre del lead *</Text>
                     <TextInput
                       style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                       value={nombreLead}
@@ -289,7 +289,7 @@ export default function TiendaCompras() {
                       placeholder="Nombre completo"
                       autoCapitalize="words"
                     />
-                    <Text style={s.fieldLabel}>Teléfono *</Text>
+                    <Text style={[s.fieldLabel, { color: c.textSub }]}>Teléfono *</Text>
                     <TextInput
                       style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                       value={telLead}
@@ -313,7 +313,7 @@ export default function TiendaCompras() {
 
                 {/* Enviar notificación */}
                 <View style={s.seccion}>
-                  <Text style={s.seccionTitle}>💬 Mensaje para el usuario</Text>
+                  <Text style={[s.seccionTitle, { color: c.text }]}>💬 Mensaje para el usuario</Text>
                   <TextInput
                     style={[s.input, { height: 100, textAlignVertical: 'top' }]}
                     value={mensaje}
@@ -346,18 +346,18 @@ export default function TiendaCompras() {
       {/* Modal de rechazo */}
       <Modal visible={modalRechazo} animationType="slide" transparent onRequestClose={() => setModalRechazo(false)}>
         <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { paddingBottom: 40 }]}>
+          <View style={[s.modalSheet, { paddingBottom: 40, backgroundColor: c.card }]}>
             <Text style={[s.modalTitle, { color: '#c0392b' }]}>❌ Rechazar compra</Text>
             {compraRechazo && (
               <View style={s.modalInfo}>
                 <Text style={s.modalInfoIcono}>{compraRechazo.item_icono}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.modalInfoNombre}>{compraRechazo.item_nombre}</Text>
+                  <Text style={[s.modalInfoNombre, { color: c.text }]}>{compraRechazo.item_nombre}</Text>
                   <Text style={s.modalInfoUser}>👤 {compraRechazo.user_nombre} · 💰 {compraRechazo.costo_coins} coins</Text>
                 </View>
               </View>
             )}
-            <Text style={s.seccionTitle}>Motivo del rechazo</Text>
+            <Text style={[s.seccionTitle, { color: c.text }]}>Motivo del rechazo</Text>
             <Text style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
               Los Valera Coins serán devueltos automáticamente al usuario.
             </Text>
@@ -403,7 +403,7 @@ const s = StyleSheet.create({
   filtroRow:    { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' },
   filtroBtn:    { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
   filtroBtnActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  filtroTxt:       { fontSize: 12, fontWeight: '600', color: '#666' },
+  filtroTxt:       { fontSize: 12, fontWeight: '600' },
   filtroTxtActivo: { color: '#fff' },
 
   emptyBox: { alignItems: 'center', paddingVertical: 60 },
@@ -418,8 +418,8 @@ const s = StyleSheet.create({
 
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   itemIcono: { fontSize: 28 },
-  itemNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
-  userName: { fontSize: 12, color: '#666', marginTop: 2 },
+  itemNombre: { fontSize: 15, fontWeight: '700' },
+  userName: { fontSize: 12, marginTop: 2 },
   estadoBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   badgePending:   { backgroundColor: '#fff3e0' },
   badgeOk:        { backgroundColor: '#e8f5e9' },
@@ -427,8 +427,8 @@ const s = StyleSheet.create({
   estadoTxt: { fontSize: 11, fontWeight: '700' },
 
   cardMeta: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  metaTxt: { fontSize: 12, color: '#888' },
-  notaAdmin: { fontSize: 12, color: '#555', fontStyle: 'italic', marginBottom: 6 },
+  metaTxt: { fontSize: 12 },
+  notaAdmin: { fontSize: 12, fontStyle: 'italic', marginBottom: 6 },
   ruletaBadge: { backgroundColor: '#fff8e1', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#c9a84c66' },
   ruletaBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#c9a84c', letterSpacing: 0.5 },
 
@@ -453,15 +453,15 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: '#dde8e9',
   },
   modalInfoIcono:  { fontSize: 32 },
-  modalInfoNombre: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
+  modalInfoNombre: { fontSize: 15, fontWeight: '700' },
   modalInfoUser:   { fontSize: 12, color: '#1a6470', marginTop: 2 },
   modalInfoDesc:   { fontSize: 12, color: '#888', marginTop: 4 },
 
   seccion: { marginBottom: 16 },
-  seccionTitle: { fontSize: 14, fontWeight: '800', color: '#1a1a2e', marginBottom: 6 },
+  seccionTitle: { fontSize: 14, fontWeight: '800', marginBottom: 6 },
   seccionDesc:  { fontSize: 12, color: '#888', marginBottom: 10, lineHeight: 17 },
 
-  fieldLabel: { fontSize: 12, fontWeight: '700', color: '#666', marginBottom: 5, marginTop: 8, textTransform: 'uppercase' },
+  fieldLabel: { fontSize: 12, fontWeight: '700', marginBottom: 5, marginTop: 8, textTransform: 'uppercase' as const },
   input: {
     borderRadius: 10, borderWidth: 1,
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,

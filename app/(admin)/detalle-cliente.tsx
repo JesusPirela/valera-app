@@ -232,62 +232,62 @@ export default function AdminDetalleCliente() {
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Teléfono</Text>
-          <Text style={styles.infoValue}>{cliente.telefono}</Text>
+          <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.telefono}</Text>
         </View>
         {cliente.email ? (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Email</Text>
-            <Text style={styles.infoValue}>{cliente.email}</Text>
+            <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.email}</Text>
           </View>
         ) : null}
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Fuente</Text>
-          <Text style={styles.infoValue}>{FUENTE_LABELS[cliente.fuente_lead] ?? cliente.fuente_lead}</Text>
+          <Text style={[styles.infoValue, { color: c.textSub }]}>{FUENTE_LABELS[cliente.fuente_lead] ?? cliente.fuente_lead}</Text>
         </View>
         {cliente.tipo_operacion ? (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Busca en</Text>
-            <Text style={styles.infoValue}>{cliente.tipo_operacion === 'venta' ? 'Venta' : 'Renta'}</Text>
+            <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.tipo_operacion === 'venta' ? 'Venta' : 'Renta'}</Text>
           </View>
         ) : null}
         {cliente.zona_busqueda ? (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Zona</Text>
-            <Text style={styles.infoValue}>{cliente.zona_busqueda}</Text>
+            <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.zona_busqueda}</Text>
           </View>
         ) : null}
         {cliente.tipo_credito ? (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Crédito</Text>
-            <Text style={styles.infoValue}>{CREDITO_LABELS[cliente.tipo_credito] ?? cliente.tipo_credito}</Text>
+            <Text style={[styles.infoValue, { color: c.textSub }]}>{CREDITO_LABELS[cliente.tipo_credito] ?? cliente.tipo_credito}</Text>
           </View>
         ) : null}
         {cliente.presupuesto ? (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Presupuesto</Text>
-            <Text style={styles.infoValue}>{cliente.presupuesto}</Text>
+            <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.presupuesto}</Text>
           </View>
         ) : null}
         {cliente.proximo_contacto ? (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Próx. contacto</Text>
-            <Text style={styles.infoValue}>{formatFechaHora(cliente.proximo_contacto)}</Text>
+            <Text style={[styles.infoValue, { color: c.textSub }]}>{formatFechaHora(cliente.proximo_contacto)}</Text>
           </View>
         ) : null}
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Agregado</Text>
-          <Text style={styles.infoValue}>{tiempoRelativo(cliente.created_at)}</Text>
+          <Text style={[styles.infoValue, { color: c.textSub }]}>{tiempoRelativo(cliente.created_at)}</Text>
         </View>
         {cliente.notas ? (
           <View style={styles.notasBox}>
             <Text style={styles.notasLabel}>Notas</Text>
-            <Text style={styles.notasText}>{cliente.notas}</Text>
+            <Text style={[styles.notasText, { color: c.textSub }]}>{cliente.notas}</Text>
           </View>
         ) : null}
       </View>
 
       {/* Estado + Asesor */}
-      <View style={styles.asesorCard}>
+      <View style={[styles.asesorCard, { backgroundColor: c.card }]}>
         {/* Estado */}
         <View style={[styles.asesorRow, { borderBottomWidth: 1, borderBottomColor: '#f0f3f5', paddingBottom: 14, marginBottom: 14 }]}>
           <View style={{ flex: 1 }}>
@@ -306,7 +306,7 @@ export default function AdminDetalleCliente() {
         <View style={styles.asesorRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.asesorLabel}>Asesor asignado</Text>
-            <Text style={styles.asesorNombre}>
+            <Text style={[styles.asesorNombre, { color: c.text }]}>
               {cliente.responsable_nombre ?? 'Sin asignar'}
             </Text>
           </View>
@@ -319,9 +319,9 @@ export default function AdminDetalleCliente() {
       {/* Modal reasignar */}
       <Modal visible={modalReasignar} animationType="slide" transparent onRequestClose={() => setModalReasignar(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { backgroundColor: c.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitulo}>Reasignar asesor</Text>
+              <Text style={[styles.modalTitulo, { color: c.text }]}>Reasignar asesor</Text>
               <TouchableOpacity onPress={() => setModalReasignar(false)}>
                 <Text style={styles.modalCerrar}>✕</Text>
               </TouchableOpacity>
@@ -344,7 +344,7 @@ export default function AdminDetalleCliente() {
                           {(u.nombre ?? '?')[0].toUpperCase()}
                         </Text>
                       </View>
-                      <Text style={[styles.usuarioNombre, asesorSeleccionado === u.id && { color: '#2a8a5a', fontWeight: '700' }]}>
+                      <Text style={[styles.usuarioNombre, { color: c.text }, asesorSeleccionado === u.id && { color: '#2a8a5a', fontWeight: '700' }]}>
                         {u.nombre}
                       </Text>
                       {asesorSeleccionado === u.id && <Text style={{ color: '#2a8a5a', fontSize: 16 }}>✓</Text>}
@@ -370,9 +370,9 @@ export default function AdminDetalleCliente() {
       {/* Modal cambiar estado */}
       <Modal visible={modalEstado} animationType="slide" transparent onRequestClose={() => setModalEstado(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { backgroundColor: c.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitulo}>Cambiar estado</Text>
+              <Text style={[styles.modalTitulo, { color: c.text }]}>Cambiar estado</Text>
               <TouchableOpacity onPress={() => setModalEstado(false)}>
                 <Text style={styles.modalCerrar}>✕</Text>
               </TouchableOpacity>
@@ -388,7 +388,7 @@ export default function AdminDetalleCliente() {
                       onPress={() => setEstadoSeleccionado(key)}
                     >
                       <View style={[styles.estadoOpcionDot, { backgroundColor: est.color }]} />
-                      <Text style={[styles.estadoOpcionText, activo && { color: est.color, fontWeight: '700' }]}>
+                      <Text style={[styles.estadoOpcionText, { color: c.textSub }, activo && { color: est.color, fontWeight: '700' }]}>
                         {est.label}
                       </Text>
                       {activo && <Ionicons name="checkmark-circle" size={18} color={est.color} />}
@@ -420,9 +420,9 @@ export default function AdminDetalleCliente() {
         recPendientes.map((r) => {
           const vencido = new Date(r.fecha_hora) < new Date()
           return (
-            <View key={r.id} style={[styles.recCard, vencido && styles.recCardVencido]}>
+            <View key={r.id} style={[styles.recCard, { backgroundColor: c.card }, vencido && styles.recCardVencido]}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.recTitulo, vencido && styles.recTituloVencido]}>{r.titulo}</Text>
+                <Text style={[styles.recTitulo, { color: c.text }, vencido && styles.recTituloVencido]}>{r.titulo}</Text>
                 <Text style={styles.recFecha}>{formatFechaHora(r.fecha_hora)}</Text>
                 {r.descripcion ? <Text style={styles.recDesc}>{r.descripcion}</Text> : null}
                 {vencido && <Text style={styles.recVencidoLabel}>Vencido</Text>}
@@ -445,10 +445,10 @@ export default function AdminDetalleCliente() {
         <Text style={styles.emptyText}>Sin actividad registrada.</Text>
       ) : (
         interacciones.map((item) => (
-          <View key={item.id} style={styles.interaccionRow}>
+          <View key={item.id} style={[styles.interaccionRow, { backgroundColor: c.card }]}>
             <Text style={styles.interaccionIcon}>{TIPO_ICON[item.tipo] ?? '•'}</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.interaccionDesc}>{item.descripcion}</Text>
+              <Text style={[styles.interaccionDesc, { color: c.text }]}>{item.descripcion}</Text>
               <Text style={styles.interaccionFecha}>{tiempoRelativo(item.created_at)}</Text>
             </View>
           </View>
@@ -507,21 +507,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 12,
   },
   estadoOpcionDot: { width: 8, height: 8, borderRadius: 4 },
-  estadoOpcionText: { flex: 1, fontSize: 14, color: '#4a5568' },
+  estadoOpcionText: { flex: 1, fontSize: 14 },
 
   infoRow: {
     flexDirection: 'row', paddingVertical: 10, flexWrap: 'wrap',
     borderBottomWidth: 1, borderBottomColor: '#f0f3f5',
   },
   infoLabel: { fontSize: 12, color: '#9eafb2', fontWeight: '600', width: 120 },
-  infoValue: { fontSize: 13, color: '#2d3748', fontWeight: '500', flex: 1 },
+  infoValue: { fontSize: 13, fontWeight: '500', flex: 1 },
 
   notasBox: {
     marginTop: 10, backgroundColor: '#f8f9fb', borderRadius: 12,
     padding: 12, borderLeftWidth: 3, borderLeftColor: '#c9a84c',
   },
   notasLabel: { fontSize: 11, fontWeight: '700', color: '#9eafb2', marginBottom: 5, letterSpacing: 0.4 },
-  notasText: { fontSize: 13, color: '#4a5568', fontStyle: 'italic', lineHeight: 20 },
+  notasText: { fontSize: 13, fontStyle: 'italic', lineHeight: 20 },
 
   secTitle: {
     fontSize: 11, fontWeight: '700', color: '#6b8082', letterSpacing: 0.8,
@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3, borderLeftColor: '#e0f4f5',
   },
   recCardVencido: { borderLeftColor: '#fde8e8', backgroundColor: '#fff8f8' },
-  recTitulo: { fontSize: 14, fontWeight: '700', color: '#1a1a2e', marginBottom: 3 },
+  recTitulo: { fontSize: 14, fontWeight: '700', marginBottom: 3 },
   recTituloVencido: { color: '#c0392b' },
   recFecha: { fontSize: 12, color: '#9eafb2' },
   recDesc: { fontSize: 12, color: '#6b7f82', marginTop: 3 },
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
   interaccionIcon: { fontSize: 18 },
-  interaccionDesc: { fontSize: 13, color: '#2d3748', lineHeight: 19 },
+  interaccionDesc: { fontSize: 13, lineHeight: 19 },
   interaccionFecha: { fontSize: 11, color: '#9eafb2', marginTop: 4 },
 
   asesorCard: {
@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
   },
   asesorRow: { flexDirection: 'row', alignItems: 'center' },
   asesorLabel: { fontSize: 11, fontWeight: '700', color: '#9eafb2', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 },
-  asesorNombre: { fontSize: 16, fontWeight: '700', color: '#1a1a2e' },
+  asesorNombre: { fontSize: 16, fontWeight: '700' },
   asesorBtn: {
     backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9,
     shadowColor: '#1a6470', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3, elevation: 2,
@@ -567,16 +567,16 @@ const styles = StyleSheet.create({
   asesorBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40, maxHeight: '80%' },
+  modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40, maxHeight: '80%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
-  modalTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e' },
+  modalTitulo: { fontSize: 18, fontWeight: '800' },
   modalCerrar: { fontSize: 18, color: '#9eafb2', paddingHorizontal: 6 },
   usuariosList: { borderWidth: 1, borderColor: '#e0eaec', borderRadius: 14, overflow: 'hidden', marginBottom: 16 },
   usuarioRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f0f4f5' },
   usuarioRowActivo: { backgroundColor: '#f0fcf6' },
   usuarioAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   usuarioAvatarTxt: { fontSize: 14, fontWeight: '700' },
-  usuarioNombre: { flex: 1, fontSize: 14, color: '#1a2e30' },
+  usuarioNombre: { flex: 1, fontSize: 14 },
   guardarBtn: { backgroundColor: '#c9a84c', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
   guardarBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
 })
