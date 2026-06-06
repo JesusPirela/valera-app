@@ -93,8 +93,16 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
   // ── helpers ─────────────────────────────────────────────────────────────────
 
   function clearMarkers() {
-    markersRef.current.forEach(m => m.remove())
+    markersRef.current.forEach(m => { try { m.remove() } catch {} })
     markersRef.current = []
+    // Eliminar cualquier marker que haya escapado del ref (ej. el que fue clickeado)
+    if (mapRef.current) {
+      const extras: any[] = []
+      mapRef.current.eachLayer((layer: any) => {
+        if (layer._latlng !== undefined) extras.push(layer)
+      })
+      extras.forEach(m => { try { m.remove() } catch {} })
+    }
   }
 
   function clusterHTML(count: number, color: string, size = 52) {
