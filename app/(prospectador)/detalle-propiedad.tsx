@@ -132,6 +132,7 @@ export default function DetallePropiedad() {
         .from('propiedades')
         .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, asesor_id, es_constructora, nombre_constructora, propiedad_imagenes(url, orden)')
         .eq('id', id)
+        .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
         .single()
 
       if (error) throw error
@@ -632,15 +633,19 @@ export default function DetallePropiedad() {
             document.body.appendChild(a)
             a.click()
             document.body.removeChild(a)
-            URL.revokeObjectURL(objectUrl)
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
           } catch {
             const a = document.createElement('a')
             a.href = imagenes[i].url
+            a.download = `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`
             a.target = '_blank'
             a.rel = 'noopener'
             document.body.appendChild(a)
             a.click()
             document.body.removeChild(a)
+          }
+          if (i < imagenes.length - 1) {
+            await new Promise<void>(r => setTimeout(r, 500))
           }
         }
         setCompartiendoFotos(false)
@@ -716,16 +721,22 @@ export default function DetallePropiedad() {
             document.body.appendChild(a)
             a.click()
             document.body.removeChild(a)
-            URL.revokeObjectURL(objectUrl)
+            // Defer revoke — el navegador necesita tiempo para leer el blob antes de que se libere
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
           } catch {
-            // CORS bloqueó fetch — abrir en nueva pestaña para descarga manual
+            // CORS bloqueó fetch — abrir directamente la URL
             const a = document.createElement('a')
             a.href = imagenes[i].url
+            a.download = `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`
             a.target = '_blank'
             a.rel = 'noopener'
             document.body.appendChild(a)
             a.click()
             document.body.removeChild(a)
+          }
+          // Pausa entre descargas para que el navegador no bloquee las múltiples descargas
+          if (i < imagenes.length - 1) {
+            await new Promise<void>(r => setTimeout(r, 500))
           }
         }
       } finally {
