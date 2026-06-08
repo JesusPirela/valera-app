@@ -114,6 +114,7 @@ export default function DetallePropiedad() {
   const scrollRef = useRef<ScrollView>(null)
   const [lightboxVisible, setLightboxVisible] = useState(false)
   const [lightboxIndex, setLightboxIndex]     = useState(0)
+  const [lightboxLoading, setLightboxLoading] = useState(false)
 
   const { data: detalle, isLoading } = useQuery({
     queryKey: ['detalle-propiedad', id],
@@ -215,6 +216,11 @@ export default function DetallePropiedad() {
     registrarActividad('vista')
     cargarPublicacion()
   }, [id])
+
+  // Resetear estado de carga al cambiar de imagen en el lightbox
+  useEffect(() => {
+    if (lightboxVisible) setLightboxLoading(true)
+  }, [lightboxIndex, lightboxVisible])
 
   // Teclado para lightbox en web
   useEffect(() => {
@@ -1146,11 +1152,17 @@ export default function DetallePropiedad() {
             onPress={() => setLightboxVisible(false)}
           >
             <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-              <Image
-                source={{ uri: imagenes[lightboxIndex]?.url }}
-                style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.72 }}
-                resizeMode="contain"
-              />
+              <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.72, justifyContent: 'center', alignItems: 'center' }}>
+                {lightboxLoading && (
+                  <ActivityIndicator color="rgba(255,255,255,0.7)" size="large" style={{ position: 'absolute', zIndex: 1 }} />
+                )}
+                <Image
+                  source={{ uri: imagenes[lightboxIndex]?.url }}
+                  style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.72 }}
+                  resizeMode="contain"
+                  onLoad={() => setLightboxLoading(false)}
+                />
+              </View>
             </TouchableOpacity>
           </TouchableOpacity>
 
@@ -1380,7 +1392,7 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: '#aaa', fontSize: 15 },
 
-  imagen: { height: 260 },
+  imagen: { height: 260, backgroundColor: '#d0d0d0' },
   sinImagen: {
     height: 180,
     backgroundColor: '#e0e0e0',
