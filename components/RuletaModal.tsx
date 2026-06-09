@@ -408,8 +408,8 @@ export function RuletaModal({
                   </>
                 ) : (
                   <>
-                    <BlurView intensity={55} tint="default" style={cs.fadeLeft}  pointerEvents="none" />
-                    <BlurView intensity={55} tint="default" style={cs.fadeRight} pointerEvents="none" />
+                    <BlurView intensity={60} tint="dark" style={cs.fadeLeft}  pointerEvents="none" />
+                    <BlurView intensity={60} tint="dark" style={cs.fadeRight} pointerEvents="none" />
                   </>
                 )}
               </View>
