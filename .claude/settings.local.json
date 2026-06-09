@@ -51,7 +51,8 @@
       "Bash(python3 -c ' *)",
       "Bash(git rm *)",
       "Bash(eas build *)",
-      "Bash(xargs grep -l \"PDF\\\\|pdf\")"
+      "Bash(xargs grep -l \"PDF\\\\|pdf\")",
+      "Bash(Remove-Item \"c:\\\\Users\\\\carbe\\\\OneDrive\\\\Escritorio\\\\valera_app\\\\components\\\\MiniMapa.tsx\")"
     ]
   }
 }

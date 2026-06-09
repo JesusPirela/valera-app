@@ -31,9 +31,9 @@ export type PropiedadCoord = {
 }
 
 const CITY_VIEW: Record<string, { center: [number, number]; zoom: number }> = {
-  queretaro: { center: [20.57, -100.35], zoom: 10 },
-  monterrey: { center: [25.72, -100.35], zoom: 10 },
-  puebla:    { center: [19.05, -98.26],  zoom: 10 },
+  queretaro: { center: [20.57,  -100.35], zoom: 10 },
+  monterrey: { center: [25.72,  -100.35], zoom: 10 },
+  puebla:    { center: [19.05,  -98.26],  zoom: 10 },
 }
 
 type Props = {
@@ -51,7 +51,10 @@ function naturalSpread(center: [number, number], count: number, R = 0.007): [num
   return Array.from({ length: count }, (_, i) => {
     const r = R * (0.25 + 0.75 * seeded(i * 3))
     const angle = 2 * Math.PI * seeded(i * 3 + 1)
-    return [center[0] + Math.cos(angle) * r, center[1] + Math.sin(angle) * r * lngFactor] as [number, number]
+    return [
+      center[0] + Math.cos(angle) * r,
+      center[1] + Math.sin(angle) * r * lngFactor,
+    ] as [number, number]
   })
 }
 
@@ -63,11 +66,14 @@ function uniformSpread(center: [number, number], count: number): [number, number
   return Array.from({ length: count }, (_, i) => {
     const angle = 2 * Math.PI * PHI * i
     const r = R * Math.sqrt((i + 1) / count)
-    return [center[0] + Math.cos(angle) * r, center[1] + Math.sin(angle) * r * lngFactor] as [number, number]
+    return [
+      center[0] + Math.cos(angle) * r,
+      center[1] + Math.sin(angle) * r * lngFactor,
+    ] as [number, number]
   })
 }
 
-export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = [], onPropiedadPress }: Props) {
+export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props) {
   const containerRef     = useRef<any>(null)
   const mapRef           = useRef<any>(null)
   const markersRef       = useRef<any[]>([])
@@ -91,7 +97,9 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     markersRef.current = []
     if (mapRef.current) {
       const extras: any[] = []
-      mapRef.current.eachLayer((layer: any) => { if (layer._latlng !== undefined) extras.push(layer) })
+      mapRef.current.eachLayer((layer: any) => {
+        if (layer._latlng !== undefined) extras.push(layer)
+      })
       extras.forEach(m => { try { m.remove() } catch {} })
     }
   }
@@ -153,15 +161,23 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(item)
     })
-    groups.forEach(group => {
+    groups.forEach((group) => {
       const center = group[0].coords
       if (group.length === 1) {
         addIndivPin(L, map, center, group[0].p, color)
       } else {
-        const icon = L.divIcon({ className: '', html: clusterHTML(group.length, color, 44), iconSize: [44, 44], iconAnchor: [22, 22] })
+        const icon = L.divIcon({
+          className: '',
+          html: clusterHTML(group.length, color, 44),
+          iconSize: [44, 44],
+          iconAnchor: [22, 22],
+        })
         const m = L.marker(center, { icon }).addTo(map)
         markersRef.current.push(m)
-        m.on('click', (e: any) => { L.DomEvent.stopPropagation(e); expandCluster(L, map, m, group, color) })
+        m.on('click', (e: any) => {
+          L.DomEvent.stopPropagation(e)
+          expandCluster(L, map, m, group, color)
+        })
       }
     })
   }
@@ -172,7 +188,20 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
       onAdd() {
         const btn = L.DomUtil.create('button', '')
         btn.innerHTML = `&#8592; Volver a ${label}`
-        btn.style.cssText = 'background:#1976D2;color:#fff;border:none;padding:10px 18px;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,0.35);margin:10px;letter-spacing:0.3px;white-space:nowrap;'
+        btn.style.cssText = [
+          'background:#1976D2',
+          'color:#fff',
+          'border:none',
+          'padding:10px 18px',
+          'border-radius:10px',
+          'font-weight:800',
+          'font-size:14px',
+          'cursor:pointer',
+          'box-shadow:0 3px 10px rgba(0,0,0,0.35)',
+          'margin:10px',
+          'letter-spacing:0.3px',
+          'white-space:nowrap',
+        ].join(';')
         L.DomEvent.on(btn, 'click', (e: Event) => { L.DomEvent.stopPropagation(e); onClick() })
         return btn
       },
@@ -213,13 +242,16 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
     map.flyTo(view.center, view.zoom, { duration: 0.8 })
     clearMarkers()
     setBackBtn(L, map, 'México', () => showMexico(L, map))
+
     const props = zona.propiedades ?? []
     const color = zona.color
+
     const spread = naturalSpread(view.center, props.length)
     const items = props.map((p, i) => ({
       coords: (p.lat && p.lng) ? [p.lat, p.lng] as [number, number] : spread[i],
       p,
     }))
+
     renderGroupedPins(L, map, items, color)
   }
 
@@ -240,6 +272,7 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
       l.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
       document.head.appendChild(l)
     }
+
     const tryInit = () => {
       const L = (window as any).L
       if (L) { setTimeout(() => initMap(L), 80); return }
@@ -252,8 +285,11 @@ export default function MiniMapa({ zonas, onZonaPress, propiedadesConCoords = []
         const t = setInterval(() => { if ((window as any).L) { clearInterval(t); setTimeout(() => initMap((window as any).L), 80) } }, 100)
       }
     }
-    tryInit()
+
+    tryInit();
+
     ;(window as any).__mapaVerPropiedad = (id: string) => onPropiedadRef.current?.(id)
+
     return () => {
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
       markersRef.current = []; backCtrlRef.current = null; expandedGroupRef.current = []

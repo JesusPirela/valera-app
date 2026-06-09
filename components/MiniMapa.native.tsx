@@ -69,9 +69,9 @@ const SUBZONAS: Record<string, { label: string; coords: [number, number]; keywor
 }
 
 const CITY_VIEW: Record<string, { center: [number, number]; zoom: number }> = {
-  queretaro: { center: [20.57, -100.35], zoom: 10 },
-  monterrey: { center: [25.72, -100.35], zoom: 10 },
-  puebla:    { center: [19.05, -98.26],  zoom: 10 },
+  queretaro: { center: [20.57,  -100.35], zoom: 10 },
+  monterrey: { center: [25.72,  -100.35], zoom: 10 },
+  puebla:    { center: [19.05,  -98.26],  zoom: 10 },
 }
 
 type Props = {
@@ -83,20 +83,21 @@ type Props = {
 
 type PinData = { id: string; titulo: string; precio: number | null; tipo: string | null; direccion: string; imagen?: string | null; lat: number; lng: number; color: string }
 type PinGroup = { key: string; lat: number; lng: number; color: string; pins: PinData[] }
+type MapRegion = { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }
 
-const MEXICO_REGION = { latitude: 22.5, longitude: -102.55, latitudeDelta: 18, longitudeDelta: 18 }
 const PINS_VISIBLE_THRESHOLD = 0.12
+const MEXICO_REGION = { latitude: 22.5, longitude: -102.55, latitudeDelta: 18, longitudeDelta: 18 }
 
 export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props) {
-  const nativeMapRef   = useRef<InstanceType<typeof MapView>>(null)
-  const [selectedZona, setSelectedZona]     = useState<string | null>(null)
-  const [latDelta, setLatDelta]             = useState(18)
-  const [searchText, setSearchText]         = useState('')
-  const [pinsReady, setPinsReady]           = useState(false)
-  const [selectedPin, setSelectedPin]       = useState<PinData | null>(null)
+  const nativeMapRef = useRef<InstanceType<typeof MapView>>(null)
+  const [selectedZona, setSelectedZona] = useState<string | null>(null)
+  const [mapRegion, setMapRegion] = useState<MapRegion>(MEXICO_REGION)
+  const [searchText, setSearchText] = useState('')
+  const [pinsReady, setPinsReady] = useState(false)
+  const [selectedPin, setSelectedPin] = useState<PinData | null>(null)
   const [selectedCluster, setSelectedCluster] = useState<PinGroup | null>(null)
 
-  const pinsCurrentlyVisible = latDelta < PINS_VISIBLE_THRESHOLD || searchText.trim().length > 0
+  const pinsCurrentlyVisible = mapRegion.latitudeDelta < PINS_VISIBLE_THRESHOLD || searchText.trim().length > 0
 
   useEffect(() => {
     if (pinsCurrentlyVisible) {
@@ -143,17 +144,28 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
     return () => clearTimeout(timer)
   }, [searchText, selectedZona])
 
-  const zonaActual  = selectedZona ? zonas.find(z => z.key === selectedZona) : null
-  const pinsVisible = latDelta < PINS_VISIBLE_THRESHOLD || searchText.trim().length > 0
-  const term        = searchText.toLowerCase().trim()
+  const zonaActual = selectedZona ? zonas.find(z => z.key === selectedZona) : null
+  const pinsVisible = mapRegion.latitudeDelta < PINS_VISIBLE_THRESHOLD || searchText.trim().length > 0
+
+  const term = searchText.toLowerCase().trim()
+  const pad = 0.6
+  const minLat = mapRegion.latitude - mapRegion.latitudeDelta * (0.5 + pad)
+  const maxLat = mapRegion.latitude + mapRegion.latitudeDelta * (0.5 + pad)
+  const minLng = mapRegion.longitude - mapRegion.longitudeDelta * (0.5 + pad)
+  const maxLng = mapRegion.longitude + mapRegion.longitudeDelta * (0.5 + pad)
 
   const pinsEnMapa = zonaActual
     ? (zonaActual.propiedades ?? [])
         .filter(p => {
           if (p.lat == null || p.lng == null) return false
-          if (!term) return true
-          return (p.direccion ?? '').toLowerCase().includes(term) ||
-                 (p.titulo ?? '').toLowerCase().includes(term)
+          if (term && !(
+            (p.direccion ?? '').toLowerCase().includes(term) ||
+            (p.titulo ?? '').toLowerCase().includes(term)
+          )) return false
+          if (!term && pinsVisible) {
+            return p.lat >= minLat && p.lat <= maxLat && p.lng >= minLng && p.lng <= maxLng
+          }
+          return true
         })
         .map(p => ({ ...p, lat: p.lat!, lng: p.lng!, color: zonaActual.color }))
     : []
@@ -203,10 +215,13 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
             clearButtonMode="while-editing"
             autoCorrect={false}
           />
-          {searchText.length > 0
-            ? <TouchableOpacity onPress={() => setSearchText('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={nS.searchClear}>✕</Text></TouchableOpacity>
-            : <Text style={nS.searchIcon}>🔍</Text>
-          }
+          {searchText.length > 0 ? (
+            <TouchableOpacity onPress={() => setSearchText('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={nS.searchClear}>✕</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={nS.searchIcon}>🔍</Text>
+          )}
         </View>
       )}
 
@@ -223,19 +238,22 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
         initialRegion={MEXICO_REGION}
         showsUserLocation={false}
         onPress={() => { setSelectedPin(null); setSelectedCluster(null) }}
-        onRegionChangeComplete={r => setLatDelta(r.latitudeDelta)}
+        onRegionChangeComplete={r => setMapRegion(r)}
       >
         {!selectedZona && zonas.map(z => (
-          <Marker key={z.key} coordinate={{ latitude: z.coords[0], longitude: z.coords[1] }} onPress={() => handleZonaPress(z.key)}>
+          <Marker
+            key={z.key}
+            coordinate={{ latitude: z.coords[0], longitude: z.coords[1] }}
+            onPress={() => handleZonaPress(z.key)}
+          >
             <View style={[nS.clusterPin, { backgroundColor: z.color }]}>
               <Text style={nS.clusterTxt}>{z.count}</Text>
             </View>
           </Marker>
         ))}
-
         {selectedZona && pinsVisible && (() => {
           const groupMap = new Map<string, PinGroup>()
-          pinsEnMapa.slice(0, 80).forEach(p => {
+          pinsEnMapa.forEach(p => {
             const gKey = `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`
             if (!groupMap.has(gKey)) groupMap.set(gKey, { key: gKey, lat: p.lat, lng: p.lng, color: zonaActual!.color, pins: [] })
             groupMap.get(gKey)!.pins.push(p)
@@ -247,14 +265,20 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
               tracksViewChanges={!pinsReady}
               anchor={{ x: 0.5, y: 0.5 }}
               onPress={() => {
-                setSelectedPin(null); setSelectedCluster(null)
-                if (group.pins.length === 1) setSelectedPin(group.pins[0])
-                else setSelectedCluster(group)
+                setSelectedPin(null)
+                setSelectedCluster(null)
+                if (group.pins.length === 1) {
+                  setSelectedPin(group.pins[0])
+                } else {
+                  setSelectedCluster(group)
+                }
               }}
             >
               {group.pins.length === 1
                 ? <View style={[nS.locationDot, { backgroundColor: group.color }]} />
-                : <View style={[nS.propCluster, { backgroundColor: group.color }]}><Text style={nS.propClusterTxt}>{group.pins.length}</Text></View>
+                : <View style={[nS.propCluster, { backgroundColor: group.color }]}>
+                    <Text style={nS.propClusterTxt}>{group.pins.length}</Text>
+                  </View>
               }
             </Marker>
           ))
@@ -267,14 +291,27 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
           onPress={() => { onPropiedadPress?.(selectedPin.id); setSelectedPin(null) }}
           activeOpacity={0.85}
         >
-          {selectedPin.imagen
-            ? <Image source={{ uri: selectedPin.imagen }} style={nS.previewImg} resizeMode="cover" />
-            : <View style={[nS.previewImg, nS.previewImgPlaceholder]}><Text style={{ fontSize: 28 }}>🏠</Text></View>
-          }
+          {selectedPin.imagen ? (
+            <Image
+              source={{ uri: selectedPin.imagen }}
+              style={nS.previewImg}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[nS.previewImg, nS.previewImgPlaceholder]}>
+              <Text style={{ fontSize: 28 }}>🏠</Text>
+            </View>
+          )}
           <View style={nS.previewInfo}>
             <Text style={nS.previewTitulo} numberOfLines={2}>{selectedPin.titulo}</Text>
-            <Text style={nS.previewPrecio}>{selectedPin.precio ? `$${selectedPin.precio.toLocaleString('es-MX')} MXN` : 'Precio a consultar'}</Text>
-            {selectedPin.tipo && <Text style={nS.previewTipo}>{selectedPin.tipo}</Text>}
+            <Text style={nS.previewPrecio}>
+              {selectedPin.precio
+                ? `$${selectedPin.precio.toLocaleString('es-MX')} MXN`
+                : 'Precio a consultar'}
+            </Text>
+            {selectedPin.tipo && (
+              <Text style={nS.previewTipo}>{selectedPin.tipo}</Text>
+            )}
             <Text style={nS.previewVer}>Ver propiedad →</Text>
           </View>
           <TouchableOpacity style={nS.previewClose} onPress={() => setSelectedPin(null)}>
@@ -293,14 +330,21 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10 }}>
             {selectedCluster.pins.map(p => (
-              <TouchableOpacity key={p.id} style={nS.clusterItem} onPress={() => { onPropiedadPress?.(p.id); setSelectedCluster(null) }} activeOpacity={0.8}>
+              <TouchableOpacity
+                key={p.id}
+                style={nS.clusterItem}
+                onPress={() => { onPropiedadPress?.(p.id); setSelectedCluster(null) }}
+                activeOpacity={0.8}
+              >
                 {p.imagen
                   ? <Image source={{ uri: p.imagen }} style={nS.clusterItemImg} resizeMode="cover" />
                   : <View style={[nS.clusterItemImg, nS.previewImgPlaceholder]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
                 }
                 <View style={nS.clusterItemInfo}>
                   <Text style={nS.clusterItemTitulo} numberOfLines={2}>{p.titulo}</Text>
-                  <Text style={nS.clusterItemPrecio}>{p.precio ? `$${p.precio.toLocaleString('es-MX')}` : 'A consultar'}</Text>
+                  <Text style={nS.clusterItemPrecio}>
+                    {p.precio ? `$${p.precio.toLocaleString('es-MX')}` : 'A consultar'}
+                  </Text>
                   {p.tipo && <Text style={nS.clusterItemTipo}>{p.tipo}</Text>}
                 </View>
               </TouchableOpacity>
@@ -323,37 +367,93 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
 }
 
 const nS = StyleSheet.create({
-  clusterPin: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 6, elevation: 6 },
+  clusterPin: {
+    width: 52, height: 52, borderRadius: 26,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: '#fff',
+    shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 6, elevation: 6,
+  },
   clusterTxt: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  locationDot: { width: 24, height: 24, borderRadius: 12, borderWidth: 3, borderColor: '#fff' },
-  propCluster: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: '#fff' },
+  locationDot: {
+    width: 24, height: 24, borderRadius: 12,
+    borderWidth: 3, borderColor: '#fff',
+  },
+  propCluster: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2.5, borderColor: '#fff',
+  },
   propClusterTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  clusterPanel: { position: 'absolute', bottom: 16, left: 0, right: 0, zIndex: 20, backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 12, paddingBottom: 16, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12, elevation: 12 },
-  clusterPanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 10 },
+  clusterPanel: {
+    position: 'absolute', bottom: 16, left: 0, right: 0, zIndex: 20,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16, borderTopRightRadius: 16,
+    paddingTop: 12, paddingBottom: 16,
+    shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12, elevation: 12,
+  },
+  clusterPanelHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, marginBottom: 10,
+  },
   clusterPanelTitle: { fontSize: 13, fontWeight: '700', color: '#1a1a2e' },
-  clusterItem: { width: 140, borderRadius: 10, backgroundColor: '#f7f9fa', overflow: 'hidden', borderWidth: 1, borderColor: '#e8eef0' },
+  clusterItem: {
+    width: 140, borderRadius: 10, backgroundColor: '#f7f9fa',
+    overflow: 'hidden',
+    borderWidth: 1, borderColor: '#e8eef0',
+  },
   clusterItemImg: { width: 140, height: 90 },
   clusterItemInfo: { padding: 8 },
   clusterItemTitulo: { fontSize: 11, fontWeight: '700', color: '#1a1a2e', marginBottom: 3 },
   clusterItemPrecio: { fontSize: 12, fontWeight: '700', color: '#1a6470', marginBottom: 2 },
   clusterItemTipo: { fontSize: 10, color: '#888' },
-  previewCard: { position: 'absolute', bottom: 16, left: 12, right: 12, zIndex: 20, backgroundColor: '#fff', borderRadius: 14, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 10, overflow: 'hidden' },
-  previewImg: { width: 88, height: 88 },
-  previewImgPlaceholder: { backgroundColor: '#e8f4f8', alignItems: 'center', justifyContent: 'center' },
-  previewInfo: { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
+  previewCard: {
+    position: 'absolute', bottom: 16, left: 12, right: 12, zIndex: 20,
+    backgroundColor: '#fff', borderRadius: 14,
+    flexDirection: 'row', alignItems: 'center',
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 10,
+    overflow: 'hidden',
+  },
+  previewImg: {
+    width: 88, height: 88,
+  },
+  previewImgPlaceholder: {
+    backgroundColor: '#e8f4f8', alignItems: 'center', justifyContent: 'center',
+  },
+  previewInfo: {
+    flex: 1, paddingHorizontal: 12, paddingVertical: 10,
+  },
   previewTitulo: { fontSize: 13, fontWeight: '700', color: '#1a1a2e', marginBottom: 3 },
   previewPrecio: { fontSize: 13, fontWeight: '700', color: '#1a6470', marginBottom: 2 },
   previewTipo: { fontSize: 11, color: '#888', marginBottom: 4 },
   previewVer: { fontSize: 12, color: '#1a6470', fontWeight: '600', textDecorationLine: 'underline' },
-  previewClose: { position: 'absolute', top: 8, right: 10, padding: 4 },
-  searchBar: { position: 'absolute', top: 12, left: 12, right: 12, zIndex: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 6 },
+  previewClose: {
+    position: 'absolute', top: 8, right: 10,
+    padding: 4,
+  },
+  searchBar: {
+    position: 'absolute', top: 12, left: 12, right: 12, zIndex: 10,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 12,
+    paddingHorizontal: 10, paddingVertical: 8,
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 6,
+  },
   searchBackBtn: { paddingHorizontal: 6, paddingVertical: 2, marginRight: 4 },
   searchBackTxt: { fontSize: 20, color: '#1a6470', fontWeight: '700', lineHeight: 22 },
   searchIcon: { fontSize: 15, marginLeft: 4 },
-  searchInput: { flex: 1, fontSize: 14, color: '#1a1a2e', paddingVertical: 0 },
+  searchInput: {
+    flex: 1, fontSize: 14, color: '#1a1a2e', paddingVertical: 0,
+  },
   searchClear: { fontSize: 14, color: '#aaa', marginLeft: 6 },
-  zoomHint: { position: 'absolute', bottom: 16, left: 16, right: 16, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center' },
+  zoomHint: {
+    position: 'absolute', bottom: 16, left: 16, right: 16, zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center',
+  },
   zoomHintTxt: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  sinCoordsTag: { position: 'absolute', bottom: 16, left: 16, right: 16, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, alignItems: 'center' },
+  sinCoordsTag: {
+    position: 'absolute', bottom: 16, left: 16, right: 16, zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 7, alignItems: 'center',
+  },
   sinCoordsTxt: { color: '#fff', fontSize: 12, fontWeight: '600' },
 })

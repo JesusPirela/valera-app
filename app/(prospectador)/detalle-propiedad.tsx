@@ -457,6 +457,7 @@ export default function DetallePropiedad() {
         .cars { display: flex; gap: 12px; flex-wrap: wrap; }
         .car-val { display: block; font-size: 20px; font-weight: 800; color: #1a6470; }
         .car-lbl { display: block; font-size: 11px; color: #888; margin-top: 2px; }
+        .page2 { break-before: page; page-break-before: always; }
         .desc { font-size: 13px; line-height: 1.7; color: #444; white-space: pre-wrap; }
         .mapa-box { border: 1.5px solid #e0e8ea; border-radius: 10px; overflow: hidden; margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
         .mapa-img { width: 100%; height: 200px; object-fit: cover; display: block; }
@@ -478,9 +479,11 @@ export default function DetallePropiedad() {
       <div class="body">
         ${imagenes.length > 0 ? `<div class="seccion">Fotos</div><div class="fotos">${imagenesHTML}</div>` : ''}
         ${cars.length > 0 ? `<div class="seccion">Características</div><div class="cars">${cars.join('')}</div>` : ''}
-        ${propiedad.descripcion ? `<div class="seccion">Descripción</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
-        ${mapaHTML}
-        <div class="footer">Valera Real Estate · valerarealestate.com</div>
+        ${propiedad.descripcion || mapaHTML ? `<div class="page2">
+          ${propiedad.descripcion ? `<div class="seccion">Descripción</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
+          ${mapaHTML}
+          <div class="footer">Valera Real Estate · valerarealestate.com</div>
+        </div>` : `<div class="footer">Valera Real Estate · valerarealestate.com</div>`}
       </div>
       </body></html>`
 
