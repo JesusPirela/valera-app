@@ -49,7 +49,7 @@ export default function LoginScreen() {
 
       supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', data.user.id).then(() => {}).catch(() => {})
 
-      if (profile?.role === 'admin') {
+      if (profile?.role === 'admin' || profile?.role === 'supervisor') {
         router.replace('/(admin)/propiedades')
       } else {
         try {

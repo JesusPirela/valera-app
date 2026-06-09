@@ -6,6 +6,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type UsuarioCofre = {
   id: string
@@ -52,6 +53,7 @@ function alerta(msg: string) {
 }
 
 export default function TiendaCompras() {
+  useSupervisorBlock()
   const c = useColors()
   const [compras, setCompras]       = useState<Compra[]>([])
   const [loading, setLoading]       = useState(true)

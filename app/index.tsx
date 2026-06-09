@@ -21,7 +21,7 @@ export default function Index() {
         .eq('id', session.user.id)
         .single()
 
-      if (profile?.role === 'admin') {
+      if (profile?.role === 'admin' || profile?.role === 'supervisor') {
         router.replace('/(admin)/propiedades')
       } else {
         router.replace('/(prospectador)/propiedades')

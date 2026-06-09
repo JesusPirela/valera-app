@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ function diasRestantes(fl: string | null): { texto: string; color: string } | nu
 // ── Componente ────────────────────────────────────────────────────────────
 
 export default function Proyectos() {
+  useSupervisorBlock()
   const [proyectos, setProyectos]     = useState<Proyecto[]>([])
   const [loading, setLoading]         = useState(true)
   const [perfiles, setPerfiles]       = useState<Perfil[]>([])

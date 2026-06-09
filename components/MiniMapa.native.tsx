@@ -191,41 +191,10 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
 
   return (
     <View style={{ flex: 1 }}>
-      {selectedZona && (
-        <View style={nS.searchBar}>
-          <TouchableOpacity onPress={handleBackToMexico} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={nS.searchBackBtn}>
-            <Text style={nS.searchBackTxt}>←</Text>
-          </TouchableOpacity>
-          <TextInput
-            style={nS.searchInput}
-            placeholder="Buscar colonia o dirección..."
-            placeholderTextColor="#999"
-            value={searchText}
-            onChangeText={setSearchText}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-            autoCorrect={false}
-          />
-          {searchText.length > 0 ? (
-            <TouchableOpacity onPress={() => setSearchText('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={nS.searchClear}>✕</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={nS.searchIcon}>🔍</Text>
-          )}
-        </View>
-      )}
-
-      {selectedZona && !pinsVisible && !selectedPin && (
-        <View style={nS.zoomHint}>
-          <Text style={nS.zoomHintTxt}>Acerca el mapa para ver las propiedades</Text>
-        </View>
-      )}
-
       <MapView
         ref={nativeMapRef}
         provider="google"
-        style={{ flex: 1 }}
+        style={StyleSheet.absoluteFill}
         initialRegion={MEXICO_REGION}
         showsUserLocation={false}
         onPress={() => { setSelectedPin(null); setSelectedCluster(null) }}
@@ -276,83 +245,110 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
         })()}
       </MapView>
 
-      {selectedPin && (
-        <TouchableOpacity
-          style={nS.previewCard}
-          onPress={() => { onPropiedadPress?.(selectedPin.id); setSelectedPin(null) }}
-          activeOpacity={0.85}
-        >
-          {selectedPin.imagen ? (
-            <Image
-              source={{ uri: selectedPin.imagen }}
-              style={nS.previewImg}
-              resizeMode="cover"
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        {selectedZona && (
+          <View style={nS.searchBar}>
+            <TouchableOpacity onPress={handleBackToMexico} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={nS.searchBackBtn}>
+              <Text style={nS.searchBackTxt}>←</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={nS.searchInput}
+              placeholder="Buscar colonia o dirección..."
+              placeholderTextColor="#999"
+              value={searchText}
+              onChangeText={setSearchText}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+              autoCorrect={false}
             />
-          ) : (
-            <View style={[nS.previewImg, nS.previewImgPlaceholder]}>
-              <Text style={{ fontSize: 28 }}>🏠</Text>
-            </View>
-          )}
-          <View style={nS.previewInfo}>
-            <Text style={nS.previewTitulo} numberOfLines={2}>{selectedPin.titulo}</Text>
-            <Text style={nS.previewPrecio}>
-              {selectedPin.precio
-                ? `$${selectedPin.precio.toLocaleString('es-MX')} MXN`
-                : 'Precio a consultar'}
-            </Text>
-            {selectedPin.tipo && (
-              <Text style={nS.previewTipo}>{selectedPin.tipo}</Text>
+            {searchText.length > 0 ? (
+              <TouchableOpacity onPress={() => setSearchText('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={nS.searchClear}>✕</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={nS.searchIcon}>🔍</Text>
             )}
-            <Text style={nS.previewVer}>Ver propiedad →</Text>
           </View>
-          <TouchableOpacity style={nS.previewClose} onPress={() => setSelectedPin(null)}>
-            <Text style={{ color: '#888', fontSize: 16, fontWeight: '700' }}>✕</Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      )}
+        )}
 
-      {selectedCluster && !selectedPin && (
-        <View style={nS.clusterPanel}>
-          <View style={nS.clusterPanelHeader}>
-            <Text style={nS.clusterPanelTitle}>{selectedCluster.pins.length} propiedades en esta ubicación</Text>
-            <TouchableOpacity onPress={() => setSelectedCluster(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        {selectedZona && !pinsVisible && !selectedPin && (
+          <View style={nS.zoomHint}>
+            <Text style={nS.zoomHintTxt}>Acerca el mapa para ver las propiedades</Text>
+          </View>
+        )}
+
+        {selectedPin && (
+          <TouchableOpacity
+            style={nS.previewCard}
+            onPress={() => { onPropiedadPress?.(selectedPin.id); setSelectedPin(null) }}
+            activeOpacity={0.85}
+          >
+            {selectedPin.imagen ? (
+              <Image source={{ uri: selectedPin.imagen }} style={nS.previewImg} resizeMode="cover" />
+            ) : (
+              <View style={[nS.previewImg, nS.previewImgPlaceholder]}>
+                <Text style={{ fontSize: 28 }}>🏠</Text>
+              </View>
+            )}
+            <View style={nS.previewInfo}>
+              <Text style={nS.previewTitulo} numberOfLines={2}>{selectedPin.titulo}</Text>
+              <Text style={nS.previewPrecio}>
+                {selectedPin.precio
+                  ? `$${selectedPin.precio.toLocaleString('es-MX')} MXN`
+                  : 'Precio a consultar'}
+              </Text>
+              {selectedPin.tipo && <Text style={nS.previewTipo}>{selectedPin.tipo}</Text>}
+              <Text style={nS.previewVer}>Ver propiedad →</Text>
+            </View>
+            <TouchableOpacity style={nS.previewClose} onPress={() => setSelectedPin(null)}>
               <Text style={{ color: '#888', fontSize: 16, fontWeight: '700' }}>✕</Text>
             </TouchableOpacity>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10 }}>
-            {selectedCluster.pins.map(p => (
-              <TouchableOpacity
-                key={p.id}
-                style={nS.clusterItem}
-                onPress={() => { onPropiedadPress?.(p.id); setSelectedCluster(null) }}
-                activeOpacity={0.8}
-              >
-                {p.imagen
-                  ? <Image source={{ uri: p.imagen }} style={nS.clusterItemImg} resizeMode="cover" />
-                  : <View style={[nS.clusterItemImg, nS.previewImgPlaceholder]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
-                }
-                <View style={nS.clusterItemInfo}>
-                  <Text style={nS.clusterItemTitulo} numberOfLines={2}>{p.titulo}</Text>
-                  <Text style={nS.clusterItemPrecio}>
-                    {p.precio ? `$${p.precio.toLocaleString('es-MX')}` : 'A consultar'}
-                  </Text>
-                  {p.tipo && <Text style={nS.clusterItemTipo}>{p.tipo}</Text>}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+          </TouchableOpacity>
+        )}
 
-      {selectedZona && pinsVisible && !selectedPin && !selectedCluster && sinCoords > 0 && (
-        <View style={nS.sinCoordsTag}>
-          <Text style={nS.sinCoordsTxt}>
-            {pinsEnMapa.length > 0
-              ? `${pinsEnMapa.length} ubicadas · ${sinCoords} sin coords`
-              : `${sinCoords} propiedades sin ubicación exacta`}
-          </Text>
-        </View>
-      )}
+        {selectedCluster && !selectedPin && (
+          <View style={nS.clusterPanel}>
+            <View style={nS.clusterPanelHeader}>
+              <Text style={nS.clusterPanelTitle}>{selectedCluster.pins.length} propiedades en esta ubicación</Text>
+              <TouchableOpacity onPress={() => setSelectedCluster(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ color: '#888', fontSize: 16, fontWeight: '700' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10 }}>
+              {selectedCluster.pins.map(p => (
+                <TouchableOpacity
+                  key={p.id}
+                  style={nS.clusterItem}
+                  onPress={() => { onPropiedadPress?.(p.id); setSelectedCluster(null) }}
+                  activeOpacity={0.8}
+                >
+                  {p.imagen
+                    ? <Image source={{ uri: p.imagen }} style={nS.clusterItemImg} resizeMode="cover" />
+                    : <View style={[nS.clusterItemImg, nS.previewImgPlaceholder]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
+                  }
+                  <View style={nS.clusterItemInfo}>
+                    <Text style={nS.clusterItemTitulo} numberOfLines={2}>{p.titulo}</Text>
+                    <Text style={nS.clusterItemPrecio}>
+                      {p.precio ? `$${p.precio.toLocaleString('es-MX')}` : 'A consultar'}
+                    </Text>
+                    {p.tipo && <Text style={nS.clusterItemTipo}>{p.tipo}</Text>}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {selectedZona && pinsVisible && !selectedPin && !selectedCluster && sinCoords > 0 && (
+          <View style={nS.sinCoordsTag}>
+            <Text style={nS.sinCoordsTxt}>
+              {pinsEnMapa.length > 0
+                ? `${pinsEnMapa.length} ubicadas · ${sinCoords} sin coords`
+                : `${sinCoords} propiedades sin ubicación exacta`}
+            </Text>
+          </View>
+        )}
+      </View>
     </View>
   )
 }

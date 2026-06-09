@@ -7,6 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type TareaDraft = {
   id?: string
@@ -92,6 +93,7 @@ function TareaEditor({ tarea, onChange, onQuitar }: {
 }
 
 export default function UniversityCursoForm() {
+  useSupervisorBlock()
   const c = useColors()
   const { id: cursoId } = useLocalSearchParams<{ id?: string }>()
   const esEdicion = !!cursoId

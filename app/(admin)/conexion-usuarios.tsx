@@ -7,6 +7,7 @@ import { useFocusEffect, router } from 'expo-router'
 import Svg, { Rect, Text as SvgText, Line } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type ConexionRow = { user_id: string; nombre: string; fecha: string; minutos: number }
 type UserConexion = { user_id: string; nombre: string; dias: { fecha: string; minutos: number }[] }
@@ -83,6 +84,7 @@ function UserBarChart({ nombre, dias, width: W }: { nombre: string; dias: { fech
 }
 
 export default function ConexionUsuarios() {
+  useSupervisorBlock()
   const c = useColors()
   const [usuarios, setUsuarios]   = useState<UserConexion[]>([])
   const [periodo, setPeriodo]     = useState<1 | 7 | 30>(7)

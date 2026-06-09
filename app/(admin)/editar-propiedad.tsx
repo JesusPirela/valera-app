@@ -20,7 +20,9 @@ import { useColors, AppColors } from '../../lib/ThemeContext'
 import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
 import AsesorPicker from '../../components/ui/AsesorPicker'
+import InmobiliariaPicker from '../../components/ui/InmobiliariaPicker'
 import { COLONIAS } from '../../lib/colonias'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type ImagenExistente = { id: string; url: string; orden: number }
 
@@ -48,6 +50,7 @@ const ESTACIONAMIENTOS_OPTIONS = [
 ]
 
 export default function EditarPropiedad() {
+  useSupervisorBlock()
   const c = useColors()
   const { id } = useLocalSearchParams<{ id: string }>()
 
@@ -69,6 +72,7 @@ export default function EditarPropiedad() {
   const [geoResults, setGeoResults] = useState<any[]>([])
   const [geoLoading, setGeoLoading] = useState(false)
   const [asesorId, setAsesorId] = useState<string | null>(null)
+  const [inmobiliariaId, setInmobiliariaId] = useState<string | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
@@ -87,7 +91,7 @@ export default function EditarPropiedad() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, m2, estacionamientos, asesor_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
+      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, m2, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
       .eq('id', id)
       .single()
 
@@ -113,6 +117,7 @@ export default function EditarPropiedad() {
     setM2(data.m2 != null ? String(data.m2) : '')
     setEstacionamientos(data.estacionamientos ?? null)
     setAsesorId(data.asesor_id ?? null)
+    setInmobiliariaId(data.inmobiliaria_id ?? null)
     setExclusiva(data.exclusiva ?? false)
     setEsConstructora(data.es_constructora ?? false)
     setNombreConstructora(data.nombre_constructora ?? '')
@@ -291,6 +296,7 @@ export default function EditarPropiedad() {
           m2: m2Num,
           estacionamientos,
           asesor_id: asesorId,
+          inmobiliaria_id: inmobiliariaId,
           exclusiva,
           es_constructora: esConstructora,
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
@@ -543,6 +549,9 @@ export default function EditarPropiedad() {
 
         <Text style={styles.label}>Asesor de contacto</Text>
         <AsesorPicker value={asesorId} onChange={setAsesorId} />
+
+        <Text style={styles.label}>Inmobiliaria</Text>
+        <InmobiliariaPicker value={inmobiliariaId} onChange={setInmobiliariaId} />
 
         <View style={styles.exclusivaRow}>
           <View style={{ flex: 1 }}>

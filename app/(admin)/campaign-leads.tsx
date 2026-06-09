@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type Lead = {
   id: string
@@ -36,6 +37,7 @@ function formatPresupuesto(p: string | null) {
 }
 
 export default function CampaignLeads() {
+  useSupervisorBlock()
   const [leads, setLeads]           = useState<Lead[]>([])
   const [usuarios, setUsuarios]     = useState<Usuario[]>([])
   const [loading, setLoading]       = useState(true)

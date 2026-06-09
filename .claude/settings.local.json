@@ -52,7 +52,15 @@
       "Bash(git rm *)",
       "Bash(eas build *)",
       "Bash(xargs grep -l \"PDF\\\\|pdf\")",
-      "Bash(Remove-Item \"c:\\\\Users\\\\carbe\\\\OneDrive\\\\Escritorio\\\\valera_app\\\\components\\\\MiniMapa.tsx\")"
+      "Bash(Remove-Item \"c:\\\\Users\\\\carbe\\\\OneDrive\\\\Escritorio\\\\valera_app\\\\components\\\\MiniMapa.tsx\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\carbe\\\\OneDrive\\\\Escritorio\\\\valera_app\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(xargs -I {} ls -la \"{}\")",
+      "Bash(xargs head -300)",
+      "Bash(grep -E \"\\\\.sql$\")",
+      "Bash(xargs head -1)",
+      "Bash(xargs grep -l \"CREATE TABLE\")",
+      "Bash(xargs wc -l)"
     ]
   }
 }

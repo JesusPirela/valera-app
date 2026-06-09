@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 import { supabase } from '../../lib/supabase'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type Entrega = {
   id: string
@@ -46,6 +47,7 @@ function mostrarAlerta(msg: string) {
 }
 
 export default function AdminEntregas() {
+  useSupervisorBlock()
   const c = useColors()
   const [entregas, setEntregas] = useState<Entrega[]>([])
   const [loading, setLoading] = useState(true)

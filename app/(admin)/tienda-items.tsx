@@ -7,6 +7,7 @@ import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type StoreItem = {
   id: string
@@ -60,6 +61,7 @@ type PremioConfig = {
 type RuletaCfg = { costo: number; premios: PremioConfig[] }
 
 export default function TiendaItems() {
+  useSupervisorBlock()
   const c = useColors()
   const [items, setItems]         = useState<StoreItem[]>([])
   const [loading, setLoading]     = useState(true)

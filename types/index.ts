@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'prospectador' | 'prospectador_plus' | 'nuevo'
+export type UserRole = 'admin' | 'supervisor' | 'prospectador' | 'prospectador_plus' | 'nuevo'
 
 export type PropertyType = 'casa' | 'depa' | 'terreno' | 'local'
 export type PropertyModality = 'venta' | 'renta'
@@ -9,6 +9,15 @@ export interface Profile {
   role: UserRole
   nombre: string
   created_at: string
+}
+
+export interface Inmobiliaria {
+  id: string
+  nombre: string
+  asesor_referencia: string | null
+  telefono: string | null
+  logo_url: string | null
+  exclusiva: boolean
 }
 
 export interface Property {
@@ -25,7 +34,9 @@ export interface Property {
   ciudad: string
   recamaras?: number
   banos?: number
+  medios_banos?: number
   metros_cuadrados?: number
+  inmobiliaria_id?: string | null
   created_by: string
   created_at: string
   updated_at: string

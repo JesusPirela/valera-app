@@ -237,7 +237,7 @@ export default function RootLayout() {
       .eq('id', session.user.id)
       .single()
       .then(({ data }) => {
-        if (data?.role === 'admin') {
+        if (data?.role === 'admin' || data?.role === 'supervisor') {
           router.replace('/(admin)/propiedades')
         } else if (data?.role === 'nuevo' || data?.role === 'prospectador' || data?.role === 'prospectador_plus') {
           router.replace('/(prospectador)/propiedades')

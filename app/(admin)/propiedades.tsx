@@ -33,8 +33,11 @@ type Propiedad = {
   nombre_constructora: string | null
   recamaras: number | null
   banos: number | null
+  medios_banos: number | null
   m2: number | null
   estacionamientos: number | null
+  inmobiliaria_id: string | null
+  inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
@@ -42,6 +45,8 @@ type FiltroOperacion = 'venta' | 'renta' | null
 type FiltroEstado = 'disponible' | 'vendida' | null
 type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
+
+type InmobiliariaOpcion = { id: string; nombre: string }
 
 const NAV_ITEMS = [
   { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2' },
@@ -66,26 +71,51 @@ export default function AdminPropiedades() {
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
+  const [filtroInmobiliaria, setFiltroInmobiliaria] = useState<string | null>(null)
 
   const [modalVisible, setModalVisible] = useState(false)
   const [propSeleccionada, setPropSeleccionada] = useState<Propiedad | null>(null)
   const [mensajeDestacado, setMensajeDestacado] = useState('')
   const [guardandoDestacado, setGuardandoDestacado] = useState(false)
 
+  const [role, setRole] = useState<string | null>(null)
+  const [inmobiliarias, setInmobiliarias] = useState<InmobiliariaOpcion[]>([])
+  const esSupervisor = role === 'supervisor'
+
   async function cargarPropiedades() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, estacionamientos, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
       .order('created_at', { ascending: false })
     if (error) Alert.alert('Error', 'No se pudieron cargar las propiedades.')
-    else setPropiedades(data ?? [])
+    else {
+      const normalizadas = (data ?? []).map((p: any) => ({
+        ...p,
+        inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
+      }))
+      setPropiedades(normalizadas)
+    }
     setLoading(false)
   }
 
-  useFocusEffect(useCallback(() => { cargarPropiedades() }, []))
+  async function cargarRolEInmobiliarias() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user?.id) {
+      const { data: perfil } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle()
+      setRole(perfil?.role ?? null)
+    }
+    const { data: inmobiliariasData } = await supabase.from('inmobiliarias').select('id, nombre').order('nombre')
+    setInmobiliarias(inmobiliariasData ?? [])
+  }
 
-  const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio].filter(Boolean).length
+  useFocusEffect(useCallback(() => { cargarPropiedades(); cargarRolEInmobiliarias() }, []))
+
+  const navItems = esSupervisor
+    ? NAV_ITEMS.filter((item) => !['/(admin)/nueva-propiedad', '/(admin)/university', '/(admin)/tienda-compras'].includes(item.route))
+    : NAV_ITEMS
+
+  const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, filtroInmobiliaria].filter(Boolean).length
 
   let propiedadesFiltradas = propiedades
   if (busqueda.trim()) {
@@ -97,6 +127,7 @@ export default function AdminPropiedades() {
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroEstado) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.estado === filtroEstado)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
+  if (filtroInmobiliaria) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.inmobiliaria_id === filtroInmobiliaria)
   if (ordenPrecio) {
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
       ordenPrecio === 'asc'
@@ -170,6 +201,7 @@ export default function AdminPropiedades() {
     setFiltroEstado(null)
     setFiltroTipo(null)
     setOrdenPrecio(null)
+    setFiltroInmobiliaria(null)
   }
 
   function FiltroChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
@@ -191,7 +223,7 @@ export default function AdminPropiedades() {
 
       {/* Grid de navegación */}
       <View style={styles.navGrid}>
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <TouchableOpacity
             key={item.route}
             style={[styles.navCard, { backgroundColor: item.color }]}
@@ -258,6 +290,22 @@ export default function AdminPropiedades() {
             <FiltroChip label="↑ Menor" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} />
             <FiltroChip label="↓ Mayor" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} />
           </ScrollView>
+          {inmobiliarias.length > 0 && (
+            <>
+              <Text style={[styles.filtroLabel, { color: c.textMute }]}>Inmobiliaria</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                <FiltroChip label="Todas" active={filtroInmobiliaria === null} onPress={() => setFiltroInmobiliaria(null)} />
+                {inmobiliarias.map((inm) => (
+                  <FiltroChip
+                    key={inm.id}
+                    label={inm.nombre}
+                    active={filtroInmobiliaria === inm.id}
+                    onPress={() => setFiltroInmobiliaria(filtroInmobiliaria === inm.id ? null : inm.id)}
+                  />
+                ))}
+              </ScrollView>
+            </>
+          )}
           {filtrosActivos > 0 && (
             <TouchableOpacity style={styles.limpiarBtn} onPress={limpiarFiltros}>
               <Text style={styles.limpiarText}>Limpiar filtros</Text>
@@ -280,7 +328,7 @@ export default function AdminPropiedades() {
           <View style={styles.webGrid}>
             {propiedadesFiltradas.map((item) => {
               const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-              const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
+              const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.estacionamientos != null
               return (
                 <View key={item.id} style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada, cardWidth ? { width: cardWidth } : undefined]}>
                 {/* Imagen con badges superpuestos */}
@@ -338,32 +386,35 @@ export default function AdminPropiedades() {
                     <View style={styles.metaRow}>
                       {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
                       {item.banos != null && <Text style={styles.metaItem}>🚿 {item.banos}</Text>}
+                      {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>🚿 ½ {item.medios_banos}</Text>}
                       {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m²</Text>}
                       {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
                     </View>
                   )}
 
-                  {/* Botones de acción compactos */}
-                  <View style={styles.cardAcciones}>
-                    <TouchableOpacity
-                      style={styles.btnEditar}
-                      onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: item.id } })}
-                    >
-                      <Text style={styles.btnEditarText}>✏️ Editar</Text>
-                    </TouchableOpacity>
-                    {item.destacada ? (
-                      <TouchableOpacity style={styles.btnQuitarDestacada} onPress={() => quitarDestacada(item.id)}>
-                        <Text style={styles.btnQuitarDestacadaText}>✕ Destacado</Text>
+                  {/* Botones de acción compactos (solo lectura para Supervisor) */}
+                  {!esSupervisor && (
+                    <View style={styles.cardAcciones}>
+                      <TouchableOpacity
+                        style={styles.btnEditar}
+                        onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: item.id } })}
+                      >
+                        <Text style={styles.btnEditarText}>✏️ Editar</Text>
                       </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity style={styles.btnDestacar} onPress={() => abrirModalDestacar(item)}>
-                        <Text style={styles.btnDestacarText}>★ Destacar</Text>
+                      {item.destacada ? (
+                        <TouchableOpacity style={styles.btnQuitarDestacada} onPress={() => quitarDestacada(item.id)}>
+                          <Text style={styles.btnQuitarDestacadaText}>✕ Destacado</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity style={styles.btnDestacar} onPress={() => abrirModalDestacar(item)}>
+                          <Text style={styles.btnDestacarText}>★ Destacar</Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity style={styles.btnBorrar} onPress={() => handleBorrar(item.id, item.titulo)}>
+                        <Text style={styles.btnBorrarText}>🗑</Text>
                       </TouchableOpacity>
-                    )}
-                    <TouchableOpacity style={styles.btnBorrar} onPress={() => handleBorrar(item.id, item.titulo)}>
-                      <Text style={styles.btnBorrarText}>🗑</Text>
-                    </TouchableOpacity>
-                  </View>
+                    </View>
+                  )}
                 </View>
               </View>
               )
@@ -423,6 +474,7 @@ export default function AdminPropiedades() {
                     <View style={styles.metaRow}>
                       {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
                       {item.banos != null && <Text style={styles.metaItem}>🚿 {item.banos}</Text>}
+                      {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>🚿 ½ {item.medios_banos}</Text>}
                       {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m²</Text>}
                       {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
                     </View>

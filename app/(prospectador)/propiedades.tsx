@@ -47,10 +47,13 @@ type Propiedad = {
   nombre_constructora: string | null
   recamaras: number | null
   banos: number | null
+  medios_banos: number | null
   m2: number | null
   estacionamientos: number | null
   descripcion: string | null
   created_at: string
+  inmobiliaria_id: string | null
+  inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
@@ -139,7 +142,7 @@ export default function ProspectadorPropiedades() {
         supabase.from('profiles').select('role, nombre').eq('id', userId).single(),
         supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, m2, estacionamientos, descripcion, created_at, propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .order('created_at', { ascending: false })
           .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
@@ -150,9 +153,12 @@ export default function ProspectadorPropiedades() {
       if (propsRes.error) throw propsRes.error
 
       const rol = profileRes.data?.role ?? null
-      let propiedades = (propsRes.data ?? []) as Propiedad[]
-      if (rol !== 'prospectador_plus') {
-        propiedades = propiedades.filter(p => !p.exclusiva)
+      let propiedades = (propsRes.data ?? []).map((p: any) => ({
+        ...p,
+        inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
+      })) as unknown as Propiedad[]
+      if (rol !== 'prospectador_plus' && rol !== 'admin' && rol !== 'supervisor') {
+        propiedades = propiedades.filter(p => !p.exclusiva && !p.inmobiliarias?.exclusiva)
       }
 
       return {
@@ -384,7 +390,7 @@ export default function ProspectadorPropiedades() {
 
   function renderPropiedad(item: Propiedad, width?: number) {
     const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-    const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
+    const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.estacionamientos != null
     const veces = publicaciones[item.id] ?? 0
     return (
       <TouchableOpacity
@@ -439,6 +445,7 @@ export default function ProspectadorPropiedades() {
             <View style={styles.metaRow}>
               {item.recamaras != null && <Text style={styles.metaItem}>Rec {item.recamaras}</Text>}
               {item.banos != null && <Text style={styles.metaItem}>Ba {item.banos}</Text>}
+              {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>{item.medios_banos} 1/2 Ba</Text>}
               {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m²</Text>}
               {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
             </View>

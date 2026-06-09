@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type Stats = {
   total_cursos: number
@@ -35,6 +36,7 @@ function confirmar(msg: string): Promise<boolean> {
 }
 
 export default function AdminUniversity() {
+  useSupervisorBlock()
   const c = useColors()
   const [stats, setStats] = useState<Stats | null>(null)
   const [cursos, setCursos] = useState<CursoAdmin[]>([])

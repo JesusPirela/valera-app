@@ -6,6 +6,8 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
+import ToggleSwitch from '../../components/ToggleSwitch'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type Inmobiliaria = {
   id: string
@@ -14,10 +16,13 @@ type Inmobiliaria = {
   telefono: string | null
   email: string | null
   sitio_web: string | null
+  asesor_referencia: string | null
+  exclusiva: boolean
 }
 
 const EMPTY: Omit<Inmobiliaria, 'id'> = {
   nombre: '', logo_url: null, telefono: null, email: null, sitio_web: null,
+  asesor_referencia: null, exclusiva: false,
 }
 
 function alerta(msg: string) {
@@ -26,6 +31,7 @@ function alerta(msg: string) {
 }
 
 export default function AdminInmobiliarias() {
+  useSupervisorBlock()
   const c = useColors()
   const [lista, setLista] = useState<Inmobiliaria[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,7 +60,10 @@ export default function AdminInmobiliarias() {
 
   function abrirEditar(inm: Inmobiliaria) {
     setEditando(inm)
-    setForm({ nombre: inm.nombre, logo_url: inm.logo_url, telefono: inm.telefono, email: inm.email, sitio_web: inm.sitio_web })
+    setForm({
+      nombre: inm.nombre, logo_url: inm.logo_url, telefono: inm.telefono, email: inm.email, sitio_web: inm.sitio_web,
+      asesor_referencia: inm.asesor_referencia, exclusiva: inm.exclusiva,
+    })
     setModal(true)
   }
 
@@ -68,6 +77,8 @@ export default function AdminInmobiliarias() {
         telefono: form.telefono?.trim() || null,
         email: form.email?.trim() || null,
         sitio_web: form.sitio_web?.trim() || null,
+        asesor_referencia: form.asesor_referencia?.trim() || null,
+        exclusiva: form.exclusiva,
       }
       if (editando) {
         const { error } = await supabase.from('inmobiliarias').update(payload).eq('id', editando.id)
@@ -130,7 +141,13 @@ export default function AdminInmobiliarias() {
                 <Text style={s.cardIconText}>🏢</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[s.cardNombre, { color: c.text }]}>{inm.nombre}</Text>
+                <View style={s.cardNombreRow}>
+                  <Text style={[s.cardNombre, { color: c.text }]}>{inm.nombre}</Text>
+                  {inm.exclusiva && (
+                    <Text style={s.exclusivaBadge}>Exclusiva Plus</Text>
+                  )}
+                </View>
+                {inm.asesor_referencia && <Text style={[s.cardMeta, { color: c.textMute }]}>👤 {inm.asesor_referencia}</Text>}
                 {inm.telefono && <Text style={[s.cardMeta, { color: c.textMute }]}>📞 {inm.telefono}</Text>}
                 {inm.email && <Text style={[s.cardMeta, { color: c.textMute }]}>✉ {inm.email}</Text>}
                 {inm.sitio_web && <Text style={[s.cardMeta, { color: c.textMute }]}>🌐 {inm.sitio_web}</Text>}
@@ -163,7 +180,17 @@ export default function AdminInmobiliarias() {
               placeholderTextColor={c.placeholder}
             />
 
-            <Text style={[s.fieldLabel, { color: c.textSub }]}>Teléfono</Text>
+            <Text style={[s.fieldLabel, { color: c.textSub }]}>Asesor de referencia</Text>
+            <TextInput
+              style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+              value={form.asesor_referencia ?? ''}
+              onChangeText={v => setForm(f => ({ ...f, asesor_referencia: v }))}
+              placeholder="Nombre del asesor"
+              placeholderTextColor={c.placeholder}
+              autoCapitalize="words"
+            />
+
+            <Text style={[s.fieldLabel, { color: c.textSub }]}>Contacto (teléfono)</Text>
             <TextInput
               style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               value={form.telefono ?? ''}
@@ -172,6 +199,18 @@ export default function AdminInmobiliarias() {
               placeholderTextColor={c.placeholder}
               keyboardType="phone-pad"
             />
+
+            <View style={s.exclusivaRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.fieldLabel, { color: c.textSub, marginBottom: 2 }]}>Exclusiva Plus</Text>
+                <Text style={[s.exclusivaDesc, { color: c.textMute }]}>Solo visible para Prospectadores Plus, Supervisor y Admin</Text>
+              </View>
+              <ToggleSwitch
+                value={form.exclusiva}
+                onValueChange={v => setForm(f => ({ ...f, exclusiva: v }))}
+                trackColor={{ false: '#ccc', true: '#c9a84c' }}
+              />
+            </View>
 
             <Text style={[s.fieldLabel, { color: c.textSub }]}>Email</Text>
             <TextInput
@@ -247,8 +286,18 @@ const s = StyleSheet.create({
   },
   cardIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   cardIconText: { fontSize: 22 },
+  cardNombreRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   cardNombre: { fontSize: 16, fontWeight: '700' },
   cardMeta: { fontSize: 12, marginTop: 2 },
+  exclusivaBadge: {
+    fontSize: 10, fontWeight: '700', color: '#c0392b',
+    backgroundColor: '#fdecea', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
+  },
+  exclusivaRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginTop: 8, marginBottom: 10,
+  },
+  exclusivaDesc: { fontSize: 11 },
   cardAcciones: { flexDirection: 'row', gap: 8 },
   btnEdit: { padding: 8 },
   btnEditText: { fontSize: 18 },

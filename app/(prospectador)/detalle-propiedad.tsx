@@ -39,13 +39,17 @@ type Propiedad = {
   estado: string | null
   recamaras: number | null
   banos: number | null
+  medios_banos: number | null
   m2: number | null
   estacionamientos: number | null
   descripcion: string | null
   created_by: string | null
   asesor_id: string | null
+  exclusiva: boolean | null
   es_constructora: boolean | null
   nombre_constructora: string | null
+  inmobiliaria_id: string | null
+  inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
   lat: number | null
   lng: number | null
   propiedad_imagenes: { url: string; orden: number }[]
@@ -59,6 +63,8 @@ type ClienteCRM = {
   telefono: string
   estado: string
 }
+
+const GMAPS_KEY = 'AIzaSyCPML-wonbnHif1HswVfTk-ypInP1u94sE'
 
 const ESTADOS_LABEL: Record<string, string> = {
   por_perfilar: 'Por perfilar',
@@ -92,7 +98,12 @@ function formatearFichaWhatsApp(p: Propiedad): string {
 
   const meta: string[] = []
   if (p.recamaras != null) meta.push(`🛏 ${p.recamaras} rec`)
-  if (p.banos != null) meta.push(`🚿 ${p.banos} baños`)
+  if (p.banos != null || p.medios_banos != null) {
+    const partes: string[] = []
+    if (p.banos != null) partes.push(`${p.banos} completo${p.banos === 1 ? '' : 's'}`)
+    if (p.medios_banos != null && p.medios_banos > 0) partes.push(`${p.medios_banos} medio${p.medios_banos === 1 ? '' : 's'}`)
+    meta.push(`🚿 ${partes.join(' + ')}`)
+  }
   if (p.m2 != null) meta.push(`📐 ${p.m2} m²`)
   if (p.estacionamientos != null) meta.push(`🚗 ${p.estacionamientos} est`)
   if (meta.length) msg += '\n\n' + meta.join('   ')
@@ -126,32 +137,47 @@ export default function DetallePropiedad() {
       const userId = session?.user?.id
 
       let nombreUsuario: string | null = null
+      let rol: string | null = null
       if (userId) {
         const { data: miPerfil } = await supabase
-          .from('profiles').select('nombre').eq('id', userId).maybeSingle()
+          .from('profiles').select('nombre, role').eq('id', userId).maybeSingle()
         nombreUsuario = miPerfil?.nombre ?? null
+        rol = miPerfil?.role ?? null
       }
 
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, asesor_id, es_constructora, nombre_constructora, lat, lng, propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, estacionamientos, descripcion, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), lat, lng, propiedad_imagenes(url, orden)')
         .eq('id', id)
         .single()
 
       if (error) throw error
 
+      const dataNormalizada = {
+        ...data,
+        inmobiliarias: Array.isArray((data as any).inmobiliarias) ? (data as any).inmobiliarias[0] ?? null : (data as any).inmobiliarias,
+      }
+
+      // Restricción: Prospectador/Nuevo no pueden ver propiedades de inmobiliarias exclusivas
+      if (rol !== 'prospectador_plus' && rol !== 'admin' && rol !== 'supervisor') {
+        const propiedadAny = dataNormalizada as unknown as Propiedad
+        if (propiedadAny.exclusiva || propiedadAny.inmobiliarias?.exclusiva) {
+          return { propiedad: null, subidoPor: null, nombreUsuario, sinAcceso: true as const }
+        }
+      }
+
       let subidoPor: SubidoPor | null = null
 
       // Usar siempre el perfil del admin que creó la propiedad para coordinar citas
-      if (data.created_by) {
+      if (dataNormalizada.created_by) {
         const { data: perfil } = await supabase
-          .from('profiles').select('nombre, telefono').eq('id', data.created_by).maybeSingle()
+          .from('profiles').select('nombre, telefono').eq('id', dataNormalizada.created_by).maybeSingle()
         if (perfil) {
           subidoPor = { nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null }
         }
       }
 
-      return { propiedad: data as Propiedad, subidoPor, nombreUsuario }
+      return { propiedad: dataNormalizada as unknown as Propiedad, subidoPor, nombreUsuario, sinAcceso: false as const }
     },
     enabled: !!id,
     networkMode: 'offlineFirst',
@@ -177,6 +203,13 @@ export default function DetallePropiedad() {
   const propiedad = detalle?.propiedad ?? null
   const subidoPor = detalle?.subidoPor ?? null
   const nombreUsuario = detalle?.nombreUsuario ?? null
+
+  // Sin permiso para ver esta propiedad (inmobiliaria exclusiva) → volver al listado
+  useEffect(() => {
+    if (detalle?.sinAcceso) {
+      router.replace('/(prospectador)/propiedades')
+    }
+  }, [detalle?.sinAcceso])
 
   // Sincronizar nota desde caché cuando carga
   useEffect(() => {
@@ -386,6 +419,19 @@ export default function DetallePropiedad() {
 
   async function generarFichaPDF() {
     if (!propiedad) return
+
+    // Abrir la ventana sincrónicamente (dentro del gesto del usuario) para que
+    // los navegadores de escritorio no bloqueen el pop-up tras los `await` siguientes.
+    let win: Window | null = null
+    if (Platform.OS === 'web') {
+      win = window.open('', '_blank')
+      if (!win) {
+        window.alert('Habilita las ventanas emergentes para generar la ficha.')
+        return
+      }
+      win.document.write('<p style="font-family: sans-serif; padding: 24px; color: #888;">Generando ficha…</p>')
+    }
+
     setGenerandoPDF(true)
     try {
       const esc = (s: string | null | undefined) =>
@@ -420,11 +466,11 @@ export default function DetallePropiedad() {
       const cars: string[] = []
       if (propiedad.recamaras != null) cars.push(`<div class="car"><span class="car-val">${propiedad.recamaras}</span><span class="car-lbl">Recámaras</span></div>`)
       if (propiedad.banos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.banos}</span><span class="car-lbl">Baños</span></div>`)
+      if (propiedad.medios_banos != null && propiedad.medios_banos > 0) cars.push(`<div class="car"><span class="car-val">${propiedad.medios_banos}</span><span class="car-lbl">Medio${propiedad.medios_banos === 1 ? '' : 's'} baño${propiedad.medios_banos === 1 ? '' : 's'}</span></div>`)
       if (propiedad.m2 != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2}</span><span class="car-lbl">m²</span></div>`)
       if (propiedad.estacionamientos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.estacionamientos}</span><span class="car-lbl">Estacionamientos</span></div>`)
 
       // Mapa estático de Google si hay coordenadas
-      const GMAPS_KEY = 'AIzaSyCPML-wonbnHif1HswVfTk-ypInP1u94sE'
       let mapaHTML = ''
       if (propiedad.lat && propiedad.lng) {
         const lat = propiedad.lat
@@ -487,10 +533,10 @@ export default function DetallePropiedad() {
       </body></html>`
 
       if (Platform.OS === 'web') {
-        const blob = new Blob([html], { type: 'text/html' })
-        const url = URL.createObjectURL(blob)
-        const win = window.open(url, '_blank')
-        setTimeout(() => { win?.print(); URL.revokeObjectURL(url) }, 800)
+        win!.document.open()
+        win!.document.write(html)
+        win!.document.close()
+        setTimeout(() => { win?.print() }, 500)
       } else {
         const Print = await import('expo-print')
         const ShareLib = await import('expo-sharing')
@@ -503,8 +549,12 @@ export default function DetallePropiedad() {
         await ShareLib.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: propiedad.codigo ?? 'ficha' })
       }
     } catch (e: any) {
-      if (Platform.OS === 'web') window.alert('No se pudo generar el PDF.')
-      else Alert.alert('Error', `No se pudo generar la ficha PDF.\n\n${e?.message ?? ''}`)
+      if (Platform.OS === 'web') {
+        win?.close()
+        window.alert('No se pudo generar el PDF.')
+      } else {
+        Alert.alert('Error', `No se pudo generar la ficha PDF.\n\n${e?.message ?? ''}`)
+      }
     } finally {
       setGenerandoPDF(false)
     }
@@ -917,6 +967,16 @@ export default function DetallePropiedad() {
 
       {/* Contenido */}
       <View style={styles.content}>
+        {/* Logo de la inmobiliaria */}
+        {propiedad.inmobiliarias?.logo_url && (
+          <View style={styles.inmobiliariaLogoWrapper}>
+            <Image source={{ uri: propiedad.inmobiliarias.logo_url }} style={styles.inmobiliariaLogo} resizeMode="contain" />
+            {propiedad.inmobiliarias.nombre && (
+              <Text style={styles.inmobiliariaNombre}>{propiedad.inmobiliarias.nombre}</Text>
+            )}
+          </View>
+        )}
+
         {/* Badges */}
         <View style={styles.badgeRow}>
           <Text style={styles.codigoBadge}>{propiedad.codigo ?? '—'}</Text>
@@ -978,7 +1038,7 @@ export default function DetallePropiedad() {
         </View>
 
         {/* Características */}
-        {(propiedad.recamaras != null || propiedad.banos != null || propiedad.m2 != null || propiedad.estacionamientos != null) && (
+        {(propiedad.recamaras != null || propiedad.banos != null || propiedad.medios_banos != null || propiedad.m2 != null || propiedad.estacionamientos != null) && (
           <View style={styles.seccion}>
             <Text style={styles.seccionTitulo}>Características</Text>
             <View style={styles.caracteristicasGrid}>
@@ -991,7 +1051,13 @@ export default function DetallePropiedad() {
               {propiedad.banos != null && (
                 <View style={styles.caracteristica}>
                   <Text style={styles.carValor}>{propiedad.banos}</Text>
-                  <Text style={styles.carLabel}>Baños</Text>
+                  <Text style={styles.carLabel}>Baño{propiedad.banos === 1 ? '' : 's'} completo{propiedad.banos === 1 ? '' : 's'}</Text>
+                </View>
+              )}
+              {propiedad.medios_banos != null && propiedad.medios_banos > 0 && (
+                <View style={styles.caracteristica}>
+                  <Text style={styles.carValor}>{propiedad.medios_banos}</Text>
+                  <Text style={styles.carLabel}>Medio{propiedad.medios_banos === 1 ? '' : 's'} baño{propiedad.medios_banos === 1 ? '' : 's'}</Text>
                 </View>
               )}
               {propiedad.m2 != null && (
@@ -1027,6 +1093,37 @@ export default function DetallePropiedad() {
             <Text style={styles.descripcion}>{propiedad.descripcion}</Text>
           </View>
         ) : null}
+
+        {/* Galería de imágenes restantes */}
+        {imagenes.length > 1 && (
+          <View style={styles.seccion}>
+            <Text style={styles.seccionTitulo}>Galería</Text>
+            <View style={styles.galeriaGrid}>
+              {imagenes.slice(1).map((img, i) => (
+                <TouchableOpacity
+                  key={i + 1}
+                  activeOpacity={0.85}
+                  onPress={() => { setLightboxIndex(i + 1); setLightboxVisible(true) }}
+                >
+                  <Image source={{ uri: img.url }} style={styles.galeriaThumb} resizeMode="cover" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Ubicación */}
+        {propiedad.lat != null && propiedad.lng != null && (
+          <View style={styles.seccion}>
+            <Text style={styles.seccionTitulo}>Ubicación</Text>
+            <Image
+              source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${propiedad.lat},${propiedad.lng}&zoom=15&size=600x220&scale=2&markers=color:0x1a6470%7C${propiedad.lat},${propiedad.lng}&key=${GMAPS_KEY}` }}
+              style={styles.mapaImagen}
+              resizeMode="cover"
+            />
+            <Text style={styles.mapaDireccion}>📍 {propiedad.direccion}</Text>
+          </View>
+        )}
 
         {/* Mis notas privadas */}
         <View style={styles.seccion}>
@@ -1444,7 +1541,7 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: '#aaa', fontSize: 15 },
 
-  imagen: { height: 260, backgroundColor: '#d0d0d0' },
+  imagen: { height: 340, backgroundColor: '#d0d0d0' },
   sinImagen: {
     height: 180,
     backgroundColor: '#e0e0e0',
@@ -1474,6 +1571,10 @@ const styles = StyleSheet.create({
   },
 
   content: { padding: 20 },
+
+  inmobiliariaLogoWrapper: { alignItems: 'center', marginBottom: 14 },
+  inmobiliariaLogo: { width: 180, height: 70 },
+  inmobiliariaNombre: { fontSize: 13, color: '#888', fontWeight: '600', marginTop: 4 },
 
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   codigoBadge: {
@@ -1579,6 +1680,26 @@ const styles = StyleSheet.create({
   carLabel: { fontSize: 12, color: '#888', marginTop: 2 },
 
   descripcion: { fontSize: 15, color: '#444', lineHeight: 23 },
+
+  galeriaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  galeriaThumb: {
+    width: 100,
+    height: 100,
+    borderRadius: 10,
+    backgroundColor: '#e0e0e0',
+  },
+
+  mapaImagen: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    backgroundColor: '#e0e0e0',
+  },
+  mapaDireccion: { fontSize: 13, color: '#666', marginTop: 8 },
 
   btnWhatsapp: {
     backgroundColor: '#25D366',
