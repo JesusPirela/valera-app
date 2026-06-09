@@ -83,7 +83,6 @@ type Props = {
 
 type PinData = { id: string; titulo: string; precio: number | null; tipo: string | null; direccion: string; imagen?: string | null; lat: number; lng: number; color: string }
 type PinGroup = { key: string; lat: number; lng: number; color: string; pins: PinData[] }
-type MapRegion = { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }
 
 const PINS_VISIBLE_THRESHOLD = 0.12
 const MEXICO_REGION = { latitude: 22.5, longitude: -102.55, latitudeDelta: 18, longitudeDelta: 18 }
@@ -91,13 +90,13 @@ const MEXICO_REGION = { latitude: 22.5, longitude: -102.55, latitudeDelta: 18, l
 export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props) {
   const nativeMapRef = useRef<InstanceType<typeof MapView>>(null)
   const [selectedZona, setSelectedZona] = useState<string | null>(null)
-  const [mapRegion, setMapRegion] = useState<MapRegion>(MEXICO_REGION)
+  const [latDelta, setLatDelta] = useState(18)
   const [searchText, setSearchText] = useState('')
   const [pinsReady, setPinsReady] = useState(false)
   const [selectedPin, setSelectedPin] = useState<PinData | null>(null)
   const [selectedCluster, setSelectedCluster] = useState<PinGroup | null>(null)
 
-  const pinsCurrentlyVisible = mapRegion.latitudeDelta < PINS_VISIBLE_THRESHOLD || searchText.trim().length > 0
+  const pinsCurrentlyVisible = latDelta < PINS_VISIBLE_THRESHOLD || searchText.trim().length > 0
 
   useEffect(() => {
     if (pinsCurrentlyVisible) {
@@ -145,25 +144,17 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
   }, [searchText, selectedZona])
 
   const zonaActual = selectedZona ? zonas.find(z => z.key === selectedZona) : null
-  const pinsVisible = mapRegion.latitudeDelta < PINS_VISIBLE_THRESHOLD || searchText.trim().length > 0
+  const pinsVisible = latDelta < PINS_VISIBLE_THRESHOLD || searchText.trim().length > 0
 
   const term = searchText.toLowerCase().trim()
-  const pad = 0.6
-  const minLat = mapRegion.latitude - mapRegion.latitudeDelta * (0.5 + pad)
-  const maxLat = mapRegion.latitude + mapRegion.latitudeDelta * (0.5 + pad)
-  const minLng = mapRegion.longitude - mapRegion.longitudeDelta * (0.5 + pad)
-  const maxLng = mapRegion.longitude + mapRegion.longitudeDelta * (0.5 + pad)
 
   const pinsEnMapa = zonaActual
     ? (zonaActual.propiedades ?? [])
         .filter(p => {
           if (p.lat == null || p.lng == null) return false
-          if (term && !(
-            (p.direccion ?? '').toLowerCase().includes(term) ||
-            (p.titulo ?? '').toLowerCase().includes(term)
-          )) return false
-          if (!term && pinsVisible) {
-            return p.lat >= minLat && p.lat <= maxLat && p.lng >= minLng && p.lng <= maxLng
+          if (term) {
+            return (p.direccion ?? '').toLowerCase().includes(term) ||
+                   (p.titulo ?? '').toLowerCase().includes(term)
           }
           return true
         })
@@ -238,7 +229,7 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
         initialRegion={MEXICO_REGION}
         showsUserLocation={false}
         onPress={() => { setSelectedPin(null); setSelectedCluster(null) }}
-        onRegionChangeComplete={r => setMapRegion(r)}
+        onRegionChangeComplete={r => setLatDelta(r.latitudeDelta)}
       >
         {!selectedZona && zonas.map(z => (
           <Marker
