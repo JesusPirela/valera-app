@@ -355,7 +355,11 @@ export default function ProspectadorPropiedades() {
       coords: z.coords,
       color: z.color,
       count: propsZona.length,
-      propiedades: propsZona.map(p => ({ id: p.id, titulo: p.titulo, precio: p.precio, tipo: p.tipo, direccion: p.direccion, lat: p.lat, lng: p.lng })),
+      propiedades: propsZona.map(p => ({
+        id: p.id, titulo: p.titulo, precio: p.precio, tipo: p.tipo,
+        direccion: p.direccion, lat: p.lat, lng: p.lng,
+        imagen: [...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]?.url ?? null,
+      })),
     }
   }).filter(z => z.count > 0)
 
@@ -512,7 +516,7 @@ export default function ProspectadorPropiedades() {
         </View>
 
         {/* Contenido centrado en web */}
-        <View style={isWeb ? styles.webBody : undefined}>
+        <View style={isWeb ? styles.webBody : { flex: 1 }}>
 
         {/* Botones rápidos Venta / Renta / Nuevas */}
         <View style={[styles.quickFiltersRow, { backgroundColor: darkMode ? '#0f1e2d' : '#eef2f4' }]}>
@@ -674,25 +678,23 @@ export default function ProspectadorPropiedades() {
             </Text>
           </View>
         ) : vistaZonas ? (
-          <ScrollView contentContainerStyle={{ paddingBottom: 24, paddingTop: 0 }}>
-            <View>
-              <MiniMapa
-                zonas={zonasParaMapa}
-                onZonaPress={handleZonaMapPress}
-                propiedadesConCoords={propiedades.filter(p => p.lat && p.lng).map(p => ({
-                  id: p.id,
-                  lat: p.lat!,
-                  lng: p.lng!,
-                  direccion: p.direccion,
-                  zona: p.zona,
-                  titulo: p.titulo,
-                  precio: p.precio,
-                  tipo: p.tipo,
-                }))}
-                onPropiedadPress={id => router.push(`/(prospectador)/detalle-propiedad?id=${id}` as any)}
-              />
-            </View>
-          </ScrollView>
+          <View style={{ flex: 1 }}>
+            <MiniMapa
+              zonas={zonasParaMapa}
+              onZonaPress={handleZonaMapPress}
+              propiedadesConCoords={propiedades.filter(p => p.lat && p.lng).map(p => ({
+                id: p.id,
+                lat: p.lat!,
+                lng: p.lng!,
+                direccion: p.direccion,
+                zona: p.zona,
+                titulo: p.titulo,
+                precio: p.precio,
+                tipo: p.tipo,
+              }))}
+              onPropiedadPress={id => router.push(`/(prospectador)/detalle-propiedad?id=${id}` as any)}
+            />
+          </View>
         ) : isWeb ? (
           <ScrollView contentContainerStyle={styles.webGridScroll}>
             <View style={styles.webGrid}>

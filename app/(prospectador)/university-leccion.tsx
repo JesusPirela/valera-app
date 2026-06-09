@@ -50,7 +50,22 @@ function getEmbedUrl(url: string | null): string | null {
 
 function VideoPlayer({ url }: { url: string | null }) {
   const embed = getEmbedUrl(url)
-  if (!embed) return null
+  const [error, setError] = useState(false)
+
+  if (!embed || !url) return null
+
+  if (error) {
+    return (
+      <View style={[vpS.container, vpS.errorBox]}>
+        <Text style={vpS.errorIcon}>⚠️</Text>
+        <Text style={vpS.errorText}>El video no se puede mostrar aquí.</Text>
+        <TouchableOpacity style={vpS.errorBtn} onPress={() => Linking.openURL(url)}>
+          <Text style={vpS.errorBtnText}>Abrir video →</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
   if (Platform.OS === 'web') {
     return (
       <View style={vpS.container}>
@@ -69,6 +84,8 @@ function VideoPlayer({ url }: { url: string | null }) {
         allowsFullscreenVideo
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
+        onError={() => setError(true)}
+        onHttpError={(e) => { if (e.nativeEvent.statusCode >= 400) setError(true) }}
       />
     </View>
   )
@@ -78,7 +95,11 @@ const vpS = StyleSheet.create({
   native: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#1a1a2e', alignItems: 'center', justifyContent: 'center', gap: 8 },
   playIcon: { fontSize: 40, color: '#c9a84c' },
   playText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-
+  errorBox: { backgroundColor: '#1a1a2e', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  errorIcon: { fontSize: 32 },
+  errorText: { color: '#aaa', fontSize: 13, textAlign: 'center' },
+  errorBtn: { backgroundColor: '#c9a84c', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 8, marginTop: 4 },
+  errorBtnText: { color: '#1a1a2e', fontWeight: '700', fontSize: 13 },
 })
 
 const ESTADO_INFO: Record<string, { label: string; color: string; bg: string }> = {
@@ -409,6 +430,7 @@ export default function UniversityLeccion() {
         {yaCompletada ? (
           <View style={estilos.completadaBanner}>
             <Text style={estilos.completadaText}>✓ Lección completada · +10 puntos</Text>
+            <Text style={estilos.repasarHint}>Modo repaso — los puntos ya fueron sumados</Text>
           </View>
         ) : tieneTareasObligatorias ? (
           !todasEntregadas ? (
@@ -473,8 +495,9 @@ const estilos = StyleSheet.create({
   btnEntregar: { backgroundColor: '#1a6470', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   btnEntregarText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   // Completar
-  completadaBanner: { backgroundColor: '#e8f5e9', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#4caf50', marginBottom: 16 },
+  completadaBanner: { backgroundColor: '#e8f5e9', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#4caf50', marginBottom: 16, gap: 4 },
   completadaText: { color: '#2e7d32', fontWeight: '700', fontSize: 14 },
+  repasarHint: { color: '#66bb6a', fontSize: 11 },
   pendienteBanner: { backgroundColor: '#fff8e1', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#ffb300', marginBottom: 16 },
   pendienteText: { color: '#e65100', fontWeight: '600', fontSize: 13, textAlign: 'center' },
   btnCompletar: { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 16 },

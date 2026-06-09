@@ -339,37 +339,49 @@ export default function UniversityCurso() {
         <Text style={estilos.progresoSub}>{completadasIds.size} de {totalLecciones} lecciones completadas</Text>
 
         {/* Banner certificado */}
-        {cursoCompleto && curso.es_certificacion ? (
-          <View style={estilos.certBannerGold}>
-            <Text style={estilos.certBannerIcon}>🏆</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={estilos.certBannerTitulo}>¡Curso completado!</Text>
-              <Text style={estilos.certBannerSub}>
-                {nombreGuardado
-                  ? `Certificado emitido a nombre de ${nombreGuardado}`
-                  : 'Genera tu certificado oficial PDF'}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={estilos.btnCertAccion}
-              onPress={() => {
-                if (nombreGuardado) {
-                  generarCertificadoPDF(nombreGuardado, curso.titulo)
-                } else {
-                  setNombreForm('')
-                  setModalCert(true)
-                }
-              }}
-            >
-              <Text style={estilos.btnCertAccionText}>
-                {nombreGuardado ? '⬇ Descargar PDF' : '📄 Generar certificado'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : cursoCompleto ? (
-          <View style={estilos.certBanner}>
-            <Text style={estilos.certText}>🏆 ¡Curso completado!</Text>
-          </View>
+        {cursoCompleto ? (
+          <>
+            {curso.es_certificacion ? (
+              <View style={estilos.certBannerGold}>
+                <Text style={estilos.certBannerIcon}>🏆</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={estilos.certBannerTitulo}>¡Curso completado!</Text>
+                  <Text style={estilos.certBannerSub}>
+                    {nombreGuardado
+                      ? `Certificado emitido a nombre de ${nombreGuardado}`
+                      : 'Genera tu certificado oficial PDF'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={estilos.btnCertAccion}
+                  onPress={() => {
+                    if (nombreGuardado) {
+                      generarCertificadoPDF(nombreGuardado, curso.titulo)
+                    } else {
+                      setNombreForm('')
+                      setModalCert(true)
+                    }
+                  }}
+                >
+                  <Text style={estilos.btnCertAccionText}>
+                    {nombreGuardado ? '⬇ Descargar PDF' : '📄 Generar certificado'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={estilos.certBanner}>
+                <Text style={estilos.certText}>🏆 ¡Curso completado!</Text>
+              </View>
+            )}
+            {lecciones.length > 0 && (
+              <TouchableOpacity
+                style={estilos.btnRepasar}
+                onPress={() => router.push(`/(prospectador)/university-leccion?id=${lecciones[0].id}&cursoId=${cursoId}`)}
+              >
+                <Text style={estilos.btnRepasarText}>🔄 Repasar curso desde el inicio</Text>
+              </TouchableOpacity>
+            )}
+          </>
         ) : siguiente ? (
           <TouchableOpacity
             style={estilos.btnContinuar}
@@ -513,6 +525,8 @@ const estilos = StyleSheet.create({
   btnCertAccionText: { color: '#000', fontWeight: '700', fontSize: 13 },
   btnContinuar: { backgroundColor: '#1a6470', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   btnContinuarText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  btnRepasar: { marginTop: 10, borderRadius: 10, paddingVertical: 11, alignItems: 'center', borderWidth: 1.5, borderColor: '#1a6470' },
+  btnRepasarText: { color: '#1a6470', fontWeight: '700', fontSize: 13 },
   descCard: { backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 16, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e8eef0' },
   descTitle: { fontSize: 13, fontWeight: '700', color: '#1a6470', marginBottom: 8 },
   descText: { fontSize: 13, color: '#555', lineHeight: 20 },

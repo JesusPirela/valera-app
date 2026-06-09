@@ -16,6 +16,7 @@ import {
   useWindowDimensions,
 } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
+import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
@@ -45,6 +46,8 @@ type Propiedad = {
   asesor_id: string | null
   es_constructora: boolean | null
   nombre_constructora: string | null
+  lat: number | null
+  lng: number | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
@@ -131,7 +134,7 @@ export default function DetallePropiedad() {
 
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, asesor_id, es_constructora, nombre_constructora, propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, asesor_id, es_constructora, nombre_constructora, lat, lng, propiedad_imagenes(url, orden)')
         .eq('id', id)
         .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
         .single()
@@ -347,6 +350,28 @@ export default function DetallePropiedad() {
     setTimeout(() => setDescripcionCopiada(false), 2000)
   }
 
+  async function getLogoBase64(): Promise<string> {
+    try {
+      if (Platform.OS === 'web') {
+        const logoModule = require('../../assets/logo.png')
+        const url = typeof logoModule === 'string' ? logoModule : ''
+        if (!url) return ''
+        const resp = await fetch(url)
+        const blob = await resp.blob()
+        return new Promise((res) => {
+          const reader = new FileReader()
+          reader.onloadend = () => res(reader.result as string)
+          reader.readAsDataURL(blob)
+        })
+      }
+      const asset = Asset.fromModule(require('../../assets/logo.png'))
+      await asset.downloadAsync()
+      if (!asset.localUri) return ''
+      const b64 = await FileSystem.readAsStringAsync(asset.localUri, { encoding: FileSystem.EncodingType.Base64 })
+      return `data:image/png;base64,${b64}`
+    } catch { return '' }
+  }
+
   async function imagenABase64(url: string): Promise<string> {
     try {
       if (Platform.OS === 'web') return url
@@ -379,57 +404,82 @@ export default function DetallePropiedad() {
 
       const imagenes = [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
 
-      // En móvil convertimos a base64 para que expo-print pueda renderizarlas
-      const imagenesConSrc = await Promise.all(
-        imagenes.slice(0, 20).map(async img => ({
-          ...img,
-          src: await imagenABase64(img.url),
-        }))
-      )
+      const [imagenesConSrc, logoSrc] = await Promise.all([
+        Promise.all(
+          imagenes.slice(0, 20).map(async img => ({
+            ...img,
+            src: await imagenABase64(img.url),
+          }))
+        ),
+        getLogoBase64(),
+      ])
+
       const imagenesHTML = imagenesConSrc.map(img =>
-        `<img src="${img.src}" style="width:48%;height:160px;object-fit:cover;border-radius:8px;margin:4px;" />`
+        `<img src="${img.src}" style="width:48%;height:160px;object-fit:cover;border-radius:8px;" />`
       ).join('')
 
       const cars: string[] = []
-      if (propiedad.recamaras != null) cars.push(`<div class="car"><span class="car-val">${propiedad.recamaras}</span><span class="car-lbl">Recamaras</span></div>`)
-      if (propiedad.banos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.banos}</span><span class="car-lbl">Banos</span></div>`)
-      if (propiedad.m2 != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2}</span><span class="car-lbl">m2</span></div>`)
+      if (propiedad.recamaras != null) cars.push(`<div class="car"><span class="car-val">${propiedad.recamaras}</span><span class="car-lbl">Recámaras</span></div>`)
+      if (propiedad.banos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.banos}</span><span class="car-lbl">Baños</span></div>`)
+      if (propiedad.m2 != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2}</span><span class="car-lbl">m²</span></div>`)
       if (propiedad.estacionamientos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.estacionamientos}</span><span class="car-lbl">Estacionamientos</span></div>`)
+
+      // Mapa estático de Google si hay coordenadas
+      const GMAPS_KEY = 'AIzaSyCPML-wonbnHif1HswVfTk-ypInP1u94sE'
+      let mapaHTML = ''
+      if (propiedad.lat && propiedad.lng) {
+        const lat = propiedad.lat
+        const lng = propiedad.lng
+        const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=600x220&scale=2&markers=color:0x1a6470%7C${lat},${lng}&key=${GMAPS_KEY}`
+        const mapSrc = await imagenABase64(staticUrl)
+        mapaHTML = `
+          <div class="seccion">Ubicación</div>
+          <div class="mapa-box">
+            <img src="${mapSrc}" class="mapa-img" />
+            <div class="mapa-dir">📍 ${esc(propiedad.direccion)}</div>
+          </div>`
+      }
 
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${propiedad.codigo ?? 'ficha'}</title><style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; }
-        .header { background: #1a6470; padding: 24px 28px 20px; }
-        .codigo { font-size: 12px; color: #c9a84c; font-weight: 700; margin-bottom: 4px; }
-        .titulo { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px; }
-        .tipo-op { font-size: 13px; color: rgba(255,255,255,0.7); margin-bottom: 12px; }
-        .precio { font-size: 26px; font-weight: 800; color: #c9a84c; margin-bottom: 6px; }
-        .direccion { font-size: 13px; color: rgba(255,255,255,0.8); }
+        .header { background: #1a6470; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
+        .header-left { flex: 1; }
+        .header-logo { height: 80px; max-width: 180px; object-fit: contain; flex-shrink: 0; margin-left: 20px; }
+        .codigo { font-size: 11px; color: #c9a84c; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
+        .titulo { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+        .tipo-op { font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 10px; }
+        .precio { font-size: 24px; font-weight: 800; color: #c9a84c; margin-bottom: 5px; }
+        .direccion { font-size: 12px; color: rgba(255,255,255,0.8); }
         .body { padding: 20px 28px; }
         .fotos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-        .fotos img { width: 48%; height: 160px; object-fit: cover; border-radius: 8px; }
-        .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1px; text-transform: uppercase; margin: 20px 0 10px; }
+        .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1.2px; text-transform: uppercase; margin: 20px 0 10px; }
         .cars { display: flex; gap: 12px; flex-wrap: wrap; }
-        .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; }
         .car-val { display: block; font-size: 20px; font-weight: 800; color: #1a6470; }
         .car-lbl { display: block; font-size: 11px; color: #888; margin-top: 2px; }
         .desc { font-size: 13px; line-height: 1.7; color: #444; white-space: pre-wrap; }
-        .asesor { background: #fff8e1; border-left: 4px solid #c9a84c; border-radius: 8px; padding: 12px 16px; margin-top: 20px; }
-        .asesor-nombre { font-weight: 700; font-size: 14px; color: #1a6470; }
-        .asesor-tel { font-size: 12px; color: #555; margin-top: 3px; }
-        .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; }
+        .mapa-box { border: 1.5px solid #e0e8ea; border-radius: 10px; overflow: hidden; margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
+        .mapa-img { width: 100%; height: 200px; object-fit: cover; display: block; }
+        .mapa-dir { background: #f0f5f5; padding: 10px 14px; font-size: 12px; color: #1a6470; font-weight: 600; }
+        .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; break-inside: avoid; page-break-inside: avoid; }
+        .fotos img { break-inside: avoid; page-break-inside: avoid; }
+        .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; break-inside: avoid; page-break-inside: avoid; }
       </style></head><body>
       <div class="header">
-        <div class="codigo">${esc(propiedad.codigo)}</div>
-        <div class="titulo">${esc(propiedad.titulo)}</div>
-        <div class="tipo-op">${[tipo, operacion].filter(Boolean).join(' en ')}</div>
-        <div class="precio">${precio}</div>
-        <div class="direccion">${esc(propiedad.direccion)}</div>
+        <div class="header-left">
+          <div class="codigo">${esc(propiedad.codigo)}</div>
+          <div class="titulo">${esc(propiedad.titulo)}</div>
+          <div class="tipo-op">${[tipo, operacion].filter(Boolean).join(' en ')}</div>
+          <div class="precio">${precio}</div>
+          <div class="direccion">${esc(propiedad.direccion)}</div>
+        </div>
+        ${logoSrc ? `<img src="${logoSrc}" class="header-logo" />` : ''}
       </div>
       <div class="body">
         ${imagenes.length > 0 ? `<div class="seccion">Fotos</div><div class="fotos">${imagenesHTML}</div>` : ''}
-        ${cars.length > 0 ? `<div class="seccion">Caracteristicas</div><div class="cars">${cars.join('')}</div>` : ''}
-        ${propiedad.descripcion ? `<div class="seccion">Descripcion</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
+        ${cars.length > 0 ? `<div class="seccion">Características</div><div class="cars">${cars.join('')}</div>` : ''}
+        ${propiedad.descripcion ? `<div class="seccion">Descripción</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
+        ${mapaHTML}
         <div class="footer">Valera Real Estate · valerarealestate.com</div>
       </div>
       </body></html>`
@@ -442,7 +492,7 @@ export default function DetallePropiedad() {
       } else {
         const Print = await import('expo-print')
         const ShareLib = await import('expo-sharing')
-        const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 })
+        const { uri } = await Print.printToFileAsync({ html, width: 595 })
         const isAvailable = await ShareLib.isAvailableAsync()
         if (!isAvailable) {
           Alert.alert('Error', 'Compartir no está disponible en este dispositivo.')

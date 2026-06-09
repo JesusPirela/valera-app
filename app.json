@@ -3,7 +3,7 @@
     "name": "Valera App",
     "slug": "valera-app",
     "scheme": "valera-app",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,16 +15,20 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.valerarealestate.app",
-      "buildNumber": "4",
+      "buildNumber": "5",
+      "config": {
+        "googleMapsApiKey": "AIzaSyCPML-wonbnHif1HswVfTk-ypInP1u94sE"
+      },
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Valera necesita acceso a tu galería para guardar imágenes de propiedades.",
         "NSPhotoLibraryAddUsageDescription": "Valera necesita permiso para guardar imágenes en tu galería.",
+        "NSLocationWhenInUseUsageDescription": "Valera usa tu ubicación para mostrarte propiedades cercanas en el mapa.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.valerarealestate.app",
-      "versionCode": 10,
+      "versionCode": 11,
       "softwareKeyboardLayoutMode": "pan",
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
@@ -32,6 +36,11 @@
         "backgroundColor": "#1a6470"
       },
       "predictiveBackGestureEnabled": false,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCPML-wonbnHif1HswVfTk-ypInP1u94sE"
+        }
+      },
       "permissions": [
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -47,6 +56,15 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/withCppStandard",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
       [
         "expo-font",
         {
