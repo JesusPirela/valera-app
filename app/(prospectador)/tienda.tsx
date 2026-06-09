@@ -69,6 +69,7 @@ export default function Tienda() {
   const [ruletaMilestone, setRuletaMilestone] = useState(false)
   const [milestoneNivel, setMilestoneNivel]   = useState<number | undefined>()
   const [ruletaCfg, setRuletaCfg]             = useState<RuletaConfig>(CONFIG_DEFAULT)
+  const [cofresPendientes, setCofresPendientes] = useState(0)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -79,7 +80,7 @@ export default function Tienda() {
     setUserId(user.id)
 
     const [statsRes, itemsRes, comprasRes, cfgRes] = await Promise.all([
-      supabase.from('user_stats').select('valera_coins, xp').eq('id', user.id).maybeSingle(),
+      supabase.from('user_stats').select('valera_coins, xp, cofres_pendientes').eq('id', user.id).maybeSingle(),
       supabase.from('store_items').select('*').eq('disponible', true).order('orden'),
       supabase.from('store_compras')
         .select('id, created_at, costo_coins, estado, notas_admin, es_ruleta, es_milestone, nombre_premio, store_items(nombre, icono)')
@@ -96,6 +97,7 @@ export default function Tienda() {
     const xp    = (statsRes.data as any)?.xp ?? 0
     const nivel = calcularNivel(xp)
     setCoins(statsRes.data?.valera_coins ?? 0)
+    setCofresPendientes((statsRes.data as any)?.cofres_pendientes ?? 0)
     setItems((itemsRes.data ?? []) as StoreItem[])
     setCompras((comprasRes.data ?? []) as Compra[])
     setLoading(false)
@@ -137,6 +139,13 @@ export default function Tienda() {
 
   // Llamado por el modal cuando el usuario confirma abrir (toca el botón interno)
   async function onConfirmarAbrir(): Promise<boolean> {
+    // Usar cofre regalado primero (gratis)
+    if (cofresPendientes > 0) {
+      const { error } = await supabase.rpc('usar_cofre_pendiente')
+      if (error) { alerta('Error al abrir el cofre'); return false }
+      setCofresPendientes(prev => prev - 1)
+      return true
+    }
     const costo = ruletaCfg.costo
     if (coins < costo) {
       alerta(`Necesitas ${costo} Valera Coins para abrir el cofre. Tienes ${coins}.`)
@@ -214,8 +223,8 @@ export default function Tienda() {
         >
           <Text style={[s.tabTxt, tab === 'cofre' && s.tabTxtActive]}>
             🎁 Cofre
-            {compras.filter(c => esCofre(c) && c.estado === 'pendiente').length > 0 && (
-              <Text style={s.tabBadge}> {compras.filter(c => esCofre(c) && c.estado === 'pendiente').length}</Text>
+            {(cofresPendientes > 0 || compras.filter(c => esCofre(c) && c.estado === 'pendiente').length > 0) && (
+              <Text style={s.tabBadge}> {cofresPendientes + compras.filter(c => esCofre(c) && c.estado === 'pendiente').length}</Text>
             )}
           </Text>
         </TouchableOpacity>
@@ -228,11 +237,32 @@ export default function Tienda() {
             💡 Tras comprar, el equipo de Valera te contactará para entregar tu recompensa.
           </Text>
 
+          {/* Cofres regalados */}
+          {cofresPendientes > 0 && (
+            <TouchableOpacity style={s.cofreRegaloCard} onPress={abrirCofre}>
+              <View style={s.cofreLeft}>
+                <Text style={s.cofreIcn}>🎁</Text>
+                <View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={s.cofreNombre}>Cofre de Regalo</Text>
+                    <View style={s.gratisBadge}><Text style={s.gratisBadgeTxt}>GRATIS</Text></View>
+                  </View>
+                  <Text style={s.cofreSub}>
+                    {cofresPendientes === 1
+                      ? 'Tienes 1 cofre gratis disponible'
+                      : `Tienes ${cofresPendientes} cofres gratis disponibles`}
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: 22 }}>▶</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Cofre / Ruleta */}
           <TouchableOpacity
-            style={[s.cofreCard, coins < ruletaCfg.costo && s.cofreCardDis]}
+            style={[s.cofreCard, coins < ruletaCfg.costo && cofresPendientes === 0 && s.cofreCardDis]}
             onPress={abrirCofre}
-            disabled={coins < ruletaCfg.costo}
+            disabled={coins < ruletaCfg.costo && cofresPendientes === 0}
           >
             <View style={s.cofreLeft}>
               <Text style={s.cofreIcn}>🎁</Text>
@@ -357,6 +387,25 @@ export default function Tienda() {
       ) : (
         // ── Tab Cofre ──────────────────────────────────────────────
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          {cofresPendientes > 0 && (
+            <TouchableOpacity style={s.cofreRegaloCard} onPress={abrirCofre}>
+              <View style={s.cofreLeft}>
+                <Text style={s.cofreIcn}>🎁</Text>
+                <View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={s.cofreNombre}>¡Cofre(s) de regalo!</Text>
+                    <View style={s.gratisBadge}><Text style={s.gratisBadgeTxt}>GRATIS</Text></View>
+                  </View>
+                  <Text style={s.cofreSub}>
+                    {cofresPendientes === 1
+                      ? 'Pulsa para abrir tu cofre gratis'
+                      : `Tienes ${cofresPendientes} cofres gratis · Pulsa para abrir uno`}
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: 22 }}>▶</Text>
+            </TouchableOpacity>
+          )}
           {compras.filter(c => esCofre(c)).length === 0 ? (
             <View style={s.emptyHistorial}>
               <Text style={s.emptyIcn}>🎁</Text>
@@ -412,7 +461,7 @@ export default function Tienda() {
         nivel={milestoneNivel}
         premios={ruletaCfg.premios}
         costoGirar={ruletaCfg.costo}
-        puedePagar={coins >= ruletaCfg.costo}
+        puedePagar={coins >= ruletaCfg.costo || cofresPendientes > 0}
         onConfirmarAbrir={onConfirmarAbrir}
         onClose={() => setShowRuleta(false)}
         onGanar={onGanarPremio}
@@ -464,6 +513,17 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: GOLD,
   },
   cofreCardDis: { opacity: 0.5 },
+  cofreRegaloCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 12, marginBottom: 8, padding: 16,
+    backgroundColor: '#0d2518', borderRadius: 16,
+    borderWidth: 1.5, borderColor: '#2ecc71',
+  },
+  gratisBadge: {
+    backgroundColor: '#2ecc71', borderRadius: 5,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  gratisBadgeTxt: { fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 1 },
   cofreLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   cofreIcn:   { fontSize: 32 },
   cofreNombre:{ fontSize: 15, fontWeight: '800', color: GOLD },
