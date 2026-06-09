@@ -136,7 +136,6 @@ export default function DetallePropiedad() {
         .from('propiedades')
         .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, m2, estacionamientos, descripcion, created_by, asesor_id, es_constructora, nombre_constructora, lat, lng, propiedad_imagenes(url, orden)')
         .eq('id', id)
-        .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
         .single()
 
       if (error) throw error
