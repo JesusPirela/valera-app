@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert, Modal, Switch, Platform,
+  TextInput, ActivityIndicator, Alert, Modal, Platform,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
+import ToggleSwitch from '../../components/ToggleSwitch'
 
 type StoreItem = {
   id: string
@@ -307,7 +308,7 @@ export default function TiendaItems() {
             <View style={s.cardFooter}>
               <View style={s.switchRow}>
                 <Text style={s.switchLbl}>{item.disponible ? 'Disponible' : 'Oculto'}</Text>
-                <Switch
+                <ToggleSwitch
                   value={item.disponible}
                   onValueChange={() => toggleDisponible(item)}
                   trackColor={{ true: '#1a6470', false: '#ccc' }}
@@ -528,7 +529,7 @@ export default function TiendaItems() {
 
             <View style={s.switchRowModal}>
               <Text style={s.lbl}>Disponible en la tienda</Text>
-              <Switch
+              <ToggleSwitch
                 value={form.disponible}
                 onValueChange={v => setForm(f => ({ ...f, disponible: v }))}
                 trackColor={{ true: '#1a6470', false: '#ccc' }}

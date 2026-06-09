@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert, Modal, Switch, Platform,
+  TextInput, ActivityIndicator, Alert, Modal, Platform,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
+import ToggleSwitch from '../../components/ToggleSwitch'
 
 type Mision = {
   id: string
@@ -235,7 +236,7 @@ export default function AdminMisiones() {
                 <View style={s.cardFooter}>
                   <View style={s.switchRow}>
                     <Text style={[s.switchLabel, { color: c.textSub }]}>{m.activa ? 'Activa' : 'Inactiva'}</Text>
-                    <Switch
+                    <ToggleSwitch
                       value={m.activa}
                       onValueChange={() => toggleActiva(m)}
                       trackColor={{ true: '#1a6470', false: '#ccc' }}
@@ -372,7 +373,7 @@ export default function AdminMisiones() {
             {/* Activa */}
             <View style={s.switchRowModal}>
               <Text style={[s.fieldLabel, { color: c.textSub }]}>Misión activa</Text>
-              <Switch
+              <ToggleSwitch
                 value={form.activa}
                 onValueChange={v => setForm(f => ({ ...f, activa: v }))}
                 trackColor={{ true: '#1a6470', false: '#ccc' }}

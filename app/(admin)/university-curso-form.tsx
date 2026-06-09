@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, ActivityIndicator, Switch, Platform, Alert,
+  TouchableOpacity, ActivityIndicator, Platform, Alert,
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
+import ToggleSwitch from '../../components/ToggleSwitch'
 
 type TareaDraft = {
   id?: string
@@ -68,20 +69,20 @@ function TareaEditor({ tarea, onChange, onQuitar }: {
       />
       <View style={estilos.tareaToggleRow}>
         <View style={estilos.tareaToggleItem}>
-          <Switch
+          <ToggleSwitch
             value={tarea.requiere_archivo}
             onValueChange={(v) => onChange('requiere_archivo', v)}
             trackColor={{ false: '#ddd', true: '#1a6470' }}
-            thumbColor={tarea.requiere_archivo ? '#c9a84c' : '#fff'}
+            thumbColor="#fff"
           />
           <Text style={estilos.tareaToggleLabel}>Requiere subir archivo</Text>
         </View>
         <View style={estilos.tareaToggleItem}>
-          <Switch
+          <ToggleSwitch
             value={tarea.obligatoria}
             onValueChange={(v) => onChange('obligatoria', v)}
             trackColor={{ false: '#ddd', true: '#1a6470' }}
-            thumbColor={tarea.obligatoria ? '#c9a84c' : '#fff'}
+            thumbColor="#fff"
           />
           <Text style={estilos.tareaToggleLabel}>Obligatoria para completar</Text>
         </View>
@@ -369,7 +370,7 @@ export default function UniversityCursoForm() {
             <Text style={estilos.label}>Publicar curso</Text>
             <Text style={estilos.publishSub}>{publicado ? 'Visible para todos' : 'Borrador'}</Text>
           </View>
-          <Switch value={publicado} onValueChange={setPublicado} trackColor={{ false: '#ddd', true: '#1a6470' }} thumbColor={publicado ? '#c9a84c' : '#fff'} />
+          <ToggleSwitch value={publicado} onValueChange={setPublicado} trackColor={{ false: '#ddd', true: '#1a6470' }} thumbColor="#fff" />
         </View>
 
         <View style={estilos.publishRow}>
@@ -379,7 +380,7 @@ export default function UniversityCursoForm() {
               {esCertificacion ? '🎓 Al terminar, el alumno recibe un certificado PDF' : 'Sin certificado al completar'}
             </Text>
           </View>
-          <Switch value={esCertificacion} onValueChange={setEsCertificacion} trackColor={{ false: '#ddd', true: '#c9a84c' }} thumbColor={esCertificacion ? '#1a6470' : '#fff'} />
+          <ToggleSwitch value={esCertificacion} onValueChange={setEsCertificacion} trackColor={{ false: '#ddd', true: '#c9a84c' }} thumbColor="#fff" />
         </View>
 
         {/* Lecciones */}

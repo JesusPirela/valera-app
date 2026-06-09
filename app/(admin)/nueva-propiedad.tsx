@@ -12,7 +12,6 @@ import {
   Image,
   View,
   FlatList,
-  Switch,
 } from 'react-native'
 import { router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
@@ -22,6 +21,7 @@ import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
 import AsesorPicker from '../../components/ui/AsesorPicker'
 import { COLONIAS } from '../../lib/colonias'
+import ToggleSwitch from '../../components/ToggleSwitch'
 
 function generarUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -768,11 +768,11 @@ export default function NuevaPropiedad() {
             <Text style={styles.exclusivaLabel}>Propiedad exclusiva</Text>
             <Text style={styles.exclusivaDesc}>Solo visible para Prospectadores Plus</Text>
           </View>
-          <Switch
+          <ToggleSwitch
             value={exclusiva}
             onValueChange={setExclusiva}
             trackColor={{ false: '#ddd', true: '#c0392b' }}
-            thumbColor={exclusiva ? '#fff' : '#f4f3f4'}
+            thumbColor="#fff"
           />
         </View>
 
@@ -781,11 +781,11 @@ export default function NuevaPropiedad() {
             <Text style={styles.exclusivaLabel}>Propiedad de constructora</Text>
             <Text style={styles.exclusivaDesc}>Desarrollo en construcción o con unidades nuevas</Text>
           </View>
-          <Switch
+          <ToggleSwitch
             value={esConstructora}
             onValueChange={setEsConstructora}
             trackColor={{ false: '#ddd', true: '#1a6470' }}
-            thumbColor={esConstructora ? '#fff' : '#f4f3f4'}
+            thumbColor="#fff"
           />
         </View>
         {esConstructora && (

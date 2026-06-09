@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
-import { Image, Text, TouchableOpacity, View, StyleSheet, Switch } from 'react-native'
+import { Image, Text, TouchableOpacity, View, StyleSheet } from 'react-native'
+import ToggleSwitch from '../../components/ToggleSwitch'
 import { Stack, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
@@ -73,12 +74,11 @@ export default function AdminLayout() {
                 </View>
               )}
             </TouchableOpacity>
-            <Switch
+            <ToggleSwitch
               value={darkMode}
               onValueChange={toggleDarkMode}
               trackColor={{ false: '#2a475e', true: '#c9a84c' }}
-              thumbColor={darkMode ? '#fff' : '#fff'}
-              style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+              thumbColor="#fff"
             />
             <TouchableOpacity onPress={() => supabase.auth.signOut()}>
               <Text style={styles.salirText}>Salir</Text>

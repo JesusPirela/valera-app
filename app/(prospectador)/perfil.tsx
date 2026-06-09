@@ -1,12 +1,13 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Platform, Alert, Image, Switch,
+  TextInput, ActivityIndicator, Platform, Alert, Image,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { useTheme, useColors } from '../../lib/ThemeContext'
+import ToggleSwitch from '../../components/ToggleSwitch'
 import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
 
 const COLORES_PRESET = [
@@ -312,7 +313,7 @@ export default function Perfil() {
               {darkMode ? 'La app usa fondos oscuros' : 'La app usa fondos claros'}
             </Text>
           </View>
-          <Switch
+          <ToggleSwitch
             value={darkMode}
             onValueChange={toggleDarkMode}
             trackColor={{ false: '#dde8e9', true: colorAcento + '88' }}
