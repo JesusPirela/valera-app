@@ -183,6 +183,12 @@ export default function ProspectadorPropiedades() {
   })
 
   useFocusEffect(useCallback(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user?.id) return
+      supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
+        if (data?.role === 'admin' || data?.role === 'supervisor') router.replace('/(admin)/propiedades')
+      })
+    })
     if (togglingRef.current.size === 0) {
       const state = queryClient.getQueryState(['prospectador-propiedades'])
       const isStale = !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt > 1000 * 60 * 5

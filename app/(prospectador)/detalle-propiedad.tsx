@@ -456,9 +456,18 @@ export default function DetallePropiedad() {
       ])
 
       const imagenPrincipal = imagenesConSrc[0]
-      const galeriaHTML = imagenesConSrc.slice(1, 7).map(img =>
-        `<img src="${img.src}" class="foto-galeria" />`
-      ).join('')
+      // Agrupar el resto de imágenes en bloques de máximo 6 por hoja
+      const fotosRestantes = imagenesConSrc.slice(1)
+      const gruposFotos: typeof fotosRestantes[] = []
+      for (let i = 0; i < fotosRestantes.length; i += 6) {
+        gruposFotos.push(fotosRestantes.slice(i, i + 6))
+      }
+      const galeriaHTML = gruposFotos.map((grupo, i) => `
+        <div class="galeria-grupo">
+          ${i === 0 ? '<div class="seccion">Galería</div>' : ''}
+          <div class="fotos">${grupo.map(img => `<img src="${img.src}" class="foto-galeria" />`).join('')}</div>
+        </div>
+      `).join('')
 
       const cars: string[] = []
       if (propiedad.recamaras != null) cars.push(`<div class="car"><span class="car-val">${propiedad.recamaras}</span><span class="car-lbl">Recámaras</span></div>`)
@@ -476,10 +485,12 @@ export default function DetallePropiedad() {
         const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=600x220&scale=2&markers=color:0x1a6470%7C${lat},${lng}&key=${GMAPS_KEY}`
         const mapSrc = await imagenABase64(staticUrl)
         mapaHTML = `
-          <div class="seccion">Ubicación</div>
-          <div class="mapa-box">
-            <img src="${mapSrc}" class="mapa-img" />
-            <div class="mapa-dir">📍 ${esc(propiedad.direccion)}</div>
+          <div class="seccion-grupo">
+            <div class="seccion">Ubicación</div>
+            <div class="mapa-box">
+              <img src="${mapSrc}" class="mapa-img" />
+              <div class="mapa-dir">📍 ${esc(propiedad.direccion)}</div>
+            </div>
           </div>`
       }
 
@@ -511,6 +522,8 @@ export default function DetallePropiedad() {
         .mapa-img { width: 100%; height: 200px; object-fit: cover; display: block; }
         .mapa-dir { background: #f0f5f5; padding: 10px 14px; font-size: 12px; color: #1a6470; font-weight: 600; }
         .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; break-inside: avoid; page-break-inside: avoid; }
+        .galeria-grupo { break-inside: avoid; page-break-inside: avoid; }
+        .seccion-grupo { break-inside: avoid; page-break-inside: avoid; }
         .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; break-inside: avoid; page-break-inside: avoid; }
       </style></head><body>
       <div class="header">
@@ -529,9 +542,9 @@ export default function DetallePropiedad() {
           <img src="${inmobiliariaLogoSrc}" class="inmob-logo" />
           ${propiedad.inmobiliarias.nombre ? `<div class="inmob-nombre">${esc(propiedad.inmobiliarias.nombre)}</div>` : ''}
         </div>` : ''}
-        ${cars.length > 0 ? `<div class="seccion">Características</div><div class="cars">${cars.join('')}</div>` : ''}
+        ${cars.length > 0 ? `<div class="seccion-grupo"><div class="seccion">Características</div><div class="cars">${cars.join('')}</div></div>` : ''}
         ${propiedad.descripcion ? `<div class="seccion">Descripción</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
-        ${galeriaHTML ? `<div class="seccion">Galería</div><div class="fotos">${galeriaHTML}</div>` : ''}
+        ${galeriaHTML}
         ${mapaHTML}
         <div class="footer">Valera Real Estate · valerarealestate.com</div>
       </div>
@@ -600,7 +613,7 @@ export default function DetallePropiedad() {
           // Evita cortar imágenes/tarjetas/mapa a la mitad entre páginas
           const containerRect = container.getBoundingClientRect()
           const scaleFactor = canvas.width / containerRect.width
-          const avoidRanges = Array.from(container.querySelectorAll('img, .car, .mapa-box, .footer'))
+          const avoidRanges = Array.from(container.querySelectorAll('img, .car, .mapa-box, .footer, .galeria-grupo, .seccion-grupo'))
             .map(el => {
               const r = el.getBoundingClientRect()
               return {
