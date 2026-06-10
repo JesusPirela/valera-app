@@ -74,19 +74,31 @@ export default function GestionCofres() {
 
   async function cargarUsuarios() {
     setLoadingUsuarios(true)
-    const { data, error } = await supabase
+    // Igual que tienda-compras: primero profiles, luego user_stats por IDs
+    const { data: perfs } = await supabase
       .from('profiles')
-      .select('id, nombre, email, user_stats(cofres_pendientes)')
+      .select('id, nombre')
       .neq('role', 'admin')
       .order('nombre')
-    if (!error && data) {
-      setUsuarios(data.map((p: any) => ({
-        id: p.id,
-        nombre: p.nombre,
-        email: p.email,
-        cofres_pendientes: p.user_stats?.cofres_pendientes ?? 0,
-      })))
+    if (!perfs) { setLoadingUsuarios(false); return }
+
+    const ids = perfs.map((p: any) => p.id)
+    const { data: stats } = await supabase
+      .from('user_stats')
+      .select('id, cofres_pendientes')
+      .in('id', ids)
+
+    const statsMap: Record<string, number> = {}
+    for (const s of (stats ?? [])) {
+      statsMap[(s as any).id] = (s as any).cofres_pendientes ?? 0
     }
+
+    setUsuarios(perfs.map((p: any) => ({
+      id: p.id,
+      nombre: p.nombre,
+      email: '',
+      cofres_pendientes: statsMap[p.id] ?? 0,
+    })))
     setLoadingUsuarios(false)
   }
 
@@ -163,8 +175,7 @@ export default function GestionCofres() {
 
   const usuariosFiltrados = usuarios.filter(u =>
     !busqueda.trim() ||
-    (u.nombre ?? '').toLowerCase().includes(busqueda.toLowerCase()) ||
-    u.email.toLowerCase().includes(busqueda.toLowerCase())
+    (u.nombre ?? '').toLowerCase().includes(busqueda.toLowerCase())
   )
 
   const totalPendientes = usuarios.reduce((s, u) => s + u.cofres_pendientes, 0)
@@ -260,16 +271,13 @@ export default function GestionCofres() {
                 >
                   <View style={st.userAvatar}>
                     <Text style={st.userAvatarTxt}>
-                      {(u.nombre ?? u.email)[0].toUpperCase()}
+                      {(u.nombre ?? '?')[0].toUpperCase()}
                     </Text>
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[st.userNombre, { color: c.text }]} numberOfLines={1}>
-                      {u.nombre ?? u.email}
+                      {u.nombre ?? '(sin nombre)'}
                     </Text>
-                    {u.nombre ? (
-                      <Text style={[st.userEmail, { color: c.textMute }]} numberOfLines={1}>{u.email}</Text>
-                    ) : null}
                   </View>
                   <View style={st.cofresInfo}>
                     <Text style={st.cofresN}>{u.cofres_pendientes}</Text>
@@ -342,12 +350,12 @@ export default function GestionCofres() {
               <View style={[st.modalUsuario, { backgroundColor: c.bg }]}>
                 <View style={st.userAvatar}>
                   <Text style={st.userAvatarTxt}>
-                    {(usuarioSelec.nombre ?? usuarioSelec.email)[0].toUpperCase()}
+                    {(usuarioSelec.nombre ?? '?')[0].toUpperCase()}
                   </Text>
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[st.userNombre, { color: c.text }]} numberOfLines={1}>
-                    {usuarioSelec.nombre ?? usuarioSelec.email}
+                    {usuarioSelec.nombre ?? '(sin nombre)'}
                   </Text>
                   <Text style={[st.userEmail, { color: c.textMute }]}>
                     Tiene {usuarioSelec.cofres_pendientes} cofres pendientes
