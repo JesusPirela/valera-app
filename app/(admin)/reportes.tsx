@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Platform, Alert,
@@ -33,6 +33,20 @@ type DiaActividad = {
   usuarios_activos: number
 }
 
+type ReportProgramado = {
+  id: string
+  frecuencia: 'diario' | 'semanal' | 'mensual'
+  hora_envio: string
+  dia_semana: number | null
+  destinatarios: string[]
+  activo: boolean
+  ultimo_envio: string | null
+}
+
+// ── Constantes ────────────────────────────────────────────────────────────────
+const FREQ_LABELS: Record<string, string> = { diario: 'Diario', semanal: 'Semanal', mensual: 'Mensual' }
+const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+
 // ── Helpers de fecha ──────────────────────────────────────────────────────────
 function sdDia(d: Date) { const c = new Date(d); c.setHours(0,0,0,0); return c }
 function edDia(d: Date) { const c = new Date(d); c.setHours(23,59,59,999); return c }
@@ -66,7 +80,7 @@ function formatHora(iso: string | null) {
 
 function formatFechaCorta(iso: string | null) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+  return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 function formatRangoLabel(inicio: Date, fin: Date) {
@@ -161,13 +175,12 @@ const mS = StyleSheet.create({
   valor: { fontSize: 14, fontWeight: '800', color: '#fff', minWidth: 30, textAlign: 'right' },
 })
 
-function UserCard({ u, rank, maxActividad, expanded, onToggle, onPress }: {
+function UserCard({ u, rank, maxActividad, expanded, onToggle }: {
   u: UsuarioMetricas
   rank: number
   maxActividad: number
   expanded: boolean
   onToggle: () => void
-  onPress: () => void
 }) {
   const st = statusConfig(u.actividad_total, maxActividad)
   const pct = maxActividad > 0 ? u.actividad_total / maxActividad : 0
@@ -177,36 +190,26 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, onPress }: {
   return (
     <View style={uS.card}>
       <TouchableOpacity style={uS.header} onPress={onToggle} activeOpacity={0.8}>
-        {/* Rank */}
         <View style={[uS.rankBadge, rank <= 3 ? uS.rankTop : null]}>
           <Text style={[uS.rankTxt, rank <= 3 ? uS.rankTopTxt : null]}>#{rank}</Text>
         </View>
-
-        {/* Status dot */}
         <View style={[uS.statusDot, { backgroundColor: st.color }]} />
-
-        {/* Name + label */}
         <View style={{ flex: 1 }}>
           <Text style={uS.nombre} numberOfLines={1}>{u.nombre ?? 'Usuario'}</Text>
           <Text style={[uS.statusLabel, { color: st.color }]}>{st.emoji} {st.label}</Text>
         </View>
-
-        {/* Quick metrics */}
         <View style={uS.quickMetrics}>
           <View style={uS.qm}><Text style={uS.qmVal}>{u.clientes_nuevos}</Text><Text style={uS.qmLbl}>clientes</Text></View>
           <View style={uS.qm}><Text style={uS.qmVal}>{u.seguimientos}</Text><Text style={uS.qmLbl}>seguim.</Text></View>
           <View style={uS.qm}><Text style={uS.qmVal}>{formatMinutos(u.minutos_conexion)}</Text><Text style={uS.qmLbl}>tiempo</Text></View>
         </View>
-
         <Text style={uS.chevron}>{expanded ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 
-      {/* Activity bar */}
       <View style={uS.barBg}>
         <View style={[uS.barFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: st.color }]} />
       </View>
 
-      {/* Expanded detail */}
       {expanded && (
         <View style={uS.detail}>
           <View style={uS.detailGrid}>
@@ -223,8 +226,6 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, onPress }: {
               <MetricRow icono="📥" label="Fotos guardadas"       valor={u.descargas_propiedades}   />
             </View>
           </View>
-
-          {/* Tiempo */}
           <View style={uS.tiempoRow}>
             <View style={uS.tiempoItem}>
               <Text style={uS.tiempoLbl}>⏱ Tiempo activo</Text>
@@ -239,8 +240,6 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, onPress }: {
               <Text style={uS.tiempoVal}>{formatHora(u.ultimo_acceso)}</Text>
             </View>
           </View>
-
-          {/* Score */}
           <View style={[uS.scoreRow, { backgroundColor: st.bg }]}>
             <Text style={[uS.scoreLbl, { color: st.color }]}>Puntaje de productividad</Text>
             <Text style={[uS.scoreVal, { color: st.color }]}>{u.actividad_total} pts</Text>
@@ -265,7 +264,7 @@ const uS = StyleSheet.create({
   qm:         { alignItems: 'center', minWidth: 42 },
   qmVal:      { fontSize: 14, fontWeight: '900', color: '#fff' },
   qmLbl:      { fontSize: 9, color: '#556a7a', marginTop: 1 },
-  barBg:      { height: 3, backgroundColor: '#1e3448', marginHorizontal: 0 },
+  barBg:      { height: 3, backgroundColor: '#1e3448' },
   barFill:    { height: 3, borderRadius: 0 },
   detail:     { padding: 14, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#1e3448' },
   detailGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
@@ -279,7 +278,7 @@ const uS = StyleSheet.create({
   scoreVal:   { fontSize: 20, fontWeight: '900' },
 })
 
-// ── HTML del reporte ──────────────────────────────────────────────────────────
+// ── HTML del reporte (para PDF web) ──────────────────────────────────────────
 function generarReporteHTML(
   usuarios: UsuarioMetricas[],
   tendencia: DiaActividad[],
@@ -410,28 +409,46 @@ export default function Reportes() {
   const [tendencia, setTendencia] = useState<DiaActividad[]>([])
   const [loading, setLoading]     = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [modalEmail, setModalEmail] = useState(false)
-  const [emails, setEmails]         = useState('valerarealestateqro@gmail.com')
   const [exportando, setExportando] = useState(false)
 
-  useFocusEffect(useCallback(() => { cargar() }, [periodo, rangoInicio, rangoFin]))
+  // Email inmediato
+  const [modalEmail, setModalEmail]   = useState(false)
+  const [emails, setEmails]           = useState('valerarealestateqro@gmail.com')
+  const [enviando, setEnviando]       = useState(false)
+  const [enviandoMsg, setEnviandoMsg] = useState('')
+
+  // Programaciones
+  const [programados, setProgramados]   = useState<ReportProgramado[]>([])
+  const [modalSchedule, setModalSchedule] = useState(false)
+  const [schedFreq, setSchedFreq]   = useState<'diario' | 'semanal' | 'mensual'>('diario')
+  const [schedHora, setSchedHora]   = useState('09:00')
+  const [schedDia, setSchedDia]     = useState(1)
+  const [schedEmails, setSchedEmails] = useState('valerarealestateqro@gmail.com')
+
+  useFocusEffect(useCallback(() => {
+    cargar()
+    cargarProgramados()
+  }, [periodo, rangoInicio, rangoFin]))
 
   async function cargar() {
     setLoading(true)
     const { inicio, fin } = getRango(periodo, rangoInicio, rangoFin)
     const [uRes, tRes] = await Promise.all([
-      supabase.rpc('get_productividad_equipo', {
-        p_inicio: inicio.toISOString(),
-        p_fin:    fin.toISOString(),
-      }),
-      supabase.rpc('get_tendencia_equipo', {
-        p_inicio: inicio.toISOString(),
-        p_fin:    fin.toISOString(),
-      }),
+      supabase.rpc('get_productividad_equipo', { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
+      supabase.rpc('get_tendencia_equipo',     { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
     ])
     setUsuarios((uRes.data as UsuarioMetricas[] | null) ?? [])
     setTendencia((tRes.data as DiaActividad[] | null) ?? [])
     setLoading(false)
+  }
+
+  async function cargarProgramados() {
+    const { data } = await supabase
+      .from('report_programados')
+      .select('*')
+      .eq('activo', true)
+      .order('created_at')
+    setProgramados((data as ReportProgramado[] | null) ?? [])
   }
 
   function aplicarRango() {
@@ -459,27 +476,62 @@ export default function Reportes() {
     setExportando(false)
   }
 
-  function enviarEmail() {
+  async function enviarEmailConFuncion() {
     const { inicio, fin } = getRango(periodo, rangoInicio, rangoFin)
-    const label = formatRangoLabel(inicio, fin)
-    const top = usuarios.slice(0, 3).map((u, i) => `#${i+1} ${u.nombre ?? 'Usuario'}: ${u.actividad_total} pts`).join('\n')
-    const resumen = [
-      `📊 Reporte de Productividad – ${label}`,
-      '',
-      `👥 Usuarios activos: ${usuarios.filter(u => u.actividad_total > 0).length}/${usuarios.length}`,
-      `🏆 Top performers:`,
-      top,
-      '',
-      `📅 Clientes nuevos (equipo): ${usuarios.reduce((s,u)=>s+u.clientes_nuevos,0)}`,
-      `✅ Seguimientos (equipo): ${usuarios.reduce((s,u)=>s+u.seguimientos,0)}`,
-      `📅 Citas generadas (equipo): ${usuarios.reduce((s,u)=>s+u.citas,0)}`,
-    ].join('\n')
+    const label  = formatRangoLabel(inicio, fin)
+    const destinos = emails.split(/[,;\n]/).map(e => e.trim()).filter(Boolean)
+    if (!destinos.length) { alerta('Ingresa al menos un destinatario'); return }
 
-    const destinos = emails.split(/[,;\n]/).map(e => e.trim()).filter(Boolean).join(',')
-    const mailto = `mailto:${destinos}?subject=${encodeURIComponent(`Reporte Productividad – ${label}`)}&body=${encodeURIComponent(resumen)}`
-    if (Platform.OS === 'web') window.open(mailto, '_blank')
-    else { /* React Native Linking */ alerta('Copia el resumen y envíalo manualmente.') }
-    setModalEmail(false)
+    setEnviando(true)
+    setEnviandoMsg('Generando reporte…')
+    try {
+      const { data, error } = await supabase.functions.invoke('enviar-reporte', {
+        body: {
+          destinatarios: destinos,
+          rangoInicio:   inicio.toISOString(),
+          rangoFin:      fin.toISOString(),
+          rangoLabel:    label,
+        },
+      })
+      if (error) throw error
+      if ((data as any)?.error) throw new Error((data as any).error)
+      setModalEmail(false)
+      alerta(`✅ Reporte enviado a ${destinos.length} destinatario${destinos.length > 1 ? 's' : ''}`)
+    } catch (err: any) {
+      alerta('Error al enviar: ' + (err.message ?? 'Intenta de nuevo'))
+    } finally {
+      setEnviando(false)
+      setEnviandoMsg('')
+    }
+  }
+
+  async function guardarProgramado() {
+    const hora = schedHora.trim()
+    if (!/^\d{1,2}:\d{2}$/.test(hora)) { alerta('Formato de hora inválido. Usa HH:MM (ej. 09:00)'); return }
+    const destinos = schedEmails.split(/[,;\n]/).map(e => e.trim()).filter(Boolean)
+    if (!destinos.length) { alerta('Ingresa al menos un destinatario'); return }
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { alerta('No autenticado'); return }
+
+    const { error } = await supabase.from('report_programados').insert({
+      admin_id:      user.id,
+      frecuencia:    schedFreq,
+      hora_envio:    hora,
+      dia_semana:    schedFreq === 'semanal' ? schedDia : null,
+      destinatarios: destinos,
+      activo:        true,
+    })
+
+    if (error) { alerta('Error al guardar: ' + error.message); return }
+    await cargarProgramados()
+    setModalSchedule(false)
+    alerta(`✅ Programación guardada · ${FREQ_LABELS[schedFreq]} a las ${hora}`)
+  }
+
+  async function eliminarProgramado(id: string) {
+    await supabase.from('report_programados').update({ activo: false }).eq('id', id)
+    setProgramados(prev => prev.filter(p => p.id !== id))
   }
 
   const { inicio, fin } = getRango(periodo, rangoInicio, rangoFin)
@@ -550,6 +602,71 @@ export default function Reportes() {
             </TouchableOpacity>
           </View>
 
+          {/* ── EXPORTAR Y PROGRAMAR (arriba) ── */}
+          <View style={s.exportTopCard}>
+            <View style={s.exportTopHeader}>
+              <Text style={s.exportTopTitle}>📤 Exportar reporte</Text>
+              {programados.length > 0 && (
+                <View style={s.schedBadge}>
+                  <Text style={s.schedBadgeTxt}>⏰ {programados.length} activa{programados.length > 1 ? 's' : ''}</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={s.exportRow}>
+              <TouchableOpacity
+                style={[s.exportBtn, exportando && { opacity: 0.6 }]}
+                onPress={exportarPDF}
+                disabled={exportando || usuarios.length === 0}
+              >
+                <Text style={s.exportBtnIcn}>📄</Text>
+                <Text style={s.exportBtnTxt}>PDF</Text>
+                <Text style={s.exportBtnSub}>Imprimir</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[s.exportBtn, s.exportBtnGreen]}
+                onPress={() => setModalEmail(true)}
+                disabled={usuarios.length === 0}
+              >
+                <Text style={s.exportBtnIcn}>📧</Text>
+                <Text style={s.exportBtnTxt}>Enviar</Text>
+                <Text style={s.exportBtnSub}>Email ahora</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[s.exportBtn, s.exportBtnGold]}
+                onPress={() => setModalSchedule(true)}
+              >
+                <Text style={s.exportBtnIcn}>⏰</Text>
+                <Text style={s.exportBtnTxt}>Programar</Text>
+                <Text style={s.exportBtnSub}>Automático</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Lista de programaciones activas */}
+            {programados.map(p => (
+              <View key={p.id} style={s.schedItem}>
+                <Text style={s.schedItemEmoji}>
+                  {p.frecuencia === 'diario' ? '📅' : p.frecuencia === 'semanal' ? '📆' : '🗓️'}
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.schedItemTitulo}>
+                    {FREQ_LABELS[p.frecuencia]} · {p.hora_envio}
+                    {p.frecuencia === 'semanal' ? ` · ${DIAS_SEMANA[p.dia_semana ?? 1]}` : ''}
+                  </Text>
+                  <Text style={s.schedItemDest} numberOfLines={1}>{p.destinatarios.join(', ')}</Text>
+                  {p.ultimo_envio && (
+                    <Text style={s.schedItemUltimo}>Último envío: {formatFechaCorta(p.ultimo_envio)}</Text>
+                  )}
+                </View>
+                <TouchableOpacity style={s.schedDeleteBtn} onPress={() => eliminarProgramado(p.id)}>
+                  <Text style={{ fontSize: 18 }}>🗑️</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+
           {/* KPI Cards */}
           <View style={s.kpiRow}>
             <KpiCard icono="👥" label="Usuarios activos"  valor={activos}        color="#2ecc71" sub={`${inactivos} inactivos`} />
@@ -600,7 +717,6 @@ export default function Reportes() {
                 maxActividad={maxActividad}
                 expanded={expandedId === u.id}
                 onToggle={() => setExpandedId(expandedId === u.id ? null : u.id)}
-                onPress={() => setExpandedId(u.id)}
               />
             ))}
           </View>
@@ -632,60 +748,112 @@ export default function Reportes() {
             </View>
           )}
 
-          {/* Export section */}
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Exportar reporte</Text>
-            <View style={s.exportRow}>
-              <TouchableOpacity
-                style={[s.exportBtn, exportando && { opacity: 0.6 }]}
-                onPress={exportarPDF}
-                disabled={exportando || usuarios.length === 0}
-              >
-                <Text style={s.exportBtnIcn}>📄</Text>
-                <Text style={s.exportBtnTxt}>Descargar PDF</Text>
-                <Text style={s.exportBtnSub}>Abre vista de impresión</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.exportBtn, s.exportBtnGreen]}
-                onPress={() => setModalEmail(true)}
-                disabled={usuarios.length === 0}
-              >
-                <Text style={s.exportBtnIcn}>📧</Text>
-                <Text style={s.exportBtnTxt}>Enviar por email</Text>
-                <Text style={s.exportBtnSub}>Abre cliente de correo</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
         </ScrollView>
       )}
 
-      {/* Modal email */}
-      <Modal visible={modalEmail} transparent animationType="slide" onRequestClose={() => setModalEmail(false)}>
+      {/* ── Modal: Enviar email ahora ── */}
+      <Modal visible={modalEmail} transparent animationType="slide" onRequestClose={() => !enviando && setModalEmail(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalSheet, { backgroundColor: col.card }]}>
             <Text style={s.modalTitle}>📧 Enviar reporte por email</Text>
-            <Text style={[s.modalDesc, { color: col.textSub }]}>
-              Ingresa los correos separados por coma. Se abrirá tu cliente de correo con el resumen del reporte.
-            </Text>
+
+            {enviando ? (
+              <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+                <ActivityIndicator size="large" color="#1a6470" />
+                <Text style={{ color: col.textSub, marginTop: 12, fontSize: 14 }}>{enviandoMsg || 'Enviando…'}</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={[s.fieldLabel, { color: col.textSub }]}>Destinatarios</Text>
+                <TextInput
+                  style={[s.modalInput, { backgroundColor: col.input, borderColor: col.inputBorder, color: col.inputText }]}
+                  value={emails}
+                  onChangeText={setEmails}
+                  placeholder="correo@empresa.com, otro@ejemplo.com"
+                  placeholderTextColor={col.textMute}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  multiline
+                />
+                <Text style={[s.modalHint, { color: col.textMute }]}>
+                  Período: {rangoLabel}
+                </Text>
+                <TouchableOpacity style={s.modalBtn} onPress={enviarEmailConFuncion} disabled={usuarios.length === 0}>
+                  <Text style={s.modalBtnTxt}>📤 Enviar reporte</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.modalCancelar} onPress={() => setModalEmail(false)}>
+                  <Text style={{ color: '#aaa', fontSize: 14 }}>Cancelar</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Modal: Programar envío automático ── */}
+      <Modal visible={modalSchedule} transparent animationType="slide" onRequestClose={() => setModalSchedule(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalSheet, { backgroundColor: col.card }]}>
+            <Text style={s.modalTitle}>⏰ Programar envío automático</Text>
+
+            <Text style={[s.fieldLabel, { color: col.textSub }]}>Frecuencia</Text>
+            <View style={s.freqRow}>
+              {(['diario', 'semanal', 'mensual'] as const).map(f => (
+                <TouchableOpacity
+                  key={f}
+                  style={[s.freqBtn, schedFreq === f && s.freqBtnActivo]}
+                  onPress={() => setSchedFreq(f)}
+                >
+                  <Text style={[s.freqBtnTxt, schedFreq === f && s.freqBtnTxtActivo]}>{FREQ_LABELS[f]}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {schedFreq === 'semanal' && (
+              <>
+                <Text style={[s.fieldLabel, { color: col.textSub }]}>Día de la semana</Text>
+                <View style={s.diasRow}>
+                  {DIAS_SEMANA.map((d, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={[s.diaBtn, schedDia === i && s.diaBtnActivo]}
+                      onPress={() => setSchedDia(i)}
+                    >
+                      <Text style={[s.diaBtnTxt, schedDia === i && s.diaBtnTxtActivo]}>{d}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            <Text style={[s.fieldLabel, { color: col.textSub }]}>Hora de envío</Text>
+            <TextInput
+              style={[s.modalInput, { backgroundColor: col.input, borderColor: col.inputBorder, color: col.inputText }]}
+              value={schedHora}
+              onChangeText={setSchedHora}
+              placeholder="09:00"
+              placeholderTextColor={col.textMute}
+              keyboardType="numbers-and-punctuation"
+              maxLength={5}
+            />
+            <Text style={[s.modalHint, { color: col.textMute }]}>Formato 24h · Hora de México (CST)</Text>
+
             <Text style={[s.fieldLabel, { color: col.textSub }]}>Destinatarios</Text>
             <TextInput
               style={[s.modalInput, { backgroundColor: col.input, borderColor: col.inputBorder, color: col.inputText }]}
-              value={emails}
-              onChangeText={setEmails}
+              value={schedEmails}
+              onChangeText={setSchedEmails}
               placeholder="correo@empresa.com, otro@ejemplo.com"
               placeholderTextColor={col.textMute}
               keyboardType="email-address"
               autoCapitalize="none"
               multiline
             />
-            <Text style={[s.modalHint, { color: col.textMute }]}>
-              Período: {rangoLabel}
-            </Text>
-            <TouchableOpacity style={s.modalBtn} onPress={enviarEmail}>
-              <Text style={s.modalBtnTxt}>📤 Abrir cliente de correo</Text>
+
+            <TouchableOpacity style={s.modalBtn} onPress={guardarProgramado}>
+              <Text style={s.modalBtnTxt}>💾 Guardar programación</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.modalCancelar} onPress={() => setModalEmail(false)}>
+            <TouchableOpacity style={s.modalCancelar} onPress={() => setModalSchedule(false)}>
               <Text style={{ color: '#aaa', fontSize: 14 }}>Cancelar</Text>
             </TouchableOpacity>
           </View>
@@ -713,10 +881,36 @@ const s = StyleSheet.create({
   rangoBtn:   { backgroundColor: TEAL, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   rangoBtnTxt:{ color: '#fff', fontWeight: '700', fontSize: 12 },
 
-  rangoHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  rangoHeader:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   rangoHeaderTxt:{ fontSize: 14, fontWeight: '700', color: '#7a9ab5' },
-  recargarBtn:  { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#1e3448' },
-  recargarTxt:  { fontSize: 12, color: '#c9a84c', fontWeight: '700' },
+  recargarBtn:   { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#1e3448' },
+  recargarTxt:   { fontSize: 12, color: GOLD, fontWeight: '700' },
+
+  // ── Export top card ──
+  exportTopCard:   { backgroundColor: '#111f2e', borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#1e3448' },
+  exportTopHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  exportTopTitle:  { fontSize: 12, fontWeight: '800', color: '#7a9ab5', textTransform: 'uppercase', letterSpacing: 0.5 },
+  schedBadge:      { backgroundColor: '#1a1200', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: GOLD + '44' },
+  schedBadgeTxt:   { fontSize: 10, color: GOLD, fontWeight: '700' },
+
+  exportRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  exportBtn: {
+    flex: 1, backgroundColor: TEAL, borderRadius: 12,
+    padding: 12, alignItems: 'center', gap: 3,
+  },
+  exportBtnGreen: { backgroundColor: '#2e7d32' },
+  exportBtnGold:  { backgroundColor: '#7a4f00' },
+  exportBtnIcn:   { fontSize: 22 },
+  exportBtnTxt:   { color: '#fff', fontWeight: '800', fontSize: 13 },
+  exportBtnSub:   { color: 'rgba(255,255,255,.65)', fontSize: 9 },
+
+  // Schedule items
+  schedItem:       { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#0d1b2a', borderRadius: 10, padding: 10, marginTop: 8, borderWidth: 1, borderColor: '#1e3448' },
+  schedItemEmoji:  { fontSize: 20 },
+  schedItemTitulo: { fontSize: 13, fontWeight: '700', color: '#fff', marginBottom: 2 },
+  schedItemDest:   { fontSize: 11, color: '#7a9ab5' },
+  schedItemUltimo: { fontSize: 10, color: '#556a7a', marginTop: 2 },
+  schedDeleteBtn:  { padding: 6 },
 
   kpiRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
 
@@ -738,24 +932,26 @@ const s = StyleSheet.create({
   teamMetricLbl: { fontSize: 13, color: '#c0d0dc' },
   teamMetricVal: { fontSize: 16, fontWeight: '900', color: '#fff', minWidth: 36, textAlign: 'right' },
 
-  exportRow: { flexDirection: 'row', gap: 10 },
-  exportBtn: {
-    flex: 1, backgroundColor: TEAL, borderRadius: 14,
-    padding: 16, alignItems: 'center', gap: 4,
-  },
-  exportBtnGreen: { backgroundColor: '#2e7d32' },
-  exportBtnIcn:   { fontSize: 24 },
-  exportBtnTxt:   { color: '#fff', fontWeight: '800', fontSize: 14 },
-  exportBtnSub:   { color: 'rgba(255,255,255,.65)', fontSize: 10 },
-
+  // ── Modals ──
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,.5)', justifyContent: 'flex-end' },
   modalSheet:   { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 },
-  modalTitle:   { fontSize: 18, fontWeight: '800', color: TEAL, marginBottom: 8 },
-  modalDesc:    { fontSize: 13, lineHeight: 18, marginBottom: 16 },
+  modalTitle:   { fontSize: 18, fontWeight: '800', color: TEAL, marginBottom: 14 },
   fieldLabel:   { fontSize: 12, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase' },
-  modalInput:   { borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, minHeight: 60, textAlignVertical: 'top' },
-  modalHint:    { fontSize: 11, marginTop: 6, marginBottom: 16 },
-  modalBtn:     { backgroundColor: TEAL, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  modalInput:   { borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, minHeight: 48, textAlignVertical: 'top', marginBottom: 4 },
+  modalHint:    { fontSize: 11, marginBottom: 14 },
+  modalBtn:     { backgroundColor: TEAL, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
   modalBtnTxt:  { color: '#fff', fontWeight: '800', fontSize: 15 },
   modalCancelar:{ alignItems: 'center', paddingVertical: 14 },
+
+  // Freq / days selectors
+  freqRow:         { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  freqBtn:         { flex: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center', borderWidth: 1, borderColor: '#2a475e', backgroundColor: '#0d1b2a' },
+  freqBtnActivo:   { backgroundColor: TEAL, borderColor: TEAL },
+  freqBtnTxt:      { fontSize: 12, fontWeight: '600', color: '#556a7a' },
+  freqBtnTxtActivo:{ color: '#fff' },
+  diasRow:         { flexDirection: 'row', gap: 4, marginBottom: 14 },
+  diaBtn:          { flex: 1, borderRadius: 6, paddingVertical: 6, alignItems: 'center', borderWidth: 1, borderColor: '#2a475e', backgroundColor: '#0d1b2a' },
+  diaBtnActivo:    { backgroundColor: TEAL, borderColor: TEAL },
+  diaBtnTxt:       { fontSize: 9, fontWeight: '600', color: '#556a7a' },
+  diaBtnTxtActivo: { color: '#fff' },
 })
