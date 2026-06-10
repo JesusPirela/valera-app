@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import nodemailer from 'npm:nodemailer@6.9.13'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -127,53 +128,89 @@ ${tendencia.length > 0 ? `
 </body></html>`
 }
 
-// ── Enviar email vía Resend ───────────────────────────────────────────────────
+// ── Enviar email (SMTP o Resend según secrets configurados) ──────────────────
+
+async function buildReporte(supabase: any, rangoInicio: string, rangoFin: string, rangoLabel: string) {
+  const [{ data: usuarios, error: e1 }, { data: tendencia, error: e2 }] = await Promise.all([
+    supabase.rpc('get_productividad_equipo', { p_inicio: rangoInicio, p_fin: rangoFin }),
+    supabase.rpc('get_tendencia_equipo', { p_inicio: rangoInicio, p_fin: rangoFin }),
+  ])
+  if (e1) throw new Error(`RPC equipo: ${e1.message}`)
+  if (e2) throw new Error(`RPC tendencia: ${e2.message}`)
+  const generadoEn = new Date().toLocaleString('es-MX', {
+    dateStyle: 'full', timeStyle: 'short', timeZone: 'America/Mexico_City',
+  })
+  return generarHTML(usuarios ?? [], tendencia ?? [], rangoLabel, generadoEn)
+}
+
+async function enviarViaResend(resendKey: string, fromEmail: string, destinatarios: string[], subject: string, html: string) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: fromEmail, to: destinatarios, subject, html }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(`Resend: ${JSON.stringify(data)}`)
+  return (data as any).id
+}
+
+async function enviarViaSmtp(destinatarios: string[], subject: string, html: string) {
+  const smtpUser = Deno.env.get('SMTP_USER')!
+  const smtpPass = Deno.env.get('SMTP_PASS')!
+  const smtpHost = Deno.env.get('SMTP_HOST') ?? 'smtp.gmail.com'
+  const smtpPort = parseInt(Deno.env.get('SMTP_PORT') ?? '587')
+  const smtpFrom = Deno.env.get('SMTP_FROM') ?? smtpUser
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: { user: smtpUser, pass: smtpPass },
+  })
+
+  await transporter.sendMail({
+    from: `Valera App <${smtpFrom}>`,
+    to: destinatarios.join(', '),
+    subject,
+    html,
+  })
+}
 
 async function enviarEmail(
   supabase: any,
-  resendKey: string,
-  fromEmail: string,
   destinatarios: string[],
   rangoInicio: string,
   rangoFin: string,
   rangoLabel: string,
 ) {
-  const [{ data: usuarios, error: e1 }, { data: tendencia, error: e2 }] = await Promise.all([
-    supabase.rpc('get_productividad_equipo', { p_inicio: rangoInicio, p_fin: rangoFin }),
-    supabase.rpc('get_tendencia_equipo', { p_inicio: rangoInicio, p_fin: rangoFin }),
-  ])
+  const resendKey = Deno.env.get('RESEND_API_KEY')
+  const smtpUser  = Deno.env.get('SMTP_USER')
+  const smtpPass  = Deno.env.get('SMTP_PASS')
 
-  if (e1) throw new Error(`RPC equipo: ${e1.message}`)
-  if (e2) throw new Error(`RPC tendencia: ${e2.message}`)
+  if (!resendKey && (!smtpUser || !smtpPass)) {
+    throw new Error(
+      'No hay proveedor de email configurado. Opciones:\n' +
+      '① SMTP Gmail: agrega SMTP_USER (tu Gmail) y SMTP_PASS (contraseña de aplicación Google) en Supabase → Project Settings → Edge Functions → Secrets\n' +
+      '② Resend: agrega RESEND_API_KEY desde resend.com'
+    )
+  }
 
-  const generadoEn = new Date().toLocaleString('es-MX', {
-    dateStyle: 'full', timeStyle: 'short', timeZone: 'America/Mexico_City',
-  })
-  const html = generarHTML(usuarios ?? [], tendencia ?? [], rangoLabel, generadoEn)
+  const html    = await buildReporte(supabase, rangoInicio, rangoFin, rangoLabel)
+  const subject = `📊 Reporte de Productividad – ${rangoLabel}`
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${resendKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: destinatarios,
-      subject: `📊 Reporte de Productividad – ${rangoLabel}`,
-      html,
-    }),
-  })
+  if (resendKey) {
+    const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'Reportes Valera <noreply@resend.dev>'
+    const emailId = await enviarViaResend(resendKey, fromEmail, destinatarios, subject, html)
+    return { ok: true, enviado_a: destinatarios.length, proveedor: 'resend', email_id: emailId }
+  }
 
-  const data = await res.json()
-  if (!res.ok) throw new Error(`Resend: ${JSON.stringify(data)}`)
-
-  return { ok: true, enviado_a: destinatarios.length, email_id: (data as any).id }
+  await enviarViaSmtp(destinatarios, subject, html)
+  return { ok: true, enviado_a: destinatarios.length, proveedor: 'smtp' }
 }
 
 // ── Procesar programaciones automáticas ──────────────────────────────────────
 
-async function procesarProgramados(supabase: any, resendKey: string, fromEmail: string) {
+async function procesarProgramados(supabase: any) {
   const { data: programados } = await supabase
     .from('report_programados')
     .select('*')
@@ -216,7 +253,7 @@ async function procesarProgramados(supabase: any, resendKey: string, fromEmail: 
     const rangoLabel = `${inicio.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} – ${fin.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`
 
     try {
-      await enviarEmail(supabase, resendKey, fromEmail, prog.destinatarios, inicio.toISOString(), fin.toISOString(), rangoLabel)
+      await enviarEmail(supabase, prog.destinatarios, inicio.toISOString(), fin.toISOString(), rangoLabel)
       await supabase.from('report_programados').update({ ultimo_envio: ahora.toISOString() }).eq('id', prog.id)
       enviados++
     } catch (err) {
@@ -233,9 +270,6 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
-    const resendKey = Deno.env.get('RESEND_API_KEY')
-    const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'Reportes Valera <noreply@resend.dev>'
-
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -245,10 +279,7 @@ serve(async (req) => {
     const { destinatarios, rangoInicio, rangoFin, rangoLabel, check_schedules } = body
 
     if (check_schedules) {
-      if (!resendKey) {
-        return new Response(JSON.stringify({ ok: true, enviados: 0, nota: 'RESEND_API_KEY no configurada' }), { headers: CORS })
-      }
-      const result = await procesarProgramados(supabase, resendKey, fromEmail)
+      const result = await procesarProgramados(supabase)
       return new Response(JSON.stringify(result), { headers: CORS })
     }
 
@@ -256,14 +287,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: 'Faltan destinatarios' }), { headers: CORS })
     }
 
-    if (!resendKey) {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'RESEND_API_KEY no configurada. Ve a Supabase → Project Settings → Edge Functions → Secrets y agrega tu clave de resend.com' }),
-        { headers: CORS },
-      )
-    }
-
-    const result = await enviarEmail(supabase, resendKey, fromEmail, destinatarios, rangoInicio, rangoFin, rangoLabel)
+    const result = await enviarEmail(supabase, destinatarios, rangoInicio, rangoFin, rangoLabel)
     return new Response(JSON.stringify(result), { headers: CORS })
 
   } catch (err: any) {
