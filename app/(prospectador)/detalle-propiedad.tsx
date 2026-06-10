@@ -456,8 +456,8 @@ export default function DetallePropiedad() {
       ])
 
       const imagenPrincipal = imagenesConSrc[0]
-      const galeriaHTML = imagenesConSrc.slice(1).map(img =>
-        `<img src="${img.src}" style="width:48%;height:140px;object-fit:cover;border-radius:8px;" />`
+      const galeriaHTML = imagenesConSrc.slice(1, 7).map(img =>
+        `<img src="${img.src}" class="foto-galeria" />`
       ).join('')
 
       const cars: string[] = []
@@ -488,18 +488,20 @@ export default function DetallePropiedad() {
         body { font-family: Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; }
         .header { background: #1a6470; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
         .header-left { flex: 1; }
-        .header-logo { height: 70px; max-width: 160px; object-fit: contain; flex-shrink: 0; margin-left: 16px; }
+        .header-logo { height: 100px; max-width: 220px; object-fit: contain; flex-shrink: 0; margin-left: 16px; }
         .codigo { font-size: 11px; color: #c9a84c; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
         .titulo { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 4px; }
         .tipo-op { font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 10px; }
         .precio { font-size: 24px; font-weight: 800; color: #c9a84c; margin-bottom: 5px; }
         .direccion { font-size: 12px; color: rgba(255,255,255,0.8); }
         .body { padding: 20px 28px; }
-        .imagen-principal { width: 100%; height: 320px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 16px; }
+        .imagen-principal-wrap { width: 100%; height: 420px; border-radius: 10px; overflow: hidden; margin-bottom: 16px; background: #eef2f3; display: flex; align-items: center; justify-content: center; }
+        .imagen-principal { width: 100%; height: 100%; object-fit: contain; display: block; }
         .inmob-logo-wrap { text-align: center; margin-bottom: 16px; }
         .inmob-logo { max-height: 90px; max-width: 240px; object-fit: contain; }
         .inmob-nombre { font-size: 12px; color: #888; font-weight: 600; margin-top: 4px; }
-        .fotos { display: flex; flex-wrap: wrap; gap: 8px; }
+        .fotos { display: flex; flex-wrap: wrap; gap: 14px; }
+        .foto-galeria { width: calc(50% - 7px); height: 220px; object-fit: contain; background: #eef2f3; border-radius: 8px; border: 1px solid #e0e8ea; break-inside: avoid; page-break-inside: avoid; }
         .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1.2px; text-transform: uppercase; margin: 20px 0 10px; }
         .cars { display: flex; gap: 12px; flex-wrap: wrap; }
         .car-val { display: block; font-size: 20px; font-weight: 800; color: #1a6470; }
@@ -509,7 +511,6 @@ export default function DetallePropiedad() {
         .mapa-img { width: 100%; height: 200px; object-fit: cover; display: block; }
         .mapa-dir { background: #f0f5f5; padding: 10px 14px; font-size: 12px; color: #1a6470; font-weight: 600; }
         .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; break-inside: avoid; page-break-inside: avoid; }
-        .fotos img { break-inside: avoid; page-break-inside: avoid; }
         .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; break-inside: avoid; page-break-inside: avoid; }
       </style></head><body>
       <div class="header">
@@ -523,7 +524,7 @@ export default function DetallePropiedad() {
         ${logoSrc ? `<img src="${logoSrc}" class="header-logo" />` : ''}
       </div>
       <div class="body">
-        ${imagenPrincipal ? `<img src="${imagenPrincipal.src}" class="imagen-principal" />` : ''}
+        ${imagenPrincipal ? `<div class="imagen-principal-wrap"><img src="${imagenPrincipal.src}" class="imagen-principal" /></div>` : ''}
         ${propiedad.inmobiliarias?.logo_url ? `<div class="inmob-logo-wrap">
           <img src="${inmobiliariaLogoSrc}" class="inmob-logo" />
           ${propiedad.inmobiliarias.nombre ? `<div class="inmob-nombre">${esc(propiedad.inmobiliarias.nombre)}</div>` : ''}
