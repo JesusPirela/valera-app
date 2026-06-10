@@ -482,7 +482,7 @@ export default function DetallePropiedad() {
       if (propiedad.lat && propiedad.lng) {
         const lat = propiedad.lat
         const lng = propiedad.lng
-        const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=600x220&scale=2&markers=color:0x1a6470%7C${lat},${lng}&key=${GMAPS_KEY}`
+        const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=740x340&scale=2&markers=color:0x1a6470%7C${lat},${lng}&key=${GMAPS_KEY}`
         const mapSrc = await imagenABase64(staticUrl)
         mapaHTML = `
           <div class="seccion-grupo">
@@ -519,7 +519,7 @@ export default function DetallePropiedad() {
         .car-lbl { display: block; font-size: 11px; color: #888; margin-top: 2px; }
         .desc { font-size: 13px; line-height: 1.7; color: #444; white-space: pre-wrap; }
         .mapa-box { border: 1.5px solid #e0e8ea; border-radius: 10px; overflow: hidden; margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
-        .mapa-img { width: 100%; height: 200px; object-fit: cover; display: block; }
+        .mapa-img { width: 100%; height: 340px; object-fit: cover; display: block; }
         .mapa-dir { background: #f0f5f5; padding: 10px 14px; font-size: 12px; color: #1a6470; font-weight: 600; }
         .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; break-inside: avoid; page-break-inside: avoid; }
         .galeria-grupo { break-inside: avoid; page-break-inside: avoid; }
