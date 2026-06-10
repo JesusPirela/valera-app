@@ -64,9 +64,11 @@ function nfc(s: string): string {
 // (evita que algunos emojis se rendericen como ?? en web con fontWeight)
 function extraerEmoji(titulo: string): { emoji: string; texto: string } {
   const norm = nfc(titulo)
-  const match = norm.match(/^(\p{Extended_Pictographic})\s*(¡?)(.*)/su)
-  if (match) return { emoji: match[1], texto: nfc((match[2] + match[3]).trim()) }
-  return { emoji: '', texto: norm }
+  // Extrae emoji inicial y elimina el ¡ de apertura (rinde como ?? en fontWeight 600)
+  const match = norm.match(/^(\p{Extended_Pictographic})\s*¡?\s*(.*)/su)
+  if (match) return { emoji: match[1], texto: nfc(match[2].trim()) }
+  // Sin emoji: sólo eliminar ¡ inicial si lo hay
+  return { emoji: '', texto: norm.replace(/^¡\s*/, '') }
 }
 
 function esNavegable(n: Notificacion): boolean {
