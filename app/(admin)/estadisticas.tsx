@@ -335,12 +335,20 @@ export default function Estadisticas() {
 
       <View style={styles.pageHeader}>
         <Text style={[styles.pageTitle, { color: c.text }]}>Estadísticas</Text>
-        <TouchableOpacity
-          style={styles.conexionBtn}
-          onPress={() => router.push('/(admin)/conexion-usuarios' as any)}
-        >
-          <Text style={styles.conexionBtnTxt}>⏱️ Tiempo conectado</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity
+            style={styles.conexionBtn}
+            onPress={() => router.push('/(admin)/reportes' as any)}
+          >
+            <Text style={styles.conexionBtnTxt}>📊 Productividad</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.conexionBtn}
+            onPress={() => router.push('/(admin)/conexion-usuarios' as any)}
+          >
+            <Text style={styles.conexionBtnTxt}>⏱️ Tiempo conectado</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Selector de período */}
