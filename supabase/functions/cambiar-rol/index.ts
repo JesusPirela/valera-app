@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const ROLES_VALIDOS = ['nuevo', 'prospectador', 'prospectador_plus']
+const ROLES_VALIDOS = ['nuevo', 'prospectador', 'prospectador_plus', 'supervisor']
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

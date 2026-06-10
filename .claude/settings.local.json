@@ -77,7 +77,10 @@
       "Bash(node -e \"console.log\\(require\\('html2canvas/package.json'\\).types || require\\('html2canvas/package.json'\\).typings\\)\")",
       "Bash(taskkill //F //IM node.exe //FI \"WINDOWTITLE eq *expo*\")",
       "Bash(taskkill //F //PID 29320)",
-      "Bash(curl -s '__TRACKED_VAR__/rest/v1/propiedades?codigo=eq.VR-842&select=codigo,inmobiliaria_id,inmobiliarias\\(nombre,logo_url,exclusiva\\)' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')"
+      "Bash(curl -s '__TRACKED_VAR__/rest/v1/propiedades?codigo=eq.VR-842&select=codigo,inmobiliaria_id,inmobiliarias\\(nombre,logo_url,exclusiva\\)' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s '__TRACKED_VAR__/rest/v1/inmobiliarias?select=id,nombre,exclusiva&order=nombre' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s '__TRACKED_VAR__/rest/v1/propiedades?select=codigo,inmobiliaria_id,inmobiliarias\\(nombre\\)&inmobiliarias.nombre=eq.Terrafirme' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s '__TRACKED_VAR__/rest/v1/propiedades?select=id&limit=3' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__' -H 'Prefer: count=exact' -i)"
     ],
     "additionalDirectories": [
       "C:\\Users\\carbe\\OneDrive\\Escritorio\\valera_app\\supabase\\_tmp_pending"

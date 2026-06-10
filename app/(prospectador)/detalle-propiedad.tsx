@@ -387,15 +387,7 @@ export default function DetallePropiedad() {
       if (Platform.OS === 'web') {
         const logoModule = require('../../assets/logo.png')
         const resolved = Image.resolveAssetSource(logoModule)
-        const url = resolved?.uri ?? (typeof logoModule === 'string' ? logoModule : '')
-        if (!url) return ''
-        const resp = await fetch(url)
-        const blob = await resp.blob()
-        return new Promise((res) => {
-          const reader = new FileReader()
-          reader.onloadend = () => res(reader.result as string)
-          reader.readAsDataURL(blob)
-        })
+        return resolved?.uri ?? (typeof logoModule === 'string' ? logoModule : '')
       }
       const asset = Asset.fromModule(require('../../assets/logo.png'))
       await asset.downloadAsync()
@@ -576,6 +568,29 @@ export default function DetallePropiedad() {
             return idealY
           }
 
+          // Evita cortar imágenes/tarjetas/mapa a la mitad entre páginas
+          const containerRect = container.getBoundingClientRect()
+          const scaleFactor = canvas.width / containerRect.width
+          const avoidRanges = Array.from(container.querySelectorAll('img, .car, .mapa-box, .footer'))
+            .map(el => {
+              const r = el.getBoundingClientRect()
+              return {
+                top: (r.top - containerRect.top) * scaleFactor,
+                bottom: (r.bottom - containerRect.top) * scaleFactor,
+              }
+            })
+            .sort((a, b) => a.top - b.top)
+
+          const resolveBreak = (renderedPx: number, idealEnd: number) => {
+            if (idealEnd >= canvas.height) return canvas.height
+            const conflict = avoidRanges.find(r => idealEnd > r.top + 1 && idealEnd < r.bottom - 1)
+            if (conflict) {
+              if (conflict.top > renderedPx) return conflict.top
+              if (conflict.bottom - renderedPx <= pageHeightPx) return conflict.bottom
+            }
+            return findBreak(Math.floor(idealEnd))
+          }
+
           const sliceCanvas = document.createElement('canvas')
           const sliceCtx = sliceCanvas.getContext('2d')!
           sliceCanvas.width = canvas.width
@@ -584,7 +599,7 @@ export default function DetallePropiedad() {
           let firstPage = true
           while (renderedPx < canvas.height) {
             const idealEnd = renderedPx + pageHeightPx
-            const end = idealEnd >= canvas.height ? canvas.height : findBreak(Math.floor(idealEnd))
+            const end = resolveBreak(renderedPx, idealEnd)
             const sliceHeightPx = Math.max(1, end - renderedPx)
 
             sliceCanvas.height = sliceHeightPx

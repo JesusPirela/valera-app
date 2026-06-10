@@ -17,7 +17,7 @@ import { supabase } from '../../lib/supabase'
 import { adminAjustarMonedas } from '../../lib/gamification'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 
-type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus'
+type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus' | 'supervisor'
 
 type Prospectador = {
   id: string
@@ -66,24 +66,32 @@ const ROL_LABEL: Record<string, string> = {
   nuevo:             'Nuevo',
   prospectador:      'Prospectador',
   prospectador_plus: 'Plus',
+  supervisor:        'Supervisor',
 }
 
 const ROL_BADGE: Record<string, object> = {
   nuevo:             { backgroundColor: '#fff3cd' },
   prospectador:      { backgroundColor: '#e8f5e9' },
   prospectador_plus: { backgroundColor: '#fdecea' },
+  supervisor:        { backgroundColor: '#e3e0fb' },
 }
 
 const ROL_TEXT: Record<string, object> = {
   nuevo:             { color: '#856404' },
   prospectador:      { color: '#2e7d32' },
   prospectador_plus: { color: '#c0392b' },
+  supervisor:        { color: '#5e35b1' },
 }
 
 const ROLES_SELECTOR: { value: RolUsuario; label: string }[] = [
   { value: 'nuevo',             label: 'Nuevo' },
   { value: 'prospectador',      label: 'Prospectador' },
   { value: 'prospectador_plus', label: 'Plus' },
+]
+
+const ROLES_SELECTOR_CAMBIO: { value: RolUsuario; label: string }[] = [
+  ...ROLES_SELECTOR,
+  { value: 'supervisor', label: 'Supervisor' },
 ]
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -484,7 +492,7 @@ export default function Prospectadores() {
                 <View style={[styles.rolPickerContainer, { borderTopColor: c.divider }]}>
                   <Text style={[styles.rolPickerLabel, { color: c.textMute }]}>Cambiar rol:</Text>
                   <View style={styles.rolPickerPills}>
-                    {ROLES_SELECTOR.map(r => {
+                    {ROLES_SELECTOR_CAMBIO.map(r => {
                       const activo = item.role === r.value
                       return (
                         <TouchableOpacity
