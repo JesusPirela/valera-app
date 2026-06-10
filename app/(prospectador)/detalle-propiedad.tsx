@@ -387,7 +387,20 @@ export default function DetallePropiedad() {
       if (Platform.OS === 'web') {
         const logoModule = require('../../assets/logo.png')
         const resolved = Image.resolveAssetSource(logoModule)
-        return resolved?.uri ?? (typeof logoModule === 'string' ? logoModule : '')
+        const uri = resolved?.uri ?? (typeof logoModule === 'string' ? logoModule : '')
+        if (!uri) return ''
+        try {
+          const res = await fetch(uri)
+          const blob = await res.blob()
+          return await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result as string)
+            reader.onerror = reject
+            reader.readAsDataURL(blob)
+          })
+        } catch {
+          return uri
+        }
       }
       const asset = Asset.fromModule(require('../../assets/logo.png'))
       await asset.downloadAsync()
@@ -536,7 +549,20 @@ export default function DetallePropiedad() {
         document.body.appendChild(container)
 
         try {
-          await new Promise(resolve => setTimeout(resolve, 50))
+          await new Promise<void>(resolve => {
+            const imgs = Array.from(container.querySelectorAll('img'))
+            if (imgs.length === 0) return resolve()
+            let restantes = imgs.length
+            const listo = () => { restantes--; if (restantes <= 0) resolve() }
+            imgs.forEach(img => {
+              if (img.complete) listo()
+              else {
+                img.addEventListener('load', listo)
+                img.addEventListener('error', listo)
+              }
+            })
+            setTimeout(resolve, 8000)
+          })
           const canvas = await html2canvas(container, {
             useCORS: true,
             scale: 2,

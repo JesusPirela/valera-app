@@ -203,6 +203,8 @@ export default function ProspectadorLayout() {
   }
 
   const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 72 : 64
+  const esAdminOSupervisorGlobal = role === 'admin' || role === 'supervisor'
+  const ocultarTabBar = esAdminOSupervisorGlobal && pathname.includes('detalle-propiedad')
 
   return (
     <>
@@ -210,7 +212,7 @@ export default function ProspectadorLayout() {
       screenOptions={{
         tabBarActiveTintColor: colorAcento,
         tabBarInactiveTintColor: darkMode ? '#556a7a' : '#9eafb2',
-        tabBarStyle: {
+        tabBarStyle: ocultarTabBar ? { display: 'none' } : {
           backgroundColor: darkMode ? '#1b3045' : '#fff',
           borderTopColor: darkMode ? '#2a4560' : '#e8eef0',
           borderTopWidth: 1,
@@ -240,9 +242,8 @@ export default function ProspectadorLayout() {
           />
         ),
         headerLeft: () => {
-          const esAdminOSupervisor = role === 'admin' || role === 'supervisor'
           const BACK: Record<string, string> = {
-            'detalle-propiedad': esAdminOSupervisor ? '/(admin)/propiedades' : '/(prospectador)/propiedades',
+            'detalle-propiedad': esAdminOSupervisorGlobal ? '/(admin)/propiedades' : '/(prospectador)/propiedades',
             'detalle-cliente':   '/(prospectador)/crm',
             'cliente-form':      '/(prospectador)/crm',
             'university-curso':  '/(prospectador)/university',

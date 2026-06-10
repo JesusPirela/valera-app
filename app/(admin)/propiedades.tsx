@@ -337,8 +337,16 @@ export default function AdminPropiedades() {
             {propiedadesFiltradas.map((item) => {
               const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
               const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.estacionamientos != null
+              const CardWrapper: any = esSupervisor ? TouchableOpacity : View
               return (
-                <View key={item.id} style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada, cardWidth ? { width: cardWidth } : undefined]}>
+                <CardWrapper
+                  key={item.id}
+                  style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada, cardWidth ? { width: cardWidth } : undefined]}
+                  {...(esSupervisor ? {
+                    activeOpacity: 0.85,
+                    onPress: () => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } }),
+                  } : {})}
+                >
                 {/* Imagen con badges superpuestos */}
                 <View style={styles.imagenWrapper}>
                   {primera?.url ? (
@@ -400,17 +408,8 @@ export default function AdminPropiedades() {
                     </View>
                   )}
 
-                  {/* Botones de acción compactos (solo lectura para Supervisor) */}
-                  {esSupervisor ? (
-                    <View style={styles.cardAcciones}>
-                      <TouchableOpacity
-                        style={styles.btnEditar}
-                        onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } })}
-                      >
-                        <Text style={styles.btnEditarText}>👁 Ver ficha</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
+                  {/* Botones de acción compactos (no disponibles para Supervisor: solo lectura) */}
+                  {!esSupervisor && (
                     <View style={styles.cardAcciones}>
                       <TouchableOpacity
                         style={styles.btnEditar}
@@ -433,7 +432,7 @@ export default function AdminPropiedades() {
                     </View>
                   )}
                 </View>
-              </View>
+              </CardWrapper>
               )
             })}
           </View>
@@ -446,8 +445,15 @@ export default function AdminPropiedades() {
           renderItem={({ item }) => {
             const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
             const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
+            const CardWrapper: any = esSupervisor ? TouchableOpacity : View
             return (
-              <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada]}>
+              <CardWrapper
+                style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada]}
+                {...(esSupervisor ? {
+                  activeOpacity: 0.85,
+                  onPress: () => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } }),
+                } : {})}
+              >
                 <View style={styles.imagenWrapper}>
                   {primera?.url ? (
                     <Image source={{ uri: primera.url }} style={styles.cardImagen} />
@@ -496,16 +502,7 @@ export default function AdminPropiedades() {
                       {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
                     </View>
                   )}
-                  {esSupervisor ? (
-                    <View style={styles.cardAcciones}>
-                      <TouchableOpacity
-                        style={styles.btnEditar}
-                        onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } })}
-                      >
-                        <Text style={styles.btnEditarText}>👁 Ver ficha</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
+                  {!esSupervisor && (
                     <View style={styles.cardAcciones}>
                       <TouchableOpacity
                         style={styles.btnEditar}
@@ -528,7 +525,7 @@ export default function AdminPropiedades() {
                     </View>
                   )}
                 </View>
-              </View>
+              </CardWrapper>
             )
           }}
         />
