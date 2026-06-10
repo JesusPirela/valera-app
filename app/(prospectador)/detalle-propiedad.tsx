@@ -446,7 +446,7 @@ export default function DetallePropiedad() {
 
       const [imagenesConSrc, logoSrc, inmobiliariaLogoSrc] = await Promise.all([
         Promise.all(
-          imagenes.slice(0, 20).map(async img => ({
+          imagenes.slice(0, 13).map(async img => ({
             ...img,
             src: await imagenABase64(img.url),
           }))
@@ -499,12 +499,12 @@ export default function DetallePropiedad() {
         body { font-family: Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; }
         .header { background: #1a6470; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
         .header-left { flex: 1; }
-        .header-logo { height: 100px; max-width: 220px; object-fit: contain; flex-shrink: 0; margin-left: 16px; }
-        .codigo { font-size: 11px; color: #c9a84c; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
-        .titulo { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 4px; }
-        .tipo-op { font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 10px; }
-        .precio { font-size: 24px; font-weight: 800; color: #c9a84c; margin-bottom: 5px; }
-        .direccion { font-size: 12px; color: rgba(255,255,255,0.8); }
+        .header-logo { height: 130px; max-width: 280px; object-fit: contain; flex-shrink: 0; margin-left: 16px; }
+        .codigo { font-size: 13px; color: #c9a84c; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
+        .titulo { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+        .tipo-op { font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 10px; }
+        .precio { font-size: 30px; font-weight: 800; color: #c9a84c; margin-bottom: 5px; }
+        .direccion { font-size: 14px; color: rgba(255,255,255,0.8); }
         .body { padding: 20px 28px; }
         .imagen-principal-wrap { width: 100%; height: 420px; border-radius: 10px; overflow: hidden; margin-bottom: 16px; background: #eef2f3; display: flex; align-items: center; justify-content: center; }
         .imagen-principal { width: 100%; height: 100%; object-fit: contain; display: block; }
