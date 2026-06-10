@@ -923,7 +923,7 @@ export default function CoordinacionCitas() {
       ) : (
         <ScrollView
           horizontal
-          showsHorizontalScrollIndicator={false}
+          showsHorizontalScrollIndicator
           contentContainerStyle={s.boardContent}
           style={s.board}
           decelerationRate="fast"
@@ -952,18 +952,23 @@ export default function CoordinacionCitas() {
         </ScrollView>
       )}
 
-      {/* ── Modales ── */}
-      <ModalEdicion
-        cita={citaEditando}
-        admins={admins}
-        onClose={() => setCitaEditando(null)}
-        onGuardar={cargar}
-      />
-      <ModalMover
-        cita={citaMoviendo}
-        onClose={() => setCitaMoviendo(null)}
-        onMover={moverCita}
-      />
+      {/* ── Modales — renderizado condicional para que el estado local
+           se inicialice fresco con los datos reales de cada cita ── */}
+      {citaEditando && (
+        <ModalEdicion
+          cita={citaEditando}
+          admins={admins}
+          onClose={() => setCitaEditando(null)}
+          onGuardar={cargar}
+        />
+      )}
+      {citaMoviendo && (
+        <ModalMover
+          cita={citaMoviendo}
+          onClose={() => setCitaMoviendo(null)}
+          onMover={moverCita}
+        />
+      )}
       {modalNueva && (
         <ModalNuevaCita
           admins={admins}
