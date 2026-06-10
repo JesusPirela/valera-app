@@ -52,30 +52,27 @@ function isYoutubeUrl(url: string | null): boolean {
   return /youtu\.be\/|youtube\.com/.test(url)
 }
 
-// Inyectado en WebView nativo: rastrea segundos reales reproducidos (anti-skip)
+// JS inyectado en WebView nativo — usa onStateChange + reloj de pared
 const YT_TRACK_JS = `
 (function() {
   var playedSecs = 0, lastTs = null, duration = 0, done = false;
+  function notify() { if (!done) { done = true; window.ReactNativeWebView.postMessage('video_suficiente'); } }
   function check() {
+    if (done || duration <= 0) return;
     var total = lastTs ? playedSecs + (Date.now() - lastTs) / 1000 : playedSecs;
-    if (!done && duration > 0 && total >= duration * 0.80) {
-      done = true;
-      window.ReactNativeWebView.postMessage('video_suficiente');
-    }
+    if (total >= duration * 0.75) notify();
   }
+  setInterval(check, 3000);
   window.addEventListener('message', function(e) {
     try {
       var d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
       if (!d) return;
-      if (d.event === 'infoDelivery' && d.info) {
-        if (d.info.duration > 0) duration = d.info.duration;
-        if (d.info.playerState === 1) { if (!lastTs) lastTs = Date.now(); }
-        else { if (lastTs) { playedSecs += (Date.now() - lastTs) / 1000; lastTs = null; } }
+      if (d.event === 'onStateChange') {
+        if (d.info === 1) { if (!lastTs) lastTs = Date.now(); }
+        else { if (lastTs) { playedSecs += (Date.now() - lastTs) / 1000; lastTs = null; } if (d.info === 0) notify(); }
         check();
       }
-      if (d.event === 'onStateChange' && d.info === 0 && !done) {
-        done = true; window.ReactNativeWebView.postMessage('video_suficiente');
-      }
+      if (d.event === 'infoDelivery' && d.info && d.info.duration > 0) { duration = d.info.duration; check(); }
     } catch(_) {}
   });
   setTimeout(function() {
@@ -83,7 +80,7 @@ const YT_TRACK_JS = `
     for (var i = 0; i < iframes.length; i++) {
       try { iframes[i].contentWindow.postMessage('{"event":"listening","id":1}', '*'); } catch(_) {}
     }
-  }, 1500);
+  }, 2000);
 })();
 true;
 `
@@ -92,45 +89,70 @@ function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void })
   const embed = getEmbedUrl(url)
   const [error, setError] = useState(false)
   const onEndRef = useRef(onEnd)
-  const iframeRef = useRef<any>(null)
+  const containerRef = useRef<any>(null)
+  const playerRef = useRef<any>(null)
   useEffect(() => { onEndRef.current = onEnd }, [onEnd])
 
-  // Web: rastrea segundos reales reproducidos via infoDelivery de YouTube
+  // Web + YouTube: API oficial de YouTube IFrame para tracking preciso
   useEffect(() => {
-    if (Platform.OS !== 'web' || !isYoutubeUrl(url)) return
+    if (Platform.OS !== 'web' || !isYoutubeUrl(url) || !url) return
+
+    const match = url.match(/(?:youtu\.be\/|v=|embed\/)([\w-]{11})/)
+    const videoId = match?.[1]
+    if (!videoId) return
+
     let playedSecs = 0, lastTs: number | null = null, duration = 0, done = false
 
     const check = () => {
+      if (done) return
       const total = lastTs ? playedSecs + (Date.now() - lastTs) / 1000 : playedSecs
-      if (!done && duration > 0 && total >= duration * 0.80) { done = true; onEndRef.current?.() }
+      if (duration > 0 && total >= duration * 0.80) { done = true; onEndRef.current?.() }
+    }
+    const timer = setInterval(check, 2000)
+
+    const setupPlayer = () => {
+      if (!containerRef.current || playerRef.current) return
+      const YT = (window as any).YT
+      playerRef.current = new YT.Player(containerRef.current, {
+        videoId,
+        playerVars: { rel: 0, modestbranding: 1 },
+        events: {
+          onReady: (e: any) => { const d = e.target.getDuration(); if (d > 0) duration = d },
+          onStateChange: (e: any) => {
+            if (!duration) { const d = playerRef.current?.getDuration?.(); if (d > 0) duration = d }
+            if (e.data === 1) { if (!lastTs) lastTs = Date.now() }
+            else {
+              if (lastTs) { playedSecs += (Date.now() - lastTs) / 1000; lastTs = null }
+              if (e.data === 0 && !done) { done = true; onEndRef.current?.() }
+            }
+            check()
+          },
+        },
+      })
     }
 
-    const handler = (e: MessageEvent) => {
-      try {
-        const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
-        if (!d) return
-        if (d.event === 'infoDelivery' && d.info) {
-          if (d.info.duration > 0) duration = d.info.duration
-          if (d.info.playerState === 1) { if (!lastTs) lastTs = Date.now() }
-          else { if (lastTs) { playedSecs += (Date.now() - lastTs) / 1000; lastTs = null } }
-          check()
-        }
-        if (d.event === 'onStateChange' && d.info === 0 && !done) { done = true; onEndRef.current?.() }
-      } catch (_) {}
-    }
-
-    window.addEventListener('message', handler)
-    const t = setTimeout(() => {
-      if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1 }), '*')
+    if ((window as any).YT?.Player) {
+      setupPlayer()
+    } else {
+      const prev = (window as any).onYouTubeIframeAPIReady
+      ;(window as any).onYouTubeIframeAPIReady = () => { if (prev) prev(); setupPlayer() }
+      if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+        const s = document.createElement('script')
+        s.src = 'https://www.youtube.com/iframe_api'
+        document.head.appendChild(s)
       }
-    }, 1500)
-    return () => { window.removeEventListener('message', handler); clearTimeout(t) }
+    }
+
+    return () => {
+      clearInterval(timer)
+      playerRef.current?.destroy?.()
+      playerRef.current = null
+    }
   }, [url])
 
-  if (!embed || !url) return null
+  if (!url) return null
 
-  if (error) {
+  if (error && Platform.OS !== 'web') {
     return (
       <View style={[vpS.container, vpS.errorBox]}>
         <Text style={vpS.errorIcon}>⚠️</Text>
@@ -143,15 +165,28 @@ function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void })
   }
 
   if (Platform.OS === 'web') {
+    if (!isYoutubeUrl(url)) {
+      if (!embed) return null
+      return (
+        <View style={vpS.container}>
+          {/* @ts-ignore */}
+          <iframe src={embed} style={{ width: '100%', height: '100%', border: 'none' }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen title="Valera University" />
+        </View>
+      )
+    }
+    // YouTube en web: div gestionado por la YouTube IFrame API
     return (
       <View style={vpS.container}>
         {/* @ts-ignore */}
-        <iframe ref={iframeRef} src={embed} style={{ width: '100%', height: '100%', border: 'none' }}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen title="Valera University" />
+        <div ref={containerRef} style={{ width: '100%', height: '100%', backgroundColor: '#000' }} />
       </View>
     )
   }
+
+  if (!embed) return null
+
   return (
     <View style={vpS.container}>
       <WebView
