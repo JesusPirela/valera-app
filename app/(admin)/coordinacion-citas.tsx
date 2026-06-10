@@ -179,14 +179,15 @@ function ModalEdicion({
       const { error } = await supabase.from('clientes').update({ telefono: telefono.trim() }).eq('id', cita.cliente_id)
       if (error) { alerta(error.message); setGuardando(false); return }
     }
-    const { error } = await supabase.from('citas_coordinacion').update({
+    const { data: upd, error } = await supabase.from('citas_coordinacion').update({
       estado,
       notas: notas.trim() || null,
       coordinado_por: coordinadorId || null,
       fecha_cita: fechaTexto ? new Date(fechaTexto).toISOString() : null,
-    }).eq('id', cita.id)
+    }).eq('id', cita.id).select('id')
     setGuardando(false)
     if (error) { alerta(error.message); return }
+    if (!upd || upd.length === 0) { alerta('No se pudo guardar. Verifica tu sesión e intenta de nuevo.'); return }
     onGuardar(); onClose()
   }
 
@@ -771,10 +772,14 @@ export default function CoordinacionCitas() {
   }, []))
 
   async function moverCita(cita: Cita, nuevoEstado: EstadoCita) {
-    // Optimistic update
     setCitas(prev => prev.map(c => c.id === cita.id ? { ...c, estado: nuevoEstado, updated_at: new Date().toISOString() } : c))
-    const { error } = await supabase.from('citas_coordinacion').update({ estado: nuevoEstado }).eq('id', cita.id)
-    if (error) { alerta(error.message); cargar() }
+    const { data, error } = await supabase
+      .from('citas_coordinacion')
+      .update({ estado: nuevoEstado })
+      .eq('id', cita.id)
+      .select('id, estado')
+    if (error) { alerta(error.message); cargar(); return }
+    if (!data || data.length === 0) { alerta('No se pudo cambiar el estado. Intenta de nuevo.'); cargar() }
   }
 
   // ── Filtros ──────────────────────────────────────────────────────────────
