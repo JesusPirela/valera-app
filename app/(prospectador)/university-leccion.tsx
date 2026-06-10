@@ -41,16 +41,48 @@ type Entrega = {
 function getEmbedUrl(url: string | null): string | null {
   if (!url) return null
   const yt = url.match(/(?:youtu\.be\/|v=|embed\/)([\w-]{11})/)
-  if (yt) return `https://www.youtube.com/embed/${yt[1]}?rel=0&modestbranding=1`
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}?rel=0&modestbranding=1&enablejsapi=1`
   const gd = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/)
   if (gd) return `https://drive.google.com/file/d/${gd[1]}/preview`
   return null
 }
 
+function isYoutubeUrl(url: string | null): boolean {
+  if (!url) return false
+  return /youtu\.be\/|youtube\.com/.test(url)
+}
 
-function VideoPlayer({ url }: { url: string | null }) {
+const YT_ENDED_JS = `
+(function() {
+  window.addEventListener('message', function(e) {
+    try {
+      var d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+      if (d && d.event === 'onStateChange' && d.info === 0) {
+        window.ReactNativeWebView.postMessage('video_ended');
+      }
+    } catch(_) {}
+  });
+})();
+true;
+`
+
+function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void }) {
   const embed = getEmbedUrl(url)
   const [error, setError] = useState(false)
+  const onEndRef = useRef(onEnd)
+  useEffect(() => { onEndRef.current = onEnd }, [onEnd])
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !isYoutubeUrl(url)) return
+    const handler = (e: MessageEvent) => {
+      try {
+        const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
+        if (d?.event === 'onStateChange' && d?.info === 0) onEndRef.current?.()
+      } catch (_) {}
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [url])
 
   if (!embed || !url) return null
 
@@ -84,6 +116,8 @@ function VideoPlayer({ url }: { url: string | null }) {
         allowsFullscreenVideo
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
+        injectedJavaScript={isYoutubeUrl(url) ? YT_ENDED_JS : undefined}
+        onMessage={(e) => { if (e.nativeEvent.data === 'video_ended') onEnd?.() }}
         onError={() => setError(true)}
         onHttpError={(e) => { if (e.nativeEvent.statusCode >= 400) setError(true) }}
       />
@@ -121,6 +155,7 @@ export default function UniversityLeccion() {
   const [tareas, setTareas] = useState<Tarea[]>([])
   const [entregas, setEntregas] = useState<Map<string, Entrega>>(new Map())
   const [yaCompletada, setYaCompletada] = useState(false)
+  const [videoVisto, setVideoVisto] = useState(false)
   const [completando, setCompletando] = useState(false)
   const [resultado, setResultado] = useState<{ curso_completado: boolean; certificado_nuevo: boolean } | null>(null)
   const [esCertificacion, setEsCertificacion] = useState(false)
@@ -156,6 +191,7 @@ export default function UniversityLeccion() {
     setTareas(tareasData ?? [])
     setEsCertificacion(!!(cursoData as any)?.es_certificacion)
     setYaCompletada(!!progData)
+    setVideoVisto(!isYoutubeUrl(lecData?.youtube_url ?? null))
 
     // Cargar entregas del usuario para las tareas de esta lección
     if (tareasData && tareasData.length > 0) {
@@ -288,7 +324,7 @@ export default function UniversityLeccion() {
       </View>
 
       {/* Video */}
-      <VideoPlayer url={leccion.youtube_url} />
+      <VideoPlayer url={leccion.youtube_url} onEnd={() => setVideoVisto(true)} />
 
       <View style={estilos.body}>
         <Text style={estilos.titulo}>{leccion.titulo}</Text>
@@ -445,16 +481,23 @@ export default function UniversityLeccion() {
             </View>
           )
         ) : (
-          <TouchableOpacity
-            style={[estilos.btnCompletar, completando && { opacity: 0.6 }]}
-            onPress={marcarCompletada}
-            disabled={completando}
-          >
-            {completando
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={estilos.btnCompletarText}>✓ Marcar como completada · +10 pts</Text>
-            }
-          </TouchableOpacity>
+          <>
+            {!videoVisto && (
+              <View style={estilos.videoPendienteBanner}>
+                <Text style={estilos.videoPendienteText}>▶ Termina de ver el video para habilitar este botón</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[estilos.btnCompletar, (completando || !videoVisto) && { opacity: 0.4 }]}
+              onPress={marcarCompletada}
+              disabled={completando || !videoVisto}
+            >
+              {completando
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={estilos.btnCompletarText}>✓ Marcar como completada · +10 pts</Text>
+              }
+            </TouchableOpacity>
+          </>
         )}
       </View>
     </ScrollView>
@@ -502,6 +545,8 @@ const estilos = StyleSheet.create({
   pendienteText: { color: '#e65100', fontWeight: '600', fontSize: 13, textAlign: 'center' },
   btnCompletar: { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 16 },
   btnCompletarText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  videoPendienteBanner: { backgroundColor: '#fff8e1', borderRadius: 10, padding: 12, alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: '#ffb300' },
+  videoPendienteText: { color: '#e65100', fontSize: 13, fontWeight: '600', textAlign: 'center' },
   cursoDoneCard: { backgroundColor: '#c9a84c', borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 20 },
   cursoDoneIcon: { fontSize: 40, marginBottom: 8 },
   cursoDoneTitle: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 4 },

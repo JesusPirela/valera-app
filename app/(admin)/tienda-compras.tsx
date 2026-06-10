@@ -8,12 +8,6 @@ import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
-type UsuarioCofre = {
-  id: string
-  nombre: string
-  cofres_pendientes: number
-}
-
 type Compra = {
   id: string
   user_id: string
@@ -57,7 +51,7 @@ export default function TiendaCompras() {
   const c = useColors()
   const [compras, setCompras]       = useState<Compra[]>([])
   const [loading, setLoading]       = useState(true)
-  const [filtro, setFiltro]         = useState<'todas' | 'pendiente' | 'entregado' | 'rechazado' | 'cofre' | 'regalar'>('pendiente')
+  const [filtro, setFiltro]         = useState<'todas' | 'pendiente' | 'entregado' | 'rechazado' | 'cofre'>('pendiente')
 
   // Modal de atención
   const [modal, setModal]           = useState(false)
@@ -73,16 +67,6 @@ export default function TiendaCompras() {
   const [modalRechazo, setModalRechazo] = useState(false)
   const [motivoRechazo, setMotivoRechazo] = useState('')
   const [compraRechazo, setCompraRechazo] = useState<Compra | null>(null)
-
-  // Regalar cofres
-  const [usuarios, setUsuarios]           = useState<UsuarioCofre[]>([])
-  const [loadingUsers, setLoadingUsers]   = useState(false)
-  const [busquedaUser, setBusquedaUser]   = useState('')
-  const [modalRegalar, setModalRegalar]   = useState(false)
-  const [usuarioRegalo, setUsuarioRegalo] = useState<UsuarioCofre | null>(null)
-  const [cantRegalo, setCantRegalo]       = useState(1)
-  const [notaRegalo, setNotaRegalo]       = useState('')
-  const [regalando, setRegalando]         = useState(false)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -161,46 +145,6 @@ export default function TiendaCompras() {
     cargar()
   }
 
-  async function cargarUsuarios() {
-    setLoadingUsers(true)
-    const { data: perfs } = await supabase
-      .from('profiles').select('id, nombre').neq('role', 'admin').order('nombre')
-    if (!perfs) { setLoadingUsers(false); return }
-    const ids = perfs.map((u: any) => u.id)
-    const { data: stats } = await supabase
-      .from('user_stats').select('id, cofres_pendientes').in('id', ids)
-    const statsMap = new Map((stats ?? []).map((s: any) => [s.id, s.cofres_pendientes ?? 0]))
-    setUsuarios(perfs.map((u: any) => ({
-      id: u.id,
-      nombre: u.nombre ?? 'Sin nombre',
-      cofres_pendientes: statsMap.get(u.id) ?? 0,
-    })))
-    setLoadingUsers(false)
-  }
-
-  async function regalarCofre() {
-    if (!usuarioRegalo) return
-    setRegalando(true)
-    const nota = notaRegalo.trim() ||
-      `El equipo Valera te regala ${cantRegalo} cofre${cantRegalo > 1 ? 's' : ''} misterioso${cantRegalo > 1 ? 's' : ''} 🎁`
-    const { data, error } = await supabase.rpc('admin_regalar_cofre', {
-      p_target_user_id: usuarioRegalo.id,
-      p_cantidad:       cantRegalo,
-      p_nota:           nota,
-    })
-    setRegalando(false)
-    if (error || !data) { alerta('Error: ' + (error?.message ?? 'desconocido')); return }
-    setUsuarios(prev => prev.map(u =>
-      u.id === usuarioRegalo.id
-        ? { ...u, cofres_pendientes: u.cofres_pendientes + cantRegalo }
-        : u
-    ))
-    alerta(`✅ ${cantRegalo} cofre${cantRegalo > 1 ? 's regalados' : ' regalado'} a ${usuarioRegalo.nombre}`)
-    setModalRegalar(false)
-    setNotaRegalo('')
-    setCantRegalo(1)
-  }
-
   const esCofre = (comp: Compra) => comp.es_ruleta === true || comp.costo_coins === 0
 
   const lista = compras.filter(comp => {
@@ -244,76 +188,17 @@ export default function TiendaCompras() {
           ['entregado', '✅ Entregadas'],
           ['rechazado', '❌ Rechazadas'],
           ['cofre',     `🎁 Cofre${cofrePendientes > 0 ? ` (${cofrePendientes})` : ''}`],
-          ['regalar',   '🎀 Regalar'],
         ] as const).map(([val, lbl]) => (
           <TouchableOpacity
             key={val}
             style={[s.filtroBtn, filtro === val && s.filtroBtnActivo]}
-            onPress={() => {
-              setFiltro(val)
-              if (val === 'regalar' && usuarios.length === 0) cargarUsuarios()
-            }}
+            onPress={() => setFiltro(val)}
           >
             <Text style={[s.filtroTxt, { color: c.textSub }, filtro === val && s.filtroTxtActivo]}>{lbl}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
-      {filtro === 'regalar' ? (
-        // ── Tab Regalar ─────────────────────────────────────────────
-        <View style={{ flex: 1 }}>
-          <View style={s.regalarHeader}>
-            <Text style={[s.regalarHeaderTxt, { color: c.text }]}>Regalar cofres a usuarios</Text>
-            <Text style={[s.regalarHeaderSub, { color: c.textSub }]}>Selecciona un usuario para regalarle cofres gratis</Text>
-          </View>
-          <View style={[s.regalarSearchRow, { backgroundColor: c.card, borderColor: c.border }]}>
-            <Text style={{ fontSize: 16, marginRight: 6 }}>🔍</Text>
-            <TextInput
-              style={[s.regalarSearch, { color: c.text }]}
-              placeholder="Buscar usuario..."
-              placeholderTextColor={c.textMute}
-              value={busquedaUser}
-              onChangeText={setBusquedaUser}
-            />
-          </View>
-          {loadingUsers
-            ? <ActivityIndicator style={{ marginTop: 40 }} color="#1a6470" />
-            : (
-              <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
-                {usuarios
-                  .filter(u => !busquedaUser || u.nombre.toLowerCase().includes(busquedaUser.toLowerCase()))
-                  .map(u => (
-                    <TouchableOpacity
-                      key={u.id}
-                      style={[s.userCard, { backgroundColor: c.card, borderColor: c.border }]}
-                      onPress={() => { setUsuarioRegalo(u); setCantRegalo(1); setNotaRegalo(''); setModalRegalar(true) }}
-                    >
-                      <View style={s.userCardLeft}>
-                        <View style={s.userAvatar}>
-                          <Text style={{ fontSize: 20 }}>👤</Text>
-                        </View>
-                        <View>
-                          <Text style={[s.userNombre, { color: c.text }]}>{u.nombre}</Text>
-                          {u.cofres_pendientes > 0 && (
-                            <Text style={s.userCofres}>🎁 {u.cofres_pendientes} cofre{u.cofres_pendientes > 1 ? 's' : ''} pendiente{u.cofres_pendientes > 1 ? 's' : ''}</Text>
-                          )}
-                        </View>
-                      </View>
-                      <View style={s.regalarBtn}>
-                        <Text style={s.regalarBtnTxt}>🎁 Regalar</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                {usuarios.filter(u => !busquedaUser || u.nombre.toLowerCase().includes(busquedaUser.toLowerCase())).length === 0 && (
-                  <View style={s.emptyBox}>
-                    <Text style={s.emptyTxt}>No se encontraron usuarios.</Text>
-                  </View>
-                )}
-              </ScrollView>
-            )
-          }
-        </View>
-      ) : (
       <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
         {lista.length === 0 ? (
           <View style={s.emptyBox}>
@@ -370,64 +255,6 @@ export default function TiendaCompras() {
           )
         })}
       </ScrollView>
-      )}
-
-      {/* Modal Regalar cofre */}
-      <Modal visible={modalRegalar} animationType="slide" transparent onRequestClose={() => setModalRegalar(false)}>
-        <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { backgroundColor: c.card, paddingBottom: 40 }]}>
-            <Text style={[s.modalTitle, { color: '#2e7d32' }]}>🎁 Regalar cofres</Text>
-            {usuarioRegalo && (
-              <View style={[s.modalInfo, { marginBottom: 16 }]}>
-                <Text style={s.modalInfoIcono}>👤</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.modalInfoNombre, { color: c.text }]}>{usuarioRegalo.nombre}</Text>
-                  <Text style={s.modalInfoUser}>
-                    Cofres pendientes actuales: {usuarioRegalo.cofres_pendientes}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            <Text style={[s.seccionTitle, { color: c.text }]}>Cantidad de cofres</Text>
-            <View style={s.cantRow}>
-              {[1, 2, 3, 5, 10].map(n => (
-                <TouchableOpacity
-                  key={n}
-                  style={[s.cantBtn, cantRegalo === n && s.cantBtnActivo]}
-                  onPress={() => setCantRegalo(n)}
-                >
-                  <Text style={[s.cantBtnTxt, cantRegalo === n && s.cantBtnTxtActivo]}>{n}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={[s.fieldLabel, { color: c.textSub, marginTop: 12 }]}>Mensaje (opcional)</Text>
-            <TextInput
-              style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText, height: 80, textAlignVertical: 'top' }]}
-              value={notaRegalo}
-              onChangeText={setNotaRegalo}
-              multiline
-              placeholder="Ej: ¡Premio por tu excelente desempeño este mes! 🏆"
-              placeholderTextColor={c.textMute}
-            />
-
-            <TouchableOpacity
-              style={[s.btnEnviar, { backgroundColor: '#2e7d32', marginTop: 16 }, regalando && { opacity: 0.6 }]}
-              onPress={regalarCofre}
-              disabled={regalando}
-            >
-              {regalando
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={s.btnEnviarTxt}>🎁 Regalar {cantRegalo} cofre{cantRegalo > 1 ? 's' : ''}</Text>
-              }
-            </TouchableOpacity>
-            <TouchableOpacity style={s.btnCancelar} onPress={() => setModalRegalar(false)}>
-              <Text style={s.btnCancelarTxt}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Modal de atención */}
       <Modal visible={modal} animationType="slide" transparent onRequestClose={() => setModal(false)}>
@@ -660,39 +487,4 @@ const s = StyleSheet.create({
   btnCancelar: { alignItems: 'center', paddingVertical: 14 },
   btnCancelarTxt: { color: '#aaa', fontSize: 14 },
 
-  // Regalar
-  regalarHeader: { padding: 16, paddingBottom: 4 },
-  regalarHeaderTxt: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
-  regalarHeaderSub: { fontSize: 12 },
-  regalarSearchRow: {
-    flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 12, marginBottom: 4, marginTop: 8,
-    borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10,
-  },
-  regalarSearch: { flex: 1, fontSize: 14 },
-  userCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderRadius: 14, marginBottom: 8, padding: 14, borderWidth: 1,
-  },
-  userCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  userAvatar: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: '#e8f4f8', alignItems: 'center', justifyContent: 'center',
-  },
-  userNombre: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
-  userCofres: { fontSize: 11, color: '#2e7d32', fontWeight: '600' },
-  regalarBtn: {
-    backgroundColor: '#2e7d32', borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 8,
-  },
-  regalarBtnTxt: { color: '#fff', fontWeight: '700', fontSize: 12 },
-
-  cantRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  cantBtn: {
-    width: 46, height: 46, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: '#ddd',
-  },
-  cantBtnActivo: { backgroundColor: '#2e7d32', borderColor: '#2e7d32' },
-  cantBtnTxt: { fontSize: 16, fontWeight: '700', color: '#555' },
-  cantBtnTxtActivo: { color: '#fff' },
 })

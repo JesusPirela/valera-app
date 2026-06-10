@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, createElement } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
   TextInput, ActivityIndicator, ScrollView, Platform, Alert,
@@ -516,20 +516,15 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
   const dia    = formatDia(cita.fecha_cita)
   const hora   = formatHora(cita.fecha_cita)
 
-  const webDrag = Platform.OS === 'web' && onDragStart ? {
-    draggable: true,
-    onDragStart: (e: any) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(cita) },
-    onDragEnd: () => {},
-  } : {}
+  const isWebDrag = Platform.OS === 'web' && !!onDragStart
 
-  return (
+  const card = (
     <TouchableOpacity
-      style={[kc.card, esUrgente && kc.cardUrgente, isDragging && kc.cardDragging]}
+      style={[kc.card, esUrgente && kc.cardUrgente, !isWebDrag && isDragging && kc.cardDragging, isWebDrag && { marginBottom: 0 }]}
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={400}
       activeOpacity={0.85}
-      {...(webDrag as any)}
     >
       {/* Barra de color lateral */}
       <View style={[kc.colorBar, { backgroundColor: inf.color }]} />
@@ -600,6 +595,16 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
       </View>
     </TouchableOpacity>
   )
+
+  if (isWebDrag) {
+    return createElement('div', {
+      draggable: true,
+      onDragStart: (e: any) => { e.dataTransfer.effectAllowed = 'move'; onDragStart!(cita) },
+      style: { marginBottom: 8, cursor: 'grab', opacity: isDragging ? 0.45 : 1 },
+    }, card)
+  }
+
+  return card
 }
 
 const kc = StyleSheet.create({
@@ -644,18 +649,10 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
   onDrop?: () => void
 }) {
   const inf = ESTADOS_CITA[estado]
+  const dragCounter = useRef(0)
 
-  const webDropProps = Platform.OS === 'web' ? {
-    onDragOver: (e: any) => { e.preventDefault(); onDragOver?.() },
-    onDragLeave: () => onDragLeave?.(),
-    onDrop: (e: any) => { e.preventDefault(); onDrop?.() },
-  } : {}
-
-  return (
-    <View
-      style={[col.wrap, { width: COL_W }]}
-      {...(webDropProps as any)}
-    >
+  const inner = (
+    <View style={[col.wrap, { width: COL_W }, Platform.OS === 'web' && { marginRight: 0 }]}>
       {/* Cabecera de columna */}
       <View style={[col.header, { borderTopColor: inf.color }, isDragOver && { borderTopWidth: 4, borderTopColor: inf.color }]}>
         <View style={[col.headerDot, { backgroundColor: inf.color }]} />
@@ -692,6 +689,16 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
       </ScrollView>
     </View>
   )
+
+  if (Platform.OS !== 'web') return inner
+
+  return createElement('div', {
+    style: { width: COL_W, marginRight: 10, display: 'flex', flexDirection: 'column', flexShrink: 0 },
+    onDragEnter: (e: any) => { e.preventDefault(); dragCounter.current++; if (dragCounter.current === 1) onDragOver?.() },
+    onDragOver: (e: any) => { e.preventDefault() },
+    onDragLeave: () => { dragCounter.current--; if (dragCounter.current === 0) onDragLeave?.() },
+    onDrop: (e: any) => { e.preventDefault(); dragCounter.current = 0; onDrop?.() },
+  }, inner)
 }
 
 const col = StyleSheet.create({
