@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Modal, Platform,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
@@ -70,7 +70,15 @@ export default function AdminMisiones() {
   const [form, setForm] = useState<Omit<Mision, 'id'>>(MISION_VACIA)
   const [guardando, setGuardando] = useState(false)
 
-  useFocusEffect(useCallback(() => { cargar() }, []))
+  useFocusEffect(useCallback(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user?.id) return
+      supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
+        if (data?.role === 'supervisor') router.replace('/(admin)/propiedades')
+      })
+    })
+    cargar()
+  }, []))
 
   async function cargar() {
     setLoading(true)

@@ -223,7 +223,15 @@ export default function Prospectadores() {
     setLoading(false)
   }
 
-  useFocusEffect(useCallback(() => { cargar() }, []))
+  useFocusEffect(useCallback(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user?.id) return
+      supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
+        if (data?.role === 'supervisor') router.replace('/(admin)/propiedades')
+      })
+    })
+    cargar()
+  }, []))
 
   function abrirModal() {
     setNombre('')

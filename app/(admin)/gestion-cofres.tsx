@@ -68,6 +68,12 @@ export default function GestionCofres() {
   const [regalando, setRegalando]         = useState(false)
 
   useFocusEffect(useCallback(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user?.id) return
+      supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
+        if (data?.role === 'supervisor') router.replace('/(admin)/propiedades')
+      })
+    })
     cargarUsuarios()
     cargarHistorial()
   }, []))

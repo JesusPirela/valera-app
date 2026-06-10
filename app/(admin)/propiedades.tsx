@@ -113,7 +113,14 @@ export default function AdminPropiedades() {
   useFocusEffect(useCallback(() => { cargarPropiedades(); cargarRolEInmobiliarias() }, []))
 
   const navItems = esSupervisor
-    ? NAV_ITEMS.filter((item) => !['/(admin)/nueva-propiedad', '/(admin)/university', '/(admin)/tienda-compras'].includes(item.route))
+    ? NAV_ITEMS.filter((item) => ![
+        '/(admin)/nueva-propiedad',
+        '/(admin)/university',
+        '/(admin)/tienda-compras',
+        '/(admin)/misiones',
+        '/(admin)/gestion-cofres',
+        '/(admin)/prospectadores',
+      ].includes(item.route))
     : NAV_ITEMS
 
   const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, filtroInmobiliaria].filter(Boolean).length
