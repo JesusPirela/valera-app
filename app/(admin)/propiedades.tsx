@@ -401,7 +401,16 @@ export default function AdminPropiedades() {
                   )}
 
                   {/* Botones de acción compactos (solo lectura para Supervisor) */}
-                  {!esSupervisor && (
+                  {esSupervisor ? (
+                    <View style={styles.cardAcciones}>
+                      <TouchableOpacity
+                        style={styles.btnEditar}
+                        onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } })}
+                      >
+                        <Text style={styles.btnEditarText}>👁 Ver ficha</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
                     <View style={styles.cardAcciones}>
                       <TouchableOpacity
                         style={styles.btnEditar}
@@ -487,26 +496,37 @@ export default function AdminPropiedades() {
                       {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
                     </View>
                   )}
-                  <View style={styles.cardAcciones}>
-                    <TouchableOpacity
-                      style={styles.btnEditar}
-                      onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: item.id } })}
-                    >
-                      <Text style={styles.btnEditarText}>✏️ Editar</Text>
-                    </TouchableOpacity>
-                    {item.destacada ? (
-                      <TouchableOpacity style={styles.btnQuitarDestacada} onPress={() => quitarDestacada(item.id)}>
-                        <Text style={styles.btnQuitarDestacadaText}>✕ Destacado</Text>
+                  {esSupervisor ? (
+                    <View style={styles.cardAcciones}>
+                      <TouchableOpacity
+                        style={styles.btnEditar}
+                        onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } })}
+                      >
+                        <Text style={styles.btnEditarText}>👁 Ver ficha</Text>
                       </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity style={styles.btnDestacar} onPress={() => abrirModalDestacar(item)}>
-                        <Text style={styles.btnDestacarText}>★ Destacar</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.cardAcciones}>
+                      <TouchableOpacity
+                        style={styles.btnEditar}
+                        onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: item.id } })}
+                      >
+                        <Text style={styles.btnEditarText}>✏️ Editar</Text>
                       </TouchableOpacity>
-                    )}
-                    <TouchableOpacity style={styles.btnBorrar} onPress={() => handleBorrar(item.id, item.titulo)}>
-                      <Text style={styles.btnBorrarText}>🗑</Text>
-                    </TouchableOpacity>
-                  </View>
+                      {item.destacada ? (
+                        <TouchableOpacity style={styles.btnQuitarDestacada} onPress={() => quitarDestacada(item.id)}>
+                          <Text style={styles.btnQuitarDestacadaText}>✕ Destacado</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity style={styles.btnDestacar} onPress={() => abrirModalDestacar(item)}>
+                          <Text style={styles.btnDestacarText}>★ Destacar</Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity style={styles.btnBorrar} onPress={() => handleBorrar(item.id, item.titulo)}>
+                        <Text style={styles.btnBorrarText}>🗑</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               </View>
             )

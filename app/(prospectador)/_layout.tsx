@@ -72,6 +72,7 @@ function HoverTabIcon({ name, nameFocused, focused, color }: {
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
   const [showCrmPopup, setShowCrmPopup] = useState(false)
+  const [role, setRole] = useState<string | null>(null)
   const { primaryColor: colorAcento, darkMode } = useTheme()
   const pathname = usePathname()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -80,6 +81,15 @@ export default function ProspectadorLayout() {
   useEffect(() => {
     mountedRef.current = true
     return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user?.id) return
+      supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
+        if (mountedRef.current) setRole(data?.role ?? null)
+      })
+    })
   }, [])
 
   // Mostrar popup CRM máximo 2 veces por día
@@ -230,8 +240,9 @@ export default function ProspectadorLayout() {
           />
         ),
         headerLeft: () => {
+          const esAdminOSupervisor = role === 'admin' || role === 'supervisor'
           const BACK: Record<string, string> = {
-            'detalle-propiedad': '/(prospectador)/propiedades',
+            'detalle-propiedad': esAdminOSupervisor ? '/(admin)/propiedades' : '/(prospectador)/propiedades',
             'detalle-cliente':   '/(prospectador)/crm',
             'cliente-form':      '/(prospectador)/crm',
             'university-curso':  '/(prospectador)/university',
