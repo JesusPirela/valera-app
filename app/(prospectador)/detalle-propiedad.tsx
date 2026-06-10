@@ -512,7 +512,7 @@ export default function DetallePropiedad() {
         .inmob-logo { max-height: 90px; max-width: 240px; object-fit: contain; }
         .inmob-nombre { font-size: 12px; color: #888; font-weight: 600; margin-top: 4px; }
         .fotos { display: flex; flex-wrap: wrap; gap: 14px; }
-        .foto-galeria { width: calc(50% - 7px); height: 220px; object-fit: contain; background: #eef2f3; border-radius: 8px; border: 1px solid #e0e8ea; break-inside: avoid; page-break-inside: avoid; }
+        .foto-galeria { width: calc(50% - 7px); height: 330px; object-fit: contain; background: #eef2f3; border-radius: 8px; border: 1px solid #e0e8ea; break-inside: avoid; page-break-inside: avoid; }
         .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1.2px; text-transform: uppercase; margin: 20px 0 10px; }
         .cars { display: flex; gap: 12px; flex-wrap: wrap; }
         .car-val { display: block; font-size: 20px; font-weight: 800; color: #1a6470; }
@@ -633,6 +633,15 @@ export default function DetallePropiedad() {
             return findBreak(Math.floor(idealEnd))
           }
 
+          // Forzar salto de página entre cada grupo de fotos de la galería (máx. 6 por hoja)
+          const forceBreaks = Array.from(container.querySelectorAll('.galeria-grupo'))
+            .slice(1)
+            .map(el => {
+              const r = el.getBoundingClientRect()
+              return (r.top - containerRect.top) * scaleFactor
+            })
+            .sort((a, b) => a - b)
+
           const sliceCanvas = document.createElement('canvas')
           const sliceCtx = sliceCanvas.getContext('2d')!
           sliceCanvas.width = canvas.width
@@ -641,7 +650,9 @@ export default function DetallePropiedad() {
           let firstPage = true
           while (renderedPx < canvas.height) {
             const idealEnd = renderedPx + pageHeightPx
-            const end = resolveBreak(renderedPx, idealEnd)
+            let end = resolveBreak(renderedPx, idealEnd)
+            const nextForceBreak = forceBreaks.find(f => f > renderedPx + 1 && f < end)
+            if (nextForceBreak !== undefined) end = nextForceBreak
             const sliceHeightPx = Math.max(1, end - renderedPx)
 
             sliceCanvas.height = sliceHeightPx
