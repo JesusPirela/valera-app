@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type Periodo = 'hoy' | 'ayer' | '7dias' | '30dias' | 'este_mes' | 'mes_pasado' | 'rango'
+type Periodo = '24h' | '7dias' | '30dias'
 
 type UsuarioMetricas = {
   id: string
@@ -47,35 +47,48 @@ type ReportProgramado = {
 const FREQ_LABELS: Record<string, string> = { diario: 'Diario', semanal: 'Semanal', mensual: 'Mensual' }
 const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
-// ── Helpers de fecha ──────────────────────────────────────────────────────────
-function sdDia(d: Date) { const c = new Date(d); c.setHours(0,0,0,0); return c }
-function edDia(d: Date) { const c = new Date(d); c.setHours(23,59,59,999); return c }
-function primerDiaMes(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1) }
-function ultimoDiaMes(d: Date) { return new Date(d.getFullYear(), d.getMonth()+1, 0, 23, 59, 59, 999) }
+const PERIODOS: { key: Periodo; label: string; sub: string }[] = [
+  { key: '24h',   label: '24 horas', sub: 'Últimas 24h'    },
+  { key: '7dias', label: '7 días',   sub: 'Última semana'  },
+  { key: '30dias',label: '30 días',  sub: 'Último mes'     },
+]
 
-function getRango(p: Periodo, ri?: Date, rf?: Date): { inicio: Date; fin: Date } {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function getRango(p: Periodo): { inicio: Date; fin: Date } {
   const now = new Date()
   switch (p) {
-    case 'hoy':        return { inicio: sdDia(now),                        fin: now }
-    case 'ayer':       { const a = new Date(now); a.setDate(a.getDate()-1); return { inicio: sdDia(a), fin: edDia(a) } }
-    case '7dias':      { const i = new Date(now); i.setDate(i.getDate()-7); return { inicio: i, fin: now } }
-    case '30dias':     { const i = new Date(now); i.setDate(i.getDate()-30); return { inicio: i, fin: now } }
-    case 'este_mes':   return { inicio: primerDiaMes(now), fin: now }
-    case 'mes_pasado': { const pm = new Date(now.getFullYear(), now.getMonth()-1, 1); return { inicio: pm, fin: ultimoDiaMes(pm) } }
-    case 'rango':      return { inicio: ri ?? sdDia(now), fin: rf ?? now }
+    case '24h': {
+      const i = new Date(now)
+      i.setHours(i.getHours() - 24)
+      return { inicio: i, fin: now }
+    }
+    case '7dias': {
+      const i = new Date(now)
+      i.setDate(i.getDate() - 7)
+      return { inicio: i, fin: now }
+    }
+    case '30dias': {
+      const i = new Date(now)
+      i.setDate(i.getDate() - 30)
+      return { inicio: i, fin: now }
+    }
   }
 }
 
 function formatMinutos(m: number) {
   if (!m) return '—'
-  const h = Math.floor(m / 60)
+  const h   = Math.floor(m / 60)
   const min = m % 60
   return h > 0 ? `${h}h ${min}m` : `${min}m`
 }
 
-function formatHora(iso: string | null) {
+function formatAcceso(iso: string | null, periodo: Periodo) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+  const d = new Date(iso)
+  if (periodo === '24h') {
+    return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+  }
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 function formatFechaCorta(iso: string | null) {
@@ -83,9 +96,13 @@ function formatFechaCorta(iso: string | null) {
   return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-function formatRangoLabel(inicio: Date, fin: Date) {
+function formatRangoLabel(p: Periodo, inicio: Date, fin: Date) {
   const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }
-  return `${inicio.toLocaleDateString('es-MX', opts)} – ${fin.toLocaleDateString('es-MX', opts)}`
+  switch (p) {
+    case '24h':    return `Últimas 24 horas · ${inicio.toLocaleDateString('es-MX', opts)} – ${fin.toLocaleDateString('es-MX', opts)}`
+    case '7dias':  return `Últimos 7 días · ${inicio.toLocaleDateString('es-MX', opts)} – ${fin.toLocaleDateString('es-MX', opts)}`
+    case '30dias': return `Últimos 30 días · ${inicio.toLocaleDateString('es-MX', opts)} – ${fin.toLocaleDateString('es-MX', opts)}`
+  }
 }
 
 function statusConfig(act: number, max: number) {
@@ -111,7 +128,7 @@ function KpiCard({ icono, label, valor, color, sub }: { icono: string; label: st
   )
 }
 const kS = StyleSheet.create({
-  card: { flex: 1, backgroundColor: '#111f2e', borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1, minWidth: 80 },
+  card:  { flex: 1, backgroundColor: '#111f2e', borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1, minWidth: 80 },
   icono: { fontSize: 22, marginBottom: 4 },
   valor: { fontSize: 22, fontWeight: '900', marginBottom: 2 },
   label: { fontSize: 10, color: '#7a9ab5', textAlign: 'center', fontWeight: '600' },
@@ -126,9 +143,9 @@ function TrendChart({ datos, height = 80 }: { datos: DiaActividad[]; height?: nu
     <View style={tS.wrap}>
       <View style={[tS.bars, { height }]}>
         {datos.map((d, i) => {
-          const pct = d.total_actividad / maxVal
+          const pct  = d.total_actividad / maxVal
           const barH = Math.max(pct * height, d.total_actividad > 0 ? 4 : 2)
-          const col = d.total_actividad === 0 ? '#1e3448' : d.usuarios_activos >= 3 ? '#1a6470' : '#c9a84c'
+          const col  = d.total_actividad === 0 ? '#1e3448' : d.usuarios_activos >= 3 ? '#1a6470' : '#c9a84c'
           return (
             <View key={i} style={tS.barWrap}>
               <View style={[tS.bar, { height: barH, width: barW, backgroundColor: col }]} />
@@ -175,15 +192,16 @@ const mS = StyleSheet.create({
   valor: { fontSize: 14, fontWeight: '800', color: '#fff', minWidth: 30, textAlign: 'right' },
 })
 
-function UserCard({ u, rank, maxActividad, expanded, onToggle }: {
+function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo }: {
   u: UsuarioMetricas
   rank: number
   maxActividad: number
   expanded: boolean
   onToggle: () => void
+  periodo: Periodo
 }) {
-  const st = statusConfig(u.actividad_total, maxActividad)
-  const pct = maxActividad > 0 ? u.actividad_total / maxActividad : 0
+  const st   = statusConfig(u.actividad_total, maxActividad)
+  const pct  = maxActividad > 0 ? u.actividad_total / maxActividad : 0
   const horas = Math.floor(u.minutos_conexion / 60)
   const mins  = u.minutos_conexion % 60
 
@@ -233,11 +251,11 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle }: {
             </View>
             <View style={uS.tiempoItem}>
               <Text style={uS.tiempoLbl}>🌅 Primera actividad</Text>
-              <Text style={uS.tiempoVal}>{formatHora(u.primer_acceso)}</Text>
+              <Text style={uS.tiempoVal}>{formatAcceso(u.primer_acceso, periodo)}</Text>
             </View>
             <View style={uS.tiempoItem}>
               <Text style={uS.tiempoLbl}>🌙 Última actividad</Text>
-              <Text style={uS.tiempoVal}>{formatHora(u.ultimo_acceso)}</Text>
+              <Text style={uS.tiempoVal}>{formatAcceso(u.ultimo_acceso, periodo)}</Text>
             </View>
           </View>
           <View style={[uS.scoreRow, { backgroundColor: st.bg }]}>
@@ -285,11 +303,11 @@ function generarReporteHTML(
   rangoLabel: string,
   generadoEn: string,
 ): string {
-  const activos  = usuarios.filter(u => u.actividad_total > 0).length
-  const inactivos = usuarios.length - activos
-  const topUser  = usuarios[0]
-  const totalAct = usuarios.reduce((s, u) => s + u.actividad_total, 0)
-  const totalClientes = usuarios.reduce((s, u) => s + u.clientes_nuevos, 0)
+  const activos        = usuarios.filter(u => u.actividad_total > 0).length
+  const inactivos      = usuarios.length - activos
+  const topUser        = usuarios[0]
+  const totalAct       = usuarios.reduce((s, u) => s + u.actividad_total, 0)
+  const totalClientes  = usuarios.reduce((s, u) => s + u.clientes_nuevos, 0)
   const totalSeguimientos = usuarios.reduce((s, u) => s + u.seguimientos, 0)
 
   const filas = usuarios.map((u, i) => {
@@ -329,7 +347,7 @@ function generarReporteHTML(
   .header{background:linear-gradient(135deg,#1a6470,#0d3d45);color:#fff;border-radius:16px;padding:28px 32px;margin-bottom:24px}
   .header h1{font-size:24px;font-weight:900;margin-bottom:4px}
   .header p{font-size:13px;opacity:.8}
-  .header-meta{display:flex;gap:24px;margin-top:16px}
+  .header-meta{display:flex;gap:24px;margin-top:16px;flex-wrap:wrap}
   .header-meta div{background:rgba(255,255,255,.15);border-radius:8px;padding:10px 16px;text-align:center}
   .header-meta strong{display:block;font-size:22px;font-weight:900;color:#c9a84c}
   .header-meta span{font-size:11px;opacity:.85}
@@ -388,23 +406,9 @@ ${tendencia.length > 0 ? `
 }
 
 // ── Pantalla principal ────────────────────────────────────────────────────────
-const PERIODOS: { key: Periodo; label: string }[] = [
-  { key: 'hoy',        label: 'Hoy' },
-  { key: 'ayer',       label: 'Ayer' },
-  { key: '7dias',      label: '7 días' },
-  { key: '30dias',     label: '30 días' },
-  { key: 'este_mes',   label: 'Este mes' },
-  { key: 'mes_pasado', label: 'Mes anterior' },
-  { key: 'rango',      label: 'Rango' },
-]
-
 export default function Reportes() {
   const col = useColors()
-  const [periodo, setPeriodo]       = useState<Periodo>('7dias')
-  const [rangoInicio, setRangoInicio] = useState(new Date(Date.now() - 7*24*3600*1000))
-  const [rangoFin, setRangoFin]       = useState(new Date())
-  const [rangoInicioTxt, setRangoInicioTxt] = useState('')
-  const [rangoFinTxt, setRangoFinTxt]       = useState('')
+  const [periodo, setPeriodo] = useState<Periodo>('7dias')
   const [usuarios, setUsuarios]   = useState<UsuarioMetricas[]>([])
   const [tendencia, setTendencia] = useState<DiaActividad[]>([])
   const [loading, setLoading]     = useState(true)
@@ -418,7 +422,7 @@ export default function Reportes() {
   const [enviandoMsg, setEnviandoMsg] = useState('')
 
   // Programaciones
-  const [programados, setProgramados]   = useState<ReportProgramado[]>([])
+  const [programados, setProgramados]     = useState<ReportProgramado[]>([])
   const [modalSchedule, setModalSchedule] = useState(false)
   const [schedFreq, setSchedFreq]   = useState<'diario' | 'semanal' | 'mensual'>('diario')
   const [schedHora, setSchedHora]   = useState('09:00')
@@ -428,11 +432,11 @@ export default function Reportes() {
   useFocusEffect(useCallback(() => {
     cargar()
     cargarProgramados()
-  }, [periodo, rangoInicio, rangoFin]))
+  }, [periodo]))
 
   async function cargar() {
     setLoading(true)
-    const { inicio, fin } = getRango(periodo, rangoInicio, rangoFin)
+    const { inicio, fin } = getRango(periodo)
     const [uRes, tRes] = await Promise.all([
       supabase.rpc('get_productividad_equipo', { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
       supabase.rpc('get_tendencia_equipo',     { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
@@ -451,25 +455,16 @@ export default function Reportes() {
     setProgramados((data as ReportProgramado[] | null) ?? [])
   }
 
-  function aplicarRango() {
-    const i = new Date(rangoInicioTxt)
-    const f = new Date(rangoFinTxt + 'T23:59:59')
-    if (isNaN(i.getTime()) || isNaN(f.getTime())) { alerta('Fechas inválidas'); return }
-    if (i > f) { alerta('La fecha de inicio debe ser anterior al fin'); return }
-    setRangoInicio(i)
-    setRangoFin(f)
-  }
-
   function exportarPDF() {
     if (Platform.OS !== 'web') { alerta('La exportación PDF está disponible en la versión web'); return }
     setExportando(true)
-    const { inicio, fin } = getRango(periodo, rangoInicio, rangoFin)
-    const label = formatRangoLabel(inicio, fin)
-    const generadoEn = new Date().toLocaleString('es-MX', { dateStyle: 'full', timeStyle: 'short' })
-    const html = generarReporteHTML(usuarios, tendencia, label, generadoEn)
-    const blob = new Blob([html], { type: 'text/html' })
-    const url  = URL.createObjectURL(blob)
-    const win  = window.open(url, '_blank')
+    const { inicio, fin } = getRango(periodo)
+    const label       = formatRangoLabel(periodo, inicio, fin)
+    const generadoEn  = new Date().toLocaleString('es-MX', { dateStyle: 'full', timeStyle: 'short' })
+    const html  = generarReporteHTML(usuarios, tendencia, label, generadoEn)
+    const blob  = new Blob([html], { type: 'text/html' })
+    const url   = URL.createObjectURL(blob)
+    const win   = window.open(url, '_blank')
     if (win) {
       win.addEventListener('load', () => { win.print(); setTimeout(() => URL.revokeObjectURL(url), 60_000) })
     }
@@ -477,8 +472,8 @@ export default function Reportes() {
   }
 
   async function enviarEmailConFuncion() {
-    const { inicio, fin } = getRango(periodo, rangoInicio, rangoFin)
-    const label  = formatRangoLabel(inicio, fin)
+    const { inicio, fin } = getRango(periodo)
+    const label    = formatRangoLabel(periodo, inicio, fin)
     const destinos = emails.split(/[,;\n]/).map(e => e.trim()).filter(Boolean)
     if (!destinos.length) { alerta('Ingresa al menos un destinatario'); return }
 
@@ -534,57 +529,34 @@ export default function Reportes() {
     setProgramados(prev => prev.filter(p => p.id !== id))
   }
 
-  const { inicio, fin } = getRango(periodo, rangoInicio, rangoFin)
-  const rangoLabel   = formatRangoLabel(inicio, fin)
-  const maxActividad = usuarios[0]?.actividad_total ?? 0
-  const activos      = usuarios.filter(u => u.actividad_total > 0).length
-  const inactivos    = usuarios.length - activos
+  const { inicio, fin } = getRango(periodo)
+  const rangoLabel    = formatRangoLabel(periodo, inicio, fin)
+  const maxActividad  = usuarios[0]?.actividad_total ?? 0
+  const activos       = usuarios.filter(u => u.actividad_total > 0).length
+  const inactivos     = usuarios.length - activos
   const totalClientes = usuarios.reduce((s, u) => s + u.clientes_nuevos, 0)
   const totalSegui    = usuarios.reduce((s, u) => s + u.seguimientos, 0)
 
   return (
     <View style={{ flex: 1, backgroundColor: '#0d1b2a' }}>
 
-      {/* Period selector */}
-      <ScrollView
-        horizontal showsHorizontalScrollIndicator={false}
-        style={s.periodoScroll}
-        contentContainerStyle={s.periodoRow}
-      >
-        {PERIODOS.map(p => (
-          <TouchableOpacity
-            key={p.key}
-            style={[s.periodoBtn, periodo === p.key && s.periodoBtnActivo]}
-            onPress={() => setPeriodo(p.key)}
-          >
-            <Text style={[s.periodoTxt, periodo === p.key && s.periodoTxtActivo]}>{p.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Rango personalizado */}
-      {periodo === 'rango' && (
-        <View style={s.rangoRow}>
-          <TextInput
-            style={s.rangoInput}
-            placeholder="Inicio  yyyy-mm-dd"
-            placeholderTextColor="#556a7a"
-            value={rangoInicioTxt}
-            onChangeText={setRangoInicioTxt}
-          />
-          <Text style={{ color: '#556a7a', fontSize: 14 }}>→</Text>
-          <TextInput
-            style={s.rangoInput}
-            placeholder="Fin  yyyy-mm-dd"
-            placeholderTextColor="#556a7a"
-            value={rangoFinTxt}
-            onChangeText={setRangoFinTxt}
-          />
-          <TouchableOpacity style={s.rangoBtn} onPress={aplicarRango}>
-            <Text style={s.rangoBtnTxt}>Aplicar</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* ── Selector de período: 3 tabs prominentes ── */}
+      <View style={s.tabsContainer}>
+        {PERIODOS.map(p => {
+          const activo = periodo === p.key
+          return (
+            <TouchableOpacity
+              key={p.key}
+              style={[s.tab, activo && s.tabActivo]}
+              onPress={() => { if (!activo) setPeriodo(p.key) }}
+              activeOpacity={0.75}
+            >
+              <Text style={[s.tabLabel, activo && s.tabLabelActivo]}>{p.label}</Text>
+              <Text style={[s.tabSub, activo && s.tabSubActivo]}>{p.sub}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
 
       {loading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -602,7 +574,7 @@ export default function Reportes() {
             </TouchableOpacity>
           </View>
 
-          {/* ── EXPORTAR Y PROGRAMAR (arriba) ── */}
+          {/* ── EXPORTAR Y PROGRAMAR ── */}
           <View style={s.exportTopCard}>
             <View style={s.exportTopHeader}>
               <Text style={s.exportTopTitle}>📤 Exportar reporte</Text>
@@ -644,7 +616,6 @@ export default function Reportes() {
               </TouchableOpacity>
             </View>
 
-            {/* Lista de programaciones activas */}
             {programados.map(p => (
               <View key={p.id} style={s.schedItem}>
                 <Text style={s.schedItemEmoji}>
@@ -678,9 +649,9 @@ export default function Reportes() {
           {/* Activity status summary */}
           <View style={s.statusRow}>
             {[
-              { emoji: '🟢', label: 'Muy activos',     n: usuarios.filter(u => u.actividad_total >= maxActividad * 0.5 && u.actividad_total > 0).length },
-              { emoji: '🟡', label: 'Actividad media',  n: usuarios.filter(u => u.actividad_total > 0 && u.actividad_total < maxActividad * 0.5).length },
-              { emoji: '🔴', label: 'Sin actividad',    n: inactivos },
+              { emoji: '🟢', label: 'Muy activos',    n: usuarios.filter(u => u.actividad_total >= maxActividad * 0.5 && u.actividad_total > 0).length },
+              { emoji: '🟡', label: 'Act. media',      n: usuarios.filter(u => u.actividad_total > 0 && u.actividad_total < maxActividad * 0.5).length },
+              { emoji: '🔴', label: 'Sin actividad',   n: inactivos },
             ].map(st => (
               <View key={st.label} style={s.statusItem}>
                 <Text style={s.statusEmoji}>{st.emoji}</Text>
@@ -690,8 +661,8 @@ export default function Reportes() {
             ))}
           </View>
 
-          {/* Trend chart */}
-          {tendencia.length > 0 && (
+          {/* Trend chart — solo para 7 y 30 días */}
+          {periodo !== '24h' && tendencia.length > 0 && (
             <View style={s.section}>
               <Text style={s.sectionTitle}>Actividad diaria del equipo</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -717,24 +688,25 @@ export default function Reportes() {
                 maxActividad={maxActividad}
                 expanded={expandedId === u.id}
                 onToggle={() => setExpandedId(expandedId === u.id ? null : u.id)}
+                periodo={periodo}
               />
             ))}
           </View>
 
-          {/* Métricas del equipo (resumen) */}
+          {/* Totales del equipo */}
           {usuarios.length > 0 && (
             <View style={s.section}>
               <Text style={s.sectionTitle}>Totales del equipo</Text>
               <View style={s.teamCard}>
                 {[
-                  { icono: '👥', label: 'Clientes nuevos',       val: usuarios.reduce((s,u)=>s+u.clientes_nuevos,0) },
-                  { icono: '🏠', label: 'Propiedades publicadas', val: usuarios.reduce((s,u)=>s+u.propiedades_publicadas,0) },
-                  { icono: '✅', label: 'Seguimientos',           val: usuarios.reduce((s,u)=>s+u.seguimientos,0) },
-                  { icono: '💬', label: 'Interacciones',          val: usuarios.reduce((s,u)=>s+u.interacciones,0) },
-                  { icono: '📅', label: 'Citas generadas',        val: usuarios.reduce((s,u)=>s+u.citas,0) },
-                  { icono: '🎓', label: 'Cursos completados',     val: usuarios.reduce((s,u)=>s+u.cursos_completados,0) },
-                  { icono: '👁️',  label: 'Fichas vistas',          val: usuarios.reduce((s,u)=>s+u.vistas_propiedades,0) },
-                  { icono: '📥', label: 'Fotos guardadas',        val: usuarios.reduce((s,u)=>s+u.descargas_propiedades,0) },
+                  { icono: '👥', label: 'Clientes nuevos',        val: usuarios.reduce((a,u)=>a+u.clientes_nuevos,0) },
+                  { icono: '🏠', label: 'Propiedades publicadas',  val: usuarios.reduce((a,u)=>a+u.propiedades_publicadas,0) },
+                  { icono: '✅', label: 'Seguimientos',            val: usuarios.reduce((a,u)=>a+u.seguimientos,0) },
+                  { icono: '💬', label: 'Interacciones',           val: usuarios.reduce((a,u)=>a+u.interacciones,0) },
+                  { icono: '📅', label: 'Citas generadas',         val: usuarios.reduce((a,u)=>a+u.citas,0) },
+                  { icono: '🎓', label: 'Cursos completados',      val: usuarios.reduce((a,u)=>a+u.cursos_completados,0) },
+                  { icono: '👁️',  label: 'Fichas vistas',           val: usuarios.reduce((a,u)=>a+u.vistas_propiedades,0) },
+                  { icono: '📥', label: 'Fotos guardadas',         val: usuarios.reduce((a,u)=>a+u.descargas_propiedades,0) },
                 ].map(m => (
                   <View key={m.label} style={s.teamMetric}>
                     <Text style={s.teamMetricIcn}>{m.icono}</Text>
@@ -751,7 +723,7 @@ export default function Reportes() {
         </ScrollView>
       )}
 
-      {/* ── Modal: Enviar email ahora ── */}
+      {/* ── Modal: Enviar email ── */}
       <Modal visible={modalEmail} transparent animationType="slide" onRequestClose={() => !enviando && setModalEmail(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalSheet, { backgroundColor: col.card }]}>
@@ -869,20 +841,42 @@ const GOLD = '#c9a84c'
 const TEAL = '#1a6470'
 
 const s = StyleSheet.create({
-  periodoScroll: { flexGrow: 0, borderBottomWidth: 1, borderBottomColor: '#1e3448', backgroundColor: '#0d1b2a' },
-  periodoRow:    { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 10 },
-  periodoBtn:    { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#2a475e' },
-  periodoBtnActivo: { backgroundColor: TEAL, borderColor: TEAL },
-  periodoTxt:    { fontSize: 12, fontWeight: '600', color: '#556a7a' },
-  periodoTxtActivo: { color: '#fff' },
-
-  rangoRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#111f2e', borderBottomWidth: 1, borderBottomColor: '#1e3448' },
-  rangoInput: { flex: 1, backgroundColor: '#0d1b2a', borderRadius: 8, borderWidth: 1, borderColor: '#2a475e', paddingHorizontal: 10, paddingVertical: 7, fontSize: 12, color: '#fff' },
-  rangoBtn:   { backgroundColor: TEAL, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  rangoBtnTxt:{ color: '#fff', fontWeight: '700', fontSize: 12 },
+  // ── Tabs de período ──
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#0d1b2a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e3448',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 0,
+    gap: 8,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2a475e',
+    backgroundColor: '#111f2e',
+    marginBottom: 10,
+  },
+  tabActivo: {
+    backgroundColor: TEAL,
+    borderColor: TEAL,
+    shadowColor: TEAL,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  tabLabel:      { fontSize: 14, fontWeight: '800', color: '#556a7a' },
+  tabLabelActivo:{ color: '#fff' },
+  tabSub:        { fontSize: 9, color: '#2a475e', marginTop: 2, fontWeight: '600' },
+  tabSubActivo:  { color: 'rgba(255,255,255,.65)' },
 
   rangoHeader:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  rangoHeaderTxt:{ fontSize: 14, fontWeight: '700', color: '#7a9ab5' },
+  rangoHeaderTxt:{ fontSize: 12, fontWeight: '700', color: '#7a9ab5' },
   recargarBtn:   { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#1e3448' },
   recargarTxt:   { fontSize: 12, color: GOLD, fontWeight: '700' },
 
@@ -904,7 +898,6 @@ const s = StyleSheet.create({
   exportBtnTxt:   { color: '#fff', fontWeight: '800', fontSize: 13 },
   exportBtnSub:   { color: 'rgba(255,255,255,.65)', fontSize: 9 },
 
-  // Schedule items
   schedItem:       { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#0d1b2a', borderRadius: 10, padding: 10, marginTop: 8, borderWidth: 1, borderColor: '#1e3448' },
   schedItemEmoji:  { fontSize: 20 },
   schedItemTitulo: { fontSize: 13, fontWeight: '700', color: '#fff', marginBottom: 2 },
@@ -926,8 +919,8 @@ const s = StyleSheet.create({
   emptyBox: { alignItems: 'center', paddingVertical: 40 },
   emptyTxt: { color: '#556a7a', fontSize: 14 },
 
-  teamCard: { backgroundColor: '#111f2e', borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#1e3448' },
-  teamMetric: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1e3448', gap: 10 },
+  teamCard:      { backgroundColor: '#111f2e', borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#1e3448' },
+  teamMetric:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1e3448', gap: 10 },
   teamMetricIcn: { fontSize: 16, width: 24 },
   teamMetricLbl: { fontSize: 13, color: '#c0d0dc' },
   teamMetricVal: { fontSize: 16, fontWeight: '900', color: '#fff', minWidth: 36, textAlign: 'right' },
@@ -943,15 +936,14 @@ const s = StyleSheet.create({
   modalBtnTxt:  { color: '#fff', fontWeight: '800', fontSize: 15 },
   modalCancelar:{ alignItems: 'center', paddingVertical: 14 },
 
-  // Freq / days selectors
-  freqRow:         { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  freqBtn:         { flex: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center', borderWidth: 1, borderColor: '#2a475e', backgroundColor: '#0d1b2a' },
-  freqBtnActivo:   { backgroundColor: TEAL, borderColor: TEAL },
-  freqBtnTxt:      { fontSize: 12, fontWeight: '600', color: '#556a7a' },
-  freqBtnTxtActivo:{ color: '#fff' },
-  diasRow:         { flexDirection: 'row', gap: 4, marginBottom: 14 },
-  diaBtn:          { flex: 1, borderRadius: 6, paddingVertical: 6, alignItems: 'center', borderWidth: 1, borderColor: '#2a475e', backgroundColor: '#0d1b2a' },
-  diaBtnActivo:    { backgroundColor: TEAL, borderColor: TEAL },
-  diaBtnTxt:       { fontSize: 9, fontWeight: '600', color: '#556a7a' },
-  diaBtnTxtActivo: { color: '#fff' },
+  freqRow:          { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  freqBtn:          { flex: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center', borderWidth: 1, borderColor: '#2a475e', backgroundColor: '#0d1b2a' },
+  freqBtnActivo:    { backgroundColor: TEAL, borderColor: TEAL },
+  freqBtnTxt:       { fontSize: 12, fontWeight: '600', color: '#556a7a' },
+  freqBtnTxtActivo: { color: '#fff' },
+  diasRow:          { flexDirection: 'row', gap: 4, marginBottom: 14 },
+  diaBtn:           { flex: 1, borderRadius: 6, paddingVertical: 6, alignItems: 'center', borderWidth: 1, borderColor: '#2a475e', backgroundColor: '#0d1b2a' },
+  diaBtnActivo:     { backgroundColor: TEAL, borderColor: TEAL },
+  diaBtnTxt:        { fontSize: 9, fontWeight: '600', color: '#556a7a' },
+  diaBtnTxtActivo:  { color: '#fff' },
 })
