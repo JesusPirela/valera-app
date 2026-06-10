@@ -13,7 +13,9 @@ AS $$
 DECLARE v_rol TEXT;
 BEGIN
   SELECT role INTO v_rol FROM profiles WHERE id = auth.uid();
-  IF v_rol IS DISTINCT FROM 'admin' THEN RETURN '[]'::jsonb; END IF;
+  IF v_rol IS DISTINCT FROM 'admin' AND current_setting('request.jwt.claims', true)::jsonb->>'role' IS DISTINCT FROM 'service_role' THEN
+    RETURN '[]'::jsonb;
+  END IF;
 
   RETURN COALESCE((
     SELECT jsonb_agg(row_to_json(u))
@@ -112,7 +114,9 @@ AS $$
 DECLARE v_rol TEXT;
 BEGIN
   SELECT role INTO v_rol FROM profiles WHERE id = auth.uid();
-  IF v_rol IS DISTINCT FROM 'admin' THEN RETURN '[]'::jsonb; END IF;
+  IF v_rol IS DISTINCT FROM 'admin' AND current_setting('request.jwt.claims', true)::jsonb->>'role' IS DISTINCT FROM 'service_role' THEN
+    RETURN '[]'::jsonb;
+  END IF;
 
   RETURN COALESCE((
     SELECT jsonb_agg(d ORDER BY d.fecha)
