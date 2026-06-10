@@ -177,6 +177,7 @@ export default function Prospectadores() {
   const c = useColors()
   const [lista, setLista] = useState<Prospectador[]>([])
   const [loading, setLoading] = useState(true)
+  const [busqueda, setBusqueda] = useState('')
 
   // Selector de rol inline
   const [editandoRolId, setEditandoRolId] = useState<string | null>(null)
@@ -404,6 +405,25 @@ export default function Prospectadores() {
         </Text>
       </TouchableOpacity>
 
+      {/* Barra de búsqueda */}
+      <View style={[styles.searchBar, { backgroundColor: c.card, borderColor: c.border }]}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={[styles.searchInput, { color: c.text }]}
+          placeholder="Buscar por nombre o email..."
+          placeholderTextColor={c.textMute}
+          value={busqueda}
+          onChangeText={setBusqueda}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+        />
+        {busqueda ? (
+          <TouchableOpacity onPress={() => setBusqueda('')}>
+            <Text style={{ color: c.textMute, fontSize: 16 }}>✕</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
       {loading ? (
         <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : lista.length === 0 ? (
@@ -413,7 +433,11 @@ export default function Prospectadores() {
         </View>
       ) : (
         <FlatList
-          data={lista}
+          data={lista.filter(p =>
+            !busqueda.trim() ||
+            (p.nombre ?? '').toLowerCase().includes(busqueda.toLowerCase()) ||
+            p.email.toLowerCase().includes(busqueda.toLowerCase())
+          )}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => (
@@ -844,6 +868,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
   backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
+
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 9,
+    marginBottom: 12,
+  },
+  searchIcon:  { fontSize: 15 },
+  searchInput: { flex: 1, fontSize: 14 },
 
   btnNuevo: {
     backgroundColor: '#1a6470',

@@ -70,6 +70,9 @@ export default function Tienda() {
   const [milestoneNivel, setMilestoneNivel]   = useState<number | undefined>()
   const [ruletaCfg, setRuletaCfg]             = useState<RuletaConfig>(CONFIG_DEFAULT)
   const [cofresPendientes, setCofresPendientes] = useState(0)
+  const [cofresAbiertos, setCofresAbiertos]   = useState(0)
+  const [cofresNivelTotal, setCofresNivelTotal] = useState(0)
+  const [nivelCofresGanados, setNivelCofresGanados] = useState<{ nivel: number; cantidad: number } | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -79,7 +82,7 @@ export default function Tienda() {
     if (!user) { setLoading(false); return }
     setUserId(user.id)
 
-    const [statsRes, itemsRes, comprasRes, cfgRes] = await Promise.all([
+    const [statsRes, itemsRes, comprasRes, cfgRes, cofresStatsRes] = await Promise.all([
       supabase.from('user_stats').select('valera_coins, xp, cofres_pendientes').eq('id', user.id).maybeSingle(),
       supabase.from('store_items').select('*').eq('disponible', true).order('orden'),
       supabase.from('store_compras')
@@ -87,6 +90,7 @@ export default function Tienda() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
       supabase.from('app_config').select('value').eq('key', 'ruleta_config').maybeSingle(),
+      supabase.rpc('get_cofres_stats'),
     ])
 
     // Cargar config de ruleta desde Supabase
@@ -100,7 +104,23 @@ export default function Tienda() {
     setCofresPendientes((statsRes.data as any)?.cofres_pendientes ?? 0)
     setItems((itemsRes.data ?? []) as StoreItem[])
     setCompras((comprasRes.data ?? []) as Compra[])
+
+    // Estadísticas de cofres del RPC
+    const cs = cofresStatsRes.data as any
+    if (cs) {
+      setCofresAbiertos(cs.abiertos ?? 0)
+      setCofresNivelTotal(cs.nivel_total ?? 0)
+    }
+
     setLoading(false)
+
+    // Verificar cofres por nivel usando el nuevo RPC servidor (idempotente)
+    const cofresGanados = await supabase.rpc('claim_cofres_nivel', { p_nivel: nivel })
+    if (!cofresGanados.error && (cofresGanados.data as number) > 0) {
+      const ganados = cofresGanados.data as number
+      setCofresPendientes(prev => prev + ganados)
+      setNivelCofresGanados({ nivel, cantidad: ganados })
+    }
 
     // Verificar si hay un milestone de nivel pendiente (cada 10 niveles)
     const milestone = await checkMilestone(nivel)
@@ -387,6 +407,69 @@ export default function Tienda() {
       ) : (
         // ── Tab Cofre ──────────────────────────────────────────────
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+
+          {/* ── Notificación de nivel ── */}
+          {nivelCofresGanados && (
+            <TouchableOpacity
+              style={s.nivelBanner}
+              onPress={() => setNivelCofresGanados(null)}
+              activeOpacity={0.85}
+            >
+              <Text style={s.nivelBannerIcn}>🎉</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.nivelBannerTitulo}>¡Subiste al nivel {nivelCofresGanados.nivel}!</Text>
+                <Text style={s.nivelBannerSub}>
+                  Ganaste {nivelCofresGanados.cantidad} cofre{nivelCofresGanados.cantidad > 1 ? 's' : ''} · Pulsa para cerrar
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* ── Inventario ── */}
+          <View style={s.inventarioCard}>
+            <Text style={s.inventarioTitulo}>📦 Mis Cofres</Text>
+            <View style={s.inventarioGrid}>
+              <View style={s.inventarioItem}>
+                <Text style={s.inventarioN}>{cofresPendientes}</Text>
+                <Text style={s.inventarioLbl}>Disponibles</Text>
+                <Text style={s.inventarioSub}>listos para abrir</Text>
+              </View>
+              <View style={s.inventarioDiv} />
+              <View style={s.inventarioItem}>
+                <Text style={s.inventarioN}>{cofresAbiertos}</Text>
+                <Text style={s.inventarioLbl}>Abiertos</Text>
+                <Text style={s.inventarioSub}>en total</Text>
+              </View>
+              <View style={s.inventarioDiv} />
+              <View style={s.inventarioItem}>
+                <Text style={s.inventarioN}>{cofresNivelTotal}</Text>
+                <Text style={s.inventarioLbl}>Por nivel</Text>
+                <Text style={s.inventarioSub}>recibidos</Text>
+              </View>
+            </View>
+            <View style={s.nivelRecompensasWrap}>
+              <Text style={s.nivelRecompensasTitulo}>🏆 Recompensas por nivel</Text>
+              <View style={s.nivelRecompensasRow}>
+                {[
+                  { nivel: 1,  cofres: 2 },
+                  { nivel: 5,  cofres: 1 },
+                  { nivel: 10, cofres: 2 },
+                  { nivel: 20, cofres: 2 },
+                  { nivel: 30, cofres: 2 },
+                ].map(r => (
+                  <View key={r.nivel} style={s.nivelBadge}>
+                    <Text style={s.nivelBadgeN}>Nv.{r.nivel}</Text>
+                    <Text style={s.nivelBadgeC}>+{r.cofres} 📦</Text>
+                  </View>
+                ))}
+                <View style={s.nivelBadge}>
+                  <Text style={s.nivelBadgeN}>c/10</Text>
+                  <Text style={s.nivelBadgeC}>+2 📦</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
           {cofresPendientes > 0 && (
             <TouchableOpacity style={s.cofreRegaloCard} onPress={abrirCofre}>
               <View style={s.cofreLeft}>
@@ -528,6 +611,36 @@ const s = StyleSheet.create({
   cofreIcn:   { fontSize: 32 },
   cofreNombre:{ fontSize: 15, fontWeight: '800', color: GOLD },
   cofreSub:   { fontSize: 11, color: '#7a9ab5', marginTop: 2 },
+
+  // Notificación nivel
+  nivelBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#1a1500', borderRadius: 14, padding: 14,
+    borderWidth: 1.5, borderColor: '#c9a84c', marginBottom: 14,
+  },
+  nivelBannerIcn:    { fontSize: 30 },
+  nivelBannerTitulo: { fontSize: 15, fontWeight: '900', color: '#c9a84c' },
+  nivelBannerSub:    { fontSize: 11, color: '#7a9ab5', marginTop: 2 },
+
+  // Inventario de cofres
+  inventarioCard: {
+    backgroundColor: '#111f2e', borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: '#1e3448', marginBottom: 16,
+  },
+  inventarioTitulo: { fontSize: 16, fontWeight: '900', color: '#c9a84c', marginBottom: 14 },
+  inventarioGrid:   { flexDirection: 'row', alignItems: 'stretch', marginBottom: 16 },
+  inventarioItem:   { flex: 1, alignItems: 'center', gap: 2 },
+  inventarioDiv:    { width: 1, backgroundColor: '#1e3448', marginVertical: 4 },
+  inventarioN:      { fontSize: 28, fontWeight: '900', color: '#fff' },
+  inventarioLbl:    { fontSize: 11, fontWeight: '800', color: '#7a9ab5', textTransform: 'uppercase' },
+  inventarioSub:    { fontSize: 10, color: '#556a7a' },
+
+  nivelRecompensasWrap:  { borderTopWidth: 1, borderTopColor: '#1e3448', paddingTop: 12 },
+  nivelRecompensasTitulo:{ fontSize: 12, fontWeight: '700', color: '#7a9ab5', marginBottom: 8 },
+  nivelRecompensasRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  nivelBadge:    { backgroundColor: '#1a1500', borderRadius: 8, borderWidth: 1, borderColor: '#c9a84c44', paddingHorizontal: 8, paddingVertical: 5, alignItems: 'center' },
+  nivelBadgeN:   { fontSize: 10, fontWeight: '800', color: '#c9a84c' },
+  nivelBadgeC:   { fontSize: 11, fontWeight: '700', color: '#fff', marginTop: 1 },
   cofreCosto: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#0d1b2a', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
   cofreCostoNum: { fontSize: 16, fontWeight: '900', color: GOLD },
   cofreCostoIcn: { fontSize: 16 },

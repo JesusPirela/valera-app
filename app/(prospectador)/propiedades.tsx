@@ -124,6 +124,7 @@ export default function ProspectadorPropiedades() {
   const [precioMax, setPrecioMax] = useState('')
   const [filtroPublicadas, setFiltroPublicadas] = useState<FiltroPublicadas>(null)
   const [filtroNueva, setFiltroNueva] = useState(false)
+  const [filtroExclusiva, setFiltroExclusiva] = useState(false)
   const [filtroFechaPreset, setFiltroFechaPreset] = useState<7 | 30 | 90 | 180 | null>(null)
   const [fechaDesdeCustom, setFechaDesdeCustom] = useState('')
   const [fechaHastaCustom, setFechaHastaCustom] = useState('')
@@ -287,6 +288,7 @@ export default function ProspectadorPropiedades() {
     (precioMinNum != null || precioMaxNum != null) ? 'precio' : null,
     filtroPublicadas,
     filtroNueva ? 'nueva' : null,
+    filtroExclusiva ? 'exclusiva' : null,
     (filtroFechaPreset || fechaDesdeCustom || fechaHastaCustom) ? 'fecha' : null,
   ].filter(Boolean).length
 
@@ -305,6 +307,9 @@ export default function ProspectadorPropiedades() {
   if (filtroNueva) {
     const haceUnaS = Date.now() - 7 * 24 * 60 * 60 * 1000
     propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() > haceUnaS)
+  }
+  if (filtroExclusiva) {
+    propiedadesFiltradas = propiedadesFiltradas.filter(p => p.exclusiva || p.inmobiliarias?.exclusiva)
   }
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
@@ -528,9 +533,10 @@ export default function ProspectadorPropiedades() {
         {/* Botones rápidos Venta / Renta / Nuevas */}
         <View style={[styles.quickFiltersRow, { backgroundColor: darkMode ? '#0f1e2d' : '#eef2f4' }]}>
           {([
-            { key: 'venta',  label: 'Venta',  icon: 'home'     as const, activo: filtroOperacion === 'venta', onPress: () => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta') },
-            { key: 'renta',  label: 'Renta',  icon: 'key'      as const, activo: filtroOperacion === 'renta', onPress: () => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta') },
-            { key: 'nuevas', label: 'Nuevas', icon: 'sparkles' as const, activo: filtroNueva,                 onPress: () => setFiltroNueva(v => !v) },
+            { key: 'venta',      label: 'Venta',      icon: 'home'      as const, activo: filtroOperacion === 'venta', onPress: () => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta') },
+            { key: 'renta',      label: 'Renta',      icon: 'key'       as const, activo: filtroOperacion === 'renta', onPress: () => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta') },
+            { key: 'nuevas',     label: 'Nuevas',     icon: 'sparkles'  as const, activo: filtroNueva,                 onPress: () => setFiltroNueva(v => !v) },
+            { key: 'exclusivas', label: 'Exclusivas', icon: 'star'      as const, activo: filtroExclusiva,             onPress: () => setFiltroExclusiva(v => !v) },
           ]).map(btn => (
             <TouchableOpacity
               key={btn.key}
