@@ -83,7 +83,7 @@ BEGIN
     p_target_user_id,
     '🎁 ¡Te regalaron ' || p_cantidad || CASE WHEN p_cantidad = 1 THEN ' cofre gratis!' ELSE ' cofres gratis!' END,
     p_nota,
-    'sistema'
+    'cofre'
   );
 
   RETURN TRUE;
