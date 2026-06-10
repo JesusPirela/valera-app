@@ -22,7 +22,7 @@ BEGIN
   ON CONFLICT (id) DO UPDATE
     SET cofres_pendientes = user_stats.cofres_pendientes + EXCLUDED.cofres_pendientes;
 
-  INSERT INTO notificaciones(user_id, titulo, cuerpo, tipo)
+  INSERT INTO notificaciones(user_id, titulo, mensaje, tipo)
   VALUES (
     p_target_user_id,
     '🎁 ¡Te regalaron ' || p_cantidad || CASE WHEN p_cantidad = 1 THEN ' cofre gratis!' ELSE ' cofres gratis!' END,
