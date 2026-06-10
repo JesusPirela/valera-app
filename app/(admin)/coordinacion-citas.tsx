@@ -500,10 +500,12 @@ function ModalMover({ cita, onClose, onMover }: {
 
 // ─── KanbanCard ───────────────────────────────────────────────────────────────
 
-function KanbanCard({ cita, onPress, onLongPress }: {
+function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
   cita: Cita
   onPress: () => void
   onLongPress: () => void
+  onDragStart?: (c: Cita) => void
+  isDragging?: boolean
 }) {
   const inf     = ESTADOS_CITA[cita.estado]
   const ahora   = Date.now()
@@ -514,13 +516,20 @@ function KanbanCard({ cita, onPress, onLongPress }: {
   const dia    = formatDia(cita.fecha_cita)
   const hora   = formatHora(cita.fecha_cita)
 
+  const webDrag = Platform.OS === 'web' && onDragStart ? {
+    draggable: true,
+    onDragStart: (e: any) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(cita) },
+    onDragEnd: () => {},
+  } : {}
+
   return (
     <TouchableOpacity
-      style={[kc.card, esUrgente && kc.cardUrgente]}
+      style={[kc.card, esUrgente && kc.cardUrgente, isDragging && kc.cardDragging]}
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={400}
       activeOpacity={0.85}
+      {...(webDrag as any)}
     >
       {/* Barra de color lateral */}
       <View style={[kc.colorBar, { backgroundColor: inf.color }]} />
@@ -600,7 +609,8 @@ const kc = StyleSheet.create({
     shadowColor: '#0f172a', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
   },
-  cardUrgente: { borderWidth: 1.5, borderColor: '#fbbf24' },
+  cardUrgente:  { borderWidth: 1.5, borderColor: '#fbbf24' },
+  cardDragging: { opacity: 0.45 },
   colorBar:    { width: 4 },
   body:        { flex: 1, padding: 10, gap: 5 },
   headRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -621,17 +631,33 @@ const kc = StyleSheet.create({
 
 // ─── KanbanColumn ─────────────────────────────────────────────────────────────
 
-function KanbanColumn({ estado, citas, onCardPress, onCardLongPress }: {
+function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCita, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop }: {
   estado: EstadoCita
   citas: Cita[]
   onCardPress: (c: Cita) => void
   onCardLongPress: (c: Cita) => void
+  draggingCita?: Cita | null
+  isDragOver?: boolean
+  onDragStart?: (c: Cita) => void
+  onDragOver?: () => void
+  onDragLeave?: () => void
+  onDrop?: () => void
 }) {
   const inf = ESTADOS_CITA[estado]
+
+  const webDropProps = Platform.OS === 'web' ? {
+    onDragOver: (e: any) => { e.preventDefault(); onDragOver?.() },
+    onDragLeave: () => onDragLeave?.(),
+    onDrop: (e: any) => { e.preventDefault(); onDrop?.() },
+  } : {}
+
   return (
-    <View style={[col.wrap, { width: COL_W }]}>
+    <View
+      style={[col.wrap, { width: COL_W }]}
+      {...(webDropProps as any)}
+    >
       {/* Cabecera de columna */}
-      <View style={[col.header, { borderTopColor: inf.color }]}>
+      <View style={[col.header, { borderTopColor: inf.color }, isDragOver && { borderTopWidth: 4, borderTopColor: inf.color }]}>
         <View style={[col.headerDot, { backgroundColor: inf.color }]} />
         <Text style={col.headerTxt} numberOfLines={1}>{inf.label}</Text>
         <View style={[col.headerCnt, { backgroundColor: inf.color + '22' }]}>
@@ -642,12 +668,14 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress }: {
       {/* Tarjetas */}
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={col.list}
+        contentContainerStyle={[col.list, isDragOver && { backgroundColor: inf.color + '11', borderRadius: 8 }]}
         nestedScrollEnabled
       >
         {citas.length === 0 ? (
-          <View style={col.empty}>
-            <Text style={col.emptyTxt}>Sin citas</Text>
+          <View style={[col.empty, isDragOver && { borderWidth: 2, borderColor: inf.color + '44', borderStyle: 'dashed', borderRadius: 8 }]}>
+            <Text style={[col.emptyTxt, isDragOver && { color: inf.color }]}>
+              {isDragOver ? `Mover aquí` : 'Sin citas'}
+            </Text>
           </View>
         ) : (
           citas.map(c => (
@@ -656,6 +684,8 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress }: {
               cita={c}
               onPress={() => onCardPress(c)}
               onLongPress={() => onCardLongPress(c)}
+              onDragStart={onDragStart}
+              isDragging={draggingCita?.id === c.id}
             />
           ))
         )}
@@ -694,6 +724,8 @@ export default function CoordinacionCitas() {
   const [busqueda, setBusqueda]         = useState('')
   const [filtroAdmin, setFiltroAdmin]   = useState<string | null>(null)
   const [showSearch, setShowSearch]     = useState(false)
+  const [draggingCita, setDraggingCita] = useState<Cita | null>(null)
+  const [dragOverEstado, setDragOverEstado] = useState<EstadoCita | null>(null)
   const mountedRef = useRef(true)
 
   async function cargar() {
@@ -779,7 +811,7 @@ export default function CoordinacionCitas() {
           <Ionicons name="arrow-back" size={22} color="#1a6470" />
         </TouchableOpacity>
 
-        <Text style={s.headerTitle}>Pipeline de Citas</Text>
+        <Text style={s.headerTitle}>Citas</Text>
 
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <TouchableOpacity
@@ -891,6 +923,18 @@ export default function CoordinacionCitas() {
               citas={citasFiltradas.filter(c => c.estado === estado)}
               onCardPress={setCitaEditando}
               onCardLongPress={setCitaMoviendo}
+              draggingCita={draggingCita}
+              isDragOver={dragOverEstado === estado}
+              onDragStart={setDraggingCita}
+              onDragOver={() => setDragOverEstado(estado)}
+              onDragLeave={() => setDragOverEstado(null)}
+              onDrop={() => {
+                if (draggingCita && draggingCita.estado !== estado) {
+                  moverCita(draggingCita, estado)
+                }
+                setDraggingCita(null)
+                setDragOverEstado(null)
+              }}
             />
           ))}
         </ScrollView>
