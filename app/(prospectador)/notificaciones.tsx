@@ -50,7 +50,23 @@ function iconoPorTipo(tipo: string) {
   if (tipo === 'recordatorio') return '⏰'
   if (tipo === 'destacada')    return '⭐'
   if (tipo === 'exclusiva')    return '🔴'
+  if (tipo === 'cofre')        return '🎁'
   return '🔔'
+}
+
+// Normaliza a NFC para evitar que combinaciones de caracteres accentuados se
+// rendericen como íconos de reemplazo en React Native Web
+function nfc(s: string): string {
+  try { return s.normalize('NFC') } catch { return s }
+}
+
+// Extrae el emoji inicial del título para mostrarlo en un Text sin fontWeight
+// (evita que algunos emojis se rendericen como ?? en web con fontWeight)
+function extraerEmoji(titulo: string): { emoji: string; texto: string } {
+  const norm = nfc(titulo)
+  const match = norm.match(/^(\p{Extended_Pictographic})\s*(¡?)(.*)/su)
+  if (match) return { emoji: match[1], texto: nfc((match[2] + match[3]).trim()) }
+  return { emoji: '', texto: norm }
 }
 
 function esNavegable(n: Notificacion): boolean {
@@ -110,12 +126,16 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
   const esRecordatorio = item.tipo === 'recordatorio'
   const esDestacada    = item.tipo === 'destacada'
   const esExclusiva    = item.tipo === 'exclusiva'
+  const esCofre        = item.tipo === 'cofre'
   const navegable      = esNavegable(item)
   const hint           = hintTexto(item)
 
+  const { emoji: tituloEmoji, texto: tituloTexto } = extraerEmoji(item.titulo)
+  const icono = tituloEmoji || iconoPorTipo(item.tipo)
+  const mensajeNorm = nfc(item.mensaje)
+
   return (
     <View style={styles.swipeContainer}>
-      {/* Fondo rojo de eliminar (solo visible al deslizar en native) */}
       {Platform.OS !== 'web' && (
         <Animated.View style={[styles.deleteBg, { opacity: deleteOpacity }]}>
           <Text style={styles.deleteBgIcon}>🗑</Text>
@@ -137,28 +157,32 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
             esDestacada && !item.leida && styles.cardDestacadaNoLeida,
             esExclusiva && styles.cardExclusiva,
             esExclusiva && !item.leida && styles.cardExclusivaNoLeida,
+            esCofre && styles.cardCofre,
+            esCofre && !item.leida && styles.cardCofreNoLeida,
             navegable && styles.cardNavegable,
-            // Dark mode — sobreescribe fondos claros
-            darkMode && !item.leida && !esRecordatorio && !esDestacada && !esExclusiva && { backgroundColor: '#172030' },
+            darkMode && !item.leida && !esRecordatorio && !esDestacada && !esExclusiva && !esCofre && { backgroundColor: '#172030' },
             darkMode && esRecordatorio && { backgroundColor: '#1e1609', borderColor: '#c0660a' },
             darkMode && esRecordatorio && !item.leida && { backgroundColor: '#261e0a' },
             darkMode && esDestacada && { backgroundColor: '#1e1b07', borderColor: '#b09010' },
             darkMode && esDestacada && !item.leida && { backgroundColor: '#262107' },
             darkMode && esExclusiva && { backgroundColor: '#1e0d0d', borderColor: '#c0392b' },
             darkMode && esExclusiva && !item.leida && { backgroundColor: '#250d0d' },
+            darkMode && esCofre && { backgroundColor: '#1c1600', borderColor: '#c9a84c66' },
+            darkMode && esCofre && !item.leida && { backgroundColor: '#261e00' },
           ]}
           onPress={() => onPress(item)}
           activeOpacity={0.75}
         >
           <View style={styles.cardTop}>
             <View style={styles.cardTituloCont}>
-              <Text style={styles.icono}>{iconoPorTipo(item.tipo)}</Text>
+              <Text style={styles.icono}>{icono}</Text>
               {!item.leida && (
                 <View style={[
                   styles.puntito,
                   esRecordatorio && styles.puntitoRecordatorio,
                   esDestacada && styles.puntitoDestacada,
                   esExclusiva && styles.puntitoExclusiva,
+                  esCofre && styles.puntitoCofre,
                 ]} />
               )}
               <Text style={[
@@ -167,8 +191,9 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
                 esRecordatorio && styles.cardTituloRecordatorio,
                 esDestacada && styles.cardTituloDestacada,
                 esExclusiva && styles.cardTituloExclusiva,
+                esCofre && styles.cardTituloCofre,
               ]}>
-                {item.titulo}
+                {tituloTexto}
               </Text>
             </View>
             <View style={styles.cardTopRight}>
@@ -186,7 +211,7 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
           </View>
 
           <Text style={[styles.cardMensaje, !item.leida && styles.cardMensajeNoLeido, darkMode && { color: c.textSub }]}>
-            {item.mensaje}
+            {mensajeNorm}
           </Text>
 
           {hint !== '' && (
@@ -195,6 +220,7 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
               esRecordatorio && styles.tapHintRecordatorio,
               esDestacada && styles.tapHintDestacada,
               esExclusiva && styles.tapHintExclusiva,
+              esCofre && styles.tapHintCofre,
             ]}>
               {hint}
             </Text>
@@ -448,4 +474,18 @@ const styles = StyleSheet.create({
   puntitoExclusiva: { backgroundColor: '#c0392b' },
   cardTituloExclusiva: { color: '#c0392b' },
   tapHintExclusiva: { color: '#c0392b' },
+
+  // Cofre — dorado
+  cardCofre: {
+    borderColor: '#c9a84c',
+    borderWidth: 1.5,
+    backgroundColor: '#fffbf0',
+  },
+  cardCofreNoLeida: {
+    backgroundColor: '#fff8dc',
+    borderColor: '#c9a84c',
+  },
+  puntitoCofre:    { backgroundColor: '#c9a84c' },
+  cardTituloCofre: { color: '#7a5200' },
+  tapHintCofre:    { color: '#c9a84c' },
 })
