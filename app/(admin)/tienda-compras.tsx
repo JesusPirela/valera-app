@@ -181,23 +181,25 @@ export default function TiendaCompras() {
       </View>
 
       {/* Filtros */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[s.filtroScroll, { backgroundColor: c.card, borderBottomColor: c.border }]} contentContainerStyle={s.filtroRow}>
-        {([
-          ['todas',     'Todas'],
-          ['pendiente', `⏳ Pendientes${pendientes > 0 ? ` (${pendientes})` : ''}`],
-          ['entregado', '✅ Entregadas'],
-          ['rechazado', '❌ Rechazadas'],
-          ['cofre',     `🎁 Cofre${cofrePendientes > 0 ? ` (${cofrePendientes})` : ''}`],
-        ] as const).map(([val, lbl]) => (
-          <TouchableOpacity
-            key={val}
-            style={[s.filtroBtn, filtro === val && s.filtroBtnActivo]}
-            onPress={() => setFiltro(val)}
-          >
-            <Text style={[s.filtroTxt, { color: c.textSub }, filtro === val && s.filtroTxtActivo]}>{lbl}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={[s.filtroWrap, { backgroundColor: c.card, borderBottomColor: c.border }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filtroRow}>
+          {([
+            ['todas',     'Todas'],
+            ['pendiente', `⏳ Pendientes${pendientes > 0 ? ` (${pendientes})` : ''}`],
+            ['entregado', '✅ Entregadas'],
+            ['rechazado', '❌ Rechazadas'],
+            ['cofre',     `🎁 Cofre${cofrePendientes > 0 ? ` (${cofrePendientes})` : ''}`],
+          ] as const).map(([val, lbl]) => (
+            <TouchableOpacity
+              key={val}
+              style={[s.filtroBtn, filtro === val && s.filtroBtnActivo]}
+              onPress={() => setFiltro(val)}
+            >
+              <Text style={[s.filtroTxt, { color: c.textSub }, filtro === val && s.filtroTxtActivo]}>{lbl}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
         {lista.length === 0 ? (
@@ -401,8 +403,8 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
 
-  filtroScroll: { flexGrow: 0, borderBottomWidth: 1 },
-  filtroRow:    { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' },
+  filtroWrap:   { flexShrink: 0, borderBottomWidth: 1, height: 52 },
+  filtroRow:    { flexDirection: 'row', gap: 6, paddingHorizontal: 12, alignItems: 'center', height: 52 },
   filtroBtn:    { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
   filtroBtnActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   filtroTxt:       { fontSize: 12, fontWeight: '600' },

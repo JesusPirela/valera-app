@@ -41,10 +41,12 @@ type ReportProgramado = {
   destinatarios: string[]
   activo: boolean
   ultimo_envio: string | null
+  periodo_reporte: Periodo | null
 }
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const FREQ_LABELS: Record<string, string> = { diario: 'Diario', semanal: 'Semanal', mensual: 'Mensual' }
+const PERIODO_LABELS: Record<Periodo, string> = { '24h': '24 horas', '7dias': '7 días', '30dias': '30 días' }
 const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 const PERIODOS: { key: Periodo; label: string; sub: string }[] = [
@@ -424,10 +426,11 @@ export default function Reportes() {
   // Programaciones
   const [programados, setProgramados]     = useState<ReportProgramado[]>([])
   const [modalSchedule, setModalSchedule] = useState(false)
-  const [schedFreq, setSchedFreq]   = useState<'diario' | 'semanal' | 'mensual'>('diario')
-  const [schedHora, setSchedHora]   = useState('09:00')
-  const [schedDia, setSchedDia]     = useState(1)
-  const [schedEmails, setSchedEmails] = useState('valerarealestateqro@gmail.com')
+  const [schedFreq, setSchedFreq]       = useState<'diario' | 'semanal' | 'mensual'>('diario')
+  const [schedHora, setSchedHora]       = useState('09:00')
+  const [schedDia, setSchedDia]         = useState(1)
+  const [schedEmails, setSchedEmails]   = useState('valerarealestateqro@gmail.com')
+  const [schedPeriodo, setSchedPeriodo] = useState<Periodo>('7dias')
 
   useFocusEffect(useCallback(() => {
     cargar()
@@ -510,18 +513,19 @@ export default function Reportes() {
     if (!user) { alerta('No autenticado'); return }
 
     const { error } = await supabase.from('report_programados').insert({
-      admin_id:      user.id,
-      frecuencia:    schedFreq,
-      hora_envio:    hora,
-      dia_semana:    schedFreq === 'semanal' ? schedDia : null,
-      destinatarios: destinos,
-      activo:        true,
+      admin_id:        user.id,
+      frecuencia:      schedFreq,
+      hora_envio:      hora,
+      dia_semana:      schedFreq === 'semanal' ? schedDia : null,
+      destinatarios:   destinos,
+      activo:          true,
+      periodo_reporte: schedPeriodo,
     })
 
     if (error) { alerta('Error al guardar: ' + error.message); return }
     await cargarProgramados()
     setModalSchedule(false)
-    alerta(`✅ Programación guardada · ${FREQ_LABELS[schedFreq]} a las ${hora}`)
+    alerta(`✅ Programación guardada · ${FREQ_LABELS[schedFreq]} a las ${hora} · Reporte ${PERIODO_LABELS[schedPeriodo]}`)
   }
 
   async function eliminarProgramado(id: string) {
@@ -625,6 +629,7 @@ export default function Reportes() {
                   <Text style={s.schedItemTitulo}>
                     {FREQ_LABELS[p.frecuencia]} · {p.hora_envio}
                     {p.frecuencia === 'semanal' ? ` · ${DIAS_SEMANA[p.dia_semana ?? 1]}` : ''}
+                    {` · ${PERIODO_LABELS[p.periodo_reporte ?? '7dias']}`}
                   </Text>
                   <Text style={s.schedItemDest} numberOfLines={1}>{p.destinatarios.join(', ')}</Text>
                   {p.ultimo_envio && (
@@ -797,6 +802,19 @@ export default function Reportes() {
                 </View>
               </>
             )}
+
+            <Text style={[s.fieldLabel, { color: col.textSub }]}>Período del reporte</Text>
+            <View style={s.freqRow}>
+              {PERIODOS.map(p => (
+                <TouchableOpacity
+                  key={p.key}
+                  style={[s.freqBtn, schedPeriodo === p.key && s.freqBtnActivo]}
+                  onPress={() => setSchedPeriodo(p.key)}
+                >
+                  <Text style={[s.freqBtnTxt, schedPeriodo === p.key && s.freqBtnTxtActivo]}>{p.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             <Text style={[s.fieldLabel, { color: col.textSub }]}>Hora de envío</Text>
             <TextInput
