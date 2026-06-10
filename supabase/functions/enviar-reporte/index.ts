@@ -253,13 +253,13 @@ serve(async (req) => {
     }
 
     if (!destinatarios?.length) {
-      return new Response(JSON.stringify({ error: 'Faltan destinatarios' }), { status: 400, headers: CORS })
+      return new Response(JSON.stringify({ ok: false, error: 'Faltan destinatarios' }), { headers: CORS })
     }
 
     if (!resendKey) {
       return new Response(
-        JSON.stringify({ error: 'RESEND_API_KEY no configurada. Ve a Supabase → Edge Functions → Secrets y agrega RESEND_API_KEY con tu clave de resend.com' }),
-        { status: 503, headers: CORS },
+        JSON.stringify({ ok: false, error: 'RESEND_API_KEY no configurada. Ve a Supabase → Project Settings → Edge Functions → Secrets y agrega tu clave de resend.com' }),
+        { headers: CORS },
       )
     }
 
@@ -268,6 +268,6 @@ serve(async (req) => {
 
   } catch (err: any) {
     console.error('[enviar-reporte]', err)
-    return new Response(JSON.stringify({ error: err.message ?? 'Error interno' }), { status: 500, headers: CORS })
+    return new Response(JSON.stringify({ ok: false, error: err.message ?? 'Error interno' }), { headers: CORS })
   }
 })
