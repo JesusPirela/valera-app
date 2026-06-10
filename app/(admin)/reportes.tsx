@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, createElement } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Platform, Alert,
@@ -817,16 +817,38 @@ export default function Reportes() {
             </View>
 
             <Text style={[s.fieldLabel, { color: col.textSub }]}>Hora de envío</Text>
-            <TextInput
-              style={[s.modalInput, { backgroundColor: col.input, borderColor: col.inputBorder, color: col.inputText }]}
-              value={schedHora}
-              onChangeText={setSchedHora}
-              placeholder="09:00"
-              placeholderTextColor={col.textMute}
-              keyboardType="numbers-and-punctuation"
-              maxLength={5}
-            />
-            <Text style={[s.modalHint, { color: col.textMute }]}>Formato 24h · Hora de México (CST)</Text>
+            {Platform.OS === 'web' ? (
+              createElement('input', {
+                type: 'time',
+                value: schedHora,
+                onChange: (e: any) => setSchedHora(e.target.value),
+                style: {
+                  background: '#0d1b2a',
+                  border: '1px solid #2a475e',
+                  borderRadius: 10,
+                  color: '#ffffff',
+                  colorScheme: 'dark',
+                  fontSize: 15,
+                  fontWeight: '700',
+                  padding: '10px 14px',
+                  width: '100%',
+                  marginBottom: 4,
+                  outline: 'none',
+                  cursor: 'pointer',
+                },
+              })
+            ) : (
+              <TextInput
+                style={[s.modalInput, { backgroundColor: col.input, borderColor: col.inputBorder, color: col.inputText }]}
+                value={schedHora}
+                onChangeText={setSchedHora}
+                placeholder="09:00"
+                placeholderTextColor={col.textMute}
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+              />
+            )}
+            <Text style={[s.modalHint, { color: col.textMute }]}>Hora de México (CST)</Text>
 
             <Text style={[s.fieldLabel, { color: col.textSub }]}>Destinatarios</Text>
             <TextInput
