@@ -386,7 +386,8 @@ export default function DetallePropiedad() {
     try {
       if (Platform.OS === 'web') {
         const logoModule = require('../../assets/logo.png')
-        const url = typeof logoModule === 'string' ? logoModule : ''
+        const resolved = Image.resolveAssetSource(logoModule)
+        const url = resolved?.uri ?? (typeof logoModule === 'string' ? logoModule : '')
         if (!url) return ''
         const resp = await fetch(url)
         const blob = await resp.blob()
@@ -480,7 +481,7 @@ export default function DetallePropiedad() {
         body { font-family: Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; }
         .header { background: #1a6470; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
         .header-left { flex: 1; }
-        .header-logo { height: 60px; max-width: 140px; object-fit: contain; flex-shrink: 0; margin-left: 16px; }
+        .header-logo { height: 70px; max-width: 160px; object-fit: contain; flex-shrink: 0; margin-left: 16px; }
         .codigo { font-size: 11px; color: #c9a84c; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
         .titulo { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 4px; }
         .tipo-op { font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 10px; }
@@ -532,21 +533,77 @@ export default function DetallePropiedad() {
 
       if (Platform.OS === 'web') {
         const { jsPDF } = await import('jspdf')
-        const doc = new jsPDF('p', 'pt', 'a4')
-        const pageWidth = doc.internal.pageSize.getWidth()
-        await new Promise<void>((resolve, reject) => {
-          doc.html(html, {
-            x: 0,
-            y: 0,
-            width: pageWidth,
+        const html2canvas = (await import('html2canvas')).default
+
+        const container = document.createElement('div')
+        container.style.position = 'fixed'
+        container.style.top = '0'
+        container.style.left = '-9999px'
+        container.style.width = '800px'
+        container.innerHTML = html
+        document.body.appendChild(container)
+
+        try {
+          await new Promise(resolve => setTimeout(resolve, 50))
+          const canvas = await html2canvas(container, {
+            useCORS: true,
+            scale: 2,
+            width: 800,
             windowWidth: 800,
-            html2canvas: { useCORS: true, scale: pageWidth / 800 },
-            callback: (pdfDoc) => {
-              pdfDoc.save(nombreArchivo)
-              resolve()
-            },
-          }).catch(reject)
-        })
+          })
+
+          const doc = new jsPDF('p', 'pt', 'a4')
+          const pageWidth = doc.internal.pageSize.getWidth()
+          const pageHeight = doc.internal.pageSize.getHeight()
+          const pxPerPt = canvas.width / pageWidth
+          const pageHeightPx = pageHeight * pxPerPt
+          const searchMarginPx = 60 * (canvas.width / 800)
+
+          const ctx = canvas.getContext('2d')
+          const isRowBlank = (y: number) => {
+            if (!ctx) return false
+            const { data } = ctx.getImageData(0, y, canvas.width, 1)
+            for (let i = 0; i < data.length; i += 4) {
+              if (data[i] < 245 || data[i + 1] < 245 || data[i + 2] < 245) return false
+            }
+            return true
+          }
+          const findBreak = (idealY: number) => {
+            const minY = Math.max(0, idealY - searchMarginPx)
+            for (let y = idealY; y > minY; y--) {
+              if (isRowBlank(y)) return y
+            }
+            return idealY
+          }
+
+          const sliceCanvas = document.createElement('canvas')
+          const sliceCtx = sliceCanvas.getContext('2d')!
+          sliceCanvas.width = canvas.width
+
+          let renderedPx = 0
+          let firstPage = true
+          while (renderedPx < canvas.height) {
+            const idealEnd = renderedPx + pageHeightPx
+            const end = idealEnd >= canvas.height ? canvas.height : findBreak(Math.floor(idealEnd))
+            const sliceHeightPx = Math.max(1, end - renderedPx)
+
+            sliceCanvas.height = sliceHeightPx
+            sliceCtx.clearRect(0, 0, sliceCanvas.width, sliceHeightPx)
+            sliceCtx.drawImage(canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx)
+            const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.92)
+            const sliceHeightPt = sliceHeightPx / pxPerPt
+
+            if (!firstPage) doc.addPage()
+            doc.addImage(sliceData, 'JPEG', 0, 0, pageWidth, sliceHeightPt)
+
+            renderedPx = end
+            firstPage = false
+          }
+
+          doc.save(nombreArchivo)
+        } finally {
+          document.body.removeChild(container)
+        }
       } else {
         const Print = await import('expo-print')
         const ShareLib = await import('expo-sharing')

@@ -69,7 +69,15 @@
       "Bash(curl -s \"https://ystxicgrryyzhrxinsbq.supabase.co/rest/v1/inmobiliarias?select=nombre,exclusiva,asesor_referencia\" -H \"apikey: sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl\" -H \"Authorization: Bearer sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl\")",
       "Bash(npx eas-cli *)",
       "Bash(node -e \"const {jsPDF} = require\\('jspdf'\\); const d = new jsPDF\\(\\); console.log\\(typeof d.html\\);\")",
-      "Bash(xargs grep -l \"html\")"
+      "Bash(xargs grep -l \"html\")",
+      "Bash(ls node_modules/html2canvas)",
+      "Bash(node -e \"const html2canvas = require\\('html2canvas'\\); console.log\\(typeof html2canvas\\);\")",
+      "Bash(ls node_modules/html2canvas/dist/types)",
+      "Bash(ls node_modules/@types/html2canvas)",
+      "Bash(node -e \"console.log\\(require\\('html2canvas/package.json'\\).types || require\\('html2canvas/package.json'\\).typings\\)\")",
+      "Bash(taskkill //F //IM node.exe //FI \"WINDOWTITLE eq *expo*\")",
+      "Bash(taskkill //F //PID 29320)",
+      "Bash(curl -s '__TRACKED_VAR__/rest/v1/propiedades?codigo=eq.VR-842&select=codigo,inmobiliaria_id,inmobiliarias\\(nombre,logo_url,exclusiva\\)' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')"
     ],
     "additionalDirectories": [
       "C:\\Users\\carbe\\OneDrive\\Escritorio\\valera_app\\supabase\\_tmp_pending"
