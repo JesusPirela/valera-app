@@ -52,16 +52,38 @@ function isYoutubeUrl(url: string | null): boolean {
   return /youtu\.be\/|youtube\.com/.test(url)
 }
 
-const YT_ENDED_JS = `
+// Inyectado en WebView nativo: rastrea segundos reales reproducidos (anti-skip)
+const YT_TRACK_JS = `
 (function() {
+  var playedSecs = 0, lastTs = null, duration = 0, done = false;
+  function check() {
+    var total = lastTs ? playedSecs + (Date.now() - lastTs) / 1000 : playedSecs;
+    if (!done && duration > 0 && total >= duration * 0.80) {
+      done = true;
+      window.ReactNativeWebView.postMessage('video_suficiente');
+    }
+  }
   window.addEventListener('message', function(e) {
     try {
       var d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-      if (d && d.event === 'onStateChange' && d.info === 0) {
-        window.ReactNativeWebView.postMessage('video_ended');
+      if (!d) return;
+      if (d.event === 'infoDelivery' && d.info) {
+        if (d.info.duration > 0) duration = d.info.duration;
+        if (d.info.playerState === 1) { if (!lastTs) lastTs = Date.now(); }
+        else { if (lastTs) { playedSecs += (Date.now() - lastTs) / 1000; lastTs = null; } }
+        check();
+      }
+      if (d.event === 'onStateChange' && d.info === 0 && !done) {
+        done = true; window.ReactNativeWebView.postMessage('video_suficiente');
       }
     } catch(_) {}
   });
+  setTimeout(function() {
+    var iframes = document.querySelectorAll('iframe');
+    for (var i = 0; i < iframes.length; i++) {
+      try { iframes[i].contentWindow.postMessage('{"event":"listening","id":1}', '*'); } catch(_) {}
+    }
+  }, 1500);
 })();
 true;
 `
@@ -70,18 +92,40 @@ function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void })
   const embed = getEmbedUrl(url)
   const [error, setError] = useState(false)
   const onEndRef = useRef(onEnd)
+  const iframeRef = useRef<any>(null)
   useEffect(() => { onEndRef.current = onEnd }, [onEnd])
 
+  // Web: rastrea segundos reales reproducidos via infoDelivery de YouTube
   useEffect(() => {
     if (Platform.OS !== 'web' || !isYoutubeUrl(url)) return
+    let playedSecs = 0, lastTs: number | null = null, duration = 0, done = false
+
+    const check = () => {
+      const total = lastTs ? playedSecs + (Date.now() - lastTs) / 1000 : playedSecs
+      if (!done && duration > 0 && total >= duration * 0.80) { done = true; onEndRef.current?.() }
+    }
+
     const handler = (e: MessageEvent) => {
       try {
         const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
-        if (d?.event === 'onStateChange' && d?.info === 0) onEndRef.current?.()
+        if (!d) return
+        if (d.event === 'infoDelivery' && d.info) {
+          if (d.info.duration > 0) duration = d.info.duration
+          if (d.info.playerState === 1) { if (!lastTs) lastTs = Date.now() }
+          else { if (lastTs) { playedSecs += (Date.now() - lastTs) / 1000; lastTs = null } }
+          check()
+        }
+        if (d.event === 'onStateChange' && d.info === 0 && !done) { done = true; onEndRef.current?.() }
       } catch (_) {}
     }
+
     window.addEventListener('message', handler)
-    return () => window.removeEventListener('message', handler)
+    const t = setTimeout(() => {
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1 }), '*')
+      }
+    }, 1500)
+    return () => { window.removeEventListener('message', handler); clearTimeout(t) }
   }, [url])
 
   if (!embed || !url) return null
@@ -102,7 +146,7 @@ function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void })
     return (
       <View style={vpS.container}>
         {/* @ts-ignore */}
-        <iframe src={embed} style={{ width: '100%', height: '100%', border: 'none' }}
+        <iframe ref={iframeRef} src={embed} style={{ width: '100%', height: '100%', border: 'none' }}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen title="Valera University" />
       </View>
@@ -116,8 +160,8 @@ function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void })
         allowsFullscreenVideo
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
-        injectedJavaScript={isYoutubeUrl(url) ? YT_ENDED_JS : undefined}
-        onMessage={(e) => { if (e.nativeEvent.data === 'video_ended') onEnd?.() }}
+        injectedJavaScript={isYoutubeUrl(url) ? YT_TRACK_JS : undefined}
+        onMessage={(e) => { if (e.nativeEvent.data === 'video_suficiente') onEnd?.() }}
         onError={() => setError(true)}
         onHttpError={(e) => { if (e.nativeEvent.statusCode >= 400) setError(true) }}
       />
