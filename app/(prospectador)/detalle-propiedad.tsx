@@ -420,18 +420,6 @@ export default function DetallePropiedad() {
   async function generarFichaPDF() {
     if (!propiedad) return
 
-    // Abrir la ventana sincrónicamente (dentro del gesto del usuario) para que
-    // los navegadores de escritorio no bloqueen el pop-up tras los `await` siguientes.
-    let win: Window | null = null
-    if (Platform.OS === 'web') {
-      win = window.open('', '_blank')
-      if (!win) {
-        window.alert('Habilita las ventanas emergentes para generar la ficha.')
-        return
-      }
-      win.document.write('<p style="font-family: sans-serif; padding: 24px; color: #888;">Generando ficha…</p>')
-    }
-
     setGenerandoPDF(true)
     try {
       const esc = (s: string | null | undefined) =>
@@ -449,7 +437,7 @@ export default function DetallePropiedad() {
 
       const imagenes = [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
 
-      const [imagenesConSrc, logoSrc] = await Promise.all([
+      const [imagenesConSrc, logoSrc, inmobiliariaLogoSrc] = await Promise.all([
         Promise.all(
           imagenes.slice(0, 20).map(async img => ({
             ...img,
@@ -457,10 +445,12 @@ export default function DetallePropiedad() {
           }))
         ),
         getLogoBase64(),
+        propiedad.inmobiliarias?.logo_url ? imagenABase64(propiedad.inmobiliarias.logo_url) : Promise.resolve(''),
       ])
 
-      const imagenesHTML = imagenesConSrc.map(img =>
-        `<img src="${img.src}" style="width:48%;height:160px;object-fit:cover;border-radius:8px;" />`
+      const imagenPrincipal = imagenesConSrc[0]
+      const galeriaHTML = imagenesConSrc.slice(1).map(img =>
+        `<img src="${img.src}" style="width:48%;height:140px;object-fit:cover;border-radius:8px;" />`
       ).join('')
 
       const cars: string[] = []
@@ -490,19 +480,22 @@ export default function DetallePropiedad() {
         body { font-family: Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; }
         .header { background: #1a6470; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
         .header-left { flex: 1; }
-        .header-logo { height: 80px; max-width: 180px; object-fit: contain; flex-shrink: 0; margin-left: 20px; }
+        .header-logo { height: 60px; max-width: 140px; object-fit: contain; flex-shrink: 0; margin-left: 16px; }
         .codigo { font-size: 11px; color: #c9a84c; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
         .titulo { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 4px; }
         .tipo-op { font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 10px; }
         .precio { font-size: 24px; font-weight: 800; color: #c9a84c; margin-bottom: 5px; }
         .direccion { font-size: 12px; color: rgba(255,255,255,0.8); }
         .body { padding: 20px 28px; }
-        .fotos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+        .imagen-principal { width: 100%; height: 320px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 16px; }
+        .inmob-logo-wrap { text-align: center; margin-bottom: 16px; }
+        .inmob-logo { max-height: 90px; max-width: 240px; object-fit: contain; }
+        .inmob-nombre { font-size: 12px; color: #888; font-weight: 600; margin-top: 4px; }
+        .fotos { display: flex; flex-wrap: wrap; gap: 8px; }
         .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1.2px; text-transform: uppercase; margin: 20px 0 10px; }
         .cars { display: flex; gap: 12px; flex-wrap: wrap; }
         .car-val { display: block; font-size: 20px; font-weight: 800; color: #1a6470; }
         .car-lbl { display: block; font-size: 11px; color: #888; margin-top: 2px; }
-        .page2 { break-before: page; page-break-before: always; }
         .desc { font-size: 13px; line-height: 1.7; color: #444; white-space: pre-wrap; }
         .mapa-box { border: 1.5px solid #e0e8ea; border-radius: 10px; overflow: hidden; margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
         .mapa-img { width: 100%; height: 200px; object-fit: cover; display: block; }
@@ -522,21 +515,38 @@ export default function DetallePropiedad() {
         ${logoSrc ? `<img src="${logoSrc}" class="header-logo" />` : ''}
       </div>
       <div class="body">
-        ${imagenes.length > 0 ? `<div class="seccion">Fotos</div><div class="fotos">${imagenesHTML}</div>` : ''}
+        ${imagenPrincipal ? `<img src="${imagenPrincipal.src}" class="imagen-principal" />` : ''}
+        ${propiedad.inmobiliarias?.logo_url ? `<div class="inmob-logo-wrap">
+          <img src="${inmobiliariaLogoSrc}" class="inmob-logo" />
+          ${propiedad.inmobiliarias.nombre ? `<div class="inmob-nombre">${esc(propiedad.inmobiliarias.nombre)}</div>` : ''}
+        </div>` : ''}
         ${cars.length > 0 ? `<div class="seccion">Características</div><div class="cars">${cars.join('')}</div>` : ''}
-        ${propiedad.descripcion || mapaHTML ? `<div class="page2">
-          ${propiedad.descripcion ? `<div class="seccion">Descripción</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
-          ${mapaHTML}
-          <div class="footer">Valera Real Estate · valerarealestate.com</div>
-        </div>` : `<div class="footer">Valera Real Estate · valerarealestate.com</div>`}
+        ${propiedad.descripcion ? `<div class="seccion">Descripción</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
+        ${galeriaHTML ? `<div class="seccion">Galería</div><div class="fotos">${galeriaHTML}</div>` : ''}
+        ${mapaHTML}
+        <div class="footer">Valera Real Estate · valerarealestate.com</div>
       </div>
       </body></html>`
 
+      const nombreArchivo = `${(propiedad.codigo || 'ficha').replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`
+
       if (Platform.OS === 'web') {
-        win!.document.open()
-        win!.document.write(html)
-        win!.document.close()
-        setTimeout(() => { win?.print() }, 500)
+        const { jsPDF } = await import('jspdf')
+        const doc = new jsPDF('p', 'pt', 'a4')
+        const pageWidth = doc.internal.pageSize.getWidth()
+        await new Promise<void>((resolve, reject) => {
+          doc.html(html, {
+            x: 0,
+            y: 0,
+            width: pageWidth,
+            windowWidth: 800,
+            html2canvas: { useCORS: true, scale: pageWidth / 800 },
+            callback: (pdfDoc) => {
+              pdfDoc.save(nombreArchivo)
+              resolve()
+            },
+          }).catch(reject)
+        })
       } else {
         const Print = await import('expo-print')
         const ShareLib = await import('expo-sharing')
@@ -550,7 +560,6 @@ export default function DetallePropiedad() {
       }
     } catch (e: any) {
       if (Platform.OS === 'web') {
-        win?.close()
         window.alert('No se pudo generar el PDF.')
       } else {
         Alert.alert('Error', `No se pudo generar la ficha PDF.\n\n${e?.message ?? ''}`)
@@ -1093,24 +1102,6 @@ export default function DetallePropiedad() {
             <Text style={styles.descripcion}>{propiedad.descripcion}</Text>
           </View>
         ) : null}
-
-        {/* Galería de imágenes restantes */}
-        {imagenes.length > 1 && (
-          <View style={styles.seccion}>
-            <Text style={styles.seccionTitulo}>Galería</Text>
-            <View style={styles.galeriaGrid}>
-              {imagenes.slice(1).map((img, i) => (
-                <TouchableOpacity
-                  key={i + 1}
-                  activeOpacity={0.85}
-                  onPress={() => { setLightboxIndex(i + 1); setLightboxVisible(true) }}
-                >
-                  <Image source={{ uri: img.url }} style={styles.galeriaThumb} resizeMode="cover" />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
 
         {/* Ubicación */}
         {propiedad.lat != null && propiedad.lng != null && (
@@ -1680,18 +1671,6 @@ const styles = StyleSheet.create({
   carLabel: { fontSize: 12, color: '#888', marginTop: 2 },
 
   descripcion: { fontSize: 15, color: '#444', lineHeight: 23 },
-
-  galeriaGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  galeriaThumb: {
-    width: 100,
-    height: 100,
-    borderRadius: 10,
-    backgroundColor: '#e0e0e0',
-  },
 
   mapaImagen: {
     width: '100%',

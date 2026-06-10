@@ -60,7 +60,19 @@
       "Bash(grep -E \"\\\\.sql$\")",
       "Bash(xargs head -1)",
       "Bash(xargs grep -l \"CREATE TABLE\")",
-      "Bash(xargs wc -l)"
+      "Bash(xargs wc -l)",
+      "Bash(curl -s \"https://ystxicgrryyzhrxinsbq.supabase.co/rest/v1/inmobiliarias?select=*&limit=1\" -H \"apikey: sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl\" -H \"Authorization: Bearer sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl\")",
+      "Bash(awk -F'|' '{gsub\\(/ /,\"\",$2\\); if \\($2!=\"\"\\) print $2}')",
+      "Bash(cd \"c:\\\\Users\\\\carbe\\\\OneDrive\\\\Escritorio\\\\valera_app\" && mv supabase/_tmp_pending/*.sql supabase/migrations/ && rmdir supabase/_tmp_pending && ls supabase/migrations | tail -5)",
+      "Bash(curl -s \"https://ystxicgrryyzhrxinsbq.supabase.co/rest/v1/propiedades?select=id,codigo,titulo,inmobiliaria_id,medios_banos,inmobiliarias\\(nombre,logo_url,exclusiva\\)&limit=2\" -H \"apikey: sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl\" -H \"Authorization: Bearer sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl\")",
+      "Bash(curl -s -i \"https://ystxicgrryyzhrxinsbq.supabase.co/rest/v1/propiedades?select=id&limit=2\" -H \"apikey: sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl\" -H \"Authorization: Bearer sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl\")",
+      "Bash(curl -s \"https://ystxicgrryyzhrxinsbq.supabase.co/rest/v1/inmobiliarias?select=nombre,exclusiva,asesor_referencia\" -H \"apikey: sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl\" -H \"Authorization: Bearer sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl\")",
+      "Bash(npx eas-cli *)",
+      "Bash(node -e \"const {jsPDF} = require\\('jspdf'\\); const d = new jsPDF\\(\\); console.log\\(typeof d.html\\);\")",
+      "Bash(xargs grep -l \"html\")"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\carbe\\OneDrive\\Escritorio\\valera_app\\supabase\\_tmp_pending"
     ]
   }
 }
