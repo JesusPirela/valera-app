@@ -64,6 +64,7 @@ export default function EditarPropiedad() {
   const [recamaras, setRecamaras] = useState<number | null>(null)
   const [banos, setBanos] = useState<number | null>(null)
   const [m2, setM2] = useState('')
+  const [m2Terreno, setM2Terreno] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
   const [zona, setZona] = useState<'queretaro' | 'monterrey' | 'puebla' | null>(null)
   const [lat, setLat] = useState<number | null>(null)
@@ -91,7 +92,7 @@ export default function EditarPropiedad() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, m2, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
+      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
       .eq('id', id)
       .single()
 
@@ -115,6 +116,7 @@ export default function EditarPropiedad() {
     setRecamaras(data.recamaras ?? null)
     setBanos(data.banos ?? null)
     setM2(data.m2 != null ? String(data.m2) : '')
+    setM2Terreno(data.m2_terreno != null ? String(data.m2_terreno) : '')
     setEstacionamientos(data.estacionamientos ?? null)
     setAsesorId(data.asesor_id ?? null)
     setInmobiliariaId(data.inmobiliaria_id ?? null)
@@ -277,6 +279,11 @@ export default function EditarPropiedad() {
       Alert.alert('Error', 'Los m² deben ser un número válido.')
       return
     }
+    const m2TerrenoNum = m2Terreno ? parseFloat(m2Terreno) : null
+    if (m2Terreno && isNaN(m2TerrenoNum!)) {
+      Alert.alert('Error', 'Los m² de terreno deben ser un número válido.')
+      return
+    }
 
     setGuardando(true)
     try {
@@ -294,6 +301,7 @@ export default function EditarPropiedad() {
           recamaras,
           banos,
           m2: m2Num,
+          m2_terreno: m2TerrenoNum,
           estacionamientos,
           asesor_id: asesorId,
           inmobiliaria_id: inmobiliariaId,
@@ -503,7 +511,7 @@ export default function EditarPropiedad() {
 
         <View style={styles.dosColumnas}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>M²</Text>
+            <Text style={styles.label}>M² construcción</Text>
             <TextInput
               style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               placeholder="Ej. 120"
@@ -514,9 +522,23 @@ export default function EditarPropiedad() {
             />
           </View>
           <View style={{ flex: 1 }}>
+            <Text style={styles.label}>M² terreno</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+              placeholder="Ej. 200"
+              value={m2Terreno}
+              onChangeText={setM2Terreno}
+              keyboardType="decimal-pad"
+              maxLength={10}
+            />
+          </View>
+        </View>
+        <View style={styles.dosColumnas}>
+          <View style={{ flex: 1 }}>
             <Text style={styles.label}>Estacionamientos</Text>
             <DropdownModal options={ESTACIONAMIENTOS_OPTIONS} value={estacionamientos} onChange={setEstacionamientos} />
           </View>
+          <View style={{ flex: 1 }} />
         </View>
 
         <Text style={styles.label}>Precio (MXN)</Text>

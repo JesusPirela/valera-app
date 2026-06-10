@@ -41,6 +41,7 @@ type Propiedad = {
   banos: number | null
   medios_banos: number | null
   m2: number | null
+  m2_terreno: number | null
   estacionamientos: number | null
   descripcion: string | null
   created_by: string | null
@@ -104,7 +105,8 @@ function formatearFichaWhatsApp(p: Propiedad): string {
     if (p.medios_banos != null && p.medios_banos > 0) partes.push(`${p.medios_banos} medio${p.medios_banos === 1 ? '' : 's'}`)
     meta.push(`🚿 ${partes.join(' + ')}`)
   }
-  if (p.m2 != null) meta.push(`📐 ${p.m2} m²`)
+  if (p.m2 != null) meta.push(`📐 ${p.m2} m² const.`)
+  if (p.m2_terreno != null) meta.push(`🌳 ${p.m2_terreno} m² terreno`)
   if (p.estacionamientos != null) meta.push(`🚗 ${p.estacionamientos} est`)
   if (meta.length) msg += '\n\n' + meta.join('   ')
 
@@ -147,7 +149,7 @@ export default function DetallePropiedad() {
 
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, estacionamientos, descripcion, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), lat, lng, propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), lat, lng, propiedad_imagenes(url, orden)')
         .eq('id', id)
         .single()
 
@@ -386,8 +388,7 @@ export default function DetallePropiedad() {
     try {
       if (Platform.OS === 'web') {
         const logoModule = require('../../assets/logo.png')
-        const resolved = Image.resolveAssetSource(logoModule)
-        const uri = resolved?.uri ?? (typeof logoModule === 'string' ? logoModule : '')
+        const uri = typeof logoModule === 'string' ? logoModule : (logoModule?.uri ?? '')
         if (!uri) return ''
         try {
           const res = await fetch(uri)
@@ -463,7 +464,8 @@ export default function DetallePropiedad() {
       if (propiedad.recamaras != null) cars.push(`<div class="car"><span class="car-val">${propiedad.recamaras}</span><span class="car-lbl">Recámaras</span></div>`)
       if (propiedad.banos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.banos}</span><span class="car-lbl">Baños</span></div>`)
       if (propiedad.medios_banos != null && propiedad.medios_banos > 0) cars.push(`<div class="car"><span class="car-val">${propiedad.medios_banos}</span><span class="car-lbl">Medio${propiedad.medios_banos === 1 ? '' : 's'} baño${propiedad.medios_banos === 1 ? '' : 's'}</span></div>`)
-      if (propiedad.m2 != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2}</span><span class="car-lbl">m²</span></div>`)
+      if (propiedad.m2 != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2}</span><span class="car-lbl">m² construcción</span></div>`)
+      if (propiedad.m2_terreno != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2_terreno}</span><span class="car-lbl">m² terreno</span></div>`)
       if (propiedad.estacionamientos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.estacionamientos}</span><span class="car-lbl">Estacionamientos</span></div>`)
 
       // Mapa estático de Google si hay coordenadas
@@ -1145,7 +1147,7 @@ export default function DetallePropiedad() {
         </View>
 
         {/* Características */}
-        {(propiedad.recamaras != null || propiedad.banos != null || propiedad.medios_banos != null || propiedad.m2 != null || propiedad.estacionamientos != null) && (
+        {(propiedad.recamaras != null || propiedad.banos != null || propiedad.medios_banos != null || propiedad.m2 != null || propiedad.m2_terreno != null || propiedad.estacionamientos != null) && (
           <View style={styles.seccion}>
             <Text style={styles.seccionTitulo}>Características</Text>
             <View style={styles.caracteristicasGrid}>
@@ -1170,7 +1172,13 @@ export default function DetallePropiedad() {
               {propiedad.m2 != null && (
                 <View style={styles.caracteristica}>
                   <Text style={styles.carValor}>{propiedad.m2}</Text>
-                  <Text style={styles.carLabel}>m²</Text>
+                  <Text style={styles.carLabel}>m² construcción</Text>
+                </View>
+              )}
+              {propiedad.m2_terreno != null && (
+                <View style={styles.caracteristica}>
+                  <Text style={styles.carValor}>{propiedad.m2_terreno}</Text>
+                  <Text style={styles.carLabel}>m² terreno</Text>
                 </View>
               )}
               {propiedad.estacionamientos != null && (

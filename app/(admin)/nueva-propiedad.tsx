@@ -91,14 +91,16 @@ function parsearFicha(texto: string) {
   const mPrecio = texto.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:MXN)?/i)
   if (mPrecio) precio = mPrecio[1].replace(/,/g, '')
 
-  // M2: construcción tiene prioridad sobre terreno
+  // M2 construcción y terreno
   let m2 = ''
+  let m2Terreno = ''
   const mConst = texto.match(/construcci[oó]n\s*[:.]?\s*([\d,.]+)\s*m[²2]/i)
+  const mTerr = texto.match(/terreno\s*[:.]?\s*([\d,.]+)\s*m[²2]/i)
+  if (mTerr) m2Terreno = mTerr[1].replace(/,/g, '')
   if (mConst) {
     m2 = mConst[1].replace(/,/g, '')
-  } else {
-    const mTerr = texto.match(/terreno\s*[:.]?\s*([\d,.]+)\s*m[²2]/i)
-    if (mTerr) m2 = mTerr[1].replace(/,/g, '')
+  } else if (mTerr) {
+    m2 = mTerr[1].replace(/,/g, '')
   }
 
   // Recámaras
@@ -139,7 +141,7 @@ function parsearFicha(texto: string) {
   if (/\brenta\b/i.test(inicio)) operacion = 'renta'
   else if (/\bventa\b/i.test(inicio)) operacion = 'venta'
 
-  return { titulo, direccion, precio, m2, recamaras, banos, mediosBanos, estacionamientos, tipo, operacion }
+  return { titulo, direccion, precio, m2, m2Terreno, recamaras, banos, mediosBanos, estacionamientos, tipo, operacion }
 }
 
 export default function NuevaPropiedad() {
@@ -156,6 +158,7 @@ export default function NuevaPropiedad() {
   const [recamaras, setRecamaras] = useState<number | null>(null)
   const [banos, setBanos] = useState<number | null>(null)
   const [m2, setM2] = useState('')
+  const [m2Terreno, setM2Terreno] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
   const [zona, setZona] = useState<'queretaro' | 'monterrey' | 'puebla' | null>(null)
   const [lat, setLat] = useState<number | null>(null)
@@ -239,6 +242,7 @@ export default function NuevaPropiedad() {
     if (r.direccion) setDireccion(r.direccion)
     if (r.precio) setPrecio(r.precio)
     if (r.m2) setM2(r.m2)
+    if (r.m2Terreno) setM2Terreno(r.m2Terreno)
     if (r.recamaras !== null) setRecamaras(r.recamaras)
     if (r.banos !== null) setBanos(r.banos)
     if (r.mediosBanos !== null) setMediosBanos(r.mediosBanos)
@@ -437,6 +441,11 @@ export default function NuevaPropiedad() {
       Alert.alert('Error', 'Los m² deben ser un número válido.')
       return
     }
+    const m2TerrenoNum = m2Terreno ? parseFloat(m2Terreno) : null
+    if (m2Terreno && isNaN(m2TerrenoNum!)) {
+      Alert.alert('Error', 'Los m² de terreno deben ser un número válido.')
+      return
+    }
 
     setLoading(true)
     try {
@@ -476,6 +485,7 @@ export default function NuevaPropiedad() {
           banos,
           medios_banos: mediosBanos ?? 0,
           m2: m2Num,
+          m2_terreno: m2TerrenoNum,
           estacionamientos,
           asesor_id: asesorId,
           inmobiliaria_id: inmobiliariaId,
@@ -719,7 +729,7 @@ export default function NuevaPropiedad() {
 
         <View style={styles.dosColumnas}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>M²</Text>
+            <Text style={styles.label}>M² construcción</Text>
             <TextInput
               style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               placeholder="Ej. 120"
@@ -730,9 +740,23 @@ export default function NuevaPropiedad() {
             />
           </View>
           <View style={{ flex: 1 }}>
+            <Text style={styles.label}>M² terreno</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+              placeholder="Ej. 200"
+              value={m2Terreno}
+              onChangeText={setM2Terreno}
+              keyboardType="decimal-pad"
+              maxLength={10}
+            />
+          </View>
+        </View>
+        <View style={styles.dosColumnas}>
+          <View style={{ flex: 1 }}>
             <Text style={styles.label}>Estacionamientos</Text>
             <DropdownModal options={ESTACIONAMIENTOS_OPTIONS} value={estacionamientos} onChange={setEstacionamientos} />
           </View>
+          <View style={{ flex: 1 }} />
         </View>
 
         <Text style={styles.label}>Precio (MXN)</Text>
