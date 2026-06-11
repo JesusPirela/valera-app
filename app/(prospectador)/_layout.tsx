@@ -241,26 +241,7 @@ export default function ProspectadorLayout() {
             resizeMode="contain"
           />
         ),
-        headerLeft: () => {
-          const BACK: Record<string, string> = {
-            'detalle-propiedad': esAdminOSupervisorGlobal ? '/(admin)/propiedades' : '/(prospectador)/propiedades',
-            'detalle-cliente':   '/(prospectador)/crm',
-            'cliente-form':      '/(prospectador)/crm',
-            'university-curso':  '/(prospectador)/university',
-            'university-leccion':'/(prospectador)/university',
-            'tienda':            '/(prospectador)/misiones',
-            'ranking':           '/(prospectador)/misiones',
-            'mi-actividad':      '/(prospectador)/perfil',
-            'mi-historial':     '/(prospectador)/perfil',
-          }
-          const match = Object.entries(BACK).find(([seg]) => pathname.includes(seg))
-          if (!match) return null
-          return (
-            <TouchableOpacity onPress={() => router.navigate(match[1] as any)} style={{ paddingLeft: 8, paddingRight: 4 }}>
-              <Text style={{ color: '#c9a84c', fontSize: 22, fontWeight: '700' }}>‹</Text>
-            </TouchableOpacity>
-          )
-        },
+        headerLeft: () => null,
         headerRight: () => null,
       }}
     >

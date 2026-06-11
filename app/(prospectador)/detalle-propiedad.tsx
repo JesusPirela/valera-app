@@ -413,7 +413,12 @@ export default function DetallePropiedad() {
 
   async function imagenABase64(url: string): Promise<string> {
     try {
-      if (Platform.OS === 'web') return url
+      if (Platform.OS === 'web') {
+        // Evita usar una versión en caché sin cabeceras CORS, que html2canvas
+        // no puede leer y renderiza como un recuadro en blanco.
+        const sep = url.includes('?') ? '&' : '?'
+        return `${url}${sep}_cb=${Date.now()}`
+      }
       const FileSystemLib = await import('expo-file-system')
       const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
       const { uri } = await FileSystemLib.FileSystem.downloadAsync(url, localUri)
