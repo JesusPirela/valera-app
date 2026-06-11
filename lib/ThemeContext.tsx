@@ -1,15 +1,20 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { Text, TextInput } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
 
 const DEFAULT_COLOR  = '#1a6470'
 const DARK_MODE_KEY  = '@valera_dark_mode'
+const FONT_CAP_KEY   = '@valera_font_scale_cap'
+const FONT_CAP_MULTIPLIER = 1.15
 
 type ThemeCtx = {
   primaryColor: string
   setPrimaryColor: (color: string) => void
   darkMode: boolean
   toggleDarkMode: () => void
+  fontScaleCap: boolean
+  toggleFontScaleCap: () => void
 }
 
 const ThemeContext = createContext<ThemeCtx>({
@@ -17,16 +22,34 @@ const ThemeContext = createContext<ThemeCtx>({
   setPrimaryColor: () => {},
   darkMode:        true,
   toggleDarkMode:  () => {},
+  fontScaleCap:       false,
+  toggleFontScaleCap: () => {},
 })
+
+function aplicarTopeFuente(activo: boolean) {
+  const maxFontSizeMultiplier = activo ? FONT_CAP_MULTIPLIER : undefined
+  ;(Text as any).defaultProps = (Text as any).defaultProps || {}
+  ;(Text as any).defaultProps.maxFontSizeMultiplier = maxFontSizeMultiplier
+  ;(TextInput as any).defaultProps = (TextInput as any).defaultProps || {}
+  ;(TextInput as any).defaultProps.maxFontSizeMultiplier = maxFontSizeMultiplier
+}
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [primaryColor, setPrimaryColor] = useState(DEFAULT_COLOR)
   const [darkMode, setDarkMode]         = useState(false)
+  const [fontScaleCap, setFontScaleCap] = useState(false)
 
   // Cargar preferencia guardada al iniciar
   useEffect(() => {
     AsyncStorage.getItem(DARK_MODE_KEY).then(val => {
       if (val !== null) setDarkMode(val === 'true')
+    })
+    AsyncStorage.getItem(FONT_CAP_KEY).then(val => {
+      const activo = val === 'true'
+      if (activo) {
+        aplicarTopeFuente(true)
+        setFontScaleCap(true)
+      }
     })
   }, [])
 
@@ -55,8 +78,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     })
   }
 
+  function toggleFontScaleCap() {
+    setFontScaleCap(prev => {
+      const next = !prev
+      aplicarTopeFuente(next)
+      AsyncStorage.setItem(FONT_CAP_KEY, String(next))
+      return next
+    })
+  }
+
   return (
-    <ThemeContext.Provider value={{ primaryColor, setPrimaryColor, darkMode, toggleDarkMode }}>
+    <ThemeContext.Provider value={{ primaryColor, setPrimaryColor, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap }}>
       {children}
     </ThemeContext.Provider>
   )

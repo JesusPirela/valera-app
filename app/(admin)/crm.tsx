@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking,
   ActivityIndicator, TouchableOpacity, ScrollView, Modal, Alert, FlatList,
@@ -77,8 +77,8 @@ export default function AdminCRM() {
   const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null)
   const [seccionesColapsadas, setSeccionesColapsadas] = useState<Set<string>>(new Set())
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
+  const cargadoUnaVez = useRef(false)
 
   const [modalNuevo, setModalNuevo] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
@@ -92,18 +92,16 @@ export default function AdminCRM() {
   const [guardandoCliente, setGuardandoCliente] = useState(false)
 
   async function cargarClientes() {
-    setLoading(true)
+    if (!cargadoUnaVez.current) setLoading(true)
     setErrorMsg(null)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) setCurrentUserId(user.id)
 
     const { data: clientesData, error: errorClientes } = await supabase
       .from('clientes')
       .select('id, nombre, telefono, email, empresa, estado, tipo_operacion, created_at, responsable_id')
       .order('updated_at', { ascending: false })
 
-    if (errorClientes) { setErrorMsg(errorClientes.message); setLoading(false); return }
-    if (!clientesData?.length) { setSecciones([]); setLoading(false); return }
+    if (errorClientes) { setErrorMsg(errorClientes.message); setLoading(false); cargadoUnaVez.current = true; return }
+    if (!clientesData?.length) { setSecciones([]); setLoading(false); cargadoUnaVez.current = true; return }
 
     const idsUnicos = [...new Set(clientesData.map((c: any) => c.responsable_id).filter(Boolean))]
     const { data: perfilesData } = await supabase
@@ -132,6 +130,7 @@ export default function AdminCRM() {
         .map(([nombre, clientes]) => ({ title: nombre, email: '', data: clientes, total: clientes.length }))
     )
     setLoading(false)
+    cargadoUnaVez.current = true
   }
 
   useFocusEffect(useCallback(() => { cargarClientes() }, []))
@@ -142,6 +141,28 @@ export default function AdminCRM() {
     const { data } = await supabase.from('profiles').select('id, nombre').neq('role', 'admin').order('nombre')
     setUsuariosLista((data ?? []) as UsuarioSimple[])
     setModalNuevo(true)
+  }
+
+  function confirmarEliminarCliente(item: ClienteAdmin) {
+    const mensaje = `¿Eliminar a "${item.nombre}"? Esta acción no se puede deshacer.`
+    if (Platform.OS === 'web') {
+      if (window.confirm(mensaje)) eliminarCliente(item.id)
+    } else {
+      Alert.alert('Eliminar cliente', mensaje, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => eliminarCliente(item.id) },
+      ])
+    }
+  }
+
+  async function eliminarCliente(id: string) {
+    const { error } = await supabase.from('clientes').delete().eq('id', id)
+    if (error) { Platform.OS === 'web' ? window.alert(error.message) : Alert.alert('Error', error.message); return }
+    setSecciones(prev =>
+      prev
+        .map(sec => ({ ...sec, data: sec.data.filter(c => c.id !== id), total: sec.total - (sec.data.some(c => c.id === id) ? 1 : 0) }))
+        .filter(sec => sec.data.length > 0)
+    )
   }
 
   async function guardarNuevoCliente() {
@@ -247,6 +268,10 @@ export default function AdminCRM() {
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
+
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
+        <Text style={styles.backBtnText}>← Volver</Text>
+      </TouchableOpacity>
 
       {/* Stats banner */}
       <View style={styles.statsBanner}>
@@ -448,6 +473,12 @@ export default function AdminCRM() {
                             <Ionicons name="call-outline" size={12} color="#1a6470" />
                             <Text style={styles.actionCallText}>Llamar</Text>
                           </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.actionDelete}
+                            onPress={() => confirmarEliminarCliente(item)}
+                          >
+                            <Ionicons name="trash-outline" size={12} color="#c0392b" />
+                          </TouchableOpacity>
                           <View style={{ flex: 1, alignItems: 'flex-end' }}>
                             <Ionicons name="chevron-forward" size={14} color="#d0d8da" />
                           </View>
@@ -573,6 +604,9 @@ export default function AdminCRM() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f2f5f8' },
 
+  backBtn: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4 },
+  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
+
   // Stats
   statsBanner: {
     flexDirection: 'row', backgroundColor: '#1a6470',
@@ -695,6 +729,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#cde8ed',
   },
   actionCallText: { fontSize: 11, fontWeight: '600', color: '#1a6470' },
+  actionDelete: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#fef2f0', borderRadius: 7,
+    paddingHorizontal: 8, paddingVertical: 5,
+    borderWidth: 1, borderColor: '#fbd9d2',
+  },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

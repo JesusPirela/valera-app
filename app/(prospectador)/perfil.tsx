@@ -29,7 +29,7 @@ function mostrarAlerta(msg: string) {
 }
 
 export default function Perfil() {
-  const { setPrimaryColor, darkMode, toggleDarkMode } = useTheme()
+  const { setPrimaryColor, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap } = useTheme()
   const c = useColors()
 
   const [loading, setLoading] = useState(true)
@@ -318,6 +318,23 @@ export default function Perfil() {
             onValueChange={toggleDarkMode}
             trackColor={{ false: '#dde8e9', true: colorAcento + '88' }}
             thumbColor={darkMode ? colorAcento : '#aaa'}
+          />
+        </View>
+
+        <View style={[s.modoRow, darkMode && { backgroundColor: '#111f2e', borderColor: '#1e3448' }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.modoTitulo, darkMode && { color: '#fff' }]}>
+              📐 Ajustar tamaño de letra
+            </Text>
+            <Text style={[s.modoSub, darkMode && { color: '#7a9ab5' }]}>
+              Si en tu celular el tamaño de letra grande hace que los botones y textos de la app se amontonen, activa esto para corregirlo.
+            </Text>
+          </View>
+          <ToggleSwitch
+            value={fontScaleCap}
+            onValueChange={toggleFontScaleCap}
+            trackColor={{ false: '#dde8e9', true: colorAcento + '88' }}
+            thumbColor={fontScaleCap ? colorAcento : '#aaa'}
           />
         </View>
 

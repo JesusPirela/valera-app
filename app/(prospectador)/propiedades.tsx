@@ -489,7 +489,7 @@ export default function ProspectadorPropiedades() {
   }
 
   const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
-  const { width: screenWidth } = useWindowDimensions()
+  const { width: screenWidth, height: windowHeight } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
   const numCols = isWeb ? 4 : 1
   const CARD_GAP = 16
@@ -509,10 +509,10 @@ export default function ProspectadorPropiedades() {
             <View style={[styles.headerTopRow, { marginBottom: 8 }]}>
               <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
               <View style={{ flex: 1, marginLeft: 14, justifyContent: 'center' }}>
-                <Text style={styles.headerSaludo}>
+                <Text style={styles.headerSaludo} numberOfLines={1} maxFontSizeMultiplier={1.3}>
                   {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
                 </Text>
-                <Text style={styles.headerSubtitulo}>
+                <Text style={styles.headerSubtitulo} numberOfLines={1} maxFontSizeMultiplier={1.3}>
                   {propiedades.length > 0 ? `${propiedades.length} propiedades disponibles` : 'Cargando...'}
                 </Text>
               </View>
@@ -521,13 +521,15 @@ export default function ProspectadorPropiedades() {
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
                 style={[styles.searchInput, { color: darkMode ? '#fff' : '#1a1a2e' }]}
-                placeholder="Buscar por título, código o dirección..."
+                placeholder="Buscar propiedades..."
                 placeholderTextColor={darkMode ? 'rgba(255,255,255,0.6)' : '#666'}
                 value={busqueda}
                 onChangeText={setBusqueda}
                 autoCapitalize="none"
                 autoCorrect={false}
                 clearButtonMode="while-editing"
+                numberOfLines={1}
+                maxFontSizeMultiplier={1.2}
               />
             </View>
           </View>
@@ -553,7 +555,12 @@ export default function ProspectadorPropiedades() {
               onPress={btn.onPress}
             >
               <Ionicons name={btn.icon} size={14} color={btn.activo ? '#fff' : primaryColor} />
-              <Text style={[styles.quickFilterText, { color: btn.activo ? '#fff' : primaryColor }]}>
+              <Text
+                style={[styles.quickFilterText, { color: btn.activo ? '#fff' : primaryColor }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                maxFontSizeMultiplier={1.2}
+              >
                 {btn.label}
               </Text>
             </TouchableOpacity>
@@ -563,7 +570,7 @@ export default function ProspectadorPropiedades() {
         {/* Fila de controles: Filtros + Ver zonas */}
         <View style={styles.controlsRow}>
           <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
-            <Text style={[styles.filtrosToggleText, { color: primaryColor }]}>
+            <Text style={[styles.filtrosToggleText, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
               {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
             </Text>
           </TouchableOpacity>
@@ -572,14 +579,14 @@ export default function ProspectadorPropiedades() {
             onPress={() => setVistaZonas(v => !v)}
           >
             <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : primaryColor} />
-            <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : primaryColor }]}>
+            <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
               Ver zonas
             </Text>
           </TouchableOpacity>
         </View>
 
         {mostrarFiltros && (
-          <View style={styles.filtrosPanel}>
+          <ScrollView style={[styles.filtrosPanel, { maxHeight: windowHeight * 0.55 }]} nestedScrollEnabled showsVerticalScrollIndicator={true}>
             <Text style={styles.filtroLabel}>Tipo</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
               <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)} color={primaryColor} />
@@ -683,7 +690,7 @@ export default function ProspectadorPropiedades() {
                 <Text style={styles.aplicarBtnText}>Aplicar filtros</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </ScrollView>
         )}
 
         {isLoading ? (
@@ -840,11 +847,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginTop: 2,
     marginBottom: 0,
+    height: 44,
+    overflow: 'hidden',
   },
   searchIcon: { fontSize: 15, marginRight: 8, color: '#aaa' },
   searchInput: {
     flex: 1,
-    paddingVertical: 12,
+    height: '100%',
+    paddingVertical: 0,
     fontSize: 14,
   },
   // Botones rápidos Venta / Renta

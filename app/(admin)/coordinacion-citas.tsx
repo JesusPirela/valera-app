@@ -159,9 +159,9 @@ function DropdownSelector({
 // ─── ModalEdicion ─────────────────────────────────────────────────────────────
 
 function ModalEdicion({
-  cita, admins, onClose, onGuardar,
+  cita, admins, onClose, onGuardar, onEliminar,
 }: {
-  cita: Cita | null; admins: Profile[]; onClose: () => void; onGuardar: () => void
+  cita: Cita | null; admins: Profile[]; onClose: () => void; onGuardar: () => void; onEliminar: (cita: Cita) => void
 }) {
   const [estado, setEstado]               = useState<EstadoCita>(cita?.estado ?? 'por_contactar')
   const [notas, setNotas]                 = useState(cita?.notas ?? '')
@@ -266,6 +266,11 @@ function ModalEdicion({
               onPress={guardar} disabled={guardando}>
               {guardando ? <ActivityIndicator color="#fff" size="small" />
                 : <Text style={s.btnGuardarTxt}>Guardar cambios</Text>}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={s.btnEliminar} onPress={() => onEliminar(cita)} disabled={guardando}>
+              <Ionicons name="trash-outline" size={16} color="#c0392b" />
+              <Text style={s.btnEliminarTxt}>Eliminar cita</Text>
             </TouchableOpacity>
           </ScrollView>
         </TouchableOpacity>
@@ -782,6 +787,25 @@ export default function CoordinacionCitas() {
     if (!data || data.length === 0) { alerta('No se pudo cambiar el estado. Intenta de nuevo.'); cargar() }
   }
 
+  function confirmarEliminarCita(cita: Cita) {
+    const mensaje = `¿Eliminar la cita de "${cita.clientes.nombre}"? Esta acción no se puede deshacer.`
+    if (Platform.OS === 'web') {
+      if (window.confirm(mensaje)) eliminarCita(cita)
+    } else {
+      Alert.alert('Eliminar cita', mensaje, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => eliminarCita(cita) },
+      ])
+    }
+  }
+
+  async function eliminarCita(cita: Cita) {
+    const { error } = await supabase.from('citas_coordinacion').delete().eq('id', cita.id)
+    if (error) { alerta(error.message); return }
+    setCitas(prev => prev.filter(c => c.id !== cita.id))
+    setCitaEditando(null)
+  }
+
   // ── Filtros ──────────────────────────────────────────────────────────────
   const citasFiltradas = citas.filter(c => {
     if (filtroAdmin) {
@@ -960,6 +984,7 @@ export default function CoordinacionCitas() {
           admins={admins}
           onClose={() => setCitaEditando(null)}
           onGuardar={cargar}
+          onEliminar={confirmarEliminarCita}
         />
       )}
       {citaMoviendo && (
@@ -1065,6 +1090,8 @@ const s = StyleSheet.create({
 
   btnGuardar:    { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 15, alignItems: 'center' },
   btnGuardarTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  btnEliminar:   { flexDirection: 'row', gap: 6, backgroundColor: '#fef2f0', borderRadius: 12, borderWidth: 1, borderColor: '#fbd9d2', paddingVertical: 13, alignItems: 'center', justifyContent: 'center', marginTop: 10, marginBottom: 24 },
+  btnEliminarTxt: { color: '#c0392b', fontSize: 14, fontWeight: '700' },
 
   // Modal nueva cita
   modoToggle:  { flexDirection: 'row', gap: 8, marginBottom: 16 },
