@@ -304,8 +304,18 @@ export default function NuevaPropiedad() {
       if (d.m2)        partes.push(`${d.m2} m²`)
       if (d.imagenes?.length) partes.push(`${d.imagenes.length} fotos`)
       setImportMsg(partes.length > 0
-        ? `✓ Importado: ${partes.join(' · ')}`
+        ? `✓ ${partes.join(' · ')}`
         : '⚠ No se detectaron campos. Verifica que el URL sea de una propiedad.')
+
+      if (d.descripcion) {
+        setImportMsg(prev => `${prev} · Mejorando con IA…`)
+        try {
+          await mejorarConDatos(d)
+          setImportMsg(prev => prev.replace(' · Mejorando con IA…', ' · Desc. mejorada'))
+        } catch {
+          setImportMsg(prev => prev.replace(' · Mejorando con IA…', ''))
+        }
+      }
     } catch (err: any) {
       setImportMsg('✗ Error: ' + (err.message ?? 'No se pudo importar'))
     } finally {
@@ -447,18 +457,41 @@ export default function NuevaPropiedad() {
     if (urls.length > 0) setImagenes(prev => [...prev, ...urls])
   }
 
-  async function handleMejorarDescripcion() {
+  async function mejorarConDatos(d?: {
+    titulo?: string; descripcion?: string; precio?: string; direccion?: string
+    tipo?: string; operacion?: string; recamaras?: number | null; banos?: number | null
+    mediosBanos?: number | null; m2?: string; estacionamientos?: number | null
+  }): Promise<void> {
     setMejorando(true)
     try {
-      const { data, error } = await supabase.functions.invoke('mejorar-descripcion', {
-        body: { titulo, direccion, precio, descripcion, tipo, operacion, recamaras, banos, mediosBanos, m2, estacionamientos },
-      })
+      const body = {
+        titulo:           d?.titulo           != null ? d.titulo           : titulo,
+        direccion:        d?.direccion        != null ? d.direccion        : direccion,
+        precio:           d?.precio           != null ? d.precio           : precio,
+        descripcion:      d?.descripcion      != null ? d.descripcion      : descripcion,
+        tipo:             d?.tipo             != null ? d.tipo             : tipo,
+        operacion:        d?.operacion        != null ? d.operacion        : operacion,
+        recamaras:        d?.recamaras        != null ? d.recamaras        : recamaras,
+        banos:            d?.banos            != null ? d.banos            : banos,
+        mediosBanos:      d?.mediosBanos      != null ? d.mediosBanos      : mediosBanos,
+        m2:               d?.m2               != null ? d.m2               : m2,
+        estacionamientos: d?.estacionamientos != null ? d.estacionamientos : estacionamientos,
+      }
+      const { data, error } = await supabase.functions.invoke('mejorar-descripcion', { body })
       if (error) throw error
-      if (data?.texto) setDescripcion(data.texto)
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'No se pudo mejorar la descripción.')
+      if ((data as any)?.error) throw new Error((data as any).error)
+      if (!data?.texto) throw new Error('La IA no devolvió texto')
+      setDescripcion(data.texto)
     } finally {
       setMejorando(false)
+    }
+  }
+
+  async function handleMejorarDescripcion() {
+    try {
+      await mejorarConDatos()
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo mejorar la descripción.')
     }
   }
 

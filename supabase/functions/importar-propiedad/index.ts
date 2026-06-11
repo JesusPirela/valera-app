@@ -5,13 +5,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-function getMetaContent(html: string, prop: string): string {
-  for (const attr of ['property', 'name']) {
-    const patterns = [
+function getMeta(html: string, prop: string): string {
+  for (const attr of ['property', 'name', 'itemprop']) {
+    const pats = [
       new RegExp(`<meta[^>]+${attr}="${prop}"[^>]+content="([^"]*)"`, 'i'),
       new RegExp(`<meta[^>]+content="([^"]*)"[^>]+${attr}="${prop}"`, 'i'),
     ]
-    for (const p of patterns) {
+    for (const p of pats) {
       const m = html.match(p)
       if (m?.[1]) return m[1].trim()
     }
@@ -25,48 +25,36 @@ function parseNum(val: unknown): number | null {
   return isNaN(n) ? null : n
 }
 
-function capNum(n: number | null, max: number): number | null {
+function cap(n: number | null, max: number): number | null {
   return n !== null ? Math.min(Math.round(n), max) : null
 }
 
 function mapTipo(s: string): 'casa' | 'departamento' | 'local' | 'terreno' | null {
   const l = s.toLowerCase()
   if (/departamento|apartment|condo/.test(l)) return 'departamento'
-  if (/\bcasa\b|house|home|residencia/.test(l))  return 'casa'
-  if (/local|comercial|comercio|oficina|office/.test(l)) return 'local'
-  if (/terreno|lot\b|land\b|lote/.test(l))       return 'terreno'
+  if (/\bcasa\b|house|home|residencia/.test(l)) return 'casa'
+  if (/local|comercial|oficina|office/.test(l)) return 'local'
+  if (/terreno|lot\b|land\b|lote/.test(l)) return 'terreno'
   return null
 }
 
 function mapOp(s: string): 'venta' | 'renta' | null {
   const l = s.toLowerCase()
-  if (/sale|venta/.test(l))  return 'venta'
+  if (/sale|venta/.test(l)) return 'venta'
   if (/rent|renta|alquiler/.test(l)) return 'renta'
   return null
 }
 
-// Busca recursivamente un objeto que parezca ficha de propiedad
-function findProp(obj: unknown, depth = 0): Record<string, unknown> | null {
-  if (depth > 8 || !obj || typeof obj !== 'object') return null
-  const o = obj as Record<string, unknown>
-  if (
-    'bedrooms' in o || 'bathrooms' in o || 'construction_size' in o ||
-    'property_type' in o || 'lot_size' in o || 'parking_spaces' in o
-  ) return o
-  for (const v of Object.values(o)) {
-    const found = findProp(v, depth + 1)
-    if (found) return found
-  }
-  return null
-}
-
-function extractImages(val: unknown): string[] {
-  if (!val) return []
-  const arr = Array.isArray(val) ? val : [val]
-  return arr
-    .slice(0, 20)
-    .map((i) => (typeof i === 'string' ? i : (i as any)?.url || (i as any)?.source_url || (i as any)?.src || ''))
-    .filter(Boolean)
+function htmlText(s: string): string {
+  return s
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .trim()
 }
 
 serve(async (req) => {
@@ -100,118 +88,115 @@ serve(async (req) => {
     let operacion: 'venta' | 'renta' | null = null
     let imagenes: string[] = []
 
-    // ── 1. __NEXT_DATA__ (Next.js — EasyBroker usa Next.js) ─────────────────
-    const nextMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
-    if (nextMatch) {
+    // ── 1. EasyBroker: JSON embebido HTML-encoded ─────────────────────────────
+    // Patrón: {"Property ID":"EB-XXXX","Bedrooms":N,...}
+    const ebMatch = html.match(/\{[^{}]*&quot;Property ID&quot;[^{}]*\}/)
+    if (ebMatch) {
       try {
-        const nd = JSON.parse(nextMatch[1])
-        const prop = findProp(nd)
-        if (prop) {
-          titulo       = String(prop.title ?? prop.name ?? prop.public_title ?? '')
-          descripcion  = String(prop.description ?? prop.public_note ?? prop.notes ?? '')
+        const decoded = ebMatch[0]
+          .replace(/&quot;/g, '"')
+          .replace(/&amp;/g, '&')
+          .replace(/&#39;/g, "'")
+        const eb = JSON.parse(decoded)
 
-          const p = parseNum(prop.price ?? prop.list_price ?? prop.sale_price ?? prop.amount)
-          if (p) precio = String(Math.round(p))
+        recamaras       = cap(parseNum(eb['Bedrooms']), 5)
+        banos           = cap(parseNum(eb['Bathrooms'] ?? eb['Full Bathrooms']), 4)
+        mediosBanos     = cap(parseNum(eb['Half Bathrooms'] ?? eb['Half Baths']), 2)
+        estacionamientos = cap(parseNum(eb['Parking Spaces'] ?? eb['Parking']), 3)
 
-          recamaras     = capNum(parseNum(prop.bedrooms ?? prop.rooms), 5)
-          banos         = capNum(parseNum(prop.bathrooms ?? prop.full_bathrooms), 4)
-          mediosBanos   = capNum(parseNum(prop.half_bathrooms ?? prop.half_baths), 2)
-          estacionamientos = capNum(parseNum(prop.parking_spaces ?? prop.parking ?? prop.garage), 3)
+        const constArea = parseNum(eb['Area M2'] ?? eb['Construction M2'] ?? eb['Constructed Area'])
+        if (constArea) m2 = String(constArea)
+        const lotArea = parseNum(eb['Lot M2'] ?? eb['Lot Size M2'] ?? eb['Land M2'])
+        if (lotArea) m2Terreno = String(lotArea)
 
-          const cs = parseNum(prop.construction_size ?? prop.construction ?? prop.built_area ?? prop.area)
-          if (cs) m2 = String(cs)
-          const ls = parseNum(prop.lot_size ?? prop.land_size ?? prop.terrain ?? prop.plot_size)
-          if (ls) m2Terreno = String(ls)
+        const saleP = parseNum(eb['Sale Price'])
+        const rentP = parseNum(eb['Rent Price'])
+        if (saleP)      { precio = String(Math.round(saleP)); operacion = operacion || 'venta' }
+        else if (rentP) { precio = String(Math.round(rentP)); operacion = operacion || 'renta' }
 
-          if (prop.property_type) tipo = mapTipo(String(prop.property_type))
-          if (prop.operation_type ?? prop.listing_type ?? prop.type) {
-            operacion = mapOp(String(prop.operation_type ?? prop.listing_type ?? prop.type ?? ''))
-          }
+        if (eb['Property Type']) tipo = mapTipo(String(eb['Property Type']))
+        if (eb['Operation Type']) operacion = mapOp(String(eb['Operation Type'])) ?? operacion
 
-          // Dirección
-          const loc = (prop.location ?? prop.address ?? {}) as Record<string, unknown>
-          const parts = [loc.street, loc.colony, loc.neighborhood, loc.city, loc.municipality, loc.state]
-            .map(v => String(v ?? '').trim()).filter(Boolean)
-          if (parts.length) direccion = parts.join(', ')
-
-          // Imágenes — buscar en el objeto de propiedad y en el árbol completo
-          const imgs = extractImages(
-            prop.property_images ?? prop.images ?? prop.photos ?? prop.gallery
-          )
-          if (imgs.length) imagenes = imgs
-        }
-      } catch { /* JSON parse error, continue */ }
+        // Dirección desde campos de localización
+        const parts = [
+          eb['Property Neighborhood'],
+          eb['Property City'],
+          eb['Property State'],
+        ].filter(Boolean).map(String)
+        if (parts.length) direccion = parts.join(', ')
+      } catch { /* continue */ }
     }
 
-    // ── 2. JSON-LD ───────────────────────────────────────────────────────────
-    if (!titulo) {
-      const ldRe = /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g
-      let m
-      while ((m = ldRe.exec(html)) !== null) {
-        try {
-          const ld = JSON.parse(m[1])
-          const items: unknown[] = Array.isArray(ld) ? ld : [ld]
-          for (const item of items) {
-            const it = item as Record<string, unknown>
-            if (!it?.['@type']) continue
-            titulo      = titulo      || String(it.name ?? '')
-            descripcion = descripcion || String(it.description ?? '')
-            const offer = (it.offers ?? {}) as Record<string, unknown>
-            if (!precio && offer.price) precio = String(Math.round(parseNum(offer.price) ?? 0))
-            const addr = (it.address ?? {}) as Record<string, unknown>
-            if (!direccion) {
-              const p = [addr.streetAddress, addr.addressLocality, addr.addressRegion].filter(Boolean)
-              if (p.length) direccion = p.join(', ')
-            }
-            if (!imagenes.length) imagenes = extractImages(it.image)
-          }
-        } catch { /* continue */ }
-      }
+    // ── 2. Descripción completa desde <p class="text-description"> ───────────
+    const descTagM = html.match(/<p[^>]+class="[^"]*text-description[^"]*"[^>]*>([\s\S]*?)<\/p>/)
+    if (descTagM) {
+      descripcion = htmlText(descTagM[1])
     }
 
-    // ── 3. Meta tags ─────────────────────────────────────────────────────────
-    if (!titulo)      titulo      = getMetaContent(html, 'og:title') || getMetaContent(html, 'twitter:title')
-    if (!descripcion) descripcion = getMetaContent(html, 'og:description') || getMetaContent(html, 'description')
-    if (!imagenes.length) {
-      const og = getMetaContent(html, 'og:image')
-      if (og) imagenes = [og]
+    // ── 3. Título ─────────────────────────────────────────────────────────────
+    titulo = getMeta(html, 'og:title')
+          || getMeta(html, 'twitter:title')
+          || (html.match(/<title>([^<]+)<\/title>/)?.[1] ?? '')
+    titulo = titulo
+      .replace(/\s*[-|–·]\s*(easy\s*broker|easybroker).*/i, '')
+      .replace(/\s*\|\s*[^|]*$/, '')
+      .trim()
+
+    // ── 4. Descripción fallback desde meta og ─────────────────────────────────
+    if (!descripcion) {
+      descripcion = getMeta(html, 'og:description') || getMeta(html, 'description')
     }
 
-    // ── 4. Fallback regex sobre el HTML ──────────────────────────────────────
+    // ── 5. Imágenes: todos los assets.easybroker.com únicos, sin query params ─
+    // También busca otros CDN comunes (cloudfront, amazonaws, etc.)
+    const imgPatterns = [
+      /https?:\/\/assets\.easybroker\.com\/property_images\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
+      /https?:\/\/[^\s"'<>?]+\.(?:cloudfront\.net|amazonaws\.com)\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
+    ]
+    const rawImgs: string[] = []
+    for (const pat of imgPatterns) {
+      for (const m of html.matchAll(pat)) rawImgs.push(m[0].split('?')[0])
+    }
+    imagenes = [...new Set(rawImgs)]
+
+    // ── 6. Fallbacks genéricos para otros portales ────────────────────────────
     if (!precio) {
       const mp = html.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:MXN|USD|pesos)?/i)
       if (mp) precio = mp[1].replace(/,/g, '')
     }
-    if (!recamaras) {
+    if (recamaras === null) {
       const mr = html.match(/(\d+)\s*(?:rec[aá]maras?|bedrooms?)/i)
-      if (mr) recamaras = capNum(parseInt(mr[1]), 5)
+      if (mr) recamaras = cap(parseInt(mr[1]), 5)
     }
-    if (!banos) {
+    if (banos === null) {
       const mb = html.match(/(\d+)\s*(?:ba[ñn]os?\s*(?:completos?)?|bathrooms?)/i)
-      if (mb) banos = capNum(parseInt(mb[1]), 4)
+      if (mb) banos = cap(parseInt(mb[1]), 4)
+    }
+    if (estacionamientos === null) {
+      const me = html.match(/(\d+)\s*(?:estacionamientos?|cajones?|parking\s*spaces?)/i)
+      if (me) estacionamientos = cap(parseInt(me[1]), 3)
     }
     if (!m2) {
-      const mc = html.match(/construcci[oó]n[\s\S]{0,30}?([\d,.]+)\s*m[²2]/i)
-        || html.match(/([\d,.]+)\s*m[²2][\s\S]{0,30}?construcci[oó]n/i)
+      const mc = html.match(/construcci[oó]n[\s\S]{0,40}?([\d,.]+)\s*m[²2]/i)
+              || html.match(/([\d,.]+)\s*m[²2][\s\S]{0,40}?construcci[oó]n/i)
       if (mc) m2 = mc[1].replace(/,/g, '')
     }
     if (!m2Terreno) {
-      const mt = html.match(/terreno[\s\S]{0,30}?([\d,.]+)\s*m[²2]/i)
-        || html.match(/([\d,.]+)\s*m[²2][\s\S]{0,30}?terreno/i)
+      const mt = html.match(/terreno[\s\S]{0,40}?([\d,.]+)\s*m[²2]/i)
+              || html.match(/([\d,.]+)\s*m[²2][\s\S]{0,40}?terreno/i)
       if (mt) m2Terreno = mt[1].replace(/,/g, '')
     }
-    if (!tipo)      tipo      = mapTipo(titulo + ' ' + getMetaContent(html, 'og:title'))
+    if (!tipo) {
+      tipo = mapTipo(titulo + ' ' + getMeta(html, 'og:title'))
+    }
     if (!operacion) {
       const snippet = titulo + ' ' + html.slice(0, 3000)
       operacion = /\brenta\b/i.test(snippet) ? 'renta' : 'venta'
     }
-
-    // Limpiar título: quitar sufijos de sitio
-    titulo = titulo
-      .replace(/\s*[-|–|·]\s*easy\s*broker.*/i, '')
-      .replace(/\s*[-|–|·]\s*easybroker.*/i, '')
-      .replace(/\s*\|\s*.*$/, '')
-      .trim()
+    if (!imagenes.length) {
+      const og = getMeta(html, 'og:image')
+      if (og) imagenes = [og.split('?')[0]]
+    }
 
     return new Response(JSON.stringify({
       titulo, descripcion, precio, direccion,
