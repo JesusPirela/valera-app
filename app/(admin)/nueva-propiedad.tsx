@@ -481,7 +481,19 @@ export default function NuevaPropiedad() {
         estacionamientos: d?.estacionamientos != null ? d.estacionamientos : estacionamientos,
       }
       const { data, error } = await supabase.functions.invoke('mejorar-descripcion', { body })
-      if (error) throw new Error(error.message ?? String(error))
+      if (error) {
+        // El SDK devuelve "Edge Function returned a non-2xx status code" como mensaje genérico.
+        // El error real está en el cuerpo de la respuesta (error.context es el Response crudo).
+        let msg = error.message ?? String(error)
+        try {
+          const ctx = (error as any).context
+          if (ctx?.json) {
+            const body = await ctx.json()
+            if (body?.error) msg = body.error
+          }
+        } catch {}
+        throw new Error(msg)
+      }
       if ((data as any)?.error) throw new Error((data as any).error)
       if (!data?.texto) throw new Error('La IA no devolvió texto. Intenta de nuevo.')
       setDescripcion(data.texto)
