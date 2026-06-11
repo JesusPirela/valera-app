@@ -60,21 +60,21 @@ ${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Constru
 🚿 Baño completo
 🧺 Área de lavado
 🚗 Cajón(es) de estacionamiento]
-${tipo !== 'terreno' ? `
+${tipo !== 'terreno' ? `[INSTRUCCIÓN CRÍTICA: Las siguientes dos secciones (Equipamiento y Amenidades) SOLO aparecen si hay información real en la descripción original. Si no hay datos, NO escribas el encabezado ni nada relacionado con esa sección. Elimínala completamente del texto.]
+
+[SI hay equipamiento mencionado en la descripción original, escribe exactamente:
 🏢 Equipamiento
 
-[Equipamiento del edificio/desarrollo con emoji. IMPORTANTE: Si no hay información de equipamiento en la descripción original, omite esta sección por completo. No pongas "No disponible". Ejemplo solo si hay datos:
-🛗 Elevador
-🚶 Escaleras de acceso]
+🛗 (elemento)
+...
+(línea en blanco)]
 
+[SI hay amenidades mencionadas en la descripción original, escribe exactamente:
 🌟 Amenidades
 
-[Amenidades del desarrollo con emoji. IMPORTANTE: Solo incluye amenidades que estén mencionadas en la descripción original. Si no hay información, omite esta sección por completo. NUNCA escribas "No disponible". Ejemplo solo si hay datos:
-🏊 Alberca
-🎉 Salón de eventos
-🏀 Canchas deportivas
-🛝 Juegos infantiles
-🛡️ Vigilancia 24/7]
+🏊 (elemento)
+...
+(línea en blanco)]
 ` : ''}📍 [2-3 oraciones sobre ubicación: fraccionamiento/colonia, conectividad, qué tiene cerca]
 
 📲 Agenda tu cita y conoce este excelente ${tipoLabel.toLowerCase()}.`
