@@ -351,25 +351,46 @@ async function procesarProgramados(supabase: any) {
       if (prog.frecuencia === 'mensual'  && horasDesdeUltimo < 28 * 24) continue
     }
 
-    // Calcular rango del período
+    // CORREGIDO: usar periodo_reporte (24h/7dias/30dias) para el rango del reporte,
+    // NO la frecuencia (diario/semanal/mensual) que solo indica con qué cadencia se envía.
     const fin = new Date()
     let inicio: Date
-    if (prog.frecuencia === 'diario') {
+    const periodo = prog.periodo_reporte ?? '7dias'
+    if (periodo === '24h') {
       inicio = new Date(fin.getTime() - 24 * 3_600_000)
-    } else if (prog.frecuencia === 'semanal') {
+    } else if (periodo === '7dias') {
       inicio = new Date(fin.getTime() - 7 * 24 * 3_600_000)
     } else {
-      inicio = new Date(fin.getFullYear(), fin.getMonth() - 1, fin.getDate())
+      inicio = new Date(fin.getTime() - 30 * 24 * 3_600_000)
     }
 
     const rangoLabel = `${inicio.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} – ${fin.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`
 
     try {
-      await enviarEmail(supabase, prog.destinatarios, inicio.toISOString(), fin.toISOString(), rangoLabel)
+      const resultado = await enviarEmail(supabase, prog.destinatarios, inicio.toISOString(), fin.toISOString(), rangoLabel)
       await supabase.from('report_programados').update({ ultimo_envio: ahora.toISOString() }).eq('id', prog.id)
+      await supabase.from('report_logs').insert({
+        report_programado_id: prog.id,
+        destinatarios: prog.destinatarios,
+        enviados: prog.destinatarios.length,
+        estado: 'ok',
+        proveedor: resultado.proveedor ?? null,
+        rango_inicio: inicio.toISOString(),
+        rango_fin: fin.toISOString(),
+      })
       enviados++
-    } catch (err) {
-      console.error(`[enviar-reporte] Error en prog ${prog.id}:`, err)
+    } catch (err: any) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      console.error(`[enviar-reporte] Error en prog ${prog.id}:`, errMsg)
+      await supabase.from('report_logs').insert({
+        report_programado_id: prog.id,
+        destinatarios: prog.destinatarios,
+        enviados: 0,
+        estado: 'error',
+        error_msg: errMsg,
+        rango_inicio: inicio.toISOString(),
+        rango_fin: fin.toISOString(),
+      })
     }
   }
 

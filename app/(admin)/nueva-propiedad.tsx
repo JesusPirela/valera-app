@@ -295,6 +295,7 @@ export default function NuevaPropiedad() {
       if (d.m2Terreno) setM2Terreno(d.m2Terreno)
       if (d.tipo)      setTipo(d.tipo)
       if (d.operacion) setOperacion(d.operacion)
+      if (d.zona)      setZona(d.zona)
       if (d.imagenes?.length > 0) setImagenes(d.imagenes)
 
       const partes: string[] = []

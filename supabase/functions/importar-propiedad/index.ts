@@ -86,6 +86,7 @@ serve(async (req) => {
     let m2Terreno = ''
     let tipo: 'casa' | 'departamento' | 'local' | 'terreno' | null = null
     let operacion: 'venta' | 'renta' | null = null
+    let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
     let imagenes: string[] = []
 
     // ── 1. EasyBroker: JSON embebido HTML-encoded ─────────────────────────────
@@ -124,6 +125,12 @@ serve(async (req) => {
           eb['Property State'],
         ].filter(Boolean).map(String)
         if (parts.length) direccion = parts.join(', ')
+
+        // Zona a partir de ciudad/estado
+        const locStr = [eb['Property City'], eb['Property State']].filter(Boolean).join(' ').toLowerCase()
+        if (/quer[eé]taro/.test(locStr))                              zona = 'queretaro'
+        else if (/monterrey|nuevo\s*le[oó]n/.test(locStr))           zona = 'monterrey'
+        else if (/puebla/.test(locStr))                               zona = 'puebla'
       } catch { /* continue */ }
     }
 
@@ -197,9 +204,16 @@ serve(async (req) => {
       const og = getMeta(html, 'og:image')
       if (og) imagenes = [og.split('?')[0]]
     }
+    // Zona: fallback desde direccion o URL si no se detectó en el JSON de EasyBroker
+    if (!zona) {
+      const haystack = (direccion + ' ' + url).toLowerCase()
+      if (/quer[eé]taro/.test(haystack))               zona = 'queretaro'
+      else if (/monterrey|nuevo\s*le[oó]n/.test(haystack)) zona = 'monterrey'
+      else if (/puebla/.test(haystack))                  zona = 'puebla'
+    }
 
     return new Response(JSON.stringify({
-      titulo, descripcion, precio, direccion,
+      titulo, descripcion, precio, direccion, zona,
       recamaras, banos, mediosBanos, estacionamientos,
       m2, m2Terreno, tipo, operacion, imagenes,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
