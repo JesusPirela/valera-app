@@ -180,6 +180,9 @@ export default function NuevaPropiedad() {
   const [ficha, setFicha] = useState('')
   const [mostrarFicha, setMostrarFicha] = useState(true)
   const [fichaMsg, setFichaMsg] = useState('')
+  const [urlImport, setUrlImport] = useState('')
+  const [importando, setImportando] = useState(false)
+  const [importMsg, setImportMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const [mejorando, setMejorando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -261,6 +264,53 @@ export default function NuevaPropiedad() {
     setFichaMsg(partes.length > 0 ? `✓ Detectado: ${partes.join(' · ')}` : '⚠ No se detectaron campos. Revisa el formato.')
     setMostrarFicha(false)
     setTituloEditado(false)
+  }
+
+  async function importarDesdeUrl() {
+    const url = urlImport.trim()
+    if (!url || !/^https?:\/\//.test(url)) {
+      setImportMsg('⚠ Pega un URL válido (empieza con https://)')
+      return
+    }
+    setImportando(true)
+    setImportMsg('Descargando información…')
+    try {
+      const { data, error } = await supabase.functions.invoke('importar-propiedad', {
+        body: { url },
+      })
+      if (error) throw error
+      if ((data as any)?.error) throw new Error((data as any).error)
+
+      const d = data as any
+      if (d.titulo)       { setTitulo(d.titulo); setTituloEditado(true) }
+      if (d.descripcion)  setDescripcion(d.descripcion)
+      if (d.precio)       setPrecio(d.precio)
+      if (d.direccion)    { setDireccion(d.direccion); setGeoQuery(d.direccion) }
+      if (d.recamaras  != null) setRecamaras(d.recamaras)
+      if (d.banos      != null) setBanos(d.banos)
+      if (d.mediosBanos != null) setMediosBanos(d.mediosBanos)
+      if (d.estacionamientos != null) setEstacionamientos(d.estacionamientos)
+      if (d.m2)        setM2(d.m2)
+      if (d.m2Terreno) setM2Terreno(d.m2Terreno)
+      if (d.tipo)      setTipo(d.tipo)
+      if (d.operacion) setOperacion(d.operacion)
+      if (d.imagenes?.length > 0) setImagenes(d.imagenes)
+
+      const partes: string[] = []
+      if (d.titulo)    partes.push(d.titulo)
+      if (d.precio)    partes.push(`$${parseInt(d.precio).toLocaleString('es-MX')}`)
+      if (d.recamaras) partes.push(`${d.recamaras} rec.`)
+      if (d.banos)     partes.push(`${d.banos} baños`)
+      if (d.m2)        partes.push(`${d.m2} m²`)
+      if (d.imagenes?.length) partes.push(`${d.imagenes.length} fotos`)
+      setImportMsg(partes.length > 0
+        ? `✓ Importado: ${partes.join(' · ')}`
+        : '⚠ No se detectaron campos. Verifica que el URL sea de una propiedad.')
+    } catch (err: any) {
+      setImportMsg('✗ Error: ' + (err.message ?? 'No se pudo importar'))
+    } finally {
+      setImportando(false)
+    }
   }
 
   async function seleccionarImagenes() {
@@ -529,6 +579,40 @@ export default function NuevaPropiedad() {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
           <Text style={styles.backBtnText}>← Volver</Text>
         </TouchableOpacity>
+
+        {/* Importar desde URL */}
+        <View style={[styles.fichaBox, { borderColor: '#c9a84c44', backgroundColor: '#1c1600' }]}>
+          <View style={styles.fichaToggle}>
+            <Text style={[styles.fichaToggleText, { color: '#c9a84c' }]}>🔗 Importar desde URL</Text>
+            <Text style={{ fontSize: 10, color: '#7a5200', fontWeight: '600' }}>EasyBroker · Lamudi · cualquier portal</Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+              placeholder="https://www.easybroker.com/mx/listing/..."
+              placeholderTextColor={c.placeholder}
+              value={urlImport}
+              onChangeText={v => { setUrlImport(v); setImportMsg('') }}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+            <TouchableOpacity
+              style={[styles.btnIA, { marginBottom: 0, paddingHorizontal: 14, opacity: importando ? 0.6 : 1, backgroundColor: '#7a4f00' }]}
+              onPress={importarDesdeUrl}
+              disabled={importando}
+            >
+              {importando
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.btnIAText}>Importar</Text>
+              }
+            </TouchableOpacity>
+          </View>
+          {importMsg ? (
+            <Text style={[styles.fichaMsg, { color: importMsg.startsWith('✓') ? '#c9a84c' : importMsg.startsWith('✗') ? '#e53935' : '#aaa' }]}>
+              {importMsg}
+            </Text>
+          ) : null}
+        </View>
 
         {/* Importar desde ficha */}
         <View style={styles.fichaBox}>
