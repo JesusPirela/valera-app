@@ -185,6 +185,7 @@ export default function NuevaPropiedad() {
   const [importMsg, setImportMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const [mejorando, setMejorando] = useState(false)
+  const [mejorandoMsg, setMejorandoMsg] = useState('')
   const [guardado, setGuardado] = useState(false)
 
   // Auto-generar título cuando cambian tipo / operación / dirección
@@ -463,6 +464,7 @@ export default function NuevaPropiedad() {
     mediosBanos?: number | null; m2?: string; estacionamientos?: number | null
   }): Promise<void> {
     setMejorando(true)
+    setMejorandoMsg('')
     try {
       const body = {
         titulo:           d?.titulo           != null ? d.titulo           : titulo,
@@ -478,10 +480,15 @@ export default function NuevaPropiedad() {
         estacionamientos: d?.estacionamientos != null ? d.estacionamientos : estacionamientos,
       }
       const { data, error } = await supabase.functions.invoke('mejorar-descripcion', { body })
-      if (error) throw error
+      if (error) throw new Error(error.message ?? String(error))
       if ((data as any)?.error) throw new Error((data as any).error)
-      if (!data?.texto) throw new Error('La IA no devolvió texto')
+      if (!data?.texto) throw new Error('La IA no devolvió texto. Intenta de nuevo.')
       setDescripcion(data.texto)
+      setMejorandoMsg('✓ Descripción mejorada')
+    } catch (err: any) {
+      const msg: string = err.message || 'Error al mejorar con IA'
+      setMejorandoMsg('✗ ' + msg)
+      throw err
     } finally {
       setMejorando(false)
     }
@@ -490,9 +497,7 @@ export default function NuevaPropiedad() {
   async function handleMejorarDescripcion() {
     try {
       await mejorarConDatos()
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'No se pudo mejorar la descripción.')
-    }
+    } catch { /* error ya visible en mejorandoMsg */ }
   }
 
   async function subirImagen(uri: string, propiedadId: string, orden: number): Promise<string> {
@@ -900,11 +905,16 @@ export default function NuevaPropiedad() {
           placeholder="Detalles de la propiedad..."
           placeholderTextColor={c.placeholder}
           value={descripcion}
-          onChangeText={setDescripcion}
+          onChangeText={v => { setDescripcion(v); setMejorandoMsg('') }}
           multiline
           numberOfLines={4}
           textAlignVertical="top"
         />
+        {mejorandoMsg ? (
+          <Text style={{ fontSize: 12, marginTop: 4, marginBottom: 4, color: mejorandoMsg.startsWith('✓') ? '#4caf50' : '#ef5350' }}>
+            {mejorandoMsg}
+          </Text>
+        ) : null}
 
         <Text style={styles.label}>Asesor de contacto</Text>
         <AsesorPicker value={asesorId} onChange={setAsesorId} />

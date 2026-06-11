@@ -1,62 +1,81 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-const corsHeaders = {
+const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json',
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
-    const { titulo, direccion, precio, descripcion, tipo, operacion, recamaras, banos, mediosBanos, m2, estacionamientos } = await req.json()
+    const {
+      titulo, direccion, precio, descripcion,
+      tipo, operacion, recamaras, banos, mediosBanos, m2, estacionamientos,
+    } = await req.json()
 
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
-    if (!apiKey) throw new Error('API key no configurada')
+    if (!apiKey) {
+      throw new Error(
+        'ANTHROPIC_API_KEY no configurado. Ve a Supabase → Project Settings → Edge Functions → Secrets y agrega ANTHROPIC_API_KEY con tu clave de api.anthropic.com'
+      )
+    }
 
-    const tipoLabel = tipo === 'departamento' ? 'Departamento' : tipo === 'local' ? 'Local' : tipo === 'terreno' ? 'Terreno' : 'Casa'
-    const operacionLabel = operacion === 'renta' ? 'en Renta' : 'en Venta'
+    const emojiTipo = tipo === 'casa' ? '🏡' : tipo === 'departamento' ? '🏢' : tipo === 'local' ? '🏪' : tipo === 'terreno' ? '🌄' : '🏠'
+    const tipoLabel = tipo === 'casa' ? 'Casa' : tipo === 'departamento' ? 'Departamento' : tipo === 'local' ? 'Local' : tipo === 'terreno' ? 'Terreno' : 'Propiedad'
+    const opLabel = operacion === 'renta' ? 'en Renta' : 'en Venta'
     const precioFmt = precio ? `$${parseInt(precio).toLocaleString('es-MX')} MXN` : null
 
-    const prompt = `Eres un experto en marketing inmobiliario de alto nivel en México. Genera una descripción profesional y atractiva para esta propiedad con el siguiente formato EXACTO (con emojis y estructura). Usa ÚNICAMENTE los datos proporcionados para los números; el resto puedes crearlo de forma creativa y persuasiva basándote en la descripción original y el tipo de propiedad.
+    // Construir encabezado de datos básicos
+    const lineasDatos: string[] = []
+    if (recamaras)           lineasDatos.push(`🛏️ ${recamaras} recámara${recamaras > 1 ? 's' : ''}`)
+    if (banos)               lineasDatos.push(`🚿 ${banos} baño${banos > 1 ? 's completos' : ' completo'}${mediosBanos ? ` + ${mediosBanos} medio baño${mediosBanos > 1 ? 's' : ''}` : ''}`)
+    if (estacionamientos)    lineasDatos.push(`🚗 ${estacionamientos} estacionamiento${estacionamientos > 1 ? 's' : ''}`)
+    const datosFijos = lineasDatos.join('\n')
 
-DATOS DE LA PROPIEDAD:
-- Título: ${titulo || `${tipoLabel} ${operacionLabel}`}
-- Dirección/Zona: ${direccion || 'No especificada'}
+    const prompt = `Eres un experto copywriter inmobiliario en México. Tu tarea es generar una descripción profesional, atractiva y detallada para una propiedad.
+
+DATOS DE LA PROPIEDAD (usa estos valores exactos, NO inventes números):
+- Tipo: ${tipoLabel} ${opLabel}
+- Zona / Fraccionamiento: ${direccion || 'No especificada'}
 - Precio: ${precioFmt || 'Consultar'}
-- Tipo: ${tipoLabel} ${operacionLabel}
-- M² (construcción o terreno): ${m2 ? `${m2} m²` : 'No especificado'}
+- M² construcción: ${m2 ? `${m2} m²` : 'No especificado'}
 - Recámaras: ${recamaras ?? 'No especificado'}
 - Baños completos: ${banos ?? 'No especificado'}
 - Medios baños: ${mediosBanos ?? 0}
 - Estacionamientos: ${estacionamientos ?? 'No especificado'}
-- Descripción original: ${descripcion || '(sin descripción)'}
+- Descripción original (úsala de referencia): ${descripcion || '(sin descripción)'}
 
-FORMATO DE SALIDA (responde ÚNICAMENTE con esto, sin comentarios ni explicaciones):
+FORMATO DE SALIDA OBLIGATORIO — responde ÚNICAMENTE con el texto de la descripción, sin comentarios ni explicaciones adicionales:
 
-🏡 ${tipoLabel} ${operacionLabel}${direccion ? ` | ${direccion}` : ''}
+${emojiTipo} ${tipoLabel} ${opLabel}${direccion ? ` en ${direccion}` : ''}
 
 💰 Precio: ${precioFmt || 'Consultar precio'}
-${m2 ? `\n📐 Superficie: ${m2} m²` : ''}
-${recamaras ? `\n🛏️ ${recamaras} recámara${recamaras > 1 ? 's' : ''}` : ''}
-${banos ? `\n🚿 ${banos} baño${banos > 1 ? 's completos' : ' completo'}${mediosBanos ? ` + ${mediosBanos} medio baño${mediosBanos > 1 ? 's' : ''}` : ''}` : ''}
-${estacionamientos ? `\n🚗 Cochera para ${estacionamientos} auto${estacionamientos > 1 ? 's' : ''}` : ''}
+${datosFijos ? '\n' + datosFijos : ''}
+${m2 ? `\n📐 Construcción: ${m2} m²` : ''}
 
-📍 [Párrafo de 2-3 oraciones sobre la ubicación y zona: por qué es una zona exclusiva/conveniente, qué tiene cerca, plusvalía]
+✨ [Escribe aquí 2-3 oraciones de presentación atractiva: qué hace especial esta propiedad, qué sensación genera, para quién es ideal]
 
-✨ [Párrafo de 2-3 oraciones describiendo los acabados, estilo y sensación general de la propiedad]
+🏠 Distribución
 
-🔹 Características principales
-[Lista de 5-8 características destacadas de la propiedad con emoji al inicio de cada línea, basándote en los datos y la descripción original. Ejemplo: 🛋️ Sala amplia y luminosa]
+[Lista de los espacios interiores con emoji apropiado al inicio de cada línea. Ejemplo:
+🛋️ Sala y comedor integrados
+🍳 Cocina equipada
+🛏️ Recámara principal con baño y clóset
+Usa la descripción original como guía. Si no hay detalle, infiere espacios típicos para este tipo de propiedad]
 
-🌟 Lo mejor de esta propiedad
-[Lista de 4-6 puntos clave que hacen destacar esta propiedad con ✨ al inicio]
+${tipo !== 'terreno' ? `🏢 Equipamiento
 
-📞 Agenda tu visita y conoce tu próximo hogar.
+[Lista de equipamiento del edificio/desarrollo: elevador, escaleras, lobby, bodega, etc. Solo incluir si es relevante para el tipo de propiedad. Si es casa sin copropiedad, omitir esta sección]
 
-⚠️ Precio y disponibilidad sujetos a cambio sin previo aviso.`
+🌟 Amenidades
+
+[Lista de amenidades: alberca, gimnasio, salón de eventos, canchas, juegos, vigilancia, etc. Basarse en la descripción original. Si no hay info, inferir amenidades típicas para un desarrollo de este tipo y zona]
+
+` : ''}📍 [2-3 oraciones sobre la ubicación: nombre del fraccionamiento/colonia, qué tan bien conectado está, qué tiene cerca: plazas, supermercados, vialidades, hospitales, colegios según el tipo de zona]
+
+📲 Agenda tu cita y conoce este excelente ${tipoLabel.toLowerCase()}.`
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -67,24 +86,29 @@ ${estacionamientos ? `\n🚗 Cochera para ${estacionamientos} auto${estacionamie
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1500,
+        max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }],
       }),
     })
 
     const json = await response.json()
-    if (!response.ok) throw new Error(`Anthropic ${response.status}: ${JSON.stringify(json.error)}`)
 
-    const texto = json.content?.[0]?.text ?? ''
+    if (!response.ok) {
+      const errMsg = json?.error?.message ?? JSON.stringify(json)
+      throw new Error(`Error de Anthropic (${response.status}): ${errMsg}`)
+    }
 
-    return new Response(JSON.stringify({ texto }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    const texto: string = json.content?.[0]?.text ?? ''
+    if (!texto) throw new Error('La IA no devolvió texto. Intenta de nuevo.')
+
+    return new Response(JSON.stringify({ texto }), { headers: CORS })
+
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    console.error('[mejorar-descripcion]', msg)
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: CORS,
     })
   }
 })
