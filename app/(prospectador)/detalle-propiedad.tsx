@@ -419,10 +419,9 @@ export default function DetallePropiedad() {
         const sep = url.includes('?') ? '&' : '?'
         return `${url}${sep}_cb=${Date.now()}`
       }
-      const FileSystemLib = await import('expo-file-system')
       const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
-      const { uri } = await FileSystemLib.FileSystem.downloadAsync(url, localUri)
-      const base64 = await FileSystemLib.FileSystem.readAsStringAsync(uri, { encoding: FileSystemLib.FileSystem.EncodingType.Base64 })
+      const { uri } = await FileSystem.downloadAsync(url, localUri)
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })
       return `data:image/jpeg;base64,${base64}`
     } catch {
       return url
@@ -516,10 +515,13 @@ export default function DetallePropiedad() {
         .inmob-logo-wrap { text-align: center; margin-bottom: 16px; }
         .inmob-logo { max-height: 90px; max-width: 240px; object-fit: contain; }
         .inmob-nombre { font-size: 12px; color: #888; font-weight: 600; margin-top: 4px; }
-        .fotos { display: flex; flex-wrap: wrap; gap: 14px; }
-        .foto-galeria { width: calc(50% - 7px); height: 330px; object-fit: contain; background: #eef2f3; border-radius: 8px; border: 1px solid #e0e8ea; break-inside: avoid; page-break-inside: avoid; }
+        .fotos { display: block; }
+        .fotos::after { content: ""; display: table; clear: both; }
+        .foto-galeria { width: calc(50% - 7px); height: 330px; object-fit: contain; background: #eef2f3; border-radius: 8px; border: 1px solid #e0e8ea; float: left; margin: 0 14px 14px 0; break-inside: avoid; page-break-inside: avoid; }
+        .foto-galeria:nth-child(2n) { margin-right: 0; }
         .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1.2px; text-transform: uppercase; margin: 20px 0 10px; }
-        .cars { display: flex; gap: 12px; flex-wrap: wrap; }
+        .cars { display: block; }
+        .cars::after { content: ""; display: table; clear: both; }
         .car-val { display: block; font-size: 20px; font-weight: 800; color: #1a6470; }
         .car-lbl { display: block; font-size: 11px; color: #888; margin-top: 2px; }
         .desc { font-size: 13px; line-height: 1.7; color: #444; white-space: pre-wrap; }
@@ -529,7 +531,7 @@ export default function DetallePropiedad() {
         .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; break-inside: avoid; page-break-inside: avoid; }
         .galeria-grupo { break-inside: avoid; page-break-inside: avoid; }
         .seccion-grupo { break-inside: avoid; page-break-inside: avoid; }
-        .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; break-inside: avoid; page-break-inside: avoid; }
+        .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; float: left; margin: 0 12px 12px 0; break-inside: avoid; page-break-inside: avoid; }
       </style></head><body>
       <div class="header">
         <div class="header-left">

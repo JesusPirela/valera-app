@@ -187,10 +187,17 @@ function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void })
 
   if (!embed) return null
 
+  const fuente = isYoutubeUrl(url)
+    ? {
+        html: `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>*{margin:0;padding:0}html,body{height:100%;background:#000}iframe{width:100%;height:100%;border:0}</style></head><body><iframe src="${embed}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></body></html>`,
+        baseUrl: 'https://www.youtube.com',
+      }
+    : { uri: embed }
+
   return (
     <View style={vpS.container}>
       <WebView
-        source={{ uri: embed }}
+        source={fuente}
         style={{ flex: 1 }}
         allowsFullscreenVideo
         mediaPlaybackRequiresUserAction={false}

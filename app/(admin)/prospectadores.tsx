@@ -227,7 +227,7 @@ export default function Prospectadores() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.user?.id) return
       supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
-        if (data?.role === 'supervisor') router.replace('/(admin)/propiedades')
+        if (data?.role === 'supervisor') router.replace('/(prospectador)/propiedades')
       })
     })
     cargar()

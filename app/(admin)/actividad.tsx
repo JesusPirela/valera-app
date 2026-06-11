@@ -94,7 +94,7 @@ export default function ActividadAdmin() {
 
   return (
     <View style={s.container}>
-      <TouchableOpacity style={s.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
+      <TouchableOpacity style={s.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
         <Text style={s.backBtnText}>← Volver</Text>
       </TouchableOpacity>
       {/* Resumen estadísticas */}

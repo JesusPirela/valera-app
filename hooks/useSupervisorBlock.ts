@@ -16,7 +16,7 @@ export function useSupervisorBlock() {
           .single()
           .then(({ data }) => {
             if (activo && data?.role === 'supervisor') {
-              router.replace('/(admin)/propiedades')
+              router.replace('/(prospectador)/propiedades')
             }
           })
       })

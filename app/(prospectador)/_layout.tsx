@@ -203,8 +203,9 @@ export default function ProspectadorLayout() {
   }
 
   const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 72 : 64
-  const esAdminOSupervisorGlobal = role === 'admin' || role === 'supervisor'
-  const ocultarTabBar = esAdminOSupervisorGlobal && pathname.includes('detalle-propiedad')
+  const esAdminGlobal = role === 'admin'
+  const ocultarTabBar = esAdminGlobal && pathname.includes('detalle-propiedad')
+  const esSupervisor = role === 'supervisor'
 
   return (
     <>
@@ -272,6 +273,14 @@ export default function ProspectadorLayout() {
         options={{
           title: 'Universidad',
           tabBarIcon: tabIcon('school-outline', 'school'),
+        }}
+      />
+      <Tabs.Screen
+        name="supervision"
+        options={{
+          title: 'Supervisión',
+          tabBarIcon: tabIcon('shield-checkmark-outline', 'shield-checkmark'),
+          href: esSupervisor ? undefined : null,
         }}
       />
       <Tabs.Screen

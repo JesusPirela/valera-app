@@ -186,7 +186,7 @@ export default function ProspectadorPropiedades() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.user?.id) return
       supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
-        if (data?.role === 'admin' || data?.role === 'supervisor') router.replace('/(admin)/propiedades')
+        if (data?.role === 'admin') router.replace('/(admin)/propiedades')
       })
     })
     if (togglingRef.current.size === 0) {

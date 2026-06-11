@@ -17,6 +17,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type Propiedad = {
   id: string
@@ -62,6 +63,7 @@ const NAV_ITEMS = [
 ]
 
 export default function AdminPropiedades() {
+  useSupervisorBlock()
   const c = useColors()
   const [propiedades, setPropiedades] = useState<Propiedad[]>([])
   const [busqueda, setBusqueda] = useState('')

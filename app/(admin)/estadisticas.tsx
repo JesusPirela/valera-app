@@ -329,7 +329,7 @@ export default function Estadisticas() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 48 }}>
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
         <Text style={styles.backBtnText}>← Volver</Text>
       </TouchableOpacity>
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, Image, TextInput, ScrollView } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Image, TextInput, ScrollView, Platform } from 'react-native'
 import MapView, { Marker } from 'react-native-maps'
 
 export type ZonaPin = {
@@ -222,7 +222,7 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
             <Marker
               key={group.key}
               coordinate={{ latitude: group.lat, longitude: group.lng }}
-              tracksViewChanges={!pinsReady}
+              tracksViewChanges={Platform.OS === 'ios' ? true : !pinsReady}
               anchor={{ x: 0.5, y: 0.5 }}
               onPress={() => {
                 setSelectedPin(null)
