@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 import { ESTADOS, ORDEN_ESTADOS as ORDEN_ESTADOS_BASE } from '../(prospectador)/crm'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
+import { normalizarTelefono } from '../../lib/telefono'
 
 type ClienteAdmin = {
   id: string
@@ -49,14 +50,6 @@ function tiempoRelativo(fechaISO: string) {
 
 function iniciales(nombre: string) {
   return nombre.split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
-}
-
-function normalizarTelefono(tel: string): string {
-  let phone = tel.replace(/\D/g, '')
-  if (phone.startsWith('5252')) phone = phone.slice(2)
-  if (phone.startsWith('521') && phone.length === 13) phone = '52' + phone.slice(3)
-  if (phone.length === 10) phone = '52' + phone
-  return phone
 }
 
 function abrirWhatsApp(telefono: string, nombre: string) {
@@ -343,6 +336,11 @@ export default function AdminCRM() {
       {/* Botón leads de campaña */}
       <TouchableOpacity style={styles.btnCampana} onPress={() => router.push('/(admin)/campaign-leads')}>
         <Text style={styles.btnCampanaTxt}>📣 Leads de Campaña</Text>
+      </TouchableOpacity>
+
+      {/* Botón chats de WhatsApp */}
+      <TouchableOpacity style={[styles.btnCampana, { backgroundColor: '#25D366' }]} onPress={() => router.push('/(admin)/chats')}>
+        <Text style={styles.btnCampanaTxt}>💬 Chats de WhatsApp</Text>
       </TouchableOpacity>
 
       {/* Búsqueda + botón exportar + botón nuevo */}
