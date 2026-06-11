@@ -63,13 +63,13 @@ ${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Constru
 ${tipo !== 'terreno' ? `
 🏢 Equipamiento
 
-[Equipamiento del edificio/desarrollo con emoji. Si es casa sola sin amenidades, omite esta sección:
+[Equipamiento del edificio/desarrollo con emoji. IMPORTANTE: Si no hay información de equipamiento en la descripción original, omite esta sección por completo. No pongas "No disponible". Ejemplo solo si hay datos:
 🛗 Elevador
 🚶 Escaleras de acceso]
 
 🌟 Amenidades
 
-[Amenidades del desarrollo con emoji, basarte en descripción original:
+[Amenidades del desarrollo con emoji. IMPORTANTE: Solo incluye amenidades que estén mencionadas en la descripción original. Si no hay información, omite esta sección por completo. NUNCA escribas "No disponible". Ejemplo solo si hay datos:
 🏊 Alberca
 🎉 Salón de eventos
 🏀 Canchas deportivas
