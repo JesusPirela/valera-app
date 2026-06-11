@@ -15,12 +15,8 @@ serve(async (req) => {
       tipo, operacion, recamaras, banos, mediosBanos, m2, estacionamientos,
     } = await req.json()
 
-    const apiKey = Deno.env.get('GEMINI_API_KEY')
-    if (!apiKey) {
-      throw new Error(
-        'GEMINI_API_KEY no configurado. Ve a Supabase → Project Settings → Edge Functions → Secrets y agrega GEMINI_API_KEY con tu clave de aistudio.google.com'
-      )
-    }
+    const apiKey = Deno.env.get('GROQ_API_KEY')
+    if (!apiKey) throw new Error('GROQ_API_KEY no configurado en Supabase Secrets.')
 
     const emojiTipo = tipo === 'casa' ? '🏡' : tipo === 'departamento' ? '🏢' : tipo === 'local' ? '🏪' : tipo === 'terreno' ? '🌄' : '🏠'
     const tipoLabel = tipo === 'casa' ? 'Casa' : tipo === 'departamento' ? 'Departamento' : tipo === 'local' ? 'Local' : tipo === 'terreno' ? 'Terreno' : 'Propiedad'
@@ -31,73 +27,69 @@ serve(async (req) => {
     if (recamaras)        lineasDatos.push(`🛏️ ${recamaras} recámara${recamaras > 1 ? 's' : ''}`)
     if (banos)            lineasDatos.push(`🚿 ${banos} baño${banos > 1 ? 's completos' : ' completo'}${mediosBanos ? ` + ${mediosBanos} medio baño${mediosBanos > 1 ? 's' : ''}` : ''}`)
     if (estacionamientos) lineasDatos.push(`🚗 ${estacionamientos} estacionamiento${estacionamientos > 1 ? 's' : ''}`)
-    const datosFijos = lineasDatos.join('\n')
 
-    const prompt = `Eres un experto copywriter inmobiliario en México. Genera una descripción profesional y atractiva para esta propiedad.
+    const prompt = `Eres un experto copywriter inmobiliario en México. Genera una descripción profesional para esta propiedad.
 
-DATOS EXACTOS (no inventes números, úsalos tal cual):
+DATOS (usa estos números exactos, no inventes):
 - Tipo: ${tipoLabel} ${opLabel}
 - Zona: ${direccion || 'No especificada'}
 - Precio: ${precioFmt || 'Consultar'}
-- M² construcción: ${m2 ? `${m2} m²` : 'No especificado'}
+- M²: ${m2 ? `${m2} m²` : 'No especificado'}
 - Recámaras: ${recamaras ?? 'No especificado'}
 - Baños completos: ${banos ?? 'No especificado'}
 - Medios baños: ${mediosBanos ?? 0}
 - Estacionamientos: ${estacionamientos ?? 'No especificado'}
 - Descripción original: ${descripcion || '(sin descripción)'}
 
-FORMATO EXACTO DE SALIDA (responde SOLO con esto, sin texto adicional):
+Responde ÚNICAMENTE con la descripción en este formato exacto:
 
 ${emojiTipo} ${tipoLabel} ${opLabel}${direccion ? ` en ${direccion}` : ''}
 
 💰 Precio: ${precioFmt || 'Consultar precio'}
-${datosFijos ? '\n' + datosFijos : ''}
-${m2 ? `\n📐 Construcción: ${m2} m²` : ''}
+${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Construcción: ${m2} m²` : ''}
 
-✨ [2-3 oraciones de presentación: qué hace especial esta propiedad, sensación, para quién es ideal]
+✨ [2-3 oraciones atractivas: qué hace especial esta propiedad, para quién es ideal]
 
 🏠 Distribución
 
-[Lista de espacios interiores con emoji apropiado por línea. Basa en descripción original e infiere espacios típicos del tipo de propiedad. Ejemplo:
+[Lista de espacios interiores, un emoji por línea. Basarte en la descripción original e inferir espacios típicos:
 🛋️ Sala y comedor integrados
-🍳 Cocina integral con barra
+🍳 Cocina integral
 🛏️ Recámara principal con clóset y baño completo
-🛏️ Recámara secundaria con clóset
+🛏️ Recámara secundaria
 🚿 Baño completo
 🧺 Área de lavado
-🚗 ${estacionamientos ?? 1} cajón${(estacionamientos ?? 1) > 1 ? 'es' : ''} de estacionamiento]
+🚗 Cajón(es) de estacionamiento]
 ${tipo !== 'terreno' ? `
 🏢 Equipamiento
 
-[Lista del equipamiento del edificio/desarrollo con emoji. Solo incluir si es relevante. Ejemplo:
+[Equipamiento del edificio/desarrollo con emoji. Si es casa sola sin amenidades, omite esta sección:
 🛗 Elevador
-🚶 Escaleras de acceso
-Si es casa sola sin copropiedad, omitir esta sección completamente]
+🚶 Escaleras de acceso]
 
 🌟 Amenidades
 
-[Lista de amenidades con emoji. Basarse en descripción original. Si no hay info, inferir amenidades típicas del desarrollo. Ejemplo:
+[Amenidades del desarrollo con emoji, basarte en descripción original:
 🏊 Alberca
 🎉 Salón de eventos
 🏀 Canchas deportivas
 🛝 Juegos infantiles
 🛡️ Vigilancia 24/7]
-` : ''}
-📍 [2-3 oraciones sobre la ubicación: nombre del fraccionamiento/colonia, conectividad, qué tiene cerca]
+` : ''}📍 [2-3 oraciones sobre ubicación: fraccionamiento/colonia, conectividad, qué tiene cerca]
 
 📲 Agenda tu cita y conoce este excelente ${tipoLabel.toLowerCase()}.`
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
-
-    const response = await fetch(url, {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 2000,
-        },
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 2000,
       }),
     })
 
@@ -105,11 +97,11 @@ Si es casa sola sin copropiedad, omitir esta sección completamente]
 
     if (!response.ok) {
       const errMsg = json?.error?.message ?? JSON.stringify(json)
-      throw new Error(`Error de Gemini (${response.status}): ${errMsg}`)
+      throw new Error(`Error de Groq (${response.status}): ${errMsg}`)
     }
 
-    const texto: string = json.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-    if (!texto) throw new Error('Gemini no devolvió texto. Intenta de nuevo.')
+    const texto: string = json.choices?.[0]?.message?.content ?? ''
+    if (!texto) throw new Error('Groq no devolvió texto. Intenta de nuevo.')
 
     return new Response(JSON.stringify({ texto }), { headers: CORS })
 
