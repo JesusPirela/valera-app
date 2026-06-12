@@ -313,6 +313,8 @@ export default function ProspectadorLayout() {
       <Tabs.Screen name="ranking"            options={{ href: null, title: 'Ranking' }} />
       <Tabs.Screen name="mi-actividad"       options={{ href: null, title: 'Mi Actividad' }} />
       <Tabs.Screen name="mi-historial"       options={{ href: null, title: 'Mi Historial' }} />
+      <Tabs.Screen name="chats"              options={{ href: null, title: 'Chats' }} />
+      <Tabs.Screen name="chat-cliente"       options={{ href: null, title: 'Chat' }} />
     </Tabs>
 
     <Modal visible={showCrmPopup} transparent animationType="fade" onRequestClose={() => setShowCrmPopup(false)}>

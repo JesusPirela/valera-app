@@ -19,7 +19,8 @@ type Notificacion = {
   created_at: string
   propiedad_id: string | null
   cliente_id: string | null
-  tipo: 'nuevo_cliente' | 'login' | 'nueva_propiedad' | 'destacada' | string
+  chatbot_lead_id: string | null
+  tipo: 'nuevo_cliente' | 'login' | 'nueva_propiedad' | 'destacada' | 'lead_caliente' | string
 }
 
 function tiempoRelativo(fechaISO: string): string {
@@ -39,11 +40,13 @@ function iconoPorTipo(tipo: string) {
   if (tipo === 'nuevo_cliente') return '👤'
   if (tipo === 'login')         return '🔑'
   if (tipo === 'destacada')     return '⭐'
+  if (tipo === 'lead_caliente') return '🔥'
   return '🔔'
 }
 
 function esNavegable(n: Notificacion): boolean {
   if (n.tipo === 'nuevo_cliente' && n.cliente_id) return true
+  if (n.tipo === 'lead_caliente' && n.chatbot_lead_id) return true
   if (n.propiedad_id) return true
   return false
 }
@@ -96,7 +99,7 @@ function NotifItem({ item, onPress, onDelete, cardBg, textColor }: NotifItemProp
     })
   ).current
 
-  const esCliente   = item.tipo === 'nuevo_cliente'
+  const esCliente   = item.tipo === 'nuevo_cliente' || item.tipo === 'lead_caliente'
   const esLogin     = item.tipo === 'login'
   const esDestacada = item.tipo === 'destacada'
   const navegable   = esNavegable(item)
@@ -194,7 +197,7 @@ export default function AdminNotificaciones() {
 
     const { data, error } = await supabase
       .from('notificaciones')
-      .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, tipo')
+      .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, chatbot_lead_id, tipo')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -225,11 +228,21 @@ export default function AdminNotificaciones() {
     await supabase.from('notificaciones').delete().eq('id', id)
   }
 
-  function handlePress(item: Notificacion) {
+  async function handlePress(item: Notificacion) {
     if (!item.leida) marcarLeida(item.id)
 
     if (item.tipo === 'nuevo_cliente' && item.cliente_id) {
       router.push(`/(admin)/detalle-cliente?id=${item.cliente_id}`)
+    } else if (item.tipo === 'lead_caliente' && item.chatbot_lead_id) {
+      const { data: lead } = await supabase
+        .from('chatbot_leads')
+        .select('telefono, nombre')
+        .eq('id', item.chatbot_lead_id)
+        .maybeSingle()
+
+      if (lead?.telefono) {
+        router.push(`/(admin)/chat-cliente?telefono=${lead.telefono}&nombre=${encodeURIComponent(lead.nombre ?? '')}`)
+      }
     } else if (item.propiedad_id) {
       router.push(`/(admin)/editar-propiedad?id=${item.propiedad_id}`)
     }

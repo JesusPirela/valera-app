@@ -104,9 +104,7 @@ serve(async (req) => {
       .eq('id', user.id)
       .single()
 
-    if (profile?.role !== 'admin' && profile?.role !== 'supervisor') {
-      return json({ error: 'Acceso denegado' }, 403)
-    }
+    const esStaff = profile?.role === 'admin' || profile?.role === 'supervisor'
 
     const url = new URL(req.url)
     const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
@@ -115,6 +113,11 @@ serve(async (req) => {
     const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')!
     const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')!
     const twilioAuth = 'Basic ' + btoa(`${accountSid}:${authToken}`)
+
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    )
 
     if (action === 'hilos') {
       const cutoffMs = Date.now() - DIAS_HISTORIAL * 24 * 3600 * 1000
@@ -154,11 +157,7 @@ serve(async (req) => {
         }
       }
 
-      // Cruzar contra clientes (service role: el rol ya fue validado arriba)
-      const supabaseAdmin = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      )
+      // Cruzar contra clientes
       const { data: clientes } = await supabaseAdmin.from('clientes').select('id, nombre, telefono')
 
       const clientesPorTelefono = new Map<string, { id: string; nombre: string }>()
@@ -169,16 +168,58 @@ serve(async (req) => {
         }
       }
 
-      const resultado = Array.from(hilos.entries()).map(([telefono, datos]) => {
+      // Cruzar contra chatbot_leads (separación por prospectador)
+      const { data: chatbotLeads } = await supabaseAdmin
+        .from('chatbot_leads')
+        .select('telefono, nombre, prospectador_id, estado')
+
+      const chatbotPorTelefono = new Map<string, { nombre: string | null; prospectador_id: string | null; estado: string }>()
+      for (const cl of chatbotLeads ?? []) {
+        chatbotPorTelefono.set(cl.telefono, {
+          nombre: cl.nombre,
+          prospectador_id: cl.prospectador_id,
+          estado: cl.estado,
+        })
+      }
+
+      // Resolver nombres de los prospectadores dueños (solo necesario para staff)
+      const nombresProspectadores = new Map<string, string>()
+      if (esStaff) {
+        const ids = [...new Set(
+          Array.from(chatbotPorTelefono.values())
+            .map((c) => c.prospectador_id)
+            .filter((id): id is string => !!id)
+        )]
+        if (ids.length > 0) {
+          const { data: perfiles } = await supabaseAdmin.from('profiles').select('id, nombre').in('id', ids)
+          for (const p of perfiles ?? []) {
+            nombresProspectadores.set(p.id, p.nombre ?? '')
+          }
+        }
+      }
+
+      let entradas = Array.from(hilos.entries())
+
+      // Prospectadores solo ven los hilos de los leads del chatbot que les pertenecen
+      if (!esStaff) {
+        entradas = entradas.filter(([telefono]) => chatbotPorTelefono.get(telefono)?.prospectador_id === user.id)
+      }
+
+      const resultado = entradas.map(([telefono, datos]) => {
         const cliente = clientesPorTelefono.get(telefono)
+        const chatbotLead = chatbotPorTelefono.get(telefono)
         return {
           telefono,
-          nombre: cliente?.nombre ?? null,
+          nombre: cliente?.nombre ?? chatbotLead?.nombre ?? null,
           cliente_id: cliente?.id ?? null,
           ultimo_mensaje: datos.ultimo_mensaje,
           fecha_ultimo: datos.fecha_ultimo,
           direccion_ultimo: datos.direccion_ultimo,
           total_mensajes: datos.total_mensajes,
+          estado_lead: chatbotLead?.estado ?? null,
+          prospectador_nombre: esStaff && chatbotLead?.prospectador_id
+            ? (nombresProspectadores.get(chatbotLead.prospectador_id) || null)
+            : null,
         }
       }).sort((a, b) => b.fecha_ultimo.localeCompare(a.fecha_ultimo))
 
@@ -191,6 +232,17 @@ serve(async (req) => {
 
       const canonico = normalizarTelefono(String(telefono))
       if (canonico.length !== 12) return json({ error: 'Teléfono inválido' }, 400)
+
+      // Prospectadores solo pueden ver la conversación de sus propios leads del chatbot
+      if (!esStaff) {
+        const { data: lead } = await supabaseAdmin
+          .from('chatbot_leads')
+          .select('prospectador_id')
+          .eq('telefono', canonico)
+          .maybeSingle()
+
+        if (lead?.prospectador_id !== user.id) return json({ error: 'Acceso denegado' }, 403)
+      }
 
       const variantes = variantesWhatsapp(canonico)
       const lotes = await Promise.all(

@@ -428,6 +428,11 @@ export default function CRM() {
           })}
         </ScrollView>
 
+        {/* ── Botón chats de WhatsApp ── */}
+        <TouchableOpacity style={s.btnCampana} onPress={() => router.push('/(prospectador)/chats')}>
+          <Text style={s.btnCampanaTxt}>💬 Chats de WhatsApp</Text>
+        </TouchableOpacity>
+
         {/* ── Search + sort + nuevo ── */}
         <View style={s.searchRow}>
           <View style={[s.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -859,6 +864,15 @@ const s = StyleSheet.create({
   stageDot:     { width: 6, height: 6, borderRadius: 3 },
   stageChipTxt: { fontSize: 12, color: '#64748b', fontWeight: '500' },
   stageCnt:     { fontSize: 11, color: '#94a3b8', fontWeight: '700' },
+
+  // ── Botón chats ─────────────────────────────────────────────────
+  btnCampana: {
+    marginHorizontal: 12, marginTop: 8,
+    backgroundColor: '#25D366', borderRadius: 10,
+    paddingVertical: 11, alignItems: 'center',
+    flexShrink: 0,
+  },
+  btnCampanaTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
 
   // ── Search ──────────────────────────────────────────────────────
   searchRow: {
