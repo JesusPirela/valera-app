@@ -1,0 +1,110 @@
+=============================================================================
+SEGURIDAD VALERA APP - COSAS QUE DEBEN HACER USTEDES (PASO A PASO)
+Actualizado: 12 junio 2026
+=============================================================================
+
+Lo que ya quedo hecho automaticamente (no tienen que hacer nada):
+  [OK] Politica de contrasenas: minimo 8 caracteres, letras y numeros
+       obligatorios, y rechazo de contrasenas filtradas en internet (HIBP).
+       Aplica solo a contrasenas NUEVAS; nadie pierde acceso hoy.
+  [OK] HTTPS forzado + cabeceras de seguridad en la web (aplica en el
+       proximo deploy automatico).
+  [OK] Auditoria: cada vez que alguien modifica o borra una propiedad o
+       un cliente queda registrado quien fue, cuando, y como estaba el
+       registro antes (tabla audit_log, solo visible para admins).
+  [OK] Revision RLS: las 43 tablas tienen Row Level Security activado.
+  [OK] Revision de secretos: no hay llaves privadas en el codigo del repo.
+  [OK] Vulnerabilidad critica de dependencias corregida (shell-quote).
+
+
+-----------------------------------------------------------------------------
+PRIORIDAD 1 - HACER ESTA SEMANA
+-----------------------------------------------------------------------------
+
+1. CAMBIAR LAS CONTRASENAS DEBILES EXISTENTES
+   La politica nueva solo aplica a contrasenas nuevas. Las cuentas viejas
+   con contrasenas como "123" siguen funcionando.
+   Pasos:
+   a) Entrar a https://supabase.com/dashboard -> proyecto valera
+   b) Authentication -> Users
+   c) Identificar cuentas importantes (admins primero)
+   d) Pedir a cada usuario que cambie su contrasena desde la app,
+      o usar "Send password recovery" para forzar el cambio por email.
+
+2. ROTAR LAS LLAVES DE SUPABASE
+   El "service role key" y el "personal access token" han circulado por
+   chats y archivos. Quien los tenga controla TODA la base de datos.
+   Pasos:
+   a) Dashboard -> Settings -> API -> "Reset" en service_role key
+   b) https://supabase.com/dashboard/account/tokens -> borrar el token
+      "sbp_..." viejo y crear uno nuevo
+   c) Actualizar el secret en las Edge Functions si alguna usa la llave:
+      Dashboard -> Edge Functions -> Secrets
+   d) Si GitHub Actions usa estas llaves: GitHub -> repo -> Settings ->
+      Secrets and variables -> Actions -> actualizar valores.
+   NOTA: el "anon key" NO hay que rotarlo, es publico por diseno.
+
+3. ACTIVAR MFA (DOBLE FACTOR) PARA LOS ADMINS
+   Ya esta habilitado a nivel proyecto; falta que cada admin lo active.
+   Pasos (por cada cuenta admin):
+   a) Instalar Google Authenticator o similar en el celular
+   b) (Requiere agregar pantalla de enrolamiento en la app, o hacerlo
+      via Dashboard -> Authentication -> Users -> usuario -> MFA)
+   c) Si quieren, puedo desarrollar la pantalla de MFA en la app.
+
+
+-----------------------------------------------------------------------------
+PRIORIDAD 2 - PROXIMAS 2 SEMANAS
+-----------------------------------------------------------------------------
+
+4. REVISAR RATE LIMITS DE LOGIN
+   Limita cuantos intentos de contrasena se permiten (frena ataques de
+   fuerza bruta).
+   Pasos:
+   a) Dashboard -> Authentication -> Rate Limits
+   b) Sugerido: "Sign ups and sign ins" = 10 por 5 minutos por IP
+
+5. VERIFICAR BACKUPS
+   Pasos:
+   a) Dashboard -> Database -> Backups
+   b) Confirmar que hay backups diarios de los ultimos 7 dias
+   c) IMPORTANTE: hacer una prueba de restauracion una vez para saber
+      que funciona (restaurar en un proyecto de prueba, no en produccion)
+
+6. CORRER EL SECURITY ADVISOR DE SUPABASE
+   Es un escaner automatico que ya viene incluido.
+   Pasos:
+   a) Dashboard -> Advisors -> Security
+   b) Revisar la lista de advertencias y mandarmelas, yo las corrijo
+
+7. LIMITAR ACCESO AL DASHBOARD DE SUPABASE Y HOSTINGER
+   - Quien tiene la contrasena del Dashboard de Supabase?
+   - Quien tiene el acceso FTP de Hostinger?
+   Reducir a las 1-2 personas que realmente lo necesitan y activar
+   2FA en las cuentas de Supabase, Hostinger y GitHub.
+
+
+-----------------------------------------------------------------------------
+PRIORIDAD 3 - MEDIANO PLAZO (1-2 MESES)
+-----------------------------------------------------------------------------
+
+8. ACTUALIZAR EXPO A LA VERSION 56
+   Quedan 15 vulnerabilidades moderadas en dependencias que solo se
+   resuelven subiendo de version de Expo (es un cambio grande que hay
+   que probar bien). Diganme cuando haya un momento tranquilo (sin
+   lanzamientos) y lo hago con pruebas completas.
+
+9. POLITICA DE ALTAS Y BAJAS DE USUARIOS
+   - Cuando alguien deja la empresa: desactivar su cuenta el mismo dia
+     (Dashboard -> Authentication -> Users -> Ban user)
+   - Revisar cada mes la lista de usuarios activos
+
+10. MONITOREO
+   - Dashboard -> Reports: revisar 1 vez por semana errores de API
+     y picos raros de trafico
+   - La tabla audit_log ya registra cambios criticos: puedo hacer una
+     pantalla de admin para verla facil si la quieren
+
+=============================================================================
+Cualquier duda de un paso especifico, preguntenme y los guio en vivo.
+=============================================================================
