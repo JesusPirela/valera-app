@@ -70,6 +70,13 @@ export default function FichaPublica() {
     setImgIdx(idx)
   }
 
+  function irAImagen(idx: number) {
+    const total = propiedad?.propiedad_imagenes.length ?? 0
+    const next = Math.max(0, Math.min(total - 1, idx))
+    setImgIdx(next)
+    scrollRef.current?.scrollTo({ x: next * imgW, animated: true })
+  }
+
   if (loading) return (
     <View style={s.center}>
       <ActivityIndicator size="large" color={TEAL} />
@@ -111,6 +118,7 @@ export default function FichaPublica() {
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={onScrollImg}
               style={{ width: imgW }}
+              scrollEventThrottle={16}
             >
               {imagenes.map((img, i) => (
                 <Image
@@ -121,10 +129,26 @@ export default function FichaPublica() {
                 />
               ))}
             </ScrollView>
+
+            {/* Flechas de navegación */}
+            {imagenes.length > 1 && imgIdx > 0 && (
+              <TouchableOpacity style={[s.arrow, s.arrowLeft]} onPress={() => irAImagen(imgIdx - 1)} activeOpacity={0.8}>
+                <Text style={s.arrowTxt}>‹</Text>
+              </TouchableOpacity>
+            )}
+            {imagenes.length > 1 && imgIdx < imagenes.length - 1 && (
+              <TouchableOpacity style={[s.arrow, s.arrowRight]} onPress={() => irAImagen(imgIdx + 1)} activeOpacity={0.8}>
+                <Text style={s.arrowTxt}>›</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Dots y contador */}
             {imagenes.length > 1 && (
               <View style={s.dots}>
                 {imagenes.map((_, i) => (
-                  <View key={i} style={[s.dot, i === imgIdx && s.dotActive]} />
+                  <TouchableOpacity key={i} onPress={() => irAImagen(i)}>
+                    <View style={[s.dot, i === imgIdx && s.dotActive]} />
+                  </TouchableOpacity>
                 ))}
               </View>
             )}
@@ -212,6 +236,15 @@ const s = StyleSheet.create({
   },
   imgCounterTxt: { color: '#fff', fontSize: 11, fontWeight: '600' },
   noImg: { backgroundColor: '#1e3448', alignItems: 'center', justifyContent: 'center' },
+  arrow: {
+    position: 'absolute', top: '50%' as any, marginTop: -22,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center', zIndex: 10,
+  },
+  arrowLeft:  { left: 10 },
+  arrowRight: { right: 10 },
+  arrowTxt: { color: '#fff', fontSize: 30, fontWeight: '300', lineHeight: 36, marginTop: -2 },
 
   content: { padding: 20, maxWidth: 600, alignSelf: 'center', width: '100%' as any },
 
