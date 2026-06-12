@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { View, ActivityIndicator, AppState, Platform, Modal, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native'
 import { Stack, router, usePathname } from 'expo-router'
 import { supabase } from '../lib/supabase'
@@ -94,6 +94,8 @@ export default function RootLayout() {
   const [updateRequerido, setUpdateRequerido] = useState(false)
   const [fontsLoaded] = useFonts(Platform.OS === 'web' ? {} : Ionicons.font)
   const pathname = usePathname()
+  const pathnameRef = useRef('')
+  pathnameRef.current = pathname
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return
@@ -226,7 +228,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loading) return
-    if (pathname.startsWith('/ficha')) return  // ruta pública, sin auth
+    if (pathnameRef.current.startsWith('/ficha')) return  // ruta pública, sin auth
     if (!session) {
       router.replace('/(auth)/login')
       return
@@ -246,7 +248,7 @@ export default function RootLayout() {
         }
       })
       .catch(() => {})
-  }, [loading, pathname])
+  }, [loading])
 
   if (loading || !fontsLoaded) {
     return (
