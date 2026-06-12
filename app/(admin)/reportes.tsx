@@ -50,7 +50,7 @@ const PERIODO_LABELS: Record<Periodo, string> = { '24h': '24 horas', '7dias': '7
 const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 const PERIODOS: { key: Periodo; label: string; sub: string }[] = [
-  { key: '24h',   label: '24 horas', sub: 'Últimas 24h'    },
+  { key: '24h',   label: 'Hoy',       sub: 'Desde 12:00 am' },
   { key: '7dias', label: '7 días',   sub: 'Última semana'  },
   { key: '30dias',label: '30 días',  sub: 'Último mes'     },
 ]
@@ -61,7 +61,7 @@ function getRango(p: Periodo): { inicio: Date; fin: Date } {
   switch (p) {
     case '24h': {
       const i = new Date(now)
-      i.setHours(i.getHours() - 24)
+      i.setHours(0, 0, 0, 0)
       return { inicio: i, fin: now }
     }
     case '7dias': {

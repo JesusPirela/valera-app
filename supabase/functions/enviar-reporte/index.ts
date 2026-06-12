@@ -358,7 +358,8 @@ async function procesarProgramados(supabase: any) {
     let inicio: Date
     const periodo = prog.periodo_reporte ?? '7dias'
     if (periodo === '24h') {
-      inicio = new Date(fin.getTime() - 24 * 3_600_000)
+      inicio = new Date(fin)
+      inicio.setHours(0, 0, 0, 0)
     } else if (periodo === '7dias') {
       inicio = new Date(fin.getTime() - 7 * 24 * 3_600_000)
     } else {
