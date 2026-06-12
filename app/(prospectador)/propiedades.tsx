@@ -68,6 +68,7 @@ type PropiedadesData = {
   rol: string | null
   nombreUsuario: string | null
   userId: string
+  telefono: string | null
   propiedades: Propiedad[]
   publicacionesMap: Record<string, number>
   publicacionFechasMap: Record<string, string>
@@ -141,7 +142,7 @@ export default function ProspectadorPropiedades() {
       if (!userId) throw new Error('No user')
 
       const [profileRes, propsRes, pubRes] = await Promise.all([
-        supabase.from('profiles').select('role, nombre').eq('id', userId).single(),
+        supabase.from('profiles').select('role, nombre, telefono').eq('id', userId).single(),
         supabase
           .from('propiedades')
           .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
@@ -167,6 +168,7 @@ export default function ProspectadorPropiedades() {
         rol,
         nombreUsuario: profileRes.data?.nombre ?? null,
         userId,
+        telefono: profileRes.data?.telefono ?? null,
         propiedades,
         publicacionesMap: Object.fromEntries(
           (pubRes.data ?? []).map((r: { propiedad_id: string; veces_publicada: number; fecha_publicacion: string | null }) => [r.propiedad_id, r.veces_publicada ?? 0])
@@ -264,6 +266,31 @@ export default function ProspectadorPropiedades() {
     finalTogglingSet.delete(propiedadId)
     togglingRef.current = finalTogglingSet
     setToggling(finalTogglingSet)
+  }
+
+  function compartirLink(codigo: string) {
+    const tel = queryData?.telefono ?? ''
+    const base = Platform.OS === 'web' && typeof window !== 'undefined'
+      ? window.location.origin
+      : 'https://app.valerarealestate.com'
+    const url = tel ? `${base}/ficha/${codigo}?t=${encodeURIComponent(tel)}` : `${base}/ficha/${codigo}`
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url)
+      if (typeof document !== 'undefined') {
+        const el = document.createElement('div')
+        el.textContent = '✓ Enlace copiado'
+        Object.assign(el.style, {
+          position: 'fixed', bottom: '32px', left: '50%', transform: 'translateX(-50%)',
+          background: '#1a6470', color: '#fff', padding: '10px 20px', borderRadius: '20px',
+          fontSize: '14px', zIndex: '9999', fontFamily: 'sans-serif', fontWeight: '600',
+          pointerEvents: 'none',
+        })
+        document.body.appendChild(el)
+        setTimeout(() => el.remove(), 2000)
+      }
+    } else {
+      Alert.alert('Enlace', url, [{ text: 'Cerrar' }])
+    }
   }
 
   function toggleZona(zona: string) {
@@ -465,6 +492,13 @@ export default function ProspectadorPropiedades() {
           )}
           <View style={styles.cardFooter}>
             <Text style={[styles.precio, { color: primaryColor }]}>{formatPrecio(item.precio)}</Text>
+            <TouchableOpacity
+              style={styles.shareBtn}
+              onPress={(e) => { e.stopPropagation(); compartirLink(item.codigo) }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.shareBtnText}>🔗</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.publicadaBtn,
@@ -1108,6 +1142,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   precio: { fontSize: 16, fontWeight: '700' },
+  shareBtn: {
+    width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  shareBtnText: { fontSize: 15 },
   publicadaBtn: {
     borderWidth: 1.5,
     borderRadius: 20,

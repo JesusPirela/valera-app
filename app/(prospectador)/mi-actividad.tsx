@@ -197,8 +197,8 @@ export default function MiActividad() {
       <View style={s.sectionCard}>
         <Text style={s.sectionTitle}>📊 Actividad de {periodoLabel}</Text>
         <View style={s.statsGrid}>
-          <StatBox icon="🏠" label="Prop. únicas"    val={actividad?.propiedades_publicadas ?? 0} />
-          <StatBox icon="📤" label="Publicaciones"   val={actividad?.publicaciones_totales ?? 0} />
+          <StatBox icon="🏠" label="Propiedades"  val={actividad?.propiedades_publicadas ?? 0} />
+          <StatBox icon="📤" label="Publicaciones" val={actividad?.publicaciones_totales ?? 0} />
           <StatBox icon="👤" label="Clientes nuevos" val={actividad?.clientes_nuevos ?? 0} />
           <StatBox icon="💬" label="Interacciones"   val={actividad?.interacciones ?? 0} />
           <StatBox icon="✅" label="Seguimientos"    val={actividad?.seguimientos ?? 0} />

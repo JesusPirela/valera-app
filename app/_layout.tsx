@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { View, ActivityIndicator, AppState, Platform, Modal, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native'
-import { Stack, router } from 'expo-router'
+import { Stack, router, usePathname } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { Session } from '@supabase/supabase-js'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
@@ -93,6 +93,7 @@ export default function RootLayout() {
   const [loading, setLoading] = useState(true)
   const [updateRequerido, setUpdateRequerido] = useState(false)
   const [fontsLoaded] = useFonts(Platform.OS === 'web' ? {} : Ionicons.font)
+  const pathname = usePathname()
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return
@@ -225,6 +226,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loading) return
+    if (pathname.startsWith('/ficha')) return  // ruta pública, sin auth
     if (!session) {
       router.replace('/(auth)/login')
       return
@@ -244,7 +246,7 @@ export default function RootLayout() {
         }
       })
       .catch(() => {})
-  }, [loading])
+  }, [loading, pathname])
 
   if (loading || !fontsLoaded) {
     return (
@@ -262,6 +264,7 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(admin)" />
           <Stack.Screen name="(prospectador)" />
+          <Stack.Screen name="ficha" />
         </Stack>
 
         <Modal visible={updateRequerido} transparent animationType="fade" statusBarTranslucent>
