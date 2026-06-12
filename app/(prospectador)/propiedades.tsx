@@ -270,7 +270,9 @@ export default function ProspectadorPropiedades() {
 
   function compartirLink(codigo: string) {
     const tel = queryData?.telefono ?? ''
-    const base = 'https://valerarealestate.com'
+    const base = Platform.OS === 'web' && typeof window !== 'undefined'
+      ? window.location.origin
+      : 'https://valerarealestate.com'
     const url = tel ? `${base}/ficha/${codigo}?t=${encodeURIComponent(tel)}` : `${base}/ficha/${codigo}`
     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(url)
