@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seguridad Valera App — Cambios y Pendientes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0d1b2a;
+    color: #e2e8f0;
+    line-height: 1.6;
+    padding: 32px 16px;
+  }
+  .container { max-width: 860px; margin: 0 auto; }
+
+  header {
+    background: linear-gradient(135deg, #1a6470 0%, #0f3d45 100%);
+    border-radius: 16px;
+    padding: 36px 32px;
+    margin-bottom: 28px;
+    border: 1px solid #2a7a87;
+  }
+  header h1 { font-size: 26px; color: #fff; margin-bottom: 6px; }
+  header h1 .icon { margin-right: 10px; }
+  header p { color: rgba(255,255,255,0.75); font-size: 14px; }
+  .fecha {
+    display: inline-block; margin-top: 14px;
+    background: rgba(201,168,76,0.15); color: #c9a84c;
+    border: 1px solid rgba(201,168,76,0.4);
+    border-radius: 20px; padding: 4px 14px; font-size: 12px; font-weight: 600;
+  }
+
+  section {
+    background: #111f2e;
+    border: 1px solid #1e3448;
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 24px;
+  }
+  section > h2 {
+    font-size: 18px; margin-bottom: 4px; color: #fff;
+    display: flex; align-items: center; gap: 10px;
+  }
+  section > .sub { color: #7a9ab5; font-size: 13px; margin-bottom: 20px; }
+
+  .badge {
+    font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .badge.hecho    { background: rgba(46,204,113,0.15); color: #2ecc71; border: 1px solid rgba(46,204,113,0.4); }
+  .badge.p1       { background: rgba(231,76,60,0.15);  color: #e74c3c; border: 1px solid rgba(231,76,60,0.4); }
+  .badge.p2       { background: rgba(243,156,18,0.15); color: #f39c12; border: 1px solid rgba(243,156,18,0.4); }
+  .badge.p3       { background: rgba(52,152,219,0.15); color: #3498db; border: 1px solid rgba(52,152,219,0.4); }
+
+  .item {
+    display: flex; gap: 14px;
+    padding: 16px 0;
+    border-bottom: 1px solid #1e3448;
+  }
+  .item:last-child { border-bottom: none; padding-bottom: 0; }
+  .item .check {
+    flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .check.ok      { background: rgba(46,204,113,0.12); }
+  .check.todo    { background: rgba(231,76,60,0.12); }
+  .check.todo2   { background: rgba(243,156,18,0.12); }
+  .check.todo3   { background: rgba(52,152,219,0.12); }
+  .item h3 { font-size: 15px; color: #fff; margin-bottom: 3px; }
+  .item p  { font-size: 13px; color: #9bb2c5; }
+  .item .impacto {
+    margin-top: 8px; font-size: 12px; color: #c9a84c;
+    background: rgba(201,168,76,0.08);
+    border-left: 3px solid #c9a84c;
+    padding: 6px 12px; border-radius: 0 8px 8px 0;
+  }
+  .item .pasos {
+    margin-top: 8px; font-size: 12.5px; color: #8fa9bd;
+    background: #0d1b2a; border-radius: 10px; padding: 10px 14px;
+  }
+  .item .pasos li { margin-left: 18px; margin-bottom: 3px; }
+
+  .resumen {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px; margin-bottom: 28px;
+  }
+  .stat {
+    background: #111f2e; border: 1px solid #1e3448; border-radius: 14px;
+    padding: 18px; text-align: center;
+  }
+  .stat .num { font-size: 30px; font-weight: 800; }
+  .stat .num.verde { color: #2ecc71; }
+  .stat .num.rojo  { color: #e74c3c; }
+  .stat .num.ambar { color: #f39c12; }
+  .stat .num.azul  { color: #3498db; }
+  .stat .lbl { font-size: 11px; color: #7a9ab5; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+
+  footer { text-align: center; color: #556a7a; font-size: 12px; padding: 20px 0; }
+  @media print {
+    body { background: #fff; color: #1e293b; }
+    section, .stat, header { border-color: #cbd5e1; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1><span class="icon">🛡️</span>Seguridad Valera App</h1>
+    <p>Reporte de endurecimiento de seguridad — cambios aplicados y plan de acción pendiente</p>
+    <span class="fecha">Actualizado: 12 de junio de 2026</span>
+  </header>
+
+  <div class="resumen">
+    <div class="stat"><div class="num verde">6</div><div class="lbl">Cambios hechos</div></div>
+    <div class="stat"><div class="num rojo">3</div><div class="lbl">Urgentes (ustedes)</div></div>
+    <div class="stat"><div class="num ambar">4</div><div class="lbl">Próximas 2 semanas</div></div>
+    <div class="stat"><div class="num azul">3</div><div class="lbl">Mediano plazo</div></div>
+  </div>
+
+  <!-- ════════ HECHO ════════ -->
+  <section>
+    <h2>✅ Cambios ya aplicados <span class="badge hecho">Hecho</span></h2>
+    <p class="sub">Estos cambios ya están activos en producción. No tienen que hacer nada.</p>
+
+    <div class="item">
+      <div class="check ok">🔑</div>
+      <div>
+        <h3>Política de contraseñas fuerte</h3>
+        <p>Mínimo 8 caracteres con letras y números obligatorios, y rechazo automático de contraseñas que aparecen en filtraciones de internet (verificación HIBP).</p>
+        <div class="impacto">Impacto: aplica solo a contraseñas nuevas — nadie pierde acceso hoy. Ya no se podrán crear cuentas con contraseñas como "123".</div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check ok">🔒</div>
+      <div>
+        <h3>HTTPS forzado + cabeceras de seguridad en la web</h3>
+        <p>Todo el tráfico se redirige a HTTPS y se agregaron cabeceras de protección: nosniff, X-Frame-Options (anti-clickjacking), HSTS, Referrer-Policy y Permissions-Policy.</p>
+        <div class="impacto">Impacto: protege contra interceptación de datos y que otros sitios incrusten la app para engañar usuarios. Invisible para los usuarios.</div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check ok">📋</div>
+      <div>
+        <h3>Auditoría de cambios críticos</h3>
+        <p>Nueva tabla <b>audit_log</b> con triggers: cada modificación o borrado de una propiedad o cliente registra quién fue, cuándo, y el estado anterior completo del registro.</p>
+        <div class="impacto">Impacto: si alguien borra datos (por error o mala intención) se sabe exactamente quién fue y se puede recuperar la información. Solo admins pueden consultarlo y nadie puede alterarlo desde la app.</div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check ok">🗄️</div>
+      <div>
+        <h3>Revisión completa de Row Level Security (RLS)</h3>
+        <p>Se auditaron las 43 tablas de la base de datos: todas tienen RLS activado con políticas que limitan qué puede ver y modificar cada usuario según su rol.</p>
+        <div class="impacto">Impacto: confirmado que un prospectador no puede leer datos de otros ni saltarse permisos consultando la API directamente.</div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check ok">🔍</div>
+      <div>
+        <h3>Revisión de secretos en el código</h3>
+        <p>Se escaneó todo el repositorio de GitHub: no hay llaves privadas ni contraseñas dentro del código fuente.</p>
+        <div class="impacto">Impacto: aunque alguien vea el código, no obtiene acceso a la base de datos.</div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check ok">📦</div>
+      <div>
+        <h3>Vulnerabilidad crítica de dependencias corregida</h3>
+        <p>Se corrigió la vulnerabilidad crítica de <b>shell-quote</b> y la de <b>ws</b> con <code>npm audit fix</code> (sin romper nada).</p>
+        <div class="impacto">Impacto: quedan 15 vulnerabilidades moderadas en herramientas de build que solo se resuelven actualizando Expo (ver pendiente #10).</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ PRIORIDAD 1 ════════ -->
+  <section>
+    <h2>🚨 Lo que deben hacer ustedes <span class="badge p1">Esta semana</span></h2>
+    <p class="sub">Acciones que requieren acceso de dueño a las cuentas — yo no las puedo hacer.</p>
+
+    <div class="item">
+      <div class="check todo">1</div>
+      <div>
+        <h3>Cambiar las contraseñas débiles existentes</h3>
+        <p>La política nueva solo aplica a contraseñas nuevas. Las cuentas viejas con contraseñas como "123" siguen entrando.</p>
+        <div class="pasos"><ol>
+          <li>Entrar a supabase.com/dashboard → proyecto Valera</li>
+          <li>Authentication → Users</li>
+          <li>Empezar por las cuentas admin</li>
+          <li>Pedir a cada usuario que cambie su contraseña desde la app, o usar "Send password recovery" para forzarlo por email</li>
+        </ol></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check todo">2</div>
+      <div>
+        <h3>Rotar las llaves de Supabase</h3>
+        <p>El <b>service role key</b> y el <b>personal access token</b> han circulado por chats y archivos. Quien los tenga controla toda la base de datos.</p>
+        <div class="pasos"><ol>
+          <li>Dashboard → Settings → API → "Reset" en service_role key</li>
+          <li>supabase.com/dashboard/account/tokens → borrar el token viejo "sbp_..." y crear uno nuevo</li>
+          <li>Actualizar secrets de Edge Functions si alguna usa la llave (Dashboard → Edge Functions → Secrets)</li>
+          <li>Actualizar secrets de GitHub Actions si aplica (repo → Settings → Secrets → Actions)</li>
+        </ol>El "anon key" NO hay que rotarlo — es público por diseño.</div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check todo">3</div>
+      <div>
+        <h3>Activar doble factor (MFA) para los admins</h3>
+        <p>Ya está habilitado a nivel proyecto; falta que cada admin lo active en su cuenta.</p>
+        <div class="pasos"><ol>
+          <li>Instalar Google Authenticator (o similar) en el celular de cada admin</li>
+          <li>Avisarme para desarrollar la pantalla de enrolamiento MFA dentro de la app</li>
+        </ol></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ PRIORIDAD 2 ════════ -->
+  <section>
+    <h2>⚠️ Siguientes pasos <span class="badge p2">Próximas 2 semanas</span></h2>
+    <p class="sub">Importantes pero no urgentes.</p>
+
+    <div class="item">
+      <div class="check todo2">4</div>
+      <div>
+        <h3>Revisar rate limits de login</h3>
+        <p>Limita los intentos de contraseña para frenar ataques de fuerza bruta.</p>
+        <div class="pasos">Dashboard → Authentication → Rate Limits → sugerido: 10 intentos por 5 minutos por IP.</div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check todo2">5</div>
+      <div>
+        <h3>Verificar backups y probar una restauración</h3>
+        <p>Tener backups que nunca se han probado es como no tener backups.</p>
+        <div class="pasos">Dashboard → Database → Backups → confirmar respaldos diarios → hacer una prueba de restauración en un proyecto de prueba (nunca en producción).</div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check todo2">6</div>
+      <div>
+        <h3>Correr el Security Advisor de Supabase</h3>
+        <p>Escáner automático incluido en Supabase que detecta configuraciones inseguras.</p>
+        <div class="pasos">Dashboard → Advisors → Security → mandarme la lista de advertencias y yo las corrijo.</div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check todo2">7</div>
+      <div>
+        <h3>Limitar acceso a Supabase, Hostinger y GitHub</h3>
+        <p>Reducir quién tiene las contraseñas de los paneles a 1-2 personas, y activar 2FA en esas cuentas.</p>
+        <div class="pasos">¿Quién tiene hoy acceso al Dashboard de Supabase? ¿Al FTP de Hostinger? ¿Al repo de GitHub? Hacer lista y recortar.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ PRIORIDAD 3 ════════ -->
+  <section>
+    <h2>📅 Mediano plazo <span class="badge p3">1-2 meses</span></h2>
+    <p class="sub">Mejoras de fondo para mantener la seguridad en el tiempo.</p>
+
+    <div class="item">
+      <div class="check todo3">8</div>
+      <div>
+        <h3>Actualizar Expo a la versión 56</h3>
+        <p>Resuelve las 15 vulnerabilidades moderadas restantes. Es un cambio grande que necesita pruebas completas — avísenme cuando haya un momento tranquilo sin lanzamientos.</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check todo3">9</div>
+      <div>
+        <h3>Política de altas y bajas de usuarios</h3>
+        <p>Cuando alguien deje la empresa: desactivar su cuenta el mismo día (Dashboard → Authentication → Users → Ban user). Revisar la lista de usuarios activos cada mes.</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="check todo3">10</div>
+      <div>
+        <h3>Monitoreo continuo</h3>
+        <p>Revisar Dashboard → Reports una vez por semana (errores de API, picos raros de tráfico). Si quieren, puedo hacer una pantalla de admin para consultar el log de auditoría fácilmente.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Valera Real Estate · Reporte de seguridad · Cualquier duda sobre un paso específico, pregúntenme y los guío en vivo.
+  </footer>
+
+</div>
+</body>
+</html>
