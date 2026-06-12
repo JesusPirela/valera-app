@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Platform, Alert,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 
@@ -410,6 +410,7 @@ ${tendencia.length > 0 ? `
 // ── Pantalla principal ────────────────────────────────────────────────────────
 export default function Reportes() {
   const col = useColors()
+  const router = useRouter()
   const [periodo, setPeriodo] = useState<Periodo>('7dias')
   const [usuarios, setUsuarios]   = useState<UsuarioMetricas[]>([])
   const [tendencia, setTendencia] = useState<DiaActividad[]>([])
@@ -543,6 +544,15 @@ export default function Reportes() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#0d1b2a' }}>
+
+      {/* ── Header con botón de regreso ── */}
+      <View style={s.headerBar}>
+        <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+          <Text style={s.backBtnTxt}>← Regresar</Text>
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Reportes</Text>
+        <View style={{ width: 90 }} />
+      </View>
 
       {/* ── Selector de período: 3 tabs prominentes ── */}
       <View style={s.tabsContainer}>
@@ -881,6 +891,35 @@ const GOLD = '#c9a84c'
 const TEAL = '#1a6470'
 
 const s = StyleSheet.create({
+  // ── Header con regreso ──
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0d1b2a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e3448',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 16,
+  },
+  backBtn: {
+    backgroundColor: '#1e3448',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    minWidth: 90,
+  },
+  backBtnTxt: {
+    color: '#7a9ab5',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+  },
   // ── Tabs de período ──
   tabsContainer: {
     flexDirection: 'row',
