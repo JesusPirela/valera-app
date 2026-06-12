@@ -413,7 +413,7 @@ ${tendencia.length > 0 ? `
 export default function Reportes() {
   const col = useColors()
   const router = useRouter()
-  const [periodo, setPeriodo] = useState<Periodo>('7dias')
+  const [periodo, setPeriodo] = useState<Periodo>('24h')
   const [usuarios, setUsuarios]   = useState<UsuarioMetricas[]>([])
   const [tendencia, setTendencia] = useState<DiaActividad[]>([])
   const [loading, setLoading]     = useState(true)

@@ -87,7 +87,7 @@ export default function ConexionUsuarios() {
   useSupervisorBlock()
   const c = useColors()
   const [usuarios, setUsuarios]   = useState<UserConexion[]>([])
-  const [periodo, setPeriodo]     = useState<1 | 7 | 30>(7)
+  const [periodo, setPeriodo]     = useState<1 | 7 | 30>(1)
   const [loading, setLoading]     = useState(true)
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
   const { width }                 = useWindowDimensions()
@@ -95,8 +95,8 @@ export default function ConexionUsuarios() {
   const yaCargoRef                = useRef(false)
 
   useFocusEffect(useCallback(() => {
-    setPeriodo(7)
-    cargar(7, yaCargoRef.current)  // al volver, refresca sin spinner completo
+    setPeriodo(1)
+    cargar(1, yaCargoRef.current)  // al volver, refresca sin spinner completo
   }, []))
 
   async function cargar(dias: 1 | 7 | 30, silencioso = false) {

@@ -216,7 +216,7 @@ export default function Estadisticas() {
   const [propDist, setPropDist] = useState<{ tipo: string | null; operacion: string | null; estado: string | null }[]>([])
   const [clienteDist, setClienteDist] = useState<{ estado: string }[]>([])
   const [loading, setLoading] = useState(true)
-  const [periodo, setPeriodo] = useState<Periodo>('semana')
+  const [periodo, setPeriodo] = useState<Periodo>('dia')
   const yaCargoRef = useRef(false)
 
   async function cargar(p: Periodo = periodo) {
