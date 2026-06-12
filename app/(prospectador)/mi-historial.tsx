@@ -12,6 +12,7 @@ type Historial = {
   valera_coins: number
   streak_dias: number
   total_propiedades: number
+  total_publicaciones: number
   total_clientes: number
   total_cursos: number
   total_seguimientos: number
@@ -74,13 +75,15 @@ export default function MiHistorial() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 
-    const [perfil, stats, sesiones, txs, propiedades, clientes, seguimientos, interacciones, cursos] = await Promise.all([
+    const [perfil, stats, sesiones, txs, propiedades, publicaciones, clientes, seguimientos, interacciones, cursos] = await Promise.all([
       supabase.from('profiles').select('nombre, created_at').eq('id', user.id).maybeSingle(),
       supabase.from('user_stats').select('xp, valera_coins, streak_dias, total_ventas').eq('id', user.id).maybeSingle(),
       supabase.from('user_sessions').select('inicio, fin').eq('user_id', user.id),
       supabase.from('coin_transactions').select('cantidad').eq('user_id', user.id),
-      // Conteos reales desde tablas fuente (más confiables que user_stats counters)
+      // Propiedades únicas publicadas (UNIQUE constraint = una fila por propiedad)
       supabase.from('propiedad_publicacion').select('propiedad_id', { count: 'exact', head: true }).eq('user_id', user.id),
+      // Publicaciones totales (una fila por evento, incluyendo re-publicaciones)
+      supabase.from('publicacion_log').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
       supabase.from('clientes').select('id', { count: 'exact', head: true }).eq('responsable_id', user.id),
       supabase.from('recordatorios').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('completado', true),
       supabase.from('interacciones').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
@@ -106,6 +109,7 @@ export default function MiHistorial() {
       valera_coins:        stats.data?.valera_coins ?? 0,
       streak_dias:         stats.data?.streak_dias ?? 0,
       total_propiedades:   propiedades.count  ?? 0,
+      total_publicaciones: publicaciones.count ?? 0,
       total_clientes:      clientes.count     ?? 0,
       total_cursos:        cursos.count       ?? 0,
       total_seguimientos:  seguimientos.count ?? 0,
@@ -153,7 +157,12 @@ export default function MiHistorial() {
 
       {/* Producción */}
       <SeccionCard titulo="📦 Producción total">
-        <StatRow icono="🏠" label="Propiedades publicadas"  valor={data.total_propiedades.toLocaleString()} />
+        <StatRow icono="🏠" label="Propiedades publicadas"
+          valor={Math.min(data.total_propiedades, 10).toLocaleString()}
+          sub="Únicas, sin contar re-publicaciones (máx. 10)" />
+        <StatRow icono="📤" label="Publicaciones totales"
+          valor={data.total_publicaciones.toLocaleString()}
+          sub="Incluyendo re-publicaciones" />
         <StatRow icono="👤" label="Clientes agregados"      valor={data.total_clientes.toLocaleString()} />
         <StatRow icono="🤝" label="Ventas cerradas"         valor={data.total_ventas.toLocaleString()} />
         <StatRow icono="✅" label="Seguimientos completados" valor={data.total_seguimientos.toLocaleString()} />

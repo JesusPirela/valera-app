@@ -62,7 +62,9 @@ function getRango(p: Periodo): { inicio: Date; fin: Date } {
     case '24h': {
       const i = new Date(now)
       i.setHours(0, 0, 0, 0)
-      return { inicio: i, fin: now }
+      const f = new Date(now)
+      f.setHours(23, 59, 59, 999)
+      return { inicio: i, fin: f }
     }
     case '7dias': {
       const i = new Date(now)

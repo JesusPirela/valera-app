@@ -10,6 +10,7 @@ import { supabase } from '../../lib/supabase'
 type ActividadPeriodo = {
   clientes_nuevos:        number
   propiedades_publicadas: number
+  publicaciones_totales:  number
   seguimientos:           number
   interacciones:          number
   cursos_completados:     number
@@ -196,7 +197,8 @@ export default function MiActividad() {
       <View style={s.sectionCard}>
         <Text style={s.sectionTitle}>📊 Actividad de {periodoLabel}</Text>
         <View style={s.statsGrid}>
-          <StatBox icon="🏠" label="Publicadas"      val={actividad?.propiedades_publicadas ?? 0} />
+          <StatBox icon="🏠" label="Prop. únicas"    val={actividad?.propiedades_publicadas ?? 0} sub="Sin re-pub." />
+          <StatBox icon="📤" label="Publicaciones"   val={actividad?.publicaciones_totales ?? 0}  sub="Incl. re-pub." />
           <StatBox icon="👤" label="Clientes nuevos" val={actividad?.clientes_nuevos ?? 0} />
           <StatBox icon="💬" label="Interacciones"   val={actividad?.interacciones ?? 0} />
           <StatBox icon="✅" label="Seguimientos"    val={actividad?.seguimientos ?? 0} />
@@ -249,12 +251,13 @@ export default function MiActividad() {
   )
 }
 
-function StatBox({ icon, label, val, isText }: { icon: string; label: string; val: number | string; isText?: boolean }) {
+function StatBox({ icon, label, val, isText, sub }: { icon: string; label: string; val: number | string; isText?: boolean; sub?: string }) {
   return (
     <View style={s.statBox}>
       <Text style={s.statIcon}>{icon}</Text>
       <Text style={s.statVal}>{val}</Text>
       <Text style={s.statLabel}>{label}</Text>
+      {sub ? <Text style={s.statSub}>{sub}</Text> : null}
     </View>
   )
 }
@@ -282,6 +285,7 @@ const s = StyleSheet.create({
   statIcon:  { fontSize: 22, marginBottom: 4 },
   statVal:   { fontSize: 20, fontWeight: '800', color: GOLD },
   statLabel: { fontSize: 10, color: '#7a9ab5', textAlign: 'center', marginTop: 2 },
+  statSub:   { fontSize: 9, color: '#556a7a', textAlign: 'center', marginTop: 1 },
 
   periodoRow:           { flexDirection: 'row', gap: 6 },
   periodoPill:          { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: MID },
