@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import {
   View, Text, ScrollView, Image, TouchableOpacity,
-  ActivityIndicator, Linking, Platform, StyleSheet,
-  useWindowDimensions, Share, NativeSyntheticEvent, NativeScrollEvent,
+  ActivityIndicator, StyleSheet, Platform,
+  useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native'
 import { useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -26,7 +26,6 @@ type Propiedad = {
 }
 
 const TEAL = '#1a6470'
-const GOLD = '#c9a84c'
 
 function formatPrecio(precio: number | null) {
   if (!precio) return 'Consultar precio'
@@ -39,7 +38,7 @@ function capitalize(s: string | null) {
 }
 
 export default function FichaPublica() {
-  const { codigo, t } = useLocalSearchParams<{ codigo: string; t?: string }>()
+  const { codigo } = useLocalSearchParams<{ codigo: string }>()
   const [propiedad, setPropiedad] = useState<Propiedad | null>(null)
   const [loading, setLoading]   = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -69,37 +68,6 @@ export default function FichaPublica() {
   function onScrollImg(e: NativeSyntheticEvent<NativeScrollEvent>) {
     const idx = Math.round(e.nativeEvent.contentOffset.x / imgW)
     setImgIdx(idx)
-  }
-
-  function contactarWhatsApp() {
-    const phone = t ?? ''
-    const msg = encodeURIComponent(
-      `Hola, me interesa esta propiedad:\n\n🏠 ${propiedad?.codigo} – ${propiedad?.titulo}\n📍 ${propiedad?.direccion}\n💰 ${formatPrecio(propiedad?.precio ?? null)}`
-    )
-    const url = phone ? `https://wa.me/${phone}?text=${msg}` : `https://wa.me/?text=${msg}`
-    Linking.openURL(url)
-  }
-
-  function compartirLink() {
-    const base = Platform.OS === 'web' && typeof window !== 'undefined'
-      ? window.location.href
-      : `https://app.valerarealestate.com/ficha/${codigo}`
-    if (Platform.OS === 'web' && navigator.clipboard) {
-      navigator.clipboard.writeText(base)
-      if (typeof window !== 'undefined') {
-        const el = document.createElement('div')
-        el.textContent = '✓ Enlace copiado'
-        Object.assign(el.style, {
-          position: 'fixed', bottom: '32px', left: '50%', transform: 'translateX(-50%)',
-          background: TEAL, color: '#fff', padding: '10px 20px', borderRadius: '20px',
-          fontSize: '14px', zIndex: '9999', fontFamily: 'sans-serif', fontWeight: '600',
-        })
-        document.body.appendChild(el)
-        setTimeout(() => el.remove(), 2000)
-      }
-    } else {
-      Share.share({ message: base, url: base })
-    }
   }
 
   if (loading) return (
@@ -132,7 +100,7 @@ export default function FichaPublica() {
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
 
         {/* Carrusel de imágenes */}
         {imagenes.length > 0 ? (
@@ -219,20 +187,8 @@ export default function FichaPublica() {
             </View>
           ) : null}
 
-          {/* Botón compartir */}
-          <TouchableOpacity style={s.shareBtn} onPress={compartirLink}>
-            <Text style={s.shareBtnTxt}>🔗 Copiar enlace</Text>
-          </TouchableOpacity>
-
         </View>
       </ScrollView>
-
-      {/* Botón flotante WhatsApp */}
-      <View style={s.fabWrap}>
-        <TouchableOpacity style={s.fab} onPress={contactarWhatsApp} activeOpacity={0.85}>
-          <Text style={s.fabTxt}>💬 Contactar asesor</Text>
-        </TouchableOpacity>
-      </View>
 
       {/* Footer */}
       <View style={s.footer}>
@@ -288,22 +244,6 @@ const s = StyleSheet.create({
   descBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
   descTitle: { fontSize: 13, fontWeight: '800', color: '#1e293b', marginBottom: 8 },
   descTxt: { fontSize: 14, color: '#475569', lineHeight: 22 },
-
-  shareBtn: {
-    borderWidth: 1, borderColor: TEAL, borderRadius: 12,
-    paddingVertical: 12, alignItems: 'center', marginBottom: 8,
-  },
-  shareBtnTxt: { color: TEAL, fontSize: 14, fontWeight: '700' },
-
-  fabWrap: {
-    position: 'absolute', bottom: 36, left: 20, right: 20,
-  },
-  fab: {
-    backgroundColor: '#25D366', borderRadius: 14, paddingVertical: 16,
-    alignItems: 'center',
-    ...Platform.select({ web: { boxShadow: '0 4px 16px rgba(37,211,102,0.4)' } as any }),
-  },
-  fabTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
 
   footer: { backgroundColor: TEAL, paddingVertical: 12, alignItems: 'center' },
   footerTxt: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
