@@ -96,13 +96,13 @@ function BarChart({ data, label }: { data: ConexionDia[]; label: string }) {
 
 export default function MiActividad() {
   const [userId, setUserId]           = useState<string | null>(null)
-  const [periodo, setPeriodo]         = useState<'hoy' | 'semana' | 'mes'>('hoy')
+  const [periodo, setPeriodo]         = useState<'hoy' | 'semana' | 'mes'>('semana')
   const [actividad, setActividad]     = useState<ActividadPeriodo | null>(null)
   const [conexionData, setConexionData] = useState<ConexionDia[]>([])
   const [loading, setLoading]         = useState(true)
   const [cargandoPeriodo, setCargandoPeriodo] = useState(false)
 
-  useFocusEffect(useCallback(() => { cargar('hoy') }, []))
+  useFocusEffect(useCallback(() => { cargar('semana') }, []))
 
   async function cargar(p: 'hoy' | 'semana' | 'mes') {
     setLoading(true)
