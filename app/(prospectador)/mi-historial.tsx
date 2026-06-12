@@ -158,11 +158,9 @@ export default function MiHistorial() {
       {/* Producción */}
       <SeccionCard titulo="📦 Producción total">
         <StatRow icono="🏠" label="Propiedades publicadas"
-          valor={Math.min(data.total_propiedades, 10).toLocaleString()}
-          sub="Únicas, sin contar re-publicaciones (máx. 10)" />
+          valor={Math.min(data.total_propiedades, 10).toLocaleString()} />
         <StatRow icono="📤" label="Publicaciones totales"
-          valor={data.total_publicaciones.toLocaleString()}
-          sub="Incluyendo re-publicaciones" />
+          valor={data.total_publicaciones.toLocaleString()} />
         <StatRow icono="👤" label="Clientes agregados"      valor={data.total_clientes.toLocaleString()} />
         <StatRow icono="🤝" label="Ventas cerradas"         valor={data.total_ventas.toLocaleString()} />
         <StatRow icono="✅" label="Seguimientos completados" valor={data.total_seguimientos.toLocaleString()} />
