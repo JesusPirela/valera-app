@@ -237,6 +237,7 @@ export default function DetallePropiedad() {
   const [fechaPublicacion, setFechaPublicacion] = useState<string | null>(null)
   const [togglingPublicacion, setTogglingPublicacion] = useState(false)
   const [vecesPublicada, setVecesPublicada] = useState(0)
+  const [deshaciendoPub, setDeshaciendoPub] = useState(false)
 
   // Paso 2: selección de fecha/hora de la cita
   const [clienteParaCita, setClienteParaCita] = useState<ClienteCRM | null>(null)
@@ -353,6 +354,41 @@ export default function DetallePropiedad() {
     }
 
     setTogglingPublicacion(false)
+  }
+
+  async function deshacerPublicacion() {
+    if (vecesPublicada <= 0 || deshaciendoPub) return
+
+    const msg = `Esto deshará tu ÚLTIMA publicación y el contador quedará en ${vecesPublicada - 1}/10.\n\nÚsalo SOLO si le diste click a "Publicar" por error. También se restarán los puntos ganados por esa publicación (-10 XP, -2 coins).`
+    const confirmado = Platform.OS === 'web'
+      ? window.confirm(`¿Deshacer última publicación?\n\n${msg}`)
+      : await new Promise<boolean>((res) => {
+          Alert.alert('¿Deshacer última publicación?', msg, [
+            { text: 'Cancelar', style: 'cancel', onPress: () => res(false) },
+            { text: 'Sí, fue un error', style: 'destructive', onPress: () => res(true) },
+          ])
+        })
+    if (!confirmado) return
+
+    setDeshaciendoPub(true)
+    const { data, error } = await supabase.rpc('despublicar_propiedad', { p_propiedad_id: id })
+    const resp = data as { ok: boolean; veces_publicada?: number; fecha_publicacion?: string | null } | null
+
+    if (!error && resp?.ok) {
+      const nuevas = resp.veces_publicada ?? 0
+      setVecesPublicada(nuevas)
+      setPublicada(nuevas > 0)
+      setFechaPublicacion(resp.fecha_publicacion ?? null)
+      queryClient.setQueryData<any>(['prospectador-propiedades'], (old: any) => {
+        if (!old) return old
+        return { ...old, publicacionesMap: { ...old.publicacionesMap, [id]: nuevas } }
+      })
+    } else {
+      const errMsg = 'No se pudo deshacer la publicación. Intenta de nuevo.'
+      if (Platform.OS === 'web') window.alert(errMsg)
+      else Alert.alert('Error', errMsg)
+    }
+    setDeshaciendoPub(false)
   }
 
   async function guardarNota() {
@@ -1321,6 +1357,23 @@ export default function DetallePropiedad() {
               }
             </TouchableOpacity>
           </View>
+
+          {/* Deshacer publicación (solo para clicks por error) */}
+          {vecesPublicada > 0 && (
+            <View style={styles.deshacerRow}>
+              <Text style={styles.deshacerHint}>¿Le diste click a "Publicar" por error?</Text>
+              <TouchableOpacity
+                style={[styles.deshacerBtn, deshaciendoPub && styles.btnDisabled]}
+                onPress={deshacerPublicacion}
+                disabled={deshaciendoPub}
+              >
+                {deshaciendoPub
+                  ? <ActivityIndicator color="#c0392b" size="small" />
+                  : <Text style={styles.deshacerBtnText}>↩️ Deshacer última publicación</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Botón descargar imágenes */}
@@ -2143,6 +2196,16 @@ const styles = StyleSheet.create({
   pubBtn: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   pubBtnPendiente: { backgroundColor: '#1a6470' },
   pubBtnActiva: { backgroundColor: '#888' },
+  deshacerRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f0e8e8', gap: 10,
+  },
+  deshacerHint: { flex: 1, fontSize: 12, color: '#999', fontStyle: 'italic' },
+  deshacerBtn: {
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1, borderColor: '#e4bcbc', backgroundColor: '#fdf6f6',
+  },
+  deshacerBtnText: { fontSize: 12, fontWeight: '600', color: '#c0392b' },
   pubBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   constructoraBadge: {
