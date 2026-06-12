@@ -36,6 +36,7 @@ type Propiedad = {
   banos: number | null
   medios_banos: number | null
   m2: number | null
+  m2_terreno: number | null
   estacionamientos: number | null
   inmobiliaria_id: string | null
   inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
@@ -89,7 +90,7 @@ export default function AdminPropiedades() {
     setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, estacionamientos, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
       .order('created_at', { ascending: false })
     if (error) Alert.alert('Error', 'No se pudieron cargar las propiedades.')
     else {
@@ -338,7 +339,7 @@ export default function AdminPropiedades() {
           <View style={styles.webGrid}>
             {propiedadesFiltradas.map((item) => {
               const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-              const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.estacionamientos != null
+              const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.m2_terreno != null || item.estacionamientos != null
               const CardWrapper: any = esSupervisor ? TouchableOpacity : View
               return (
                 <CardWrapper
@@ -405,7 +406,8 @@ export default function AdminPropiedades() {
                       {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
                       {item.banos != null && <Text style={styles.metaItem}>🚿 {item.banos}</Text>}
                       {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>🚿 ½ {item.medios_banos}</Text>}
-                      {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m²</Text>}
+                      {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m² const.</Text>}
+                      {item.m2_terreno != null && <Text style={styles.metaItem}>🌳 {item.m2_terreno}m² terr.</Text>}
                       {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
                     </View>
                   )}
@@ -446,7 +448,7 @@ export default function AdminPropiedades() {
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => {
             const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-            const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.estacionamientos != null
+            const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.m2_terreno != null || item.estacionamientos != null
             const CardWrapper: any = esSupervisor ? TouchableOpacity : View
             return (
               <CardWrapper
@@ -500,7 +502,8 @@ export default function AdminPropiedades() {
                       {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
                       {item.banos != null && <Text style={styles.metaItem}>🚿 {item.banos}</Text>}
                       {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>🚿 ½ {item.medios_banos}</Text>}
-                      {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m²</Text>}
+                      {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m² const.</Text>}
+                      {item.m2_terreno != null && <Text style={styles.metaItem}>🌳 {item.m2_terreno}m² terr.</Text>}
                       {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
                     </View>
                   )}

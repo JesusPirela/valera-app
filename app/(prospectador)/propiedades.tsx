@@ -49,6 +49,7 @@ type Propiedad = {
   banos: number | null
   medios_banos: number | null
   m2: number | null
+  m2_terreno: number | null
   estacionamientos: number | null
   descripcion: string | null
   created_at: string
@@ -143,7 +144,7 @@ export default function ProspectadorPropiedades() {
         supabase.from('profiles').select('role, nombre').eq('id', userId).single(),
         supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .order('created_at', { ascending: false })
           .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
@@ -457,7 +458,8 @@ export default function ProspectadorPropiedades() {
               {item.recamaras != null && <Text style={styles.metaItem}>Rec {item.recamaras}</Text>}
               {item.banos != null && <Text style={styles.metaItem}>Ba {item.banos}</Text>}
               {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>{item.medios_banos} 1/2 Ba</Text>}
-              {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m²</Text>}
+              {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m² const.</Text>}
+              {item.m2_terreno != null && <Text style={styles.metaItem}>{item.m2_terreno}m² terr.</Text>}
               {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
             </View>
           )}

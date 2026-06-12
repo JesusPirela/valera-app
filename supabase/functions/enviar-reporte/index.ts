@@ -340,8 +340,9 @@ async function procesarProgramados(supabase: any) {
     const minutosActual = parseInt(haStr) * 60 + parseInt(maStr)
     const minutosProg = h * 60 + m
 
-    // Solo enviar si estamos dentro de ±30 min de la hora programada
-    if (Math.abs(minutosActual - minutosProg) > 30) continue
+    // Solo enviar si estamos dentro de ±14 min de la hora programada
+    // (cron corre cada 30 min → ventana de 14 min evita envíos duplicados o adelantados)
+    if (Math.abs(minutosActual - minutosProg) > 14) continue
 
     // No reenviar si ya se envió recientemente según la frecuencia
     if (prog.ultimo_envio) {
