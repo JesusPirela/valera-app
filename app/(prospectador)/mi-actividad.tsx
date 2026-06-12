@@ -99,7 +99,6 @@ export default function MiActividad() {
   const [periodo, setPeriodo]         = useState<'hoy' | 'semana' | 'mes'>('semana')
   const [actividad, setActividad]     = useState<ActividadPeriodo | null>(null)
   const [conexionData, setConexionData] = useState<ConexionDia[]>([])
-  const [totalPropiedades, setTotalPropiedades] = useState<number>(0)
   const [loading, setLoading]         = useState(true)
   const [cargandoPeriodo, setCargandoPeriodo] = useState(false)
   const yaCargoRef = useRef(false)
@@ -116,18 +115,9 @@ export default function MiActividad() {
     await Promise.all([
       cargarActividad(user.id, p),
       cargarConexion(user.id, p),
-      cargarTotalPropiedades(user.id),
     ])
     yaCargoRef.current = true
     setLoading(false)
-  }
-
-  async function cargarTotalPropiedades(uid: string) {
-    const { count } = await supabase
-      .from('propiedad_publicacion')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', uid)
-    setTotalPropiedades(count ?? 0)
   }
 
   async function cargarActividad(uid: string, p: 'hoy' | 'semana' | 'mes') {
@@ -210,7 +200,7 @@ export default function MiActividad() {
       <View style={s.sectionCard}>
         <Text style={s.sectionTitle}>📊 Actividad de {periodoLabel}</Text>
         <View style={s.statsGrid}>
-          <StatBox icon="🏠" label="Propiedades"  val={totalPropiedades} />
+          <StatBox icon="🏠" label="Propiedades"  val={actividad?.propiedades_publicadas ?? 0} />
           <StatBox icon="📤" label="Publicaciones" val={actividad?.publicaciones_totales ?? 0} />
           <StatBox icon="👤" label="Clientes nuevos" val={actividad?.clientes_nuevos ?? 0} />
           <StatBox icon="💬" label="Interacciones"   val={actividad?.interacciones ?? 0} />
