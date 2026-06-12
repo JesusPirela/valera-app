@@ -359,9 +359,15 @@ export default function NuevaPropiedad() {
         if (el) {
           el.draggable = true
           el.setAttribute('data-idx', String(index))
+          // Evitar que el <img> interno intercepte el drag (especialmente para URLs externas)
+          el.querySelectorAll('img').forEach(img => {
+            img.draggable = false
+            img.style.pointerEvents = 'none'
+            img.style.userSelect = 'none'
+          })
         }
       })
-    }, 100)
+    }, 300)
     return () => clearTimeout(id)
   }, [imagenes])
 
