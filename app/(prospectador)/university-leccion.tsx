@@ -187,10 +187,12 @@ function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void })
 
   if (!embed) return null
 
+  // baseUrl debe ser un dominio propio: si se usa youtube.com, YouTube rechaza
+  // el embed con "Video no disponible" (error 152/153 por referer invalido)
   const fuente = isYoutubeUrl(url)
     ? {
         html: `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>*{margin:0;padding:0}html,body{height:100%;background:#000}iframe{width:100%;height:100%;border:0}</style></head><body><iframe src="${embed}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></body></html>`,
-        baseUrl: 'https://www.youtube.com',
+        baseUrl: 'https://valerarealestate.com',
       }
     : { uri: embed }
 
