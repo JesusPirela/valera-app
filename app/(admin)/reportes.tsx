@@ -437,6 +437,9 @@ export default function Reportes() {
 
   const yaCargoRef = useRef(false)
 
+  // Al entrar a la pantalla siempre se muestra "Hoy"
+  useFocusEffect(useCallback(() => { setPeriodo('24h') }, []))
+
   useFocusEffect(useCallback(() => {
     cargar()
     cargarProgramados()
