@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView,
   ActivityIndicator, TouchableOpacity, useWindowDimensions,
@@ -92,14 +92,15 @@ export default function ConexionUsuarios() {
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
   const { width }                 = useWindowDimensions()
   const chartW                    = Math.min(width - 80, 480)
+  const yaCargoRef                = useRef(false)
 
   useFocusEffect(useCallback(() => {
     setPeriodo(7)
-    cargar(7)
+    cargar(7, yaCargoRef.current)  // al volver, refresca sin spinner completo
   }, []))
 
-  async function cargar(dias: 1 | 7 | 30) {
-    setLoading(true)
+  async function cargar(dias: 1 | 7 | 30, silencioso = false) {
+    if (!silencioso) setLoading(true)
     setErrorMsg(null)
     const { data, error } = await supabase.rpc('get_conexion_todos_usuarios', { p_dias: dias })
 
@@ -126,6 +127,7 @@ export default function ConexionUsuarios() {
       const tb = b.dias.reduce((s, d) => s + d.minutos, 0)
       return tb - ta
     }))
+    yaCargoRef.current = true
     setLoading(false)
   }
 

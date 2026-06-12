@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView,
   ActivityIndicator, TouchableOpacity, useWindowDimensions,
@@ -102,11 +102,13 @@ export default function MiActividad() {
   const [totalPropiedades, setTotalPropiedades] = useState<number>(0)
   const [loading, setLoading]         = useState(true)
   const [cargandoPeriodo, setCargandoPeriodo] = useState(false)
+  const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { cargar('semana') }, []))
 
   async function cargar(p: 'hoy' | 'semana' | 'mes') {
-    setLoading(true)
+    // Solo spinner completo la primera vez; al volver, refresca en segundo plano
+    if (!yaCargoRef.current) setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
     setUserId(user.id)
@@ -116,6 +118,7 @@ export default function MiActividad() {
       cargarConexion(user.id, p),
       cargarTotalPropiedades(user.id),
     ])
+    yaCargoRef.current = true
     setLoading(false)
   }
 

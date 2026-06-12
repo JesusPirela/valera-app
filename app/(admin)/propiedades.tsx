@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -69,6 +69,7 @@ export default function AdminPropiedades() {
   const [propiedades, setPropiedades] = useState<Propiedad[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [loading, setLoading] = useState(true)
+  const yaCargoRef = useRef(false)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
 
   const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
@@ -87,11 +88,14 @@ export default function AdminPropiedades() {
   const esSupervisor = role === 'supervisor'
 
   async function cargarPropiedades() {
-    setLoading(true)
+    // Spinner completo solo en la primera carga; al volver refresca en silencio
+    if (yaCargoRef.current === false) setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
       .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
       .order('created_at', { ascending: false })
+      .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
+      .limit(1, { referencedTable: 'propiedad_imagenes' })
     if (error) Alert.alert('Error', 'No se pudieron cargar las propiedades.')
     else {
       const normalizadas = (data ?? []).map((p: any) => ({
@@ -99,6 +103,7 @@ export default function AdminPropiedades() {
         inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
       }))
       setPropiedades(normalizadas)
+      yaCargoRef.current = true
     }
     setLoading(false)
   }

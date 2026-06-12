@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native'
@@ -67,18 +67,20 @@ function diasDesde(iso: string) {
 export default function MiHistorial() {
   const [data, setData]     = useState<Historial | null>(null)
   const [loading, setLoading] = useState(true)
+  const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 
-    const [perfil, stats, sesiones, txs, propiedades, publicaciones, clientes, seguimientos, interacciones, cursos] = await Promise.all([
+    const [perfil, stats, minConexion, txs, propiedades, publicaciones, clientes, seguimientos, interacciones, cursos] = await Promise.all([
       supabase.from('profiles').select('nombre, created_at').eq('id', user.id).maybeSingle(),
       supabase.from('user_stats').select('xp, valera_coins, streak_dias, total_ventas').eq('id', user.id).maybeSingle(),
-      supabase.from('user_sessions').select('inicio, fin').eq('user_id', user.id),
+      // Total de minutos conectado con intervalos fusionados (mismo cálculo que el resto de la app)
+      supabase.rpc('get_total_minutos_conexion'),
       supabase.from('coin_transactions').select('cantidad').eq('user_id', user.id),
       // Propiedades únicas publicadas (UNIQUE constraint = una fila por propiedad)
       supabase.from('propiedad_publicacion').select('propiedad_id', { count: 'exact', head: true }).eq('user_id', user.id),
@@ -89,16 +91,6 @@ export default function MiHistorial() {
       supabase.from('interacciones').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
       supabase.from('vu_certificados').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     ])
-
-    // Calcular horas con los mismos topes que el SQL: null fin → 30 min, máx 4h por sesión
-    const MAX_SESION_MIN = 240
-    const NULL_FIN_MIN   = 30
-    const horasMin = (sesiones.data ?? []).reduce((acc: number, s: any) => {
-      const inicioMs = new Date(s.inicio).getTime()
-      const finMs    = s.fin ? new Date(s.fin).getTime() : inicioMs + NULL_FIN_MIN * 60000
-      const raw      = (finMs - inicioMs) / 60000
-      return acc + Math.min(Math.max(0, raw), MAX_SESION_MIN)
-    }, 0)
 
     const coinsG = (txs.data ?? []).filter((t: any) => t.cantidad > 0).reduce((a: number, t: any) => a + t.cantidad, 0)
     const coinsE = (txs.data ?? []).filter((t: any) => t.cantidad < 0).reduce((a: number, t: any) => a + Math.abs(t.cantidad), 0)
@@ -116,10 +108,11 @@ export default function MiHistorial() {
       total_ventas:        stats.data?.total_ventas ?? 0,
       total_interacciones: interacciones.count ?? 0,
       created_at:          perfil.data?.created_at ?? new Date().toISOString(),
-      horas_conectado:     Math.round(horasMin),
+      horas_conectado:     (minConexion.data as number | null) ?? 0,
       coins_ganados:       coinsG,
       coins_gastados:      coinsE,
     })
+    yaCargoRef.current = true
     setLoading(false)
   }
 

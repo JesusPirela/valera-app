@@ -1,4 +1,4 @@
-import { useState, useCallback, createElement } from 'react'
+import { useState, useCallback, useRef, createElement } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Platform, Alert,
@@ -435,13 +435,15 @@ export default function Reportes() {
   const [schedEmails, setSchedEmails]   = useState('valerarealestateqro@gmail.com')
   const [schedPeriodo, setSchedPeriodo] = useState<Periodo>('7dias')
 
+  const yaCargoRef = useRef(false)
+
   useFocusEffect(useCallback(() => {
     cargar()
     cargarProgramados()
   }, [periodo]))
 
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
     const { inicio, fin } = getRango(periodo)
     const [uRes, tRes] = await Promise.all([
       supabase.rpc('get_productividad_equipo', { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
@@ -449,6 +451,7 @@ export default function Reportes() {
     ])
     setUsuarios((uRes.data as UsuarioMetricas[] | null) ?? [])
     setTendencia((tRes.data as DiaActividad[] | null) ?? [])
+    yaCargoRef.current = true
     setLoading(false)
   }
 

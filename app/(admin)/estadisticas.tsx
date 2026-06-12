@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -217,9 +217,10 @@ export default function Estadisticas() {
   const [clienteDist, setClienteDist] = useState<{ estado: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [periodo, setPeriodo] = useState<Periodo>('semana')
+  const yaCargoRef = useRef(false)
 
   async function cargar(p: Periodo = periodo) {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
     const desde = fechaDesde(p)
     const [rpcRes, propRes, crmRes] = await Promise.all([
       supabase.rpc('get_estadisticas_admin', desde ? { p_desde: desde } : {}),
@@ -229,6 +230,7 @@ export default function Estadisticas() {
     if (!rpcRes.error && rpcRes.data) setStats(rpcRes.data as Estadisticas)
     setPropDist(propRes.data ?? [])
     setClienteDist(crmRes.data ?? [])
+    yaCargoRef.current = true
     setLoading(false)
   }
 
@@ -247,7 +249,7 @@ export default function Estadisticas() {
     return (
       <View style={[styles.centered, { backgroundColor: c.bg }]}>
         <Text style={[styles.errorText, { color: c.textMute }]}>No se pudieron cargar las estadísticas.</Text>
-        <TouchableOpacity onPress={cargar} style={styles.reintentarBtn}>
+        <TouchableOpacity onPress={() => cargar()} style={styles.reintentarBtn}>
           <Text style={styles.reintentarText}>Reintentar</Text>
         </TouchableOpacity>
       </View>
