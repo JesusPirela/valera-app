@@ -491,6 +491,7 @@ export default function ProspectadorPropiedades() {
   const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
   const { width: screenWidth, height: windowHeight } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
+  const FiltrosPanelWrapper: any = isWeb ? View : ScrollView
   const numCols = isWeb ? 4 : 1
   const CARD_GAP = 16
   const contentWidth = screenWidth - 64
@@ -586,7 +587,10 @@ export default function ProspectadorPropiedades() {
         </View>
 
         {mostrarFiltros && (
-          <ScrollView style={[styles.filtrosPanel, { maxHeight: windowHeight * 0.55 }]} nestedScrollEnabled showsVerticalScrollIndicator={true}>
+          <FiltrosPanelWrapper
+            style={isWeb ? styles.filtrosPanel : [styles.filtrosPanel, { maxHeight: windowHeight * 0.55 }]}
+            {...(isWeb ? {} : { nestedScrollEnabled: true, showsVerticalScrollIndicator: true })}
+          >
             <Text style={styles.filtroLabel}>Tipo</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
               <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)} color={primaryColor} />
@@ -690,7 +694,7 @@ export default function ProspectadorPropiedades() {
                 <Text style={styles.aplicarBtnText}>Aplicar filtros</Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
+          </FiltrosPanelWrapper>
         )}
 
         {isLoading ? (
