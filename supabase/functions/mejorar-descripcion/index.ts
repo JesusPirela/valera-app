@@ -7,11 +7,13 @@ const CORS = {
 }
 
 // Cadena de respaldo: cada modelo de Groq tiene su PROPIA cuota diaria gratis.
-// Si uno se queda sin tokens (429), se intenta el siguiente automaticamente.
+// Si uno se queda sin tokens (429) o no existe (404), se intenta el siguiente.
 // llama-3.1-8b-instant tiene ~5x mas cuota diaria que el 70b.
 const MODELOS_GROQ = [
   'llama-3.3-70b-versatile',
+  'meta-llama/llama-4-scout-17b-16e-instruct',
   'llama-3.1-8b-instant',
+  'qwen/qwen3-32b',
 ]
 
 async function llamarGroq(apiKey: string, model: string, prompt: string): Promise<{ ok: boolean; texto?: string; status?: number; err?: string }> {
@@ -32,7 +34,9 @@ async function llamarGroq(apiKey: string, model: string, prompt: string): Promis
   if (!response.ok) {
     return { ok: false, status: response.status, err: json?.error?.message ?? JSON.stringify(json) }
   }
-  const texto: string = json.choices?.[0]?.message?.content ?? ''
+  // Algunos modelos (qwen) incluyen su razonamiento en <think>...</think>: quitarlo
+  const crudo: string = json.choices?.[0]?.message?.content ?? ''
+  const texto = crudo.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
   if (!texto) return { ok: false, err: 'Respuesta vacia' }
   return { ok: true, texto }
 }
