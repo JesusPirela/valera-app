@@ -320,12 +320,23 @@ export default function EditarPropiedad() {
       }
 
       if (imagenesEliminar.length > 0) {
-        const { error } = await supabase.from('propiedad_imagenes').delete().in('id', imagenesEliminar)
+        const { data: borradas, error } = await supabase
+          .from('propiedad_imagenes')
+          .delete()
+          .in('id', imagenesEliminar)
+          .select('id')
         if (error) throw error
+        // RLS puede filtrar el DELETE sin dar error: verificar que sí borró
+        if ((borradas?.length ?? 0) < imagenesEliminar.length) {
+          throw new Error('No se pudieron eliminar las imágenes. Verifica los permisos (RLS DELETE en propiedad_imagenes).')
+        }
       }
 
       if (imagenesNuevas.length > 0) {
-        const ordenBase = imagenesExistentes.length
+        // Continuar después del orden más alto restante (evita colisiones si se borraron imágenes intermedias)
+        const ordenBase = imagenesExistentes.length > 0
+          ? Math.max(...imagenesExistentes.map((i) => i.orden)) + 1
+          : 0
         const registros = await Promise.all(
           imagenesNuevas.map(async (uri, index) => {
             const url = await subirImagen(uri, id, ordenBase + index)
