@@ -52,39 +52,6 @@ function isYoutubeUrl(url: string | null): boolean {
   return /youtu\.be\/|youtube\.com/.test(url)
 }
 
-// JS inyectado en WebView nativo — usa onStateChange + reloj de pared
-const YT_TRACK_JS = `
-(function() {
-  var playedSecs = 0, lastTs = null, duration = 0, done = false;
-  function notify() { if (!done) { done = true; window.ReactNativeWebView.postMessage('video_suficiente'); } }
-  function check() {
-    if (done || duration <= 0) return;
-    var total = lastTs ? playedSecs + (Date.now() - lastTs) / 1000 : playedSecs;
-    if (total >= duration * 0.75) notify();
-  }
-  setInterval(check, 3000);
-  window.addEventListener('message', function(e) {
-    try {
-      var d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-      if (!d) return;
-      if (d.event === 'onStateChange') {
-        if (d.info === 1) { if (!lastTs) lastTs = Date.now(); }
-        else { if (lastTs) { playedSecs += (Date.now() - lastTs) / 1000; lastTs = null; } if (d.info === 0) notify(); }
-        check();
-      }
-      if (d.event === 'infoDelivery' && d.info && d.info.duration > 0) { duration = d.info.duration; check(); }
-    } catch(_) {}
-  });
-  setTimeout(function() {
-    var iframes = document.querySelectorAll('iframe');
-    for (var i = 0; i < iframes.length; i++) {
-      try { iframes[i].contentWindow.postMessage('{"event":"listening","id":1}', '*'); } catch(_) {}
-    }
-  }, 2000);
-})();
-true;
-`
-
 function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void }) {
   const embed = getEmbedUrl(url)
   const [error, setError] = useState(false)
@@ -187,13 +154,40 @@ function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void })
 
   if (!embed) return null
 
-  // baseUrl debe ser un dominio propio: si se usa youtube.com, YouTube rechaza
-  // el embed con "Video no disponible" (error 152/153 por referer invalido)
-  const fuente = isYoutubeUrl(url)
-    ? {
-        html: `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"><style>*{margin:0;padding:0}html,body{height:100%;background:#000}iframe{width:100%;height:100%;border:0}</style></head><body><iframe src="${embed}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></body></html>`,
-        baseUrl: 'https://valerarealestate.com',
+  // YouTube endureció los embeds en WebView (error 152/153): un iframe crudo
+  // ya no es confiable. Se usa la API oficial de YouTube IFrame con origin y
+  // widget_referrer de un dominio propio, que es el método soportado.
+  const videoIdMatch = url.match(/(?:youtu\.be\/|v=|embed\/)([\w-]{11})/)
+  const videoId = videoIdMatch?.[1]
+
+  const htmlYoutube = videoId ? `<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<style>*{margin:0;padding:0}html,body{height:100%;background:#000}#p{width:100%;height:100%}</style>
+</head><body><div id="p"></div><script>
+var tag=document.createElement('script');tag.src='https://www.youtube.com/iframe_api';document.head.appendChild(tag);
+var done=false,played=0,last=null,dur=0,player;
+function notify(){if(!done){done=true;try{window.ReactNativeWebView.postMessage('video_suficiente')}catch(e){}}}
+function check(){var t=last?played+(Date.now()-last)/1000:played;if(dur>0&&t>=dur*0.8)notify()}
+setInterval(check,2000);
+function onYouTubeIframeAPIReady(){
+  player=new YT.Player('p',{
+    videoId:'${videoId}',
+    playerVars:{rel:0,playsinline:1,modestbranding:1,origin:'https://valerarealestate.com',widget_referrer:'https://valerarealestate.com'},
+    events:{
+      onReady:function(e){var d=e.target.getDuration();if(d>0)dur=d},
+      onStateChange:function(e){
+        if(!dur){try{var d=player.getDuration();if(d>0)dur=d}catch(_){}}
+        if(e.data===1){if(!last)last=Date.now()}
+        else{if(last){played+=(Date.now()-last)/1000;last=null}if(e.data===0)notify()}
+        check();
       }
+    }
+  });
+}
+</script></body></html>` : null
+
+  const fuente = isYoutubeUrl(url) && htmlYoutube
+    ? { html: htmlYoutube, baseUrl: 'https://valerarealestate.com' }
     : { uri: embed }
 
   return (
@@ -202,9 +196,10 @@ function VideoPlayer({ url, onEnd }: { url: string | null; onEnd?: () => void })
         source={fuente}
         style={{ flex: 1 }}
         allowsFullscreenVideo
+        allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
-        injectedJavaScript={isYoutubeUrl(url) ? YT_TRACK_JS : undefined}
+        domStorageEnabled
         onMessage={(e) => { if (e.nativeEvent.data === 'video_suficiente') onEnd?.() }}
         onError={() => setError(true)}
         onHttpError={(e) => { if (e.nativeEvent.statusCode >= 400) setError(true) }}
