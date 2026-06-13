@@ -15,7 +15,10 @@ import {
   Platform,
   useWindowDimensions,
   StatusBar,
+  Share,
+  ToastAndroid,
 } from 'react-native'
+import * as Clipboard from 'expo-clipboard'
 import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
@@ -268,17 +271,18 @@ export default function ProspectadorPropiedades() {
     setToggling(finalTogglingSet)
   }
 
-  function compartirLink(codigo: string) {
+  async function compartirLink(codigo: string) {
     const tel = queryData?.telefono ?? ''
     const base = Platform.OS === 'web' && typeof window !== 'undefined'
       ? window.location.origin
       : 'https://valerarealestate.com'
     const url = tel ? `${base}/ficha/${codigo}?t=${encodeURIComponent(tel)}` : `${base}/ficha/${codigo}`
+
     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(url)
       if (typeof document !== 'undefined') {
         const el = document.createElement('div')
-        el.textContent = '✓ Enlace copiado'
+        el.textContent = '✓ Ficha copiada — pégala en WhatsApp o donde quieras'
         Object.assign(el.style, {
           position: 'fixed', bottom: '32px', left: '50%', transform: 'translateX(-50%)',
           background: '#1a6470', color: '#fff', padding: '10px 20px', borderRadius: '20px',
@@ -286,11 +290,27 @@ export default function ProspectadorPropiedades() {
           pointerEvents: 'none',
         })
         document.body.appendChild(el)
-        setTimeout(() => el.remove(), 2000)
+        setTimeout(() => el.remove(), 2500)
       }
-    } else {
-      Alert.alert('Enlace', url, [{ text: 'Cerrar' }])
+      return
     }
+
+    // App (Android/iOS): copiar al portapapeles y ofrecer compartir directo
+    try { await Clipboard.setStringAsync(url) } catch { /* continuar aunque falle el copiado */ }
+
+    // Notificación visual de copiado (toast nativo en Android)
+    if (Platform.OS === 'android') {
+      ToastAndroid.show('✓ Link de la ficha copiado', ToastAndroid.LONG)
+    }
+
+    Alert.alert(
+      '✓ Ficha copiada',
+      'El link de la ficha ya está copiado.\n\nPégalo en WhatsApp o donde quieras compartirlo, o usa "Compartir ahora".',
+      [
+        { text: 'Compartir ahora', onPress: () => { Share.share({ message: url }).catch(() => {}) } },
+        { text: 'Listo', style: 'cancel' },
+      ],
+    )
   }
 
   function toggleZona(zona: string) {
@@ -497,7 +517,7 @@ export default function ProspectadorPropiedades() {
               onPress={(e) => { e.stopPropagation(); compartirLink(item.codigo) }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.shareBtnText}>🔗</Text>
+              <Text style={styles.shareBtnText}>🔗 Copiar ficha</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -1143,10 +1163,10 @@ const styles = StyleSheet.create({
   },
   precio: { fontSize: 16, fontWeight: '700' },
   shareBtn: {
-    width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 12, backgroundColor: 'rgba(26,100,112,0.12)',
   },
-  shareBtnText: { fontSize: 15 },
+  shareBtnText: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
   publicadaBtn: {
     borderWidth: 1.5,
     borderRadius: 20,
