@@ -105,6 +105,7 @@ serve(async (req) => {
       const nombre = body.nombre ?? null
       const perfil = body.perfil ?? {}
       const fecha = body.fecha ?? new Date().toISOString()
+      const prospectadorEmail = body.prospectador_email ?? null
 
       const { data: existente } = await supabaseAdmin
         .from('chatbot_leads')
@@ -112,21 +113,31 @@ serve(async (req) => {
         .eq('telefono', telefono)
         .maybeSingle()
 
+      // El prospectador_email del payload tiene prioridad sobre el dueño ya guardado
+      let prospectadorIdPorEmail: string | null = null
+      if (prospectadorEmail) {
+        const { data: id } = await supabaseAdmin.rpc('get_profile_id_by_email', { p_email: prospectadorEmail })
+        if (id) prospectadorIdPorEmail = id
+      }
+
+      const prospectadorId: string | null = prospectadorIdPorEmail ?? existente?.prospectador_id ?? null
+
+      const datosActualizacion: Record<string, unknown> = { nombre, perfil, estado: 'esperando_asesor', fecha_caliente: fecha }
+      if (prospectadorIdPorEmail) datosActualizacion.prospectador_id = prospectadorIdPorEmail
+
       let leadId: string
-      let prospectadorId: string | null = null
 
       if (existente) {
         leadId = existente.id
-        prospectadorId = existente.prospectador_id
         const { error } = await supabaseAdmin
           .from('chatbot_leads')
-          .update({ nombre, perfil, estado: 'esperando_asesor', fecha_caliente: fecha })
+          .update(datosActualizacion)
           .eq('id', leadId)
         if (error) return json({ error: error.message }, 500)
       } else {
         const { data: inserted, error } = await supabaseAdmin
           .from('chatbot_leads')
-          .insert({ telefono, nombre, perfil, estado: 'esperando_asesor', fecha_caliente: fecha })
+          .insert({ telefono, nombre, perfil, estado: 'esperando_asesor', fecha_caliente: fecha, prospectador_id: prospectadorId })
           .select('id')
           .single()
         if (error) return json({ error: error.message }, 500)
@@ -140,18 +151,12 @@ serve(async (req) => {
       if (perfil.zona) partes.push(`Zona: ${perfil.zona}`)
       if (perfil.presupuesto) partes.push(`Presupuesto: ${perfil.presupuesto}`)
       if (perfil.tipo_operacion) partes.push(`Operación: ${perfil.tipo_operacion}`)
-      if (perfil.resumen) partes.push(perfil.resumen)
-      const mensaje = partes.length > 0
-        ? partes.join(' · ')
-        : 'El chatbot detectó que el lead está listo para ser atendido.'
+      partes.push(`Tel: ${telefono}`)
+      const mensaje = partes.join(' · ')
 
-      let destinatarios: string[] = []
-      if (prospectadorId) {
-        destinatarios = [prospectadorId]
-      } else {
-        const { data: admins } = await supabaseAdmin.from('profiles').select('id').eq('role', 'admin')
-        destinatarios = (admins ?? []).map((a) => a.id)
-      }
+      const destinatarios: string[] = prospectadorId
+        ? [prospectadorId]
+        : (await supabaseAdmin.from('profiles').select('id').eq('role', 'admin')).data?.map((a) => a.id) ?? []
 
       const pushMensajes: { to: string; title: string; body: string; sound: string }[] = []
       for (const userId of destinatarios) {

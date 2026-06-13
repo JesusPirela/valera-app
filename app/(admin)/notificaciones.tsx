@@ -44,6 +44,16 @@ function iconoPorTipo(tipo: string) {
   return '🔔'
 }
 
+// Los leads calientes del chatbot se muestran siempre arriba (alta prioridad),
+// manteniendo el orden por fecha dentro de cada grupo (sort estable)
+function ordenarPorPrioridad(items: Notificacion[]): Notificacion[] {
+  return [...items].sort((a, b) => {
+    const pa = a.tipo === 'lead_caliente' ? 0 : 1
+    const pb = b.tipo === 'lead_caliente' ? 0 : 1
+    return pa - pb
+  })
+}
+
 function esNavegable(n: Notificacion): boolean {
   if (n.tipo === 'nuevo_cliente' && n.cliente_id) return true
   if (n.tipo === 'lead_caliente' && n.chatbot_lead_id) return true
@@ -202,7 +212,7 @@ export default function AdminNotificaciones() {
       .order('created_at', { ascending: false })
 
     if (error) Alert.alert('Error', 'No se pudieron cargar las notificaciones.')
-    else setNotificaciones(data ?? [])
+    else setNotificaciones(ordenarPorPrioridad(data ?? []))
     setLoading(false)
   }
 
