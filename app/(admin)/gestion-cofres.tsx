@@ -59,6 +59,7 @@ export default function GestionCofres() {
   const [loadingUsuarios, setLoadingUsuarios] = useState(true)
   const [loadingHistorial, setLoadingHistorial] = useState(true)
   const [busqueda, setBusqueda]   = useState('')
+  const [busquedaHist, setBusquedaHist] = useState('')
 
   // Modal de regalo
   const [modalRegalar, setModalRegalar]   = useState(false)
@@ -184,6 +185,11 @@ export default function GestionCofres() {
     (u.nombre ?? '').toLowerCase().includes(busqueda.toLowerCase())
   )
 
+  const entregasFiltradas = entregas.filter(e =>
+    !busquedaHist.trim() ||
+    (e.target_nombre ?? '').toLowerCase().includes(busquedaHist.toLowerCase())
+  )
+
   const totalPendientes = usuarios.reduce((s, u) => s + u.cofres_pendientes, 0)
   const totalEntregados = entregas.reduce((s, e) => s + e.cantidad, 0)
 
@@ -299,15 +305,34 @@ export default function GestionCofres() {
         </View>
       ) : (
         // ── Historial ──
-        <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 60 }}>
+        <View style={{ flex: 1 }}>
+          {/* Filtro por usuario */}
+          <View style={[st.searchBar, { backgroundColor: c.card, borderColor: c.border }]}>
+            <Text style={{ fontSize: 15 }}>🔍</Text>
+            <TextInput
+              style={[st.searchInput, { color: c.text }]}
+              placeholder="Filtrar historial por usuario..."
+              placeholderTextColor={c.textMute}
+              value={busquedaHist}
+              onChangeText={setBusquedaHist}
+              autoCapitalize="none"
+            />
+            {busquedaHist ? (
+              <TouchableOpacity onPress={() => setBusquedaHist('')}>
+                <Text style={{ color: c.textMute, fontSize: 16 }}>✕</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 14, paddingTop: 0, paddingBottom: 60 }}>
           {loadingHistorial ? (
             <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
-          ) : entregas.length === 0 ? (
+          ) : entregasFiltradas.length === 0 ? (
             <View style={st.empty}>
-              <Text style={st.emptyTxt}>Sin entregas registradas</Text>
+              <Text style={st.emptyTxt}>{busquedaHist.trim() ? 'Sin entregas para ese usuario' : 'Sin entregas registradas'}</Text>
             </View>
           ) : (
-            entregas.map(e => (
+            entregasFiltradas.map(e => (
               <View key={e.id} style={[st.historialCard, { backgroundColor: c.card, borderColor: c.border }]}>
                 <View style={st.historialTop}>
                   <View style={st.historialIconWrap}>
@@ -340,7 +365,8 @@ export default function GestionCofres() {
               </View>
             ))
           )}
-        </ScrollView>
+          </ScrollView>
+        </View>
       )}
 
       {/* ── Modal regalar ── */}
