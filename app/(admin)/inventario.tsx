@@ -144,7 +144,7 @@ export default function Inventario() {
         <View style={[styles.checkBox, value && styles.checkBoxOn]}>
           {value && <Text style={styles.checkMark}>✓</Text>}
         </View>
-        <Text style={[styles.checkLabel, value && styles.checkLabelOn]}>{label}</Text>
+        <Text style={[styles.checkLabel, { color: value ? c.text : c.textMute }, value && styles.checkLabelOn]}>{label}</Text>
       </TouchableOpacity>
     )
   }
@@ -318,20 +318,20 @@ const styles = StyleSheet.create({
   },
   checkBoxOn: { backgroundColor: '#2E7D32', borderColor: '#2E7D32' },
   checkMark: { color: '#fff', fontSize: 14, fontWeight: '900' },
-  checkLabel: { fontSize: 13, color: '#666' },
-  checkLabelOn: { color: '#1a1a2e', fontWeight: '700' },
+  checkLabel: { fontSize: 13 },
+  checkLabelOn: { fontWeight: '700' },
 
   notas: { fontSize: 12, color: '#7a5500', backgroundColor: '#fffbe6', borderRadius: 8, padding: 8, marginTop: 10 },
 
-  acciones: { flexDirection: 'row', gap: 8, marginTop: 12, alignItems: 'center' },
-  btnSeccion: { borderWidth: 1, borderColor: '#c9a84c', borderRadius: 9, paddingVertical: 8, paddingHorizontal: 8 },
-  btnSeccionTxt: { color: '#8a6d1a', fontSize: 12, fontWeight: '700' },
+  acciones: { flexDirection: 'row', gap: 8, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' },
+  btnSeccion: { borderWidth: 1, borderColor: '#c9a84c', borderRadius: 9, paddingVertical: 8, paddingHorizontal: 10 },
+  btnSeccionTxt: { color: '#c9a84c', fontSize: 12, fontWeight: '700' },
   btnEditar: { borderWidth: 1, borderColor: '#1a6470', borderRadius: 9, paddingVertical: 8, paddingHorizontal: 12 },
-  btnEditarTxt: { color: '#1a6470', fontSize: 12, fontWeight: '700' },
-  btnPublicar: { flex: 1, backgroundColor: '#2E7D32', borderRadius: 9, paddingVertical: 9, alignItems: 'center' },
+  btnEditarTxt: { color: '#3a9aa8', fontSize: 12, fontWeight: '700' },
+  btnPublicar: { backgroundColor: '#2E7D32', borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12 },
   btnPublicarTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  btnDisabled: { backgroundColor: '#b9c7ba' },
-  btnBorrar: { borderWidth: 1, borderColor: '#c0392b', borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 },
+  btnDisabled: { backgroundColor: '#6b7d6c' },
+  btnBorrar: { borderWidth: 1, borderColor: '#c0392b', borderRadius: 9, paddingVertical: 7, paddingHorizontal: 10, marginLeft: 'auto' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modalBox: { backgroundColor: '#fff', borderRadius: 18, padding: 22, width: '100%', maxWidth: 460 },
