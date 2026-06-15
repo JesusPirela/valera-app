@@ -279,7 +279,6 @@ export default function AdminPropiedades() {
           <Text style={styles.inventarioBtnIcon}>📦</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.inventarioBtnTitle}>Inventario</Text>
-            <Text style={styles.inventarioBtnSub}>Opciones en seguimiento (no publicadas)</Text>
           </View>
           {inventarioCount > 0 && (
             <View style={styles.inventarioBadge}>

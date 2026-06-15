@@ -151,6 +151,10 @@ export default function Inventario() {
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+        <Text style={styles.backBtnText}>‹  Volver</Text>
+      </TouchableOpacity>
+
       <View style={styles.intro}>
         <Text style={styles.introTitle}>📦 Inventario</Text>
         <Text style={styles.introSub}>
@@ -277,6 +281,8 @@ export default function Inventario() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 12 },
+  backBtn: { alignSelf: 'flex-start', paddingVertical: 6, paddingRight: 12, marginBottom: 2 },
+  backBtnText: { fontSize: 16, fontWeight: '700', color: '#1a6470' },
   intro: { marginBottom: 12 },
   introTitle: { fontSize: 20, fontWeight: '800', color: '#8a6d1a' },
   introSub: { fontSize: 12, color: '#a8893f', marginTop: 3, lineHeight: 17 },
