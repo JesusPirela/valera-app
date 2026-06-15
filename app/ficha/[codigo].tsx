@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
 import {
   View, Text, ScrollView, Image, TouchableOpacity,
-  ActivityIndicator, StyleSheet, Platform,
+  ActivityIndicator, StyleSheet, Platform, Linking,
   useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native'
 import { useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import PropMapa from '../../components/PropMapa'
 
 type Propiedad = {
   id: string
@@ -22,6 +23,8 @@ type Propiedad = {
   m2_terreno: number | null
   estacionamientos: number | null
   descripcion: string | null
+  lat: number | null
+  lng: number | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
@@ -52,7 +55,7 @@ export default function FichaPublica() {
   async function cargar() {
     const { data } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, lat, lng, propiedad_imagenes(url, orden)')
       .eq('codigo', codigo)
       .eq('estado', 'disponible')
       .maybeSingle()
@@ -211,6 +214,27 @@ export default function FichaPublica() {
             </View>
           ) : null}
 
+          {/* Ubicación — mapa interactivo + abrir en Google Maps */}
+          {propiedad.lat != null && propiedad.lng != null && (
+            <View style={s.mapBox}>
+              <Text style={s.descTitle}>Ubicación</Text>
+              <View style={s.mapWrapper}>
+                <PropMapa lat={propiedad.lat} lng={propiedad.lng} titulo={propiedad.titulo} height={300} />
+                <TouchableOpacity
+                  style={s.mapOverlayBtn}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    const url = `https://www.google.com/maps/search/?api=1&query=${propiedad.lat},${propiedad.lng}`
+                    if (Platform.OS === 'web') window.open(url, '_blank')
+                    else Linking.openURL(url)
+                  }}
+                >
+                  <Text style={s.mapOverlayBtnTxt}>🗺️ Abrir en Maps</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
         </View>
       </ScrollView>
 
@@ -277,6 +301,15 @@ const s = StyleSheet.create({
   descBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
   descTitle: { fontSize: 13, fontWeight: '800', color: '#1e293b', marginBottom: 8 },
   descTxt: { fontSize: 14, color: '#475569', lineHeight: 22 },
+
+  mapBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
+  mapWrapper: { position: 'relative', borderRadius: 12, overflow: 'hidden' },
+  mapOverlayBtn: {
+    position: 'absolute', top: 10, right: 10, zIndex: 1000,
+    backgroundColor: TEAL, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9,
+    ...Platform.select({ web: { boxShadow: '0 2px 6px rgba(0,0,0,0.3)' } as any, default: { elevation: 6 } }),
+  },
+  mapOverlayBtnTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
 
   footer: { backgroundColor: TEAL, paddingVertical: 12, alignItems: 'center' },
   footerTxt: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
