@@ -31,8 +31,9 @@ function cap(n: number | null, max: number): number | null {
 
 function mapTipo(s: string): 'casa' | 'departamento' | 'local' | 'terreno' | null {
   const l = s.toLowerCase()
-  if (/departamento|apartment|condo|loft|penthouse|flat/.test(l)) return 'departamento'
-  if (/\bcasa\b|house|home|residencia|singlefamily|townhouse|villa/.test(l)) return 'casa'
+  // "casa" primero: en México "casa en condominio" es una casa, no un depto.
+  if (/\bcasa\b|house|home|residencia|singlefamily|townhouse|villa|chalet/.test(l)) return 'casa'
+  if (/departamento|\bdepto\b|apartment|\bcondo\b|loft|penthouse|\bflat\b/.test(l)) return 'departamento'
   if (/local|comercial|oficina|office|bodega|nave/.test(l)) return 'local'
   if (/terreno|lot\b|land\b|lote|predio/.test(l)) return 'terreno'
   return null
@@ -123,6 +124,35 @@ function extractSpecs(dhtml: string): Record<string, string> {
   return specs
 }
 
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'es-MX,es;q=0.9,en;q=0.5',
+}
+
+// Descarga el HTML. Algunos portales (p.ej. Inmobay) sirven una cadena de
+// certificados incompleta que el runtime de Deno rechaza ("UnknownIssuer"),
+// o bloquean por IP/bot. En esos casos se reintenta vía un proxy de lectura
+// que descarga el contenido del lado del servidor y lo devuelve crudo.
+async function fetchHtml(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, { headers: BROWSER_HEADERS })
+    if (res.ok) return await res.text()
+    // 403/429/5xx: intentar proxy antes de rendirse.
+  } catch (_) {
+    // Error de red/TLS: caer al proxy.
+  }
+  try {
+    const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+    const res2 = await fetch(proxy, { headers: BROWSER_HEADERS })
+    if (res2.ok) {
+      const t = await res2.text()
+      if (t && t.length > 200) return t
+    }
+  } catch (_) { /* el proxy también falló */ }
+  throw new Error('No se pudo acceder a la página. El sitio puede estar bloqueando accesos automáticos o tener un certificado de seguridad incompleto. Copia la ficha y pégala manualmente en el campo de descripción.')
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -130,15 +160,7 @@ serve(async (req) => {
     const { url } = await req.json()
     if (!url || !/^https?:\/\//.test(url)) throw new Error('URL inválida')
 
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'es-MX,es;q=0.9,en;q=0.5',
-      },
-    })
-    if (!res.ok) throw new Error(`No se pudo cargar la página (${res.status})`)
-    const html = await res.text()
+    const html = await fetchHtml(url)
     // Versión con entidades decodificadas: se usa para extraer etiquetas/valores.
     const dhtml = decodeEntities(html)
     // Cuadro de características etiqueta→valor (Tokko/reval, Inmobay, gminmobiliaria…).
