@@ -25,6 +25,7 @@ import * as FileSystem from 'expo-file-system'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
+import PropMapa from '../../components/PropMapa'
 import { registrarAccion } from '../../lib/gamification'
 
 
@@ -1277,11 +1278,14 @@ export default function DetallePropiedad() {
           </View>
         ) : null}
 
-        {/* Ubicación — al tocar abre Google Maps */}
+        {/* Ubicación — mapa interactivo (acercar/alejar/mover) + abrir en Google Maps */}
         {propiedad.lat != null && propiedad.lng != null && (
           <View style={styles.seccion}>
             <Text style={styles.seccionTitulo}>Ubicación</Text>
+            <PropMapa lat={propiedad.lat} lng={propiedad.lng} titulo={propiedad.titulo} height={340} />
+            <Text style={styles.mapaDireccion}>📍 {propiedad.direccion}</Text>
             <TouchableOpacity
+              style={styles.mapaAbrirBtn}
               activeOpacity={0.85}
               onPress={() => {
                 const url = `https://www.google.com/maps/search/?api=1&query=${propiedad.lat},${propiedad.lng}`
@@ -1289,16 +1293,8 @@ export default function DetallePropiedad() {
                 else Linking.openURL(url)
               }}
             >
-              <Image
-                source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${propiedad.lat},${propiedad.lng}&zoom=15&size=600x220&scale=2&markers=color:0x1a6470%7C${propiedad.lat},${propiedad.lng}&key=${GMAPS_KEY}` }}
-                style={styles.mapaImagen}
-                resizeMode="cover"
-              />
-              <View style={styles.mapaAbrirBadge}>
-                <Text style={styles.mapaAbrirText}>🗺️ Abrir en Google Maps</Text>
-              </View>
+              <Text style={styles.mapaAbrirBtnText}>🗺️  Abrir en Google Maps</Text>
             </TouchableOpacity>
-            <Text style={styles.mapaDireccion}>📍 {propiedad.direccion}</Text>
           </View>
         )}
 
@@ -1881,17 +1877,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#e0e0e0',
   },
-  mapaAbrirBadge: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    backgroundColor: 'rgba(26,100,112,0.92)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  mapaAbrirText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   mapaDireccion: { fontSize: 13, color: '#666', marginTop: 8 },
+  mapaAbrirBtn: {
+    marginTop: 10,
+    backgroundColor: '#1a6470',
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  mapaAbrirBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
   btnWhatsapp: {
     backgroundColor: '#25D366',
