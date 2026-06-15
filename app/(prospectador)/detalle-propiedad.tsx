@@ -1282,19 +1282,21 @@ export default function DetallePropiedad() {
         {propiedad.lat != null && propiedad.lng != null && (
           <View style={styles.seccion}>
             <Text style={styles.seccionTitulo}>Ubicación</Text>
-            <PropMapa lat={propiedad.lat} lng={propiedad.lng} titulo={propiedad.titulo} height={340} />
+            <View style={styles.mapaWrapper}>
+              <PropMapa lat={propiedad.lat} lng={propiedad.lng} titulo={propiedad.titulo} height={340} />
+              <TouchableOpacity
+                style={styles.mapaOverlayBtn}
+                activeOpacity={0.85}
+                onPress={() => {
+                  const url = `https://www.google.com/maps/search/?api=1&query=${propiedad.lat},${propiedad.lng}`
+                  if (Platform.OS === 'web') window.open(url, '_blank')
+                  else Linking.openURL(url)
+                }}
+              >
+                <Text style={styles.mapaOverlayBtnText}>🗺️ Abrir en Maps</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.mapaDireccion}>📍 {propiedad.direccion}</Text>
-            <TouchableOpacity
-              style={styles.mapaAbrirBtn}
-              activeOpacity={0.85}
-              onPress={() => {
-                const url = `https://www.google.com/maps/search/?api=1&query=${propiedad.lat},${propiedad.lng}`
-                if (Platform.OS === 'web') window.open(url, '_blank')
-                else Linking.openURL(url)
-              }}
-            >
-              <Text style={styles.mapaAbrirBtnText}>🗺️  Abrir en Google Maps</Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -1878,14 +1880,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#e0e0e0',
   },
   mapaDireccion: { fontSize: 13, color: '#666', marginTop: 8 },
-  mapaAbrirBtn: {
-    marginTop: 10,
+  mapaWrapper: { position: 'relative' },
+  mapaOverlayBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 1000,
     backgroundColor: '#1a6470',
     borderRadius: 10,
-    paddingVertical: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: 'row',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
   },
-  mapaAbrirBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  mapaOverlayBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
 
   btnWhatsapp: {
     backgroundColor: '#25D366',
