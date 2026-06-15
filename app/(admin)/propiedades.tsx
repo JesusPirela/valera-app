@@ -39,6 +39,7 @@ type Propiedad = {
   m2_terreno: number | null
   estacionamientos: number | null
   inmobiliaria_id: string | null
+  es_inventario: boolean | null
   inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
@@ -92,7 +93,7 @@ export default function AdminPropiedades() {
     if (yaCargoRef.current === false) setLoading(true)
     const { data, error } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
       .order('created_at', { ascending: false })
       .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
       .limit(1, { referencedTable: 'propiedad_imagenes' })
@@ -133,7 +134,9 @@ export default function AdminPropiedades() {
 
   const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, filtroInmobiliaria].filter(Boolean).length
 
-  let propiedadesFiltradas = propiedades
+  const inventarioCount = propiedades.filter((p) => p.es_inventario).length
+  // El catálogo principal NUNCA muestra propiedades de inventario.
+  let propiedadesFiltradas = propiedades.filter((p) => !p.es_inventario)
   if (busqueda.trim()) {
     const q = busqueda.trim().toLowerCase()
     propiedadesFiltradas = propiedadesFiltradas.filter((p) =>
@@ -269,6 +272,23 @@ export default function AdminPropiedades() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Inventario (solo admins) — conjunto separado del catálogo */}
+      {!esSupervisor && (
+        <TouchableOpacity style={styles.inventarioBtn} onPress={() => router.push('/(admin)/inventario')}>
+          <Text style={styles.inventarioBtnIcon}>📦</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.inventarioBtnTitle}>Inventario</Text>
+            <Text style={styles.inventarioBtnSub}>Opciones en seguimiento (no publicadas)</Text>
+          </View>
+          {inventarioCount > 0 && (
+            <View style={styles.inventarioBadge}>
+              <Text style={styles.inventarioBadgeText}>{inventarioCount}</Text>
+            </View>
+          )}
+          <Text style={styles.inventarioChevron}>›</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Toggle de filtros */}
       <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
@@ -635,6 +655,34 @@ const styles = StyleSheet.create({
   },
   clearBtn: { padding: 4 },
   clearBtnText: { color: '#aaa', fontSize: 16 },
+
+  // Inventario
+  inventarioBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#fffbf0',
+    borderColor: '#c9a84c',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  inventarioBtnIcon: { fontSize: 20 },
+  inventarioBtnTitle: { fontSize: 15, fontWeight: '800', color: '#8a6d1a' },
+  inventarioBtnSub: { fontSize: 11, color: '#a8893f', marginTop: 1 },
+  inventarioBadge: {
+    backgroundColor: '#c9a84c',
+    borderRadius: 11,
+    minWidth: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  inventarioBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  inventarioChevron: { fontSize: 22, color: '#c9a84c', fontWeight: '700' },
 
   // Filtros
   filtrosToggle: {

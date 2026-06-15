@@ -1277,15 +1277,27 @@ export default function DetallePropiedad() {
           </View>
         ) : null}
 
-        {/* Ubicación */}
+        {/* Ubicación — al tocar abre Google Maps */}
         {propiedad.lat != null && propiedad.lng != null && (
           <View style={styles.seccion}>
             <Text style={styles.seccionTitulo}>Ubicación</Text>
-            <Image
-              source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${propiedad.lat},${propiedad.lng}&zoom=15&size=600x220&scale=2&markers=color:0x1a6470%7C${propiedad.lat},${propiedad.lng}&key=${GMAPS_KEY}` }}
-              style={styles.mapaImagen}
-              resizeMode="cover"
-            />
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                const url = `https://www.google.com/maps/search/?api=1&query=${propiedad.lat},${propiedad.lng}`
+                if (Platform.OS === 'web') window.open(url, '_blank')
+                else Linking.openURL(url)
+              }}
+            >
+              <Image
+                source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${propiedad.lat},${propiedad.lng}&zoom=15&size=600x220&scale=2&markers=color:0x1a6470%7C${propiedad.lat},${propiedad.lng}&key=${GMAPS_KEY}` }}
+                style={styles.mapaImagen}
+                resizeMode="cover"
+              />
+              <View style={styles.mapaAbrirBadge}>
+                <Text style={styles.mapaAbrirText}>🗺️ Abrir en Google Maps</Text>
+              </View>
+            </TouchableOpacity>
             <Text style={styles.mapaDireccion}>📍 {propiedad.direccion}</Text>
           </View>
         )}
@@ -1869,6 +1881,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#e0e0e0',
   },
+  mapaAbrirBadge: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    backgroundColor: 'rgba(26,100,112,0.92)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  mapaAbrirText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   mapaDireccion: { fontSize: 13, color: '#666', marginTop: 8 },
 
   btnWhatsapp: {

@@ -224,7 +224,7 @@ export default function Estadisticas() {
     const desde = fechaDesde(p)
     const [rpcRes, propRes, crmRes] = await Promise.all([
       supabase.rpc('get_estadisticas_admin', desde ? { p_desde: desde } : {}),
-      supabase.from('propiedades').select('tipo, operacion, estado'),
+      supabase.from('propiedades').select('tipo, operacion, estado').eq('es_inventario', false),
       supabase.from('clientes').select('estado'),
     ])
     if (!rpcRes.error && rpcRes.data) setStats(rpcRes.data as Estadisticas)

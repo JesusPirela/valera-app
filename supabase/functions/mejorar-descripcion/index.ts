@@ -98,6 +98,13 @@ DATOS (usa estos números exactos, no inventes):
 - Estacionamientos: ${estacionamientos ?? 'No especificado'}
 - Descripción original: ${descripcion || '(sin descripción)'}
 
+⛔ REGLAS ESTRICTAS (OBLIGATORIAS — la descripción se rechaza si las incumples):
+1. NUNCA incluyas nombres de inmobiliarias, agencias, marcas, asesores, brokers ni nombres de personas. Aunque aparezcan en la descripción original, elimínalos por completo.
+2. NUNCA incluyas números de teléfono, WhatsApp, claves/códigos de propiedad (EB-XXXX, MLS, folios), correos, sitios web ni enlaces.
+3. NUNCA hables de comisiones, "comparto comisión", porcentajes de comisión, honorarios ni acuerdos entre asesores. Omite por completo cualquier mención.
+4. En el texto libre (secciones ✨, 🏠 Distribución, 🏢, 🌟 y 📍) NO escribas cifras numéricas: nada de precios, metros, cantidades de recámaras/baños ni años. Los únicos números permitidos en toda la respuesta son los de las líneas de datos estructurados (💰 Precio, 📐 Construcción, 🛏️/🚿/🚗) que se generan abajo con los datos exactos. La prosa describe cualidades, no números.
+5. La descripción debe ser exclusivamente sobre la propiedad: sus espacios, acabados, ambiente y entorno. Nada de información de contacto, condiciones comerciales ni terceros.
+
 Responde ÚNICAMENTE con la descripción en este formato exacto:
 
 ${emojiTipo} ${tipoLabel} ${opLabel}${direccion ? ` en ${direccion}` : ''}
@@ -105,7 +112,7 @@ ${emojiTipo} ${tipoLabel} ${opLabel}${direccion ? ` en ${direccion}` : ''}
 💰 Precio: ${precioFmt || 'Consultar precio'}
 ${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Construcción: ${m2} m²` : ''}
 
-✨ [2-3 oraciones atractivas: qué hace especial esta propiedad, para quién es ideal]
+✨ [2-3 oraciones atractivas: qué hace especial esta propiedad, para quién es ideal. Sin números, sin nombres de inmobiliarias/personas, sin comisiones]
 
 🏠 Distribución
 
@@ -132,7 +139,7 @@ ${tipo !== 'terreno' ? `[INSTRUCCIÓN CRÍTICA: Las siguientes dos secciones (Eq
 🏊 (elemento)
 ...
 (línea en blanco)]
-` : ''}📍 [2-3 oraciones sobre ubicación: fraccionamiento/colonia, conectividad, qué tiene cerca]
+` : ''}📍 [2-3 oraciones sobre ubicación: fraccionamiento/colonia, conectividad, qué tiene cerca. Sin números, sin nombres de inmobiliarias/personas, sin teléfonos]
 
 📲 Agenda tu cita y conoce este excelente ${tipoLabel.toLowerCase()}.`
 

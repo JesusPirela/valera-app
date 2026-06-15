@@ -8,8 +8,8 @@ const corsHeaders = {
 function getMeta(html: string, prop: string): string {
   for (const attr of ['property', 'name', 'itemprop']) {
     const pats = [
-      new RegExp(`<meta[^>]+${attr}="${prop}"[^>]+content="([^"]*)"`, 'i'),
-      new RegExp(`<meta[^>]+content="([^"]*)"[^>]+${attr}="${prop}"`, 'i'),
+      new RegExp(`<meta[^>]+${attr}=["']${prop}["'][^>]+content=["']([^"']*)["']`, 'i'),
+      new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+${attr}=["']${prop}["']`, 'i'),
     ]
     for (const p of pats) {
       const m = html.match(p)
@@ -31,30 +31,96 @@ function cap(n: number | null, max: number): number | null {
 
 function mapTipo(s: string): 'casa' | 'departamento' | 'local' | 'terreno' | null {
   const l = s.toLowerCase()
-  if (/departamento|apartment|condo/.test(l)) return 'departamento'
-  if (/\bcasa\b|house|home|residencia/.test(l)) return 'casa'
-  if (/local|comercial|oficina|office/.test(l)) return 'local'
-  if (/terreno|lot\b|land\b|lote/.test(l)) return 'terreno'
+  if (/departamento|apartment|condo|loft|penthouse|flat/.test(l)) return 'departamento'
+  if (/\bcasa\b|house|home|residencia|singlefamily|townhouse|villa/.test(l)) return 'casa'
+  if (/local|comercial|oficina|office|bodega|nave/.test(l)) return 'local'
+  if (/terreno|lot\b|land\b|lote|predio/.test(l)) return 'terreno'
   return null
 }
 
 function mapOp(s: string): 'venta' | 'renta' | null {
   const l = s.toLowerCase()
-  if (/sale|venta/.test(l)) return 'venta'
-  if (/rent|renta|alquiler/.test(l)) return 'renta'
+  if (/sale|venta|preventa/.test(l)) return 'venta'
+  if (/rent|renta|alquiler|lease/.test(l)) return 'renta'
   return null
 }
 
 function htmlText(s: string): string {
+  return decodeEntities(
+    s
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+      .replace(/<[^>]+>/g, ''),
+  ).trim()
+}
+
+// Decodifica las entidades HTML más comunes en portales en español.
+// Necesario para que las expresiones de etiquetas (Recámaras, Construcción, m²…)
+// hagan match aunque el portal las codifique (&aacute;, &ntilde;, &sup2;…).
+function decodeEntities(s: string): string {
   return s
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .trim()
+    .replace(/&aacute;/gi, 'á').replace(/&eacute;/gi, 'é').replace(/&iacute;/gi, 'í')
+    .replace(/&oacute;/gi, 'ó').replace(/&uacute;/gi, 'ú').replace(/&ntilde;/gi, 'ñ')
+    .replace(/&uuml;/gi, 'ü')
+    .replace(/&sup2;/gi, '²').replace(/&middot;/gi, '·')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"').replace(/&#0?39;/g, "'").replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, n) => { try { return String.fromCharCode(parseInt(n, 10)) } catch { return '' } })
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => { try { return String.fromCharCode(parseInt(n, 16)) } catch { return '' } })
+}
+
+// ── JSON-LD (schema.org) ──────────────────────────────────────────────────
+// Lamudi y muchos otros portales publican los datos en bloques
+// <script type="application/ld+json">. Devuelve todos los nodos aplanados.
+function extractJsonLdNodes(html: string): any[] {
+  const out: any[] = []
+  const blocks = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)
+  const walk = (o: any) => {
+    if (!o || typeof o !== 'object') return
+    if (Array.isArray(o)) { o.forEach(walk); return }
+    out.push(o)
+    if (o['@graph']) walk(o['@graph'])
+  }
+  for (const b of blocks) {
+    try { walk(JSON.parse(b[1].trim())) } catch { /* ignore malformed */ }
+  }
+  return out
+}
+
+function ldType(node: any): string {
+  const t = node?.['@type']
+  return Array.isArray(t) ? t.join(' ') : String(t ?? '')
+}
+
+// Normaliza una etiqueta a minúsculas sin acentos ni signos: "Recámaras" → "recamaras".
+function normLabel(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+function firstInt(v: unknown): number | null {
+  if (v == null) return null
+  const m = String(v).match(/\d{1,5}/)
+  return m ? parseInt(m[0], 10) : null
+}
+
+// Extrae el "cuadro de características" como mapa etiqueta→valor.
+// Cubre dos patrones muy comunes:
+//  a) "Etiqueta: <valor numérico>" dentro de un nodo (Tokko/reval, Inmobay <li>)
+//  b) wpsight (gminmobiliaria): <div class="listing-details-label">Etiqueta</div>
+//     … <div class="listing-details-value">valor</div>
+function extractSpecs(dhtml: string): Record<string, string> {
+  const specs: Record<string, string> = {}
+  for (const m of dhtml.matchAll(/>\s*([A-Za-zÁÉÍÓÚáéíóúñÑ.\s]{3,28}?)\s*:\s*([0-9][^<]{0,28})</g)) {
+    const k = normLabel(m[1])
+    if (k && !(k in specs)) specs[k] = m[2].trim()
+  }
+  for (const m of dhtml.matchAll(/listing-details-label["'][^>]*>\s*([^<]+?)\s*<[\s\S]{0,160}?listing-details-value["'][^>]*>\s*([^<]+?)\s*</gi)) {
+    const k = normLabel(m[1])
+    if (k) specs[k] = m[2].trim()
+  }
+  return specs
 }
 
 serve(async (req) => {
@@ -73,6 +139,15 @@ serve(async (req) => {
     })
     if (!res.ok) throw new Error(`No se pudo cargar la página (${res.status})`)
     const html = await res.text()
+    // Versión con entidades decodificadas: se usa para extraer etiquetas/valores.
+    const dhtml = decodeEntities(html)
+    // Cuadro de características etiqueta→valor (Tokko/reval, Inmobay, gminmobiliaria…).
+    const specs = extractSpecs(dhtml)
+    const getSpec = (...keys: string[]): string | null => {
+      for (const k of keys) if (specs[k] != null) return specs[k]
+      return null
+    }
+    const specInt = (...keys: string[]): number | null => firstInt(getSpec(...keys))
 
     let titulo = ''
     let descripcion = ''
@@ -118,15 +193,9 @@ serve(async (req) => {
         if (eb['Property Type']) tipo = mapTipo(String(eb['Property Type']))
         if (eb['Operation Type']) operacion = mapOp(String(eb['Operation Type'])) ?? operacion
 
-        // Dirección desde campos de localización
-        const parts = [
-          eb['Property Neighborhood'],
-          eb['Property City'],
-          eb['Property State'],
-        ].filter(Boolean).map(String)
+        const parts = [eb['Property Neighborhood'], eb['Property City'], eb['Property State']].filter(Boolean).map(String)
         if (parts.length) direccion = parts.join(', ')
 
-        // Zona a partir de ciudad/estado
         const locStr = [eb['Property City'], eb['Property State']].filter(Boolean).join(' ').toLowerCase()
         if (/quer[eé]taro/.test(locStr))                              zona = 'queretaro'
         else if (/monterrey|nuevo\s*le[oó]n/.test(locStr))           zona = 'monterrey'
@@ -134,81 +203,212 @@ serve(async (req) => {
       } catch { /* continue */ }
     }
 
-    // ── 2. Descripción completa desde <p class="text-description"> ───────────
-    const descTagM = html.match(/<p[^>]+class="[^"]*text-description[^"]*"[^>]*>([\s\S]*?)<\/p>/)
-    if (descTagM) {
-      descripcion = htmlText(descTagM[1])
+    // ── 2. JSON-LD schema.org (Lamudi y portales estándar) ────────────────────
+    let ldPrice = ''
+    if (!ebMatch) {
+      const nodes = extractJsonLdNodes(html)
+      // Nodo de la propiedad: tipo inmobiliario o que traiga oferta/recámaras.
+      const propNode = nodes.find(n =>
+        /Residence|House|Apartment|RealEstate|Product|Offer|Place|Accommodation/i.test(ldType(n)) &&
+        (n.offers || n.numberOfBedrooms != null || n.numberOfRooms != null || n.floorSize || n.name)
+      )
+      if (propNode) {
+        if (propNode.name && !titulo) titulo = decodeEntities(String(propNode.name)).trim()
+        if (propNode.description && !descripcion) descripcion = htmlText(String(propNode.description))
+
+        const beds = parseNum(propNode.numberOfBedrooms ?? propNode.numberOfRooms)
+        if (beds != null && recamaras === null) recamaras = cap(beds, 5)
+        const baths = parseNum(propNode.numberOfBathroomsTotal ?? propNode.numberOfBathrooms)
+        if (baths != null && banos === null) banos = cap(baths, 4)
+
+        const floor = propNode.floorSize?.value ?? propNode.floorSize
+        const floorN = parseNum(typeof floor === 'object' ? floor?.value : floor)
+        if (floorN && !m2) m2 = String(Math.round(floorN))
+
+        const offer = Array.isArray(propNode.offers) ? propNode.offers[0] : propNode.offers
+        const p = parseNum(offer?.price ?? offer?.lowPrice ?? offer?.highPrice)
+        if (p) { ldPrice = String(Math.round(p)); operacion = operacion || mapOp(ldType(offer) + ' ' + (offer?.businessFunction ?? '')) }
+
+        if (!tipo) tipo = mapTipo(ldType(propNode) + ' ' + (titulo || ''))
+
+        // Dirección desde address (objeto PostalAddress o string)
+        const addr = propNode.address
+        if (addr && !direccion) {
+          if (typeof addr === 'string') direccion = decodeEntities(addr).trim()
+          else {
+            const ap = [addr.streetAddress, addr.addressLocality, addr.addressRegion].filter(Boolean).map((x: any) => decodeEntities(String(x)))
+            if (ap.length) direccion = ap.join(', ')
+          }
+        }
+      }
+      // Operación desde breadcrumb del JSON-LD (Lamudi: "Venta")
+      if (!operacion) {
+        const crumb = nodes.find(n => /BreadcrumbList/i.test(ldType(n)))
+        const names = (crumb?.itemListElement ?? []).map((e: any) => e?.name).filter(Boolean).join(' ')
+        operacion = mapOp(names)
+      }
     }
 
-    // ── 3. Título ─────────────────────────────────────────────────────────────
-    titulo = getMeta(html, 'og:title')
-          || getMeta(html, 'twitter:title')
-          || (html.match(/<title>([^<]+)<\/title>/)?.[1] ?? '')
-    titulo = titulo
-      .replace(/\s*[-|–·]\s*(easy\s*broker|easybroker).*/i, '')
+    // ── 3. Descripción completa desde markup conocido ─────────────────────────
+    // EasyBroker: <p class="text-description">; otros portales: contenedores comunes.
+    if (!descripcion) {
+      const descSelectors = [
+        /<p[^>]+class="[^"]*text-description[^"]*"[^>]*>([\s\S]*?)<\/p>/i,                 // EasyBroker
+        /<div[^>]+class="[^"]*listing-description[^"]*"[^>]*>([\s\S]*?)<\/div>/i,          // wpsight (gminmobiliaria)
+        /<div[^>]+(?:id|class)="[^"]*(?:descripcion|description|property-description)[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+      ]
+      for (const sel of descSelectors) {
+        const m = html.match(sel)
+        if (m?.[1]) { descripcion = htmlText(m[1]); if (descripcion.length > 30) break }
+      }
+    }
+
+    // ── 4. Título ─────────────────────────────────────────────────────────────
+    if (!titulo) {
+      titulo = getMeta(html, 'og:title')
+            || getMeta(html, 'twitter:title')
+            || (html.match(/<title>([^<]+)<\/title>/)?.[1] ?? '')
+    }
+    titulo = decodeEntities(titulo)
+      .replace(/\s*[-|–·]\s*(easy\s*broker|easybroker|gm\s*agencia|gm\s*inmobiliaria|lamudi|inmobay|reval).*/i, '')
+      // Quita precios incrustados en el título (Inmobay: "Departamento en Venta MXN 4,200,000.00 ...")
+      .replace(/\s*(?:MXN|MX\$|USD|\$)\s*[\d][\d,]*(?:\.\d+)?/i, '')
+      .replace(/\s+ubicad[oa]\s+en\s+.*/i, '')
       .replace(/\s*\|\s*[^|]*$/, '')
       .trim()
 
-    // ── 4. Descripción fallback desde meta og ─────────────────────────────────
-    if (!descripcion) {
-      descripcion = getMeta(html, 'og:description') || getMeta(html, 'description')
+    // ── 5. Dirección desde el título ("... ubicada en <Lugar>") ───────────────
+    if (!direccion) {
+      const ogt = decodeEntities(getMeta(html, 'og:title') || titulo)
+      const mUbic = ogt.match(/ubicad[oa]\s+en\s+(.+?)(?:\s*$)/i)
+      if (mUbic) direccion = mUbic[1].replace(/\s*[-|].*$/, '').trim()
     }
 
-    // ── 5. Imágenes: todos los assets.easybroker.com únicos, sin query params ─
-    // También busca otros CDN comunes (cloudfront, amazonaws, etc.)
+    // ── 6. Descripción fallback desde meta og ─────────────────────────────────
+    if (!descripcion) {
+      const cand = decodeEntities(getMeta(html, 'og:description') || getMeta(html, 'description'))
+      // Evita basura tipo "valerareal.inmobay.com" o dominios/sitios muy cortos.
+      if (cand.length > 40 && !/^[\w.-]+\.(com|mx|net|org)\b/i.test(cand)) descripcion = cand
+    }
+
+    // ── 7. Campos del cuadro de características (spec map) ─────────────────────
+    // El spec map ya cubre reval (Tokko), Inmobay y gminmobiliaria (wpsight).
+    // JSON-LD (Lamudi) tiene prioridad porque ya pobló estos campos arriba.
+    if (recamaras === null) {
+      recamaras = cap(specInt('recamaras', 'dormitorios', 'habitaciones', 'recamara') ??
+        firstInt(dhtml.match(/(\d+)\s*rec[aá]maras?/i)?.[1]), 5)
+    }
+    if (banos === null) {
+      const full = dhtml.match(/(\d+)\s*ba[ñn]os?\s*completos?/i)?.[1]
+      banos = cap(firstInt(full) ?? specInt('banos', 'banos completos', 'bano') ??
+        firstInt(dhtml.match(/(\d+)\s*ba[ñn]os?/i)?.[1]), 4)
+    }
+    if (mediosBanos === null) {
+      mediosBanos = cap(specInt('medios banos', 'num medios banos', 'medio bano') ??
+        firstInt(dhtml.match(/(\d+)\s*medios?\s*ba[ñn]os?/i)?.[1]), 2)
+    }
+    if (estacionamientos === null) {
+      estacionamientos = cap(specInt('estacionamientos', 'estacionamiento', 'cocheras', 'cajones', 'parking', 'garage') ??
+        firstInt(dhtml.match(/(\d+)\s*(?:estacionamientos?|cajones?|parking)/i)?.[1]), 3)
+    }
+
+    // ── 8. Superficies (construcción / terreno) ───────────────────────────────
+    if (!m2) {
+      const sp = specInt('construccion', 'construida', 'superficie construida', 'sup construida', 'total construido', 'construido', 'm construccion')
+      // Lamudi: <div class="area-value">306 m²</div>
+      const lam = dhtml.match(/area-value["'][^>]*>\s*([\d,.]+)/i)
+      const mc = dhtml.match(/construcci[oó]n[\s\S]{0,80}?([\d,.]+)\s*m[²2]/i)
+              || dhtml.match(/([\d,.]+)\s*m[²2][\s\S]{0,40}?construcci[oó]n/i)
+      if (sp != null) m2 = String(sp)
+      else if (lam) m2 = lam[1].replace(/,/g, '')
+      else if (mc) m2 = mc[1].replace(/,/g, '')
+    }
+    if (!m2Terreno) {
+      const sp = specInt('terreno', 'superficie terreno', 'superficie del terreno', 'sup terreno', 'm terreno')
+      // Lamudi: <span class="lot-area-value">251 m²</span>
+      const lot = dhtml.match(/lot-area-value["'][^>]*>\s*([\d,.]+)/i)
+      const mt = dhtml.match(/terreno[\s\S]{0,80}?([\d,.]+)\s*m[²2]/i)
+              || dhtml.match(/([\d,.]+)\s*m[²2][\s\S]{0,40}?terreno/i)
+      if (sp != null) m2Terreno = String(sp)
+      else if (lot) m2Terreno = lot[1].replace(/,/g, '')
+      else if (mt) m2Terreno = mt[1].replace(/,/g, '')
+    }
+
+    // ── 9. Precio (orden de prioridad por fiabilidad) ─────────────────────────
+    if (!precio) {
+      // a) JSON-LD
+      if (ldPrice) precio = ldPrice
+      // a2) microdata / meta de precio (gminmobiliaria: itemprop="price" content="12300")
+      if (!precio) {
+        const mp = getMeta(html, 'product:price:amount') || getMeta(html, 'og:price:amount')
+          || html.match(/itemprop=["']price["'][^>]+content=["']([\d.,]+)["']/i)?.[1]
+          || html.match(/content=["']([\d.,]+)["'][^>]+itemprop=["']price["']/i)?.[1] || ''
+        const n = parseNum(mp)
+        if (n && n >= 1000) precio = String(Math.round(n))
+      }
+      // b) og:title con MXN/$ (Inmobay)
+      if (!precio) {
+        const ot = decodeEntities(getMeta(html, 'og:title')).match(/(?:MXN|MX\$|\$)\s*([\d][\d,]*(?:\.\d{1,2})?)/i)
+        if (ot) precio = ot[1].replace(/,/g, '').split('.')[0]
+      }
+      // c) "MXN 17,899,000" en el cuerpo (Tokko/reval)
+      if (!precio) {
+        const mxn = dhtml.match(/MXN\s*\$?\s*([\d]{1,3}(?:,[\d]{3})+(?:\.\d+)?)/i)
+        if (mxn) precio = mxn[1].replace(/,/g, '').split('.')[0]
+      }
+      // d) Genérico "$X,XXX..." ignorando mantenimiento/enganche/apartado
+      if (!precio) {
+        for (const m of dhtml.matchAll(/\$\s*([\d]{1,3}(?:,[\d]{3})+(?:\.\d+)?)/g)) {
+          const ctx = dhtml.slice(Math.max(0, (m.index ?? 0) - 32), m.index).toLowerCase()
+          if (/manten|engan|aparta|abono|m²|metro/.test(ctx)) continue
+          precio = m[1].replace(/,/g, '').split('.')[0]
+          break
+        }
+      }
+    }
+
+    // ── 10. Imágenes: CDNs conocidos + genéricos, deduplicadas ────────────────
     const imgPatterns = [
       /https?:\/\/assets\.easybroker\.com\/property_images\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
+      /https?:\/\/static\.tokkobroker\.com\/pictures\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,    // reval (Tokko)
+      /https?:\/\/[^\s"'<>?]*inmobay\.com\/upload\/inmuebles\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi, // inmobay
+      /https?:\/\/[^\s"'<>?]+\/wp-content\/uploads\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,        // WordPress (gminmobiliaria)
       /https?:\/\/[^\s"'<>?]+\.(?:cloudfront\.net|amazonaws\.com)\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
     ]
     const rawImgs: string[] = []
     for (const pat of imgPatterns) {
       for (const m of html.matchAll(pat)) rawImgs.push(m[0].split('?')[0])
     }
-    imagenes = [...new Set(rawImgs)]
+    // Descarta logos, íconos, avatares y recortes (no son fotos de la propiedad).
+    const junk = /(logo|icon|favicon|avatar|sprite|placeholder|cropped-|whatsapp-image-2021|-32x32|-150x150|-180x180|-192x192|-270x270)/i
+    const limpiados = rawImgs.filter(u => !junk.test(u))
+    // Dedup de variantes de tamaño (-1024x668, -540x405…): conserva la más grande.
+    const best = new Map<string, { url: string; w: number }>()
+    for (const u of limpiados) {
+      const m = u.match(/-(\d+)x(\d+)(\.(?:jpe?g|png|webp))$/i)
+      const w = m ? parseInt(m[1], 10) : 999999
+      const base = m ? u.replace(/-\d+x\d+(\.(?:jpe?g|png|webp))$/i, '$1') : u
+      const cur = best.get(base)
+      if (!cur || w > cur.w) best.set(base, { url: u, w })
+    }
+    imagenes = [...best.values()].map(v => v.url)
 
-    // ── 6. Fallbacks genéricos para otros portales ────────────────────────────
-    if (!precio) {
-      const mp = html.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:MXN|USD|pesos)?/i)
-      if (mp) precio = mp[1].replace(/,/g, '')
-    }
-    if (recamaras === null) {
-      const mr = html.match(/(\d+)\s*(?:rec[aá]maras?|bedrooms?)/i)
-      if (mr) recamaras = cap(parseInt(mr[1]), 5)
-    }
-    if (banos === null) {
-      const mb = html.match(/(\d+)\s*(?:ba[ñn]os?\s*(?:completos?)?|bathrooms?)/i)
-      if (mb) banos = cap(parseInt(mb[1]), 4)
-    }
-    if (estacionamientos === null) {
-      const me = html.match(/(\d+)\s*(?:estacionamientos?|cajones?|parking\s*spaces?)/i)
-      if (me) estacionamientos = cap(parseInt(me[1]), 3)
-    }
-    if (!m2) {
-      const mc = html.match(/construcci[oó]n[\s\S]{0,40}?([\d,.]+)\s*m[²2]/i)
-              || html.match(/([\d,.]+)\s*m[²2][\s\S]{0,40}?construcci[oó]n/i)
-      if (mc) m2 = mc[1].replace(/,/g, '')
-    }
-    if (!m2Terreno) {
-      const mt = html.match(/terreno[\s\S]{0,40}?([\d,.]+)\s*m[²2]/i)
-              || html.match(/([\d,.]+)\s*m[²2][\s\S]{0,40}?terreno/i)
-      if (mt) m2Terreno = mt[1].replace(/,/g, '')
-    }
+    // ── 11. Fallbacks finales para tipo / operación / imágenes / zona ─────────
     if (!tipo) {
       tipo = mapTipo(titulo + ' ' + getMeta(html, 'og:title'))
     }
     if (!operacion) {
-      const snippet = titulo + ' ' + html.slice(0, 3000)
-      operacion = /\brenta\b/i.test(snippet) ? 'renta' : 'venta'
+      const snippet = titulo + ' ' + getMeta(html, 'og:title') + ' ' + url + ' ' + html.slice(0, 3000)
+      operacion = /\brenta\b|alquiler/i.test(snippet) ? 'renta' : 'venta'
     }
     if (!imagenes.length) {
-      const og = getMeta(html, 'og:image')
+      const og = getMeta(html, 'og:image') || getMeta(html, 'og:image:secure_url')
       if (og) imagenes = [og.split('?')[0]]
     }
-    // Zona: fallback desde direccion o URL si no se detectó en el JSON de EasyBroker
     if (!zona) {
-      const haystack = (direccion + ' ' + url).toLowerCase()
-      if (/quer[eé]taro/.test(haystack))               zona = 'queretaro'
-      else if (/monterrey|nuevo\s*le[oó]n/.test(haystack)) zona = 'monterrey'
+      const haystack = (direccion + ' ' + titulo + ' ' + url).toLowerCase()
+      if (/quer[eé]taro|qro\b/.test(haystack))               zona = 'queretaro'
+      else if (/monterrey|nuevo\s*le[oó]n|\bmty\b/.test(haystack)) zona = 'monterrey'
       else if (/puebla/.test(haystack))                  zona = 'puebla'
     }
 

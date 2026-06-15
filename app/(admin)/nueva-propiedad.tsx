@@ -171,6 +171,8 @@ export default function NuevaPropiedad() {
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
+  const [esInventario, setEsInventario] = useState(false)
+  const [inventarioSeccion, setInventarioSeccion] = useState('')
   const [imagenes, setImagenes] = useState<string[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -599,6 +601,8 @@ export default function NuevaPropiedad() {
           exclusiva,
           es_constructora: esConstructora,
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
+          es_inventario: esInventario,
+          inventario_seccion: esInventario ? (inventarioSeccion.trim() || null) : null,
           created_by: user.id,
           lat: lat ?? null,
           lng: lng ?? null,
@@ -972,6 +976,28 @@ export default function NuevaPropiedad() {
             placeholder="Nombre de la constructora"
             value={nombreConstructora}
             onChangeText={setNombreConstructora}
+            autoCapitalize="words"
+          />
+        )}
+
+        <View style={[styles.exclusivaRow, { borderColor: '#c9a84c', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, backgroundColor: '#fffbf0' }]}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.exclusivaLabel}>📦 Guardar en Inventario</Text>
+            <Text style={styles.exclusivaDesc}>No se publica al catálogo. Es una opción en seguimiento (no visible para prospectadores).</Text>
+          </View>
+          <ToggleSwitch
+            value={esInventario}
+            onValueChange={setEsInventario}
+            trackColor={{ false: '#ddd', true: '#c9a84c' }}
+            thumbColor="#fff"
+          />
+        </View>
+        {esInventario && (
+          <TextInput
+            style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+            placeholder="Sección del inventario (ej. Lonas Taray Club)"
+            value={inventarioSeccion}
+            onChangeText={setInventarioSeccion}
             autoCapitalize="words"
           />
         )}
