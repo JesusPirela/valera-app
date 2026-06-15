@@ -82,7 +82,9 @@ export default function EditarPropiedad() {
   const [imagenes, setImagenes] = useState<ImgItem[]>([])
   const [imagenesEliminar, setImagenesEliminar] = useState<string[]>([])
   const [isDragging, setIsDragging] = useState(false)
-  const fileInputRef = useRef<any>(null)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+  const imagenesRef = useRef<ImgItem[]>([])
+  const dragIdxRef = useRef<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [guardadoOk, setGuardadoOk] = useState(false)
@@ -138,16 +140,6 @@ export default function EditarPropiedad() {
     setImagenes((prev) => prev.filter((i) => i.key !== item.key))
   }
 
-  function moverImagen(index: number, dir: -1 | 1) {
-    setImagenes((prev) => {
-      const j = index + dir
-      if (j < 0 || j >= prev.length) return prev
-      const next = [...prev]
-      ;[next[index], next[j]] = [next[j], next[index]]
-      return next
-    })
-  }
-
   function agregarUris(uris: string[]) {
     if (uris.length === 0) return
     setImagenes((prev) => [
@@ -196,10 +188,33 @@ export default function EditarPropiedad() {
     else if (dn.includes('puebla')) setZona('puebla')
   }
 
+  // Mantener ref sincronizado para evitar closures estancadas
+  useEffect(() => { imagenesRef.current = imagenes }, [imagenes])
+
+  // Marcar miniaturas como draggable (web) — igual que en nueva-propiedad
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const id = setTimeout(() => {
+      imagenes.forEach((_, index) => {
+        const el = document.getElementById(`drag-img-editar-${index}`)
+        if (el) {
+          el.draggable = true
+          el.setAttribute('data-idx', String(index))
+          el.querySelectorAll('img').forEach(img => {
+            img.draggable = false
+            img.style.pointerEvents = 'none'
+            img.style.userSelect = 'none'
+          })
+        }
+      })
+    }, 300)
+    return () => clearTimeout(id)
+  }, [imagenes])
+
+  // Zona para soltar archivos nuevos
   useEffect(() => {
     if (Platform.OS !== 'web') return
     let cleanup: (() => void) | undefined
-
     const onDrop = (e: DragEvent) => {
       e.preventDefault()
       setIsDragging(false)
@@ -209,7 +224,6 @@ export default function EditarPropiedad() {
     }
     const onDragOver = (e: DragEvent) => { e.preventDefault(); setIsDragging(true) }
     const onDragLeave = () => setIsDragging(false)
-
     function tryAttach() {
       const el = document.getElementById('dropzone-editar')
       if (!el) { setTimeout(tryAttach, 100); return }
@@ -225,6 +239,61 @@ export default function EditarPropiedad() {
     tryAttach()
     return () => cleanup?.()
   }, [])
+
+  // Reordenamiento por arrastre entre miniaturas — igual que en nueva-propiedad
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const onDragStart = (e: DragEvent) => {
+      const target = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null
+      if (target) dragIdxRef.current = parseInt(target.dataset.idx ?? '-1')
+    }
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault()
+      const target = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null
+      if (target) setDragOverIdx(parseInt(target.dataset.idx ?? '-1'))
+    }
+    const onDragEnd = () => { dragIdxRef.current = null; setDragOverIdx(null) }
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault()
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        const files = Array.from(e.dataTransfer.files) as File[]
+        const urls = files.filter(f => f.type.startsWith('image/')).map(f => URL.createObjectURL(f))
+        agregarUris(urls)
+        dragIdxRef.current = null; setDragOverIdx(null)
+        return
+      }
+      const target = (e.target as HTMLElement).closest('[data-idx]') as HTMLElement | null
+      if (!target) return
+      const toIdx = parseInt(target.dataset.idx ?? '-1')
+      const fromIdx = dragIdxRef.current
+      if (fromIdx === null || fromIdx === toIdx || toIdx < 0) return
+      const arr = [...imagenesRef.current]
+      const [moved] = arr.splice(fromIdx, 1)
+      arr.splice(toIdx, 0, moved)
+      setImagenes(arr)
+      dragIdxRef.current = null; setDragOverIdx(null)
+    }
+    let container: HTMLElement | null = null
+    let timerId: ReturnType<typeof setTimeout> | null = null
+    function tryAttachGrid() {
+      container = document.getElementById('drag-grid-editar')
+      if (!container) { timerId = setTimeout(tryAttachGrid, 100); return }
+      container.addEventListener('dragstart', onDragStart)
+      container.addEventListener('dragover', onDragOver)
+      container.addEventListener('dragend', onDragEnd)
+      container.addEventListener('drop', onDrop)
+    }
+    tryAttachGrid()
+    return () => {
+      if (timerId) clearTimeout(timerId)
+      if (container) {
+        container.removeEventListener('dragstart', onDragStart)
+        container.removeEventListener('dragover', onDragOver)
+        container.removeEventListener('dragend', onDragEnd)
+        container.removeEventListener('drop', onDrop)
+      }
+    }
+  }, [imagenes.length])
 
   function handleFileInput(e: any) {
     const files: File[] = Array.from(e.target?.files ?? [])
@@ -395,73 +464,61 @@ export default function EditarPropiedad() {
 
         <Text style={styles.screenTitle}>Editar propiedad</Text>
 
-        <Text style={styles.label}>Imágenes</Text>
+        <Text style={styles.label}>Imágenes {Platform.OS === 'web' && imagenes.length > 1 ? <Text style={{ fontSize: 11, color: '#aaa', fontWeight: '400' }}> · arrastra para reordenar</Text> : null}</Text>
         {imagenes.length > 0 && (
-          <>
-            <Text style={styles.imagenesHint}>Usa ◀ ▶ para reordenar. La primera es la portada.</Text>
+          Platform.OS === 'web' ? (
+            <View nativeID="drag-grid-editar" style={styles.miniaturasGrid}>
+              {imagenes.map((item, index) => (
+                <View
+                  key={item.key}
+                  nativeID={`drag-img-editar-${index}`}
+                  style={[styles.miniatura, dragOverIdx === index && { opacity: 0.5, borderWidth: 2, borderColor: '#1a6470', borderRadius: 10 }]}
+                >
+                  <Image source={{ uri: item.uri }} style={{ width: 100, height: 100, borderRadius: 10 }} />
+                  <TouchableOpacity style={styles.miniaturaQuitar} onPress={() => quitarImagen(item)}>
+                    <Text style={styles.miniaturaQuitarText}>✕</Text>
+                  </TouchableOpacity>
+                  <View style={styles.miniaturaDragHandle}>
+                    <Text style={{ color: '#fff', fontSize: 12 }}>⠿</Text>
+                  </View>
+                  <View style={styles.miniaturaNro}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{index + 1}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
             <FlatList
               data={imagenes}
               horizontal
               keyExtractor={(item) => item.key}
               showsHorizontalScrollIndicator={false}
               style={{ marginBottom: 10 }}
-              extraData={imagenes.length}
-              renderItem={({ item, index }) => (
+              renderItem={({ item }) => (
                 <View style={styles.miniatura}>
                   <Image source={{ uri: item.uri }} style={styles.miniaturaImg} />
-                  {index === 0 && (
-                    <View style={styles.portadaBadge}><Text style={styles.portadaBadgeText}>Portada</Text></View>
-                  )}
-                  <TouchableOpacity
-                    style={styles.miniaturaQuitar}
-                    onPress={() => quitarImagen(item)}
-                  >
+                  <TouchableOpacity style={styles.miniaturaQuitar} onPress={() => quitarImagen(item)}>
                     <Text style={styles.miniaturaQuitarText}>✕</Text>
                   </TouchableOpacity>
-                  <View style={styles.miniaturaMover}>
-                    <TouchableOpacity
-                      style={[styles.moverBtn, index === 0 && styles.moverBtnDisabled]}
-                      disabled={index === 0}
-                      onPress={() => moverImagen(index, -1)}
-                    >
-                      <Text style={styles.moverBtnText}>◀</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.moverBtn, index === imagenes.length - 1 && styles.moverBtnDisabled]}
-                      disabled={index === imagenes.length - 1}
-                      onPress={() => moverImagen(index, 1)}
-                    >
-                      <Text style={styles.moverBtnText}>▶</Text>
-                    </TouchableOpacity>
-                  </View>
                 </View>
               )}
             />
-          </>
+          )
         )}
         {Platform.OS === 'web' ? (
-          <>
-            {/* @ts-ignore input DOM oculto, se dispara por ref al tocar la zona */}
+          <View nativeID="dropzone-editar" style={[styles.imagenPicker, isDragging && styles.imagenPickerDragging]}>
+            {/* @ts-ignore */}
             <input
-              ref={fileInputRef}
               type="file"
               accept="image/*"
               multiple
               onChange={handleFileInput}
-              style={{ display: 'none' }}
+              style={{ position: 'absolute', width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
             />
-            <TouchableOpacity
-              // @ts-ignore id mapea al id del DOM en web (lo usa el listener de drag)
-              id="dropzone-editar"
-              style={[styles.imagenPicker, isDragging && styles.imagenPickerDragging]}
-              activeOpacity={0.7}
-              onPress={() => { fileInputRef.current?.click() }}
-            >
-              <Text style={styles.imagenPickerText}>
-                {isDragging ? '📂 Suelta las fotos aquí' : '📁 Arrastra fotos aquí o haz clic para seleccionar'}
-              </Text>
-            </TouchableOpacity>
-          </>
+            <Text style={styles.imagenPickerText}>
+              {isDragging ? '📂 Suelta las fotos aquí' : '📁 Arrastra fotos aquí o haz clic para seleccionar'}
+            </Text>
+          </View>
         ) : (
           <TouchableOpacity style={styles.imagenPicker} onPress={seleccionarImagenes}>
             <Text style={styles.imagenPickerText}>+ Agregar fotos</Text>
@@ -748,6 +805,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   miniaturaQuitarText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  miniaturasGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  miniaturaDragHandle: { position: 'absolute', bottom: 4, left: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 2 },
+  miniaturaNro: { position: 'absolute', top: 4, left: 4, backgroundColor: 'rgba(26,100,112,0.85)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
   dosColumnas: { flexDirection: 'row', gap: 12 },
   labelRow: {
     flexDirection: 'row',
