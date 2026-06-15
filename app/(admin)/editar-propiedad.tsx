@@ -420,21 +420,28 @@ export default function EditarPropiedad() {
         }
       }
 
-      // Aplica el orden final de la lista: actualiza el orden de las existentes que
-      // se movieron y sube las nuevas en su posición. (orden = índice en la lista)
+      // Aplica el orden final de la lista (en paralelo para que no se sienta trabado):
+      // actualiza el orden de las existentes que se movieron y sube las nuevas en su posición.
+      const opsImagenes: Promise<void>[] = []
       for (let i = 0; i < imagenes.length; i++) {
         const item = imagenes[i]
+        const orden = i
         if (item.esExistente) {
-          if (item.ordenOriginal !== i) {
-            const { error } = await supabase.from('propiedad_imagenes').update({ orden: i }).eq('id', item.id)
-            if (error) throw error
+          if (item.ordenOriginal !== orden) {
+            opsImagenes.push((async () => {
+              const { error } = await supabase.from('propiedad_imagenes').update({ orden }).eq('id', item.id)
+              if (error) throw error
+            })())
           }
         } else {
-          const url = await subirImagen(item.uri, id, i)
-          const { error } = await supabase.from('propiedad_imagenes').insert({ propiedad_id: id, url, orden: i })
-          if (error) throw error
+          opsImagenes.push((async () => {
+            const url = await subirImagen(item.uri, id, orden)
+            const { error } = await supabase.from('propiedad_imagenes').insert({ propiedad_id: id, url, orden })
+            if (error) throw error
+          })())
         }
       }
+      if (opsImagenes.length > 0) await Promise.all(opsImagenes)
 
       setGuardadoOk(true)
       setTimeout(() => {
@@ -680,7 +687,7 @@ export default function EditarPropiedad() {
           onChangeText={setDescripcion}
           multiline
           numberOfLines={4}
-          maxLength={1000}
+          maxLength={5000}
           textAlignVertical="top"
           placeholderTextColor={c.textMute}
         />
