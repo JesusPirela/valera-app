@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Text,
   TextInput,
@@ -25,6 +25,8 @@ import { COLONIAS } from '../../lib/colonias'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type ImagenExistente = { id: string; url: string; orden: number }
+// Lista unificada de imágenes (existentes + nuevas) en su orden final de visualización.
+type ImgItem = { key: string; uri: string; esExistente: boolean; id: string; ordenOriginal: number }
 
 const RECAMARAS_OPTIONS = [
   { value: null, label: '—' },
@@ -77,10 +79,10 @@ export default function EditarPropiedad() {
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
-  const [imagenesExistentes, setImagenesExistentes] = useState<ImagenExistente[]>([])
+  const [imagenes, setImagenes] = useState<ImgItem[]>([])
   const [imagenesEliminar, setImagenesEliminar] = useState<string[]>([])
-  const [imagenesNuevas, setImagenesNuevas] = useState<string[]>([])
   const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<any>(null)
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [guardadoOk, setGuardadoOk] = useState(false)
@@ -123,19 +125,35 @@ export default function EditarPropiedad() {
     setExclusiva(data.exclusiva ?? false)
     setEsConstructora(data.es_constructora ?? false)
     setNombreConstructora(data.nombre_constructora ?? '')
-    setImagenesExistentes(
-      ((data.propiedad_imagenes as ImagenExistente[]) ?? []).sort((a, b) => a.orden - b.orden)
+    setImagenes(
+      ((data.propiedad_imagenes as ImagenExistente[]) ?? [])
+        .sort((a, b) => a.orden - b.orden)
+        .map((img) => ({ key: img.id, uri: img.url, esExistente: true, id: img.id, ordenOriginal: img.orden }))
     )
     setLoading(false)
   }
 
-  function quitarImagenExistente(imagenId: string) {
-    setImagenesExistentes((prev) => prev.filter((img) => img.id !== imagenId))
-    setImagenesEliminar((prev) => [...prev, imagenId])
+  function quitarImagen(item: ImgItem) {
+    if (item.esExistente) setImagenesEliminar((prev) => [...prev, item.id])
+    setImagenes((prev) => prev.filter((i) => i.key !== item.key))
   }
 
-  function quitarImagenNueva(uri: string) {
-    setImagenesNuevas((prev) => prev.filter((u) => u !== uri))
+  function moverImagen(index: number, dir: -1 | 1) {
+    setImagenes((prev) => {
+      const j = index + dir
+      if (j < 0 || j >= prev.length) return prev
+      const next = [...prev]
+      ;[next[index], next[j]] = [next[j], next[index]]
+      return next
+    })
+  }
+
+  function agregarUris(uris: string[]) {
+    if (uris.length === 0) return
+    setImagenes((prev) => [
+      ...prev,
+      ...uris.map((u) => ({ key: u, uri: u, esExistente: false as const, id: '', ordenOriginal: -1 })),
+    ])
   }
 
   const coloniasSugeridas = geoQuery.length >= 2
@@ -187,7 +205,7 @@ export default function EditarPropiedad() {
       setIsDragging(false)
       const files = Array.from(e.dataTransfer?.files ?? []) as File[]
       const urls = files.filter(f => f.type.startsWith('image/')).map(f => URL.createObjectURL(f))
-      if (urls.length > 0) setImagenesNuevas(prev => [...prev, ...urls])
+      agregarUris(urls)
     }
     const onDragOver = (e: DragEvent) => { e.preventDefault(); setIsDragging(true) }
     const onDragLeave = () => setIsDragging(false)
@@ -211,7 +229,8 @@ export default function EditarPropiedad() {
   function handleFileInput(e: any) {
     const files: File[] = Array.from(e.target?.files ?? [])
     const urls = files.filter((f: File) => f.type.startsWith('image/')).map((f: File) => URL.createObjectURL(f))
-    if (urls.length > 0) setImagenesNuevas(prev => [...prev, ...urls])
+    agregarUris(urls)
+    if (e.target) e.target.value = '' // permite volver a elegir el mismo archivo
   }
 
   async function seleccionarImagenes() {
@@ -228,7 +247,7 @@ export default function EditarPropiedad() {
       quality: 0.7,
     })
     if (!result.canceled) {
-      setImagenesNuevas((prev) => [...prev, ...result.assets.map((a) => a.uri)])
+      agregarUris(result.assets.map((a) => a.uri))
     }
   }
 
@@ -332,19 +351,20 @@ export default function EditarPropiedad() {
         }
       }
 
-      if (imagenesNuevas.length > 0) {
-        // Continuar después del orden más alto restante (evita colisiones si se borraron imágenes intermedias)
-        const ordenBase = imagenesExistentes.length > 0
-          ? Math.max(...imagenesExistentes.map((i) => i.orden)) + 1
-          : 0
-        const registros = await Promise.all(
-          imagenesNuevas.map(async (uri, index) => {
-            const url = await subirImagen(uri, id, ordenBase + index)
-            return { propiedad_id: id, url, orden: ordenBase + index }
-          })
-        )
-        const { error } = await supabase.from('propiedad_imagenes').insert(registros)
-        if (error) throw error
+      // Aplica el orden final de la lista: actualiza el orden de las existentes que
+      // se movieron y sube las nuevas en su posición. (orden = índice en la lista)
+      for (let i = 0; i < imagenes.length; i++) {
+        const item = imagenes[i]
+        if (item.esExistente) {
+          if (item.ordenOriginal !== i) {
+            const { error } = await supabase.from('propiedad_imagenes').update({ orden: i }).eq('id', item.id)
+            if (error) throw error
+          }
+        } else {
+          const url = await subirImagen(item.uri, id, i)
+          const { error } = await supabase.from('propiedad_imagenes').insert({ propiedad_id: id, url, orden: i })
+          if (error) throw error
+        }
       }
 
       setGuardadoOk(true)
@@ -366,11 +386,6 @@ export default function EditarPropiedad() {
     )
   }
 
-  const todasImagenes = [
-    ...imagenesExistentes.map((img) => ({ key: img.id, uri: img.url, esExistente: true as const, id: img.id })),
-    ...imagenesNuevas.map((uri) => ({ key: uri, uri, esExistente: false as const, id: '' })),
-  ]
-
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={[styles.container, { backgroundColor: c.bg }]} keyboardShouldPersistTaps="handled">
@@ -381,40 +396,72 @@ export default function EditarPropiedad() {
         <Text style={styles.screenTitle}>Editar propiedad</Text>
 
         <Text style={styles.label}>Imágenes</Text>
-        {todasImagenes.length > 0 && (
-          <FlatList
-            data={todasImagenes}
-            horizontal
-            keyExtractor={(item) => item.key}
-            showsHorizontalScrollIndicator={false}
-            style={{ marginBottom: 10 }}
-            renderItem={({ item }) => (
-              <View style={styles.miniatura}>
-                <Image source={{ uri: item.uri }} style={styles.miniaturaImg} />
-                <TouchableOpacity
-                  style={styles.miniaturaQuitar}
-                  onPress={() => item.esExistente ? quitarImagenExistente(item.id) : quitarImagenNueva(item.uri)}
-                >
-                  <Text style={styles.miniaturaQuitarText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          />
+        {imagenes.length > 0 && (
+          <>
+            <Text style={styles.imagenesHint}>Usa ◀ ▶ para reordenar. La primera es la portada.</Text>
+            <FlatList
+              data={imagenes}
+              horizontal
+              keyExtractor={(item) => item.key}
+              showsHorizontalScrollIndicator={false}
+              style={{ marginBottom: 10 }}
+              extraData={imagenes.length}
+              renderItem={({ item, index }) => (
+                <View style={styles.miniatura}>
+                  <Image source={{ uri: item.uri }} style={styles.miniaturaImg} />
+                  {index === 0 && (
+                    <View style={styles.portadaBadge}><Text style={styles.portadaBadgeText}>Portada</Text></View>
+                  )}
+                  <TouchableOpacity
+                    style={styles.miniaturaQuitar}
+                    onPress={() => quitarImagen(item)}
+                  >
+                    <Text style={styles.miniaturaQuitarText}>✕</Text>
+                  </TouchableOpacity>
+                  <View style={styles.miniaturaMover}>
+                    <TouchableOpacity
+                      style={[styles.moverBtn, index === 0 && styles.moverBtnDisabled]}
+                      disabled={index === 0}
+                      onPress={() => moverImagen(index, -1)}
+                    >
+                      <Text style={styles.moverBtnText}>◀</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.moverBtn, index === imagenes.length - 1 && styles.moverBtnDisabled]}
+                      disabled={index === imagenes.length - 1}
+                      onPress={() => moverImagen(index, 1)}
+                    >
+                      <Text style={styles.moverBtnText}>▶</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            />
+          </>
         )}
         {Platform.OS === 'web' ? (
-          <View nativeID="dropzone-editar" style={[styles.imagenPicker, isDragging && styles.imagenPickerDragging]}>
-            {/* @ts-ignore */}
+          <>
+            {/* @ts-ignore input DOM oculto, se dispara por ref al tocar la zona */}
             <input
+              ref={fileInputRef}
               type="file"
               accept="image/*"
               multiple
               onChange={handleFileInput}
-              style={{ position: 'absolute', width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+              style={{ display: 'none' }}
             />
-            <Text style={styles.imagenPickerText}>
-              {isDragging ? '📂 Suelta las fotos aquí' : '📁 Arrastra fotos aquí o haz clic para seleccionar'}
-            </Text>
-          </View>
+            <TouchableOpacity
+              // @ts-ignore id mapea al id del DOM en web (lo usa el listener de drag)
+              id="dropzone-editar"
+              style={[styles.imagenPicker, isDragging && styles.imagenPickerDragging]}
+              activeOpacity={0.7}
+              onPress={() => { fileInputRef.current?.click() }}
+            >
+              <Text style={styles.imagenPickerText}>
+                {isDragging ? '📂 Suelta las fotos aquí' : '📁 Arrastra fotos aquí o haz clic para seleccionar'}
+              </Text>
+            </TouchableOpacity>
+          </>
         ) : (
           <TouchableOpacity style={styles.imagenPicker} onPress={seleccionarImagenes}>
             <Text style={styles.imagenPickerText}>+ Agregar fotos</Text>
@@ -670,8 +717,25 @@ const styles = StyleSheet.create({
   },
   imagenPickerText: { color: '#888', fontSize: 15 },
   imagenPickerDragging: { borderColor: '#1a6470', backgroundColor: '#e8f4f5', borderStyle: 'solid' },
+  imagenesHint: { fontSize: 12, color: '#888', marginBottom: 6 },
   miniatura: { position: 'relative', marginRight: 10 },
   miniaturaImg: { width: 100, height: 100, borderRadius: 10 },
+  portadaBadge: {
+    position: 'absolute', top: 4, left: 4,
+    backgroundColor: 'rgba(26,100,112,0.92)', borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  portadaBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  miniaturaMover: {
+    position: 'absolute', bottom: 4, left: 4, right: 4,
+    flexDirection: 'row', justifyContent: 'space-between',
+  },
+  moverBtn: {
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 6,
+    width: 30, height: 24, alignItems: 'center', justifyContent: 'center',
+  },
+  moverBtnDisabled: { opacity: 0.25 },
+  moverBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
   miniaturaQuitar: {
     position: 'absolute',
     top: 4,
