@@ -561,52 +561,70 @@ export default function NuevaPropiedad() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Sesión no válida. Vuelve a iniciar sesión.')
 
-      const { data: codigos, error: errorCodigos } = await supabase.from('propiedades').select('codigo')
-      if (errorCodigos) throw new Error(`Error leyendo códigos: ${errorCodigos.message}`)
-
-      let maxNum = 0
-      for (const p of codigos ?? []) {
-        const match = p.codigo?.match(/VR-(\d+)/)
-        if (match) {
-          const n = parseInt(match[1], 10)
-          if (n > maxNum) maxNum = n
+      // Siguiente número de código. Preferimos la función SQL (rápida y sin límite
+      // de filas); si no existe aún, calculamos el máximo paginando todos los códigos
+      // (supera el límite de ~1000 filas por request).
+      let siguienteNum = 0
+      const { data: rpcNum, error: rpcErr } = await supabase.rpc('siguiente_codigo_propiedad')
+      if (!rpcErr && typeof rpcNum === 'number') {
+        siguienteNum = rpcNum
+      } else {
+        let maxNum = 0
+        const PAGE = 1000
+        for (let from = 0; ; from += PAGE) {
+          const { data: codigos, error: errorCodigos } = await supabase
+            .from('propiedades').select('codigo').range(from, from + PAGE - 1)
+          if (errorCodigos) throw new Error(`Error leyendo códigos: ${errorCodigos.message}`)
+          for (const p of codigos ?? []) {
+            const match = p.codigo?.match(/VR-(\d+)/)
+            if (match) { const n = parseInt(match[1], 10); if (n > maxNum) maxNum = n }
+          }
+          if (!codigos || codigos.length < PAGE) break
         }
+        siguienteNum = maxNum + 1
       }
-      const codigo = `VR-${String(maxNum + 1).padStart(3, '0')}`
+
       const propiedadId = generarUUID()
+      const datosPropiedad = {
+        id: propiedadId,
+        titulo: titulo.trim(),
+        descripcion: descripcion.trim() || null,
+        precio: precioNum,
+        direccion: direccion.trim(),
+        operacion,
+        tipo,
+        estado,
+        zona: zona ?? null,
+        recamaras,
+        banos,
+        medios_banos: mediosBanos ?? 0,
+        m2: m2Num,
+        m2_terreno: m2TerrenoNum,
+        estacionamientos,
+        asesor_id: asesorId,
+        inmobiliaria_id: inmobiliariaId,
+        exclusiva,
+        es_constructora: esConstructora,
+        nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
+        es_inventario: esInventario,
+        inventario_seccion: esInventario ? (inventarioSeccion.trim() || null) : null,
+        created_by: user.id,
+        lat: lat ?? null,
+        lng: lng ?? null,
+      }
 
       console.log('[nueva-propiedad] insertando con asesor_id:', asesorId)
 
-      const { error: errorPropiedad } = await supabase
-        .from('propiedades')
-        .insert({
-          id: propiedadId,
-          codigo,
-          titulo: titulo.trim(),
-          descripcion: descripcion.trim() || null,
-          precio: precioNum,
-          direccion: direccion.trim(),
-          operacion,
-          tipo,
-          estado,
-          zona: zona ?? null,
-          recamaras,
-          banos,
-          medios_banos: mediosBanos ?? 0,
-          m2: m2Num,
-          m2_terreno: m2TerrenoNum,
-          estacionamientos,
-          asesor_id: asesorId,
-          inmobiliaria_id: inmobiliariaId,
-          exclusiva,
-          es_constructora: esConstructora,
-          nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
-          es_inventario: esInventario,
-          inventario_seccion: esInventario ? (inventarioSeccion.trim() || null) : null,
-          created_by: user.id,
-          lat: lat ?? null,
-          lng: lng ?? null,
-        })
+      // Inserta reintentando si el código ya está ocupado (carrera o hueco).
+      let errorPropiedad: any = null
+      for (let intento = 0; intento < 25; intento++) {
+        const codigo = `VR-${String(siguienteNum).padStart(3, '0')}`
+        const { error } = await supabase.from('propiedades').insert({ ...datosPropiedad, codigo })
+        if (!error) { errorPropiedad = null; break }
+        errorPropiedad = error
+        if (error.code === '23505') { siguienteNum++; continue } // código ocupado → siguiente
+        break
+      }
 
       console.log('[nueva-propiedad] resultado insert — error:', errorPropiedad)
 
