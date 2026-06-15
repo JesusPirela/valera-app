@@ -571,13 +571,14 @@ export default function EditarPropiedad() {
           </TouchableOpacity>
         </View>
         <TextInput
-          style={[styles.input, styles.textArea]}
+          style={[styles.input, styles.textArea, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
           value={descripcion}
           onChangeText={setDescripcion}
           multiline
           numberOfLines={4}
           maxLength={1000}
           textAlignVertical="top"
+          placeholderTextColor={c.textMute}
         />
 
         <Text style={styles.label}>Asesor de contacto</Text>
