@@ -93,15 +93,26 @@ export default function AdminPropiedades() {
   async function cargarPropiedades() {
     // Spinner completo solo en la primera carga; al volver refresca en silencio
     if (yaCargoRef.current === false) setLoading(true)
-    const { data, error } = await supabase
-      .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
-      .order('created_at', { ascending: false })
-      .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
-      .limit(1, { referencedTable: 'propiedad_imagenes' })
-    if (error) Alert.alert('Error', 'No se pudieron cargar las propiedades.')
+    // Paginar: PostgREST corta en 1000 filas/petición. Sin esto, las
+    // propiedades más viejas (códigos VR bajos) no se cargan ni se pueden buscar.
+    const PAGE = 1000
+    let todas: any[] = []
+    let huboError = false
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('propiedades')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
+        .order('created_at', { ascending: false })
+        .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
+        .limit(1, { referencedTable: 'propiedad_imagenes' })
+        .range(from, from + PAGE - 1)
+      if (error) { huboError = true; break }
+      todas = todas.concat(data ?? [])
+      if (!data || data.length < PAGE) break
+    }
+    if (huboError) Alert.alert('Error', 'No se pudieron cargar las propiedades.')
     else {
-      const normalizadas = (data ?? []).map((p: any) => ({
+      const normalizadas = todas.map((p: any) => ({
         ...p,
         inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
       }))
@@ -142,9 +153,13 @@ export default function AdminPropiedades() {
   let propiedadesFiltradas = propiedades.filter((p) => !p.es_inventario)
   if (busqueda.trim()) {
     const q = busqueda.trim().toLowerCase()
-    propiedadesFiltradas = propiedadesFiltradas.filter((p) =>
-      p.codigo?.toLowerCase().includes(q) || p.direccion?.toLowerCase().includes(q) || p.titulo?.toLowerCase().includes(q)
-    )
+    const qDigits = q.replace(/\D/g, '')
+    propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
+      const cod = p.codigo?.toLowerCase() ?? ''
+      // Coincidencia de código tolerante a ceros: "4", "004" y "vr-004" encuentran VR-004
+      const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
+      return codMatch || p.direccion?.toLowerCase().includes(q) || p.titulo?.toLowerCase().includes(q)
+    })
   }
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroEstado) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.estado === filtroEstado)

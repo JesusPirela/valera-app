@@ -36,6 +36,8 @@ export default function Bloques() {
   const [periodo, setPeriodo] = useState<Periodo>(1)
   const [loading, setLoading] = useState(true)
   const [asignando, setAsignando] = useState<string | null>(null)
+  const [expandidas, setExpandidas] = useState<Record<string, boolean>>({})
+  const [editando, setEditando] = useState<Record<string, boolean>>({})
   const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { cargar(periodo, yaCargoRef.current) }, []))
@@ -62,10 +64,7 @@ export default function Bloques() {
     // Optimista
     setUsuarios((prev) => prev.map((u) => u.user_id === userId ? { ...u, bloque_id: bloqueId } : u))
     const { error } = await supabase.rpc('asignar_bloque', { p_user_id: userId, p_bloque_id: bloqueId })
-    if (error) {
-      // revertir cargando de nuevo
-      await cargar(periodo, true)
-    }
+    if (error) await cargar(periodo, true) // revertir
     setAsignando(null)
   }
 
@@ -84,6 +83,13 @@ export default function Bloques() {
       }),
       { publicaciones: 0, clientes_nuevos: 0, seguimientos: 0 }
     )
+  }
+
+  function toggleExpand(key: string) {
+    setExpandidas((s) => ({ ...s, [key]: !s[key] }))
+  }
+  function toggleEdit(key: string) {
+    setEditando((s) => ({ ...s, [key]: !s[key] }))
   }
 
   return (
@@ -117,60 +123,88 @@ export default function Bloques() {
           {grupos.map((g) => {
             const t = totales(g.users)
             const esSinAsignar = g.key === SIN_ASIGNAR
+            const abierta = expandidas[g.key]
+            const enEdicion = editando[g.key]
             return (
-              <View key={g.key} style={[s.bloqueCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                <View style={s.bloqueHeader}>
-                  <Text style={[s.bloqueNombre, { color: c.text }]}>{g.nombre}</Text>
-                  <Text style={[s.bloqueCount, { color: c.textMute }]}>{g.users.length} {g.users.length === 1 ? 'usuario' : 'usuarios'}</Text>
-                </View>
-
-                {/* Resumen del bloque */}
-                {!esSinAsignar && (
-                  <View style={s.resumenRow}>
-                    <ResumenBox label="Publicaciones" val={t.publicaciones} color={TEAL} />
-                    <ResumenBox label="Clientes nuevos" val={t.clientes_nuevos} color="#2e7d32" />
-                    <ResumenBox label="Seguimientos" val={t.seguimientos} color="#c8960c" />
+              <View key={g.key} style={[s.bloqueCard, { backgroundColor: c.card, borderColor: enEdicion ? PURPLE : c.border }]}>
+                {/* Header — abrir/cerrar */}
+                <TouchableOpacity style={s.bloqueHeader} onPress={() => toggleExpand(g.key)} activeOpacity={0.7}>
+                  <Text style={[s.chevron, { color: c.textMute }]}>{abierta ? '▼' : '▶'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.bloqueNombre, { color: c.text }]}>{g.nombre}</Text>
+                    {!esSinAsignar && (
+                      <Text style={s.headerResumen}>
+                        📤 {t.publicaciones}   👤 {t.clientes_nuevos}   ✅ {t.seguimientos}
+                      </Text>
+                    )}
                   </View>
-                )}
+                  <Text style={[s.bloqueCount, { color: c.textMute }]}>{g.users.length} {g.users.length === 1 ? 'usuario' : 'usuarios'}</Text>
+                </TouchableOpacity>
 
-                {/* Usuarios */}
-                {g.users.length === 0 ? (
-                  <Text style={s.vacio}>{esSinAsignar ? 'Todos los usuarios están asignados.' : 'Sin usuarios en este bloque.'}</Text>
-                ) : (
-                  g.users.map((u) => (
-                    <View key={u.user_id} style={[s.userRow, { borderTopColor: c.border }]}>
-                      <View style={s.userTop}>
-                        <Text style={[s.userNombre, { color: c.text }]} numberOfLines={1}>{u.nombre ?? 'Sin nombre'}</Text>
-                        <View style={s.userStats}>
-                          <Text style={[s.userStat, { color: TEAL }]}>📤 {u.publicaciones}</Text>
-                          <Text style={[s.userStat, { color: '#2e7d32' }]}>👤 {u.clientes_nuevos}</Text>
-                          <Text style={[s.userStat, { color: '#c8960c' }]}>✅ {u.seguimientos}</Text>
+                {abierta && (
+                  <View style={s.bloqueBody}>
+                    {/* Estadística general del bloque */}
+                    {!esSinAsignar && (
+                      <View style={s.resumenRow}>
+                        <ResumenBox label="Publicaciones" val={t.publicaciones} color={TEAL} />
+                        <ResumenBox label="Clientes nuevos" val={t.clientes_nuevos} color="#2e7d32" />
+                        <ResumenBox label="Seguimientos" val={t.seguimientos} color="#c8960c" />
+                      </View>
+                    )}
+
+                    {/* Botón de edición */}
+                    <TouchableOpacity
+                      style={[s.editBtn, enEdicion ? s.editBtnOn : { borderColor: PURPLE }]}
+                      onPress={() => toggleEdit(g.key)}
+                    >
+                      <Text style={[s.editBtnTxt, enEdicion && { color: '#fff' }]}>
+                        {enEdicion ? '✓ Listo' : '✎ Editar bloque'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Usuarios */}
+                    {g.users.length === 0 ? (
+                      <Text style={s.vacio}>{esSinAsignar ? 'Todos los usuarios están asignados.' : 'Sin usuarios en este bloque.'}</Text>
+                    ) : (
+                      g.users.map((u) => (
+                        <View key={u.user_id} style={[s.userRow, { borderTopColor: c.border }]}>
+                          <View style={s.userTop}>
+                            <Text style={[s.userNombre, { color: c.text }]} numberOfLines={1}>{u.nombre ?? 'Sin nombre'}</Text>
+                            <View style={s.userStats}>
+                              <Text style={[s.userStat, { color: TEAL }]}>📤 {u.publicaciones}</Text>
+                              <Text style={[s.userStat, { color: '#2e7d32' }]}>👤 {u.clientes_nuevos}</Text>
+                              <Text style={[s.userStat, { color: '#c8960c' }]}>✅ {u.seguimientos}</Text>
+                            </View>
+                          </View>
+                          {/* Chips de asignación — solo en modo edición */}
+                          {enEdicion && (
+                            <View style={s.chipsRow}>
+                              <Text style={s.chipsLabel}>Mover a:</Text>
+                              {bloques.map((b) => (
+                                <TouchableOpacity
+                                  key={b.id}
+                                  disabled={asignando === u.user_id}
+                                  style={[s.chip, u.bloque_id === b.id && s.chipActive]}
+                                  onPress={() => asignar(u.user_id, u.bloque_id === b.id ? null : b.id)}
+                                >
+                                  <Text style={[s.chipTxt, u.bloque_id === b.id && s.chipTxtActive]}>{b.nombre}</Text>
+                                </TouchableOpacity>
+                              ))}
+                              {u.bloque_id && (
+                                <TouchableOpacity
+                                  disabled={asignando === u.user_id}
+                                  style={s.chipQuitar}
+                                  onPress={() => asignar(u.user_id, null)}
+                                >
+                                  <Text style={s.chipQuitarTxt}>Quitar</Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          )}
                         </View>
-                      </View>
-                      {/* Chips de asignación */}
-                      <View style={s.chipsRow}>
-                        {bloques.map((b) => (
-                          <TouchableOpacity
-                            key={b.id}
-                            disabled={asignando === u.user_id}
-                            style={[s.chip, u.bloque_id === b.id && s.chipActive]}
-                            onPress={() => asignar(u.user_id, u.bloque_id === b.id ? null : b.id)}
-                          >
-                            <Text style={[s.chipTxt, u.bloque_id === b.id && s.chipTxtActive]}>{b.nombre}</Text>
-                          </TouchableOpacity>
-                        ))}
-                        {u.bloque_id && (
-                          <TouchableOpacity
-                            disabled={asignando === u.user_id}
-                            style={s.chipQuitar}
-                            onPress={() => asignar(u.user_id, null)}
-                          >
-                            <Text style={s.chipQuitarTxt}>Quitar</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  ))
+                      ))
+                    )}
+                  </View>
                 )}
               </View>
             )
@@ -204,15 +238,23 @@ const s = StyleSheet.create({
   periodoPillTxt: { fontSize: 12, fontWeight: '600' },
   periodoPillActiveTxt: { color: '#fff' },
 
-  bloqueCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 14 },
-  bloqueHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  bloqueCard: { borderRadius: 16, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
+  bloqueHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 },
+  chevron: { fontSize: 13, width: 14 },
   bloqueNombre: { fontSize: 17, fontWeight: '800' },
+  headerResumen: { fontSize: 12, color: '#94a3b8', fontWeight: '700', marginTop: 3 },
   bloqueCount: { fontSize: 12, fontWeight: '600' },
 
-  resumenRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
+  bloqueBody: { paddingHorizontal: 16, paddingBottom: 16 },
+
+  resumenRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   resumenBox: { flex: 1, borderLeftWidth: 3, paddingLeft: 8, paddingVertical: 4 },
   resumenVal: { fontSize: 22, fontWeight: '800' },
   resumenLbl: { fontSize: 10, color: '#94a3b8', fontWeight: '600' },
+
+  editBtn: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7, marginBottom: 4 },
+  editBtnOn: { backgroundColor: PURPLE, borderColor: PURPLE },
+  editBtnTxt: { fontSize: 13, fontWeight: '700', color: PURPLE },
 
   vacio: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic', paddingVertical: 10 },
 
@@ -222,7 +264,8 @@ const s = StyleSheet.create({
   userStats: { flexDirection: 'row', gap: 10 },
   userStat: { fontSize: 13, fontWeight: '800' },
 
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 },
+  chipsLabel: { fontSize: 11, color: '#94a3b8', fontWeight: '700', marginRight: 2 },
   chip: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 5 },
   chipActive: { backgroundColor: PURPLE, borderColor: PURPLE },
   chipTxt: { fontSize: 12, color: '#64748b', fontWeight: '600' },

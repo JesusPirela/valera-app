@@ -144,23 +144,32 @@ export default function ProspectadorPropiedades() {
       const userId = session?.user?.id
       if (!userId) throw new Error('No user')
 
-      const [profileRes, propsRes, pubRes] = await Promise.all([
+      const [profileRes, pubRes] = await Promise.all([
         supabase.from('profiles').select('role, nombre, telefono').eq('id', userId).single(),
-        supabase
+        supabase.from('propiedad_publicacion').select('propiedad_id, veces_publicada, fecha_publicacion').eq('user_id', userId),
+      ])
+
+      // Paginar: PostgREST corta en 1000 filas/petición. Sin esto, las
+      // propiedades más viejas (códigos VR bajos) no se cargan ni se buscan.
+      const PAGE = 1000
+      let propsData: any[] = []
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
           .from('propiedades')
           .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
           .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
-          .limit(1, { referencedTable: 'propiedad_imagenes' }),
-        supabase.from('propiedad_publicacion').select('propiedad_id, veces_publicada, fecha_publicacion').eq('user_id', userId),
-      ])
-
-      if (propsRes.error) throw propsRes.error
+          .limit(1, { referencedTable: 'propiedad_imagenes' })
+          .range(from, from + PAGE - 1)
+        if (error) throw error
+        propsData = propsData.concat(data ?? [])
+        if (!data || data.length < PAGE) break
+      }
 
       const rol = profileRes.data?.role ?? null
-      let propiedades = (propsRes.data ?? []).map((p: any) => ({
+      let propiedades = propsData.map((p: any) => ({
         ...p,
         inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
       })) as unknown as Propiedad[]
@@ -351,11 +360,15 @@ export default function ProspectadorPropiedades() {
 
   if (busqueda.trim()) {
     const q = busqueda.trim().toLowerCase()
-    propiedadesFiltradas = propiedadesFiltradas.filter((p) =>
-      p.codigo?.toLowerCase().includes(q) ||
-      p.direccion?.toLowerCase().includes(q) ||
-      p.titulo?.toLowerCase().includes(q)
-    )
+    const qDigits = q.replace(/\D/g, '')
+    propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
+      const cod = p.codigo?.toLowerCase() ?? ''
+      // Código tolerante a ceros: "4", "004" y "vr-004" encuentran VR-004
+      const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
+      return codMatch ||
+        p.direccion?.toLowerCase().includes(q) ||
+        p.titulo?.toLowerCase().includes(q)
+    })
   }
   if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) > 0)
   if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0)
