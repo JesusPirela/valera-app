@@ -30,6 +30,9 @@ type InvProp = {
   inv_asesor_contactado: boolean
   inv_asesor_respondio: boolean
   inv_autorizado_publicar: boolean
+  inv_asesor_no_contesto: boolean
+  inv_apartada: boolean
+  inv_no_autorizada: boolean
   inv_notas: string | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
@@ -52,7 +55,7 @@ export default function Inventario() {
   async function cargar() {
     const { data, error } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, tipo, operacion, inventario_seccion, inv_asesor_contactado, inv_asesor_respondio, inv_autorizado_publicar, inv_notas, propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, tipo, operacion, inventario_seccion, inv_asesor_contactado, inv_asesor_respondio, inv_autorizado_publicar, inv_asesor_no_contesto, inv_apartada, inv_no_autorizada, inv_notas, propiedad_imagenes(url, orden)')
       .eq('es_inventario', true)
       .order('inventario_seccion', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
@@ -75,7 +78,7 @@ export default function Inventario() {
     g.props.push(p)
   }
 
-  async function toggleCampo(p: InvProp, campo: 'inv_asesor_contactado' | 'inv_asesor_respondio' | 'inv_autorizado_publicar', valor: boolean) {
+  async function toggleCampo(p: InvProp, campo: 'inv_asesor_contactado' | 'inv_asesor_respondio' | 'inv_autorizado_publicar' | 'inv_asesor_no_contesto' | 'inv_apartada' | 'inv_no_autorizada', valor: boolean) {
     // Si se desmarca "respondió", no puede seguir autorizado; encadenamos lógica suave.
     const cambios: Partial<InvProp> = { [campo]: valor } as any
     setItems((prev) => prev.map((x) => x.id === p.id ? { ...x, ...cambios } : x))
@@ -205,12 +208,20 @@ export default function Inventario() {
                             {p.precio != null ? `$${p.precio.toLocaleString('es-MX')} MXN` : 'Sin precio'}
                           </Text>
                           {p.codigo ? <Text style={styles.cardCodigo}>{p.codigo}</Text> : null}
+                          <View style={styles.estadoBadges}>
+                            {p.inv_apartada && <Text style={[styles.estadoBadge, styles.estadoBadgeRojo]}>🔒 Apartada</Text>}
+                            {p.inv_no_autorizada && <Text style={[styles.estadoBadge, styles.estadoBadgeRojo]}>🚫 No autorizada</Text>}
+                            {p.inv_asesor_no_contesto && <Text style={[styles.estadoBadge, styles.estadoBadgeGris]}>📵 No contestó</Text>}
+                          </View>
                         </View>
                       </View>
 
                       <View style={styles.checklist}>
                         <Check label="Contacté al asesor"      value={p.inv_asesor_contactado}   onPress={() => toggleCampo(p, 'inv_asesor_contactado', !p.inv_asesor_contactado)} />
                         <Check label="El asesor me respondió"   value={p.inv_asesor_respondio}    onPress={() => toggleCampo(p, 'inv_asesor_respondio', !p.inv_asesor_respondio)} />
+                        <Check label="El asesor no me contestó"  value={p.inv_asesor_no_contesto}  onPress={() => toggleCampo(p, 'inv_asesor_no_contesto', !p.inv_asesor_no_contesto)} />
+                        <Check label="Ya está apartada"          value={p.inv_apartada}            onPress={() => toggleCampo(p, 'inv_apartada', !p.inv_apartada)} />
+                        <Check label="No me dejaron publicarla"  value={p.inv_no_autorizada}       onPress={() => toggleCampo(p, 'inv_no_autorizada', !p.inv_no_autorizada)} />
                         <Check label="Autorizó publicar"        value={p.inv_autorizado_publicar} onPress={() => toggleCampo(p, 'inv_autorizado_publicar', !p.inv_autorizado_publicar)} />
                       </View>
 
@@ -309,6 +320,10 @@ const styles = StyleSheet.create({
   cardDir: { fontSize: 12, color: '#888', marginBottom: 3 },
   cardPrecio: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
   cardCodigo: { fontSize: 11, color: '#aaa', marginTop: 2, fontWeight: '600' },
+  estadoBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 5 },
+  estadoBadge: { fontSize: 10, fontWeight: '700', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: 'hidden' },
+  estadoBadgeRojo: { backgroundColor: '#fdecea', color: '#c0392b' },
+  estadoBadgeGris: { backgroundColor: '#eceff1', color: '#607d8b' },
 
   checklist: { marginTop: 12, gap: 8 },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

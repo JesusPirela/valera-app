@@ -54,9 +54,11 @@ type InmobiliariaOpcion = { id: string; nombre: string }
 const NAV_ITEMS = [
   { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2' },
   { label: 'CRM', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
+  { label: 'Constructoras', icon: '🏗️', route: '/(prospectador)/constructoras', color: '#455A64' },
   { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32' },
   { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2' },
   { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F' },
+  { label: 'Bloques', icon: '🧩', route: '/(admin)/bloques', color: '#5e35b1' },
   { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828' },
   { label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#F57F17' },
   { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#AD1457' },
@@ -129,6 +131,7 @@ export default function AdminPropiedades() {
         '/(admin)/misiones',
         '/(admin)/gestion-cofres',
         '/(admin)/prospectadores',
+        '/(admin)/bloques',
       ].includes(item.route))
     : NAV_ITEMS
 
@@ -438,6 +441,13 @@ export default function AdminPropiedades() {
 
                   {/* Botones de acción compactos (no disponibles para Supervisor: solo lectura) */}
                   {!esSupervisor && (
+                    <>
+                    <TouchableOpacity
+                      style={styles.btnVerComoUsuario}
+                      onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } })}
+                    >
+                      <Text style={styles.btnVerComoUsuarioText}>👁 Ver como usuario</Text>
+                    </TouchableOpacity>
                     <View style={styles.cardAcciones}>
                       <TouchableOpacity
                         style={styles.btnEditar}
@@ -458,6 +468,7 @@ export default function AdminPropiedades() {
                         <Text style={styles.btnBorrarText}>🗑</Text>
                       </TouchableOpacity>
                     </View>
+                    </>
                   )}
                 </View>
               </CardWrapper>
@@ -532,6 +543,13 @@ export default function AdminPropiedades() {
                     </View>
                   )}
                   {!esSupervisor && (
+                    <>
+                    <TouchableOpacity
+                      style={styles.btnVerComoUsuario}
+                      onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } })}
+                    >
+                      <Text style={styles.btnVerComoUsuarioText}>👁 Ver como usuario</Text>
+                    </TouchableOpacity>
                     <View style={styles.cardAcciones}>
                       <TouchableOpacity
                         style={styles.btnEditar}
@@ -552,6 +570,7 @@ export default function AdminPropiedades() {
                         <Text style={styles.btnBorrarText}>🗑</Text>
                       </TouchableOpacity>
                     </View>
+                    </>
                   )}
                 </View>
               </CardWrapper>
@@ -843,6 +862,16 @@ const styles = StyleSheet.create({
   },
 
   // Botones de acción
+  btnVerComoUsuario: {
+    borderWidth: 1.5,
+    borderColor: '#7B1FA2',
+    backgroundColor: '#f6eefb',
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  btnVerComoUsuarioText: { color: '#7B1FA2', fontSize: 13, fontWeight: '700' },
   cardAcciones: { flexDirection: 'row', gap: 8 },
   btnEditar: {
     flex: 2,

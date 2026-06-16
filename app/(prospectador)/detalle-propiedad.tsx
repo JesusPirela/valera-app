@@ -165,7 +165,7 @@ export default function DetallePropiedad() {
       if (rol !== 'prospectador_plus' && rol !== 'admin' && rol !== 'supervisor') {
         const propiedadAny = dataNormalizada as unknown as Propiedad
         if (propiedadAny.exclusiva || propiedadAny.inmobiliarias?.exclusiva) {
-          return { propiedad: null, subidoPor: null, nombreUsuario, sinAcceso: true as const }
+          return { propiedad: null, subidoPor: null, nombreUsuario, rol, sinAcceso: true as const }
         }
       }
 
@@ -180,7 +180,7 @@ export default function DetallePropiedad() {
         }
       }
 
-      return { propiedad: dataNormalizada as unknown as Propiedad, subidoPor, nombreUsuario, sinAcceso: false as const }
+      return { propiedad: dataNormalizada as unknown as Propiedad, subidoPor, nombreUsuario, rol, sinAcceso: false as const }
     },
     enabled: !!id,
     networkMode: 'offlineFirst',
@@ -206,6 +206,20 @@ export default function DetallePropiedad() {
   const propiedad = detalle?.propiedad ?? null
   const subidoPor = detalle?.subidoPor ?? null
   const nombreUsuario = detalle?.nombreUsuario ?? null
+  const rol = detalle?.rol ?? null
+  const esStaff = rol === 'admin' || rol === 'supervisor'
+
+  // Admin/Supervisor: quiénes publicaron esta propiedad y cuántas veces
+  const { data: publicadores } = useQuery({
+    queryKey: ['publicadores-propiedad', id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_publicadores_propiedad', { p_propiedad_id: id })
+      if (error) return [] as { user_id: string; nombre: string; veces: number }[]
+      return (data ?? []) as { user_id: string; nombre: string; veces: number }[]
+    },
+    enabled: !!id && esStaff,
+    staleTime: 1000 * 30,
+  })
 
   // Sin permiso para ver esta propiedad (inmobiliaria exclusiva) → volver al listado
   useEffect(() => {
@@ -1300,6 +1314,25 @@ export default function DetallePropiedad() {
           </View>
         )}
 
+        {/* Quiénes la publicaron — solo admin/supervisor */}
+        {esStaff && (
+          <View style={styles.seccion}>
+            <Text style={styles.seccionTitulo}>Quiénes la publicaron</Text>
+            {(publicadores?.length ?? 0) === 0 ? (
+              <Text style={styles.publicadoresVacio}>Nadie la ha publicado aún.</Text>
+            ) : (
+              <View style={styles.publicadoresLista}>
+                {publicadores!.map((p) => (
+                  <View key={p.user_id} style={styles.publicadorRow}>
+                    <Text style={styles.publicadorNombre} numberOfLines={1}>👤 {p.nombre}</Text>
+                    <Text style={styles.publicadorVeces}>×{p.veces} {p.veces === 1 ? 'vez' : 'veces'}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Mis notas privadas */}
         <View style={styles.seccion}>
           <Text style={styles.seccionTitulo}>Mis notas privadas</Text>
@@ -1949,6 +1982,14 @@ const styles = StyleSheet.create({
     minHeight: 90,
     backgroundColor: '#fafafa',
   },
+  publicadoresVacio: { fontSize: 13, color: '#94a3b8', fontStyle: 'italic' },
+  publicadoresLista: { gap: 8 },
+  publicadorRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#f0f5f5', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+  },
+  publicadorNombre: { fontSize: 14, fontWeight: '600', color: '#1a1a2e', flex: 1, marginRight: 8 },
+  publicadorVeces: { fontSize: 13, fontWeight: '800', color: '#1a6470' },
   notaGuardarBtn: {
     backgroundColor: '#1a6470',
     borderRadius: 10,

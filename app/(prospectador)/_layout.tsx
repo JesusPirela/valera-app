@@ -305,6 +305,7 @@ export default function ProspectadorLayout() {
       />
       {/* Pantallas de detalle — ocultas del tab bar */}
       <Tabs.Screen name="detalle-propiedad"  options={{ href: null, title: 'Detalle' }} />
+      <Tabs.Screen name="constructoras"      options={{ href: null, title: 'Constructoras' }} />
       <Tabs.Screen name="cliente-form"       options={{ href: null, title: 'Cliente' }} />
       <Tabs.Screen name="detalle-cliente"    options={{ href: null, title: 'Cliente' }} />
       <Tabs.Screen name="university-curso"   options={{ href: null, title: 'Curso' }} />
