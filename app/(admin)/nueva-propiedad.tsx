@@ -173,6 +173,7 @@ export default function NuevaPropiedad() {
   const [nombreConstructora, setNombreConstructora] = useState('')
   const [esInventario, setEsInventario] = useState(false)
   const [inventarioSeccion, setInventarioSeccion] = useState('')
+  const [seccionesExistentes, setSeccionesExistentes] = useState<string[]>([])
   const [imagenes, setImagenes] = useState<string[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -268,6 +269,28 @@ export default function NuevaPropiedad() {
     setMostrarFicha(false)
     setTituloEditado(false)
   }
+
+  // Carga las secciones de inventario ya creadas para poder elegirlas (no solo crear nuevas).
+  useEffect(() => {
+    if (!esInventario) return
+    let activo = true
+    ;(async () => {
+      const { data } = await supabase
+        .from('propiedades')
+        .select('inventario_seccion')
+        .eq('es_inventario', true)
+        .not('inventario_seccion', 'is', null)
+        .limit(2000)
+      if (!activo) return
+      const set = new Map<string, string>()
+      for (const r of (data ?? [])) {
+        const s = (r as any).inventario_seccion?.trim()
+        if (s) set.set(s.toLowerCase(), s)
+      }
+      setSeccionesExistentes(Array.from(set.values()).sort((a, b) => a.localeCompare(b)))
+    })()
+    return () => { activo = false }
+  }, [esInventario])
 
   async function importarDesdeUrl() {
     const url = urlImport.trim()
@@ -1011,13 +1034,34 @@ export default function NuevaPropiedad() {
           />
         </View>
         {esInventario && (
-          <TextInput
-            style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-            placeholder="Sección del inventario (ej. Lonas Taray Club)"
-            value={inventarioSeccion}
-            onChangeText={setInventarioSeccion}
-            autoCapitalize="words"
-          />
+          <View>
+            {seccionesExistentes.length > 0 && (
+              <>
+                <Text style={[styles.exclusivaDesc, { marginTop: 8, marginBottom: 6 }]}>Elige una sección existente o escribe una nueva abajo:</Text>
+                <View style={styles.seccionChips}>
+                  {seccionesExistentes.map((sec) => {
+                    const activa = inventarioSeccion.trim().toLowerCase() === sec.toLowerCase()
+                    return (
+                      <TouchableOpacity
+                        key={sec}
+                        style={[styles.seccionChip, activa && styles.seccionChipActiva]}
+                        onPress={() => setInventarioSeccion(activa ? '' : sec)}
+                      >
+                        <Text style={[styles.seccionChipTxt, activa && styles.seccionChipTxtActiva]}>{sec}</Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              </>
+            )}
+            <TextInput
+              style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText, marginTop: 8 }]}
+              placeholder="Sección del inventario (ej. Lonas Taray Club)"
+              value={inventarioSeccion}
+              onChangeText={setInventarioSeccion}
+              autoCapitalize="words"
+            />
+          </View>
         )}
 
 
@@ -1134,6 +1178,14 @@ const styles = StyleSheet.create({
   },
   exclusivaLabel: { fontSize: 14, fontWeight: '600', color: '#1a6470' },
   exclusivaDesc: { fontSize: 12, color: '#888', marginTop: 2 },
+  seccionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  seccionChip: {
+    borderWidth: 1, borderColor: '#c9a84c', borderRadius: 16,
+    paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#fffbf0',
+  },
+  seccionChipActiva: { backgroundColor: '#c9a84c', borderColor: '#c9a84c' },
+  seccionChipTxt: { fontSize: 13, color: '#8a6d1a', fontWeight: '600' },
+  seccionChipTxtActiva: { color: '#fff', fontWeight: '800' },
   successBanner: {
     backgroundColor: '#e8f5e9', borderRadius: 10, borderWidth: 1,
     borderColor: '#a5d6a7', paddingHorizontal: 16, paddingVertical: 12,
