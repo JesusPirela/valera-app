@@ -481,6 +481,8 @@ serve(async (req) => {
       /https?:\/\/[^\s"'<>?]*inmobay\.com\/upload\/inmuebles\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi, // inmobay
       /https?:\/\/[^\s"'<>?]+\/wp-content\/uploads\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,        // WordPress (gminmobiliaria)
       /https?:\/\/[^\s"'<>?]+\.(?:cloudfront\.net|amazonaws\.com)\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
+      // Lamudi: URLs base64 SIN extensión (img.lamudi.com.mx/<token>)
+      /https?:\/\/img\.lamudi\.com\.mx\/[^\s"'<>)]+/gi,
     ]
     const rawImgs: string[] = []
     for (const pat of imgPatterns) {
@@ -489,12 +491,27 @@ serve(async (req) => {
     // Descarta logos, íconos, avatares y recortes (no son fotos de la propiedad).
     const junk = /(logo|icon|favicon|avatar|sprite|placeholder|cropped-|whatsapp-image-2021|-32x32|-150x150|-180x180|-192x192|-270x270)/i
     const limpiados = rawImgs.filter(u => !junk.test(u))
-    // Dedup de variantes de tamaño (-1024x668, -540x405…): conserva la más grande.
+    // Dedup conservando la variante más grande de cada imagen.
     const best = new Map<string, { url: string; w: number }>()
     for (const u of limpiados) {
-      const m = u.match(/-(\d+)x(\d+)(\.(?:jpe?g|png|webp))$/i)
-      const w = m ? parseInt(m[1], 10) : 999999
-      const base = m ? u.replace(/-\d+x\d+(\.(?:jpe?g|png|webp))$/i, '$1') : u
+      let base = u
+      let w = 999999
+      const lam = u.match(/img\.lamudi\.com\.mx\/(.+)$/)
+      if (lam) {
+        // El token base64 codifica la imagen ("key") y el tamaño ("resize"):
+        // deduplicamos por la imagen real y conservamos el ancho mayor.
+        try {
+          let tok = lam[1].replace(/-/g, '+').replace(/_/g, '/')
+          while (tok.length % 4) tok += '='
+          const j = JSON.parse(atob(tok))
+          base = `lamudi:${j?.key ?? lam[1]}`
+          w = Number(j?.edits?.resize?.width) || 0
+        } catch { base = u; w = 999999 }
+      } else {
+        const m = u.match(/-(\d+)x(\d+)(\.(?:jpe?g|png|webp))$/i)
+        w = m ? parseInt(m[1], 10) : 999999
+        base = m ? u.replace(/-\d+x\d+(\.(?:jpe?g|png|webp))$/i, '$1') : u
+      }
       const cur = best.get(base)
       if (!cur || w > cur.w) best.set(base, { url: u, w })
     }

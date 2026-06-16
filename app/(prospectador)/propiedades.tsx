@@ -150,6 +150,7 @@ export default function ProspectadorPropiedades() {
           .from('propiedades')
           .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
+          .eq('es_inventario', false)
           .order('created_at', { ascending: false })
           .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
           .limit(1, { referencedTable: 'propiedad_imagenes' }),
