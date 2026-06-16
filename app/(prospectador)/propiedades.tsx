@@ -137,23 +137,6 @@ export default function ProspectadorPropiedades() {
   const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
   const [showHelp, setShowHelp] = useState(false)
   const [mensajeAyuda, setMensajeAyuda] = useState('')
-  const [conteosHoy, setConteosHoy] = useState({ publicaciones: 0, clientes: 0, seguimientos: 0 })
-
-  // Métricas diarias del usuario (Publicaciones / Clientes nuevos / Seguimientos)
-  useFocusEffect(useCallback(() => {
-    let activo = true
-    supabase.rpc('get_conteos_diarios_mx').then(({ data }) => {
-      if (!activo || !data) return
-      const map: Record<string, number> = {}
-      for (const r of data as { categoria: string; conteo: number }[]) map[r.categoria] = r.conteo
-      setConteosHoy({
-        publicaciones: map.propiedad ?? 0,
-        clientes: map.crm ?? 0,
-        seguimientos: map.seguimiento ?? 0,
-      })
-    })
-    return () => { activo = false }
-  }, []))
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
     queryKey: ['prospectador-propiedades'],
     queryFn: async () => {
@@ -613,33 +596,6 @@ export default function ProspectadorPropiedades() {
         {/* Contenido centrado en web */}
         <View style={isWeb ? styles.webBody : { flex: 1 }}>
 
-        {/* Métricas diarias del usuario (muy presentes) */}
-        <View style={styles.metricasRow}>
-          <TouchableOpacity style={[styles.metricaCard, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => router.push('/(prospectador)/mi-actividad')} activeOpacity={0.85}>
-            <Text style={[styles.metricaNum, { color: primaryColor }]}>{conteosHoy.publicaciones}</Text>
-            <Text style={[styles.metricaLbl, { color: c.textMute }]}>📤 Publicaciones</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.metricaCard, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => router.push('/(prospectador)/mi-actividad')} activeOpacity={0.85}>
-            <Text style={[styles.metricaNum, { color: '#2e7d32' }]}>{conteosHoy.clientes}</Text>
-            <Text style={[styles.metricaLbl, { color: c.textMute }]}>👤 Clientes nuevos</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.metricaCard, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => router.push('/(prospectador)/mi-actividad')} activeOpacity={0.85}>
-            <Text style={[styles.metricaNum, { color: '#c8960c' }]}>{conteosHoy.seguimientos}</Text>
-            <Text style={[styles.metricaLbl, { color: c.textMute }]}>✅ Seguimientos</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Acceso a vista de Constructoras */}
-        <TouchableOpacity
-          style={[styles.constructorasBtn, { borderColor: primaryColor }]}
-          onPress={() => router.push('/(prospectador)/constructoras')}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.constructorasIcon}>🏗️</Text>
-          <Text style={[styles.constructorasTxt, { color: primaryColor }]}>Ver por constructora</Text>
-          <Text style={[styles.constructorasChevron, { color: primaryColor }]}>›</Text>
-        </TouchableOpacity>
-
         {/* Botones rápidos Venta / Renta / Nuevas */}
         <View style={[styles.quickFiltersRow, { backgroundColor: darkMode ? '#0f1e2d' : '#eef2f4' }]}>
           {([
@@ -668,6 +624,17 @@ export default function ProspectadorPropiedades() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Acceso a vista de Constructoras */}
+        <TouchableOpacity
+          style={[styles.constructorasBtn, { borderColor: primaryColor }]}
+          onPress={() => router.push('/(prospectador)/constructoras')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.constructorasIcon}>🏗️</Text>
+          <Text style={[styles.constructorasTxt, { color: primaryColor }]}>Constructoras</Text>
+          <Text style={[styles.constructorasChevron, { color: primaryColor }]}>›</Text>
+        </TouchableOpacity>
 
         {/* Fila de controles: Filtros + Ver zonas */}
         <View style={styles.controlsRow}>
@@ -963,32 +930,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   // Botones rápidos Venta / Renta
-  metricasRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    gap: 8,
-  },
-  metricaCard: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  metricaNum: { fontSize: 24, fontWeight: '900' },
-  metricaLbl: { fontSize: 10, fontWeight: '700', marginTop: 2, textAlign: 'center' },
   constructorasBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginHorizontal: 16,
-    marginTop: 10,
+    marginTop: 4,
+    marginBottom: 4,
     borderWidth: 1.5,
     borderRadius: 10,
     paddingVertical: 10,
