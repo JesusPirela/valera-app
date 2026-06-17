@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Modal, Platform, Image,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
@@ -305,9 +305,14 @@ export default function Proyectos() {
 
       {/* Header */}
       <View style={s.header}>
-        <View>
-          <Text style={s.headerTitle}>Dashboard de Proyectos</Text>
-          <Text style={s.headerSub}>{proyectos.length} proyectos · {proyectos.filter(p => p.estado === 'en_progreso').length} en progreso</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+          <View>
+            <Text style={s.headerTitle}>Dashboard de Proyectos</Text>
+            <Text style={s.headerSub}>{proyectos.length} proyectos · {proyectos.filter(p => p.estado === 'en_progreso').length} en progreso</Text>
+          </View>
         </View>
         <TouchableOpacity style={s.btnNuevo} onPress={abrirNuevo}>
           <Ionicons name="add" size={20} color="#fff" />

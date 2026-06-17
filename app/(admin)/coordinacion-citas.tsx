@@ -856,11 +856,6 @@ export default function CoordinacionCitas() {
           >
             <Ionicons name="search-outline" size={18} color={showSearch ? '#fff' : '#1a6470'} />
           </TouchableOpacity>
-          <TouchableOpacity style={[s.headerBtn, { backgroundColor: '#c9a84c22', borderColor: '#c9a84c' }]}
-            onPress={() => router.push('/(admin)/proyectos')}>
-            <Ionicons name="briefcase-outline" size={16} color="#c9a84c" />
-            <Text style={{ color: '#c9a84c', fontWeight: '700', fontSize: 12 }}>Proyectos</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={[s.headerBtn, { backgroundColor: '#059669', borderColor: '#059669' }]}
             onPress={() => setModalNueva(true)}>
             <Ionicons name="add" size={18} color="#fff" />

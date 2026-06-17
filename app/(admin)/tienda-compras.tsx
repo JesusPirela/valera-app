@@ -169,11 +169,16 @@ export default function TiendaCompras() {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       {/* Header */}
       <View style={s.header}>
-        <View>
-          <Text style={s.headerTitle}>Compras de Tienda 🛒</Text>
-          <Text style={s.headerSub}>
-            {pendientes > 0 ? `${pendientes} pendiente${pendientes > 1 ? 's' : ''} de entrega` : 'Todo al día ✅'}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
+            <Text style={{ color: '#fff', fontSize: 20 }}>←</Text>
+          </TouchableOpacity>
+          <View>
+            <Text style={s.headerTitle}>Compras de Tienda 🛒</Text>
+            <Text style={s.headerSub}>
+              {pendientes > 0 ? `${pendientes} pendiente${pendientes > 1 ? 's' : ''} de entrega` : 'Todo al día ✅'}
+            </Text>
+          </View>
         </View>
         <TouchableOpacity style={s.btnArticulos} onPress={() => router.push('/(admin)/tienda-items')}>
           <Text style={s.btnArticulosTxt}>🏪 Artículos</Text>

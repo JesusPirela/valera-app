@@ -188,9 +188,14 @@ export default function AdminMisiones() {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       {/* Header */}
       <View style={s.pageHeader}>
-        <View>
-          <Text style={s.pageTitle}>Gestión de Misiones</Text>
-          <Text style={s.pageSubtitle}>{misiones.length} misiones · {misiones.filter(m => m.activa).length} activas</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
+            <Text style={{ color: '#fff', fontSize: 20 }}>←</Text>
+          </TouchableOpacity>
+          <View>
+            <Text style={s.pageTitle}>Gestión de Misiones</Text>
+            <Text style={s.pageSubtitle}>{misiones.length} misiones · {misiones.filter(m => m.activa).length} activas</Text>
+          </View>
         </View>
         <TouchableOpacity style={s.btnNueva} onPress={abrirNueva}>
           <Text style={s.btnNuevaText}>＋ Nueva</Text>
