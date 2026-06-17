@@ -288,9 +288,11 @@ export default function ProspectadorPropiedades() {
 
   async function compartirLink(codigo: string) {
     const tel = queryData?.telefono ?? ''
+    // En móvil no existe window.location; usamos el dominio real de la app web
+    // (valerarealestate.com es el sitio de marketing y NO sirve /ficha → 404).
     const base = Platform.OS === 'web' && typeof window !== 'undefined'
       ? window.location.origin
-      : 'https://valerarealestate.com'
+      : 'https://valeraapp.valerarealestate.com'
     const url = tel ? `${base}/ficha/${codigo}?t=${encodeURIComponent(tel)}` : `${base}/ficha/${codigo}`
 
     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
