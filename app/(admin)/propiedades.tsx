@@ -60,13 +60,14 @@ const NAV_ITEMS = [
   { label: 'Bloques', icon: '🧩', route: '/(admin)/bloques', color: '#5e35b1', grupo: 'Propiedades' },
   { label: 'CRM', icon: '📒', route: '/(admin)/crm', color: '#D84315', grupo: 'Gestión' },
   { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32', grupo: 'Gestión' },
+  { label: 'Proyectos', icon: '💼', route: '/(admin)/proyectos', color: '#c9a84c', grupo: 'Gestión' },
   { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828', grupo: 'Gestión' },
   { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F', grupo: 'Gestión' },
+  { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2', grupo: 'Gestión' },
   { label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#F57F17', grupo: 'Crecimiento' },
   { label: 'Tienda', icon: '🛒', route: '/(admin)/tienda-compras', color: '#558B2F', grupo: 'Crecimiento' },
   { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#AD1457', grupo: 'Crecimiento' },
   { label: 'Cofres', icon: '🎁', route: '/(admin)/gestion-cofres', color: '#2e7d32', grupo: 'Crecimiento' },
-  { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2', grupo: null },
 ]
 
 const NAV_GRUPOS = ['Propiedades', 'Gestión', 'Crecimiento']
@@ -308,16 +309,6 @@ export default function AdminPropiedades() {
           </View>
         )
       })}
-      {navItems.filter((item) => item.grupo === null).map((item) => (
-        <TouchableOpacity
-          key={item.route}
-          style={[styles.navCard, styles.navCardSuelto, { backgroundColor: item.color }]}
-          onPress={() => router.push(item.route as any)}
-        >
-          <Text style={styles.navIcon}>{item.icon}</Text>
-          <Text style={styles.navLabel}>{item.label}</Text>
-        </TouchableOpacity>
-      ))}
 
       <View style={[styles.searchRow, { backgroundColor: c.card, borderColor: c.inputBorder }]}>
         <Text style={styles.searchIcon}>🔍</Text>
@@ -627,7 +618,7 @@ const styles = StyleSheet.create({
   webOuterContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 },
   webGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 16, marginTop: 8 },
 
-  // Grid de navegación agrupado por categoría, 3 columnas
+  // Grid de navegación agrupado por categoría, 4 columnas
   navGroup: { marginBottom: 14 },
   navGroupTitle: {
     fontSize: 11,
@@ -641,10 +632,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   navCard: {
-    width: '31%',
+    width: '23%',
     borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
     alignItems: 'center',
     gap: 4,
     shadowColor: '#000',
@@ -652,9 +643,8 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
-  navCardSuelto: { width: '31%', marginBottom: 16 },
-  navIcon: { fontSize: 18 },
-  navLabel: { color: '#fff', fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  navIcon: { fontSize: 16 },
+  navLabel: { color: '#fff', fontSize: 11, fontWeight: '700', textAlign: 'center' },
 
   // Búsqueda
   searchRow: {
