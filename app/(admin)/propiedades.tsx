@@ -94,7 +94,6 @@ export default function AdminPropiedades() {
   const esSupervisor = role === 'supervisor'
 
   async function cargarPropiedades() {
-    // Spinner completo solo en la primera carga; al volver refresca en silencio
     if (yaCargoRef.current === false) setLoading(true)
     // Paginar: PostgREST corta en 1000 filas/petición. Sin esto, las
     // propiedades más viejas (códigos VR bajos) no se cargan ni se pueden buscar.
@@ -134,7 +133,6 @@ export default function AdminPropiedades() {
     const { data: inmobiliariasData } = await supabase.from('inmobiliarias').select('id, nombre').order('nombre')
     setInmobiliarias(inmobiliariasData ?? [])
 
-    // Conteo de publicaciones por propiedad (para ordenar "más publicadas")
     const { data: conteo } = await supabase.rpc('get_publicaciones_conteo')
     if (conteo) {
       setPublicacionesMap(Object.fromEntries(
@@ -160,14 +158,12 @@ export default function AdminPropiedades() {
   const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, ordenPublicaciones, filtroInmobiliaria].filter(Boolean).length
 
   const inventarioCount = propiedades.filter((p) => p.es_inventario).length
-  // El catálogo principal NUNCA muestra propiedades de inventario.
   let propiedadesFiltradas = propiedades.filter((p) => !p.es_inventario)
   if (busqueda.trim()) {
     const q = busqueda.trim().toLowerCase()
     const qDigits = q.replace(/\D/g, '')
     propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
       const cod = p.codigo?.toLowerCase() ?? ''
-      // Coincidencia de código tolerante a ceros: "4", "004" y "vr-004" encuentran VR-004
       const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
       return codMatch || p.direccion?.toLowerCase().includes(q) || p.titulo?.toLowerCase().includes(q)
     })
@@ -183,7 +179,6 @@ export default function AdminPropiedades() {
         : (b.precio ?? -Infinity) - (a.precio ?? -Infinity)
     )
   }
-  // El orden por publicaciones tiene prioridad sobre el de precio
   if (ordenPublicaciones) {
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
       const pa = publicacionesMap[a.id] ?? 0
@@ -272,13 +267,12 @@ export default function AdminPropiedades() {
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
   const numCols = isWeb ? 4 : 1
-  const contentWidth = screenWidth - 64
+  const contentWidth = screenWidth - 32
   const cardWidth = isWeb ? (contentWidth - 16 * (numCols - 1)) / numCols : undefined
 
-  return (
-    <View style={[styles.container, { backgroundColor: c.bg }]}>
-
-      {/* Grid de navegación */}
+  // Shared header: navGrid + search + inventario + filtros
+  const pageHeader = (
+    <>
       <View style={styles.navGrid}>
         {navItems.map((item) => (
           <TouchableOpacity
@@ -292,7 +286,6 @@ export default function AdminPropiedades() {
         ))}
       </View>
 
-      {/* Barra de búsqueda con ícono */}
       <View style={[styles.searchRow, { backgroundColor: c.card, borderColor: c.inputBorder }]}>
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
@@ -311,7 +304,6 @@ export default function AdminPropiedades() {
         )}
       </View>
 
-      {/* Inventario (solo admins) — conjunto separado del catálogo */}
       {!esSupervisor && (
         <TouchableOpacity style={styles.inventarioBtn} onPress={() => router.push('/(admin)/inventario')}>
           <Text style={styles.inventarioBtnIcon}>📦</Text>
@@ -327,7 +319,6 @@ export default function AdminPropiedades() {
         </TouchableOpacity>
       )}
 
-      {/* Toggle de filtros */}
       <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
         <Text style={styles.filtrosToggleText}>
           {filtrosActivos > 0 ? `Filtros (${filtrosActivos}) ` : 'Filtros '}
@@ -392,234 +383,150 @@ export default function AdminPropiedades() {
           )}
         </View>
       )}
+    </>
+  )
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
-      ) : propiedadesFiltradas.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🏠</Text>
-          <Text style={styles.emptyText}>
-            {busqueda.trim() || filtrosActivos > 0 ? 'Sin resultados para esa búsqueda.' : 'No hay propiedades aún.'}
-          </Text>
-        </View>
-      ) : isWeb ? (
-        <ScrollView contentContainerStyle={styles.webGridScroll}>
-          <View style={styles.webGrid}>
-            {propiedadesFiltradas.map((item) => {
-              const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-              const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.m2_terreno != null || item.estacionamientos != null
-              const CardWrapper: any = esSupervisor ? TouchableOpacity : View
-              return (
-                <CardWrapper
-                  key={item.id}
-                  style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada, cardWidth ? { width: cardWidth } : undefined]}
-                  {...(esSupervisor ? {
-                    activeOpacity: 0.85,
-                    onPress: () => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } }),
-                  } : {})}
-                >
-                {/* Imagen con badges superpuestos */}
-                <View style={styles.imagenWrapper}>
-                  {primera?.url ? (
-                    <Image source={{ uri: primera.url }} style={styles.cardImagen} />
-                  ) : (
-                    <View style={styles.cardImagenPlaceholder}>
-                      <Text style={styles.cardImagenPlaceholderText}>🏠</Text>
-                    </View>
-                  )}
-                  {/* Overlay oscuro sutil en la parte inferior */}
-                  <View style={styles.imagenOverlay} />
-
-                  {/* Badges flotantes — esquina superior izquierda */}
-                  <View style={styles.badgesTop}>
-                    <Text style={styles.codigoBadge}>{item.codigo ?? '—'}</Text>
-                    {item.destacada && <Text style={styles.destacadaBadge}>★ Destacada</Text>}
-                    <View style={[styles.estadoBadge, item.estado === 'vendida' && styles.estadoVendida]}>
-                      <Text style={[styles.estadoText, item.estado === 'vendida' && styles.estadoTextVendida]}>
-                        {item.estado === 'vendida' ? 'Vendida' : 'Disponible'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Precio flotante — esquina inferior derecha */}
-                  <View style={styles.precioBadge}>
-                    <Text style={styles.precioText}>{formatPrecio(item.precio)}</Text>
-                  </View>
-                </View>
-
-                {/* Cuerpo de la tarjeta */}
-                <View style={styles.cardBody}>
-                  {item.destacada && item.destacada_mensaje ? (
-                    <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
-                  ) : null}
-
-                  {item.tipo && (
-                    <Text style={[styles.cardTipo, { color: c.textMute }]}>
-                      {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
-                      {item.operacion ? ` · ${item.operacion}` : ''}
-                    </Text>
-                  )}
-
-                  {item.es_constructora && (
-                    <Text style={styles.constructoraBadge}>
-                      🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
-                    </Text>
-                  )}
-
-                  <Text style={[styles.cardTitulo, { color: c.text }]}>{item.titulo}</Text>
-                  <Text style={[styles.cardDireccion, { color: c.textMute }]} numberOfLines={1}>📍 {item.direccion}</Text>
-                  <Text style={styles.pubBadge}>📤 {publicacionesMap[item.id] ?? 0} publicaciones</Text>
-
-                  {tieneMeta && (
-                    <View style={styles.metaRow}>
-                      {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
-                      {item.banos != null && <Text style={styles.metaItem}>🚿 {item.banos}</Text>}
-                      {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>🚿 ½ {item.medios_banos}</Text>}
-                      {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m² const.</Text>}
-                      {item.m2_terreno != null && <Text style={styles.metaItem}>🌳 {item.m2_terreno}m² terr.</Text>}
-                      {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
-                    </View>
-                  )}
-
-                  {/* Botones de acción compactos (no disponibles para Supervisor: solo lectura) */}
-                  {!esSupervisor && (
-                    <>
-                    <TouchableOpacity
-                      style={styles.btnVerComoUsuario}
-                      onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } })}
-                    >
-                      <Text style={styles.btnVerComoUsuarioText}>👁 Ver como usuario</Text>
-                    </TouchableOpacity>
-                    <View style={styles.cardAcciones}>
-                      <TouchableOpacity
-                        style={styles.btnEditar}
-                        onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: item.id } })}
-                      >
-                        <Text style={styles.btnEditarText}>✏️ Editar</Text>
-                      </TouchableOpacity>
-                      {item.destacada ? (
-                        <TouchableOpacity style={styles.btnQuitarDestacada} onPress={() => quitarDestacada(item.id)}>
-                          <Text style={styles.btnQuitarDestacadaText}>✕ Destacado</Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity style={styles.btnDestacar} onPress={() => abrirModalDestacar(item)}>
-                          <Text style={styles.btnDestacarText}>★ Destacar</Text>
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity style={styles.btnBorrar} onPress={() => handleBorrar(item.id, item.titulo)}>
-                        <Text style={styles.btnBorrarText}>🗑</Text>
-                      </TouchableOpacity>
-                    </View>
-                    </>
-                  )}
-                </View>
-              </CardWrapper>
-              )
-            })}
+  function renderCardContent(item: Propiedad, width?: number) {
+    const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+    const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.m2_terreno != null || item.estacionamientos != null
+    const CardWrapper: any = esSupervisor ? TouchableOpacity : View
+    return (
+      <CardWrapper
+        key={item.id}
+        style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada, width ? { width } : undefined]}
+        {...(esSupervisor ? {
+          activeOpacity: 0.85,
+          onPress: () => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } }),
+        } : {})}
+      >
+        <View style={styles.imagenWrapper}>
+          {primera?.url ? (
+            <Image source={{ uri: primera.url }} style={styles.cardImagen} />
+          ) : (
+            <View style={styles.cardImagenPlaceholder}>
+              <Text style={styles.cardImagenPlaceholderText}>🏠</Text>
+            </View>
+          )}
+          <View style={styles.imagenOverlay} />
+          <View style={styles.badgesTop}>
+            <Text style={styles.codigoBadge}>{item.codigo ?? '—'}</Text>
+            {item.destacada && <Text style={styles.destacadaBadge}>★ Destacada</Text>}
+            <View style={[styles.estadoBadge, item.estado === 'vendida' && styles.estadoVendida]}>
+              <Text style={[styles.estadoText, item.estado === 'vendida' && styles.estadoTextVendida]}>
+                {item.estado === 'vendida' ? 'Vendida' : 'Disponible'}
+              </Text>
+            </View>
           </View>
+          <View style={styles.precioBadge}>
+            <Text style={styles.precioText}>{formatPrecio(item.precio)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.cardBody}>
+          {item.destacada && item.destacada_mensaje ? (
+            <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
+          ) : null}
+          {item.tipo && (
+            <Text style={[styles.cardTipo, { color: c.textMute }]}>
+              {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
+              {item.operacion ? ` · ${item.operacion}` : ''}
+            </Text>
+          )}
+          {item.es_constructora && (
+            <Text style={styles.constructoraBadge}>
+              🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
+            </Text>
+          )}
+          <Text style={[styles.cardTitulo, { color: c.text }]}>{item.titulo}</Text>
+          <Text style={[styles.cardDireccion, { color: c.textMute }]} numberOfLines={1}>📍 {item.direccion}</Text>
+          <Text style={styles.pubBadge}>📤 {publicacionesMap[item.id] ?? 0} publicaciones</Text>
+          {tieneMeta && (
+            <View style={styles.metaRow}>
+              {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
+              {item.banos != null && <Text style={styles.metaItem}>🚿 {item.banos}</Text>}
+              {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>🚿 ½ {item.medios_banos}</Text>}
+              {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m² const.</Text>}
+              {item.m2_terreno != null && <Text style={styles.metaItem}>🌳 {item.m2_terreno}m² terr.</Text>}
+              {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
+            </View>
+          )}
+          {!esSupervisor && (
+            <>
+              <TouchableOpacity
+                style={styles.btnVerComoUsuario}
+                onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } })}
+              >
+                <Text style={styles.btnVerComoUsuarioText}>👁 Ver como usuario</Text>
+              </TouchableOpacity>
+              <View style={styles.cardAcciones}>
+                <TouchableOpacity
+                  style={styles.btnEditar}
+                  onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: item.id } })}
+                >
+                  <Text style={styles.btnEditarText}>✏️ Editar</Text>
+                </TouchableOpacity>
+                {item.destacada ? (
+                  <TouchableOpacity style={styles.btnQuitarDestacada} onPress={() => quitarDestacada(item.id)}>
+                    <Text style={styles.btnQuitarDestacadaText}>✕ Destacado</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.btnDestacar} onPress={() => abrirModalDestacar(item)}>
+                    <Text style={styles.btnDestacarText}>★ Destacar</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.btnBorrar} onPress={() => handleBorrar(item.id, item.titulo)}>
+                  <Text style={styles.btnBorrarText}>🗑</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
+      </CardWrapper>
+    )
+  }
+
+  const emptyView = (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyIcon}>🏠</Text>
+      <Text style={styles.emptyText}>
+        {busqueda.trim() || filtrosActivos > 0 ? 'Sin resultados para esa búsqueda.' : 'No hay propiedades aún.'}
+      </Text>
+    </View>
+  )
+
+  return (
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      {isWeb ? (
+        // Web: un solo ScrollView que abarca toda la página (navGrid → filtros → tarjetas)
+        // Así el scrollbar aparece desde el inicio y los filtros no bloquean el scroll.
+        <ScrollView
+          contentContainerStyle={styles.webOuterContent}
+          showsVerticalScrollIndicator
+        >
+          {pageHeader}
+          {loading ? (
+            <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
+          ) : propiedadesFiltradas.length === 0 ? emptyView : (
+            <View style={styles.webGrid}>
+              {propiedadesFiltradas.map((item) => renderCardContent(item, cardWidth))}
+            </View>
+          )}
         </ScrollView>
       ) : (
-        <FlatList
-          data={propiedadesFiltradas}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 24 }}
-          renderItem={({ item }) => {
-            const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-            const tieneMeta = item.recamaras != null || item.banos != null || item.m2 != null || item.m2_terreno != null || item.estacionamientos != null
-            const CardWrapper: any = esSupervisor ? TouchableOpacity : View
-            return (
-              <CardWrapper
-                style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada]}
-                {...(esSupervisor ? {
-                  activeOpacity: 0.85,
-                  onPress: () => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } }),
-                } : {})}
-              >
-                <View style={styles.imagenWrapper}>
-                  {primera?.url ? (
-                    <Image source={{ uri: primera.url }} style={styles.cardImagen} />
-                  ) : (
-                    <View style={styles.cardImagenPlaceholder}>
-                      <Text style={styles.cardImagenPlaceholderText}>🏠</Text>
-                    </View>
-                  )}
-                  <View style={styles.imagenOverlay} />
-                  <View style={styles.badgesTop}>
-                    <Text style={styles.codigoBadge}>{item.codigo ?? '—'}</Text>
-                    {item.destacada && <Text style={styles.destacadaBadge}>★ Destacada</Text>}
-                    <View style={[styles.estadoBadge, item.estado === 'vendida' && styles.estadoVendida]}>
-                      <Text style={[styles.estadoText, item.estado === 'vendida' && styles.estadoTextVendida]}>
-                        {item.estado === 'vendida' ? 'Vendida' : 'Disponible'}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.precioBadge}>
-                    <Text style={styles.precioText}>{formatPrecio(item.precio)}</Text>
-                  </View>
-                </View>
-                <View style={styles.cardBody}>
-                  {item.destacada && item.destacada_mensaje ? (
-                    <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
-                  ) : null}
-                  {item.tipo && (
-                    <Text style={[styles.cardTipo, { color: c.textMute }]}>
-                      {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
-                      {item.operacion ? ` · ${item.operacion}` : ''}
-                    </Text>
-                  )}
-                  {item.es_constructora && (
-                    <Text style={styles.constructoraBadge}>
-                      🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
-                    </Text>
-                  )}
-                  <Text style={[styles.cardTitulo, { color: c.text }]}>{item.titulo}</Text>
-                  <Text style={[styles.cardDireccion, { color: c.textMute }]} numberOfLines={1}>📍 {item.direccion}</Text>
-                  <Text style={styles.pubBadge}>📤 {publicacionesMap[item.id] ?? 0} publicaciones</Text>
-                  {tieneMeta && (
-                    <View style={styles.metaRow}>
-                      {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
-                      {item.banos != null && <Text style={styles.metaItem}>🚿 {item.banos}</Text>}
-                      {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>🚿 ½ {item.medios_banos}</Text>}
-                      {item.m2 != null && <Text style={styles.metaItem}>📐 {item.m2}m² const.</Text>}
-                      {item.m2_terreno != null && <Text style={styles.metaItem}>🌳 {item.m2_terreno}m² terr.</Text>}
-                      {item.estacionamientos != null && <Text style={styles.metaItem}>🚗 {item.estacionamientos}</Text>}
-                    </View>
-                  )}
-                  {!esSupervisor && (
-                    <>
-                    <TouchableOpacity
-                      style={styles.btnVerComoUsuario}
-                      onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } })}
-                    >
-                      <Text style={styles.btnVerComoUsuarioText}>👁 Ver como usuario</Text>
-                    </TouchableOpacity>
-                    <View style={styles.cardAcciones}>
-                      <TouchableOpacity
-                        style={styles.btnEditar}
-                        onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: item.id } })}
-                      >
-                        <Text style={styles.btnEditarText}>✏️ Editar</Text>
-                      </TouchableOpacity>
-                      {item.destacada ? (
-                        <TouchableOpacity style={styles.btnQuitarDestacada} onPress={() => quitarDestacada(item.id)}>
-                          <Text style={styles.btnQuitarDestacadaText}>✕ Destacado</Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity style={styles.btnDestacar} onPress={() => abrirModalDestacar(item)}>
-                          <Text style={styles.btnDestacarText}>★ Destacar</Text>
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity style={styles.btnBorrar} onPress={() => handleBorrar(item.id, item.titulo)}>
-                        <Text style={styles.btnBorrarText}>🗑</Text>
-                      </TouchableOpacity>
-                    </View>
-                    </>
-                  )}
-                </View>
-              </CardWrapper>
-            )
-          }}
-        />
+        // Mobile: navGrid + filtros fijos arriba, FlatList para las tarjetas
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
+          {pageHeader}
+          {loading ? (
+            <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
+          ) : propiedadesFiltradas.length === 0 ? emptyView : (
+            <FlatList
+              data={propiedadesFiltradas}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              renderItem={({ item }) => renderCardContent(item)}
+            />
+          )}
+        </View>
       )}
 
       {/* Modal destacar */}
@@ -666,11 +573,11 @@ export default function AdminPropiedades() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
-  webGridScroll: { paddingBottom: 32, paddingHorizontal: 16, paddingTop: 8, width: '100%' },
-  webGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 16 },
+  // Web: el contentContainer del ScrollView global
+  webOuterContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 },
+  webGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 16, marginTop: 8 },
 
-  // Grid de navegación 2x2
+  // Grid de navegación 2 columnas
   navGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
