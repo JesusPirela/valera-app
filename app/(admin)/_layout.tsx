@@ -4,6 +4,7 @@ import ToggleSwitch from '../../components/ToggleSwitch'
 import { Stack, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
+import HeaderBack from '../../components/HeaderBack'
 
 const LOGO = require('../../assets/logo.png')
 
@@ -49,7 +50,7 @@ export default function AdminLayout() {
         headerStyle: { backgroundColor: '#1a6470' },
         headerTintColor: '#c9a84c',
         headerTitleStyle: { fontWeight: 'bold' },
-        headerLeft: () => null,
+        headerLeft: () => <HeaderBack />,
         headerTitle: () => (
           <Image
             source={LOGO}

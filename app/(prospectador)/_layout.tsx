@@ -8,6 +8,7 @@ import { useTheme } from '../../lib/ThemeContext'
 import { trackLoginDiario } from '../../lib/gamification'
 import { programarRecordatorios } from '../../lib/notificaciones-locales'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import HeaderBack from '../../components/HeaderBack'
 
 const CRM_POPUP_KEY = '@valera_crm_popup'
 const MAX_POPUP_DIA = 2
@@ -242,7 +243,7 @@ export default function ProspectadorLayout() {
             resizeMode="contain"
           />
         ),
-        headerLeft: () => null,
+        headerLeft: () => <HeaderBack />,
         headerRight: () => null,
       }}
     >

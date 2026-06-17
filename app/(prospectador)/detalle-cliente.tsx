@@ -322,20 +322,37 @@ export default function DetalleCliente() {
   }
 
   async function eliminarCliente() {
-    const confirmar = () => {
-      const run = async () => {
-        const { error } = await supabase.from('clientes').delete().eq('id', id)
-        if (error) Alert.alert('Error', error.message)
-        else router.replace('/(prospectador)/crm')
+    const volver = () => router.canGoBack() ? router.back() : router.replace('/(prospectador)/crm')
+    const run = async () => {
+      // RPC SECURITY DEFINER: borra de verdad y devuelve cuántas filas eliminó.
+      // (Antes el DELETE directo lo bloqueaba RLS en silencio → "no se borraba".)
+      const { data, error } = await supabase.rpc('eliminar_cliente', { p_id: id })
+      if (error || !data || data < 1) {
+        const msg = (error?.message ?? '').includes('Access denied')
+          ? 'No tienes permiso para eliminar este cliente.'
+          : (error?.message || 'No se pudo eliminar el cliente. Intenta de nuevo.')
+        if (Platform.OS === 'web') window.alert('⚠ ' + msg)
+        else Alert.alert('Error', msg)
+        return
       }
-      run()
+      // Éxito: refrescar el CRM, confirmar y volver
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
+      queryClient.removeQueries({ queryKey: ['detalle-cliente', id] })
+      if (Platform.OS === 'web') {
+        window.alert('✓ Cliente eliminado correctamente')
+        volver()
+      } else {
+        Alert.alert('✓ Cliente eliminado', 'El cliente se eliminó correctamente.', [
+          { text: 'OK', onPress: volver },
+        ])
+      }
     }
     if (Platform.OS === 'web') {
-      if (window.confirm('¿Eliminar este cliente? Esta acción no se puede deshacer.')) confirmar()
+      if (window.confirm('¿Eliminar este cliente? Esta acción no se puede deshacer.')) run()
     } else {
       Alert.alert('Eliminar cliente', '¿Estás seguro? Esta acción no se puede deshacer.', [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Eliminar', style: 'destructive', onPress: confirmar },
+        { text: 'Eliminar', style: 'destructive', onPress: run },
       ])
     }
   }
