@@ -481,7 +481,7 @@ export default function Prospectadores() {
                 </TouchableOpacity>
               </View>
 
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
                 <TouchableOpacity
                   style={styles.coinsBtnSmall}
                   onPress={() => abrirCoinsModal(item)}
@@ -500,6 +500,12 @@ export default function Prospectadores() {
                   onPress={() => router.push({ pathname: '/(admin)/usuario-historial', params: { id: item.id, nombre: item.nombre ?? item.email } })}
                 >
                   <Text style={styles.historialBtnSmallText}>📋 Historial</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.publicacionesBtnSmall}
+                  onPress={() => router.push({ pathname: '/(admin)/usuario-publicaciones', params: { id: item.id, nombre: item.nombre ?? item.email } })}
+                >
+                  <Text style={styles.publicacionesBtnSmallText}>📤 Publicaciones</Text>
                 </TouchableOpacity>
               </View>
 
@@ -1104,6 +1110,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   historialBtnSmallText: { color: '#5e35b1', fontSize: 12, fontWeight: '700' },
+  publicacionesBtnSmall: {
+    backgroundColor: '#fdecec',
+    borderWidth: 1,
+    borderColor: '#c0392b',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  publicacionesBtnSmallText: { color: '#c0392b', fontSize: 12, fontWeight: '700' },
 
   crmStatsRow: {
     flexDirection: 'row',
