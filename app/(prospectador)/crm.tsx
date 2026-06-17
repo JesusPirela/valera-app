@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, createElement } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking,
   ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions,
@@ -112,6 +112,14 @@ export default function CRM() {
     col: string; label: string
     options: { value: string | null; label: string; color?: string }[]
   } | null>(null)
+  // Edición inline en la tabla Excel
+  const [editCell, setEditCell] = useState<{ id: string; col: string } | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [savingCell, setSavingCell] = useState(false)
+  const [cellPicker, setCellPicker] = useState<{
+    id: string; col: string; label: string
+    options: { value: string | null; label: string; color?: string }[]
+  } | null>(null)
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
 
@@ -189,7 +197,12 @@ export default function CRM() {
       let cmp = 0
       if (excelSort.col === 'nombre') cmp = a.nombre.localeCompare(b.nombre)
       else if (excelSort.col === 'estado') cmp = a.estado.localeCompare(b.estado)
-      else if (excelSort.col === 'fecha') cmp = a.created_at.localeCompare(b.created_at)
+      else if (excelSort.col === 'fecha') {
+        // Próxima fecha de seguimiento; los sin fecha van al final
+        const aT = a.proximo_contacto ? new Date(a.proximo_contacto).getTime() : Infinity
+        const bT = b.proximo_contacto ? new Date(b.proximo_contacto).getTime() : Infinity
+        cmp = aT === bT ? 0 : aT < bT ? -1 : 1
+      }
       return excelSort.dir === 'asc' ? cmp : -cmp
     })
   }
@@ -256,6 +269,75 @@ export default function CRM() {
     }
   }
 
+  // ── Edición inline en la tabla Excel ──────────────────────────
+  // Mapea el id de columna al campo real de la tabla `clientes`
+  const COL_FIELD: Record<string, string> = {
+    nombre: 'nombre', telefono: 'telefono', estado: 'estado',
+    operacion: 'tipo_operacion', interes: 'nivel_interes', fecha: 'proximo_contacto',
+  }
+
+  async function guardarCelda(id: string, col: string, value: string | null) {
+    const campo = COL_FIELD[col]
+    if (!campo) return
+    setSavingCell(true)
+    // Optimista: actualiza la caché de inmediato
+    queryClient.setQueryData<Cliente[]>(['clientes'], (old) =>
+      (old ?? []).map(cl => cl.id === id ? { ...cl, [campo]: value } as Cliente : cl)
+    )
+    const { error } = await supabase.from('clientes').update({ [campo]: value }).eq('id', id)
+    if (error) {
+      await refetch() // revierte al estado real si falla
+    }
+    setSavingCell(false)
+    setEditCell(null)
+  }
+
+  function abrirEdicion(item: Cliente, col: string) {
+    // Columnas de enumeración → selector; texto/fecha → input inline
+    if (col === 'estado') {
+      setCellPicker({
+        id: item.id, col, label: 'Cambiar estado',
+        options: ORDEN_ESTADOS.map(e => ({ value: e, label: estadoInfo(e).label, color: estadoInfo(e).color })),
+      })
+    } else if (col === 'operacion') {
+      setCellPicker({
+        id: item.id, col, label: 'Cambiar operación',
+        options: [
+          { value: null, label: '— Sin operación' },
+          { value: 'venta', label: '🏠 Venta' },
+          { value: 'renta', label: '🔑 Renta' },
+        ],
+      })
+    } else if (col === 'interes') {
+      setCellPicker({
+        id: item.id, col, label: 'Cambiar nivel de interés',
+        options: [
+          { value: null, label: '— Sin definir' },
+          { value: 'alto', label: '🔥 Alto' },
+          { value: 'medio', label: '🌡️ Medio' },
+          { value: 'bajo', label: '❄️ Bajo' },
+        ],
+      })
+    } else {
+      // nombre, telefono, fecha → edición de texto inline
+      const inicial = col === 'fecha'
+        ? (item.proximo_contacto ? item.proximo_contacto.slice(0, 10) : '')
+        : col === 'nombre' ? item.nombre
+        : col === 'telefono' ? item.telefono : ''
+      setEditValue(inicial)
+      setEditCell({ id: item.id, col })
+    }
+  }
+
+  function guardarTexto() {
+    if (!editCell) return
+    // Para la fecha guardamos al mediodía para que el huso horario no la corra un día
+    const val = editCell.col === 'fecha'
+      ? (editValue.trim() ? `${editValue.trim()}T12:00:00` : null)
+      : editValue.trim()
+    guardarCelda(editCell.id, editCell.col, val)
+  }
+
   // ── Importar CSV ──────────────────────────────────────────────
   const [importModal, setImportModal]   = useState(false)
   const [csvHeaders, setCsvHeaders]     = useState<string[]>([])
@@ -315,14 +397,14 @@ export default function CRM() {
     { id: 'estado',    label: 'Estado',     flex: 2.5, mw: 0, sortable: true, filterable: true },
     { id: 'operacion', label: 'Operación',  flex: 1.5, mw: 0, filterable: true },
     { id: 'interes',   label: 'Interés',    flex: 1.5, mw: 0, filterable: true },
-    { id: 'fecha',     label: 'Ingresado',  flex: 1.5, mw: 0, sortable: true },
+    { id: 'fecha',     label: 'Próx. seguimiento', flex: 2, mw: 0, sortable: true },
   ] : [
     { id: 'nombre',    label: 'Nombre',     flex: 0, mw: 155 },
     { id: 'telefono',  label: 'Teléfono',   flex: 0, mw: 115 },
     { id: 'estado',    label: 'Estado',     flex: 0, mw: 145, sortable: true, filterable: true },
     { id: 'operacion', label: 'Op.',        flex: 0, mw: 80,  filterable: true },
     { id: 'interes',   label: 'Interés',    flex: 0, mw: 90,  filterable: true },
-    { id: 'fecha',     label: 'Fecha',      flex: 0, mw: 100, sortable: true },
+    { id: 'fecha',     label: 'Próx. seguim.', flex: 0, mw: 120, sortable: true },
   ]
 
   function cStyle(col: TCol) {
@@ -540,31 +622,73 @@ export default function CRM() {
           const tableRows = filtradosExcel.map((item, idx) => {
             const info = estadoInfo(item.estado)
             return (
-              <TouchableOpacity
+              <View
                 key={item.id}
                 style={[s.excelTr, { borderBottomColor: c.border }, idx % 2 !== 0 && { backgroundColor: darkMode ? '#0a1827' : '#f8fafc' }]}
-                onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
-                activeOpacity={0.75}
               >
                 {TABLE_COLS.map(col => {
                   const cs = cStyle(col)
-                  switch (col.id) {
-                    case 'nombre':
-                      return <Text key={col.id} style={[s.excelTd, s.excelTdBold, { color: c.text }, cs]} numberOfLines={1}>{item.nombre}</Text>
-                    case 'telefono':
-                      return <Text key={col.id} style={[s.excelTd, { color: c.textSub }, cs]} numberOfLines={1}>{item.telefono}</Text>
-                    case 'estado':
+                  const editando = editCell?.id === item.id && editCell?.col === col.id
+                  // Editor de texto inline (nombre, teléfono, fecha)
+                  if (editando && (col.id === 'nombre' || col.id === 'telefono' || col.id === 'fecha')) {
+                    if (col.id === 'fecha' && isWeb) {
                       return (
                         <View key={col.id} style={[s.excelTdCell, cs]}>
+                          {createElement('input', {
+                            type: 'date',
+                            autoFocus: true,
+                            value: editValue,
+                            onChange: (e: any) => setEditValue(e.target.value),
+                            onBlur: guardarTexto,
+                            onKeyDown: (e: any) => { if (e.key === 'Enter') guardarTexto(); if (e.key === 'Escape') setEditCell(null) },
+                            style: { width: '100%', padding: '4px 6px', borderRadius: 6, border: '1px solid #1a9aaa', fontSize: 12, fontFamily: 'inherit', color: darkMode ? '#fff' : '#111', background: darkMode ? '#0a1827' : '#fff' },
+                          })}
+                        </View>
+                      )
+                    }
+                    return (
+                      <View key={col.id} style={[s.excelTdCell, cs]}>
+                        <TextInput
+                          autoFocus
+                          value={editValue}
+                          onChangeText={setEditValue}
+                          onBlur={guardarTexto}
+                          onSubmitEditing={guardarTexto}
+                          placeholder={col.id === 'fecha' ? 'AAAA-MM-DD' : ''}
+                          placeholderTextColor={c.textMute}
+                          keyboardType={col.id === 'telefono' ? 'phone-pad' : 'default'}
+                          style={[s.cellInput, { color: c.text, borderColor: '#1a9aaa', backgroundColor: c.bg }]}
+                        />
+                      </View>
+                    )
+                  }
+
+                  // Celdas (click → editar)
+                  switch (col.id) {
+                    case 'nombre':
+                      return (
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'nombre')} activeOpacity={0.6}>
+                          <Text style={[s.excelTd, s.excelTdBold, s.cellTxtNoPad, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
+                        </TouchableOpacity>
+                      )
+                    case 'telefono':
+                      return (
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'telefono')} activeOpacity={0.6}>
+                          <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub }]} numberOfLines={1}>{item.telefono}</Text>
+                        </TouchableOpacity>
+                      )
+                    case 'estado':
+                      return (
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'estado')} activeOpacity={0.6}>
                           <View style={[s.excelEstadoPill, { backgroundColor: darkMode ? info.color + '28' : info.bg }]}>
                             <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: info.color }} />
                             <Text style={{ fontSize: 11, color: info.color, fontWeight: '700' }} numberOfLines={1}>{info.label}</Text>
                           </View>
-                        </View>
+                        </TouchableOpacity>
                       )
                     case 'operacion':
                       return (
-                        <View key={col.id} style={[s.excelTdCell, cs]}>
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'operacion')} activeOpacity={0.6}>
                           {item.tipo_operacion
                             ? <View style={[s.excelOpTag, item.tipo_operacion === 'venta'
                                 ? { backgroundColor: darkMode ? 'rgba(26,100,112,0.22)' : '#e0f4f5' }
@@ -575,27 +699,36 @@ export default function CRM() {
                               </View>
                             : <Text style={[s.excelNull, { color: c.border }]}>—</Text>
                           }
-                        </View>
+                        </TouchableOpacity>
                       )
                     case 'interes':
                       return (
-                        <View key={col.id} style={[s.excelTdCell, cs]}>
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'interes')} activeOpacity={0.6}>
                           {item.nivel_interes
                             ? <Text style={[s.excelTd, { color: c.textSub }]} numberOfLines={1}>{NIVEL_INTERES_LABEL[item.nivel_interes]}</Text>
                             : <Text style={[s.excelNull, { color: c.border }]}>—</Text>
                           }
-                        </View>
+                        </TouchableOpacity>
                       )
-                    case 'fecha':
+                    case 'fecha': {
+                      const ts = item.proximo_contacto ? new Date(item.proximo_contacto) : null
+                      const vencido = ts ? ts.getTime() < Date.now() : false
+                      const hoy = ts ? ts.toDateString() === new Date().toDateString() : false
                       return (
-                        <Text key={col.id} style={[s.excelTd, s.excelTdDate, { color: c.textMute }, cs]} numberOfLines={1}>
-                          {new Date(item.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: '2-digit' })}
-                        </Text>
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'fecha')} activeOpacity={0.6}>
+                          {ts
+                            ? <Text style={[s.excelTd, s.excelTdDate, s.cellTxtNoPad, { color: vencido ? '#ef4444' : hoy ? '#d97706' : c.textSub }]} numberOfLines={1}>
+                                {vencido ? '⚠ ' : hoy ? '📌 ' : ''}{ts.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: '2-digit' })}
+                              </Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ agregar</Text>
+                          }
+                        </TouchableOpacity>
                       )
+                    }
                     default: return null
                   }
                 })}
-              </TouchableOpacity>
+              </View>
             )
           })
 
@@ -804,6 +937,41 @@ export default function CRM() {
                 </TouchableOpacity>
               )
             })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Selector inline para celdas de estado/operación/interés ── */}
+      <Modal visible={cellPicker !== null} transparent animationType="slide" onRequestClose={() => setCellPicker(null)}>
+        <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setCellPicker(null)}>
+          <View style={[s.sortSheet, { backgroundColor: c.card }]}>
+            <View style={[s.sortHandle, { backgroundColor: c.border }]} />
+            <Text style={[s.sortTitle, { color: c.text }]}>{cellPicker?.label ?? ''}</Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              {cellPicker?.options.map(opt => {
+                const cl = clientes.find(x => x.id === cellPicker.id)
+                const actualVal = cl
+                  ? (cellPicker.col === 'estado' ? cl.estado
+                    : cellPicker.col === 'operacion' ? cl.tipo_operacion
+                    : cl.nivel_interes)
+                  : null
+                const active = actualVal === opt.value
+                return (
+                  <TouchableOpacity
+                    key={String(opt.value)}
+                    style={[s.sortOpt, { borderBottomColor: c.border }]}
+                    onPress={() => { const p = cellPicker; setCellPicker(null); guardarCelda(p.id, p.col, opt.value) }}
+                    disabled={savingCell}
+                  >
+                    <View style={s.sortOptLeft}>
+                      {opt.color && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: opt.color }} />}
+                      <Text style={[s.sortOptTxt, { color: c.textSub }, active && { color: '#1a9aaa', fontWeight: '700' }]}>{opt.label}</Text>
+                    </View>
+                    {active && <Ionicons name="checkmark-circle" size={18} color="#1a6470" />}
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1072,4 +1240,13 @@ const s = StyleSheet.create({
   excelOpRenta: { backgroundColor: '#f3e8ff' },
   excelOpTxt: { fontSize: 12, fontWeight: '600' },
   excelNull: { fontSize: 13, color: '#cbd5e1', paddingHorizontal: 12, paddingVertical: 10 },
+  cellTxtNoPad: { paddingHorizontal: 0, paddingVertical: 0 },
+  cellInput: {
+    width: '100%',
+    borderWidth: 1.5,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    fontSize: 13,
+  },
 })
