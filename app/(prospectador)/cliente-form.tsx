@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import {
   View, Text, TextInput, StyleSheet, ScrollView,
   TouchableOpacity, ActivityIndicator, Alert, Modal, Platform,
@@ -8,7 +8,7 @@ function mostrarError(titulo: string, msg: string) {
   if (Platform.OS === 'web') window.alert(`${titulo}: ${msg}`)
   else Alert.alert(titulo, msg)
 }
-import { router, useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS } from './crm'
@@ -228,12 +228,43 @@ export default function ClienteForm() {
   const [zonasInteres, setZonasInteres] = useState('')
   const [problemasPoliza, setProblemasPoliza] = useState<boolean | null>(null)
 
-  useEffect(() => {
-    if (!esEdicion) return
+  // Deja todos los campos en blanco (para "Nuevo cliente")
+  function limpiarFormulario() {
+    setTipoOperacion(null)
+    setNombre('')
+    setTelefono('')
+    setFuente('otro')
+    setEstado('por_perfilar')
+    setNotas('')
+    setProximoContacto(null)
+    setNivelInteres(null)
+    setEmail('')
+    setTipoCredito(null)
+    setPresupuesto('')
+    setZonaBusqueda('')
+    setNumPersonas('')
+    setTieneMascotas(null)
+    setDetalleMascotas('')
+    setFechaMudanza('')
+    setPresupuestoRenta('')
+    setZonasInteres('')
+    setProblemasPoliza(null)
+  }
+
+  // La pantalla vive en el navegador de Tabs y NO se desmonta, así que su estado
+  // persiste entre visitas. Reinicializamos en CADA foco: si hay id cargamos el
+  // cliente; si no, dejamos todo en blanco (antes salían los datos del anterior).
+  useFocusEffect(useCallback(() => {
+    if (!params.id) {
+      limpiarFormulario()
+      setLoading(false)
+      return
+    }
+    setLoading(true)
     supabase
       .from('clientes')
       .select('*')
-      .eq('id', params.id!)
+      .eq('id', params.id)
       .single()
       .then(({ data }) => {
         if (data) {
@@ -259,7 +290,7 @@ export default function ClienteForm() {
         }
         setLoading(false)
       })
-  }, [])
+  }, [params.id]))
 
   async function guardar() {
     if (!nombre.trim()) { mostrarError('Campo requerido', 'El nombre es obligatorio.'); return }
