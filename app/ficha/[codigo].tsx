@@ -58,6 +58,7 @@ export default function FichaPublica() {
       .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, lat, lng, propiedad_imagenes(url, orden)')
       .eq('codigo', codigo)
       .eq('estado', 'disponible')
+      .eq('es_inventario', false)
       .maybeSingle()
 
     if (!data) { setNotFound(true); setLoading(false); return }
