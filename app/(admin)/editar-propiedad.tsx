@@ -79,6 +79,8 @@ export default function EditarPropiedad() {
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
+  const [constructorasExistentes, setConstructorasExistentes] = useState<string[]>([])
+  const [modoNuevaConstructora, setModoNuevaConstructora] = useState(false)
   const [imagenes, setImagenes] = useState<ImgItem[]>([])
   const [imagenesEliminar, setImagenesEliminar] = useState<string[]>([])
   const [isDragging, setIsDragging] = useState(false)
@@ -94,11 +96,24 @@ export default function EditarPropiedad() {
 
   async function cargarPropiedad() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('propiedades')
-      .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
-      .eq('id', id)
-      .single()
+    const [{ data, error }, { data: constrData }] = await Promise.all([
+      supabase
+        .from('propiedades')
+        .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, es_constructora, nombre_constructora, propiedad_imagenes(id, url, orden)')
+        .eq('id', id)
+        .single(),
+      supabase
+        .from('propiedades')
+        .select('nombre_constructora')
+        .eq('es_constructora', true)
+        .not('nombre_constructora', 'is', null),
+    ])
+
+    // Lista única de constructoras existentes en la DB
+    const nombresExistentes = [...new Set(
+      (constrData ?? []).map((p: any) => p.nombre_constructora as string).filter(Boolean)
+    )].sort() as string[]
+    setConstructorasExistentes(nombresExistentes)
 
     if (error || !data) {
       Alert.alert('Error', 'No se pudo cargar la propiedad.')
@@ -126,7 +141,15 @@ export default function EditarPropiedad() {
     setInmobiliariaId(data.inmobiliaria_id ?? null)
     setExclusiva(data.exclusiva ?? false)
     setEsConstructora(data.es_constructora ?? false)
-    setNombreConstructora(data.nombre_constructora ?? '')
+    const actualNombre = data.nombre_constructora ?? ''
+    setNombreConstructora(actualNombre)
+    // Si el nombre no está en la lista de existentes, activar modo "nueva"
+    if (actualNombre && !nombresExistentes.includes(actualNombre)) {
+      setModoNuevaConstructora(true)
+    } else if (!actualNombre) {
+      // Propiedad nueva de constructora: si no hay existentes, ir directo a modo nueva
+      if (nombresExistentes.length === 0) setModoNuevaConstructora(true)
+    }
     setImagenes(
       ((data.propiedad_imagenes as ImagenExistente[]) ?? [])
         .sort((a, b) => a.orden - b.orden)
@@ -720,13 +743,39 @@ export default function EditarPropiedad() {
           </TouchableOpacity>
         </View>
         {esConstructora && (
-          <TextInput
-            style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-            placeholder="Nombre de la constructora"
-            value={nombreConstructora}
-            onChangeText={setNombreConstructora}
-            autoCapitalize="words"
-          />
+          <View style={{ marginTop: 10 }}>
+            {constructorasExistentes.length > 0 && (
+              <View style={styles.constrChipsRow}>
+                {constructorasExistentes.map((nombre) => {
+                  const activa = !modoNuevaConstructora && nombreConstructora === nombre
+                  return (
+                    <TouchableOpacity
+                      key={nombre}
+                      style={[styles.constrChip, activa && styles.constrChipActive]}
+                      onPress={() => { setNombreConstructora(nombre); setModoNuevaConstructora(false) }}
+                    >
+                      <Text style={[styles.constrChipTxt, activa && styles.constrChipTxtActive]}>{nombre}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+                <TouchableOpacity
+                  style={[styles.constrChip, styles.constrChipNueva, modoNuevaConstructora && styles.constrChipActive]}
+                  onPress={() => { setModoNuevaConstructora(true); setNombreConstructora('') }}
+                >
+                  <Text style={[styles.constrChipTxt, modoNuevaConstructora && styles.constrChipTxtActive]}>+ Nueva</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {(modoNuevaConstructora || constructorasExistentes.length === 0) && (
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText, marginTop: constructorasExistentes.length > 0 ? 8 : 0 }]}
+                placeholder="Nombre de la constructora"
+                value={nombreConstructora}
+                onChangeText={setNombreConstructora}
+                autoCapitalize="words"
+              />
+            )}
+          </View>
         )}
 
         {guardadoOk && (
@@ -866,4 +915,11 @@ const styles = StyleSheet.create({
   },
   exclusivaLabel: { fontSize: 14, fontWeight: '600', color: '#1a6470' },
   exclusivaDesc: { fontSize: 12, color: '#888', marginTop: 2 },
+
+  constrChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  constrChip: { borderWidth: 1.5, borderColor: '#1a6470', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  constrChipActive: { backgroundColor: '#1a6470' },
+  constrChipNueva: { borderStyle: 'dashed' },
+  constrChipTxt: { fontSize: 13, fontWeight: '700', color: '#1a6470' },
+  constrChipTxtActive: { color: '#fff' },
 })
