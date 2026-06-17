@@ -139,6 +139,13 @@ export default function RootLayout() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
+        // "Última conexión": refrescar en CADA apertura/foreground, no solo en el
+        // login. Como la sesión persiste, muchos usuarios no vuelven a pasar por
+        // el login y last_seen se quedaba viejo ("hace 2 días"). Fire-and-forget.
+        supabase.from('profiles')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('id', user.id)
+          .then(() => {}, () => {})
         const { data } = await supabase
           .from('user_sessions')
           .insert({ user_id: user.id })

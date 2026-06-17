@@ -47,7 +47,7 @@ export default function LoginScreen() {
         .eq('id', data.user.id)
         .single()
 
-      supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', data.user.id).then(() => {}).catch(() => {})
+      supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', data.user.id).then(() => {}, () => {})
 
       if (profile?.role === 'admin' || profile?.role === 'supervisor') {
         router.replace('/(admin)/propiedades')
