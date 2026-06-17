@@ -30,6 +30,7 @@ export default function Constructoras() {
   const [modelos, setModelos] = useState<Modelo[]>([])
   const [loading, setLoading] = useState(true)
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
+  const [rol, setRol] = useState<string | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -41,6 +42,7 @@ export default function Constructoras() {
       const { data } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle()
       rol = data?.role ?? null
     }
+    setRol(rol)
 
     const { data } = await supabase
       .from('propiedades')
@@ -112,7 +114,10 @@ export default function Constructoras() {
                     <TouchableOpacity
                       key={m.id}
                       style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border }]}
-                      onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })}
+                      onPress={() => (rol === 'admin' || rol === 'supervisor')
+                        ? router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })
+                        : router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })
+                      }
                       activeOpacity={0.85}
                     >
                       {img?.url ? (
