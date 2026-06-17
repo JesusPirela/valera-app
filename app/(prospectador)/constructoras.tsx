@@ -6,6 +6,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { thumb } from '../../lib/img'
 
 type Modelo = {
   id: string
@@ -121,7 +122,7 @@ export default function Constructoras() {
                       activeOpacity={0.85}
                     >
                       {img?.url ? (
-                        <Image source={{ uri: img.url }} style={styles.modeloImg} />
+                        <Image source={{ uri: thumb(img.url, { width: 200, quality: 60 }) }} style={styles.modeloImg} />
                       ) : (
                         <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
                       )}

@@ -15,6 +15,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { thumb } from '../../lib/img'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import ToggleSwitch from '../../components/ToggleSwitch'
 
@@ -197,7 +198,7 @@ export default function Inventario() {
                     <View key={p.id} style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
                       <View style={styles.cardTop}>
                         {img?.url ? (
-                          <Image source={{ uri: img.url }} style={styles.cardImg} />
+                          <Image source={{ uri: thumb(img.url, { width: 200, quality: 60 }) }} style={styles.cardImg} />
                         ) : (
                           <View style={[styles.cardImg, styles.cardImgPh]}><Text style={{ fontSize: 26 }}>🏠</Text></View>
                         )}

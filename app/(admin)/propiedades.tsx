@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
+import { thumb } from '../../lib/img'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type Propiedad = {
@@ -92,6 +93,10 @@ export default function AdminPropiedades() {
   const [role, setRole] = useState<string | null>(null)
   const [inmobiliarias, setInmobiliarias] = useState<InmobiliariaOpcion[]>([])
   const esSupervisor = role === 'supervisor'
+
+  // Web: renderizado incremental para no montar 1000+ tarjetas/imágenes de golpe
+  const PAGE_WEB = 24
+  const [visibleCount, setVisibleCount] = useState(PAGE_WEB)
 
   async function cargarPropiedades() {
     if (yaCargoRef.current === false) setLoading(true)
@@ -186,6 +191,12 @@ export default function AdminPropiedades() {
       return ordenPublicaciones === 'desc' ? pb - pa : pa - pb
     })
   }
+
+  // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
+  useEffect(() => { setVisibleCount(PAGE_WEB) }, [
+    busqueda, filtroOperacion, filtroEstado, filtroTipo, ordenPrecio,
+    ordenPublicaciones, filtroInmobiliaria,
+  ])
 
   function ejecutarBorrado(id: string) {
     const run = async () => {
@@ -401,7 +412,7 @@ export default function AdminPropiedades() {
       >
         <View style={styles.imagenWrapper}>
           {primera?.url ? (
-            <Image source={{ uri: primera.url }} style={styles.cardImagen} />
+            <Image source={{ uri: thumb(primera.url, { width: 640, quality: 65 }) }} style={styles.cardImagen} />
           ) : (
             <View style={styles.cardImagenPlaceholder}>
               <Text style={styles.cardImagenPlaceholderText}>🏠</Text>
@@ -502,14 +513,31 @@ export default function AdminPropiedades() {
         <ScrollView
           contentContainerStyle={styles.webOuterContent}
           showsVerticalScrollIndicator
+          scrollEventThrottle={200}
+          onScroll={({ nativeEvent }) => {
+            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent
+            if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 600) {
+              setVisibleCount(v => v < propiedadesFiltradas.length ? v + PAGE_WEB : v)
+            }
+          }}
         >
           {pageHeader}
           {loading ? (
             <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
           ) : propiedadesFiltradas.length === 0 ? emptyView : (
-            <View style={styles.webGrid}>
-              {propiedadesFiltradas.map((item) => renderCardContent(item, cardWidth))}
-            </View>
+            <>
+              <View style={styles.webGrid}>
+                {propiedadesFiltradas.slice(0, visibleCount).map((item) => renderCardContent(item, cardWidth))}
+              </View>
+              {visibleCount < propiedadesFiltradas.length && (
+                <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#1a6470" />
+                  <Text style={{ color: c.textMute, fontSize: 12, marginTop: 6 }}>
+                    Mostrando {visibleCount} de {propiedadesFiltradas.length}
+                  </Text>
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
       ) : (

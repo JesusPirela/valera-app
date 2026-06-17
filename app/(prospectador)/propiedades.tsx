@@ -29,6 +29,7 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 const LOGO = require('../../assets/logo.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
+import { thumb } from '../../lib/img'
 import MiniMapa from '../../components/MiniMapa'
 
 type Propiedad = {
@@ -135,6 +136,9 @@ export default function ProspectadorPropiedades() {
   const [fechaHastaCustom, setFechaHastaCustom] = useState('')
   const [vistaZonas, setVistaZonas] = useState(false)
   const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
+  // Web: renderizado incremental para no montar 1000+ tarjetas/imágenes de golpe
+  const PAGE_WEB = 24
+  const [visibleCount, setVisibleCount] = useState(PAGE_WEB)
   const [showHelp, setShowHelp] = useState(false)
   const [mensajeAyuda, setMensajeAyuda] = useState('')
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
@@ -424,6 +428,13 @@ export default function ProspectadorPropiedades() {
     )
   }
 
+  // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
+  useEffect(() => { setVisibleCount(PAGE_WEB) }, [
+    busqueda, filtroOperacion, filtroTipo, ordenPrecio, precioMin, precioMax,
+    filtroPublicadas, filtroNueva, filtroExclusiva, filtroFechaPreset,
+    fechaDesdeCustom, fechaHastaCustom,
+  ])
+
   const propiedadesPorZona = vistaZonas ? agruparPorZona(propiedadesFiltradas) : []
 
   const zonasParaMapa = ZONAS_CONFIG.map(z => {
@@ -437,7 +448,7 @@ export default function ProspectadorPropiedades() {
       propiedades: propsZona.map(p => ({
         id: p.id, titulo: p.titulo, precio: p.precio, tipo: p.tipo,
         direccion: p.direccion, lat: p.lat, lng: p.lng,
-        imagen: [...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]?.url ?? null,
+        imagen: thumb([...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]?.url, { width: 320, quality: 60 }) ?? null,
       })),
     }
   }).filter(z => z.count > 0)
@@ -479,7 +490,7 @@ export default function ProspectadorPropiedades() {
         onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.id}`)}
       >
         {primera?.url && (
-          <Image source={{ uri: primera.url }} style={styles.cardImagen} resizeMode="cover" />
+          <Image source={{ uri: thumb(primera.url, { width: 640, quality: 65 }) }} style={styles.cardImagen} resizeMode="cover" />
         )}
         {item.exclusiva && (
           <View style={styles.exclusivaBanner}>
@@ -807,10 +818,28 @@ export default function ProspectadorPropiedades() {
             />
           </View>
         ) : isWeb ? (
-          <ScrollView contentContainerStyle={styles.webGridScroll}>
+          <ScrollView
+            contentContainerStyle={styles.webGridScroll}
+            scrollEventThrottle={200}
+            onScroll={({ nativeEvent }) => {
+              const { layoutMeasurement, contentOffset, contentSize } = nativeEvent
+              // Cargar el siguiente bloque al acercarse al final (umbral 600px)
+              if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 600) {
+                setVisibleCount(v => v < propiedadesFiltradas.length ? v + PAGE_WEB : v)
+              }
+            }}
+          >
             <View style={styles.webGrid}>
-              {propiedadesFiltradas.map(item => renderPropiedad(item, cardWidth))}
+              {propiedadesFiltradas.slice(0, visibleCount).map(item => renderPropiedad(item, cardWidth))}
             </View>
+            {visibleCount < propiedadesFiltradas.length && (
+              <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={primaryColor} />
+                <Text style={{ color: c.textMute, fontSize: 12, marginTop: 6 }}>
+                  Mostrando {visibleCount} de {propiedadesFiltradas.length}
+                </Text>
+              </View>
+            )}
           </ScrollView>
         ) : (
           <FlatList

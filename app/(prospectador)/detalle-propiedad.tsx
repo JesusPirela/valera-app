@@ -18,6 +18,7 @@ import {
 import { useLocalSearchParams, router } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
+import { thumb } from '../../lib/img'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
 import * as Clipboard from 'expo-clipboard'
@@ -1133,7 +1134,7 @@ export default function DetallePropiedad() {
                 onPress={() => { setLightboxIndex(i); setLightboxVisible(true) }}
               >
                 <Image
-                  source={{ uri: img.url }}
+                  source={{ uri: thumb(img.url, { width: 1080, quality: 72 }) }}
                   style={[styles.imagen, { width: SCREEN_WIDTH }]}
                   resizeMode="cover"
                 />
@@ -1563,7 +1564,7 @@ export default function DetallePropiedad() {
               {imagenes.map((img, i) => (
                 <TouchableOpacity key={i} onPress={() => setLightboxIndex(i)}>
                   <Image
-                    source={{ uri: img.url }}
+                    source={{ uri: thumb(img.url, { width: 160, quality: 55 }) }}
                     style={[styles.lbThumb, i === lightboxIndex && styles.lbThumbActive]}
                   />
                 </TouchableOpacity>
