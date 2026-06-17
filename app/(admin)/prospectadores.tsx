@@ -495,6 +495,12 @@ export default function Prospectadores() {
                 >
                   <Text style={styles.crmBtnSmallText}>📊 CRM</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.historialBtnSmall}
+                  onPress={() => router.push({ pathname: '/(admin)/usuario-historial', params: { id: item.id, nombre: item.nombre ?? item.email } })}
+                >
+                  <Text style={styles.historialBtnSmallText}>📋 Historial</Text>
+                </TouchableOpacity>
               </View>
 
               {editandoRolId === item.id && (
@@ -1089,6 +1095,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   crmBtnSmallText: { color: '#1a6470', fontSize: 12, fontWeight: '700' },
+  historialBtnSmall: {
+    backgroundColor: '#f0ecfa',
+    borderWidth: 1,
+    borderColor: '#5e35b1',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  historialBtnSmallText: { color: '#5e35b1', fontSize: 12, fontWeight: '700' },
 
   crmStatsRow: {
     flexDirection: 'row',
