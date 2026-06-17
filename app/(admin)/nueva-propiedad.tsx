@@ -273,39 +273,38 @@ export default function NuevaPropiedad() {
   }
 
   // Carga las constructoras ya registradas para poder elegirlas (o crear una nueva).
+  // Eager: lista lista antes de activar el toggle.
   useEffect(() => {
-    if (!esConstructora) return
     let activo = true
     ;(async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('propiedades')
         .select('nombre_constructora')
         .eq('es_constructora', true)
         .not('nombre_constructora', 'is', null)
         .limit(2000)
-      if (!activo) return
+      if (!activo || error) return
       const nombres = [...new Set(
         (data ?? []).map((p: any) => (p.nombre_constructora as string)?.trim()).filter(Boolean)
       )].sort() as string[]
       setConstructorasExistentes(nombres)
-      // Si no hay ninguna registrada, ir directo a modo "nueva"
-      if (nombres.length === 0) setModoNuevaConstructora(true)
     })()
     return () => { activo = false }
-  }, [esConstructora])
+  }, [])
 
-  // Carga las secciones de inventario ya creadas para poder elegirlas (no solo crear nuevas).
+  // Carga las secciones de inventario ya creadas para poder elegirlas.
+  // Se carga al montar (eager) para que los chips estén listos en cuanto se
+  // active el toggle, sin depender de un fetch posterior que pueda fallar/tardar.
   useEffect(() => {
-    if (!esInventario) return
     let activo = true
     ;(async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('propiedades')
         .select('inventario_seccion')
         .eq('es_inventario', true)
         .not('inventario_seccion', 'is', null)
         .limit(2000)
-      if (!activo) return
+      if (!activo || error) return
       const set = new Map<string, string>()
       for (const r of (data ?? [])) {
         const s = (r as any).inventario_seccion?.trim()
@@ -314,7 +313,7 @@ export default function NuevaPropiedad() {
       setSeccionesExistentes(Array.from(set.values()).sort((a, b) => a.localeCompare(b)))
     })()
     return () => { activo = false }
-  }, [esInventario])
+  }, [])
 
   async function importarDesdeUrl() {
     const url = urlImport.trim()
