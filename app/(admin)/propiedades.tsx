@@ -18,6 +18,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 import { thumb } from '../../lib/img'
+import { normalizar } from '../../lib/texto'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type Propiedad = {
@@ -165,12 +166,12 @@ export default function AdminPropiedades() {
   const inventarioCount = propiedades.filter((p) => p.es_inventario).length
   let propiedadesFiltradas = propiedades.filter((p) => !p.es_inventario)
   if (busqueda.trim()) {
-    const q = busqueda.trim().toLowerCase()
+    const q = normalizar(busqueda.trim())
     const qDigits = q.replace(/\D/g, '')
     propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
-      const cod = p.codigo?.toLowerCase() ?? ''
+      const cod = normalizar(p.codigo)
       const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
-      return codMatch || p.direccion?.toLowerCase().includes(q) || p.titulo?.toLowerCase().includes(q)
+      return codMatch || normalizar(p.direccion).includes(q) || normalizar(p.titulo).includes(q)
     })
   }
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)

@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { normalizar } from '../../lib/texto'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 import { ESTADOS, ORDEN_ESTADOS as ORDEN_ESTADOS_BASE } from '../(prospectador)/crm'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
@@ -193,11 +194,11 @@ export default function AdminCRM() {
     .map((sec) => {
       let clientes = sec.data
       if (busqueda.trim()) {
-        const q = busqueda.toLowerCase()
+        const q = normalizar(busqueda)
         clientes = clientes.filter((c) =>
-          c.nombre.toLowerCase().includes(q) || c.telefono.includes(q) ||
-          (c.empresa ?? '').toLowerCase().includes(q) ||
-          sec.title.toLowerCase().includes(q)
+          normalizar(c.nombre).includes(q) || c.telefono.includes(q) ||
+          normalizar(c.empresa).includes(q) ||
+          normalizar(sec.title).includes(q)
         )
       }
       if (estadoFiltro) clientes = clientes.filter((c) => c.estado === estadoFiltro)

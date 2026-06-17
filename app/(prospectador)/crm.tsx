@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { normalizar } from '../../lib/texto'
 import { useColors, useTheme } from '../../lib/ThemeContext'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -160,11 +161,11 @@ export default function CRM() {
   // ── Filtros ───────────────────────────────────────────────────
   let filtrados = clientes
   if (busqueda.trim()) {
-    const q = busqueda.toLowerCase()
+    const q = normalizar(busqueda)
     filtrados = filtrados.filter(c =>
-      c.nombre.toLowerCase().includes(q) || c.telefono.includes(q) ||
-      (c.email ?? '').toLowerCase().includes(q) ||
-      (c.empresa ?? '').toLowerCase().includes(q)
+      normalizar(c.nombre).includes(q) || c.telefono.includes(q) ||
+      normalizar(c.email).includes(q) ||
+      normalizar(c.empresa).includes(q)
     )
   }
   if (estadoFiltro) filtrados = filtrados.filter(c => c.estado === estadoFiltro)

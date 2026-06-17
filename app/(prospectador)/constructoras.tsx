@@ -97,7 +97,7 @@ export default function Constructoras() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
           {grupos.map((g) => {
-            const abierta = abiertas[g.nombre] ?? true
+            const abierta = abiertas[g.nombre] ?? false
             return (
               <View key={g.nombre} style={styles.grupo}>
                 <TouchableOpacity

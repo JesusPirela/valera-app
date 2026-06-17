@@ -14,6 +14,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { normalizar } from '../../lib/texto'
 import { adminAjustarMonedas } from '../../lib/gamification'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 
@@ -451,8 +452,8 @@ export default function Prospectadores() {
         <FlatList
           data={lista.filter(p =>
             !busqueda.trim() ||
-            (p.nombre ?? '').toLowerCase().includes(busqueda.toLowerCase()) ||
-            p.email.toLowerCase().includes(busqueda.toLowerCase())
+            normalizar(p.nombre).includes(normalizar(busqueda)) ||
+            normalizar(p.email).includes(normalizar(busqueda))
           )}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}

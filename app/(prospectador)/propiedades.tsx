@@ -30,6 +30,7 @@ const LOGO = require('../../assets/logo.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
 import { thumb } from '../../lib/img'
+import { normalizar } from '../../lib/texto'
 import MiniMapa from '../../components/MiniMapa'
 
 type Propiedad = {
@@ -363,15 +364,15 @@ export default function ProspectadorPropiedades() {
   let propiedadesFiltradas = propiedades
 
   if (busqueda.trim()) {
-    const q = busqueda.trim().toLowerCase()
+    const q = normalizar(busqueda.trim())
     const qDigits = q.replace(/\D/g, '')
     propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
-      const cod = p.codigo?.toLowerCase() ?? ''
+      const cod = normalizar(p.codigo)
       // Código tolerante a ceros: "4", "004" y "vr-004" encuentran VR-004
       const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
       return codMatch ||
-        p.direccion?.toLowerCase().includes(q) ||
-        p.titulo?.toLowerCase().includes(q)
+        normalizar(p.direccion).includes(q) ||
+        normalizar(p.titulo).includes(q)
     })
   }
   if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) > 0)
@@ -649,33 +650,32 @@ export default function ProspectadorPropiedades() {
           ))}
         </View>
 
-        {/* Acceso a vista de Constructoras */}
-        <TouchableOpacity
-          style={[styles.constructorasBtn, { borderColor: primaryColor }]}
-          onPress={() => router.push('/(prospectador)/constructoras')}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.constructorasIcon}>🏗️</Text>
-          <Text style={[styles.constructorasTxt, { color: primaryColor }]}>Constructoras</Text>
-          <Text style={[styles.constructorasChevron, { color: primaryColor }]}>›</Text>
-        </TouchableOpacity>
-
-        {/* Fila de controles: Filtros + Ver zonas */}
+        {/* Fila de controles: Filtros + Constructoras + Ver zonas */}
         <View style={styles.controlsRow}>
           <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
             <Text style={[styles.filtrosToggleText, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
               {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.zonasToggle, { borderColor: primaryColor }, vistaZonas && { backgroundColor: primaryColor }]}
-            onPress={() => setVistaZonas(v => !v)}
-          >
-            <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : primaryColor} />
-            <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-              Ver zonas
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              style={[styles.constructorasBtn, { backgroundColor: primaryColor }]}
+              onPress={() => router.push('/(prospectador)/constructoras')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.constructorasIcon}>🏗️</Text>
+              <Text style={styles.constructorasTxt} numberOfLines={1} maxFontSizeMultiplier={1.2}>Constructoras</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.zonasToggle, { borderColor: primaryColor }, vistaZonas && { backgroundColor: primaryColor }]}
+              onPress={() => setVistaZonas(v => !v)}
+            >
+              <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : primaryColor} />
+              <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                Ver zonas
             </Text>
           </TouchableOpacity>
+          </View>
         </View>
 
         {mostrarFiltros && (
@@ -814,7 +814,7 @@ export default function ProspectadorPropiedades() {
                 precio: p.precio,
                 tipo: p.tipo,
               }))}
-              onPropiedadPress={id => router.push(`/(prospectador)/detalle-propiedad?id=${id}` as any)}
+              onPropiedadPress={(id: string) => router.push(`/(prospectador)/detalle-propiedad?id=${id}` as any)}
             />
           </View>
         ) : isWeb ? (
@@ -971,22 +971,17 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     fontSize: 14,
   },
-  // Botones rápidos Venta / Renta
+  // Botón Constructoras — compacto y resaltado, junto a "Ver zonas"
   constructorasBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 4,
-    marginBottom: 4,
-    borderWidth: 1.5,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    gap: 5,
+    borderRadius: 16,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
   },
-  constructorasIcon: { fontSize: 18 },
-  constructorasTxt: { fontSize: 14, fontWeight: '700', flex: 1 },
-  constructorasChevron: { fontSize: 22, fontWeight: '700' },
+  constructorasIcon: { fontSize: 14 },
+  constructorasTxt: { fontSize: 13, fontWeight: '700', color: '#fff' },
   quickFiltersRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,

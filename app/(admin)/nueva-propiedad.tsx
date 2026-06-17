@@ -171,6 +171,8 @@ export default function NuevaPropiedad() {
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
+  const [constructorasExistentes, setConstructorasExistentes] = useState<string[]>([])
+  const [modoNuevaConstructora, setModoNuevaConstructora] = useState(false)
   const [esInventario, setEsInventario] = useState(false)
   const [inventarioSeccion, setInventarioSeccion] = useState('')
   const [seccionesExistentes, setSeccionesExistentes] = useState<string[]>([])
@@ -269,6 +271,28 @@ export default function NuevaPropiedad() {
     setMostrarFicha(false)
     setTituloEditado(false)
   }
+
+  // Carga las constructoras ya registradas para poder elegirlas (o crear una nueva).
+  useEffect(() => {
+    if (!esConstructora) return
+    let activo = true
+    ;(async () => {
+      const { data } = await supabase
+        .from('propiedades')
+        .select('nombre_constructora')
+        .eq('es_constructora', true)
+        .not('nombre_constructora', 'is', null)
+        .limit(2000)
+      if (!activo) return
+      const nombres = [...new Set(
+        (data ?? []).map((p: any) => (p.nombre_constructora as string)?.trim()).filter(Boolean)
+      )].sort() as string[]
+      setConstructorasExistentes(nombres)
+      // Si no hay ninguna registrada, ir directo a modo "nueva"
+      if (nombres.length === 0) setModoNuevaConstructora(true)
+    })()
+    return () => { activo = false }
+  }, [esConstructora])
 
   // Carga las secciones de inventario ya creadas para poder elegirlas (no solo crear nuevas).
   useEffect(() => {
@@ -1012,13 +1036,39 @@ export default function NuevaPropiedad() {
           />
         </View>
         {esConstructora && (
-          <TextInput
-            style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-            placeholder="Nombre de la constructora"
-            value={nombreConstructora}
-            onChangeText={setNombreConstructora}
-            autoCapitalize="words"
-          />
+          <View style={{ marginTop: 10 }}>
+            {constructorasExistentes.length > 0 && (
+              <View style={styles.constrChipsRow}>
+                {constructorasExistentes.map((nombre) => {
+                  const activa = !modoNuevaConstructora && nombreConstructora === nombre
+                  return (
+                    <TouchableOpacity
+                      key={nombre}
+                      style={[styles.constrChip, activa && styles.constrChipActive]}
+                      onPress={() => { setNombreConstructora(nombre); setModoNuevaConstructora(false) }}
+                    >
+                      <Text style={[styles.constrChipTxt, activa && styles.constrChipTxtActive]}>{nombre}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+                <TouchableOpacity
+                  style={[styles.constrChip, styles.constrChipNueva, modoNuevaConstructora && styles.constrChipActive]}
+                  onPress={() => { setModoNuevaConstructora(true); setNombreConstructora('') }}
+                >
+                  <Text style={[styles.constrChipTxt, modoNuevaConstructora && styles.constrChipTxtActive]}>+ Nueva</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {(modoNuevaConstructora || constructorasExistentes.length === 0) && (
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText, marginTop: constructorasExistentes.length > 0 ? 8 : 0 }]}
+                placeholder="Nombre de la constructora"
+                value={nombreConstructora}
+                onChangeText={setNombreConstructora}
+                autoCapitalize="words"
+              />
+            )}
+          </View>
         )}
 
         <View style={[styles.exclusivaRow, { borderColor: '#c9a84c', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, backgroundColor: '#fffbf0' }]}>
@@ -1178,6 +1228,12 @@ const styles = StyleSheet.create({
   },
   exclusivaLabel: { fontSize: 14, fontWeight: '600', color: '#1a6470' },
   exclusivaDesc: { fontSize: 12, color: '#888', marginTop: 2 },
+  constrChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  constrChip: { borderWidth: 1.5, borderColor: '#1a6470', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  constrChipActive: { backgroundColor: '#1a6470' },
+  constrChipNueva: { borderStyle: 'dashed' },
+  constrChipTxt: { fontSize: 13, fontWeight: '700', color: '#1a6470' },
+  constrChipTxtActive: { color: '#fff' },
   seccionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   seccionChip: {
     borderWidth: 1, borderColor: '#c9a84c', borderRadius: 16,
