@@ -37,7 +37,6 @@ export default function Bloques() {
   const [loading, setLoading] = useState(true)
   const [asignando, setAsignando] = useState<string | null>(null)
   const [expandidas, setExpandidas] = useState<Record<string, boolean>>({})
-  const [editando, setEditando] = useState<Record<string, boolean>>({})
   const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { cargar(periodo, yaCargoRef.current) }, []))
@@ -88,9 +87,6 @@ export default function Bloques() {
   function toggleExpand(key: string) {
     setExpandidas((s) => ({ ...s, [key]: !s[key] }))
   }
-  function toggleEdit(key: string) {
-    setEditando((s) => ({ ...s, [key]: !s[key] }))
-  }
 
   return (
     <View style={[s.container, { backgroundColor: c.bg }]}>
@@ -124,45 +120,41 @@ export default function Bloques() {
             const t = totales(g.users)
             const esSinAsignar = g.key === SIN_ASIGNAR
             const abierta = expandidas[g.key]
-            const enEdicion = editando[g.key]
             return (
-              <View key={g.key} style={[s.bloqueCard, { backgroundColor: c.card, borderColor: enEdicion ? PURPLE : c.border }]}>
-                {/* Header — abrir/cerrar */}
-                <TouchableOpacity style={s.bloqueHeader} onPress={() => toggleExpand(g.key)} activeOpacity={0.7}>
-                  <Text style={[s.chevron, { color: c.textMute }]}>{abierta ? '▼' : '▶'}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.bloqueNombre, { color: c.text }]}>{g.nombre}</Text>
-                    {!esSinAsignar && (
-                      <Text style={s.headerResumen}>
-                        📤 {t.publicaciones}   👤 {t.clientes_nuevos}   ✅ {t.seguimientos}
-                      </Text>
-                    )}
-                  </View>
-                  <Text style={[s.bloqueCount, { color: c.textMute }]}>{g.users.length} {g.users.length === 1 ? 'usuario' : 'usuarios'}</Text>
-                </TouchableOpacity>
+              <View key={g.key} style={[s.bloqueCard, { backgroundColor: c.card, borderColor: abierta ? PURPLE : c.border }]}>
+                {/* Header — click en bloque abre sus estadísticas (excepto "Sin asignar") */}
+                <View style={s.bloqueHeader}>
+                  <TouchableOpacity
+                    style={s.bloqueHeaderMain}
+                    activeOpacity={0.7}
+                    onPress={() => esSinAsignar
+                      ? toggleExpand(g.key)
+                      : router.push({ pathname: '/(admin)/bloque-detalle', params: { id: g.key, nombre: g.nombre } })}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.bloqueNombre, { color: c.text }]}>{g.nombre}</Text>
+                      {esSinAsignar ? (
+                        <Text style={[s.bloqueCount, { color: c.textMute }]}>{g.users.length} {g.users.length === 1 ? 'usuario' : 'usuarios'}</Text>
+                      ) : (
+                        <Text style={s.headerResumen}>
+                          📤 {t.publicaciones}   👤 {t.clientes_nuevos}   ✅ {t.seguimientos}   ·   {g.users.length} {g.users.length === 1 ? 'usuario' : 'usuarios'}
+                        </Text>
+                      )}
+                    </View>
+                    {!esSinAsignar && <Text style={s.verEstadisticas}>Ver estadísticas →</Text>}
+                  </TouchableOpacity>
 
+                  <TouchableOpacity
+                    style={[s.asignarBtn, abierta && s.asignarBtnOn]}
+                    onPress={() => toggleExpand(g.key)}
+                  >
+                    <Text style={[s.asignarBtnTxt, abierta && { color: '#fff' }]}>{abierta ? '✓ Listo' : '✎ Asignar'}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Panel de asignación: mover usuarios entre bloques */}
                 {abierta && (
                   <View style={s.bloqueBody}>
-                    {/* Estadística general del bloque */}
-                    {!esSinAsignar && (
-                      <View style={s.resumenRow}>
-                        <ResumenBox label="Publicaciones" val={t.publicaciones} color={TEAL} />
-                        <ResumenBox label="Clientes nuevos" val={t.clientes_nuevos} color="#2e7d32" />
-                        <ResumenBox label="Seguimientos" val={t.seguimientos} color="#c8960c" />
-                      </View>
-                    )}
-
-                    {/* Botón de edición */}
-                    <TouchableOpacity
-                      style={[s.editBtn, enEdicion ? s.editBtnOn : { borderColor: PURPLE }]}
-                      onPress={() => toggleEdit(g.key)}
-                    >
-                      <Text style={[s.editBtnTxt, enEdicion && { color: '#fff' }]}>
-                        {enEdicion ? '✓ Listo' : '✎ Editar bloque'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {/* Usuarios */}
                     {g.users.length === 0 ? (
                       <Text style={s.vacio}>{esSinAsignar ? 'Todos los usuarios están asignados.' : 'Sin usuarios en este bloque.'}</Text>
                     ) : (
@@ -176,31 +168,28 @@ export default function Bloques() {
                               <Text style={[s.userStat, { color: '#c8960c' }]}>✅ {u.seguimientos}</Text>
                             </View>
                           </View>
-                          {/* Chips de asignación — solo en modo edición */}
-                          {enEdicion && (
-                            <View style={s.chipsRow}>
-                              <Text style={s.chipsLabel}>Mover a:</Text>
-                              {bloques.map((b) => (
-                                <TouchableOpacity
-                                  key={b.id}
-                                  disabled={asignando === u.user_id}
-                                  style={[s.chip, u.bloque_id === b.id && s.chipActive]}
-                                  onPress={() => asignar(u.user_id, u.bloque_id === b.id ? null : b.id)}
-                                >
-                                  <Text style={[s.chipTxt, u.bloque_id === b.id && s.chipTxtActive]}>{b.nombre}</Text>
-                                </TouchableOpacity>
-                              ))}
-                              {u.bloque_id && (
-                                <TouchableOpacity
-                                  disabled={asignando === u.user_id}
-                                  style={s.chipQuitar}
-                                  onPress={() => asignar(u.user_id, null)}
-                                >
-                                  <Text style={s.chipQuitarTxt}>Quitar</Text>
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          )}
+                          <View style={s.chipsRow}>
+                            <Text style={s.chipsLabel}>Mover a:</Text>
+                            {bloques.map((b) => (
+                              <TouchableOpacity
+                                key={b.id}
+                                disabled={asignando === u.user_id}
+                                style={[s.chip, u.bloque_id === b.id && s.chipActive]}
+                                onPress={() => asignar(u.user_id, u.bloque_id === b.id ? null : b.id)}
+                              >
+                                <Text style={[s.chipTxt, u.bloque_id === b.id && s.chipTxtActive]}>{b.nombre}</Text>
+                              </TouchableOpacity>
+                            ))}
+                            {u.bloque_id && (
+                              <TouchableOpacity
+                                disabled={asignando === u.user_id}
+                                style={s.chipQuitar}
+                                onPress={() => asignar(u.user_id, null)}
+                              >
+                                <Text style={s.chipQuitarTxt}>Quitar</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
                         </View>
                       ))
                     )}
@@ -211,15 +200,6 @@ export default function Bloques() {
           })}
         </ScrollView>
       )}
-    </View>
-  )
-}
-
-function ResumenBox({ label, val, color }: { label: string; val: number; color: string }) {
-  return (
-    <View style={[s.resumenBox, { borderLeftColor: color }]}>
-      <Text style={[s.resumenVal, { color }]}>{val}</Text>
-      <Text style={s.resumenLbl}>{label}</Text>
     </View>
   )
 }
@@ -240,21 +220,17 @@ const s = StyleSheet.create({
 
   bloqueCard: { borderRadius: 16, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
   bloqueHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 },
-  chevron: { fontSize: 13, width: 14 },
+  bloqueHeaderMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   bloqueNombre: { fontSize: 17, fontWeight: '800' },
   headerResumen: { fontSize: 12, color: '#94a3b8', fontWeight: '700', marginTop: 3 },
-  bloqueCount: { fontSize: 12, fontWeight: '600' },
+  bloqueCount: { fontSize: 12, fontWeight: '600', marginTop: 3 },
+  verEstadisticas: { fontSize: 12, fontWeight: '700', color: PURPLE },
 
-  bloqueBody: { paddingHorizontal: 16, paddingBottom: 16 },
+  asignarBtn: { borderWidth: 1.5, borderColor: PURPLE, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+  asignarBtnOn: { backgroundColor: PURPLE, borderColor: PURPLE },
+  asignarBtnTxt: { fontSize: 12, fontWeight: '700', color: PURPLE },
 
-  resumenRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  resumenBox: { flex: 1, borderLeftWidth: 3, paddingLeft: 8, paddingVertical: 4 },
-  resumenVal: { fontSize: 22, fontWeight: '800' },
-  resumenLbl: { fontSize: 10, color: '#94a3b8', fontWeight: '600' },
-
-  editBtn: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7, marginBottom: 4 },
-  editBtnOn: { backgroundColor: PURPLE, borderColor: PURPLE },
-  editBtnTxt: { fontSize: 13, fontWeight: '700', color: PURPLE },
+  bloqueBody: { paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: 'rgba(148,163,184,0.2)' },
 
   vacio: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic', paddingVertical: 10 },
 

@@ -48,6 +48,7 @@ type FiltroOperacion = 'venta' | 'renta' | null
 type FiltroEstado = 'disponible' | 'vendida' | null
 type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
+type OrdenPublicaciones = 'desc' | 'asc' | null
 
 type InmobiliariaOpcion = { id: string; nombre: string }
 
@@ -79,6 +80,8 @@ export default function AdminPropiedades() {
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
+  const [ordenPublicaciones, setOrdenPublicaciones] = useState<OrdenPublicaciones>(null)
+  const [publicacionesMap, setPublicacionesMap] = useState<Record<string, number>>({})
   const [filtroInmobiliaria, setFiltroInmobiliaria] = useState<string | null>(null)
 
   const [modalVisible, setModalVisible] = useState(false)
@@ -130,6 +133,14 @@ export default function AdminPropiedades() {
     }
     const { data: inmobiliariasData } = await supabase.from('inmobiliarias').select('id, nombre').order('nombre')
     setInmobiliarias(inmobiliariasData ?? [])
+
+    // Conteo de publicaciones por propiedad (para ordenar "más publicadas")
+    const { data: conteo } = await supabase.rpc('get_publicaciones_conteo')
+    if (conteo) {
+      setPublicacionesMap(Object.fromEntries(
+        (conteo as { propiedad_id: string; total: number }[]).map((r) => [r.propiedad_id, r.total])
+      ))
+    }
   }
 
   useFocusEffect(useCallback(() => { cargarPropiedades(); cargarRolEInmobiliarias() }, []))
@@ -146,7 +157,7 @@ export default function AdminPropiedades() {
       ].includes(item.route))
     : NAV_ITEMS
 
-  const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, filtroInmobiliaria].filter(Boolean).length
+  const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, ordenPublicaciones, filtroInmobiliaria].filter(Boolean).length
 
   const inventarioCount = propiedades.filter((p) => p.es_inventario).length
   // El catálogo principal NUNCA muestra propiedades de inventario.
@@ -171,6 +182,14 @@ export default function AdminPropiedades() {
         ? (a.precio ?? Infinity) - (b.precio ?? Infinity)
         : (b.precio ?? -Infinity) - (a.precio ?? -Infinity)
     )
+  }
+  // El orden por publicaciones tiene prioridad sobre el de precio
+  if (ordenPublicaciones) {
+    propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
+      const pa = publicacionesMap[a.id] ?? 0
+      const pb = publicacionesMap[b.id] ?? 0
+      return ordenPublicaciones === 'desc' ? pb - pa : pa - pb
+    })
   }
 
   function ejecutarBorrado(id: string) {
@@ -238,6 +257,7 @@ export default function AdminPropiedades() {
     setFiltroEstado(null)
     setFiltroTipo(null)
     setOrdenPrecio(null)
+    setOrdenPublicaciones(null)
     setFiltroInmobiliaria(null)
   }
 
@@ -343,6 +363,12 @@ export default function AdminPropiedades() {
             <FiltroChip label="↑ Menor" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} />
             <FiltroChip label="↓ Mayor" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} />
           </ScrollView>
+          <Text style={[styles.filtroLabel, { color: c.textMute }]}>Publicaciones</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="Sin orden" active={ordenPublicaciones === null} onPress={() => setOrdenPublicaciones(null)} />
+            <FiltroChip label="🔥 Más publicadas" active={ordenPublicaciones === 'desc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'desc' ? null : 'desc')} />
+            <FiltroChip label="Menos publicadas" active={ordenPublicaciones === 'asc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'asc' ? null : 'asc')} />
+          </ScrollView>
           {inmobiliarias.length > 0 && (
             <>
               <Text style={[styles.filtroLabel, { color: c.textMute }]}>Inmobiliaria</Text>
@@ -442,6 +468,7 @@ export default function AdminPropiedades() {
 
                   <Text style={[styles.cardTitulo, { color: c.text }]}>{item.titulo}</Text>
                   <Text style={[styles.cardDireccion, { color: c.textMute }]} numberOfLines={1}>📍 {item.direccion}</Text>
+                  <Text style={styles.pubBadge}>📤 {publicacionesMap[item.id] ?? 0} publicaciones</Text>
 
                   {tieneMeta && (
                     <View style={styles.metaRow}>
@@ -547,6 +574,7 @@ export default function AdminPropiedades() {
                   )}
                   <Text style={[styles.cardTitulo, { color: c.text }]}>{item.titulo}</Text>
                   <Text style={[styles.cardDireccion, { color: c.textMute }]} numberOfLines={1}>📍 {item.direccion}</Text>
+                  <Text style={styles.pubBadge}>📤 {publicacionesMap[item.id] ?? 0} publicaciones</Text>
                   {tieneMeta && (
                     <View style={styles.metaRow}>
                       {item.recamaras != null && <Text style={styles.metaItem}>🛏 {item.recamaras}</Text>}
@@ -864,7 +892,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardTitulo: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  cardDireccion: { fontSize: 13, marginBottom: 10 },
+  cardDireccion: { fontSize: 13, marginBottom: 4 },
+  pubBadge: { fontSize: 12, fontWeight: '700', color: '#7B1FA2', marginBottom: 10 },
   metaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 12 },
   metaItem: {
     fontSize: 12,
