@@ -55,19 +55,21 @@ type OrdenPublicaciones = 'desc' | 'asc' | null
 type InmobiliariaOpcion = { id: string; nombre: string }
 
 const NAV_ITEMS = [
-  { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2' },
-  { label: 'CRM', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
-  { label: 'Constructoras', icon: '🏗️', route: '/(prospectador)/constructoras', color: '#455A64' },
-  { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32' },
-  { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2' },
-  { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F' },
-  { label: 'Bloques', icon: '🧩', route: '/(admin)/bloques', color: '#5e35b1' },
-  { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828' },
-  { label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#F57F17' },
-  { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#AD1457' },
-  { label: 'Tienda', icon: '🛒', route: '/(admin)/tienda-compras', color: '#558B2F' },
-  { label: 'Cofres', icon: '🎁', route: '/(admin)/gestion-cofres', color: '#2e7d32' },
+  { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2', grupo: 'Propiedades' },
+  { label: 'Constructoras', icon: '🏗️', route: '/(prospectador)/constructoras', color: '#455A64', grupo: 'Propiedades' },
+  { label: 'Bloques', icon: '🧩', route: '/(admin)/bloques', color: '#5e35b1', grupo: 'Propiedades' },
+  { label: 'CRM', icon: '📒', route: '/(admin)/crm', color: '#D84315', grupo: 'Gestión' },
+  { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32', grupo: 'Gestión' },
+  { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828', grupo: 'Gestión' },
+  { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F', grupo: 'Gestión' },
+  { label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#F57F17', grupo: 'Crecimiento' },
+  { label: 'Tienda', icon: '🛒', route: '/(admin)/tienda-compras', color: '#558B2F', grupo: 'Crecimiento' },
+  { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#AD1457', grupo: 'Crecimiento' },
+  { label: 'Cofres', icon: '🎁', route: '/(admin)/gestion-cofres', color: '#2e7d32', grupo: 'Crecimiento' },
+  { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2', grupo: null },
 ]
+
+const NAV_GRUPOS = ['Propiedades', 'Gestión', 'Crecimiento']
 
 export default function AdminPropiedades() {
   useSupervisorBlock()
@@ -285,18 +287,37 @@ export default function AdminPropiedades() {
   // Shared header: navGrid + search + inventario + filtros
   const pageHeader = (
     <>
-      <View style={styles.navGrid}>
-        {navItems.map((item) => (
-          <TouchableOpacity
-            key={item.route}
-            style={[styles.navCard, { backgroundColor: item.color }]}
-            onPress={() => router.push(item.route as any)}
-          >
-            <Text style={styles.navIcon}>{item.icon}</Text>
-            <Text style={styles.navLabel}>{item.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {NAV_GRUPOS.map((grupo) => {
+        const items = navItems.filter((item) => item.grupo === grupo)
+        if (items.length === 0) return null
+        return (
+          <View key={grupo} style={styles.navGroup}>
+            <Text style={[styles.navGroupTitle, { color: c.textMute }]}>{grupo.toUpperCase()}</Text>
+            <View style={styles.navGrid}>
+              {items.map((item) => (
+                <TouchableOpacity
+                  key={item.route}
+                  style={[styles.navCard, { backgroundColor: item.color }]}
+                  onPress={() => router.push(item.route as any)}
+                >
+                  <Text style={styles.navIcon}>{item.icon}</Text>
+                  <Text style={styles.navLabel}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )
+      })}
+      {navItems.filter((item) => item.grupo === null).map((item) => (
+        <TouchableOpacity
+          key={item.route}
+          style={[styles.navCard, styles.navCardSuelto, { backgroundColor: item.color }]}
+          onPress={() => router.push(item.route as any)}
+        >
+          <Text style={styles.navIcon}>{item.icon}</Text>
+          <Text style={styles.navLabel}>{item.label}</Text>
+        </TouchableOpacity>
+      ))}
 
       <View style={[styles.searchRow, { backgroundColor: c.card, borderColor: c.inputBorder }]}>
         <Text style={styles.searchIcon}>🔍</Text>
@@ -606,28 +627,34 @@ const styles = StyleSheet.create({
   webOuterContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 },
   webGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 16, marginTop: 8 },
 
-  // Grid de navegación 2 columnas
+  // Grid de navegación agrupado por categoría, 3 columnas
+  navGroup: { marginBottom: 14 },
+  navGroupTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
   navGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
   },
   navCard: {
-    width: '47%',
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
+    width: '31%',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
     alignItems: 'center',
-    gap: 10,
+    gap: 4,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
   },
-  navIcon: { fontSize: 22 },
-  navLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  navCardSuelto: { width: '31%', marginBottom: 16 },
+  navIcon: { fontSize: 18 },
+  navLabel: { color: '#fff', fontSize: 12, fontWeight: '700', textAlign: 'center' },
 
   // Búsqueda
   searchRow: {
