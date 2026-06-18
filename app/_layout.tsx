@@ -7,6 +7,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { queryClient, persister } from '../lib/queryClient'
 import { ThemeProvider, useColors } from '../lib/ThemeContext'
 import { VistaComoProvider, VISTA_COMO_KEY } from '../lib/VistaComo'
+import { guardarCuentaActual } from '../lib/cuentas'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
@@ -148,6 +149,10 @@ export default function RootLayout() {
           .update({ last_seen: new Date().toISOString() })
           .eq('id', user.id)
           .then(() => {}, () => {})
+        // Guardar la cuenta actual para el cambio rápido (aunque ya estuviera
+        // logueada desde antes de esta función). Trae nombre/rol para la etiqueta.
+        supabase.from('profiles').select('nombre, role').eq('id', user.id).maybeSingle()
+          .then(({ data: p }) => guardarCuentaActual({ nombre: p?.nombre ?? null, role: p?.role ?? null }), () => {})
         const { data } = await supabase
           .from('user_sessions')
           .insert({ user_id: user.id })
