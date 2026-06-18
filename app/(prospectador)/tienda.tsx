@@ -114,8 +114,9 @@ export default function Tienda() {
 
     setLoading(false)
 
-    // Verificar cofres por nivel usando el nuevo RPC servidor (idempotente)
-    const cofresGanados = await supabase.rpc('claim_cofres_nivel', { p_nivel: nivel })
+    // Reclamar TODOS los cofres por nivel a los que se tiene derecho (idempotente).
+    // Recupera los de quienes subieron antes del cambio o por error no los tienen.
+    const cofresGanados = await supabase.rpc('claim_cofres_nivel_todos')
     if (!cofresGanados.error && (cofresGanados.data as number) > 0) {
       const ganados = cofresGanados.data as number
       setCofresPendientes(prev => prev + ganados)
