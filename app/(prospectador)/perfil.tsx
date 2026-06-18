@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
+import CambiarCuenta from '../../components/CambiarCuenta'
 import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
 
 const COLORES_PRESET = [
@@ -387,6 +388,9 @@ export default function Perfil() {
         >
           <Text style={[s.btnActividadText, { color: '#c9a84c' }]}>🏆 Mi historial — estadísticas de toda la vida</Text>
         </TouchableOpacity>
+
+        {/* Cambiar de cuenta (solo si hay 2+ guardadas) */}
+        <CambiarCuenta />
 
         {/* Cerrar sesión */}
         <TouchableOpacity

@@ -46,6 +46,10 @@ export default function Inventario() {
   const [items, setItems] = useState<InvProp[]>([])
   const [loading, setLoading] = useState(true)
   const [colapsadas, setColapsadas] = useState<Record<string, boolean>>({})
+  // Visor de imágenes ampliadas (galería de la propiedad)
+  const [verImagenes, setVerImagenes] = useState<string[] | null>(null)
+  const [imgIdx, setImgIdx] = useState(0)
+  function abrirGaleria(urls: string[]) { setImgIdx(0); setVerImagenes(urls.length ? urls : null) }
 
   // Modal para editar sección / notas de una opción.
   const [modalProp, setModalProp] = useState<InvProp | null>(null)
@@ -199,7 +203,10 @@ export default function Inventario() {
                     <View key={p.id} style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
                       <View style={styles.cardTop}>
                         {img?.url ? (
-                          <Image source={{ uri: thumb(img.url, { width: 200, quality: 60 }) }} style={styles.cardImg} />
+                          <TouchableOpacity activeOpacity={0.85} onPress={() => abrirGaleria((p.propiedad_imagenes ?? []).slice().sort((a, b) => a.orden - b.orden).map(i => i.url))}>
+                            <Image source={{ uri: thumb(img.url, { width: 220, quality: 65 }) }} style={styles.cardImg} />
+                            <View style={styles.cardImgZoom}><Text style={{ fontSize: 11 }}>🔍</Text></View>
+                          </TouchableOpacity>
                         ) : (
                           <View style={[styles.cardImg, styles.cardImgPh]}><Text style={{ fontSize: 26 }}>🏠</Text></View>
                         )}
@@ -288,6 +295,33 @@ export default function Inventario() {
           </View>
         </View>
       </Modal>
+
+      {/* Visor de imágenes ampliadas */}
+      <Modal visible={verImagenes !== null} transparent animationType="fade" onRequestClose={() => setVerImagenes(null)}>
+        <View style={styles.viewerOverlay}>
+          <TouchableOpacity style={styles.viewerCerrar} onPress={() => setVerImagenes(null)}>
+            <Text style={styles.viewerCerrarTxt}>✕  Cerrar</Text>
+          </TouchableOpacity>
+          {verImagenes && verImagenes[imgIdx] && (
+            <Image source={{ uri: thumb(verImagenes[imgIdx], { width: 1280, quality: 80 }) }} style={styles.viewerImg} resizeMode="contain" />
+          )}
+          {verImagenes && verImagenes.length > 1 && (
+            <>
+              {imgIdx > 0 && (
+                <TouchableOpacity style={[styles.viewerArrow, { left: 12 }]} onPress={() => setImgIdx(i => i - 1)}>
+                  <Text style={styles.viewerArrowTxt}>‹</Text>
+                </TouchableOpacity>
+              )}
+              {imgIdx < verImagenes.length - 1 && (
+                <TouchableOpacity style={[styles.viewerArrow, { right: 12 }]} onPress={() => setImgIdx(i => i + 1)}>
+                  <Text style={styles.viewerArrowTxt}>›</Text>
+                </TouchableOpacity>
+              )}
+              <View style={styles.viewerContador}><Text style={styles.viewerContadorTxt}>{imgIdx + 1} / {verImagenes.length}</Text></View>
+            </>
+          )}
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -317,6 +351,15 @@ const styles = StyleSheet.create({
   },
   cardTop: { flexDirection: 'row', gap: 12 },
   cardImg: { width: 84, height: 84, borderRadius: 10, backgroundColor: '#e8f0f0' },
+  cardImgZoom: { position: 'absolute', bottom: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 11, width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
+  viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', alignItems: 'center', justifyContent: 'center' },
+  viewerImg: { width: '100%', height: '80%' },
+  viewerCerrar: { position: 'absolute', top: 40, right: 20, zIndex: 2, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 },
+  viewerCerrarTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  viewerArrow: { position: 'absolute', top: '46%', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 24, width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  viewerArrowTxt: { color: '#fff', fontSize: 30, fontWeight: '800', lineHeight: 32 },
+  viewerContador: { position: 'absolute', bottom: 36, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 6 },
+  viewerContadorTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
   cardImgPh: { alignItems: 'center', justifyContent: 'center' },
   cardTitulo: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   cardDir: { fontSize: 12, color: '#888', marginBottom: 3 },
