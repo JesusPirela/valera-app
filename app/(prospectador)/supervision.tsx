@@ -4,6 +4,7 @@ import { useColors } from '../../lib/ThemeContext'
 
 const ITEMS = [
   { label: 'CRM', desc: 'Clientes y prospectos de todo el equipo', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
+  { label: 'Mi CRM', desc: 'Solo tus clientes y prospectos', icon: '🙋', route: '/(prospectador)/crm?mios=1', color: '#1a6470' },
   { label: 'Citas', desc: 'Coordinación de citas y visitas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32' },
   { label: 'Actividad', desc: 'Actividad reciente de los prospectadores', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2' },
   { label: 'Estadísticas', desc: 'Métricas y desempeño general', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F' },

@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TextInput, Platform, Linking,
   ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions,
 } from 'react-native'
-import { router, useFocusEffect } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -105,6 +105,10 @@ const SORT_LABELS: Record<SortBy, string> = {
 }
 
 export default function CRM() {
+  // ?mios=1 → "Mi CRM": solo los clientes de los que el usuario es responsable.
+  // (Para supervisores, que por RLS ven los de todo el equipo.)
+  const { mios } = useLocalSearchParams<{ mios?: string }>()
+  const soloMios = mios === '1'
   const c = useColors()
   const { darkMode } = useTheme()
   const queryClient = useQueryClient()
@@ -145,12 +149,17 @@ export default function CRM() {
   const isWeb = Platform.OS === 'web'
 
   const { data: clientes = [], isLoading, refetch } = useQuery<Cliente[]>({
-    queryKey: ['clientes'],
+    queryKey: ['clientes', soloMios ? 'mios' : 'all'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('clientes')
         .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, nivel_interes, recordatorios(id, titulo, fecha_hora, completado)')
         .order('updated_at', { ascending: false })
+      if (soloMios) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) q = q.eq('responsable_id', user.id)
+      }
+      const { data, error } = await q
       if (error) throw error
       return data ?? []
     },
