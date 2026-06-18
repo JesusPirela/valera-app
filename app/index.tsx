@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { router } from 'expo-router'
 import { supabase } from '../lib/supabase'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { VISTA_COMO_KEY } from '../lib/VistaComo'
 
 // Este componente solo renderiza DESPUÉS de que _layout.tsx resuelve la sesión
 // (el spinner de _layout.tsx bloquea hasta que INITIAL_SESSION dispara),
@@ -22,7 +24,9 @@ export default function Index() {
         .single()
 
       if (profile?.role === 'admin') {
-        router.replace('/(admin)/propiedades')
+        let vistaComo: string | null = null
+        try { vistaComo = await AsyncStorage.getItem(VISTA_COMO_KEY) } catch {}
+        router.replace(vistaComo ? '/(prospectador)/propiedades' : '/(admin)/propiedades')
       } else {
         router.replace('/(prospectador)/propiedades')
       }

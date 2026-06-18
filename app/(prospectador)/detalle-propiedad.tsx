@@ -19,6 +19,7 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
 import { thumb } from '../../lib/img'
+import { useVistaComo } from '../../lib/VistaComo'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
 import * as Clipboard from 'expo-clipboard'
@@ -134,8 +135,9 @@ export default function DetallePropiedad() {
   const [lightboxIndex, setLightboxIndex]     = useState(0)
   const [lightboxLoading, setLightboxLoading] = useState(false)
 
+  const { vistaComo } = useVistaComo()
   const { data: detalle, isLoading } = useQuery({
-    queryKey: ['detalle-propiedad', id],
+    queryKey: vistaComo ? ['detalle-propiedad', id, vistaComo] : ['detalle-propiedad', id],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user?.id
@@ -148,6 +150,7 @@ export default function DetallePropiedad() {
         nombreUsuario = miPerfil?.nombre ?? null
         rol = miPerfil?.role ?? null
       }
+      rol = vistaComo ?? rol  // rol efectivo (admin "viendo como")
 
       const { data, error } = await supabase
         .from('propiedades')

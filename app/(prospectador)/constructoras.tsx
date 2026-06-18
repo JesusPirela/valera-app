@@ -7,6 +7,7 @@ import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { thumb } from '../../lib/img'
+import { useVistaComo } from '../../lib/VistaComo'
 
 type Modelo = {
   id: string
@@ -28,6 +29,7 @@ function formatPrecio(precio: number | null) {
 
 export default function Constructoras() {
   const c = useColors()
+  const { vistaComo } = useVistaComo()
   const [modelos, setModelos] = useState<Modelo[]>([])
   const [loading, setLoading] = useState(true)
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
@@ -43,6 +45,7 @@ export default function Constructoras() {
       const { data } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle()
       rol = data?.role ?? null
     }
+    rol = vistaComo ?? rol  // rol efectivo (admin "viendo como")
     setRol(rol)
 
     const { data } = await supabase

@@ -68,6 +68,7 @@ const NAV_ITEMS = [
   { label: 'Tienda', icon: '🛒', route: '/(admin)/tienda-compras', color: '#558B2F', grupo: 'Crecimiento' },
   { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#AD1457', grupo: 'Crecimiento' },
   { label: 'Cofres', icon: '🎁', route: '/(admin)/gestion-cofres', color: '#2e7d32', grupo: 'Crecimiento' },
+  { label: 'Cuenta', icon: '👤', route: '/(admin)/cuenta', color: '#37474F', grupo: 'Gestión' },
 ]
 
 const NAV_GRUPOS = ['Propiedades', 'Gestión', 'Crecimiento']
@@ -161,6 +162,7 @@ export default function AdminPropiedades() {
         '/(admin)/gestion-cofres',
         '/(admin)/prospectadores',
         '/(admin)/bloques',
+        '/(admin)/cuenta',
       ].includes(item.route))
     : NAV_ITEMS
 

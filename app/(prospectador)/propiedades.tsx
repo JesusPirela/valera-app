@@ -30,6 +30,7 @@ const LOGO = require('../../assets/logo.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
 import { thumb } from '../../lib/img'
+import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar } from '../../lib/texto'
 import MiniMapa from '../../components/MiniMapa'
 
@@ -142,8 +143,9 @@ export default function ProspectadorPropiedades() {
   const [visibleCount, setVisibleCount] = useState(PAGE_WEB)
   const [showHelp, setShowHelp] = useState(false)
   const [mensajeAyuda, setMensajeAyuda] = useState('')
+  const { vistaComo } = useVistaComo()
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
-    queryKey: ['prospectador-propiedades'],
+    queryKey: ['prospectador-propiedades', vistaComo],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user?.id
@@ -173,7 +175,8 @@ export default function ProspectadorPropiedades() {
         if (!data || data.length < PAGE) break
       }
 
-      const rol = profileRes.data?.role ?? null
+      // Rol efectivo: si un admin está "viendo como" otro rol, se usa ese.
+      const rol = vistaComo ?? profileRes.data?.role ?? null
       let propiedades = propsData.map((p: any) => ({
         ...p,
         inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
@@ -204,18 +207,21 @@ export default function ProspectadorPropiedades() {
   })
 
   useFocusEffect(useCallback(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user?.id) return
-      supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
-        if (data?.role === 'admin') router.replace('/(admin)/propiedades')
+    // Solo rebotar al admin a su app si NO está "viendo como" otro rol
+    if (!vistaComo) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session?.user?.id) return
+        supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
+          if (data?.role === 'admin') router.replace('/(admin)/propiedades')
+        })
       })
-    })
+    }
     if (togglingRef.current.size === 0) {
-      const state = queryClient.getQueryState(['prospectador-propiedades'])
+      const state = queryClient.getQueryState(['prospectador-propiedades', vistaComo])
       const isStale = !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt > 1000 * 60 * 5
       if (isStale) refetch()
     }
-  }, [refetch, queryClient]))
+  }, [refetch, queryClient, vistaComo]))
 
   useEffect(() => {
     if (!queryData?.propiedades) return

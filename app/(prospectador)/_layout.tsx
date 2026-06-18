@@ -10,6 +10,8 @@ import { programarRecordatorios, solicitarPermisoWeb, notificarWeb } from '../..
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import HeaderBack from '../../components/HeaderBack'
 import ClienteFormBack from '../../components/ClienteFormBack'
+import { useVistaComo } from '../../lib/VistaComo'
+import VistaComoBanner from '../../components/VistaComoBanner'
 
 const CRM_POPUP_KEY = '@valera_crm_popup'
 const MAX_POPUP_DIA = 2
@@ -75,6 +77,7 @@ export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
   const [showCrmPopup, setShowCrmPopup] = useState(false)
   const [role, setRole] = useState<string | null>(null)
+  const { vistaComo } = useVistaComo()
   const { primaryColor: colorAcento, darkMode } = useTheme()
   const pathname = usePathname()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -212,12 +215,15 @@ export default function ProspectadorLayout() {
   }
 
   const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 72 : 64
-  const esAdminGlobal = role === 'admin'
+  // Rol efectivo: si un admin está "viendo como" otro rol, manda el simulado.
+  const rolEf = vistaComo ?? role
+  const esAdminGlobal = rolEf === 'admin'
   const ocultarTabBar = esAdminGlobal && pathname.includes('detalle-propiedad')
-  const esSupervisor = role === 'supervisor'
+  const esSupervisor = rolEf === 'supervisor'
 
   return (
     <>
+    <VistaComoBanner />
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colorAcento,

@@ -6,6 +6,8 @@ import { Session } from '@supabase/supabase-js'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { queryClient, persister } from '../lib/queryClient'
 import { ThemeProvider, useColors } from '../lib/ThemeContext'
+import { VistaComoProvider, VISTA_COMO_KEY } from '../lib/VistaComo'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
 import { Ionicons } from '@expo/vector-icons'
@@ -247,9 +249,13 @@ export default function RootLayout() {
       .select('role')
       .eq('id', session.user.id)
       .single()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (data?.role === 'admin') {
-          router.replace('/(admin)/propiedades')
+          // Si el admin tiene activada una "vista como rol", entrar a la app de
+          // prospectador en lugar de la de admin (sobrevive recargas).
+          let vistaComo: string | null = null
+          try { vistaComo = await AsyncStorage.getItem(VISTA_COMO_KEY) } catch {}
+          router.replace(vistaComo ? '/(prospectador)/propiedades' : '/(admin)/propiedades')
         } else {
           router.replace('/(prospectador)/propiedades')
         }
@@ -269,6 +275,7 @@ export default function RootLayout() {
     <ThemeProvider>
       <WebThemeCSS />
       <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
+        <VistaComoProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(admin)" />
@@ -294,6 +301,7 @@ export default function RootLayout() {
             </View>
           </View>
         </Modal>
+        </VistaComoProvider>
       </PersistQueryClientProvider>
     </ThemeProvider>
   )
