@@ -20,6 +20,29 @@ export async function solicitarPermisosNotificaciones(): Promise<boolean> {
   return status === 'granted'
 }
 
+// ── Web: notificaciones del navegador ──────────────────────────
+// En web no hay notificaciones locales programadas; usamos la API Notification
+// del navegador, que muestra avisos del SO mientras la pestaña está abierta
+// (incluso en segundo plano) si el usuario dio permiso.
+export async function solicitarPermisoWeb(): Promise<boolean> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined' || !('Notification' in window)) return false
+  if (Notification.permission === 'granted') return true
+  if (Notification.permission === 'denied') return false
+  try {
+    const p = await Notification.requestPermission()
+    return p === 'granted'
+  } catch { return false }
+}
+
+export function notificarWeb(title: string, body: string, onClick?: () => void) {
+  if (Platform.OS !== 'web' || typeof window === 'undefined' || !('Notification' in window)) return
+  if (Notification.permission !== 'granted') return
+  try {
+    const n = new Notification(title, { body, icon: '/favicon.png' })
+    if (onClick) n.onclick = () => { try { window.focus() } catch {}; onClick() }
+  } catch {}
+}
+
 export async function programarRecordatorios() {
   if (Platform.OS === 'web') return
   const permiso = await solicitarPermisosNotificaciones()

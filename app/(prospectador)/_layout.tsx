@@ -6,7 +6,7 @@ import * as Notifications from 'expo-notifications'
 import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
 import { trackLoginDiario } from '../../lib/gamification'
-import { programarRecordatorios } from '../../lib/notificaciones-locales'
+import { programarRecordatorios, solicitarPermisoWeb, notificarWeb } from '../../lib/notificaciones-locales'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import HeaderBack from '../../components/HeaderBack'
 import ClienteFormBack from '../../components/ClienteFormBack'
@@ -149,6 +149,12 @@ export default function ProspectadorLayout() {
       if (!error) {
         await supabase.from('recordatorios').update({ notificado: true }).eq('id', r.id)
         huboNuevas = true
+        // Web: aviso del navegador (en móvil ya hay notificación local programada)
+        notificarWeb(
+          `⏰ ${r.titulo}`,
+          `Seguimiento pendiente con ${nombreCliente}.${r.descripcion ? ` ${r.descripcion}` : ''}`,
+          () => { if (r.cliente_id) router.push(`/(prospectador)/detalle-cliente?id=${r.cliente_id}`) },
+        )
       }
     }
 
@@ -163,8 +169,9 @@ export default function ProspectadorLayout() {
       if (user) trackLoginDiario(user.id).catch(() => {})
     })
 
-    // Programar alarmas de recordatorios
+    // Programar alarmas de recordatorios (móvil) y pedir permiso de avisos (web)
     programarRecordatorios().catch(() => {})
+    solicitarPermisoWeb().catch(() => {})
 
     // Deep link al tocar una notificación: navegar al cliente relacionado
     const subNotif = Notifications.addNotificationResponseReceivedListener(response => {
