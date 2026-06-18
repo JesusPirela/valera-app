@@ -18,6 +18,7 @@ import {
 import { useLocalSearchParams, router } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
+import { esPlusOMejor, esStaffSupervision } from '../../lib/permisos'
 import { thumb } from '../../lib/img'
 import { useVistaComo } from '../../lib/VistaComo'
 import * as MediaLibrary from 'expo-media-library'
@@ -126,6 +127,8 @@ export default function DetallePropiedad() {
   const queryClient = useQueryClient()
   const [imagenActual, setImagenActual] = useState(0)
   const [descargando, setDescargando] = useState(false)
+  const [modalSeleccion, setModalSeleccion] = useState(false)
+  const [seleccionadas, setSeleccionadas] = useState<Set<number>>(new Set())
   const [compartiendoFotos, setCompartiendoFotos] = useState(false)
   const [nota, setNota] = useState('')
   const [notaGuardada, setNotaGuardada] = useState('')
@@ -166,7 +169,7 @@ export default function DetallePropiedad() {
       }
 
       // Restricción: Prospectador/Nuevo no pueden ver propiedades de inmobiliarias exclusivas
-      if (rol !== 'prospectador_plus' && rol !== 'admin' && rol !== 'supervisor') {
+      if (!esPlusOMejor(rol)) {
         const propiedadAny = dataNormalizada as unknown as Propiedad
         if (propiedadAny.exclusiva || propiedadAny.inmobiliarias?.exclusiva) {
           return { propiedad: null, subidoPor: null, nombreUsuario, rol, sinAcceso: true as const }
@@ -211,7 +214,7 @@ export default function DetallePropiedad() {
   const subidoPor = detalle?.subidoPor ?? null
   const nombreUsuario = detalle?.nombreUsuario ?? null
   const rol = detalle?.rol ?? null
-  const esStaff = rol === 'admin' || rol === 'supervisor'
+  const esStaff = esStaffSupervision(rol)
 
   // Admin/Supervisor: quiénes publicaron esta propiedad y cuántas veces
   const { data: publicadores } = useQuery({
@@ -1004,9 +1007,9 @@ export default function DetallePropiedad() {
     setCompartiendoFotos(false)
   }
 
-  async function descargarImagenes() {
+  async function descargarImagenes(seleccion?: { url: string }[]) {
     if (!propiedad) return
-    const imagenes = [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
+    const imagenes = seleccion ?? [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
     if (imagenes.length === 0) return
 
     setDescargando(true)
@@ -1427,7 +1430,10 @@ export default function DetallePropiedad() {
         {imagenes.length > 0 && (
           <TouchableOpacity
             style={[styles.descargarBtn, descargando && styles.btnDisabled]}
-            onPress={descargarImagenes}
+            onPress={() => {
+              setSeleccionadas(new Set(imagenes.map((_, i) => i)))
+              setModalSeleccion(true)
+            }}
             disabled={descargando}
           >
             {descargando ? (
@@ -1574,6 +1580,82 @@ export default function DetallePropiedad() {
               ))}
             </ScrollView>
           )}
+        </View>
+      </Modal>
+
+      {/* Modal selección de fotos a descargar */}
+      <Modal
+        visible={modalSeleccion}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setModalSeleccion(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSeleccionCard, { maxHeight: SCREEN_HEIGHT * 0.85 }]}>
+            <View style={styles.modalSeleccionHeader}>
+              <Text style={styles.modalSeleccionTitle}>Selecciona las fotos</Text>
+              <Text style={styles.modalSeleccionSub}>{seleccionadas.size} de {imagenes.length} seleccionadas</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.seleccionarTodasBtn}
+              onPress={() => {
+                if (seleccionadas.size === imagenes.length) setSeleccionadas(new Set())
+                else setSeleccionadas(new Set(imagenes.map((_, i) => i)))
+              }}
+            >
+              <Text style={styles.seleccionarTodasText}>
+                {seleccionadas.size === imagenes.length ? 'Quitar todas' : 'Seleccionar todas'}
+              </Text>
+            </TouchableOpacity>
+
+            <FlatList
+              data={imagenes}
+              keyExtractor={(_, i) => String(i)}
+              numColumns={3}
+              contentContainerStyle={{ padding: 8 }}
+              renderItem={({ item, index }) => {
+                const elegida = seleccionadas.has(index)
+                return (
+                  <TouchableOpacity
+                    style={styles.miniaturaSeleccion}
+                    onPress={() => {
+                      setSeleccionadas(prev => {
+                        const next = new Set(prev)
+                        if (next.has(index)) next.delete(index)
+                        else next.add(index)
+                        return next
+                      })
+                    }}
+                  >
+                    <Image source={{ uri: thumb(item.url, { width: 200, quality: 55 }) }} style={styles.miniaturaSeleccionImg} />
+                    <View style={[styles.miniaturaCheck, elegida && styles.miniaturaCheckActivo]}>
+                      {elegida && <Text style={styles.miniaturaCheckText}>✓</Text>}
+                    </View>
+                  </TouchableOpacity>
+                )
+              }}
+            />
+
+            <View style={styles.modalSeleccionFooter}>
+              <TouchableOpacity style={styles.modalSeleccionCancelar} onPress={() => setModalSeleccion(false)}>
+                <Text style={styles.modalSeleccionCancelarText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSeleccionDescargar, seleccionadas.size === 0 && styles.btnDisabled]}
+                disabled={seleccionadas.size === 0}
+                onPress={() => {
+                  const elegidas = imagenes.filter((_, i) => seleccionadas.has(i))
+                  setModalSeleccion(false)
+                  descargarImagenes(elegidas)
+                }}
+              >
+                <Text style={styles.modalSeleccionDescargarText}>
+                  {Platform.OS === 'web' ? `Descargar (${seleccionadas.size})` : `Guardar en galería (${seleccionadas.size})`}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 
@@ -1971,6 +2053,64 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   descargarText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  modalSeleccionCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 16,
+  },
+  modalSeleccionHeader: { paddingHorizontal: 16, marginBottom: 10 },
+  modalSeleccionTitle: { fontSize: 17, fontWeight: '800', color: '#1a1a2e' },
+  modalSeleccionSub: { fontSize: 13, color: '#888', marginTop: 2 },
+  seleccionarTodasBtn: { alignSelf: 'flex-end', marginRight: 16, marginBottom: 6 },
+  seleccionarTodasText: { color: '#1a6470', fontWeight: '700', fontSize: 13 },
+  miniaturaSeleccion: {
+    width: '32%',
+    aspectRatio: 1,
+    margin: '0.65%',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  miniaturaSeleccionImg: { width: '100%', height: '100%' },
+  miniaturaCheck: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderWidth: 1.5,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniaturaCheckActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  miniaturaCheckText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  modalSeleccionFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  modalSeleccionCancelar: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
+  modalSeleccionCancelarText: { color: '#555', fontWeight: '700', fontSize: 14 },
+  modalSeleccionDescargar: {
+    flex: 2,
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#1a6470',
+  },
+  modalSeleccionDescargarText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   volverBtn: { marginTop: 8 },
   volverText: { fontSize: 14, color: '#1a6470', fontWeight: '600' },

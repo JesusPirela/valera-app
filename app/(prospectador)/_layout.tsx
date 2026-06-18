@@ -219,7 +219,12 @@ export default function ProspectadorLayout() {
   const rolEf = vistaComo ?? role
   const esAdminGlobal = rolEf === 'admin'
   const ocultarTabBar = esAdminGlobal && pathname.includes('detalle-propiedad')
+<<<<<<< HEAD
   const esSupervisor = rolEf === 'supervisor'
+=======
+  const esSupervisor = role === 'supervisor'
+  const esAsesor = role === 'asesor'
+>>>>>>> 0058a01 (a medias)
 
   return (
     <>
@@ -297,6 +302,18 @@ export default function ProspectadorLayout() {
           tabBarIcon: tabIcon('shield-checkmark-outline', 'shield-checkmark'),
           href: esSupervisor ? undefined : null,
         }}
+      />
+      <Tabs.Screen
+        name="asesor"
+        options={{
+          title: 'Asesor',
+          tabBarIcon: tabIcon('briefcase-outline', 'briefcase'),
+          href: (esAsesor || esSupervisor || role === 'admin') ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
+        name="asesor-estadisticas"
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="tareas"

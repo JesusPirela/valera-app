@@ -22,6 +22,7 @@ import * as Clipboard from 'expo-clipboard'
 import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { esPlusOMejor } from '../../lib/permisos'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -181,7 +182,7 @@ export default function ProspectadorPropiedades() {
         ...p,
         inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
       })) as unknown as Propiedad[]
-      if (rol !== 'prospectador_plus' && rol !== 'admin' && rol !== 'supervisor') {
+      if (!esPlusOMejor(rol)) {
         propiedades = propiedades.filter(p => !p.exclusiva && !p.inmobiliarias?.exclusiva)
       }
 
