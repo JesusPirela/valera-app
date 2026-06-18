@@ -656,7 +656,7 @@ export default function CRM() {
             </View>
           )
 
-          const tableRows = filtradosExcel.map((item, idx) => {
+          function renderExcelRow(item: Cliente, idx: number) {
             const info = estadoInfo(item.estado)
             return (
               <View
@@ -776,28 +776,42 @@ export default function CRM() {
                 })}
               </View>
             )
-          })
-
-          const table = (
-            <View style={[s.excelTable, isWeb && { minWidth: screenWidth - 32 }]}>
-              {tableHeader}
-              {tableRows}
-              <View style={{ height: 100 }} />
-            </View>
-          )
+          }
 
           if (isWeb) {
+            const table = (
+              <View style={[s.excelTable, { minWidth: screenWidth - 32 }]}>
+                {tableHeader}
+                {filtradosExcel.map((item, idx) => renderExcelRow(item, idx))}
+                <View style={{ height: 100 }} />
+              </View>
+            )
             return (
               <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 12 }}>
                 <View style={[s.excelTableWrap, { backgroundColor: c.card }]}>{table}</View>
               </ScrollView>
             )
           }
+
+          // Mobile: FlatList virtualizado (las filas no se montan todas a la vez,
+          // evita que la app se trabe con cientos de clientes en vista Excel)
+          const mobileTableWidth = TABLE_COLS.reduce((sum, col) => sum + col.mw, 0)
           return (
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {table}
-              </ScrollView>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+              <FlatList
+                data={filtradosExcel}
+                keyExtractor={item => item.id}
+                style={{ width: mobileTableWidth }}
+                ListHeaderComponent={() => tableHeader}
+                stickyHeaderIndices={[0]}
+                renderItem={({ item, index }) => renderExcelRow(item, index)}
+                contentContainerStyle={{ paddingBottom: 100 }}
+                showsVerticalScrollIndicator={false}
+                removeClippedSubviews
+                windowSize={7}
+                maxToRenderPerBatch={20}
+                initialNumToRender={20}
+              />
             </ScrollView>
           )
         })() : (

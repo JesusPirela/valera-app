@@ -2,15 +2,8 @@ import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { supabase } from './supabase'
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert:  true,
-    shouldPlaySound:  true,
-    shouldSetBadge:   true,
-    shouldShowBanner: true,
-    shouldShowList:   true,
-  }),
-})
+// El handler global (qué tan visible es la notificación con la app abierta)
+// se define una sola vez en app/_layout.tsx, que siempre se carga primero.
 
 export async function solicitarPermisosNotificaciones(): Promise<boolean> {
   if (Platform.OS === 'web') return false
@@ -48,6 +41,15 @@ export async function programarRecordatorios() {
   const permiso = await solicitarPermisosNotificaciones()
   if (!permiso) return
 
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('recordatorios', {
+      name: 'Recordatorios',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      sound: 'default',
+    })
+  }
+
   // Cancelar notificaciones anteriores de recordatorios
   const programadas = await Notifications.getAllScheduledNotificationsAsync()
   for (const n of programadas) {
@@ -82,6 +84,8 @@ export async function programarRecordatorios() {
     const nombreCliente = cliente ? `con ${cliente}` : ''
     const data          = { tipo: 'recordatorio', recordatorio_id: rec.id, cliente_id: rec.cliente_id }
 
+    const channelId = Platform.OS === 'android' ? 'recordatorios' : undefined
+
     // ── Notificación exacta ──────────────────────────────────────
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -89,6 +93,7 @@ export async function programarRecordatorios() {
         body:  [nombreCliente, rec.descripcion].filter(Boolean).join(' · ') || 'Seguimiento pendiente',
         sound: true,
         data,
+        ...(channelId ? { channelId } : {}),
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fechaHora },
     })
@@ -102,6 +107,7 @@ export async function programarRecordatorios() {
           body:  `Tienes un seguimiento ${nombreCliente} en 15 minutos.`,
           sound: true,
           data,
+          ...(channelId ? { channelId } : {}),
         },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: quinceMins },
       })
@@ -116,6 +122,7 @@ export async function programarRecordatorios() {
           body:  `Tienes un seguimiento ${nombreCliente} en 1 hora.`,
           sound: true,
           data,
+          ...(channelId ? { channelId } : {}),
         },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: unaHora },
       })

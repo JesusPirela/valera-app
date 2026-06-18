@@ -18,14 +18,33 @@ function normalizarTelefono(tel: string): string {
 
 // ── Push notifications (Expo) ────────────────────────────────────────────────
 
-async function enviarPushExpo(mensajes: { to: string; title: string; body: string; sound: string }[]) {
+// deno-lint-ignore no-explicit-any
+async function enviarPushExpo(supabase: any, mensajes: { to: string; title: string; body: string; sound: string }[]) {
   if (!mensajes.length) return
   try {
-    await fetch('https://exp.host/--/api/v2/push/send', {
+    const resp = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(mensajes),
     })
+    const json = await resp.json().catch(() => null)
+    if (!resp.ok) {
+      console.error('[Push] Expo respondió con error HTTP', resp.status, json)
+      return
+    }
+    // Cada ticket en json.data corresponde al mensaje en la misma posición.
+    // DeviceNotRegistered = el token ya no es válido (app desinstalada, etc.) -> limpiarlo.
+    const tickets = json?.data ?? []
+    const tokensInvalidos: string[] = []
+    tickets.forEach((ticket: { status: string; message?: string; details?: { error?: string } }, i: number) => {
+      if (ticket.status === 'error') {
+        console.error('[Push] Error en ticket:', mensajes[i]?.to, ticket.message, ticket.details)
+        if (ticket.details?.error === 'DeviceNotRegistered') tokensInvalidos.push(mensajes[i].to)
+      }
+    })
+    if (tokensInvalidos.length > 0) {
+      await supabase.from('profiles').update({ push_token: null }).in('push_token', tokensInvalidos)
+    }
   } catch (e) {
     console.error('[Push] Error enviando:', e)
   }
@@ -192,7 +211,7 @@ serve(async (req) => {
         }
       }
 
-      await enviarPushExpo(pushMensajes)
+      await enviarPushExpo(supabaseAdmin, pushMensajes)
 
       return json({ ok: true, telefono, lead_id: leadId, notificados: destinatarios.length })
     }

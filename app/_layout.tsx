@@ -20,6 +20,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 })
 
@@ -142,6 +144,12 @@ export default function RootLayout() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
+        // Re-registrar el push token en cada apertura/foreground (no solo en login).
+        // Si el token cambió o se invalidó (reinstalación, cambio de dispositivo,
+        // permisos otorgados después del primer rechazo) y el usuario no cierra
+        // sesión, antes nunca se actualizaba y dejaba de recibir notificaciones
+        // sin que nadie se diera cuenta.
+        registrarPushToken(user.id)
         // "Última conexión": refrescar en CADA apertura/foreground, no solo en el
         // login. Como la sesión persiste, muchos usuarios no vuelven a pasar por
         // el login y last_seen se quedaba viejo ("hace 2 días"). Fire-and-forget.
