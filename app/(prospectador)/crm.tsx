@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, createElement } from 'react'
 import {
-  View, Text, StyleSheet, TextInput, Platform, Linking,
+  View, Text, StyleSheet, TextInput, Platform, Linking, Alert,
   ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions,
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
@@ -311,13 +311,19 @@ export default function CRM() {
     const campo = COL_FIELD[col]
     if (!campo) return
     setSavingCell(true)
-    // Optimista: actualiza la caché de inmediato
-    queryClient.setQueryData<Cliente[]>(['clientes'], (old) =>
+    // Optimista: actualiza la caché de inmediato. Debe usar la MISMA clave que
+    // el useQuery (incluye 'mios'/'all'), si no el cambio no se refleja.
+    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all'], (old) =>
       (old ?? []).map(cl => cl.id === id ? { ...cl, [campo]: value } as Cliente : cl)
     )
     const { error } = await supabase.from('clientes').update({ [campo]: value }).eq('id', id)
     if (error) {
+      const m = `No se pudo guardar: ${error.message}`
+      Platform.OS === 'web' ? window.alert(m) : Alert.alert('Error', m)
       await refetch() // revierte al estado real si falla
+    } else {
+      // Asegura persistencia/consistencia con el servidor
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
     }
     setSavingCell(false)
     setEditCell(null)
