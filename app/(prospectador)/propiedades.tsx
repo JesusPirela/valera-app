@@ -263,7 +263,7 @@ export default function ProspectadorPropiedades() {
 
     const nuevasVeces = vecesActual + 1
 
-    queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades'], old => {
+    queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades', vistaComo], old => {
       if (!old) return old
       return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: nuevasVeces } }
     })
@@ -279,7 +279,7 @@ export default function ProspectadorPropiedades() {
       }, { onConflict: 'propiedad_id,user_id' })
 
     if (error) {
-      queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades'], old => {
+      queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades', vistaComo], old => {
         if (!old) return old
         return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual } }
       })
