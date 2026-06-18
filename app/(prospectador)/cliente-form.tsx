@@ -11,7 +11,7 @@ function mostrarError(titulo: string, msg: string) {
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
-import { ESTADOS } from './crm'
+import { ESTADOS, ETAPAS_CLIENTE } from './crm'
 import { registrarAccion } from '../../lib/gamification'
 
 // ── Fuentes de lead ──────────────────────────────────────
@@ -31,10 +31,6 @@ const TIPOS_CREDITO = [
   { value: 'otro',      label: 'Otro' },
 ]
 
-const ORDEN_ESTADOS = [
-  'por_perfilar', 'no_contesta', 'cita_por_agendar',
-  'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
-]
 
 // ── Date picker custom ───────────────────────────────────
 function DateTimePicker({
@@ -55,6 +51,9 @@ function DateTimePicker({
       if (field === 'year')   d.setFullYear(d.getFullYear() + delta)
       if (field === 'hour')   d.setHours(d.getHours() + delta)
       if (field === 'minute') d.setMinutes(d.getMinutes() + delta)
+      // No permitir fechas/horas anteriores al presente
+      const ahora = new Date()
+      if (d.getTime() < ahora.getTime()) return ahora
       return d
     })
   }
@@ -108,8 +107,8 @@ function DateTimePicker({
               <SpinField
                 label="Min"
                 value={String(temp.getMinutes()).padStart(2, '0')}
-                onUp={() => adj('minute', 5)}
-                onDown={() => adj('minute', -5)}
+                onUp={() => adj('minute', 1)}
+                onDown={() => adj('minute', -1)}
               />
             </View>
 
@@ -360,7 +359,7 @@ export default function ClienteForm() {
         }
       }
 
-      router.replace(fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm')
+      (router.canGoBack() ? router.back() : router.replace(fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm'))
     } catch (e: any) {
       mostrarError('Error inesperado', e?.message ?? 'Intenta de nuevo.')
     } finally {
@@ -552,7 +551,7 @@ export default function ClienteForm() {
           <Text style={styles.sectionTitle}>Etapa de venta</Text>
           <ChipSelector
             label="Estado"
-            options={ORDEN_ESTADOS.map((e) => ({
+            options={ETAPAS_CLIENTE.map((e) => ({
               value: e, label: ESTADOS[e]?.label ?? e,
               color: ESTADOS[e]?.color, bg: ESTADOS[e]?.bg,
             }))}
@@ -592,7 +591,7 @@ export default function ClienteForm() {
         </>
       )}
 
-      <TouchableOpacity style={styles.btnCancelar} onPress={() => router.replace(fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm')}>
+      <TouchableOpacity style={styles.btnCancelar} onPress={() => (router.canGoBack() ? router.back() : router.replace(fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm'))}>
         <Text style={styles.btnCancelarText}>Cancelar</Text>
       </TouchableOpacity>
     </ScrollView>

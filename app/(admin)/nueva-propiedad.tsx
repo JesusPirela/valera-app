@@ -688,7 +688,7 @@ export default function NuevaPropiedad() {
       }
 
       setGuardado(true)
-      setTimeout(() => router.replace('/(admin)/propiedades'), 1500)
+      setTimeout(() => { router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades') }, 1500)
     } catch (err: any) {
       console.error('[nueva-propiedad] error completo:', err)
       if (Platform.OS === 'web') window.alert(`Error al guardar: ${err.message}`)

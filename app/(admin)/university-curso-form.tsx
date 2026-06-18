@@ -303,7 +303,7 @@ export default function UniversityCursoForm() {
         }
       }
 
-      router.replace('/(admin)/university')
+      router.canGoBack() ? router.back() : router.replace('/(admin)/university')
     } catch (e: any) {
       alerta('Error inesperado', e?.message ?? 'Intenta de nuevo.')
     } finally {

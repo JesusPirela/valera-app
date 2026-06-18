@@ -6,7 +6,7 @@ import {
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
-import { ESTADOS, ORDEN_ESTADOS } from './crm'
+import { ESTADOS, ETAPAS_CLIENTE } from './crm'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { registrarAccion } from '../../lib/gamification'
 import { programarRecordatorios } from '../../lib/notificaciones-locales'
@@ -94,6 +94,9 @@ function DateTimePicker({ value, onChange, label }: {
       if (field === 'year')   d.setFullYear(d.getFullYear() + delta)
       if (field === 'hour')   d.setHours(d.getHours() + delta)
       if (field === 'minute') d.setMinutes(d.getMinutes() + delta)
+      // No permitir fechas/horas anteriores al presente
+      const ahora = new Date()
+      if (d.getTime() < ahora.getTime()) return ahora
       return d
     })
   }
@@ -122,7 +125,7 @@ function DateTimePicker({ value, onChange, label }: {
             <Text style={dpStyles.secLabel}>Hora</Text>
             <View style={dpStyles.row}>
               <Spin label="Hora" value={String(temp.getHours()).padStart(2, '0')}   onUp={() => adj('hour', 1)}   onDown={() => adj('hour', -1)} />
-              <Spin label="Min"  value={String(temp.getMinutes()).padStart(2, '0')} onUp={() => adj('minute', 5)} onDown={() => adj('minute', -5)} />
+              <Spin label="Min"  value={String(temp.getMinutes()).padStart(2, '0')} onUp={() => adj('minute', 1)} onDown={() => adj('minute', -1)} />
             </View>
             <View style={dpStyles.actions}>
               <TouchableOpacity style={dpStyles.btnCancel} onPress={() => setOpen(false)}>
@@ -383,7 +386,7 @@ export default function DetalleCliente() {
   const recPendientes = recordatorios.filter((r) => !r.completado)
   const recCompletados = recordatorios.filter((r) => r.completado)
   const initials = iniciales(cliente.nombre)
-  const estadoIdx = ORDEN_ESTADOS.indexOf(cliente.estado)
+  const estadoIdx = ETAPAS_CLIENTE.indexOf(cliente.estado)
   const waDefault = `Hola ${cliente.nombre}, soy tu asesor de Valera Real Estate. Te contacto para dar seguimiento a tu búsqueda de propiedad. ¿Tienes un momento para platicar?`
 
   return (
@@ -428,7 +431,7 @@ export default function DetalleCliente() {
           </View>
           <View style={styles.heroStatSep} />
           <View style={styles.heroStatItem}>
-            <Text style={styles.heroStatNum}>{estadoIdx >= 0 ? `${estadoIdx + 1}/${ORDEN_ESTADOS.length}` : '—'}</Text>
+            <Text style={styles.heroStatNum}>{estadoIdx >= 0 ? `${estadoIdx + 1}/${ETAPAS_CLIENTE.length}` : '—'}</Text>
             <Text style={styles.heroStatLbl}>Etapa</Text>
           </View>
         </View>
@@ -484,19 +487,19 @@ export default function DetalleCliente() {
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.pipelineRow}>
-            {ORDEN_ESTADOS.map((e, i) => {
+            {ETAPAS_CLIENTE.map((e, i) => {
               const ei = ESTADOS[e] ?? { label: e, color: '#555', bg: '#eee' }
               const activo = cliente.estado === e
               const pasado = estadoIdx > i
               return (
                 <View key={e} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <TouchableOpacity
+                  {/* Solo lectura: la etapa se cambia desde el botón Editar */}
+                  <View
                     style={[
                       styles.pipelineChip,
                       activo && { backgroundColor: ei.color, borderColor: ei.color },
                       !activo && pasado && { borderColor: ei.color },
                     ]}
-                    onPress={() => cambiarEstado(e)}
                   >
                     <View style={[
                       styles.pipelineNumCircle,
@@ -516,8 +519,8 @@ export default function DetalleCliente() {
                     ]}>
                       {ei.label}
                     </Text>
-                  </TouchableOpacity>
-                  {i < ORDEN_ESTADOS.length - 1 && (
+                  </View>
+                  {i < ETAPAS_CLIENTE.length - 1 && (
                     <View style={[styles.pipelineConnector, pasado && { backgroundColor: ei.color }]} />
                   )}
                 </View>
