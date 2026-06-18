@@ -107,6 +107,7 @@ export default function CRM() {
   const queryClient = useQueryClient()
   const [busqueda, setBusqueda]           = useState('')
   const [estadoFiltro, setEstadoFiltro]   = useState<string | null>(null)
+  const [filtroVencidos, setFiltroVencidos] = useState(false)
   const [opFiltro, setOpFiltro]           = useState<'venta' | 'renta' | null>(null)
   const [sortBy, setSortBy]               = useState<SortBy>('reciente')
   const [showSort, setShowSort]           = useState(false)
@@ -182,6 +183,7 @@ export default function CRM() {
     )
   }
   if (estadoFiltro) filtrados = filtrados.filter(c => c.estado === estadoFiltro)
+  if (filtroVencidos) filtrados = filtrados.filter(c => (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora) < new Date()))
   if (opFiltro)     filtrados = filtrados.filter(c => c.tipo_operacion === opFiltro)
   if (interesFilter) filtrados = filtrados.filter(c => c.nivel_interes === interesFilter)
 
@@ -421,24 +423,36 @@ export default function CRM() {
       <OfflineBanner />
       <View style={[s.container, { backgroundColor: c.bg }]}>
 
-        {/* ── KPI strip ── */}
+        {/* ── KPI strip (todos clickeables) ── */}
         <View style={[s.kpiStrip, { backgroundColor: c.card, borderBottomColor: c.border }]}>
-          <TouchableOpacity style={s.kpiItem} onPress={() => { setEstadoFiltro(null); setOpFiltro(null) }}>
+          <TouchableOpacity
+            style={[s.kpiItem, estadoFiltro === null && !filtroVencidos && s.kpiActivo]}
+            onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(false) }}
+          >
             <Text style={[s.kpiNum, { color: '#3b82f6' }]}>{activos}</Text>
             <Text style={[s.kpiLbl, { color: c.textMute }]}>ACTIVOS</Text>
           </TouchableOpacity>
           <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
-          <TouchableOpacity style={s.kpiItem} onPress={() => setEstadoFiltro('cita_agendada')}>
+          <TouchableOpacity
+            style={[s.kpiItem, estadoFiltro === 'cita_agendada' && s.kpiActivo]}
+            onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_agendada' ? null : 'cita_agendada') }}
+          >
             <Text style={[s.kpiNum, { color: '#f59e0b' }]}>{citas}</Text>
             <Text style={[s.kpiLbl, { color: c.textMute }]}>CITAS</Text>
           </TouchableOpacity>
           <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
-          <View style={s.kpiItem}>
+          <TouchableOpacity
+            style={[s.kpiItem, filtroVencidos && s.kpiActivo]}
+            onPress={() => { setEstadoFiltro(null); setFiltroVencidos(v => !v) }}
+          >
             <Text style={[s.kpiNum, vencidos > 0 ? { color: '#ef4444' } : { color: c.border }]}>{vencidos}</Text>
             <Text style={[s.kpiLbl, { color: c.textMute }]}>VENCIDOS</Text>
-          </View>
+          </TouchableOpacity>
           <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
-          <TouchableOpacity style={s.kpiItem} onPress={() => setEstadoFiltro('compro')}>
+          <TouchableOpacity
+            style={[s.kpiItem, estadoFiltro === 'compro' && s.kpiActivo]}
+            onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'compro' ? null : 'compro') }}
+          >
             <Text style={[s.kpiNum, { color: '#10b981' }]}>{cerrados}</Text>
             <Text style={[s.kpiLbl, { color: c.textMute }]}>CERRADOS</Text>
           </TouchableOpacity>
@@ -471,50 +485,23 @@ export default function CRM() {
             <View style={s.funnelLegend}>
               {ORDEN_ESTADOS.filter(e => conteos[e] > 0).map(e => {
                 const info = estadoInfo(e)
+                const activo = estadoFiltro === e
                 return (
-                  <View key={e} style={s.legendItem}>
+                  <TouchableOpacity
+                    key={e}
+                    style={[s.legendItem, activo && { backgroundColor: info.color + '22', borderRadius: 12, paddingHorizontal: 6 }]}
+                    onPress={() => { setFiltroVencidos(false); setEstadoFiltro(activo ? null : e) }}
+                    activeOpacity={0.7}
+                  >
                     <View style={[s.legendDot, { backgroundColor: info.color }]} />
-                    <Text style={[s.legendTxt, { color: c.textSub }]}>{info.label} ({conteos[e]})</Text>
-                  </View>
+                    <Text style={[s.legendTxt, { color: activo ? info.color : c.textSub }, activo && { fontWeight: '700' }]}>{info.label} ({conteos[e]})</Text>
+                  </TouchableOpacity>
                 )
               })}
             </View>
           )}
         </View>
 
-        {/* ── Stage chips ── */}
-        <ScrollView
-          horizontal showsHorizontalScrollIndicator={false}
-          style={[s.stagePipe, { backgroundColor: c.card, borderBottomColor: c.border }]} contentContainerStyle={s.stagePipeContent}
-        >
-          <TouchableOpacity
-            style={[s.stageChip, { backgroundColor: c.bg, borderColor: c.border }, estadoFiltro === null && s.stageChipAll]}
-            onPress={() => setEstadoFiltro(null)}
-          >
-            <Text style={[s.stageChipTxt, { color: c.textSub }, estadoFiltro === null && { color: '#fff', fontWeight: '700' }]}>
-              Todos · {total}
-            </Text>
-          </TouchableOpacity>
-          {ORDEN_ESTADOS.map(e => {
-            const info = estadoInfo(e)
-            const activo = estadoFiltro === e
-            return (
-              <TouchableOpacity
-                key={e}
-                style={[s.stageChip, { backgroundColor: c.bg, borderColor: c.border }, activo && { backgroundColor: info.color, borderColor: info.color }]}
-                onPress={() => setEstadoFiltro(activo ? null : e)}
-              >
-                <View style={[s.stageDot, { backgroundColor: activo ? '#fff' : info.color }]} />
-                <Text style={[s.stageChipTxt, { color: c.textSub }, activo && { color: '#fff', fontWeight: '700' }]}>
-                  {info.label}
-                </Text>
-                <Text style={[s.stageCnt, { color: c.textMute }, activo && { color: 'rgba(255,255,255,0.75)' }]}>
-                  {conteos[e]}
-                </Text>
-              </TouchableOpacity>
-            )
-          })}
-        </ScrollView>
 
         {/* ── Botón chats de WhatsApp ── */}
         <TouchableOpacity style={s.btnCampana} onPress={() => router.push('/(prospectador)/chats')}>
@@ -1006,7 +993,8 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
   },
-  kpiItem: { flex: 1, alignItems: 'center', gap: 2 },
+  kpiItem: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 4, borderRadius: 10 },
+  kpiActivo: { backgroundColor: 'rgba(26,100,112,0.12)' },
   kpiNum:  { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   kpiLbl:  { fontSize: 9, color: '#94a3b8', fontWeight: '700', letterSpacing: 0.6 },
   kpiDiv:  { width: 1, backgroundColor: '#e2e8f0', marginVertical: 6 },
