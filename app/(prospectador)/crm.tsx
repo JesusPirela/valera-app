@@ -6,7 +6,10 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { normalizar } from '../../lib/texto'
+
+const VISTA_CRM_KEY = '@valera_crm_vista'
 import { useColors, useTheme } from '../../lib/ThemeContext'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -112,6 +115,18 @@ export default function CRM() {
   const [sortBy, setSortBy]               = useState<SortBy>('reciente')
   const [showSort, setShowSort]           = useState(false)
   const [vistaExcel, setVistaExcel]       = useState(false)
+
+  // Recordar la vista elegida (tabla/lista) hasta que el usuario la cambie
+  useEffect(() => {
+    AsyncStorage.getItem(VISTA_CRM_KEY).then(v => { if (v === 'tabla') setVistaExcel(true) }).catch(() => {})
+  }, [])
+  function toggleVista() {
+    setVistaExcel(prev => {
+      const next = !prev
+      AsyncStorage.setItem(VISTA_CRM_KEY, next ? 'tabla' : 'lista').catch(() => {})
+      return next
+    })
+  }
   const [interesFilter, setInteresFilter] = useState<string | null>(null)
   const [excelSort, setExcelSort]         = useState<{ col: string; dir: 'asc' | 'desc' } | null>(null)
   const [excelFilterModal, setExcelFilterModal] = useState<{
@@ -527,7 +542,7 @@ export default function CRM() {
             <Ionicons name="funnel-outline" size={15} color="#1a6470" />
             {sortBy !== 'reciente' && <View style={s.sortDot} />}
           </TouchableOpacity>
-          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setVistaExcel(v => !v)}>
+          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={toggleVista}>
             <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
           </TouchableOpacity>
           <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
