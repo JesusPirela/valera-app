@@ -231,6 +231,9 @@ export default function RootLayout() {
         if (session?.user?.id) registrarPushToken(session.user.id)
       } else if (event === 'TOKEN_REFRESHED') {
         setSession(session)
+        // Mantener fresco el token guardado de la cuenta activa, para que el
+        // cambio rápido de cuenta no falle por rotación de refresh tokens.
+        guardarCuentaActual().catch(() => {})
       } else if (event === 'SIGNED_OUT') {
         cerrarSesion()
         setSession(null)

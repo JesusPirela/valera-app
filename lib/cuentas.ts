@@ -49,13 +49,25 @@ export async function guardarCuentaActual(extra?: { nombre?: string | null; role
 // para no perder sus tokens al volver.
 export async function cambiarACuenta(target: CuentaGuardada): Promise<{ ok: boolean; error?: string }> {
   try {
+    // Capturar la sesión actual por si hay que restaurarla
+    const { data: { session: actual } } = await supabase.auth.getSession()
     await guardarCuentaActual() // captura tokens frescos de la cuenta actual
+
     const { error } = await supabase.auth.setSession({
       access_token: target.access_token,
       refresh_token: target.refresh_token,
     })
     if (error) {
-      // La sesión guardada caducó: hay que iniciar sesión de nuevo en esa cuenta
+      // La sesión guardada caducó. Restaurar la sesión actual para no dejar al
+      // usuario sin sesión en ninguna cuenta.
+      if (actual) {
+        try {
+          await supabase.auth.setSession({
+            access_token: actual.access_token,
+            refresh_token: actual.refresh_token,
+          })
+        } catch {}
+      }
       return { ok: false, error: error.message }
     }
     // Guardar la sesión (posiblemente rotada) de la cuenta a la que entramos
