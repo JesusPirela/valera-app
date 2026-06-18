@@ -88,6 +88,7 @@ export default function AdminPropiedades() {
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
   const [ordenPublicaciones, setOrdenPublicaciones] = useState<OrdenPublicaciones>(null)
   const [publicacionesMap, setPublicacionesMap] = useState<Record<string, number>>({})
+  const [comprasPendientes, setComprasPendientes] = useState(0)
   const [filtroInmobiliaria, setFiltroInmobiliaria] = useState<string | null>(null)
 
   const [modalVisible, setModalVisible] = useState(false)
@@ -149,6 +150,10 @@ export default function AdminPropiedades() {
         (conteo as { propiedad_id: string; total: number }[]).map((r) => [r.propiedad_id, r.total])
       ))
     }
+
+    // Badge de la Tienda: compras/cofres pendientes de atender
+    const { data: pend } = await supabase.rpc('get_compras_pendientes_count')
+    setComprasPendientes(typeof pend === 'number' ? pend : 0)
   }
 
   useFocusEffect(useCallback(() => { cargarPropiedades(); cargarRolEInmobiliarias() }, []))
@@ -297,16 +302,24 @@ export default function AdminPropiedades() {
           <View key={grupo} style={styles.navGroup}>
             <Text style={[styles.navGroupTitle, { color: c.textMute }]}>{grupo.toUpperCase()}</Text>
             <View style={styles.navGrid}>
-              {items.map((item) => (
-                <TouchableOpacity
-                  key={item.route}
-                  style={[styles.navCard, { backgroundColor: item.color }]}
-                  onPress={() => router.push(item.route as any)}
-                >
-                  <Text style={styles.navIcon}>{item.icon}</Text>
-                  <Text style={styles.navLabel}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
+              {items.map((item) => {
+                const badge = item.route === '/(admin)/tienda-compras' ? comprasPendientes : 0
+                return (
+                  <TouchableOpacity
+                    key={item.route}
+                    style={[styles.navCard, { backgroundColor: item.color }]}
+                    onPress={() => router.push(item.route as any)}
+                  >
+                    <Text style={styles.navIcon}>{item.icon}</Text>
+                    <Text style={styles.navLabel}>{item.label}</Text>
+                    {badge > 0 && (
+                      <View style={styles.navBadge}>
+                        <Text style={styles.navBadgeText}>{badge > 99 ? '99+' : badge}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )
+              })}
             </View>
           </View>
         )
@@ -647,6 +660,13 @@ const styles = StyleSheet.create({
   },
   navIcon: { fontSize: 16 },
   navLabel: { color: '#fff', fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  navBadge: {
+    position: 'absolute', top: -5, right: -5,
+    backgroundColor: '#e53935', borderRadius: 11, minWidth: 22, height: 22,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
+    borderWidth: 2, borderColor: '#fff',
+  },
+  navBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
   // Búsqueda
   searchRow: {
