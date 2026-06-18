@@ -29,6 +29,7 @@ type ClienteAdmin = {
 type Seccion = {
   title: string
   email: string
+  responsableId: string
   data: ClienteAdmin[]
   total: number
 }
@@ -72,7 +73,9 @@ export default function AdminCRM() {
   const [seccionesColapsadas, setSeccionesColapsadas] = useState<Set<string>>(new Set())
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
+  const [miId, setMiId] = useState<string | null>(null)
   const cargadoUnaVez = useRef(false)
+  const colapsoInicialAplicado = useRef(false)
 
   const [modalNuevo, setModalNuevo] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
@@ -88,6 +91,13 @@ export default function AdminCRM() {
   async function cargarClientes() {
     if (!cargadoUnaVez.current) setLoading(true)
     setErrorMsg(null)
+
+    let yo = miId
+    if (!yo) {
+      const { data: { user } } = await supabase.auth.getUser()
+      yo = user?.id ?? null
+      if (yo) setMiId(yo)
+    }
 
     const { data: clientesData, error: errorClientes } = await supabase
       .from('clientes')
@@ -112,17 +122,39 @@ export default function AdminCRM() {
       prospectador_email: '',
     }))
 
+    // Agrupar por responsable_id (no por nombre, para distinguir homónimos
+    // y para poder identificar de forma confiable "mis" clientes).
     const mapaProsp = new Map<string, ClienteAdmin[]>()
     for (const cl of clientesNorm) {
-      if (!mapaProsp.has(cl.prospectador_nombre)) mapaProsp.set(cl.prospectador_nombre, [])
-      mapaProsp.get(cl.prospectador_nombre)!.push(cl)
+      const key = cl.responsable_id || 'sin_asignar'
+      if (!mapaProsp.has(key)) mapaProsp.set(key, [])
+      mapaProsp.get(key)!.push(cl)
     }
 
-    setSecciones(
-      Array.from(mapaProsp.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([nombre, clientes]) => ({ title: nombre, email: '', data: clientes, total: clientes.length }))
-    )
+    const nuevasSecciones = Array.from(mapaProsp.entries())
+      .map(([respId, clientes]) => ({
+        title: clientes[0]?.prospectador_nombre ?? 'Sin asignar',
+        email: '',
+        responsableId: respId,
+        data: clientes,
+        total: clientes.length,
+      }))
+      .sort((a, b) => {
+        // Mis propios clientes siempre hasta arriba
+        if (yo && a.responsableId === yo) return -1
+        if (yo && b.responsableId === yo) return 1
+        return a.title.localeCompare(b.title)
+      })
+
+    setSecciones(nuevasSecciones)
+
+    // Por defecto todas las secciones aparecen colapsadas (incluida la propia);
+    // solo se aplica una vez para no pisar los toggles manuales del usuario.
+    if (!colapsoInicialAplicado.current) {
+      setSeccionesColapsadas(new Set(nuevasSecciones.map(s => s.responsableId)))
+      colapsoInicialAplicado.current = true
+    }
+
     setLoading(false)
     cargadoUnaVez.current = true
   }
@@ -381,18 +413,19 @@ export default function AdminCRM() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 32, paddingTop: 4 }}>
           {seccionesFiltradas.map((sec) => {
-            const colapsada = seccionesColapsadas.has(sec.title)
-            const totalSec = secciones.find((s) => s.title === sec.title)?.total ?? 0
+            const colapsada = seccionesColapsadas.has(sec.responsableId)
+            const totalSec = secciones.find((s) => s.responsableId === sec.responsableId)?.total ?? 0
             const initProsp = iniciales(sec.title)
+            const esPropia = sec.responsableId === miId
 
             return (
-              <View key={sec.title} style={styles.seccion}>
+              <View key={sec.responsableId} style={styles.seccion}>
                 {/* Cabecera del prospectador */}
                 <TouchableOpacity
-                  style={[styles.secHeader, { backgroundColor: c.card }]}
+                  style={[styles.secHeader, { backgroundColor: c.card }, esPropia && styles.secHeaderPropia]}
                   onPress={() => setSeccionesColapsadas((prev) => {
                     const s = new Set(prev)
-                    s.has(sec.title) ? s.delete(sec.title) : s.add(sec.title)
+                    s.has(sec.responsableId) ? s.delete(sec.responsableId) : s.add(sec.responsableId)
                     return s
                   })}
                   activeOpacity={0.75}
@@ -402,7 +435,14 @@ export default function AdminCRM() {
                       <Text style={styles.secAvatarText}>{initProsp}</Text>
                     </View>
                     <View>
-                      <Text style={[styles.secNombre, { color: c.text }]}>{sec.title}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={[styles.secNombre, { color: c.text }]}>{sec.title}</Text>
+                        {esPropia && (
+                          <View style={styles.secPropiaBadge}>
+                            <Text style={styles.secPropiaBadgeTxt}>TÚ</Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={styles.secSub}>{sec.data.length} mostrando · {totalSec} total</Text>
                     </View>
                   </View>
@@ -676,6 +716,9 @@ const styles = StyleSheet.create({
     borderRadius: 14, padding: 14, marginBottom: 6,
     shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 5, elevation: 2,
   },
+  secHeaderPropia: { borderWidth: 1.5, borderColor: '#c9a84c' },
+  secPropiaBadge: { backgroundColor: '#c9a84c', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+  secPropiaBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   secHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   secAvatar: {
     width: 42, height: 42, borderRadius: 21,
