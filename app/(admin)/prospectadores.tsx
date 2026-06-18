@@ -51,6 +51,11 @@ type CoinsModal = {
 }
 
 
+// Orden jerárquico para listar usuarios
+const RANGO_ROL: Record<string, number> = {
+  admin: 0, supervisor: 1, asesor: 2, prospectador_plus: 3, prospectador: 4, nuevo: 5,
+}
+
 const ROL_LABEL: Record<string, string> = {
   nuevo:             'Nuevo',
   prospectador:      'Prospectador',
@@ -347,7 +352,12 @@ export default function Prospectadores() {
             !busqueda.trim() ||
             normalizar(p.nombre).includes(normalizar(busqueda)) ||
             normalizar(p.email).includes(normalizar(busqueda))
-          )}
+          ).sort((a, b) => {
+            // Orden jerárquico por rol; dentro del mismo rol, por nombre
+            const r = (rol: string) => RANGO_ROL[rol] ?? 99
+            const dr = r(a.role) - r(b.role)
+            return dr !== 0 ? dr : (a.nombre ?? a.email).localeCompare(b.nombre ?? b.email)
+          })}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => (

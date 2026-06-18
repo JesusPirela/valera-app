@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, TextInput, StyleSheet, ScrollView,
   TouchableOpacity, ActivityIndicator, Alert, Modal, Platform,
@@ -218,6 +218,7 @@ export default function ClienteForm() {
   const [telefono, setTelefono] = useState('')
   const [fuente, setFuente] = useState<string>('otro')
   const [estado, setEstado] = useState<string>('por_perfilar')
+  const estadoOriginalRef = useRef<string | null>(null)  // para otorgar coins solo al CAMBIAR de etapa
   const [notas, setNotas] = useState('')
   const [proximoContacto, setProximoContacto] = useState<Date | null>(null)
 
@@ -245,6 +246,7 @@ export default function ClienteForm() {
     setTelefono('')
     setFuente('otro')
     setEstado('por_perfilar')
+    estadoOriginalRef.current = null
     setNotas('')
     setProximoContacto(null)
     setNivelInteres(null)
@@ -285,6 +287,7 @@ export default function ClienteForm() {
           setNivelInteres(data.nivel_interes ?? null)
           setFuente(data.fuente_lead ?? 'otro')
           setEstado(data.estado ?? 'por_perfilar')
+          estadoOriginalRef.current = data.estado ?? 'por_perfilar'
           setTipoCredito(data.tipo_credito ?? null)
           setPresupuesto(data.presupuesto ?? '')
           setZonaBusqueda(data.zona_busqueda ?? '')
@@ -349,6 +352,11 @@ export default function ClienteForm() {
           cliente_id: params.id!, user_id: user.id,
           tipo: 'nota', descripcion: 'Información del cliente actualizada.',
         })
+        // Valera Coins al cambiar de etapa a cita agendada / venta cerrada
+        if (estado !== estadoOriginalRef.current) {
+          if (estado === 'cita_agendada') registrarAccion(user.id, 'agendar_cita').catch(() => {})
+          else if (estado === 'compro')   registrarAccion(user.id, 'cerrar_venta').catch(() => {})
+        }
       } else {
         const { data, error } = await supabase
           .from('clientes')
@@ -367,6 +375,8 @@ export default function ClienteForm() {
             p_prospectador_nombre: nombreProspectador,
           })
           registrarAccion(user.id, 'agregar_cliente').catch(() => {})
+          if (estado === 'cita_agendada') registrarAccion(user.id, 'agendar_cita').catch(() => {})
+          else if (estado === 'compro')   registrarAccion(user.id, 'cerrar_venta').catch(() => {})
         }
       }
 

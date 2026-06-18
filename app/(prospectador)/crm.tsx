@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { normalizar } from '../../lib/texto'
+import { registrarAccion } from '../../lib/gamification'
 
 const VISTA_CRM_KEY = '@valera_crm_vista'
 import { useColors, useTheme } from '../../lib/ThemeContext'
@@ -312,6 +313,7 @@ export default function CRM() {
   async function guardarCelda(id: string, col: string, value: string | null) {
     const campo = COL_FIELD[col]
     if (!campo) return
+    const estadoPrevio = clientes.find(cl => cl.id === id)?.estado
     setSavingCell(true)
     // Optimista: actualiza la caché de inmediato. Debe usar la MISMA clave que
     // el useQuery (incluye 'mios'/'all'), si no el cambio no se refleja.
@@ -324,6 +326,14 @@ export default function CRM() {
       Platform.OS === 'web' ? window.alert(m) : Alert.alert('Error', m)
       await refetch() // revierte al estado real si falla
     } else {
+      // Valera Coins al cambiar de etapa a cita agendada / venta cerrada
+      if (campo === 'estado' && value !== estadoPrevio) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          if (value === 'cita_agendada') registrarAccion(user.id, 'agendar_cita').catch(() => {})
+          else if (value === 'compro')   registrarAccion(user.id, 'cerrar_venta').catch(() => {})
+        }
+      }
       // Asegura persistencia/consistencia con el servidor
       queryClient.invalidateQueries({ queryKey: ['clientes'] })
     }
