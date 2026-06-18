@@ -9,6 +9,7 @@ import { trackLoginDiario } from '../../lib/gamification'
 import { programarRecordatorios } from '../../lib/notificaciones-locales'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import HeaderBack from '../../components/HeaderBack'
+import ClienteFormBack from '../../components/ClienteFormBack'
 
 const CRM_POPUP_KEY = '@valera_crm_popup'
 const MAX_POPUP_DIA = 2
@@ -307,7 +308,7 @@ export default function ProspectadorLayout() {
       {/* Pantallas de detalle — ocultas del tab bar */}
       <Tabs.Screen name="detalle-propiedad"  options={{ href: null, title: 'Detalle' }} />
       <Tabs.Screen name="constructoras"      options={{ href: null, title: 'Constructoras' }} />
-      <Tabs.Screen name="cliente-form"       options={{ href: null, title: 'Cliente', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
+      <Tabs.Screen name="cliente-form"       options={{ href: null, title: 'Cliente', headerLeft: () => <ClienteFormBack /> }} />
       <Tabs.Screen name="detalle-cliente"    options={{ href: null, title: 'Cliente', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
       <Tabs.Screen name="university-curso"   options={{ href: null, title: 'Curso' }} />
       <Tabs.Screen name="university-leccion" options={{ href: null, title: 'Lección' }} />
