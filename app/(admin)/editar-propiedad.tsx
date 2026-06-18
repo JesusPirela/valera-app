@@ -715,7 +715,7 @@ export default function EditarPropiedad() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={[styles.container, { backgroundColor: c.bg }]} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
           <Text style={styles.backBtnText}>← Volver</Text>
         </TouchableOpacity>
 

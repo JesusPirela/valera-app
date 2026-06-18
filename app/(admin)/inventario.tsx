@@ -179,13 +179,14 @@ export default function Inventario() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
           {grupos.map((g) => {
-            const colapsada = colapsadas[g.seccion]
+            // Por defecto cerrados al entrar (undefined → colapsada)
+            const colapsada = colapsadas[g.seccion] ?? true
             const autorizadas = g.props.filter((p) => p.inv_autorizado_publicar).length
             return (
               <View key={g.seccion} style={styles.grupo}>
                 <TouchableOpacity
                   style={styles.grupoHeader}
-                  onPress={() => setColapsadas((s) => ({ ...s, [g.seccion]: !s[g.seccion] }))}
+                  onPress={() => setColapsadas((s) => ({ ...s, [g.seccion]: !(s[g.seccion] ?? true) }))}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.grupoTitulo}>{colapsada ? '▶' : '▼'}  {g.seccion}</Text>
