@@ -1,17 +1,22 @@
 import { TouchableOpacity, Text, Platform } from 'react-native'
-import { useNavigation } from 'expo-router'
+import { useNavigation, router } from 'expo-router'
 
 // Botón "atrás" para el header de los navegadores (Stack admin y Tabs prospectador).
-// Usa navigation.goBack(), que regresa a la pantalla anterior SIN remontarla —
-// así se conserva su estado y la posición de scroll. Se oculta solo cuando no
-// hay a dónde volver (pantalla raíz).
-export default function HeaderBack({ color = '#c9a84c' }: { color?: string }) {
+// - Sin `to`: usa navigation.goBack() (correcto en el Stack del admin).
+// - Con `to`: navega explícitamente a esa ruta. En el navegador de Tabs el
+//   goBack() salta a la pestaña inicial (propiedades), así que las pantallas de
+//   detalle que viven en Tabs (ej. detalle-cliente) deben pasar su destino real.
+export default function HeaderBack({ color = '#c9a84c', to }: { color?: string; to?: string }) {
   const navigation = useNavigation()
   const puede = typeof (navigation as any).canGoBack === 'function' ? (navigation as any).canGoBack() : false
-  if (!puede) return null
+  if (!to && !puede) return null
+  const onPress = () => {
+    if (to) router.replace(to as any)
+    else navigation.goBack()
+  }
   return (
     <TouchableOpacity
-      onPress={() => navigation.goBack()}
+      onPress={onPress}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       style={{
         paddingHorizontal: 14,

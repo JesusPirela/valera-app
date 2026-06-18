@@ -75,7 +75,7 @@ function DateTimePicker({
   return (
     <>
       <Text style={dpStyles.label}>{label}</Text>
-      <TouchableOpacity style={dpStyles.trigger} onPress={() => { setTemp(value ?? new Date()); setOpen(true) }}>
+      <TouchableOpacity style={dpStyles.trigger} onPress={() => { const b = new Date(value ?? new Date()); b.setMinutes(Math.round(b.getMinutes() / 5) * 5, 0, 0); setTemp(b); setOpen(true) }}>
         <Text style={[dpStyles.triggerText, !value && dpStyles.triggerPlaceholder]}>
           {displayStr}
         </Text>
@@ -107,8 +107,8 @@ function DateTimePicker({
               <SpinField
                 label="Min"
                 value={String(temp.getMinutes()).padStart(2, '0')}
-                onUp={() => adj('minute', 1)}
-                onDown={() => adj('minute', -1)}
+                onUp={() => adj('minute', 5)}
+                onDown={() => adj('minute', -5)}
               />
             </View>
 
@@ -197,6 +197,17 @@ export default function ClienteForm() {
   const params = useLocalSearchParams<{ id?: string; fromAdmin?: string }>()
   const esEdicion = !!params.id
   const fromAdmin = params.fromAdmin === '1'
+
+  // En el navegador de Tabs, router.back() salta a la pestaña inicial. Por eso
+  // navegamos explícitamente: al editar volvemos al detalle del cliente; al
+  // crear, al CRM. (admin/prospectador según de dónde se abrió).
+  function irAtras() {
+    if (esEdicion) {
+      router.replace(((fromAdmin ? '/(admin)/detalle-cliente?id=' : '/(prospectador)/detalle-cliente?id=') + params.id) as any)
+    } else {
+      router.replace((fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm') as any)
+    }
+  }
 
   const [loading, setLoading] = useState(esEdicion)
   const [guardando, setGuardando] = useState(false)
@@ -359,7 +370,7 @@ export default function ClienteForm() {
         }
       }
 
-      (router.canGoBack() ? router.back() : router.replace(fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm'))
+      irAtras()
     } catch (e: any) {
       mostrarError('Error inesperado', e?.message ?? 'Intenta de nuevo.')
     } finally {
@@ -591,7 +602,7 @@ export default function ClienteForm() {
         </>
       )}
 
-      <TouchableOpacity style={styles.btnCancelar} onPress={() => (router.canGoBack() ? router.back() : router.replace(fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm'))}>
+      <TouchableOpacity style={styles.btnCancelar} onPress={irAtras}>
         <Text style={styles.btnCancelarText}>Cancelar</Text>
       </TouchableOpacity>
     </ScrollView>

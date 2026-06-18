@@ -49,12 +49,9 @@ export const ORDEN_ESTADOS = [
 ]
 
 // Etapas de venta seleccionables al crear/editar un cliente. Es la lista
-// canónica usada en el formulario y en la pantalla de detalle, para que la
-// "etapa de venta" sea siempre la misma en toda la app.
-export const ETAPAS_CLIENTE = [
-  'por_perfilar', 'no_contesta', 'cita_por_agendar',
-  'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
-]
+// canónica usada en el formulario y en la pantalla de detalle: incluye TODAS
+// las etapas (primer contacto, cita a futuro, etc.) para que coincidan.
+export const ETAPAS_CLIENTE = ORDEN_ESTADOS
 
 function estadoInfo(e: string) {
   return ESTADOS[e] ?? { label: e, color: '#64748b', bg: '#f1f5f9' }

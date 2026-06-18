@@ -108,7 +108,7 @@ function DateTimePicker({ value, onChange, label }: {
   return (
     <>
       <Text style={dpStyles.label}>{label}</Text>
-      <TouchableOpacity style={dpStyles.trigger} onPress={() => { setTemp(value ?? new Date()); setOpen(true) }}>
+      <TouchableOpacity style={dpStyles.trigger} onPress={() => { const b = new Date(value ?? new Date()); b.setMinutes(Math.round(b.getMinutes() / 5) * 5, 0, 0); setTemp(b); setOpen(true) }}>
         <Text style={[dpStyles.triggerText, !value && dpStyles.placeholder]}>{displayStr}</Text>
         <Text style={dpStyles.icon}>▾</Text>
       </TouchableOpacity>
@@ -125,7 +125,7 @@ function DateTimePicker({ value, onChange, label }: {
             <Text style={dpStyles.secLabel}>Hora</Text>
             <View style={dpStyles.row}>
               <Spin label="Hora" value={String(temp.getHours()).padStart(2, '0')}   onUp={() => adj('hour', 1)}   onDown={() => adj('hour', -1)} />
-              <Spin label="Min"  value={String(temp.getMinutes()).padStart(2, '0')} onUp={() => adj('minute', 1)} onDown={() => adj('minute', -1)} />
+              <Spin label="Min"  value={String(temp.getMinutes()).padStart(2, '0')} onUp={() => adj('minute', 5)} onDown={() => adj('minute', -5)} />
             </View>
             <View style={dpStyles.actions}>
               <TouchableOpacity style={dpStyles.btnCancel} onPress={() => setOpen(false)}>
