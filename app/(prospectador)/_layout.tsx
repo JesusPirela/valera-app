@@ -304,7 +304,7 @@ export default function ProspectadorLayout() {
         options={{
           title: 'Asesor',
           tabBarIcon: tabIcon('briefcase-outline', 'briefcase'),
-          href: (esAsesor || esSupervisor || rolEf === 'admin') ? undefined : null,
+          href: (esAsesor || rolEf === 'admin') ? undefined : null,
         }}
       />
       <Tabs.Screen

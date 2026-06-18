@@ -25,6 +25,15 @@ Notifications.setNotificationHandler({
   }),
 })
 
+async function registrarVersionApp(userId: string) {
+  try {
+    const version = Constants.expoConfig?.version ?? null
+    await supabase.from('profiles').update({ app_version: version, app_platform: Platform.OS }).eq('id', userId)
+  } catch (e) {
+    console.warn('[Version] Error registrando versión de app:', e)
+  }
+}
+
 async function registrarPushToken(userId: string) {
   if (Platform.OS === 'web') return
   try {
@@ -150,6 +159,7 @@ export default function RootLayout() {
         // sesión, antes nunca se actualizaba y dejaba de recibir notificaciones
         // sin que nadie se diera cuenta.
         registrarPushToken(user.id)
+        registrarVersionApp(user.id)
         // "Última conexión": refrescar en CADA apertura/foreground, no solo en el
         // login. Como la sesión persiste, muchos usuarios no vuelven a pasar por
         // el login y last_seen se quedaba viejo ("hace 2 días"). Fire-and-forget.
@@ -224,11 +234,12 @@ export default function RootLayout() {
         if (session) {
           iniciarSesion()
           registrarPushToken(session.user.id)
+          registrarVersionApp(session.user.id)
         }
       } else if (event === 'SIGNED_IN') {
         setSession(session)
         iniciarSesion()
-        if (session?.user?.id) registrarPushToken(session.user.id)
+        if (session?.user?.id) { registrarPushToken(session.user.id); registrarVersionApp(session.user.id) }
       } else if (event === 'TOKEN_REFRESHED') {
         setSession(session)
         // Mantener fresco el token guardado de la cuenta activa, para que el

@@ -30,6 +30,14 @@ type Prospectador = {
   created_at: string
   last_seen: string | null
   valera_coins: number
+  app_version: string | null
+  app_platform: string | null
+}
+
+const PLATAFORMA_LABEL: Record<string, string> = {
+  ios:     'iOS',
+  android: 'Android',
+  web:     'Web',
 }
 
 type Credenciales = {
@@ -373,6 +381,11 @@ export default function Prospectadores() {
                   <Text style={[styles.cardFecha, { color: item.last_seen ? '#1a6470' : '#bbb' }]}>
                     {item.last_seen ? `Última conexión: ${tiempoRelativo(item.last_seen)}` : 'Sin conexión registrada'}
                   </Text>
+                  {item.app_version ? (
+                    <Text style={[styles.cardFecha, { color: c.textMute }]}>
+                      📱 {PLATAFORMA_LABEL[item.app_platform ?? ''] ?? item.app_platform ?? '?'} · v{item.app_version}
+                    </Text>
+                  ) : null}
                 </View>
                 <TouchableOpacity
                   style={[styles.rolBadge, ROL_BADGE[item.role] ?? ROL_BADGE.prospectador]}

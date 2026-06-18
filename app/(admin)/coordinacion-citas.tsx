@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, createElement } from 'react'
+import { useState, useRef, useCallback, useEffect, createElement } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
   TextInput, ActivityIndicator, ScrollView, Platform, Alert,
@@ -25,6 +25,7 @@ type Cita = {
   cliente_id: string
   prospectador_id: string | null
   coordinado_por: string | null
+  asesor_id: string | null
   propiedad_id: string | null
   estado: EstadoCita
   fecha_cita: string | null
@@ -34,6 +35,7 @@ type Cita = {
   clientes: { nombre: string; telefono: string; tipo_operacion: string | null; estado: string }
   prospectador: { nombre: string } | null
   coordinador: { nombre: string } | null
+  asesor: { nombre: string } | null
   propiedad: { titulo: string } | null
 }
 
@@ -116,14 +118,19 @@ function alerta(msg: string) {
 // ─── DropdownSelector ─────────────────────────────────────────────────────────
 
 function DropdownSelector({
-  label, value, options, onSelect, placeholder = 'Sin asignar',
+  label, value, options, onSelect, placeholder = 'Sin asignar', searchable = false,
 }: {
   label: string; value: string
   options: { id: string; nombre: string }[]
-  onSelect: (id: string) => void; placeholder?: string
+  onSelect: (id: string) => void; placeholder?: string; searchable?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const [busquedaDD, setBusquedaDD] = useState('')
   const selected = options.find(o => o.id === value)
+  const cerrar = () => { setOpen(false); setBusquedaDD('') }
+  const opcionesFiltradas = searchable && busquedaDD.trim()
+    ? options.filter(o => o.nombre?.toLowerCase().includes(busquedaDD.trim().toLowerCase()))
+    : options
   return (
     <>
       <Text style={s.fieldLabel}>{label}</Text>
@@ -133,21 +140,35 @@ function DropdownSelector({
         </Text>
         <Ionicons name="chevron-down" size={16} color="#94a3b8" />
       </TouchableOpacity>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <TouchableOpacity style={s.ddOverlay} activeOpacity={1} onPress={() => setOpen(false)}>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={cerrar}>
+        <TouchableOpacity style={s.ddOverlay} activeOpacity={1} onPress={cerrar}>
           <View style={s.ddSheet}>
             <Text style={s.ddTitle}>{label}</Text>
+            {searchable && (
+              <TextInput
+                style={[s.input, { marginBottom: 10 }]}
+                placeholder="Buscar..."
+                value={busquedaDD}
+                onChangeText={setBusquedaDD}
+                autoFocus
+              />
+            )}
             <ScrollView showsVerticalScrollIndicator={false}>
-              <TouchableOpacity style={s.ddOption} onPress={() => { onSelect(''); setOpen(false) }}>
+              <TouchableOpacity style={s.ddOption} onPress={() => { onSelect(''); cerrar() }}>
                 <Text style={[s.ddOptionTxt, !value && { color: '#1a6470', fontWeight: '700' }]}>{placeholder}</Text>
                 {!value && <Ionicons name="checkmark" size={16} color="#1a6470" />}
               </TouchableOpacity>
-              {options.filter(o => o.nombre?.trim()).map(o => (
-                <TouchableOpacity key={o.id} style={s.ddOption} onPress={() => { onSelect(o.id); setOpen(false) }}>
+              {opcionesFiltradas.filter(o => o.nombre?.trim()).map(o => (
+                <TouchableOpacity key={o.id} style={s.ddOption} onPress={() => { onSelect(o.id); cerrar() }}>
                   <Text style={[s.ddOptionTxt, value === o.id && { color: '#1a6470', fontWeight: '700' }]}>{o.nombre}</Text>
                   {value === o.id && <Ionicons name="checkmark" size={16} color="#1a6470" />}
                 </TouchableOpacity>
               ))}
+              {searchable && opcionesFiltradas.length === 0 && (
+                <Text style={{ fontSize: 13, color: '#94a3b8', paddingVertical: 12, textAlign: 'center' }}>
+                  Sin resultados
+                </Text>
+              )}
             </ScrollView>
           </View>
         </TouchableOpacity>
@@ -159,9 +180,9 @@ function DropdownSelector({
 // ─── ModalEdicion ─────────────────────────────────────────────────────────────
 
 function ModalEdicion({
-  cita, admins, onClose, onGuardar, onEliminar,
+  cita, admins, asesores, onClose, onGuardar, onEliminar,
 }: {
-  cita: Cita | null; admins: Profile[]; onClose: () => void; onGuardar: () => void; onEliminar: (cita: Cita) => void
+  cita: Cita | null; admins: Profile[]; asesores: Profile[]; onClose: () => void; onGuardar: () => void; onEliminar: (cita: Cita) => void
 }) {
   const [estado, setEstado]               = useState<EstadoCita>(cita?.estado ?? 'por_contactar')
   const [notas, setNotas]                 = useState(cita?.notas ?? '')
@@ -169,6 +190,7 @@ function ModalEdicion({
     cita?.fecha_cita ? new Date(cita.fecha_cita).toISOString().slice(0, 16) : ''
   )
   const [coordinadorId, setCoordinadorId] = useState(cita?.coordinado_por ?? '')
+  const [asesorId, setAsesorId]           = useState(cita?.asesor_id ?? '')
   const [telefono, setTelefono]           = useState(cita?.clientes?.telefono ?? '')
   const [guardando, setGuardando]         = useState(false)
 
@@ -183,6 +205,7 @@ function ModalEdicion({
       estado,
       notas: notas.trim() || null,
       coordinado_por: coordinadorId || null,
+      asesor_id: asesorId || null,
       fecha_cita: fechaTexto ? new Date(fechaTexto).toISOString() : null,
     }).eq('id', cita.id).select('id')
     setGuardando(false)
@@ -246,6 +269,9 @@ function ModalEdicion({
             <DropdownSelector label="Coordinado por" value={coordinadorId}
               options={admins.filter(a => a.nombre?.trim())} onSelect={setCoordinadorId} />
 
+            <DropdownSelector label="Atiende / Atendido por" value={asesorId}
+              options={asesores} onSelect={setAsesorId} searchable />
+
             <Text style={s.fieldLabel}>Notas de coordinación</Text>
             <TextInput style={[s.input, { height: 90, textAlignVertical: 'top', paddingTop: 10, marginBottom: 16 }]}
               placeholder="Detalles, condiciones, observaciones..."
@@ -281,8 +307,8 @@ function ModalEdicion({
 
 // ─── ModalNuevaCita ───────────────────────────────────────────────────────────
 
-function ModalNuevaCita({ admins, onClose, onGuardar }: {
-  admins: Profile[]; onClose: () => void; onGuardar: () => void
+function ModalNuevaCita({ admins, asesores, onClose, onGuardar }: {
+  admins: Profile[]; asesores: Profile[]; onClose: () => void; onGuardar: () => void
 }) {
   const [busqueda, setBusqueda]               = useState('')
   const [clientes, setClientes]               = useState<{ id: string; nombre: string; telefono: string }[]>([])
@@ -295,6 +321,7 @@ function ModalNuevaCita({ admins, onClose, onGuardar }: {
   const [notas, setNotas]                     = useState('')
   const [fechaTexto, setFechaTexto]           = useState('')
   const [coordinadorId, setCoordinadorId]     = useState('')
+  const [asesorId, setAsesorId]               = useState('')
   const [prospectadorId, setProspectadorId]   = useState('')
   const [prospectadores, setProspectadores]   = useState<Profile[]>([])
   const [guardando, setGuardando]             = useState(false)
@@ -342,6 +369,7 @@ function ModalNuevaCita({ admins, onClose, onGuardar }: {
         cliente_id: idFinal,
         prospectador_id: prospectadorId || null,
         coordinado_por: coordinadorId || null,
+        asesor_id: asesorId || null,
         estado, notas: notas.trim() || null,
         fecha_cita: fechaTexto ? new Date(fechaTexto).toISOString() : null,
       })
@@ -440,8 +468,10 @@ function ModalNuevaCita({ admins, onClose, onGuardar }: {
 
             <DropdownSelector label="Coordinado por" value={coordinadorId}
               options={admins.filter(a => a.nombre?.trim())} onSelect={setCoordinadorId} />
+            <DropdownSelector label="Atiende / Atendido por" value={asesorId}
+              options={asesores} onSelect={setAsesorId} searchable />
             <DropdownSelector label="Prospectador" value={prospectadorId}
-              options={prospectadores} onSelect={setProspectadorId} />
+              options={prospectadores} onSelect={setProspectadorId} searchable />
 
             <Text style={s.fieldLabel}>Notas</Text>
             <TextInput style={[s.input, { height: 80, textAlignVertical: 'top', paddingTop: 10, marginBottom: 24 }]}
@@ -594,6 +624,11 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
               <Ionicons name="shield-checkmark-outline" size={9} color="#1a6470" /> {cita.coordinador.nombre.split(' ')[0]}
             </Text>
           )}
+          {cita.asesor && (
+            <Text style={[kc.metaTxt, { color: '#7c3aed' }]} numberOfLines={1}>
+              <Ionicons name="briefcase-outline" size={9} color="#7c3aed" /> {cita.asesor.nombre.split(' ')[0]}
+            </Text>
+          )}
           <Text style={[kc.metaTxt, { marginLeft: 'auto' as any, color: '#94a3b8' }]}>
             {tiempoRelativo(cita.updated_at)}
           </Text>
@@ -730,6 +765,9 @@ const col = StyleSheet.create({
 export default function CoordinacionCitas() {
   const [citas, setCitas]               = useState<Cita[]>([])
   const [admins, setAdmins]             = useState<Profile[]>([])
+  const [asesores, setAsesores]         = useState<Profile[]>([])
+  const [miId, setMiId]                 = useState<string | null>(null)
+  const [miRole, setMiRole]             = useState<string | null>(null)
   const [loading, setLoading]           = useState(true)
   const [citaEditando, setCitaEditando] = useState<Cita | null>(null)
   const [citaMoviendo, setCitaMoviendo] = useState<Cita | null>(null)
@@ -740,6 +778,7 @@ export default function CoordinacionCitas() {
   const [draggingCita, setDraggingCita] = useState<Cita | null>(null)
   const [dragOverEstado, setDragOverEstado] = useState<EstadoCita | null>(null)
   const mountedRef = useRef(true)
+  const defaultFiltroAplicado = useRef(false)
 
   async function cargar() {
     const { data } = await supabase
@@ -749,6 +788,7 @@ export default function CoordinacionCitas() {
         clientes ( nombre, telefono, tipo_operacion, estado ),
         prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre ),
         coordinador:profiles!citas_coordinacion_coordinado_por_fkey ( nombre ),
+        asesor:profiles!citas_coordinacion_asesor_id_fkey ( nombre ),
         propiedad:propiedades ( titulo )
       `)
       .order('updated_at', { ascending: false })
@@ -763,11 +803,25 @@ export default function CoordinacionCitas() {
     if (mountedRef.current) setAdmins(data ?? [])
   }
 
+  async function cargarAsesores() {
+    const { data } = await supabase.from('profiles').select('id, nombre').eq('role', 'asesor')
+    if (mountedRef.current) setAsesores((data ?? []).filter(a => a.nombre?.trim()))
+  }
+
+  async function cargarMiPerfil() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data: perfil } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+    if (mountedRef.current) { setMiId(user.id); setMiRole(perfil?.role ?? null) }
+  }
+
   useFocusEffect(useCallback(() => {
     mountedRef.current = true
     setLoading(true)
     cargar()
     cargarAdmins()
+    cargarAsesores()
+    cargarMiPerfil()
 
     const ch = supabase.channel('citas-kanban-rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'citas_coordinacion' }, () => cargar())
@@ -775,6 +829,15 @@ export default function CoordinacionCitas() {
 
     return () => { mountedRef.current = false; supabase.removeChannel(ch) }
   }, []))
+
+  // Admin: por defecto solo ve sus propias citas (las que él coordina),
+  // pero puede cambiar el filtro libremente con los chips de abajo.
+  useEffect(() => {
+    if (miRole === 'admin' && miId && !defaultFiltroAplicado.current) {
+      setFiltroAdmin(miId)
+      defaultFiltroAplicado.current = true
+    }
+  }, [miRole, miId])
 
   async function moverCita(cita: Cita, nuevoEstado: EstadoCita) {
     setCitas(prev => prev.map(c => c.id === cita.id ? { ...c, estado: nuevoEstado, updated_at: new Date().toISOString() } : c))
@@ -912,7 +975,7 @@ export default function CoordinacionCitas() {
       </ScrollView>
 
       {/* ── Filtro por admin ── */}
-      {admins.length > 1 && (
+      {miRole !== 'asesor' && admins.length > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           style={s.adminScroll} contentContainerStyle={s.adminContent}>
           {[
@@ -977,6 +1040,7 @@ export default function CoordinacionCitas() {
         <ModalEdicion
           cita={citaEditando}
           admins={admins}
+          asesores={asesores}
           onClose={() => setCitaEditando(null)}
           onGuardar={cargar}
           onEliminar={confirmarEliminarCita}
@@ -992,6 +1056,7 @@ export default function CoordinacionCitas() {
       {modalNueva && (
         <ModalNuevaCita
           admins={admins}
+          asesores={asesores}
           onClose={() => setModalNueva(false)}
           onGuardar={cargar}
         />
