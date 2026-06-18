@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native'
 import type { CrmMetricas } from '../lib/crmMetricas'
+import type { AppColors } from '../lib/ThemeContext'
 
 const ESTADO_LABEL: Record<string, string> = {
   por_perfilar: 'Por perfilar',
@@ -40,46 +41,46 @@ const FUENTE_LABEL: Record<string, string> = {
   otro: 'Otro',
 }
 
-function BarraMetrica({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
+function BarraMetrica({ label, count, total, color, labelColor = '#888', trackColor = '#f0f0f0' }: {
+  label: string; count: number; total: number; color: string; labelColor?: string; trackColor?: string
+}) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0
   return (
-    <View style={{ marginBottom: 10 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
-        <Text style={{ fontSize: 12, color: '#888', flex: 1 }}>{label}</Text>
-        <Text style={{ fontSize: 12, fontWeight: '700', color, marginLeft: 8 }}>{count} <Text style={{ color: '#aaa', fontWeight: '400' }}>({pct}%)</Text></Text>
+    <View style={{ marginBottom: 12 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
+        <Text style={{ fontSize: 12.5, color: labelColor, flex: 1, fontWeight: '600' }}>{label}</Text>
+        <Text style={{ fontSize: 12.5, fontWeight: '800', color, marginLeft: 8 }}>{count} <Text style={{ color: labelColor, fontWeight: '500' }}>({pct}%)</Text></Text>
       </View>
-      <View style={{ height: 7, backgroundColor: '#f0f0f0', borderRadius: 4 }}>
-        <View style={{ height: 7, width: `${pct}%` as any, backgroundColor: color, borderRadius: 4 }} />
+      <View style={{ height: 8, backgroundColor: trackColor, borderRadius: 5, overflow: 'hidden' }}>
+        <View style={{ height: 8, width: `${pct}%` as any, backgroundColor: color, borderRadius: 5 }} />
       </View>
     </View>
   )
 }
 
-export default function CrmMetricasPanel({ metricas }: { metricas: CrmMetricas }) {
+export default function CrmMetricasPanel({ metricas, c }: { metricas: CrmMetricas; c: AppColors }) {
   return (
     <View>
+      {/* 4 stat cards */}
       <View style={styles.crmStatsRow}>
-        <View style={styles.crmStatBox}>
-          <Text style={styles.crmStatNum}>{metricas.totalLeads}</Text>
-          <Text style={styles.crmStatLabel}>Total leads</Text>
-        </View>
-        <View style={styles.crmStatBox}>
-          <Text style={styles.crmStatNum}>{metricas.leadsActivos}</Text>
-          <Text style={styles.crmStatLabel}>Activos</Text>
-        </View>
-        <View style={[styles.crmStatBox, { borderColor: '#4CAF50' }]}>
-          <Text style={[styles.crmStatNum, { color: '#4CAF50' }]}>{metricas.cerrados}</Text>
-          <Text style={styles.crmStatLabel}>Compras</Text>
-        </View>
-        <View style={styles.crmStatBox}>
-          <Text style={styles.crmStatNum}>{metricas.leadsEsteMes}</Text>
-          <Text style={styles.crmStatLabel}>Este mes</Text>
-        </View>
+        {[
+          { n: metricas.totalLeads,   l: 'Total leads', icon: '👥', color: '#1a6470' },
+          { n: metricas.leadsActivos, l: 'Activos',     icon: '🔥', color: '#2563eb' },
+          { n: metricas.cerrados,     l: 'Compras',     icon: '✅', color: '#16a34a' },
+          { n: metricas.leadsEsteMes, l: 'Este mes',    icon: '🗓️', color: '#7c3aed' },
+        ].map((st, i) => (
+          <View key={i} style={[styles.crmStatBox, { backgroundColor: st.color + '14', borderColor: st.color + '38' }]}>
+            <Text style={styles.crmStatIcon}>{st.icon}</Text>
+            <Text style={[styles.crmStatNum, { color: st.color }]}>{st.n}</Text>
+            <Text style={[styles.crmStatLabel, { color: c.textMute }]}>{st.l}</Text>
+          </View>
+        ))}
       </View>
 
+      {/* Pipeline por estado */}
       {metricas.porEstado.length > 0 && (
         <>
-          <Text style={styles.crmSectionTitle}>Pipeline por estado</Text>
+          <Text style={[styles.crmSectionTitle, { color: c.text, borderBottomColor: c.border }]}>Pipeline por estado</Text>
           {metricas.porEstado.map(({ estado, count }) => (
             <BarraMetrica
               key={estado}
@@ -87,14 +88,17 @@ export default function CrmMetricasPanel({ metricas }: { metricas: CrmMetricas }
               count={count}
               total={metricas.totalLeads}
               color={ESTADO_COLOR[estado] ?? '#888'}
+              labelColor={c.textMute}
+              trackColor={c.border}
             />
           ))}
         </>
       )}
 
+      {/* Fuentes */}
       {metricas.porFuente.length > 0 && (
         <>
-          <Text style={styles.crmSectionTitle}>Fuentes de lead</Text>
+          <Text style={[styles.crmSectionTitle, { color: c.text, borderBottomColor: c.border }]}>Fuentes de lead</Text>
           {metricas.porFuente.map(({ fuente, count }) => (
             <BarraMetrica
               key={fuente}
@@ -102,69 +106,75 @@ export default function CrmMetricasPanel({ metricas }: { metricas: CrmMetricas }
               count={count}
               total={metricas.totalLeads}
               color="#1a6470"
+              labelColor={c.textMute}
+              trackColor={c.border}
             />
           ))}
         </>
       )}
 
-      <Text style={styles.crmSectionTitle}>Actividad</Text>
+      {/* Actividad */}
+      <Text style={[styles.crmSectionTitle, { color: c.text, borderBottomColor: c.border }]}>Actividad</Text>
       <View style={styles.crmActividadRow}>
-        <View style={styles.crmActividadBox}>
-          <Text style={styles.crmActividadNum}>{metricas.totalInteracciones}</Text>
-          <Text style={styles.crmActividadLabel}>Interacciones{'\n'}registradas</Text>
+        <View style={[styles.crmActividadBox, { backgroundColor: '#1a647014', borderColor: '#1a647038' }]}>
+          <Text style={[styles.crmActividadNum, { color: '#1a6470' }]}>{metricas.totalInteracciones}</Text>
+          <Text style={[styles.crmActividadLabel, { color: c.textMute }]}>💬 Interacciones{'\n'}registradas</Text>
         </View>
-        <View style={[styles.crmActividadBox, metricas.recordatoriosPendientes > 0 && { borderColor: '#FF9800' }]}>
-          <Text style={[styles.crmActividadNum, metricas.recordatoriosPendientes > 0 && { color: '#FF9800' }]}>
+        <View style={[styles.crmActividadBox, metricas.recordatoriosPendientes > 0
+          ? { backgroundColor: '#FF980018', borderColor: '#FF980055' }
+          : { backgroundColor: '#16a34a14', borderColor: '#16a34a38' }]}>
+          <Text style={[styles.crmActividadNum, { color: metricas.recordatoriosPendientes > 0 ? '#FF9800' : '#16a34a' }]}>
             {metricas.recordatoriosPendientes}
           </Text>
-          <Text style={styles.crmActividadLabel}>Recordatorios{'\n'}pendientes</Text>
+          <Text style={[styles.crmActividadLabel, { color: c.textMute }]}>⏰ Recordatorios{'\n'}pendientes</Text>
         </View>
       </View>
 
       {metricas.totalLeads === 0 && (
-        <Text style={styles.emptySubtitle}>Sin leads registrados aún.</Text>
+        <View style={styles.crmEmpty}>
+          <Text style={{ fontSize: 34, marginBottom: 8 }}>🗂️</Text>
+          <Text style={[styles.crmEmptyText, { color: c.textMute }]}>Sin leads registrados aún.</Text>
+        </View>
       )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  crmStatsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  crmStatsRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
   crmStatBox: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    padding: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
     alignItems: 'center',
   },
-  crmStatNum: { fontSize: 22, fontWeight: '800', color: '#1a6470' },
-  crmStatLabel: { fontSize: 10, color: '#888', marginTop: 2, textAlign: 'center' },
+  crmStatIcon: { fontSize: 16, marginBottom: 3 },
+  crmStatNum: { fontSize: 22, fontWeight: '900' },
+  crmStatLabel: { fontSize: 10, marginTop: 2, textAlign: 'center', fontWeight: '600' },
 
   crmSectionTitle: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#1a6470',
-    marginTop: 16,
-    marginBottom: 10,
+    fontWeight: '800',
+    marginTop: 20,
+    marginBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    paddingBottom: 4,
+    paddingBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
 
   crmActividadRow: { flexDirection: 'row', gap: 10, marginTop: 4, marginBottom: 8 },
   crmActividadBox: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
     padding: 14,
     alignItems: 'center',
   },
-  crmActividadNum: { fontSize: 26, fontWeight: '800', color: '#1a6470' },
-  crmActividadLabel: { fontSize: 11, color: '#888', marginTop: 4, textAlign: 'center', lineHeight: 15 },
-
-  emptySubtitle: { fontSize: 13, color: '#aaa', textAlign: 'center', marginTop: 16 },
+  crmActividadNum: { fontSize: 26, fontWeight: '900' },
+  crmActividadLabel: { fontSize: 11, marginTop: 4, textAlign: 'center', lineHeight: 15, fontWeight: '600' },
+  crmEmpty: { alignItems: 'center', paddingVertical: 30 },
+  crmEmptyText: { fontSize: 13, textAlign: 'center' },
 })

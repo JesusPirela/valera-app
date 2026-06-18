@@ -27,6 +27,7 @@ type Cliente = {
   proximo_contacto: string | null
   created_at: string
   nivel_interes: 'alto' | 'medio' | 'bajo' | null
+  notas: string | null
   recordatorios: { id: string; titulo: string; fecha_hora: string; completado: boolean }[]
 }
 
@@ -153,7 +154,7 @@ export default function CRM() {
     queryFn: async () => {
       let q = supabase
         .from('clientes')
-        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, nivel_interes, recordatorios(id, titulo, fecha_hora, completado)')
+        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, nivel_interes, notas, recordatorios(id, titulo, fecha_hora, completado)')
         .order('updated_at', { ascending: false })
       if (soloMios) {
         const { data: { user } } = await supabase.auth.getUser()
@@ -305,6 +306,7 @@ export default function CRM() {
   const COL_FIELD: Record<string, string> = {
     nombre: 'nombre', telefono: 'telefono', estado: 'estado',
     operacion: 'tipo_operacion', interes: 'nivel_interes', fecha: 'proximo_contacto',
+    notas: 'notas',
   }
 
   async function guardarCelda(id: string, col: string, value: string | null) {
@@ -356,11 +358,12 @@ export default function CRM() {
         ],
       })
     } else {
-      // nombre, telefono, fecha → edición de texto inline
+      // nombre, telefono, fecha, notas → edición de texto inline
       const inicial = col === 'fecha'
         ? (item.proximo_contacto ? item.proximo_contacto.slice(0, 10) : '')
         : col === 'nombre' ? item.nombre
-        : col === 'telefono' ? item.telefono : ''
+        : col === 'telefono' ? item.telefono
+        : col === 'notas' ? (item.notas ?? '') : ''
       setEditValue(inicial)
       setEditCell({ id: item.id, col })
     }
@@ -435,6 +438,7 @@ export default function CRM() {
     { id: 'operacion', label: 'Operación',  flex: 1.5, mw: 0, filterable: true },
     { id: 'interes',   label: 'Interés',    flex: 1.5, mw: 0, filterable: true },
     { id: 'fecha',     label: 'Próx. seguimiento', flex: 2, mw: 0, sortable: true },
+    { id: 'notas',     label: 'Notas',      flex: 3, mw: 0 },
   ] : [
     { id: 'nombre',    label: 'Nombre',     flex: 0, mw: 155 },
     { id: 'telefono',  label: 'Teléfono',   flex: 0, mw: 115 },
@@ -442,6 +446,7 @@ export default function CRM() {
     { id: 'operacion', label: 'Op.',        flex: 0, mw: 80,  filterable: true },
     { id: 'interes',   label: 'Interés',    flex: 0, mw: 90,  filterable: true },
     { id: 'fecha',     label: 'Próx. seguim.', flex: 0, mw: 120, sortable: true },
+    { id: 'notas',     label: 'Notas',      flex: 0, mw: 180 },
   ]
 
   function cStyle(col: TCol) {
@@ -651,8 +656,8 @@ export default function CRM() {
                 {TABLE_COLS.map(col => {
                   const cs = cStyle(col)
                   const editando = editCell?.id === item.id && editCell?.col === col.id
-                  // Editor de texto inline (nombre, teléfono, fecha)
-                  if (editando && (col.id === 'nombre' || col.id === 'telefono' || col.id === 'fecha')) {
+                  // Editor de texto inline (nombre, teléfono, fecha, notas)
+                  if (editando && (col.id === 'nombre' || col.id === 'telefono' || col.id === 'fecha' || col.id === 'notas')) {
                     if (col.id === 'fecha' && isWeb) {
                       return (
                         <View key={col.id} style={[s.excelTdCell, cs]}>
@@ -676,7 +681,7 @@ export default function CRM() {
                           onChangeText={setEditValue}
                           onBlur={guardarTexto}
                           onSubmitEditing={guardarTexto}
-                          placeholder={col.id === 'fecha' ? 'AAAA-MM-DD' : ''}
+                          placeholder={col.id === 'fecha' ? 'AAAA-MM-DD' : col.id === 'notas' ? 'Escribe una nota...' : ''}
                           placeholderTextColor={c.textMute}
                           keyboardType={col.id === 'telefono' ? 'phone-pad' : 'default'}
                           style={[s.cellInput, { color: c.text, borderColor: '#1a9aaa', backgroundColor: c.bg }]}
@@ -747,6 +752,15 @@ export default function CRM() {
                         </TouchableOpacity>
                       )
                     }
+                    case 'notas':
+                      return (
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'notas')} activeOpacity={0.6}>
+                          {item.notas
+                            ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub }]} numberOfLines={1}>{item.notas}</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ agregar</Text>
+                          }
+                        </TouchableOpacity>
+                      )
                     default: return null
                   }
                 })}

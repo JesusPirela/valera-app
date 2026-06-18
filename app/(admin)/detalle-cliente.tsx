@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView,
+  View, Text, StyleSheet, ScrollView, TextInput,
   ActivityIndicator, TouchableOpacity, Modal, Alert, Platform, Linking,
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
@@ -37,6 +37,8 @@ type Cliente = {
   created_at: string
   responsable_id: string | null
   responsable_nombre: string | null
+  cierre_completado: boolean
+  cierre_notas: string | null
 }
 
 type Interaccion = {
@@ -108,6 +110,9 @@ export default function AdminDetalleCliente() {
   const [estadoSeleccionado, setEstadoSeleccionado] = useState('')
   const [guardandoEstado, setGuardandoEstado] = useState(false)
 
+  const [cierreNotas, setCierreNotas] = useState('')
+  const [guardandoCierre, setGuardandoCierre] = useState(false)
+
   async function cargar() {
     setLoading(true)
     const [{ data: cData }, { data: i }, { data: r }] = await Promise.all([
@@ -123,10 +128,43 @@ export default function AdminDetalleCliente() {
         responsableNombre = perfil?.nombre ?? null
       }
       setCliente({ ...cData, responsable_nombre: responsableNombre })
+      setCierreNotas(cData.cierre_notas ?? '')
     }
     setInteracciones(i ?? [])
     setRecordatorios(r ?? [])
     setLoading(false)
+  }
+
+  async function alternarCierreCompletado() {
+    if (!cliente) return
+    const nuevoValor = !cliente.cierre_completado
+    setGuardandoCierre(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error } = await supabase.from('clientes').update({ cierre_completado: nuevoValor }).eq('id', id)
+    setGuardandoCierre(false)
+    if (error) {
+      if (Platform.OS === 'web') window.alert(`Error: ${error.message}`)
+      else Alert.alert('Error', error.message)
+      return
+    }
+    if (user) {
+      await supabase.from('interacciones').insert({
+        cliente_id: id, user_id: user.id,
+        tipo: 'estado_cambiado',
+        descripcion: nuevoValor ? 'Cierre marcado como completado.' : 'Cierre marcado como pendiente.',
+      })
+    }
+    cargar()
+  }
+
+  async function guardarCierreNotas() {
+    setGuardandoCierre(true)
+    const { error } = await supabase.from('clientes').update({ cierre_notas: cierreNotas.trim() || null }).eq('id', id)
+    setGuardandoCierre(false)
+    if (error) {
+      if (Platform.OS === 'web') window.alert(`Error: ${error.message}`)
+      else Alert.alert('Error', error.message)
+    }
   }
 
   async function abrirReasignar() {
@@ -314,6 +352,37 @@ export default function AdminDetalleCliente() {
             <Text style={styles.asesorBtnText}>Cambiar</Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Documentación y cierre */}
+      <View style={[styles.asesorCard, { backgroundColor: c.card }]}>
+        <View style={styles.asesorRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.asesorLabel}>Documentación y cierre</Text>
+            <Text style={[styles.asesorNombre, { color: cliente.cierre_completado ? '#2e7d32' : c.text }]}>
+              {cliente.cierre_completado ? 'Cierre completado' : 'Cierre pendiente'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.asesorBtn, cliente.cierre_completado && { backgroundColor: '#2e7d32' }, guardandoCierre && { opacity: 0.6 }]}
+            onPress={alternarCierreCompletado}
+            disabled={guardandoCierre}
+          >
+            <Text style={styles.asesorBtnText}>{cliente.cierre_completado ? 'Marcar pendiente' : 'Marcar completado'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.asesorLabel, { marginTop: 14, marginBottom: 6 }]}>Notas de cierre</Text>
+        <TextInput
+          style={[styles.cierreNotasInput, { color: c.text, borderColor: c.border }]}
+          value={cierreNotas}
+          onChangeText={setCierreNotas}
+          onBlur={guardarCierreNotas}
+          placeholder="Documentos pendientes, detalles del cierre, etc."
+          placeholderTextColor={c.textMute}
+          multiline
+          numberOfLines={3}
+        />
       </View>
 
       {/* Modal reasignar */}
@@ -565,6 +634,10 @@ const styles = StyleSheet.create({
     shadowColor: '#1a6470', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3, elevation: 2,
   },
   asesorBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  cierreNotasInput: {
+    borderWidth: 1, borderRadius: 10, padding: 10,
+    fontSize: 13, minHeight: 70, textAlignVertical: 'top',
+  },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40, maxHeight: '80%' },
