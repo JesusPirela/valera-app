@@ -183,6 +183,7 @@ export default function EditarPropiedad() {
   const [mejorando, setMejorando] = useState(false)
   const [mejorandoMsg, setMejorandoMsg] = useState('')
   const [verImagen, setVerImagen] = useState<string | null>(null)
+  const [borrando, setBorrando] = useState(false)
 
   useEffect(() => { cargarPropiedad() }, [id])
 
@@ -713,6 +714,36 @@ export default function EditarPropiedad() {
     }
   }
 
+  async function eliminarPropiedad() {
+    const run = async () => {
+      setBorrando(true)
+      // Primero las imágenes (FK), luego la propiedad
+      const { error: errImgs } = await supabase.from('propiedad_imagenes').delete().eq('propiedad_id', id)
+      if (errImgs) {
+        setBorrando(false)
+        const m = `No se pudieron borrar las imágenes: ${errImgs.message}`
+        Platform.OS === 'web' ? window.alert(m) : Alert.alert('Error', m)
+        return
+      }
+      const { error } = await supabase.from('propiedades').delete().eq('id', id)
+      setBorrando(false)
+      if (error) {
+        const m = `No se pudo borrar la propiedad: ${error.message}`
+        Platform.OS === 'web' ? window.alert(m) : Alert.alert('Error', m)
+        return
+      }
+      const volver = () => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')
+      if (Platform.OS === 'web') { window.alert('✓ Propiedad eliminada'); volver() }
+      else Alert.alert('✓ Eliminada', 'La propiedad se eliminó correctamente.', [{ text: 'OK', onPress: volver }])
+    }
+    const msg = `¿Eliminar "${titulo || 'esta propiedad'}"? Esta acción no se puede deshacer.`
+    if (Platform.OS === 'web') { if (window.confirm(msg)) run() }
+    else Alert.alert('Eliminar propiedad', msg, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Eliminar', style: 'destructive', onPress: run },
+    ])
+  }
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg }}>
@@ -1167,6 +1198,14 @@ export default function EditarPropiedad() {
         >
           <Text style={styles.cancelText}>Cancelar</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={eliminarPropiedad}
+          disabled={guardando || borrando}
+        >
+          {borrando ? <ActivityIndicator color="#c0392b" /> : <Text style={styles.deleteText}>🗑  Eliminar propiedad</Text>}
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Visor de imagen ampliada */}
@@ -1264,6 +1303,16 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   cancelText: { color: '#666', fontSize: 16 },
+  deleteButton: {
+    borderWidth: 1.5,
+    borderColor: '#c0392b',
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 40,
+  },
+  deleteText: { color: '#c0392b', fontSize: 15, fontWeight: '700' },
   exclusivaRow: {
     flexDirection: 'row',
     alignItems: 'center',
