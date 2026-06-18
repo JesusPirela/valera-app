@@ -12,6 +12,7 @@ import {
   Image,
   View,
   FlatList,
+  Modal,
 } from 'react-native'
 import { router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
@@ -192,6 +193,7 @@ export default function NuevaPropiedad() {
   const [mejorando, setMejorando] = useState(false)
   const [mejorandoMsg, setMejorandoMsg] = useState('')
   const [guardado, setGuardado] = useState(false)
+  const [verImagen, setVerImagen] = useState<string | null>(null)
 
   // Auto-generar título cuando cambian tipo / operación / dirección
   useEffect(() => {
@@ -331,7 +333,15 @@ export default function NuevaPropiedad() {
       if ((data as any)?.error) throw new Error((data as any).error)
 
       const d = data as any
-      if (d.titulo)       { setTitulo(d.titulo); setTituloEditado(true) }
+      // Título normalizado: solo OPERACIÓN TIPO EN UBICACIÓN (no el título scrapeado)
+      {
+        const op = (d.operacion ?? operacion) === 'renta' ? 'RENTA' : 'VENTA'
+        const TIPOS_T: Record<string, string> = { casa: 'CASA', departamento: 'DEPARTAMENTO', terreno: 'TERRENO', local: 'LOCAL' }
+        const tp = TIPOS_T[d.tipo ?? tipo] ?? 'PROPIEDAD'
+        const ubic = ((d.direccion ?? direccion) || '').split(',')[0].trim()
+        setTitulo(ubic ? `${op} ${tp} EN ${ubic.toUpperCase()}` : `${op} ${tp}`)
+        setTituloEditado(true)
+      }
       if (d.descripcion)  setDescripcion(d.descripcion)
       if (d.precio)       setPrecio(d.precio)
       if (d.direccion)    { setDireccion(d.direccion); setGeoQuery(d.direccion) }
@@ -778,6 +788,9 @@ export default function NuevaPropiedad() {
                   <TouchableOpacity style={styles.miniaturaQuitar} onPress={() => quitarImagen(uri)}>
                     <Text style={styles.miniaturaQuitarText}>✕</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={styles.miniaturaZoom} onPress={() => setVerImagen(uri)}>
+                    <Text style={styles.miniaturaZoomText}>🔍</Text>
+                  </TouchableOpacity>
                   <View style={styles.miniaturaDragHandle}>
                     <Text style={{ color: '#fff', fontSize: 12 }}>⠿</Text>
                   </View>
@@ -795,12 +808,15 @@ export default function NuevaPropiedad() {
               showsHorizontalScrollIndicator={false}
               style={{ marginBottom: 10 }}
               renderItem={({ item }) => (
-                <View style={styles.miniatura}>
+                <TouchableOpacity style={styles.miniatura} activeOpacity={0.85} onPress={() => setVerImagen(item)}>
                   <Image source={{ uri: item }} style={styles.miniaturaImg} />
                   <TouchableOpacity style={styles.miniaturaQuitar} onPress={() => quitarImagen(item)}>
                     <Text style={styles.miniaturaQuitarText}>✕</Text>
                   </TouchableOpacity>
-                </View>
+                  <View style={styles.miniaturaZoom}>
+                    <Text style={styles.miniaturaZoomText}>🔍</Text>
+                  </View>
+                </TouchableOpacity>
               )}
             />
           )
@@ -1132,6 +1148,14 @@ export default function NuevaPropiedad() {
           <Text style={styles.cancelText}>Cancelar</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Visor de imagen ampliada */}
+      <Modal visible={verImagen !== null} transparent animationType="fade" onRequestClose={() => setVerImagen(null)}>
+        <TouchableOpacity style={imgViewerStyles.overlay} activeOpacity={1} onPress={() => setVerImagen(null)}>
+          {verImagen && <Image source={{ uri: verImagen }} style={imgViewerStyles.img} resizeMode="contain" />}
+          <View style={imgViewerStyles.cerrar}><Text style={imgViewerStyles.cerrarTxt}>✕  Cerrar</Text></View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   )
 }
@@ -1161,6 +1185,12 @@ const styles = StyleSheet.create({
   imagenPickerDragging: { borderColor: '#1a6470', backgroundColor: '#e8f4f5', borderStyle: 'solid' },
   miniatura: { position: 'relative', marginRight: 10 },
   miniaturaImg: { width: 100, height: 100, borderRadius: 10 },
+  miniaturaZoom: {
+    position: 'absolute', bottom: 4, right: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12,
+    width: 22, height: 22, alignItems: 'center', justifyContent: 'center',
+  },
+  miniaturaZoomText: { fontSize: 11 },
   miniaturaQuitar: {
     position: 'absolute',
     top: 4,
@@ -1255,4 +1285,11 @@ const styles = StyleSheet.create({
   fichaToggleText: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
   fichaChevron: { fontSize: 12, color: '#1a6470' },
   fichaMsg: { fontSize: 12, color: '#2e7d32', marginTop: 6, fontWeight: '600' },
+})
+
+const imgViewerStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  img: { width: '100%', height: '82%' },
+  cerrar: { position: 'absolute', top: 40, right: 20, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 },
+  cerrarTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
 })
