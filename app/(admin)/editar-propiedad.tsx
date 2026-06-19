@@ -375,13 +375,22 @@ export default function EditarPropiedad() {
       if ((data as any)?.error) throw new Error((data as any).error)
 
       const d = data as any
-      // Título normalizado: solo OPERACIÓN TIPO EN UBICACIÓN (no el título scrapeado)
+      // Título: "Venta de Casa en El Mirador, Querétaro"
       {
-        const op = (d.operacion ?? operacion) === 'renta' ? 'RENTA' : 'VENTA'
-        const TIPOS_T: Record<string, string> = { casa: 'CASA', departamento: 'DEPARTAMENTO', terreno: 'TERRENO', local: 'LOCAL' }
-        const tp = TIPOS_T[d.tipo ?? tipo] ?? 'PROPIEDAD'
-        const ubic = ((d.direccion ?? direccion) || '').split(',')[0].trim()
-        setTitulo(ubic ? `${op} ${tp} EN ${ubic.toUpperCase()}` : `${op} ${tp}`)
+        const op = (d.operacion ?? operacion) === 'renta' ? 'Renta' : 'Venta'
+        const TIPOS_T: Record<string, string> = { casa: 'Casa', departamento: 'Departamento', terreno: 'Terreno', local: 'Local' }
+        const tp = TIPOS_T[d.tipo ?? tipo] ?? 'Propiedad'
+        const addr = ((d.direccion ?? direccion) || '').trim()
+        if (addr) {
+          const partes = addr.split(',').map((p: string) => p.trim()).filter(Boolean)
+          const PREFIJOS = /^(fraccionamiento|fracc\.?|colonia|col\.?|barrio|residencial|privada|priv\.?)\s+/i
+          const lugar = partes[0].replace(PREFIJOS, '').trim()
+          const estado = partes.length > 1 ? partes[partes.length - 1] : ''
+          const ubic = estado && estado.toLowerCase() !== lugar.toLowerCase() ? `${lugar}, ${estado}` : lugar
+          setTitulo(`${op} de ${tp} en ${ubic}`)
+        } else {
+          setTitulo(`${op} de ${tp}`)
+        }
       }
       if (d.descripcion)  setDescripcion(d.descripcion)
       if (d.precio)       setPrecio(d.precio)
