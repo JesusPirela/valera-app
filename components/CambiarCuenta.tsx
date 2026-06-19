@@ -19,15 +19,25 @@ export default function CambiarCuenta() {
   const qc = useQueryClient()
   const [cuentas, setCuentas] = useState<CuentaGuardada[]>([])
   const [actualId, setActualId] = useState<string | null>(null)
+  const [listo, setListo] = useState(false)
   const [cambiando, setCambiando] = useState<string | null>(null)
 
   useEffect(() => {
-    listarCuentas().then(setCuentas)
-    supabase.auth.getUser().then(({ data }) => setActualId(data.user?.id ?? null))
+    async function init() {
+      const [lista, { data }] = await Promise.all([
+        listarCuentas(),
+        supabase.auth.getSession(),
+      ])
+      setCuentas(lista)
+      setActualId(data.session?.user?.id ?? null)
+      setListo(true)
+    }
+    init()
   }, [])
 
+  if (!listo) return null
   const otras = cuentas.filter(x => x.user_id !== actualId)
-  if (cuentas.length < 2 || otras.length === 0) return null
+  if (otras.length === 0) return null
 
   async function switchTo(cuenta: CuentaGuardada) {
     setCambiando(cuenta.user_id)

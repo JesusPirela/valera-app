@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { BlurView } from 'expo-blur'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { playShake, playOpen, startRolling, stopRolling, playWin } from '../lib/sounds'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,7 @@ export type Premio = {
   tipo: string
   prob_cofre: number
   prob_milestone: number
+  min_cofres?: number  // si está definido, solo aparece cuando el usuario ha abierto >= N cofres
 }
 
 export type RuletaConfig = {
@@ -27,14 +29,17 @@ export type RuletaConfig = {
 export const CONFIG_DEFAULT: RuletaConfig = {
   costo: 100,
   premios: [
-    { id: 'sorteo',    nombre: 'Entrada sorteo',  icono: '🎟️', tipo: 'sorteo',        prob_cofre: 30,   prob_milestone: 35   },
-    { id: 'plantilla', nombre: 'Pack plantillas',  icono: '📋', tipo: 'plantilla',      prob_cofre: 22,   prob_milestone: 25   },
-    { id: 'boost',     nombre: 'Boost 3 días',     icono: '🚀', tipo: 'boost',          prob_cofre: 18,   prob_milestone: 20   },
-    { id: 'lead_meta', nombre: 'Lead Meta Ads',    icono: '📱', tipo: 'lead_meta',      prob_cofre: 13,   prob_milestone: 12   },
-    { id: 'curso',     nombre: 'Acceso curso',     icono: '🎓', tipo: 'curso_premium',  prob_cofre: 10,   prob_milestone: 6    },
-    { id: 'lead_prem', nombre: 'Lead Premium',     icono: '⭐', tipo: 'lead_premium',   prob_cofre: 5,    prob_milestone: 1.5  },
-    { id: 'merch',     nombre: 'Merch Valera',     icono: '👕', tipo: 'merch',          prob_cofre: 1.5,  prob_milestone: 0.4  },
-    { id: 'comision',  nombre: 'Comisión extra',   icono: '💰', tipo: 'comision_extra', prob_cofre: 0.5,  prob_milestone: 0.1  },
+    { id: 'sorteo',    nombre: 'Entrada sorteo',       icono: '🎟️', tipo: 'sorteo',        prob_cofre: 30,  prob_milestone: 35  },
+    { id: 'plantilla', nombre: 'Pack plantillas',       icono: '📋', tipo: 'plantilla',      prob_cofre: 22,  prob_milestone: 25  },
+    { id: 'boost',     nombre: 'Boost 3 días',          icono: '🚀', tipo: 'boost',          prob_cofre: 18,  prob_milestone: 20  },
+    { id: 'lead_meta', nombre: 'Lead Meta Ads',         icono: '📱', tipo: 'lead_meta',      prob_cofre: 13,  prob_milestone: 12  },
+    { id: 'curso',     nombre: 'Acceso curso',          icono: '🎓', tipo: 'curso_premium',  prob_cofre: 10,  prob_milestone: 6   },
+    { id: 'lead_prem', nombre: 'Lead Premium',          icono: '⭐', tipo: 'lead_premium',   prob_cofre: 5,   prob_milestone: 1.5 },
+    { id: 'merch',     nombre: 'Merch Valera',          icono: '👕', tipo: 'merch',          prob_cofre: 1.5, prob_milestone: 0.4 },
+    // Desbloqueados solo a partir de los 8 cofres abiertos:
+    { id: 'comision',  nombre: 'Comisión extra',        icono: '💰', tipo: 'comision_extra', prob_cofre: 0.5, prob_milestone: 0.1, min_cofres: 8 },
+    { id: 'libro',     nombre: 'Libro de ventas',       icono: '📚', tipo: 'libro',          prob_cofre: 1.5, prob_milestone: 0.8, min_cofres: 8 },
+    { id: 'campania',  nombre: 'Campaña publicitaria',  icono: '📣', tipo: 'campania',        prob_cofre: 0.8, prob_milestone: 0.4, min_cofres: 8 },
   ],
 }
 
@@ -60,14 +65,17 @@ export function rarityLabel(prob: number): string {
 
 // ── Sorteo ───────────────────────────────────────────────────────────────────
 
-export function sortearPremio(premios: Premio[], esMilestone: boolean): Premio {
-  const rand = Math.random() * 100
+export function sortearPremio(premios: Premio[], esMilestone: boolean, cofresAbiertos = 0): Premio {
+  const disponibles = premios.filter(p => (p.min_cofres ?? 0) <= cofresAbiertos)
+  const pool = disponibles.length > 0 ? disponibles : premios
+  const total = pool.reduce((s, p) => s + (esMilestone ? p.prob_milestone : p.prob_cofre), 0)
+  const rand = Math.random() * total
   let acum = 0
-  for (const p of premios) {
+  for (const p of pool) {
     acum += esMilestone ? p.prob_milestone : p.prob_cofre
     if (rand <= acum) return p
   }
-  return premios[0]
+  return pool[0]
 }
 
 // ── Milestone storage ────────────────────────────────────────────────────────
@@ -115,11 +123,13 @@ const LID_INNER = 52
 const HINGE_H   = 7
 const LID_H     = LID_INNER + HINGE_H
 
-function buildStrip(premios: Premio[], winner: Premio): Premio[] {
+function buildStrip(premios: Premio[], winner: Premio, cofresAbiertos = 0): Premio[] {
+  const disponibles = premios.filter(p => (p.min_cofres ?? 0) <= cofresAbiertos)
+  const pool = disponibles.length > 0 ? disponibles : premios
   return Array.from({ length: STRIP_LEN }, (_, i) =>
     i === WINNER_IDX
       ? winner
-      : premios[Math.floor(Math.random() * premios.length)]
+      : pool[Math.floor(Math.random() * pool.length)]
   )
 }
 
@@ -134,6 +144,7 @@ interface Props {
   premios?: Premio[]
   costoGirar?: number
   puedePagar?: boolean
+  cofresAbiertos?: number   // cantidad total de cofres abiertos; desbloquea premios con min_cofres
   onConfirmarAbrir?: () => Promise<boolean>  // descuenta coins; retorna false si no pudo
   onClose: () => void
   onGanar: (premio: Premio) => void
@@ -143,10 +154,16 @@ interface Props {
 export function RuletaModal({
   visible, esMilestone = false, nivel,
   premios: premiosProp, costoGirar, puedePagar = true,
+  cofresAbiertos = 0,
   onConfirmarAbrir,
   onClose, onGanar, onGirarOtraVez,
 }: Props) {
-  const premios = premiosProp ?? CONFIG_DEFAULT.premios
+  // Merge DB config premios with CONFIG_DEFAULT so that new prizes (libro, campaña, etc.)
+  // are always available even if the Supabase ruleta_config doesn't list them yet.
+  const baseDefault = CONFIG_DEFAULT.premios
+  const premiosRaw  = premiosProp ?? baseDefault
+  const defaultIds  = new Set(premiosRaw.map(p => p.id))
+  const premios     = [...premiosRaw, ...baseDefault.filter(p => !defaultIds.has(p.id))]
 
   const [fase, setFase]           = useState<Fase>('listo')
   const [strip, setStrip]         = useState<Premio[]>([])
@@ -214,6 +231,7 @@ export function RuletaModal({
     }
     glowLoop.current?.stop()
     setFase('abriendo')
+    playShake()
 
     Animated.sequence([
       // Vibración
@@ -234,16 +252,20 @@ export function RuletaModal({
       ]),
       // Cofre desaparece
       Animated.timing(chestScale, { toValue: 0, duration: 260, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-    ]).start(() => iniciarGiro())
+    ]).start(() => {
+      playOpen()
+      iniciarGiro()
+    })
   }
 
   function iniciarGiro() {
-    const winner   = sortearPremio(premios, esMilestone)
-    const newStrip = buildStrip(premios, winner)
+    const winner   = sortearPremio(premios, esMilestone, cofresAbiertos)
+    const newStrip = buildStrip(premios, winner, cofresAbiertos)
     setStrip(newStrip)
     setGanador(winner)
     scrollX.setValue(0)
     setFase('girando')
+    startRolling()
 
     Animated.timing(scrollX, {
       toValue:  END_X,
@@ -251,6 +273,7 @@ export function RuletaModal({
       easing:   Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start(() => {
+      stopRolling()
       Animated.loop(
         Animated.sequence([
           Animated.timing(glowOpac, { toValue: 1,   duration: 500, useNativeDriver: true }),
@@ -260,6 +283,7 @@ export function RuletaModal({
       ).start(() => glowOpac.setValue(1))
 
       setFase('resultado')
+      playWin()
       onGanar(winner)
     })
   }

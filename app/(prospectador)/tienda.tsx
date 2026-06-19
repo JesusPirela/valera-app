@@ -187,6 +187,8 @@ export default function Tienda() {
     if (!result.ok) {
       alerta(`No se pudo registrar tu premio "${premio.nombre}". Captura pantalla y contacta al equipo.\n\nError: ${result.error ?? 'desconocido'}`)
     }
+    // Incrementar cofresAbiertos inmediatamente (para desbloquear premios en misma sesión)
+    setCofresAbiertos(prev => prev + 1)
     // Refrescar compras en silencio (sin loading que desmonta el modal)
     if (userId) {
       const { data } = await supabase
@@ -546,6 +548,7 @@ export default function Tienda() {
         premios={ruletaCfg.premios}
         costoGirar={ruletaCfg.costo}
         puedePagar={coins >= ruletaCfg.costo || cofresPendientes > 0}
+        cofresAbiertos={cofresAbiertos}
         onConfirmarAbrir={onConfirmarAbrir}
         onClose={() => setShowRuleta(false)}
         onGanar={onGanarPremio}

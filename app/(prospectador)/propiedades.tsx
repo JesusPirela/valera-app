@@ -802,10 +802,16 @@ export default function ProspectadorPropiedades() {
           <ActivityIndicator size="large" color={primaryColor} style={{ marginTop: 40 }} />
         ) : propiedadesFiltradas.length === 0 ? (
           <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>🔍</Text>
+            <Text style={styles.emptyTitle}>
+              {busqueda.trim() || filtrosActivos > 0
+                ? 'Sin opciones disponibles'
+                : 'Sin propiedades por el momento'}
+            </Text>
             <Text style={styles.emptyText}>
               {busqueda.trim() || filtrosActivos > 0
-                ? 'Sin resultados para tu búsqueda.'
-                : 'No hay propiedades disponibles.'}
+                ? 'En este momento no hay opciones que coincidan con tus filtros de búsqueda. Intenta con otros criterios.'
+                : 'No hay propiedades disponibles en este momento.'}
             </Text>
           </View>
         ) : vistaZonas ? (
@@ -1088,8 +1094,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   aplicarBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  emptyContainer: { flex: 1, alignItems: 'center', marginTop: 60, paddingHorizontal: 16 },
-  emptyText: { color: '#aaa', fontSize: 15, textAlign: 'center' },
+  emptyContainer: { flex: 1, alignItems: 'center', marginTop: 60, paddingHorizontal: 32, gap: 8 },
+  emptyIcon: { fontSize: 48, marginBottom: 4 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#555', textAlign: 'center' },
+  emptyText: { color: '#aaa', fontSize: 14, textAlign: 'center', lineHeight: 20 },
   // Zona view
   zonaSection: {
     backgroundColor: '#fff',

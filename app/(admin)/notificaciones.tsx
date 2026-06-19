@@ -41,6 +41,7 @@ function iconoPorTipo(tipo: string) {
   if (tipo === 'login')         return '🔑'
   if (tipo === 'destacada')     return '⭐'
   if (tipo === 'lead_caliente') return '🔥'
+  if (tipo === 'apartado')      return '🏠'
   return '🔔'
 }
 
@@ -55,7 +56,7 @@ function ordenarPorPrioridad(items: Notificacion[]): Notificacion[] {
 }
 
 function esNavegable(n: Notificacion): boolean {
-  if (n.tipo === 'nuevo_cliente' && n.cliente_id) return true
+  if ((n.tipo === 'nuevo_cliente' || n.tipo === 'apartado') && n.cliente_id) return true
   if (n.tipo === 'lead_caliente' && n.chatbot_lead_id) return true
   if (n.propiedad_id) return true
   return false
@@ -241,7 +242,7 @@ export default function AdminNotificaciones() {
   async function handlePress(item: Notificacion) {
     if (!item.leida) marcarLeida(item.id)
 
-    if (item.tipo === 'nuevo_cliente' && item.cliente_id) {
+    if ((item.tipo === 'apartado' || item.tipo === 'nuevo_cliente') && item.cliente_id) {
       router.push(`/(admin)/detalle-cliente?id=${item.cliente_id}`)
     } else if (item.tipo === 'lead_caliente' && item.chatbot_lead_id) {
       const { data: lead } = await supabase

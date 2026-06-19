@@ -114,6 +114,7 @@ export default function CRM() {
   const c = useColors()
   const { darkMode } = useTheme()
   const queryClient = useQueryClient()
+  const [userRole, setUserRole]           = useState<string | null>(null)
   const [busqueda, setBusqueda]           = useState('')
   const [estadoFiltro, setEstadoFiltro]   = useState<string | null>(null)
   const [filtroVencidos, setFiltroVencidos] = useState(false)
@@ -125,6 +126,14 @@ export default function CRM() {
   // Recordar la vista elegida (tabla/lista) hasta que el usuario la cambie
   useEffect(() => {
     AsyncStorage.getItem(VISTA_CRM_KEY).then(v => { if (v === 'tabla') setVistaExcel(true) }).catch(() => {})
+    supabase.auth.getSession().then(({ data: s }) => {
+      const uid = s.session?.user?.id
+      if (uid) {
+        supabase.from('profiles').select('role').eq('id', uid).maybeSingle().then(({ data: p }) => {
+          if (p?.role) setUserRole(p.role)
+        })
+      }
+    })
   }, [])
   function toggleVista() {
     setVistaExcel(prev => {
@@ -332,6 +341,11 @@ export default function CRM() {
         if (user) {
           if (value === 'cita_agendada') registrarAccion(user.id, 'agendar_cita').catch(() => {})
           else if (value === 'compro')   registrarAccion(user.id, 'cerrar_venta').catch(() => {})
+        }
+        // Mensaje informativo al usuario no-admin que marcó apartado
+        if (value === 'compro' && userRole !== 'admin') {
+          const msg = '✅ Solicitud de apartado enviada. El equipo lo revisará y confirmará pronto.'
+          Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Solicitud enviada', msg)
         }
       }
       // Asegura persistencia/consistencia con el servidor
@@ -1020,7 +1034,26 @@ export default function CRM() {
                   <TouchableOpacity
                     key={String(opt.value)}
                     style={[s.sortOpt, { borderBottomColor: c.border }]}
-                    onPress={() => { const p = cellPicker; setCellPicker(null); guardarCelda(p.id, p.col, opt.value) }}
+                    onPress={() => {
+                      const p = cellPicker
+                      setCellPicker(null)
+                      if (p.col === 'estado' && opt.value === 'compro' && userRole !== 'admin') {
+                        const msg = '¿El cliente ya apartó? Esta acción notificará al administrador para que verifique y apruebe el apartado.'
+                        const confirmar = Platform.OS === 'web'
+                          ? window.confirm(msg)
+                          : undefined
+                        if (Platform.OS === 'web') {
+                          if (confirmar) guardarCelda(p.id, p.col, opt.value)
+                        } else {
+                          Alert.alert('Confirmar apartado', msg, [
+                            { text: 'Cancelar', style: 'cancel' },
+                            { text: 'Sí, enviar', onPress: () => guardarCelda(p.id, p.col, opt.value) },
+                          ])
+                        }
+                      } else {
+                        guardarCelda(p.id, p.col, opt.value)
+                      }
+                    }}
                     disabled={savingCell}
                   >
                     <View style={s.sortOptLeft}>
