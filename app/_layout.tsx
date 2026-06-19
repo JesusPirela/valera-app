@@ -7,7 +7,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { queryClient, persister } from '../lib/queryClient'
 import { ThemeProvider, useColors } from '../lib/ThemeContext'
 import { VistaComoProvider, VISTA_COMO_KEY } from '../lib/VistaComo'
-import { guardarCuentaActual, cambiandoCuenta } from '../lib/cuentas'
+import { guardarCuentaActual, guardarTokensSesion, cambiandoCuenta } from '../lib/cuentas'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
@@ -249,14 +249,16 @@ export default function RootLayout() {
         }
       } else if (event === 'SIGNED_IN') {
         setSession(session)
+        // Guardar tokens INMEDIATAMENTE con la sesión que ya tenemos del evento,
+        // sin necesidad de llamar a getSession() que puede devolver datos viejos.
+        if (session) guardarTokensSesion(session).catch(() => {})
         iniciarSesion()
         if (session?.user?.id) { registrarPushToken(session.user.id); registrarVersionApp(session.user.id) }
         // La navegación al nuevo home se hace en CambiarCuenta tras esperar cambiarACuenta().
       } else if (event === 'TOKEN_REFRESHED') {
         setSession(session)
-        // Mantener fresco el token guardado de la cuenta activa, para que el
-        // cambio rápido de cuenta no falle por rotación de refresh tokens.
-        guardarCuentaActual().catch(() => {})
+        // Actualizar tokens al rotar (el refresh_token viejo ya no sirve después de esto).
+        if (session) guardarTokensSesion(session).catch(() => {})
       } else if (event === 'SIGNED_OUT') {
         // Durante un cambio de cuenta, Supabase emite SIGNED_OUT del usuario
         // viejo antes del SIGNED_IN del nuevo. Limpiar la sesión interna pero

@@ -26,26 +26,43 @@ export async function listarCuentas(): Promise<CuentaGuardada[]> {
   } catch { return [] }
 }
 
-// Guarda/actualiza la cuenta actualmente activa con su sesión fresca.
-export async function guardarCuentaActual(extra?: { nombre?: string | null; role?: string | null }) {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) return
+// Guarda tokens frescos directamente desde un objeto de sesión ya obtenido.
+// Usar cuando se tiene la sesión en mano (eventos SIGNED_IN / TOKEN_REFRESHED)
+// para no depender de una llamada adicional a getSession().
+export async function guardarTokensSesion(session: {
+  user: { id: string; email?: string | null }
+  access_token: string
+  refresh_token: string
+}): Promise<void> {
+  const lista = await listarCuentas()
+  const uid = session.user.id
+  const previa = lista.find(c => c.user_id === uid)
   const cuenta: CuentaGuardada = {
-    user_id: session.user.id,
-    email: session.user.email ?? '',
-    nombre: extra?.nombre ?? null,
-    role: extra?.role ?? null,
+    user_id: uid,
+    email: session.user.email ?? previa?.email ?? '',
+    nombre: previa?.nombre ?? null,
+    role: previa?.role ?? null,
     access_token: session.access_token,
     refresh_token: session.refresh_token,
   }
+  const otras = lista.filter(c => c.user_id !== uid)
+  await AsyncStorage.setItem(KEY, JSON.stringify([...otras, cuenta]))
+}
+
+// Guarda/actualiza nombre y role de la cuenta activa (sin tocar los tokens).
+export async function guardarCuentaActual(extra?: { nombre?: string | null; role?: string | null }) {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return
   const lista = await listarCuentas()
-  const previa = lista.find(c => c.user_id === cuenta.user_id)
-  // Conservar nombre/role previos si no se pasaron ahora
-  if (previa) {
-    cuenta.nombre = cuenta.nombre ?? previa.nombre
-    cuenta.role = cuenta.role ?? previa.role
+  const uid = session.user.id
+  const previa = lista.find(c => c.user_id === uid)
+  if (!previa) return  // si aún no hay entrada, guardarTokensSesion la creará
+  const cuenta: CuentaGuardada = {
+    ...previa,
+    nombre: extra?.nombre ?? previa.nombre,
+    role: extra?.role ?? previa.role,
   }
-  const otras = lista.filter(c => c.user_id !== cuenta.user_id)
+  const otras = lista.filter(c => c.user_id !== uid)
   await AsyncStorage.setItem(KEY, JSON.stringify([...otras, cuenta]))
 }
 

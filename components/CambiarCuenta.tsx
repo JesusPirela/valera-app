@@ -44,10 +44,11 @@ export default function CambiarCuenta() {
     const res = await cambiarACuenta(cuenta)
     setCambiando(null)
     if (!res.ok) {
-      // Quitar la cuenta caducada de la lista para que no bloquee futuros intentos
+      // Quitar la cuenta caducada para que no bloquee futuros intentos
       await olvidarCuenta(cuenta.user_id)
       setCuentas(prev => prev.filter(c => c.user_id !== cuenta.user_id))
-      const msg = 'La sesión de esa cuenta caducó. Para volver a cambiar a ella, inicia sesión con su correo y contraseña.'
+      const detalle = res.error ? `\n(${res.error})` : ''
+      const msg = `La sesión de esa cuenta caducó. Inicia sesión con su correo y contraseña para volver a usarla.${detalle}`
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Sesión caducada', msg)
       return
     }
