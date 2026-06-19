@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Modal, View, Text, TouchableOpacity, StyleSheet, PanResponder, Image, Platform, ActivityIndicator, Dimensions } from 'react-native'
+import { Modal, View, Text, TouchableOpacity, StyleSheet, PanResponder, Image, Platform, ActivityIndicator, Dimensions, Alert } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { prepararFuenteImagen, aplicarCensuraWeb, htmlCensuraWebView, CajaCensura } from '../lib/censura'
+import { conTimeout } from '../lib/redIntentos'
 
 type Props = {
   visible: boolean
@@ -90,20 +91,24 @@ export default function CensorEditorModal({ visible, uri, onCancelar, onAplicar 
         w: box.w / disp.w,
         h: box.h / disp.h,
       }
-      const src = await prepararFuenteImagen(uri)
+      const src = await conTimeout(prepararFuenteImagen(uri), 15000)
       let resultado: string
       if (Platform.OS === 'web') {
-        resultado = await aplicarCensuraWeb(src, caja)
+        resultado = await conTimeout(aplicarCensuraWeb(src, caja), 15000)
       } else {
-        resultado = await new Promise<string>((resolve, reject) => {
-          resolverRef.current = (r) => (r.ok && r.data ? resolve(r.data) : reject(new Error(r.error ?? 'falló')))
-          const payload = JSON.stringify({ src, caja })
-          webviewRef.current?.postMessage(payload)
-        })
+        resultado = await conTimeout(
+          new Promise<string>((resolve, reject) => {
+            resolverRef.current = (r) => (r.ok && r.data ? resolve(r.data) : reject(new Error(r.error ?? 'falló')))
+            const payload = JSON.stringify({ src, caja })
+            webviewRef.current?.postMessage(payload)
+          }),
+          15000,
+        )
       }
       onAplicar(resultado)
     } catch (e: any) {
       console.warn('[CensorEditorModal] error aplicando censura:', e)
+      Alert.alert('No se pudo censurar la imagen', 'Intenta de nuevo. Si el problema sigue, puede ser por una conexión lenta al cargar la foto.')
     } finally {
       setProcesando(false)
     }

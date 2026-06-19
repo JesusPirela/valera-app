@@ -5,10 +5,24 @@ import * as FileSystem from 'expo-file-system'
 export type CajaCensura = { x: number; y: number; w: number; h: number }
 
 // El WebView no siempre puede cargar file:// (Android lo bloquea por defecto) ni
-// descargar una URL remota sin esperar — por eso para nativo todo se convierte
-// primero a un data URI base64 antes de mandarlo al canvas.
+// descargar una URL remota sin esperar; en web, dibujar en canvas una imagen
+// remota (ej. ya subida a Supabase Storage) y luego leerla con toDataURL()
+// puede fallar por CORS si el navegador no la considera "same-origin" — el
+// canvas queda "contaminado" y la operación se cuelga sin avisar. Por eso en
+// AMBAS plataformas la fuente se convierte primero a un data URI base64: así
+// el canvas siempre trabaja con un origen local, sin riesgo de bloqueo.
 export async function prepararFuenteImagen(uri: string): Promise<string> {
-  if (Platform.OS === 'web' || uri.startsWith('data:')) return uri
+  if (uri.startsWith('data:')) return uri
+  if (Platform.OS === 'web') {
+    const res = await fetch(uri)
+    const blob = await res.blob()
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error('No se pudo leer la imagen'))
+      reader.readAsDataURL(blob)
+    })
+  }
   let localUri = uri
   if (uri.startsWith('http')) {
     const destino = FileSystem.cacheDirectory + 'censura_src_' + Math.random().toString(36).slice(2) + '.jpg'
@@ -21,6 +35,8 @@ export async function prepararFuenteImagen(uri: string): Promise<string> {
 
 // Mismo algoritmo que el HTML inyectado en el WebView (ver htmlCensuraWebView),
 // pero corrido directo con el DOM del navegador — en web no hace falta WebView.
+// `src` ya viene como data URI (ver prepararFuenteImagen), así que no hace
+// falta crossOrigin ni hay riesgo de canvas contaminado.
 export function aplicarCensuraWeb(src: string, caja: CajaCensura): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -30,7 +46,6 @@ export function aplicarCensuraWeb(src: string, caja: CajaCensura): Promise<strin
       } catch (e) { reject(e) }
     }
     img.onerror = () => reject(new Error('No se pudo cargar la imagen'))
-    img.crossOrigin = 'anonymous'
     img.src = src
   })
 }
