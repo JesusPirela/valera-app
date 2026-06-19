@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { View, Text, TouchableOpacity, ActivityIndicator, Platform, Alert, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { listarCuentas, cambiarACuenta, type CuentaGuardada } from '../lib/cuentas'
+import { listarCuentas, cambiarACuenta, olvidarCuenta, type CuentaGuardada } from '../lib/cuentas'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
 
@@ -44,8 +44,11 @@ export default function CambiarCuenta() {
     const res = await cambiarACuenta(cuenta)
     setCambiando(null)
     if (!res.ok) {
-      const msg = 'La sesión de esa cuenta caducó. Vuelve a iniciar sesión en ella.'
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Cambiar de cuenta', msg)
+      // Quitar la cuenta caducada de la lista para que no bloquee futuros intentos
+      await olvidarCuenta(cuenta.user_id)
+      setCuentas(prev => prev.filter(c => c.user_id !== cuenta.user_id))
+      const msg = 'La sesión de esa cuenta caducó. Para volver a cambiar a ella, inicia sesión con su correo y contraseña.'
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Sesión caducada', msg)
       return
     }
     // En este punto setSession ya completó y la nueva sesión está activa.
