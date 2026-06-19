@@ -251,21 +251,7 @@ export default function RootLayout() {
         setSession(session)
         iniciarSesion()
         if (session?.user?.id) { registrarPushToken(session.user.id); registrarVersionApp(session.user.id) }
-        // Si venimos de un cambio de cuenta, navegar al home correcto del nuevo usuario.
-        if (cambiandoCuenta && session) {
-          supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle()
-            .then(async ({ data: p }) => {
-              const role = p?.role
-              let vistaComo: string | null = null
-              if (role === 'admin') {
-                try { vistaComo = await AsyncStorage.getItem(VISTA_COMO_KEY) } catch {}
-              }
-              router.replace(role === 'admin' && !vistaComo
-                ? '/(admin)/propiedades'
-                : '/(prospectador)/propiedades')
-            })
-            .catch(() => {})
-        }
+        // La navegación al nuevo home se hace en CambiarCuenta tras esperar cambiarACuenta().
       } else if (event === 'TOKEN_REFRESHED') {
         setSession(session)
         // Mantener fresco el token guardado de la cuenta activa, para que el
@@ -273,12 +259,14 @@ export default function RootLayout() {
         guardarCuentaActual().catch(() => {})
       } else if (event === 'SIGNED_OUT') {
         // Durante un cambio de cuenta, Supabase emite SIGNED_OUT del usuario
-        // viejo antes del SIGNED_IN del nuevo. Ignorar para no redirigir a /login.
-        if (cambiandoCuenta) return
+        // viejo antes del SIGNED_IN del nuevo. Limpiar la sesión interna pero
+        // NO redirigir a /login; la navegación la hace CambiarCuenta.
         cerrarSesion()
         setSession(null)
-        queryClient.clear()
-        router.replace('/(auth)/login')
+        if (!cambiandoCuenta) {
+          queryClient.clear()
+          router.replace('/(auth)/login')
+        }
       }
     })
 
