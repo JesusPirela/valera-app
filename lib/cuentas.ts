@@ -49,41 +49,26 @@ export async function guardarCuentaActual(extra?: { nombre?: string | null; role
   await AsyncStorage.setItem(KEY, JSON.stringify([...otras, cuenta]))
 }
 
-// Cambia a otra cuenta guardada. Antes refresca la sesión de la cuenta actual
-// para no perder sus tokens al volver.
+// Cambia a otra cuenta guardada usando sus tokens almacenados.
+// Intencionalmente mínimo: solo llama a setSession y nada más. Cualquier
+// llamada adicional a getSession/getUser antes o después compite con el lock
+// interno de Supabase y puede colgar indefinidamente.
 export async function cambiarACuenta(target: CuentaGuardada): Promise<{ ok: boolean; error?: string; role?: string | null }> {
-  // Activar el flag ANTES de llamar a setSession para que el handler de
-  // SIGNED_OUT en _layout.tsx no redirija a /login (Supabase emite SIGNED_OUT
-  // del usuario viejo antes del SIGNED_IN del nuevo cuando el user_id cambia).
   cambiandoCuenta = true
   try {
-    // Capturar la sesión actual por si hay que restaurarla
-    const { data: { session: actual } } = await supabase.auth.getSession()
-    await guardarCuentaActual() // captura tokens frescos de la cuenta actual
-
-    const { error } = await supabase.auth.setSession({
+    const switchPromise = supabase.auth.setSession({
       access_token: target.access_token,
       refresh_token: target.refresh_token,
     })
-    if (error) {
-      // La sesión guardada caducó. Restaurar la sesión actual.
-      if (actual) {
-        try {
-          await supabase.auth.setSession({
-            access_token: actual.access_token,
-            refresh_token: actual.refresh_token,
-          })
-        } catch {}
-      }
-      return { ok: false, error: error.message }
-    }
-    // Guardar la sesión (posiblemente rotada) de la cuenta a la que entramos
-    await guardarCuentaActual({ nombre: target.nombre, role: target.role })
+    const timeoutPromise = new Promise<{ data: { session: null }, error: Error }>(resolve =>
+      setTimeout(() => resolve({ data: { session: null }, error: new Error('timeout') }), 12000)
+    )
+    const { error } = await Promise.race([switchPromise, timeoutPromise])
+    if (error) return { ok: false, error: error.message }
     return { ok: true, role: target.role }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'No se pudo cambiar de cuenta' }
   } finally {
-    // Limpiar el flag después de que los eventos auth hayan tenido tiempo de procesarse
     setTimeout(() => { cambiandoCuenta = false }, 2000)
   }
 }
