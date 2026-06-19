@@ -7,7 +7,9 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS app_version  TEXT,
   ADD COLUMN IF NOT EXISTS app_platform TEXT;
 
-CREATE OR REPLACE FUNCTION get_prospectadores()
+DROP FUNCTION IF EXISTS get_prospectadores();
+
+CREATE FUNCTION get_prospectadores()
 RETURNS TABLE (
   id            UUID,
   email         TEXT,
