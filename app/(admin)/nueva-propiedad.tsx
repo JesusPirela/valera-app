@@ -25,6 +25,7 @@ import InmobiliariaPicker from '../../components/ui/InmobiliariaPicker'
 import { COLONIAS } from '../../lib/colonias'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import CensorEditorModal from '../../components/CensorEditorModal'
 
 function generarUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -194,6 +195,7 @@ export default function NuevaPropiedad() {
   const [mejorandoMsg, setMejorandoMsg] = useState('')
   const [guardado, setGuardado] = useState(false)
   const [verImagen, setVerImagen] = useState<string | null>(null)
+  const [censurando, setCensurando] = useState<string | null>(null)
 
   // Auto-generar título cuando cambian tipo / operación / dirección
   useEffect(() => {
@@ -403,6 +405,11 @@ export default function NuevaPropiedad() {
 
   function quitarImagen(uri: string) {
     setImagenes((prev) => prev.filter((u) => u !== uri))
+  }
+
+  function aplicarCensura(uriOriginal: string, uriCensurada: string) {
+    setImagenes((prev) => prev.map((u) => (u === uriOriginal ? uriCensurada : u)))
+    setCensurando(null)
   }
 
   // Mantener ref sincronizado para evitar closures estancadas
@@ -791,6 +798,9 @@ export default function NuevaPropiedad() {
                   <TouchableOpacity style={styles.miniaturaZoom} onPress={() => setVerImagen(uri)}>
                     <Text style={styles.miniaturaZoomText}>🔍</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={[styles.miniaturaCensura, { left: 26 }]} onPress={() => setCensurando(uri)}>
+                    <Text style={styles.miniaturaCensuraText}>🔲</Text>
+                  </TouchableOpacity>
                   <View style={styles.miniaturaDragHandle}>
                     <Text style={{ color: '#fff', fontSize: 12 }}>⠿</Text>
                   </View>
@@ -812,6 +822,9 @@ export default function NuevaPropiedad() {
                   <Image source={{ uri: item }} style={styles.miniaturaImg} />
                   <TouchableOpacity style={styles.miniaturaQuitar} onPress={() => quitarImagen(item)}>
                     <Text style={styles.miniaturaQuitarText}>✕</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.miniaturaCensura} onPress={() => setCensurando(item)}>
+                    <Text style={styles.miniaturaCensuraText}>🔲</Text>
                   </TouchableOpacity>
                   <View style={styles.miniaturaZoom}>
                     <Text style={styles.miniaturaZoomText}>🔍</Text>
@@ -1156,6 +1169,13 @@ export default function NuevaPropiedad() {
           <View style={imgViewerStyles.cerrar}><Text style={imgViewerStyles.cerrarTxt}>✕  Cerrar</Text></View>
         </TouchableOpacity>
       </Modal>
+
+      <CensorEditorModal
+        visible={censurando !== null}
+        uri={censurando}
+        onCancelar={() => setCensurando(null)}
+        onAplicar={(nuevaUri) => censurando && aplicarCensura(censurando, nuevaUri)}
+      />
     </KeyboardAvoidingView>
   )
 }
@@ -1191,6 +1211,12 @@ const styles = StyleSheet.create({
     width: 22, height: 22, alignItems: 'center', justifyContent: 'center',
   },
   miniaturaZoomText: { fontSize: 11 },
+  miniaturaCensura: {
+    position: 'absolute', bottom: 4, left: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12,
+    width: 22, height: 22, alignItems: 'center', justifyContent: 'center',
+  },
+  miniaturaCensuraText: { fontSize: 11 },
   miniaturaQuitar: {
     position: 'absolute',
     top: 4,

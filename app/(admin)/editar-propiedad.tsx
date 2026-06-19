@@ -26,10 +26,11 @@ import InmobiliariaPicker from '../../components/ui/InmobiliariaPicker'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { COLONIAS } from '../../lib/colonias'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import CensorEditorModal from '../../components/CensorEditorModal'
 
 type ImagenExistente = { id: string; url: string; orden: number }
 // Lista unificada de imágenes (existentes + nuevas) en su orden final de visualización.
-type ImgItem = { key: string; uri: string; esExistente: boolean; id: string; ordenOriginal: number }
+type ImgItem = { key: string; uri: string; esExistente: boolean; id: string; ordenOriginal: number; modificada?: boolean }
 
 const RECAMARAS_OPTIONS = [
   { value: null, label: '—' },
@@ -184,6 +185,7 @@ export default function EditarPropiedad() {
   const [mejorandoMsg, setMejorandoMsg] = useState('')
   const [verImagen, setVerImagen] = useState<string | null>(null)
   const [borrando, setBorrando] = useState(false)
+  const [censurando, setCensurando] = useState<ImgItem | null>(null)
 
   useEffect(() => { cargarPropiedad() }, [id])
 
@@ -277,6 +279,11 @@ export default function EditarPropiedad() {
   function quitarImagen(item: ImgItem) {
     if (item.esExistente) setImagenesEliminar((prev) => [...prev, item.id])
     setImagenes((prev) => prev.filter((i) => i.key !== item.key))
+  }
+
+  function aplicarCensura(itemKey: string, uriCensurada: string) {
+    setImagenes((prev) => prev.map((i) => (i.key === itemKey ? { ...i, uri: uriCensurada, modificada: true } : i)))
+    setCensurando(null)
   }
 
   function agregarUris(uris: string[]) {
@@ -687,7 +694,13 @@ export default function EditarPropiedad() {
         const item = imagenes[i]
         const orden = i
         if (item.esExistente) {
-          if (item.ordenOriginal !== orden) {
+          if (item.modificada) {
+            opsImagenes.push((async () => {
+              const url = await subirImagen(item.uri, id, orden)
+              const { error } = await supabase.from('propiedad_imagenes').update({ url, orden }).eq('id', item.id)
+              if (error) throw error
+            })())
+          } else if (item.ordenOriginal !== orden) {
             opsImagenes.push((async () => {
               const { error } = await supabase.from('propiedad_imagenes').update({ orden }).eq('id', item.id)
               if (error) throw error
@@ -837,6 +850,9 @@ export default function EditarPropiedad() {
                   <TouchableOpacity style={styles.miniaturaZoom} onPress={() => setVerImagen(item.uri)}>
                     <Text style={styles.miniaturaZoomText}>🔍</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={[styles.miniaturaCensura, { left: 26 }]} onPress={() => setCensurando(item)}>
+                    <Text style={styles.miniaturaCensuraText}>🔲</Text>
+                  </TouchableOpacity>
                   <View style={styles.miniaturaDragHandle}>
                     <Text style={{ color: '#fff', fontSize: 12 }}>⠿</Text>
                   </View>
@@ -858,6 +874,9 @@ export default function EditarPropiedad() {
                   <Image source={{ uri: thumb(item.uri, { width: 200, quality: 60 }) }} style={styles.miniaturaImg} />
                   <TouchableOpacity style={styles.miniaturaQuitar} onPress={() => quitarImagen(item)}>
                     <Text style={styles.miniaturaQuitarText}>✕</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.miniaturaCensura} onPress={() => setCensurando(item)}>
+                    <Text style={styles.miniaturaCensuraText}>🔲</Text>
                   </TouchableOpacity>
                   <View style={styles.miniaturaZoom}>
                     <Text style={styles.miniaturaZoomText}>🔍</Text>
@@ -1215,6 +1234,13 @@ export default function EditarPropiedad() {
           <View style={imgViewerStyles.cerrar}><Text style={imgViewerStyles.cerrarTxt}>✕  Cerrar</Text></View>
         </TouchableOpacity>
       </Modal>
+
+      <CensorEditorModal
+        visible={censurando !== null}
+        uri={censurando?.uri ?? null}
+        onCancelar={() => setCensurando(null)}
+        onAplicar={(nuevaUri) => censurando && aplicarCensura(censurando.key, nuevaUri)}
+      />
     </KeyboardAvoidingView>
   )
 }
@@ -1251,6 +1277,12 @@ const styles = StyleSheet.create({
     width: 22, height: 22, alignItems: 'center', justifyContent: 'center',
   },
   miniaturaZoomText: { fontSize: 11 },
+  miniaturaCensura: {
+    position: 'absolute', bottom: 4, left: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12,
+    width: 22, height: 22, alignItems: 'center', justifyContent: 'center',
+  },
+  miniaturaCensuraText: { fontSize: 11 },
   miniaturaQuitar: {
     position: 'absolute',
     top: 4,
