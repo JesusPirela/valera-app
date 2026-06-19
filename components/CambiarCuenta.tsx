@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { View, Text, TouchableOpacity, ActivityIndicator, Platform, Alert, StyleSheet } from 'react-native'
-import { router } from 'expo-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { listarCuentas, cambiarACuenta, type CuentaGuardada } from '../lib/cuentas'
 import { supabase } from '../lib/supabase'
@@ -42,16 +41,15 @@ export default function CambiarCuenta() {
   async function switchTo(cuenta: CuentaGuardada) {
     setCambiando(cuenta.user_id)
     const res = await cambiarACuenta(cuenta)
+    setCambiando(null)
     if (!res.ok) {
-      setCambiando(null)
       const msg = 'La sesión de esa cuenta caducó. Vuelve a iniciar sesión en ella.'
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Cambiar de cuenta', msg)
       return
     }
+    // La navegación al home correcto la hace el handler SIGNED_IN en _layout.tsx
+    // (que ya conoce el role real del nuevo usuario desde la BD).
     qc.clear()
-    const destino = (cuenta.role === 'admin' || cuenta.role === 'supervisor')
-      ? '/(admin)/propiedades' : '/(prospectador)/propiedades'
-    router.replace(destino as any)
   }
 
   return (

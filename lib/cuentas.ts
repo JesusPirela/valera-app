@@ -6,6 +6,10 @@ import { supabase } from './supabase'
 
 const KEY = '@valera_cuentas'
 
+// Flag que bloquea el redirect a /login cuando Supabase emite SIGNED_OUT
+// durante un cambio de cuenta (setSession dispara SIGNED_OUT+SIGNED_IN en secuencia).
+export let cambiandoCuenta = false
+
 export type CuentaGuardada = {
   user_id: string
   email: string
@@ -47,7 +51,11 @@ export async function guardarCuentaActual(extra?: { nombre?: string | null; role
 
 // Cambia a otra cuenta guardada. Antes refresca la sesión de la cuenta actual
 // para no perder sus tokens al volver.
-export async function cambiarACuenta(target: CuentaGuardada): Promise<{ ok: boolean; error?: string }> {
+export async function cambiarACuenta(target: CuentaGuardada): Promise<{ ok: boolean; error?: string; role?: string | null }> {
+  // Activar el flag ANTES de llamar a setSession para que el handler de
+  // SIGNED_OUT en _layout.tsx no redirija a /login (Supabase emite SIGNED_OUT
+  // del usuario viejo antes del SIGNED_IN del nuevo cuando el user_id cambia).
+  cambiandoCuenta = true
   try {
     // Capturar la sesión actual por si hay que restaurarla
     const { data: { session: actual } } = await supabase.auth.getSession()
@@ -58,8 +66,7 @@ export async function cambiarACuenta(target: CuentaGuardada): Promise<{ ok: bool
       refresh_token: target.refresh_token,
     })
     if (error) {
-      // La sesión guardada caducó. Restaurar la sesión actual para no dejar al
-      // usuario sin sesión en ninguna cuenta.
+      // La sesión guardada caducó. Restaurar la sesión actual.
       if (actual) {
         try {
           await supabase.auth.setSession({
@@ -72,9 +79,12 @@ export async function cambiarACuenta(target: CuentaGuardada): Promise<{ ok: bool
     }
     // Guardar la sesión (posiblemente rotada) de la cuenta a la que entramos
     await guardarCuentaActual({ nombre: target.nombre, role: target.role })
-    return { ok: true }
+    return { ok: true, role: target.role }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'No se pudo cambiar de cuenta' }
+  } finally {
+    // Limpiar el flag después de que los eventos auth hayan tenido tiempo de procesarse
+    setTimeout(() => { cambiandoCuenta = false }, 2000)
   }
 }
 
