@@ -28,8 +28,9 @@ import * as FileSystem from 'expo-file-system'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
+import { conReintentoData, generarIdemKey, conTimeout } from '../../lib/redIntentos'
 import PropMapa from '../../components/PropMapa'
-import { registrarAccion } from '../../lib/gamification'
+import { actualizarMisionesPorCategoria } from '../../lib/gamification'
 
 
 type Propiedad = {
@@ -323,24 +324,36 @@ export default function DetallePropiedad() {
 
     setTogglingPublicacion(true)
 
-    const nuevasVeces = vecesPublicada + 1
-    const ahora = new Date().toISOString()
+    // RPC atómico (bloquea la fila en servidor): el conteo "x/10" y el premio
+    // de coins/XP se aplican juntos en una sola transacción, así que no
+    // pueden desincronizarse si la misma cuenta publica desde la app y la
+    // web casi al mismo tiempo, y un reintento por mala conexión con el
+    // mismo idem key nunca duplica el premio.
+    const idemKey = generarIdemKey()
+    const { ok, data } = await conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number; fecha_publicacion?: string }>(() =>
+      supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: id, p_idem_key: idemKey })
+    )
 
-    await supabase
-      .from('propiedad_publicacion')
-      .upsert({
-        propiedad_id: id,
-        user_id: user.id,
-        publicada: true,
-        fecha_publicacion: ahora,
-        veces_publicada: nuevasVeces,
-      }, { onConflict: 'propiedad_id,user_id' })
+    if (!ok || !data?.ok) {
+      const msg = !ok
+        ? 'No se pudo registrar la publicación por una conexión inestable. Verifica tu internet e inténtalo de nuevo.'
+        : data?.error === 'limite'
+        ? 'Esta propiedad alcanzó el límite de 10 publicaciones.'
+        : 'No se pudo publicar. Intenta de nuevo.'
+      if (Platform.OS === 'web') window.alert(msg)
+      else Alert.alert('No se pudo publicar', msg)
+      setTogglingPublicacion(false)
+      return
+    }
+
+    const nuevasVeces = data.veces_publicada ?? vecesPublicada + 1
+    const ahora = data.fecha_publicacion ?? new Date().toISOString()
 
     setPublicada(true)
     setFechaPublicacion(ahora)
     setVecesPublicada(nuevasVeces)
 
-    registrarAccion(user.id, 'publicar_propiedad').catch(() => {})
+    actualizarMisionesPorCategoria(user.id, 'propiedad').catch(() => {})
     queryClient.setQueryData<any>(['prospectador-propiedades'], (old: any) => {
       if (!old) return old
       return { ...old, publicacionesMap: { ...old.publicacionesMap, [id]: nuevasVeces } }
@@ -469,21 +482,33 @@ export default function DetallePropiedad() {
     } catch { return '' }
   }
 
-  async function imagenABase64(url: string): Promise<string> {
-    try {
-      if (Platform.OS === 'web') {
-        // Evita usar una versión en caché sin cabeceras CORS, que html2canvas
-        // no puede leer y renderiza como un recuadro en blanco.
-        const sep = url.includes('?') ? '&' : '?'
-        return `${url}${sep}_cb=${Date.now()}`
-      }
-      const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
-      const { uri } = await FileSystem.downloadAsync(url, localUri)
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })
-      return `data:image/jpeg;base64,${base64}`
-    } catch {
-      return url
+  // Devuelve null si no se pudo descargar/optimizar la imagen — el llamador
+  // debe OMITIRLA del PDF. Nunca hay que caer de vuelta a la URL original
+  // sin redimensionar: con internet inestable basta que una de varias fotos
+  // falle para que el WebView de Android tenga que decodificarla a
+  // resolución completa al renderizar el PDF, reproduciendo el mismo
+  // OutOfMemoryError que se intenta evitar.
+  async function imagenABase64(url: string, anchoMax = 1100): Promise<string | null> {
+    if (Platform.OS === 'web') {
+      // Evita usar una versión en caché sin cabeceras CORS, que html2canvas
+      // no puede leer y renderiza como un recuadro en blanco.
+      const sep = url.includes('?') ? '&' : '?'
+      return `${url}${sep}_cb=${Date.now()}`
     }
+    const urlOptimizada = thumb(url, { width: anchoMax, quality: 75, resize: 'contain' }) ?? url
+    for (let intento = 1; intento <= 3; intento++) {
+      try {
+        const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
+        const { uri } = await conTimeout(FileSystem.downloadAsync(urlOptimizada, localUri), 12000)
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })
+        FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {})
+        if (!base64) throw new Error('descarga vacía')
+        return `data:image/jpeg;base64,${base64}`
+      } catch {
+        if (intento < 3) await new Promise((r) => setTimeout(r, 600 * intento))
+      }
+    }
+    return null
   }
 
   async function generarFichaPDF() {
@@ -506,16 +531,24 @@ export default function DetallePropiedad() {
 
       const imagenes = [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
 
-      const [imagenesConSrc, logoSrc, inmobiliariaLogoSrc] = await Promise.all([
+      const [imagenesConSrcRaw, logoSrc, inmobiliariaLogoSrc] = await Promise.all([
         Promise.all(
-          imagenes.slice(0, 13).map(async img => ({
+          imagenes.slice(0, 13).map(async (img, i) => ({
             ...img,
-            src: await imagenABase64(img.url),
+            // La imagen principal se ve más grande en el PDF (420px de alto a
+            // todo el ancho); el resto son miniaturas de galería más pequeñas.
+            src: await imagenABase64(img.url, i === 0 ? 1100 : 700),
           }))
         ),
         getLogoBase64(),
-        propiedad.inmobiliarias?.logo_url ? imagenABase64(propiedad.inmobiliarias.logo_url) : Promise.resolve(''),
+        propiedad.inmobiliarias?.logo_url ? imagenABase64(propiedad.inmobiliarias.logo_url) : Promise.resolve(null),
       ])
+
+      // Omitir las fotos que no se pudieron descargar/optimizar (mejor una
+      // ficha con menos fotos que arriesgar un crash por memoria).
+      const imagenesConSrc = imagenesConSrcRaw.filter(
+        (img): img is typeof img & { src: string } => !!img.src
+      )
 
       const imagenPrincipal = imagenesConSrc[0]
       // Agrupar el resto de imágenes en bloques de máximo 6 por hoja
@@ -550,7 +583,7 @@ export default function DetallePropiedad() {
           <div class="seccion-grupo">
             <div class="seccion">Ubicación</div>
             <div class="mapa-box">
-              <img src="${mapSrc}" class="mapa-img" />
+              ${mapSrc ? `<img src="${mapSrc}" class="mapa-img" />` : ''}
               <div class="mapa-dir">📍 ${esc(propiedad.direccion)}</div>
             </div>
           </div>`
@@ -603,9 +636,9 @@ export default function DetallePropiedad() {
       </div>
       <div class="body">
         ${imagenPrincipal ? `<div class="imagen-principal-wrap"><img src="${imagenPrincipal.src}" class="imagen-principal" /></div>` : ''}
-        ${propiedad.inmobiliarias?.logo_url ? `<div class="inmob-logo-wrap">
+        ${inmobiliariaLogoSrc ? `<div class="inmob-logo-wrap">
           <img src="${inmobiliariaLogoSrc}" class="inmob-logo" />
-          ${propiedad.inmobiliarias.nombre ? `<div class="inmob-nombre">${esc(propiedad.inmobiliarias.nombre)}</div>` : ''}
+          ${propiedad.inmobiliarias?.nombre ? `<div class="inmob-nombre">${esc(propiedad.inmobiliarias.nombre)}</div>` : ''}
         </div>` : ''}
         ${cars.length > 0 ? `<div class="seccion-grupo"><div class="seccion">Características</div><div class="cars">${cars.join('')}</div></div>` : ''}
         ${propiedad.descripcion ? `<div class="seccion">Descripción</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}

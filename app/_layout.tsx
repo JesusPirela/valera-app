@@ -110,6 +110,7 @@ export default function RootLayout() {
   const pathname = usePathname()
   const pathnameRef = useRef('')
   pathnameRef.current = pathname
+  const ultimaRevisionUpdateRef = useRef(0)
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return
@@ -210,6 +211,16 @@ export default function RootLayout() {
       if (state === 'active') {
         supabase.auth.startAutoRefresh()
         iniciarSesion()  // el guard evita duplicados
+        // EAS Update solo se revisa al abrir la app desde cero (cold start);
+        // como casi nadie cierra apps móviles del todo, sin esto un usuario
+        // puede quedarse semanas en una versión vieja con bugs ya corregidos.
+        // Se revisa también al volver de segundo plano, con un mínimo de 10
+        // min entre revisiones para no saturar con cada cambio de app.
+        const ahora = Date.now()
+        if (ahora - ultimaRevisionUpdateRef.current > 10 * 60 * 1000) {
+          ultimaRevisionUpdateRef.current = ahora
+          checkForUpdate()
+        }
       } else if (state === 'background' || state === 'inactive') {
         supabase.auth.stopAutoRefresh()
         cerrarSesion()

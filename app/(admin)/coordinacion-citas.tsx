@@ -67,6 +67,19 @@ const COL_W = 240  // ancho de cada columna kanban
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Para precargar el <input>/TextInput de "Fecha de cita" con la hora LOCAL
+// del dispositivo. ¡No usar .toISOString().slice(0,16) aquí! toISOString()
+// siempre da la hora en UTC — meterla tal cual en el campo de edición hace
+// que se vea (y al guardar sin tocarla, se grabe) corrida por el offset de
+// la zona horaria local (6h en México), cada vez que alguien abre y guarda
+// una cita sin cambiar la fecha.
+function aFechaLocalInput(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function formatFecha(iso: string | null) {
   if (!iso) return null
   return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -142,7 +155,11 @@ function DropdownSelector({
       </TouchableOpacity>
       <Modal visible={open} transparent animationType="fade" onRequestClose={cerrar}>
         <TouchableOpacity style={s.ddOverlay} activeOpacity={1} onPress={cerrar}>
-          <View style={s.ddSheet}>
+          {/* activeOpacity={1} + stopPropagation: sin esto, cualquier toque
+              dentro de la hoja (incluido escribir en el buscador, que en
+              Android reacomoda la vista al abrir el teclado) se propaga al
+              overlay y cierra el modal en el primer caracter. */}
+          <TouchableOpacity activeOpacity={1} style={s.ddSheet} onPress={e => e.stopPropagation()}>
             <Text style={s.ddTitle}>{label}</Text>
             {searchable && (
               <TextInput
@@ -170,7 +187,7 @@ function DropdownSelector({
                 </Text>
               )}
             </ScrollView>
-          </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
     </>
@@ -186,9 +203,7 @@ function ModalEdicion({
 }) {
   const [estado, setEstado]               = useState<EstadoCita>(cita?.estado ?? 'por_contactar')
   const [notas, setNotas]                 = useState(cita?.notas ?? '')
-  const [fechaTexto, setFechaTexto]       = useState(
-    cita?.fecha_cita ? new Date(cita.fecha_cita).toISOString().slice(0, 16) : ''
-  )
+  const [fechaTexto, setFechaTexto]       = useState(aFechaLocalInput(cita?.fecha_cita ?? null))
   const [coordinadorId, setCoordinadorId] = useState(cita?.coordinado_por ?? '')
   const [asesorId, setAsesorId]           = useState(cita?.asesor_id ?? '')
   const [telefono, setTelefono]           = useState(cita?.clientes?.telefono ?? '')

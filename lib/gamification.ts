@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { conReintento } from './redIntentos'
 
 // ── Tipos ──────────────────────────────────────────────────────
 export type AccionGamificacion =
@@ -83,17 +84,26 @@ export function tituloPorNivel(nivel: number): string {
 }
 
 // ── Registrar una acción y otorgar recompensas ─────────────────
+// Con internet lento, esta llamada (fire-and-forget desde quien la invoca)
+// podía perderse en silencio sin avisar y sin reintentar: la acción
+// principal (publicar, agregar cliente, etc.) se guardaba bien, pero el
+// premio de coins/XP simplemente nunca llegaba al servidor. Se reintenta
+// igual que el resto de escrituras críticas de la app.
 export async function registrarAccion(userId: string, accion: AccionGamificacion): Promise<void> {
   try {
     const cfg = ACCIONES[accion]
 
-    await supabase.rpc('award_xp_coins', {
+    const exito = await conReintento(() => supabase.rpc('award_xp_coins', {
       p_user_id:         userId,
       p_xp:              cfg.xp,
       p_coins:           cfg.coins,
       p_concepto:        cfg.concepto,
       p_campo_contador:  cfg.contadorCampo,
-    })
+    }))
+    if (!exito) {
+      console.warn('[Gamification] award_xp_coins falló tras reintentos:', accion)
+      return // no seguir con misiones si el premio base no se otorgó
+    }
 
     if (cfg.categoria) {
       await actualizarMisionesPorCategoria(userId, cfg.categoria)
@@ -118,7 +128,10 @@ function getHoyMX(): string {
 }
 
 // ── Actualizar progreso de misiones para una categoría ─────────
-async function actualizarMisionesPorCategoria(userId: string, categoria: string): Promise<void> {
+// Exportada para los flujos (ej. publicar propiedad) cuyo premio base de
+// xp/coins ahora se otorga en un RPC SQL atómico propio, pero que igual
+// necesitan disparar el progreso de misiones diarias/base asociado.
+export async function actualizarMisionesPorCategoria(userId: string, categoria: string): Promise<void> {
   const hoy = getHoyMX()
 
   // ── Misiones DIARIAS: función atómica en SQL (evita race conditions) ──
@@ -131,10 +144,10 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
   // Otorgar recompensas por misiones diarias recién completadas
   for (const c of completadas ?? []) {
     if (c.recien_completada) {
-      await supabase.rpc('award_xp_coins', {
+      await conReintento(() => supabase.rpc('award_xp_coins', {
         p_user_id: userId, p_xp: c.recompensa_xp, p_coins: c.recompensa_coins,
         p_concepto: '¡Misión diaria completada! ⚡', p_campo_contador: null,
-      }).catch(() => {})
+      }))
     }
   }
 
@@ -183,10 +196,10 @@ async function actualizarMisionesPorCategoria(userId: string, categoria: string)
     }
 
     if (nuevaCompl) {
-      await supabase.rpc('award_xp_coins', {
+      await conReintento(() => supabase.rpc('award_xp_coins', {
         p_user_id: userId, p_xp: m.recompensa_xp, p_coins: m.recompensa_coins,
         p_concepto: '¡Misión completada! 🎯', p_campo_contador: null,
-      }).catch(() => {})
+      }))
     }
   }
 }
@@ -268,13 +281,13 @@ export async function sincronizarMisionesBase(userId: string): Promise<void> {
     }
 
     if (nuevaCompl && !(um?.completada)) {
-      await supabase.rpc('award_xp_coins', {
+      await conReintento(() => supabase.rpc('award_xp_coins', {
         p_user_id: userId,
         p_xp:      m.recompensa_xp,
         p_coins:   m.recompensa_coins,
         p_concepto: '¡Misión completada! 🎯',
         p_campo_contador: null,
-      })
+      }))
     }
   }
 }
@@ -303,13 +316,13 @@ export async function trackLoginDiario(userId: string): Promise<{ nuevo: boolean
       : 1
 
     // Otorgar XP y coins del acceso diario
-    await supabase.rpc('award_xp_coins', {
+    await conReintento(() => supabase.rpc('award_xp_coins', {
       p_user_id:        userId,
       p_xp:             20,
       p_coins:          5,
       p_concepto:       'Acceso diario 🔥',
       p_campo_contador: null,
-    })
+    }))
 
     // Actualizar streak en user_stats
     await supabase
@@ -364,13 +377,13 @@ async function actualizarMisionesStreak(userId: string, streakActual: number): P
     }
 
     if (completada) {
-      await supabase.rpc('award_xp_coins', {
+      await conReintento(() => supabase.rpc('award_xp_coins', {
         p_user_id: userId,
         p_xp:      m.recompensa_xp,
         p_coins:   m.recompensa_coins,
         p_concepto: '¡Racha completada! 🔥',
         p_campo_contador: null,
-      })
+      }))
     }
   }
 }
@@ -386,10 +399,10 @@ export async function sincronizarMisionesDiarias(userId: string): Promise<void> 
     // Otorgar recompensas por misiones recién completadas
     for (const c of completadas ?? []) {
       if (c.recien_completada) {
-        await supabase.rpc('award_xp_coins', {
+        await conReintento(() => supabase.rpc('award_xp_coins', {
           p_user_id: userId, p_xp: c.recompensa_xp, p_coins: c.recompensa_coins,
           p_concepto: `¡Misión diaria completada! ⚡`, p_campo_contador: null,
-        }).catch(() => {})
+        }))
       }
     }
   } catch (e) {

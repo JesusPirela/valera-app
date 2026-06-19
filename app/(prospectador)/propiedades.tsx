@@ -26,10 +26,11 @@ import { esPlusOMejor } from '../../lib/permisos'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
+import { conReintentoData, generarIdemKey } from '../../lib/redIntentos'
 
 const LOGO = require('../../assets/logo.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
-import { registrarAccion } from '../../lib/gamification'
+import { actualizarMisionesPorCategoria } from '../../lib/gamification'
 import { thumb } from '../../lib/img'
 import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar } from '../../lib/texto'
@@ -261,30 +262,42 @@ export default function ProspectadorPropiedades() {
     togglingRef.current = newTogglingSet
     setToggling(newTogglingSet)
 
-    const nuevasVeces = vecesActual + 1
-
+    // Optimista: refleja +1 de inmediato; se corrige abajo con el valor real
+    // del servidor (que puede diferir si hubo otra publicación concurrente
+    // desde otra plataforma/dispositivo de la misma cuenta).
     queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades', vistaComo], old => {
       if (!old) return old
-      return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: nuevasVeces } }
+      return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual + 1 } }
     })
 
-    const { error } = await supabase
-      .from('propiedad_publicacion')
-      .upsert({
-        propiedad_id: propiedadId,
-        user_id: userId,
-        publicada: true,
-        fecha_publicacion: new Date().toISOString(),
-        veces_publicada: nuevasVeces,
-      }, { onConflict: 'propiedad_id,user_id' })
+    // RPC atómico (bloquea la fila en servidor): el conteo "x/10" y el
+    // premio de coins/XP se aplican juntos en una sola transacción, así que
+    // no pueden quedar desincronizados entre app y web, y un reintento por
+    // mala conexión con el mismo idem key nunca duplica el premio.
+    const idemKey = generarIdemKey()
+    const { ok, data } = await conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number }>(() =>
+      supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: propiedadId, p_idem_key: idemKey })
+    )
 
-    if (error) {
+    if (!ok || !data?.ok) {
       queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades', vistaComo], old => {
         if (!old) return old
         return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual } }
       })
+      const msg = !ok
+        ? 'No se pudo registrar la publicación por una conexión inestable. Verifica tu internet e inténtalo de nuevo.'
+        : data?.error === 'limite'
+        ? 'Esta propiedad alcanzó el límite de 10 publicaciones.'
+        : 'No se pudo publicar. Intenta de nuevo.'
+      if (Platform.OS === 'web') window.alert(msg)
+      else Alert.alert('No se pudo publicar', msg)
     } else {
-      registrarAccion(userId, 'publicar_propiedad').catch(() => {})
+      const vecesReal = data.veces_publicada ?? vecesActual + 1
+      queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades', vistaComo], old => {
+        if (!old) return old
+        return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesReal } }
+      })
+      actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
     }
 
     const finalTogglingSet = new Set(togglingRef.current)
