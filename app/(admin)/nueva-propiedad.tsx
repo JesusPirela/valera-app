@@ -585,6 +585,8 @@ export default function NuevaPropiedad() {
   }
 
   async function subirImagen(uri: string, propiedadId: string, orden: number): Promise<string> {
+    if (/^https?:\/\//.test(uri)) return uri
+
     const response = await fetch(uri)
     const blob = await response.blob()
     const mimeType = blob.type || 'image/jpeg'

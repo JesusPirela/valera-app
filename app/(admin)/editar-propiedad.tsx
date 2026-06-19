@@ -607,6 +607,10 @@ export default function EditarPropiedad() {
   }
 
   async function subirImagen(uri: string, propiedadId: string, orden: number): Promise<string> {
+    // URLs externas (importadas desde portal): guardar directo, sin re-subir.
+    // Hacer fetch de dominios externos falla por CORS en el browser.
+    if (/^https?:\/\//.test(uri)) return uri
+
     const response = await fetch(uri)
     const blob = await response.blob()
     const mimeType = blob.type || 'image/jpeg'
