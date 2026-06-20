@@ -110,8 +110,29 @@ export async function cambiarACuenta(
   }
 }
 
-// Quita una cuenta de la lista (solo cuando los tokens ya no sirven).
+// Quita una cuenta de la lista.
 export async function olvidarCuenta(user_id: string): Promise<void> {
   const lista = await listarCuentas()
   await AsyncStorage.setItem(KEY, JSON.stringify(lista.filter(c => c.user_id !== user_id)))
+}
+
+// Cambia de cuenta con contraseña explícita (fallback cuando los tokens caducaron).
+// Usa signInWithPassword en lugar de setSession para que funcione siempre.
+export async function cambiarACuentaConPassword(
+  target: CuentaGuardada,
+  password: string,
+): Promise<{ ok: boolean; error?: string }> {
+  accountSwitch.pending = true
+  try {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: target.email,
+      password,
+    })
+    if (error) return { ok: false, error: error.message }
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'Error desconocido' }
+  } finally {
+    setTimeout(() => { accountSwitch.pending = false }, 500)
+  }
 }

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
-import { View, Text, TouchableOpacity, ActivityIndicator, Platform, Alert, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, ActivityIndicator, Platform, Alert, StyleSheet, TextInput } from 'react-native'
 import { router } from 'expo-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { listarCuentas, cambiarACuenta, olvidarCuenta, type CuentaGuardada } from '../lib/cuentas'
+import {
+  listarCuentas, cambiarACuenta, cambiarACuentaConPassword,
+  olvidarCuenta, type CuentaGuardada,
+} from '../lib/cuentas'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
 
@@ -13,7 +16,8 @@ const ROLE_LABEL: Record<string, string> = {
 
 // Botón/sección "Cambiar de cuenta". Solo se muestra si en este dispositivo se
 // ha iniciado sesión en 2 o más cuentas. El cambio es inmediato (sin contraseña)
-// usando la sesión guardada de cada cuenta.
+// usando la sesión guardada de cada cuenta. Si los tokens caducaron se pide la
+// contraseña directamente en este componente, sin obligar al usuario a salir.
 export default function CambiarCuenta() {
   const c = useColors()
   const qc = useQueryClient()
@@ -21,6 +25,9 @@ export default function CambiarCuenta() {
   const [actualId, setActualId] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
   const [cambiando, setCambiando] = useState<string | null>(null)
+  // Cuando los tokens de una cuenta caducaron: pedimos la contraseña inline
+  const [necesitaPass, setNecesitaPass] = useState<CuentaGuardada | null>(null)
+  const [password, setPassword] = useState('')
 
   useEffect(() => {
     async function init() {
@@ -39,46 +46,111 @@ export default function CambiarCuenta() {
   const otras = cuentas.filter(x => x.user_id !== actualId)
   if (otras.length === 0) return null
 
+  function irAHome(role: string | null | undefined) {
+    qc.clear()
+    const destino = (role === 'admin' || role === 'supervisor')
+      ? '/(admin)/propiedades'
+      : '/(prospectador)/propiedades'
+    router.replace(destino as any)
+  }
+
   async function switchTo(cuenta: CuentaGuardada) {
     setCambiando(cuenta.user_id)
     const res = await cambiarACuenta(cuenta)
     setCambiando(null)
     if (!res.ok) {
       if (res.tokenVencido) {
-        // Los tokens son definitivamente inválidos (respuesta 4xx del servidor).
-        // Quitar la cuenta para que no ocupe espacio; el usuario deberá volver a
-        // iniciar sesión desde la pantalla de login y se guardará nuevamente.
-        await olvidarCuenta(cuenta.user_id)
-        setCuentas(prev => prev.filter(c => c.user_id !== cuenta.user_id))
-        const msg = `La sesión de ${cuenta.nombre || cuenta.email} caducó. Cierra esta sesión, inicia con el correo y contraseña de esa cuenta y quedará disponible aquí nuevamente.`
-        Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Sesión caducada', msg)
+        // Tokens inválidos: mostrar campo de contraseña inline.
+        // NO eliminamos la cuenta porque podría ser un fallo transitorio
+        // y queremos que el usuario pueda reintentarlo con su contraseña.
+        setNecesitaPass(cuenta)
       } else {
-        // Error de red, timeout u otro error transitorio. NO quitar la cuenta —
-        // los tokens podrían seguir siendo válidos.
-        const msg = `No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.`
+        const msg = 'No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.'
         Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error de conexión', msg)
       }
       return
     }
-    // En este punto setSession ya completó y la nueva sesión está activa.
-    // Limpiar cache y navegar al home del nuevo usuario según su rol.
-    qc.clear()
-    const destino = (cuenta.role === 'admin' || cuenta.role === 'supervisor')
-      ? '/(admin)/propiedades'
-      : '/(prospectador)/propiedades'
-    router.replace(destino as any)
+    irAHome(res.role)
+  }
+
+  async function confirmarPassword() {
+    if (!necesitaPass || !password.trim()) return
+    const cuenta = necesitaPass
+    setCambiando(cuenta.user_id)
+    const res = await cambiarACuentaConPassword(cuenta, password.trim())
+    setCambiando(null)
+    if (!res.ok) {
+      const msg = res.error?.includes('Invalid login') || res.error?.includes('invalid')
+        ? 'Contraseña incorrecta. Intenta de nuevo.'
+        : `No se pudo iniciar sesión: ${res.error}`
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg)
+      return
+    }
+    setNecesitaPass(null)
+    setPassword('')
+    irAHome(cuenta.role)
+  }
+
+  function cancelarPassword() {
+    setNecesitaPass(null)
+    setPassword('')
   }
 
   return (
     <View style={s.wrap}>
       <Text style={[s.titulo, { color: c.textMute }]}>CAMBIAR DE CUENTA</Text>
+
+      {/* Panel de contraseña inline cuando los tokens caducaron */}
+      {necesitaPass && (
+        <View style={[s.passPanel, { backgroundColor: c.card, borderColor: c.border }]}>
+          <Text style={[s.passLabel, { color: c.text }]}>
+            Ingresa la contraseña de {necesitaPass.nombre || necesitaPass.email}
+          </Text>
+          <TextInput
+            style={[s.passInput, { color: c.inputText, backgroundColor: c.input, borderColor: c.border }]}
+            placeholder="Contraseña"
+            placeholderTextColor={c.placeholder}
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            autoFocus
+            onSubmitEditing={confirmarPassword}
+            returnKeyType="go"
+          />
+          <View style={s.passRow}>
+            <TouchableOpacity
+              style={[s.passBtnSecondary, { borderColor: c.border }]}
+              onPress={cancelarPassword}
+            >
+              <Text style={[s.passBtnSecondaryText, { color: c.textMute }]}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.passBtn, { backgroundColor: '#1a6470', opacity: cambiando ? 0.6 : 1 }]}
+              onPress={confirmarPassword}
+              disabled={!!cambiando || !password.trim()}
+            >
+              {cambiando === necesitaPass.user_id
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={s.passBtnText}>Entrar</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {otras.map(cuenta => {
         const inicial = (cuenta.nombre || cuenta.email || '?')[0].toUpperCase()
+        const estaEsperandoPass = necesitaPass?.user_id === cuenta.user_id
         return (
           <TouchableOpacity
             key={cuenta.user_id}
-            style={[s.fila, { backgroundColor: c.card, borderColor: c.border }]}
-            onPress={() => switchTo(cuenta)}
+            style={[
+              s.fila,
+              { backgroundColor: c.card, borderColor: estaEsperandoPass ? '#c9a84c' : c.border },
+            ]}
+            onPress={() => {
+              if (estaEsperandoPass) return  // ya tiene el panel abierto
+              switchTo(cuenta)
+            }}
             disabled={!!cambiando}
             activeOpacity={0.8}
           >
@@ -88,6 +160,9 @@ export default function CambiarCuenta() {
               <Text style={[s.meta, { color: c.textMute }]} numberOfLines={1}>
                 {cuenta.email}{cuenta.role ? ` · ${ROLE_LABEL[cuenta.role] ?? cuenta.role}` : ''}
               </Text>
+              {estaEsperandoPass && (
+                <Text style={[s.passHint, { color: '#c9a84c' }]}>Requiere contraseña ↑</Text>
+              )}
             </View>
             {cambiando === cuenta.user_id
               ? <ActivityIndicator size="small" color="#1a6470" />
@@ -114,4 +189,23 @@ const s = StyleSheet.create({
   nombre: { fontSize: 14, fontWeight: '700' },
   meta: { fontSize: 12, marginTop: 1 },
   chevron: { fontSize: 20, fontWeight: '700' },
+  passHint: { fontSize: 11, marginTop: 3, fontWeight: '600' },
+  passPanel: {
+    borderRadius: 12, borderWidth: 1.5, padding: 14, marginBottom: 10, gap: 10,
+  },
+  passLabel: { fontSize: 14, fontWeight: '600' },
+  passInput: {
+    borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 15,
+  },
+  passRow: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
+  passBtnSecondary: {
+    borderRadius: 10, borderWidth: 1, paddingVertical: 9, paddingHorizontal: 16,
+  },
+  passBtnSecondaryText: { fontSize: 14, fontWeight: '600' },
+  passBtn: {
+    borderRadius: 10, paddingVertical: 9, paddingHorizontal: 20,
+    alignItems: 'center', justifyContent: 'center', minWidth: 80,
+  },
+  passBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 })
