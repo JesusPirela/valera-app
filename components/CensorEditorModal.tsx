@@ -19,6 +19,7 @@ export default function CensorEditorModal({ visible, uri, onCancelar, onAplicar 
   const [tamañoImg, setTamañoImg] = useState<{ w: number; h: number } | null>(null)
   const [box, setBox] = useState({ x: 0, y: 0, w: 0, h: 0 })
   const [procesando, setProcesando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const boxRef = useRef(box)
   boxRef.current = box
   const dispRef = useRef({ w: 0, h: 0 })
@@ -26,6 +27,7 @@ export default function CensorEditorModal({ visible, uri, onCancelar, onAplicar 
   const resolverRef = useRef<((d: { ok: boolean; data?: string; error?: string }) => void) | null>(null)
 
   useEffect(() => {
+    setError(null)
     if (!visible || !uri) { setTamañoImg(null); return }
     Image.getSize(
       uri,
@@ -108,7 +110,17 @@ export default function CensorEditorModal({ visible, uri, onCancelar, onAplicar 
       onAplicar(resultado)
     } catch (e: any) {
       console.warn('[CensorEditorModal] error aplicando censura:', e)
-      Alert.alert('No se pudo censurar la imagen', 'Intenta de nuevo. Si el problema sigue, puede ser por una conexión lenta al cargar la foto.')
+      const msg = String(e?.message ?? e)
+      const detalle = msg.toLowerCase().includes('timeout')
+        ? 'Tardó demasiado en procesar la imagen (conexión lenta).'
+        : msg.toLowerCase().includes('fetch') || msg.toLowerCase().includes('cors')
+        ? 'No se pudo descargar la imagen (bloqueo de CORS o conexión).'
+        : `No se pudo censurar la imagen: ${msg}`
+      if (Platform.OS === 'web') {
+        setError(detalle)
+      } else {
+        Alert.alert('No se pudo censurar la imagen', detalle)
+      }
     } finally {
       setProcesando(false)
     }
