@@ -44,12 +44,20 @@ export default function CambiarCuenta() {
     const res = await cambiarACuenta(cuenta)
     setCambiando(null)
     if (!res.ok) {
-      // Quitar la cuenta caducada para que no bloquee futuros intentos
-      await olvidarCuenta(cuenta.user_id)
-      setCuentas(prev => prev.filter(c => c.user_id !== cuenta.user_id))
-      const detalle = res.error ? `\n(${res.error})` : ''
-      const msg = `La sesión de esa cuenta caducó. Inicia sesión con su correo y contraseña para volver a usarla.${detalle}`
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Sesión caducada', msg)
+      if (res.tokenVencido) {
+        // Los tokens son definitivamente inválidos (respuesta 4xx del servidor).
+        // Quitar la cuenta para que no ocupe espacio; el usuario deberá volver a
+        // iniciar sesión desde la pantalla de login y se guardará nuevamente.
+        await olvidarCuenta(cuenta.user_id)
+        setCuentas(prev => prev.filter(c => c.user_id !== cuenta.user_id))
+        const msg = `La sesión de ${cuenta.nombre || cuenta.email} caducó. Cierra esta sesión, inicia con el correo y contraseña de esa cuenta y quedará disponible aquí nuevamente.`
+        Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Sesión caducada', msg)
+      } else {
+        // Error de red, timeout u otro error transitorio. NO quitar la cuenta —
+        // los tokens podrían seguir siendo válidos.
+        const msg = `No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.`
+        Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error de conexión', msg)
+      }
       return
     }
     // En este punto setSession ya completó y la nueva sesión está activa.

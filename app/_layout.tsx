@@ -7,7 +7,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { queryClient, persister } from '../lib/queryClient'
 import { ThemeProvider, useColors } from '../lib/ThemeContext'
 import { VistaComoProvider, VISTA_COMO_KEY } from '../lib/VistaComo'
-import { guardarCuentaActual, guardarTokensSesion, cambiandoCuenta } from '../lib/cuentas'
+import { actualizarNombreRole, guardarTokensSesion, accountSwitch } from '../lib/cuentas'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
@@ -146,35 +146,28 @@ export default function RootLayout() {
 
   useEffect(() => {
     let sessionId: string | null = null
-    let iniciando = false  // guard contra llamadas concurrentes
+    let iniciando = false
 
-    async function iniciarSesion() {
-      if (sessionId || iniciando) return  // ya hay sesión activa o está creándose
+    // userId opcional: si lo tenemos del evento SIGNED_IN lo usamos directamente
+    // y evitamos llamar a getUser() (que en móvil puede colgar si el lock de
+    // Supabase sigue activo durante el setSession del cambio de cuenta).
+    async function iniciarSesion(userId?: string) {
+      if (sessionId || iniciando) return
       iniciando = true
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-        // Re-registrar el push token en cada apertura/foreground (no solo en login).
-        // Si el token cambió o se invalidó (reinstalación, cambio de dispositivo,
-        // permisos otorgados después del primer rechazo) y el usuario no cierra
-        // sesión, antes nunca se actualizaba y dejaba de recibir notificaciones
-        // sin que nadie se diera cuenta.
-        registrarPushToken(user.id)
-        registrarVersionApp(user.id)
-        // "Última conexión": refrescar en CADA apertura/foreground, no solo en el
-        // login. Como la sesión persiste, muchos usuarios no vuelven a pasar por
-        // el login y last_seen se quedaba viejo ("hace 2 días"). Fire-and-forget.
+        const uid = userId ?? (await supabase.auth.getUser()).data.user?.id
+        if (!uid) return
+        registrarPushToken(uid)
+        registrarVersionApp(uid)
         supabase.from('profiles')
           .update({ last_seen: new Date().toISOString() })
-          .eq('id', user.id)
+          .eq('id', uid)
           .then(() => {}, () => {})
-        // Guardar la cuenta actual para el cambio rápido (aunque ya estuviera
-        // logueada desde antes de esta función). Trae nombre/rol para la etiqueta.
-        supabase.from('profiles').select('nombre, role').eq('id', user.id).maybeSingle()
-          .then(({ data: p }) => guardarCuentaActual({ nombre: p?.nombre ?? null, role: p?.role ?? null }), () => {})
+        supabase.from('profiles').select('nombre, role').eq('id', uid).maybeSingle()
+          .then(({ data: p }) => actualizarNombreRole(uid, { nombre: p?.nombre ?? null, role: p?.role ?? null }), () => {})
         const { data } = await supabase
           .from('user_sessions')
-          .insert({ user_id: user.id })
+          .insert({ user_id: uid })
           .select('id')
           .single()
         sessionId = data?.id ?? null
@@ -186,12 +179,10 @@ export default function RootLayout() {
     async function cerrarSesion() {
       if (!sessionId) return
       const id = sessionId
-      sessionId = null  // limpiar antes del await para evitar doble cierre
+      sessionId = null
       await supabase.from('user_sessions').update({ fin: new Date().toISOString() }).eq('id', id)
     }
 
-    // En web: visibilitychange es más fiable que AppState para detectar
-    // cuando el usuario minimiza o cierra la pestaña
     let removeWebListeners: (() => void) | null = null
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const onVisibility = () => {
@@ -210,12 +201,7 @@ export default function RootLayout() {
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         supabase.auth.startAutoRefresh()
-        iniciarSesion()  // el guard evita duplicados
-        // EAS Update solo se revisa al abrir la app desde cero (cold start);
-        // como casi nadie cierra apps móviles del todo, sin esto un usuario
-        // puede quedarse semanas en una versión vieja con bugs ya corregidos.
-        // Se revisa también al volver de segundo plano, con un mínimo de 10
-        // min entre revisiones para no saturar con cada cambio de app.
+        iniciarSesion()
         const ahora = Date.now()
         if (ahora - ultimaRevisionUpdateRef.current > 10 * 60 * 1000) {
           ultimaRevisionUpdateRef.current = ahora
@@ -243,29 +229,35 @@ export default function RootLayout() {
         setSession(session)
         setLoading(false)
         if (session) {
-          iniciarSesion()
+          iniciarSesion(session.user.id)
           registrarPushToken(session.user.id)
           registrarVersionApp(session.user.id)
         }
       } else if (event === 'SIGNED_IN') {
         setSession(session)
-        // Guardar tokens INMEDIATAMENTE con la sesión que ya tenemos del evento,
-        // sin necesidad de llamar a getSession() que puede devolver datos viejos.
-        if (session) guardarTokensSesion(session).catch(() => {})
-        iniciarSesion()
-        if (session?.user?.id) { registrarPushToken(session.user.id); registrarVersionApp(session.user.id) }
-        // La navegación al nuevo home se hace en CambiarCuenta tras esperar cambiarACuenta().
+        if (session) {
+          // Guardar tokens INMEDIATAMENTE del evento (sin llamar a getSession).
+          guardarTokensSesion(session).catch(() => {})
+          // Pasar el userId del evento para no llamar a getUser() desde dentro
+          // del lock de Supabase (causaría deadlock en móvil).
+          iniciarSesion(session.user.id)
+          registrarPushToken(session.user.id)
+          registrarVersionApp(session.user.id)
+        }
+        // La navegación al home del nuevo usuario la hace CambiarCuenta.tsx.
       } else if (event === 'TOKEN_REFRESHED') {
         setSession(session)
-        // Actualizar tokens al rotar (el refresh_token viejo ya no sirve después de esto).
+        // Guardar tokens rotados inmediatamente: el refresh_token anterior ya
+        // no sirve y cualquier cambio de cuenta que use el viejo fallará.
         if (session) guardarTokensSesion(session).catch(() => {})
       } else if (event === 'SIGNED_OUT') {
-        // Durante un cambio de cuenta, Supabase emite SIGNED_OUT del usuario
-        // viejo antes del SIGNED_IN del nuevo. Limpiar la sesión interna pero
-        // NO redirigir a /login; la navegación la hace CambiarCuenta.
+        // Leer accountSwitch.pending como propiedad de un objeto compartido,
+        // NO como una variable importada, para garantizar el valor más reciente
+        // sin importar cómo el bundler maneje los live bindings de ES modules.
+        const esCambioDeCuenta = accountSwitch.pending
         cerrarSesion()
         setSession(null)
-        if (!cambiandoCuenta) {
+        if (!esCambioDeCuenta) {
           queryClient.clear()
           router.replace('/(auth)/login')
         }

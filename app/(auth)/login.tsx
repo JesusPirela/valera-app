@@ -15,7 +15,7 @@ import {
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
-import { guardarCuentaActual } from '../../lib/cuentas'
+import { actualizarNombreRole } from '../../lib/cuentas'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const LOGO = require('../../assets/logo.png')
 
@@ -50,8 +50,9 @@ export default function LoginScreen() {
 
       supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', data.user.id).then(() => {}, () => {})
 
-      // Recordar esta cuenta para el cambio rápido sin contraseña
-      guardarCuentaActual({ nombre: profile?.nombre ?? null, role: profile?.role ?? null }).catch(() => {})
+      // Actualizar nombre/rol en la entrada ya guardada de esta cuenta.
+      // Los tokens los guarda _layout.tsx en el handler de SIGNED_IN.
+      actualizarNombreRole(data.user.id, { nombre: profile?.nombre ?? null, role: profile?.role ?? null }).catch(() => {})
 
       if (profile?.role === 'admin' || profile?.role === 'supervisor') {
         router.replace('/(admin)/propiedades')

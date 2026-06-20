@@ -1,14 +1,12 @@
-// Gestión de varias cuentas en el mismo dispositivo (cambio rápido sin contraseña).
-// Guardamos la sesión (tokens) de cada cuenta con la que se inició sesión aquí;
-// el botón "cambiar de cuenta" solo aparece si hay 2 o más guardadas.
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
 
 const KEY = '@valera_cuentas'
 
-// Flag que bloquea el redirect a /login cuando Supabase emite SIGNED_OUT
-// durante un cambio de cuenta (setSession dispara SIGNED_OUT+SIGNED_IN en secuencia).
-export let cambiandoCuenta = false
+// Objeto mutable compartido entre módulos. Usar un objeto (no un `export let`)
+// garantiza que el consumidor siempre lea el valor actual del campo, sin depender
+// de cómo el bundler (Metro/Babel) maneje los live bindings de ES modules.
+export const accountSwitch = { pending: false }
 
 export type CuentaGuardada = {
   user_id: string
@@ -26,9 +24,8 @@ export async function listarCuentas(): Promise<CuentaGuardada[]> {
   } catch { return [] }
 }
 
-// Guarda tokens frescos directamente desde un objeto de sesión ya obtenido.
-// Usar cuando se tiene la sesión en mano (eventos SIGNED_IN / TOKEN_REFRESHED)
-// para no depender de una llamada adicional a getSession().
+// Guarda tokens frescos directamente desde la sesión que ya tenemos (del evento
+// SIGNED_IN / TOKEN_REFRESHED), sin llamar a getSession() que puede tener datos viejos.
 export async function guardarTokensSesion(session: {
   user: { id: string; email?: string | null }
   access_token: string
@@ -49,49 +46,68 @@ export async function guardarTokensSesion(session: {
   await AsyncStorage.setItem(KEY, JSON.stringify([...otras, cuenta]))
 }
 
-// Guarda/actualiza nombre y role de la cuenta activa (sin tocar los tokens).
-export async function guardarCuentaActual(extra?: { nombre?: string | null; role?: string | null }) {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) return
+// Actualiza nombre y role de una cuenta ya guardada sin tocar sus tokens.
+// Si no existe entrada previa (nunca se guardaron los tokens), no hace nada.
+export async function actualizarNombreRole(
+  userId: string,
+  extra: { nombre?: string | null; role?: string | null },
+): Promise<void> {
   const lista = await listarCuentas()
-  const uid = session.user.id
-  const previa = lista.find(c => c.user_id === uid)
-  if (!previa) return  // si aún no hay entrada, guardarTokensSesion la creará
+  const previa = lista.find(c => c.user_id === userId)
+  if (!previa) return
   const cuenta: CuentaGuardada = {
     ...previa,
-    nombre: extra?.nombre ?? previa.nombre,
-    role: extra?.role ?? previa.role,
+    nombre: extra.nombre ?? previa.nombre,
+    role: extra.role ?? previa.role,
   }
-  const otras = lista.filter(c => c.user_id !== uid)
+  const otras = lista.filter(c => c.user_id !== userId)
   await AsyncStorage.setItem(KEY, JSON.stringify([...otras, cuenta]))
 }
 
 // Cambia a otra cuenta guardada usando sus tokens almacenados.
-// Intencionalmente mínimo: solo llama a setSession y nada más. Cualquier
-// llamada adicional a getSession/getUser antes o después compite con el lock
-// interno de Supabase y puede colgar indefinidamente.
-export async function cambiarACuenta(target: CuentaGuardada): Promise<{ ok: boolean; error?: string; role?: string | null }> {
-  cambiandoCuenta = true
+// Mínimo intencional: solo llama a setSession. Cualquier llamada adicional
+// a getSession/getUser antes o después compite con el lock interno de Supabase
+// y puede colgar indefinidamente.
+export async function cambiarACuenta(
+  target: CuentaGuardada,
+): Promise<{ ok: boolean; error?: string; tokenVencido?: boolean; role?: string | null }> {
+  accountSwitch.pending = true
   try {
-    const switchPromise = supabase.auth.setSession({
-      access_token: target.access_token,
-      refresh_token: target.refresh_token,
-    })
-    const timeoutPromise = new Promise<{ data: { session: null }, error: Error }>(resolve =>
-      setTimeout(() => resolve({ data: { session: null }, error: new Error('timeout') }), 12000)
-    )
-    const { error } = await Promise.race([switchPromise, timeoutPromise])
-    if (error) return { ok: false, error: error.message }
+    const timeoutMs = 12_000
+    const result = await Promise.race([
+      supabase.auth.setSession({
+        access_token: target.access_token,
+        refresh_token: target.refresh_token,
+      }),
+      new Promise<{ data: { session: null }; error: Error }>((resolve) =>
+        setTimeout(
+          () => resolve({ data: { session: null }, error: new Error('Tiempo de espera agotado') }),
+          timeoutMs,
+        ),
+      ),
+    ])
+    const { data, error } = result
+    if (error) {
+      // Distinguir errores de auth (tokens inválidos/vencidos, HTTP 4xx)
+      // de errores de red/timeout (el token podría seguir siendo válido).
+      const isAuthError =
+        (error as any).name === 'AuthApiError' ||
+        ((error as any).status != null && (error as any).status >= 400 && (error as any).status < 500)
+      return { ok: false, error: error.message, tokenVencido: isAuthError }
+    }
+    if (!data.session) return { ok: false, error: 'No se pudo establecer la sesión', tokenVencido: false }
     return { ok: true, role: target.role }
   } catch (e: any) {
-    return { ok: false, error: e?.message ?? 'No se pudo cambiar de cuenta' }
+    return { ok: false, error: e?.message ?? 'Error desconocido', tokenVencido: false }
   } finally {
-    setTimeout(() => { cambiandoCuenta = false }, 2000)
+    // Limpiar el flag un tick después para que el handler de SIGNED_OUT
+    // ya lo haya leído antes de que lo borremos.
+    setTimeout(() => { accountSwitch.pending = false }, 500)
   }
 }
 
-// Quita una cuenta de la lista (ej. al cerrar sesión en ella).
-export async function olvidarCuenta(user_id: string) {
+// Quita una cuenta de la lista (solo cuando los tokens ya no sirven).
+export async function olvidarCuenta(user_id: string): Promise<void> {
   const lista = await listarCuentas()
   await AsyncStorage.setItem(KEY, JSON.stringify(lista.filter(c => c.user_id !== user_id)))
 }
