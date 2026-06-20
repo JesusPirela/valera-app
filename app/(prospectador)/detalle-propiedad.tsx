@@ -330,16 +330,16 @@ export default function DetallePropiedad() {
     // web casi al mismo tiempo, y un reintento por mala conexión con el
     // mismo idem key nunca duplica el premio.
     const idemKey = generarIdemKey()
-    const { ok, data } = await conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number; fecha_publicacion?: string }>(() =>
+    const { ok, data, errorMsg } = await conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number; fecha_publicacion?: string }>(() =>
       supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: id, p_idem_key: idemKey })
     )
 
     if (!ok || !data?.ok) {
-      const msg = !ok
-        ? 'No se pudo registrar la publicación por una conexión inestable. Verifica tu internet e inténtalo de nuevo.'
-        : data?.error === 'limite'
+      const msg = data?.error === 'limite'
         ? 'Esta propiedad alcanzó el límite de 10 publicaciones.'
-        : 'No se pudo publicar. Intenta de nuevo.'
+        : errorMsg
+        ? `No se pudo publicar: ${errorMsg}`
+        : 'No se pudo registrar la publicación. Verifica tu conexión e inténtalo de nuevo.'
       if (Platform.OS === 'web') window.alert(msg)
       else Alert.alert('No se pudo publicar', msg)
       setTogglingPublicacion(false)

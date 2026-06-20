@@ -46,15 +46,21 @@ export async function conReintento(
 
 // Igual que conReintento, pero conserva el "data" de la respuesta (para RPCs
 // que devuelven un payload, ej. publicar_propiedad_atomico).
+// Solo reintenta errores de red/timeout; errores de servidor (RLS, función, etc.)
+// fallan de inmediato y devuelven el mensaje real en errorMsg.
 export async function conReintentoData<T>(
   intentar: () => PromiseLike<{ data: T | null; error: unknown }>,
   opciones: { intentos?: number; timeoutMs?: number; backoffMs?: number } = {},
-): Promise<{ ok: boolean; data: T | null }> {
+): Promise<{ ok: boolean; data: T | null; errorMsg?: string }> {
   const { intentos = 3, timeoutMs = 9000, backoffMs = 700 } = opciones
   for (let i = 1; i <= intentos; i++) {
     try {
       const { data, error } = await conTimeout(intentar(), timeoutMs)
       if (!error) return { ok: true, data }
+      // Error devuelto por el servidor (RLS, función inválida, etc.):
+      // no tiene sentido reintentar, fallar de inmediato con el mensaje real.
+      const errorMsg = (error as any)?.message ?? String(error)
+      return { ok: false, data: null, errorMsg }
     } catch { /* timeout o caída de red: se reintenta abajo */ }
     if (i < intentos) await new Promise((r) => setTimeout(r, backoffMs * i))
   }
