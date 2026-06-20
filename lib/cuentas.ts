@@ -88,14 +88,18 @@ export async function cambiarACuenta(
     ])
     const { data, error } = result
     if (error) {
-      // Distinguir errores de auth (tokens inválidos/vencidos, HTTP 4xx)
-      // de errores de red/timeout (el token podría seguir siendo válido).
-      const isAuthError =
-        (error as any).name === 'AuthApiError' ||
-        ((error as any).status != null && (error as any).status >= 400 && (error as any).status < 500)
-      return { ok: false, error: error.message, tokenVencido: isAuthError }
+      // Errores de red/timeout: la sesión puede ser válida, vale la pena reintentar.
+      // AuthRetryableFetchError = fetch falló por red. Nuestro timeout usa Error plano.
+      // Todo lo demás (AuthApiError, AuthInvalidJWTError, etc.) = tokens inválidos.
+      const isNetworkError =
+        (error as any).name === 'AuthRetryableFetchError' ||
+        (error as any).name === 'FetchError' ||
+        (error as any).name === 'TypeError' ||
+        error.message === 'Tiempo de espera agotado'
+      return { ok: false, error: error.message, tokenVencido: !isNetworkError }
     }
-    if (!data.session) return { ok: false, error: 'No se pudo establecer la sesión', tokenVencido: false }
+    // setSession completó sin error pero no devolvió sesión: tokens nulos o malformados.
+    if (!data.session) return { ok: false, error: 'No se pudo establecer la sesión', tokenVencido: true }
     return { ok: true, role: target.role }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'Error desconocido', tokenVencido: false }
