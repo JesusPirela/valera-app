@@ -104,6 +104,7 @@ function WebThemeCSS() {
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null)
+  const sessionRef = useRef<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [updateRequerido, setUpdateRequerido] = useState(false)
   const [fontsLoaded] = useFonts(Platform.OS === 'web' ? {} : Ionicons.font)
@@ -273,6 +274,9 @@ export default function RootLayout() {
     }
   }, [])
 
+  // Mantener ref sincronizado con el estado para lecturas desde callbacks async
+  useEffect(() => { sessionRef.current = session }, [session])
+
   useEffect(() => {
     if (loading) return
     if (pathnameRef.current.startsWith('/ficha')) return  // ruta pública, sin auth
@@ -280,14 +284,18 @@ export default function RootLayout() {
       router.replace('/(auth)/login')
       return
     }
-    // Al recargar la página, verificar el rol y redirigir al home correcto
-    // Esto evita que un usuario normal acceda a rutas de admin por URL
+    // Al recargar la página, verificar el rol y redirigir al home correcto.
+    // Guardamos el userId al inicio: si el usuario cambia de cuenta mientras esta
+    // consulta está en vuelo, cancelamos la redirección (evita volver al admin
+    // después de cambiar a prospectador).
+    const startUserId = session.user.id
     supabase
       .from('profiles')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', startUserId)
       .single()
       .then(async ({ data }) => {
+        if (sessionRef.current?.user.id !== startUserId) return
         if (data?.role === 'admin') {
           // Si el admin tiene activada una "vista como rol", entrar a la app de
           // prospectador en lugar de la de admin (sobrevive recargas).
