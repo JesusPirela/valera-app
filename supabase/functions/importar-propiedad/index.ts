@@ -238,6 +238,70 @@ async function fetchHtml(url: string): Promise<string> {
   throw new Error('No se pudo acceder a la página. El sitio puede estar bloqueando accesos automáticos o tener un certificado de seguridad incompleto. Copia la ficha y pégala manualmente en el campo de descripción.')
 }
 
+// ── NocNok platform helper ────────────────────────────────────────────────────
+// realtydreamsmexico.com and other NocNok-powered sites embed all property data
+// in Next.js RSC flight format: self.__next_f.push([1,"...escaped JSON..."]).
+// This helper decodes the outer JS string escape sequences and then extracts
+// the "property":{...} object using a proper brace-depth parser that accounts
+// for string values (so braces inside descriptions don't confuse the counter).
+function extractNocNokProperty(html: string): Record<string, unknown> | null {
+  const PUSH_PREFIX = 'self.__next_f.push([1,"'
+  const PROP_MARKER = '\\"property\\":'
+  let searchFrom = 0
+  while (true) {
+    const pushStart = html.indexOf(PUSH_PREFIX, searchFrom)
+    if (pushStart === -1) return null
+    const contentStart = pushStart + PUSH_PREFIX.length
+    // Quick check: does this block contain the property key?
+    const nextPush = html.indexOf(PUSH_PREFIX, contentStart + 1)
+    const blockEnd = nextPush !== -1 ? nextPush : Math.min(contentStart + 400000, html.length)
+    if (!html.slice(contentStart, blockEnd).includes(PROP_MARKER)) {
+      searchFrom = contentStart
+      continue
+    }
+    // Decode JS string escape sequences from the push argument
+    const chars: string[] = []
+    let i = contentStart
+    while (i < html.length) {
+      const ch = html[i]
+      if (ch === '\\' && i + 1 < html.length) {
+        const nx = html[i + 1]
+        if (nx === '"') { chars.push('"'); i += 2; continue }
+        if (nx === '\\') { chars.push('\\'); i += 2; continue }
+        if (nx === 'n') { chars.push('\n'); i += 2; continue }
+        if (nx === 'r') { chars.push('\r'); i += 2; continue }
+        if (nx === 't') { chars.push('\t'); i += 2; continue }
+        chars.push(nx); i += 2; continue
+      }
+      if (ch === '"') break // end of JS string
+      chars.push(ch); i++
+    }
+    const content = chars.join('')
+    // Find "property":{ and extract the object with a proper depth/string parser
+    const pkIdx = content.indexOf('"property":')
+    if (pkIdx === -1) { searchFrom = contentStart; continue }
+    let j = pkIdx + '"property":'.length // points to '{'
+    let depth = 0
+    let inStr = false
+    while (j < content.length) {
+      const c = content[j]
+      if (inStr) {
+        if (c === '\\') { j += 2; continue }
+        if (c === '"') inStr = false
+      } else {
+        if (c === '"') inStr = true
+        else if (c === '{') depth++
+        else if (c === '}') { depth--; if (depth === 0) break }
+      }
+      j++
+    }
+    if (depth !== 0) { searchFrom = contentStart; continue }
+    try {
+      return JSON.parse(content.slice(pkIdx + '"property":'.length, j + 1)) as Record<string, unknown>
+    } catch { searchFrom = contentStart; continue }
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -270,6 +334,40 @@ serve(async (req) => {
     let operacion: 'venta' | 'renta' | null = null
     let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
     let imagenes: string[] = []
+
+    // ── 0. NocNok platform (realtydreamsmexico.com y similares) ──────────────
+    if (html.includes('nocnok-img')) {
+      const np = extractNocNokProperty(html)
+      if (np) {
+        if (np.title) titulo = String(np.title)
+        if (np.description) descripcion = String(np.description)
+        const sp = parseNum(np.salePrice)
+        const rp = parseNum(np.rentPrice)
+        if (sp) { precio = String(Math.round(sp)); operacion = 'venta' }
+        else if (rp) { precio = String(Math.round(rp)); operacion = 'renta' }
+        if (!operacion) operacion = np.isSale ? 'venta' : np.isRent ? 'renta' : null
+        recamaras = cap(parseNum(np.bedrooms), 5)
+        banos = cap(parseNum(np.fullBathrooms), 4)
+        mediosBanos = cap(parseNum(np.halfBathrooms), 2)
+        estacionamientos = cap(parseNum(np.parkingSpaces), 3)
+        const cs = parseNum(np.constructionSize); if (cs) m2 = String(Math.round(cs))
+        const ls = parseNum(np.lotSize); if (ls) m2Terreno = String(Math.round(ls))
+        if (!tipo) tipo = mapTipo(String(np.type ?? '') + ' ' + String(np.subtype ?? ''))
+        if (!direccion) {
+          const parts = [np.settlement, np.county, np.state].filter(Boolean).map(String)
+          if (parts.length) direccion = parts.join(', ')
+        }
+        if (!zona) {
+          const loc = [np.state ?? '', np.county ?? ''].join(' ').toLowerCase()
+          if (/quer[eé]taro/.test(loc)) zona = 'queretaro'
+          else if (/monterrey|nuevo\s*le[oó]n/.test(loc)) zona = 'monterrey'
+          else if (/puebla/.test(loc)) zona = 'puebla'
+        }
+        if (Array.isArray(np.pictureUrls)) {
+          imagenes = (np.pictureUrls as unknown[]).slice(0, 30).map(u => String(u))
+        }
+      }
+    }
 
     // ── 1. EasyBroker: JSON embebido HTML-encoded ─────────────────────────────
     // Patrón: {"Property ID":"EB-XXXX","Bedrooms":N,...}
@@ -475,6 +573,8 @@ serve(async (req) => {
     }
 
     // ── 10. Imágenes: CDNs conocidos + genéricos, deduplicadas ────────────────
+    // Skipped when already populated (e.g. by NocNok parser from pictureUrls)
+    if (!imagenes.length) {
     const imgPatterns = [
       /https?:\/\/assets\.easybroker\.com\/property_images\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
       /https?:\/\/static\.tokkobroker\.com\/pictures\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,    // reval (Tokko)
@@ -516,6 +616,7 @@ serve(async (req) => {
       if (!cur || w > cur.w) best.set(base, { url: u, w })
     }
     imagenes = [...best.values()].map(v => v.url)
+    } // end !imagenes.length block
 
     // ── 11. Fallbacks finales para tipo / operación / imágenes / zona ─────────
     if (!tipo) {
