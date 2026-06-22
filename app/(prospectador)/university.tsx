@@ -22,6 +22,7 @@ type CursoCard = {
   totalLecciones: number
   completadas: number
   tieneCertificado: boolean
+  es_certificacion: boolean
 }
 
 const NIVEL_COLOR: Record<string, string> = {
@@ -130,7 +131,7 @@ export default function University() {
     setShowIntro(false)
   }
 
-  const totalCerts = cursos.filter((c) => c.tieneCertificado).length
+  const totalCerts = cursos.filter((c) => c.es_certificacion && c.tieneCertificado).length
   const enProgreso = cursos.filter((c) => c.completadas > 0 && !c.tieneCertificado).length
 
   return (
@@ -213,7 +214,10 @@ export default function University() {
         ) : null}
 
         {/* Cursos */}
-        <Text style={estilos.seccion}>Cursos disponibles</Text>
+        <View style={estilos.seccionRow}>
+          <View style={estilos.seccionAccent} />
+          <Text style={estilos.seccion}>Cursos disponibles</Text>
+        </View>
 
         {loading ? (
           <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
@@ -227,6 +231,8 @@ export default function University() {
             const pct = curso.totalLecciones > 0
               ? Math.round((curso.completadas / curso.totalLecciones) * 100) : 0
             const nivelColor = NIVEL_COLOR[curso.nivel] ?? '#555'
+            const nivelLabel = curso.nivel.charAt(0).toUpperCase() + curso.nivel.slice(1)
+            const inicial = curso.titulo.trim().charAt(0).toUpperCase()
             return (
               <TouchableOpacity
                 key={curso.id}
@@ -234,23 +240,33 @@ export default function University() {
                 onPress={() => router.push(`/(prospectador)/university-curso?id=${curso.id}`)}
                 activeOpacity={0.85}
               >
-                {curso.imagen_url ? (
-                  <Image source={{ uri: curso.imagen_url }} style={estilos.cardImg} />
-                ) : (
-                  <View style={estilos.cardImgPlaceholder}>
-                    <Text style={estilos.cardImgIcon}>🎓</Text>
-                  </View>
-                )}
-                <View style={estilos.cardBody}>
-                  <View style={estilos.badgeRow}>
-                    <View style={[estilos.nivelBadge, { backgroundColor: nivelColor + '20', borderColor: nivelColor }]}>
-                      <Text style={[estilos.nivelText, { color: nivelColor }]}>
-                        {curso.nivel.charAt(0).toUpperCase() + curso.nivel.slice(1)}
-                      </Text>
+                {/* Imagen o placeholder con letra inicial */}
+                <View style={estilos.cardImgWrapper}>
+                  {curso.imagen_url ? (
+                    <Image source={{ uri: curso.imagen_url }} style={estilos.cardImg} />
+                  ) : (
+                    <View style={[estilos.cardImgPlaceholder, { backgroundColor: nivelColor }]}>
+                      <Text style={estilos.cardImgInit}>{inicial}</Text>
+                      <Text style={estilos.cardImgCat}>{curso.categoria.toUpperCase()}</Text>
                     </View>
-                    <Text style={estilos.categoriaText}>{curso.categoria}</Text>
-                    {curso.tieneCertificado && <Text style={estilos.certBadge}>{curso.es_certificacion ? '🏆 Completado' : '✅ Completado'}</Text>}
+                  )}
+                  {/* Badges sobre la imagen */}
+                  <View style={estilos.imgOverlayRow}>
+                    <View style={[estilos.nivelBadgeImg, { backgroundColor: nivelColor }]}>
+                      <Text style={estilos.nivelBadgeImgText}>{nivelLabel}</Text>
+                    </View>
+                    {curso.tieneCertificado && (
+                      <View style={estilos.completadoBadge}>
+                        <Text style={estilos.completadoBadgeText}>
+                          {curso.es_certificacion ? '🏆 Certificado' : '✅ Completado'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
+                </View>
+
+                <View style={estilos.cardBody}>
+                  <Text style={estilos.categoriaChip}>{curso.categoria}</Text>
                   <Text style={[estilos.cardTitulo, { color: c.text }]}>{curso.titulo}</Text>
                   {curso.descripcion_corta && (
                     <Text style={[estilos.cardDesc, { color: c.textSub }]} numberOfLines={2}>{curso.descripcion_corta}</Text>
@@ -260,8 +276,11 @@ export default function University() {
                     {curso.duracion_texto && <Text style={[estilos.metaText, { color: c.textMute }]}>⏱ {curso.duracion_texto}</Text>}
                   </View>
                   <View style={estilos.progresoRow}>
+                    <View style={estilos.progresoTopRow}>
+                      <Text style={estilos.progresoLabel}>{curso.completadas}/{curso.totalLecciones} lecciones</Text>
+                      <Text style={[estilos.progresoLabel, { color: pct === 100 ? '#2e7d32' : '#1a6470', fontWeight: '700' }]}>{pct}%</Text>
+                    </View>
                     <BarraProgreso pct={pct} />
-                    <Text style={estilos.progresoLabel}>{curso.completadas}/{curso.totalLecciones} lecciones</Text>
                   </View>
                   <TouchableOpacity
                     style={[estilos.btnEntrar, curso.tieneCertificado && estilos.btnEntrarDone]}
@@ -269,8 +288,8 @@ export default function University() {
                   >
                     <Text style={estilos.btnEntrarText}>
                       {curso.tieneCertificado
-                        ? (curso.es_certificacion ? '🏆 Ver certificado' : '✅ Curso completado')
-                        : (curso.completadas > 0 ? '▶ Continuar' : '▶ Comenzar')}
+                        ? (curso.es_certificacion ? '🏆 Ver certificado' : '✅ Ver curso')
+                        : (curso.completadas > 0 ? '▶  Continuar' : '▶  Comenzar')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -316,29 +335,35 @@ const estilos = StyleSheet.create({
   statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1.5, borderColor: '#1a6470' },
   statNum: { fontSize: 20, fontWeight: '800', color: '#1a6470' },
   statLabel: { fontSize: 10, color: '#888', marginTop: 2, textAlign: 'center' },
-  seccion: { fontSize: 13, fontWeight: '700', color: '#1a6470', letterSpacing: 0.5, textTransform: 'uppercase', marginHorizontal: 16, marginBottom: 8 },
+  seccionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 10 },
+  seccionAccent: { width: 4, height: 16, backgroundColor: '#c9a84c', borderRadius: 2 },
+  seccion: { fontSize: 13, fontWeight: '700', color: '#1a6470', letterSpacing: 0.5, textTransform: 'uppercase' },
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: '#aaa', fontSize: 14 },
-  card: { backgroundColor: '#fff', borderRadius: 16, marginHorizontal: 16, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e8eef0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  cardImg: { width: '100%', height: 160 },
-  cardImgPlaceholder: { width: '100%', height: 160, backgroundColor: '#1a6470', alignItems: 'center', justifyContent: 'center' },
-  cardImgIcon: { fontSize: 52 },
-  cardBody: { padding: 16 },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  nivelBadge: { borderRadius: 6, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2 },
-  nivelText: { fontSize: 10, fontWeight: '700' },
-  categoriaText: { fontSize: 11, color: '#888' },
-  certBadge: { fontSize: 11, color: '#c9a84c', fontWeight: '700' },
-  cardTitulo: { fontSize: 16, fontWeight: '800', color: '#1a1a2e', marginBottom: 4 },
+  card: { backgroundColor: '#fff', borderRadius: 16, marginHorizontal: 16, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e8eef0', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
+  cardImgWrapper: { position: 'relative' },
+  cardImg: { width: '100%', height: 165 },
+  cardImgPlaceholder: { width: '100%', height: 165, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  cardImgInit: { fontSize: 56, fontWeight: '800', color: 'rgba(255,255,255,0.9)' },
+  cardImgCat: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5 },
+  imgOverlayRow: { position: 'absolute', bottom: 10, left: 10, flexDirection: 'row', gap: 6 },
+  nivelBadgeImg: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  nivelBadgeImgText: { fontSize: 10, fontWeight: '700', color: '#fff' },
+  completadoBadge: { backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  completadoBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff' },
+  cardBody: { padding: 14 },
+  categoriaChip: { fontSize: 10, fontWeight: '600', color: '#888', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 4 },
+  cardTitulo: { fontSize: 16, fontWeight: '800', color: '#1a1a2e', marginBottom: 4, lineHeight: 22 },
   cardDesc: { fontSize: 13, color: '#666', lineHeight: 18, marginBottom: 8 },
-  metaRow: { flexDirection: 'row', gap: 16, marginBottom: 10 },
+  metaRow: { flexDirection: 'row', gap: 14, marginBottom: 10 },
   metaText: { fontSize: 11, color: '#888' },
   progresoRow: { marginBottom: 14 },
-  progresoLabel: { fontSize: 11, color: '#888', marginTop: 4 },
+  progresoTopRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  progresoLabel: { fontSize: 11, color: '#888' },
   barraFondo: { height: 6, backgroundColor: '#e8eef0', borderRadius: 3 },
   barraRelleno: { height: 6, backgroundColor: '#1a6470', borderRadius: 3 },
   btnEntrar: { backgroundColor: '#1a6470', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   btnEntrarDone: { backgroundColor: '#c9a84c' },
-  btnEntrarText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  btnEntrarText: { color: '#fff', fontWeight: '700', fontSize: 14, letterSpacing: 0.3 },
 })

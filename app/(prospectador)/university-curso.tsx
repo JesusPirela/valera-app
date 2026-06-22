@@ -404,44 +404,64 @@ export default function UniversityCurso() {
 
       {/* Lista de lecciones */}
       <View style={estilos.leccionesCard}>
-        <Text style={estilos.leccionesTitle}>Contenido del curso</Text>
-        {lecciones.map((leccion) => {
+        <View style={estilos.leccionesTitleRow}>
+          <Text style={estilos.leccionesTitle}>Contenido del curso</Text>
+          <Text style={estilos.leccionesCount}>{completadasIds.size}/{totalLecciones}</Text>
+        </View>
+        {lecciones.map((leccion, idx) => {
           const completada = completadasIds.has(leccion.id)
           const bloqueada = isLocked(leccion)
+          const esSiguiente = siguiente?.id === leccion.id
+          const esUltima = idx === lecciones.length - 1
           return (
-            <TouchableOpacity
-              key={leccion.id}
-              style={[
-                estilos.leccionRow,
-                bloqueada && estilos.leccionRowBloqueada,
-                completada && estilos.leccionRowCompletada,
-              ]}
-              onPress={() => {
-                if (bloqueada) return
-                router.push(`/(prospectador)/university-leccion?id=${leccion.id}&cursoId=${cursoId}`)
-              }}
-              activeOpacity={bloqueada ? 1 : 0.7}
-            >
-              <View style={[
-                estilos.leccionNum,
-                completada && estilos.leccionNumDone,
-                bloqueada && estilos.leccionNumLocked,
-              ]}>
-                <Text style={[estilos.leccionNumText, (completada || !bloqueada) && { color: completada ? '#fff' : '#1a6470' }]}>
-                  {completada ? '✓' : bloqueada ? '🔒' : leccion.orden}
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[estilos.leccionNombre, bloqueada && { color: '#bbb' }]}>
-                  {leccion.titulo}
-                </Text>
-                {leccion.descripcion && !bloqueada && (
-                  <Text style={estilos.leccionDesc} numberOfLines={1}>{leccion.descripcion}</Text>
-                )}
-              </View>
-              {completada && <Text style={estilos.checkIcon}>+10 pts</Text>}
-              {!bloqueada && !completada && <Text style={estilos.chevron}>›</Text>}
-            </TouchableOpacity>
+            <View key={leccion.id} style={estilos.timelineItem}>
+              {/* Línea vertical del timeline */}
+              {!esUltima && (
+                <View style={[
+                  estilos.timelineLine,
+                  completada && { backgroundColor: '#1a6470' },
+                ]} />
+              )}
+              <TouchableOpacity
+                style={[
+                  estilos.leccionRow,
+                  bloqueada && estilos.leccionRowBloqueada,
+                  completada && estilos.leccionRowCompletada,
+                  esSiguiente && estilos.leccionRowSiguiente,
+                ]}
+                onPress={() => {
+                  if (bloqueada) return
+                  router.push(`/(prospectador)/university-leccion?id=${leccion.id}&cursoId=${cursoId}`)
+                }}
+                activeOpacity={bloqueada ? 1 : 0.7}
+              >
+                <View style={[
+                  estilos.leccionNum,
+                  completada && estilos.leccionNumDone,
+                  bloqueada && estilos.leccionNumLocked,
+                  esSiguiente && estilos.leccionNumSiguiente,
+                ]}>
+                  <Text style={[
+                    estilos.leccionNumText,
+                    completada && { color: '#fff' },
+                    !bloqueada && !completada && { color: esSiguiente ? '#fff' : '#1a6470' },
+                  ]}>
+                    {completada ? '✓' : bloqueada ? '🔒' : leccion.orden}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[estilos.leccionNombre, bloqueada && { color: '#bbb' }]}>
+                    {leccion.titulo}
+                  </Text>
+                  {leccion.descripcion && !bloqueada && (
+                    <Text style={estilos.leccionDesc} numberOfLines={1}>{leccion.descripcion}</Text>
+                  )}
+                </View>
+                {completada && <Text style={estilos.checkIcon}>+10 pts</Text>}
+                {esSiguiente && <Text style={estilos.chevronSig}>›</Text>}
+                {!bloqueada && !completada && !esSiguiente && <Text style={estilos.chevron}>›</Text>}
+              </TouchableOpacity>
+            </View>
           )
         })}
       </View>
@@ -531,18 +551,25 @@ const estilos = StyleSheet.create({
   descTitle: { fontSize: 13, fontWeight: '700', color: '#1a6470', marginBottom: 8 },
   descText: { fontSize: 13, color: '#555', lineHeight: 20 },
   leccionesCard: { backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e8eef0' },
-  leccionesTitle: { fontSize: 13, fontWeight: '700', color: '#1a6470', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f0f4f5' },
-  leccionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderBottomColor: '#f0f4f5' },
-  leccionRowCompletada: { backgroundColor: '#f8fffe' },
+  leccionesTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f0f4f5' },
+  leccionesTitle: { fontSize: 13, fontWeight: '700', color: '#1a6470' },
+  leccionesCount: { fontSize: 12, color: '#888', fontWeight: '600' },
+  timelineItem: { position: 'relative' },
+  timelineLine: { position: 'absolute', left: 27, top: 48, bottom: 0, width: 2, backgroundColor: '#e8eef0', zIndex: 0 },
+  leccionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderBottomColor: '#f0f4f5', zIndex: 1 },
+  leccionRowCompletada: { backgroundColor: '#f6fcf9' },
   leccionRowBloqueada: { backgroundColor: '#fafafa' },
-  leccionNum: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: '#1a6470', alignItems: 'center', justifyContent: 'center' },
+  leccionRowSiguiente: { backgroundColor: '#f0f7f8' },
+  leccionNum: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: '#1a6470', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   leccionNumDone: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  leccionNumLocked: { borderColor: '#ddd' },
+  leccionNumLocked: { borderColor: '#ddd', backgroundColor: '#fafafa' },
+  leccionNumSiguiente: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   leccionNumText: { fontSize: 13, fontWeight: '700', color: '#aaa' },
   leccionNombre: { fontSize: 14, fontWeight: '600', color: '#1a1a2e' },
   leccionDesc: { fontSize: 11, color: '#888', marginTop: 2 },
   checkIcon: { fontSize: 11, color: '#2e7d32', fontWeight: '700' },
   chevron: { fontSize: 20, color: '#bbb', fontWeight: '300' },
+  chevronSig: { fontSize: 20, color: '#1a6470', fontWeight: '700' },
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modalBox: { backgroundColor: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 420, alignItems: 'center' },
