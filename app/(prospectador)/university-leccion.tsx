@@ -304,11 +304,31 @@ export default function UniversityLeccion() {
       if (!error && data && !data.ya_completada) {
         setYaCompletada(true)
         setResultado({ curso_completado: data.curso_completado, certificado_nuevo: data.certificado_nuevo })
-        // Disparar misiones y gamificación (XP + coins + misión diaria 'curso')
         if (user) {
           await registrarAccion(user.id, 'completar_leccion')
           if (data.curso_completado) {
             await registrarAccion(user.id, 'completar_curso')
+            // Actualizar tareas de tipo completar_curso asignadas por el admin
+            const { count: totalCursos } = await supabase
+              .from('vu_certificados')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', user.id)
+            const { data: asigs } = await supabase
+              .from('tarea_asignaciones')
+              .select('id, tarea:tareas!inner(tipo, meta_cantidad)')
+              .eq('user_id', user.id)
+              .eq('completada', false)
+              .eq('tarea.tipo', 'completar_curso')
+            for (const a of (asigs ?? []) as any[]) {
+              const meta = a.tarea?.meta_cantidad ?? 1
+              const prog = Math.min(totalCursos ?? 1, meta)
+              const completada = prog >= meta
+              await supabase.from('tarea_asignaciones').update({
+                progreso: prog,
+                completada,
+                completada_at: completada ? new Date().toISOString() : null,
+              }).eq('id', a.id)
+            }
           }
         }
       }

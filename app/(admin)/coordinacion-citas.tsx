@@ -18,6 +18,11 @@ type EstadoCita =
   | 'reagendada'
   | 'no_responde_asesor'
   | 'realizada'
+  | 'aparto'
+  | 'recaudando_documentacion'
+  | 'aprobando_credito'
+  | 'firma_contrato'
+  | 'escrituracion'
   | 'cancelada'
 
 type Cita = {
@@ -46,21 +51,28 @@ type Profile = { id: string; nombre: string }
 export const ESTADOS_CITA: Record<EstadoCita, {
   label: string; color: string; bg: string; icon: string; emoji: string; dark: string
 }> = {
-  por_contactar:      { label: 'Por contactar',         color: '#3b82f6', bg: '#eff6ff', dark: '#1d4ed8', icon: 'person-outline',              emoji: '🔵' },
-  primer_contacto:    { label: 'Primer contacto',       color: '#8b5cf6', bg: '#f5f3ff', dark: '#6d28d9', icon: 'call-outline',                emoji: '🟣' },
-  buscando_opciones:  { label: 'Buscando opciones',     color: '#ca8a04', bg: '#fefce8', dark: '#92400e', icon: 'search-outline',              emoji: '🟡' },
-  en_coordinacion:    { label: 'En coordinación',       color: '#f97316', bg: '#fff7ed', dark: '#c2410c', icon: 'sync-outline',                emoji: '🟠' },
-  coordinada:         { label: 'Coordinada',            color: '#16a34a', bg: '#f0fdf4', dark: '#15803d', icon: 'calendar-outline',            emoji: '🟢' },
-  reagendada:         { label: 'Reagendada',            color: '#b45309', bg: '#fef3c7', dark: '#92400e', icon: 'refresh-outline',             emoji: '🟤' },
-  no_responde_asesor: { label: 'No responde el asesor', color: '#dc2626', bg: '#fef2f2', dark: '#b91c1c', icon: 'notifications-off-outline',   emoji: '🔴' },
-  realizada:          { label: 'Realizada',             color: '#0d9488', bg: '#f0fdfa', dark: '#0f766e', icon: 'checkmark-circle-outline',    emoji: '✅' },
-  cancelada:          { label: 'Cancelada',             color: '#64748b', bg: '#f8fafc', dark: '#475569', icon: 'close-circle-outline',        emoji: '⚫' },
+  por_contactar:            { label: 'Por contactar',              color: '#3b82f6', bg: '#eff6ff', dark: '#1d4ed8', icon: 'person-outline',              emoji: '🔵' },
+  primer_contacto:          { label: 'Primer contacto',            color: '#8b5cf6', bg: '#f5f3ff', dark: '#6d28d9', icon: 'call-outline',                emoji: '🟣' },
+  buscando_opciones:        { label: 'Buscando opciones',          color: '#ca8a04', bg: '#fefce8', dark: '#92400e', icon: 'search-outline',              emoji: '🟡' },
+  en_coordinacion:          { label: 'En coordinación',            color: '#f97316', bg: '#fff7ed', dark: '#c2410c', icon: 'sync-outline',                emoji: '🟠' },
+  coordinada:               { label: 'Coordinada',                 color: '#16a34a', bg: '#f0fdf4', dark: '#15803d', icon: 'calendar-outline',            emoji: '🟢' },
+  reagendada:               { label: 'Reagendada',                 color: '#b45309', bg: '#fef3c7', dark: '#92400e', icon: 'refresh-outline',             emoji: '🟤' },
+  no_responde_asesor:       { label: 'No responde el asesor',      color: '#dc2626', bg: '#fef2f2', dark: '#b91c1c', icon: 'notifications-off-outline',   emoji: '🔴' },
+  realizada:                { label: 'Realizada',                  color: '#0d9488', bg: '#f0fdfa', dark: '#0f766e', icon: 'checkmark-circle-outline',    emoji: '✅' },
+  aparto:                   { label: 'Apartó',                     color: '#7c3aed', bg: '#f5f3ff', dark: '#5b21b6', icon: 'key-outline',                 emoji: '🔑' },
+  recaudando_documentacion: { label: 'Recaudando documentación',   color: '#0369a1', bg: '#e0f2fe', dark: '#075985', icon: 'document-text-outline',       emoji: '📄' },
+  aprobando_credito:        { label: 'Aprobando crédito',          color: '#d97706', bg: '#fef3c7', dark: '#b45309', icon: 'card-outline',                emoji: '💳' },
+  firma_contrato:           { label: 'Firma de contrato',          color: '#059669', bg: '#ecfdf5', dark: '#047857', icon: 'pencil-outline',              emoji: '✍️' },
+  escrituracion:            { label: 'Escrituración',              color: '#c2410c', bg: '#fff7ed', dark: '#9a3412', icon: 'ribbon-outline',               emoji: '🏠' },
+  cancelada:                { label: 'Cancelada',                  color: '#64748b', bg: '#f8fafc', dark: '#475569', icon: 'close-circle-outline',        emoji: '⚫' },
 }
 
 const ORDEN_ESTADOS: EstadoCita[] = [
   'por_contactar', 'primer_contacto', 'buscando_opciones',
   'en_coordinacion', 'coordinada', 'reagendada',
-  'no_responde_asesor', 'realizada', 'cancelada',
+  'no_responde_asesor', 'realizada',
+  'aparto', 'recaudando_documentacion', 'aprobando_credito', 'firma_contrato', 'escrituracion',
+  'cancelada',
 ]
 
 const COL_W = 240  // ancho de cada columna kanban
@@ -787,9 +799,10 @@ export default function CoordinacionCitas() {
   const [citaEditando, setCitaEditando] = useState<Cita | null>(null)
   const [citaMoviendo, setCitaMoviendo] = useState<Cita | null>(null)
   const [modalNueva, setModalNueva]     = useState(false)
-  const [busqueda, setBusqueda]         = useState('')
-  const [filtroAdmin, setFiltroAdmin]   = useState<string | null>(null)
-  const [showSearch, setShowSearch]     = useState(false)
+  const [busqueda, setBusqueda]             = useState('')
+  const [filtroAdmin, setFiltroAdmin]       = useState<string | null>(null)
+  const [filtroOperacion, setFiltroOperacion] = useState<'venta' | 'renta' | null>(null)
+  const [showSearch, setShowSearch]         = useState(false)
   const [draggingCita, setDraggingCita] = useState<Cita | null>(null)
   const [dragOverEstado, setDragOverEstado] = useState<EstadoCita | null>(null)
   const mountedRef = useRef(true)
@@ -889,6 +902,9 @@ export default function CoordinacionCitas() {
     if (filtroAdmin) {
       if (filtroAdmin === 'sin_asignar' && c.coordinado_por) return false
       if (filtroAdmin !== 'sin_asignar' && c.coordinado_por !== filtroAdmin) return false
+    }
+    if (filtroOperacion) {
+      if (c.clientes.tipo_operacion !== filtroOperacion) return false
     }
     if (busqueda.trim()) {
       const q = busqueda.toLowerCase()
@@ -1011,6 +1027,28 @@ export default function CoordinacionCitas() {
         </ScrollView>
       )}
 
+      {/* ── Filtro venta / renta ── */}
+      <View style={s.opRow}>
+        {([null, 'venta', 'renta'] as const).map(op => {
+          const activo = filtroOperacion === op
+          const label = op === null ? 'Todos' : op.charAt(0).toUpperCase() + op.slice(1)
+          const cnt = op === null ? citasFiltradas.length : citas.filter(c => c.clientes.tipo_operacion === op && (filtroAdmin
+            ? filtroAdmin === 'sin_asignar' ? !c.coordinado_por : c.coordinado_por === filtroAdmin
+            : true)).length
+          return (
+            <TouchableOpacity
+              key={String(op)}
+              style={[s.opChip, activo && s.opChipActivo]}
+              onPress={() => setFiltroOperacion(activo && op !== null ? null : op)}
+            >
+              <Text style={[s.opChipTxt, activo && { color: '#fff', fontWeight: '700' }]}>
+                {label} · {cnt}
+              </Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+
       {/* ── Board kanban ── */}
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
@@ -1120,6 +1158,12 @@ const s = StyleSheet.create({
   },
   adminChipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   adminChipTxt:    { fontSize: 12, color: '#64748b', fontWeight: '500' },
+
+  // Filtro venta / renta
+  opRow:     { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 7, gap: 8, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  opChip:    { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff' },
+  opChipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  opChipTxt: { fontSize: 12, color: '#64748b', fontWeight: '500' },
 
   // Board
   board:        { flex: 1, backgroundColor: '#f1f5f9' },

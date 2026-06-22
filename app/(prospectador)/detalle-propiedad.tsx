@@ -355,10 +355,9 @@ export default function DetallePropiedad() {
     setVecesPublicada(nuevasVeces)
 
     actualizarMisionesPorCategoria(user.id, 'propiedad').catch(() => {})
-    queryClient.setQueryData<any>(['prospectador-propiedades'], (old: any) => {
-      if (!old) return old
-      return { ...old, publicacionesMap: { ...old.publicacionesMap, [id]: nuevasVeces } }
-    })
+    // Invalida el query de publicaciones (prefijo parcial cubre todos los userId)
+    // para que la lista de propiedades muestre el estado correcto al regresar.
+    queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
 
     // Actualizar progreso en tarea de tipo publicar_propiedades
     const { count } = await supabase
@@ -415,10 +414,7 @@ export default function DetallePropiedad() {
       setVecesPublicada(nuevas)
       setPublicada(nuevas > 0)
       setFechaPublicacion(resp.fecha_publicacion ?? null)
-      queryClient.setQueryData<any>(['prospectador-propiedades'], (old: any) => {
-        if (!old) return old
-        return { ...old, publicacionesMap: { ...old.publicacionesMap, [id]: nuevas } }
-      })
+      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
     } else {
       const errMsg = 'No se pudo deshacer la publicación. Intenta de nuevo.'
       if (Platform.OS === 'web') window.alert(errMsg)

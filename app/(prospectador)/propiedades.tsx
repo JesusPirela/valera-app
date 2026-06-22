@@ -78,6 +78,9 @@ type PropiedadesData = {
   userId: string
   telefono: string | null
   propiedades: Propiedad[]
+}
+
+type PublicacionesData = {
   publicacionesMap: Record<string, number>
   publicacionFechasMap: Record<string, string>
 }
@@ -153,9 +156,8 @@ export default function ProspectadorPropiedades() {
       const userId = session?.user?.id
       if (!userId) throw new Error('No user')
 
-      const [profileRes, pubRes] = await Promise.all([
+      const [profileRes] = await Promise.all([
         supabase.from('profiles').select('role, nombre, telefono').eq('id', userId).single(),
-        supabase.from('propiedad_publicacion').select('propiedad_id, veces_publicada, fecha_publicacion').eq('user_id', userId),
       ])
 
       // Paginar: PostgREST corta en 1000 filas/petición. Sin esto, las
@@ -193,18 +195,42 @@ export default function ProspectadorPropiedades() {
         userId,
         telefono: profileRes.data?.telefono ?? null,
         propiedades,
-        publicacionesMap: Object.fromEntries(
-          (pubRes.data ?? []).map((r: { propiedad_id: string; veces_publicada: number; fecha_publicacion: string | null }) => [r.propiedad_id, r.veces_publicada ?? 0])
-        ),
-        publicacionFechasMap: Object.fromEntries(
-          (pubRes.data ?? [])
-            .filter((r: { propiedad_id: string; fecha_publicacion: string | null }) => r.fecha_publicacion)
-            .map((r: { propiedad_id: string; fecha_publicacion: string }) => [r.propiedad_id, r.fecha_publicacion])
-        ),
       }
     },
     networkMode: 'offlineFirst',
     staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
+  })
+
+  // Query separado para publicaciones: staleTime=0 y gcTime=0 garantizan que
+  // (a) nunca se persiste al disco (no puede quedar un update optimista "pegado"
+  // entre sesiones tras un crash), y (b) siempre se trae fresco del servidor
+  // al montar el componente o al regresar a esta pantalla.
+  const { data: pubData, refetch: refetchPub } = useQuery<PublicacionesData>({
+    queryKey: ['publicaciones-usuario', queryData?.userId ?? null],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const uid = session?.user?.id
+      if (!uid) throw new Error('No user')
+      const { data } = await supabase
+        .from('propiedad_publicacion')
+        .select('propiedad_id, veces_publicada, fecha_publicacion')
+        .eq('user_id', uid)
+      return {
+        publicacionesMap: Object.fromEntries(
+          (data ?? []).map((r: { propiedad_id: string; veces_publicada: number }) => [r.propiedad_id, r.veces_publicada ?? 0])
+        ),
+        publicacionFechasMap: Object.fromEntries(
+          (data ?? [])
+            .filter((r: { fecha_publicacion: string | null }) => r.fecha_publicacion)
+            .map((r: { propiedad_id: string; fecha_publicacion: string }) => [r.propiedad_id, r.fecha_publicacion])
+        ),
+      }
+    },
+    enabled: !!queryData?.userId,
+    staleTime: 0,
+    gcTime: 0,
+    networkMode: 'offlineFirst',
     refetchOnWindowFocus: false,
   })
 
@@ -222,8 +248,12 @@ export default function ProspectadorPropiedades() {
       const state = queryClient.getQueryState(['prospectador-propiedades', vistaComo])
       const isStale = !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt > 1000 * 60 * 5
       if (isStale) refetch()
+      // Las publicaciones siempre se refresca en focus: el query tiene gcTime=0
+      // (nunca persiste) y staleTime=0, así cualquier estado optimista perdido
+      // tras un crash o cambio de pantalla se corrige al volver aquí.
+      refetchPub()
     }
-  }, [refetch, queryClient, vistaComo]))
+  }, [refetch, refetchPub, queryClient, vistaComo]))
 
   useEffect(() => {
     if (!queryData?.propiedades) return
@@ -242,8 +272,8 @@ export default function ProspectadorPropiedades() {
   }, [queryData?.propiedades])
 
   const propiedades = queryData?.propiedades ?? []
-  const publicaciones = queryData?.publicacionesMap ?? {}
-  const publicacionFechas = queryData?.publicacionFechasMap ?? {}
+  const publicaciones = pubData?.publicacionesMap ?? {}
+  const publicacionFechas = pubData?.publicacionFechasMap ?? {}
 
   async function publicarPropiedad(propiedadId: string) {
     if (togglingRef.current.has(propiedadId)) return
@@ -262,18 +292,12 @@ export default function ProspectadorPropiedades() {
     togglingRef.current = newTogglingSet
     setToggling(newTogglingSet)
 
-    // Optimista: refleja +1 de inmediato; se corrige abajo con el valor real
-    // del servidor (que puede diferir si hubo otra publicación concurrente
-    // desde otra plataforma/dispositivo de la misma cuenta).
-    queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades', vistaComo], old => {
+    // Optimista sobre el query separado (gcTime=0 → no persiste al disco).
+    queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => {
       if (!old) return old
       return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual + 1 } }
     })
 
-    // RPC atómico (bloquea la fila en servidor): el conteo "x/10" y el
-    // premio de coins/XP se aplican juntos en una sola transacción, así que
-    // no pueden quedar desincronizados entre app y web, y un reintento por
-    // mala conexión con el mismo idem key nunca duplica el premio.
     const idemKey = generarIdemKey()
     const { ok, data, errorMsg } = await conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number }>(
       () => supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: propiedadId, p_idem_key: idemKey }),
@@ -281,10 +305,12 @@ export default function ProspectadorPropiedades() {
     )
 
     if (!ok || !data?.ok) {
-      queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades', vistaComo], old => {
+      // Rollback optimista y refetch para mostrar estado real del servidor.
+      queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => {
         if (!old) return old
         return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual } }
       })
+      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
       const msg = data?.error === 'limite'
         ? 'Esta propiedad alcanzó el límite de 10 publicaciones.'
         : errorMsg
@@ -294,10 +320,12 @@ export default function ProspectadorPropiedades() {
       else Alert.alert('No se pudo publicar', msg)
     } else {
       const vecesReal = data.veces_publicada ?? vecesActual + 1
-      queryClient.setQueryData<PropiedadesData>(['prospectador-propiedades', vistaComo], old => {
+      queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => {
         if (!old) return old
         return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesReal } }
       })
+      // Invalida para confirmar el conteo real desde el servidor en background.
+      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
       actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
     }
 
