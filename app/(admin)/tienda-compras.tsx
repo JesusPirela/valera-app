@@ -109,7 +109,9 @@ export default function TiendaCompras() {
 
   function abrirRechazo(compraArg: Compra) {
     setCompraRechazo(compraArg)
-    setMotivoRechazo('Lo sentimos, en este momento no podemos procesar tu solicitud. Tus Valera Coins han sido reintegrados.')
+    setMotivoRechazo(esCofre(compraArg)
+      ? 'Lo sentimos, en este momento no podemos procesar el premio de este cofre. Tu cofre ha sido devuelto.'
+      : 'Lo sentimos, en este momento no podemos procesar tu solicitud. Tus Valera Coins han sido reintegrados.')
     setModalRechazo(true)
   }
 
@@ -368,7 +370,9 @@ export default function TiendaCompras() {
             )}
             <Text style={[s.seccionTitle, { color: c.text }]}>Motivo del rechazo</Text>
             <Text style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-              Los Valera Coins serán devueltos automáticamente al usuario.
+              {compraRechazo && esCofre(compraRechazo)
+                ? 'El cofre será devuelto al usuario para que pueda abrirlo de nuevo.'
+                : 'Los Valera Coins serán devueltos automáticamente al usuario.'}
             </Text>
             <TextInput
               style={[s.input, { height: 90, textAlignVertical: 'top' }]}
