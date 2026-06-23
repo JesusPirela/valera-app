@@ -176,6 +176,8 @@ export default function CensorEditorModal({ visible, uri, onCancelar, onAplicar 
               {procesando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnAplicarText}>Aplicar</Text>}
             </TouchableOpacity>
           </View>
+
+          {error && <Text style={styles.error}>{error}</Text>}
         </View>
       </View>
     </Modal>
@@ -187,6 +189,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, alignItems: 'center', maxWidth: 460 },
   titulo: { fontSize: 16, fontWeight: '800', color: '#1a1a2e', marginBottom: 4 },
   ayuda: { fontSize: 12, color: '#777', marginBottom: 12, textAlign: 'center' },
+  error: { fontSize: 12, color: '#c0392b', marginTop: 10, textAlign: 'center' },
   imgBox: { position: 'relative', backgroundColor: '#eee', borderRadius: 8, overflow: 'hidden' },
   box: {
     position: 'absolute',
