@@ -758,7 +758,7 @@ const kc = StyleSheet.create({
 
 // ─── KanbanColumn ─────────────────────────────────────────────────────────────
 
-function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCita, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop }: {
+function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCita, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, labelOverride, colorOverride }: {
   estado: EstadoCita
   citas: Cita[]
   onCardPress: (c: Cita) => void
@@ -769,8 +769,11 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
   onDragOver?: () => void
   onDragLeave?: () => void
   onDrop?: () => void
+  labelOverride?: string
+  colorOverride?: string
 }) {
-  const inf = ESTADOS_CITA[estado]
+  const base = ESTADOS_CITA[estado]
+  const inf = { ...base, label: labelOverride ?? base.label, color: colorOverride ?? base.color }
   const dragCounter = useRef(0)
 
   const inner = (
@@ -1207,6 +1210,31 @@ export default function CoordinacionCitas() {
                   }}
                 />
               ))}
+              {/* Columna de rescate: citas que quedaron en "Apartó" tras la
+                  migración al pipeline nuevo (exclusivo de asesor) y ya no
+                  tienen columna propia aquí — se muestran para reclasificarlas
+                  manualmente a su estado real. */}
+              <KanbanColumn
+                key="aparto"
+                estado="aparto"
+                labelOverride="Sin clasificar (revisar)"
+                colorOverride="#64748b"
+                citas={citasFiltradas.filter(c => c.estado === 'aparto')}
+                onCardPress={setCitaEditando}
+                onCardLongPress={setCitaMoviendo}
+                draggingCita={draggingCita}
+                isDragOver={dragOverEstado === 'aparto'}
+                onDragStart={setDraggingCita}
+                onDragOver={() => setDragOverEstado('aparto')}
+                onDragLeave={() => setDragOverEstado(null)}
+                onDrop={() => {
+                  if (draggingCita && draggingCita.estado !== 'aparto') {
+                    moverCita(draggingCita, 'aparto')
+                  }
+                  setDraggingCita(null)
+                  setDragOverEstado(null)
+                }}
+              />
             </ScrollView>
           )}
         </>
