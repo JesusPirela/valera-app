@@ -2,19 +2,19 @@ import { TouchableOpacity, Text, Platform } from 'react-native'
 import { useNavigation, router } from 'expo-router'
 
 // Botón "atrás" para el header de los navegadores (Stack admin y Tabs prospectador).
-// - Sin `to`: usa navigation.goBack() (correcto en el Stack del admin).
-// - Con `to`: es solo un respaldo. Si SÍ hay historial real de navegación
-//   (router.canGoBack()), se prefiere siempre router.back() — así se conserva
-//   el estado de la pantalla anterior (filtros, scroll) en vez de remontarla
-//   con replace(). `to` solo se usa cuando no hay historial (ej. la pantalla
-//   se abrió directo desde una notificación o un deep link).
+// - Sin `to`: usa navigation.goBack() (correcto en el Stack del admin, que es
+//   un Stack real con historial fiable).
+// - Con `to`: navega explícitamente a esa ruta. En el navegador de Tabs del
+//   prospectador, router.back()/canGoBack() NO respeta el historial real
+//   entre pantallas "ocultas" del tab bar — salta a la pestaña inicial en
+//   vez de a la pantalla anterior real. Por eso ahí siempre se prefiere la
+//   ruta explícita ya calculada por la pantalla (ej. detalle-cliente?id=X).
 export default function HeaderBack({ color = '#c9a84c', to }: { color?: string; to?: string }) {
   const navigation = useNavigation()
   const puede = typeof (navigation as any).canGoBack === 'function' ? (navigation as any).canGoBack() : false
   if (!to && !puede) return null
   const onPress = () => {
-    if (router.canGoBack()) router.back()
-    else if (to) router.replace(to as any)
+    if (to) router.replace(to as any)
     else navigation.goBack()
   }
   return (
