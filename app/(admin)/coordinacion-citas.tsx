@@ -67,11 +67,14 @@ export const ESTADOS_CITA: Record<EstadoCita, {
   cancelada:                { label: 'Cancelada',                  color: '#64748b', bg: '#f8fafc', dark: '#475569', icon: 'close-circle-outline',        emoji: '⚫' },
 }
 
+// Pipeline del admin: las 5 etapas posteriores al cierre (aparto,
+// recaudando_documentacion, aprobando_credito, firma_contrato, escrituracion)
+// ahora son exclusivas de la vista de asesor (ver ORDEN_ESTADOS_VENTA/RENTA
+// abajo) — el admin se queda con el resto del embudo de coordinación.
 const ORDEN_ESTADOS: EstadoCita[] = [
   'por_contactar', 'primer_contacto', 'buscando_opciones',
   'en_coordinacion', 'coordinada', 'reagendada',
   'no_responde_asesor', 'realizada',
-  'aparto', 'recaudando_documentacion', 'aprobando_credito', 'firma_contrato', 'escrituracion',
   'cancelada',
 ]
 
