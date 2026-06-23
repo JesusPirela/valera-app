@@ -738,10 +738,6 @@ export default function NuevaPropiedad() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={[styles.container, { backgroundColor: c.bg }]} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
-          <Text style={styles.backBtnText}>← Volver</Text>
-        </TouchableOpacity>
-
         {/* Importar desde URL */}
         <View style={[styles.fichaBox, { borderColor: '#c9a84c44', backgroundColor: '#1c1600' }]}>
           <View style={styles.fichaToggle}>
@@ -1205,8 +1201,6 @@ export default function NuevaPropiedad() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24 },
-  backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
-  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
   label: { fontSize: 14, fontWeight: '600', color: '#1a6470', marginBottom: 6, marginTop: 16 },
   input: {
     borderRadius: 10,

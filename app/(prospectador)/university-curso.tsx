@@ -304,9 +304,6 @@ export default function UniversityCurso() {
     <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 40 }}>
       {/* Header del curso */}
       <View style={estilos.header}>
-        <TouchableOpacity onPress={() => router.back()} style={estilos.backBtn}>
-          <Text style={estilos.backText}>← Volver</Text>
-        </TouchableOpacity>
         <View style={estilos.headerContent}>
           <View style={estilos.metaRow}>
             <View style={estilos.nivelBadge}>
@@ -510,8 +507,6 @@ export default function UniversityCurso() {
 const estilos = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f4f5' },
   header: { backgroundColor: '#1a6470', padding: 20, paddingTop: 16 },
-  backBtn: { marginBottom: 12 },
-  backText: { color: '#c9a84c', fontSize: 14, fontWeight: '600' },
   headerContent: {},
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
   nivelBadge: { backgroundColor: 'rgba(201,168,76,0.25)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: '#c9a84c' },

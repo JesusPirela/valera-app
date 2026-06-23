@@ -23,10 +23,6 @@ export default function Cuenta() {
 
   return (
     <ScrollView style={[s.container, { backgroundColor: c.bg }]} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-      <TouchableOpacity style={s.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
-        <Text style={s.backTxt}>← Volver</Text>
-      </TouchableOpacity>
-
       <Text style={[s.titulo, { color: c.text }]}>Cuenta</Text>
 
       {/* Cambiar de cuenta (si hay 2+ en el dispositivo) */}
@@ -67,8 +63,6 @@ export default function Cuenta() {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  backBtn: { alignSelf: 'flex-start', paddingVertical: 8 },
-  backTxt: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
   titulo: { fontSize: 22, fontWeight: '800', marginBottom: 16 },
   seccion: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6, marginTop: 18, marginBottom: 4, marginLeft: 2 },
   sub: { fontSize: 12, marginBottom: 12, marginLeft: 2 },

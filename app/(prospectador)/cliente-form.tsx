@@ -198,11 +198,15 @@ export default function ClienteForm() {
   const esEdicion = !!params.id
   const fromAdmin = params.fromAdmin === '1'
 
-  // En el navegador de Tabs, router.back() salta a la pestaña inicial. Por eso
-  // navegamos explícitamente: al editar volvemos al detalle del cliente; al
-  // crear, al CRM. (admin/prospectador según de dónde se abrió).
+  // Si hay historial real de navegación, volvemos a él (preserva el estado de
+  // la pantalla anterior: filtros, scroll, etc.). Solo si no hay historial
+  // (ej. se abrió directo por deep link) navegamos a una ruta de respaldo:
+  // al editar, al detalle del cliente; al crear, al CRM. (admin/prospectador
+  // según de dónde se abrió).
   function irAtras() {
-    if (esEdicion) {
+    if (router.canGoBack()) {
+      router.back()
+    } else if (esEdicion) {
       router.replace(((fromAdmin ? '/(admin)/detalle-cliente?id=' : '/(prospectador)/detalle-cliente?id=') + params.id) as any)
     } else {
       router.replace((fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm') as any)

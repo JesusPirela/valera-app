@@ -311,9 +311,6 @@ export default function Prospectadores() {
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(admin)/propiedades')}>
-        <Text style={styles.backBtnText}>← Volver</Text>
-      </TouchableOpacity>
       <TouchableOpacity style={styles.btnNuevo} onPress={abrirModal}>
         <Text style={styles.btnNuevoText}>+ Nuevo prospectador</Text>
       </TouchableOpacity>
@@ -751,8 +748,6 @@ export default function Prospectadores() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
-  backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
-  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

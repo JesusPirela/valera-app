@@ -95,10 +95,6 @@ export default function Constructoras() {
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(prospectador)/propiedades')}>
-        <Text style={styles.backTxt}>← Volver</Text>
-      </TouchableOpacity>
-
       <View style={styles.intro}>
         <Text style={[styles.introTitle, { color: c.text }]}>🏗️ Constructoras</Text>
         <Text style={[styles.introSub, { color: c.textMute }]}>Explora los modelos disponibles por constructora.</Text>
@@ -163,8 +159,6 @@ export default function Constructoras() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
-  backBtn: { alignSelf: 'flex-start', paddingVertical: 10, paddingRight: 12 },
-  backTxt: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
 
   intro: { marginBottom: 12 },
   introTitle: { fontSize: 22, fontWeight: '900' },

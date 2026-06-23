@@ -309,7 +309,7 @@ export default function ProspectadorLayout() {
       />
       <Tabs.Screen
         name="asesor-estadisticas"
-        options={{ href: null }}
+        options={{ href: null, headerLeft: () => <HeaderBack to="/(prospectador)/asesor" /> }}
       />
       <Tabs.Screen
         name="tareas"
@@ -332,11 +332,11 @@ export default function ProspectadorLayout() {
         }}
       />
       {/* Pantallas de detalle — ocultas del tab bar */}
-      <Tabs.Screen name="detalle-propiedad"  options={{ href: null, title: 'Detalle' }} />
-      <Tabs.Screen name="constructoras"      options={{ href: null, title: 'Constructoras' }} />
+      <Tabs.Screen name="detalle-propiedad"  options={{ href: null, title: 'Detalle', headerLeft: () => <HeaderBack to="/(prospectador)/propiedades" /> }} />
+      <Tabs.Screen name="constructoras"      options={{ href: null, title: 'Constructoras', headerLeft: () => <HeaderBack to="/(prospectador)/propiedades" /> }} />
       <Tabs.Screen name="cliente-form"       options={{ href: null, title: 'Cliente', headerLeft: () => <ClienteFormBack /> }} />
       <Tabs.Screen name="detalle-cliente"    options={{ href: null, title: 'Cliente', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
-      <Tabs.Screen name="university-curso"   options={{ href: null, title: 'Curso' }} />
+      <Tabs.Screen name="university-curso"   options={{ href: null, title: 'Curso', headerLeft: () => <HeaderBack to="/(prospectador)/university" /> }} />
       <Tabs.Screen name="university-leccion" options={{ href: null, title: 'Lección' }} />
       <Tabs.Screen name="tienda"             options={{ href: null, title: 'Tienda' }} />
       <Tabs.Screen name="ranking"            options={{ href: null, title: 'Ranking' }} />

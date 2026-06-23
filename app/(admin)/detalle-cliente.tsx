@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TextInput,
   ActivityIndicator, TouchableOpacity, Modal, Alert, Platform, Linking,
 } from 'react-native'
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
@@ -240,10 +240,6 @@ export default function AdminDetalleCliente() {
 
       {/* Back + acciones rápidas */}
       <View style={styles.topBar}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/crm')}>
-          <Ionicons name="arrow-back" size={18} color="#1a6470" />
-          <Text style={styles.backText}>CRM</Text>
-        </TouchableOpacity>
         <View style={styles.quickActions}>
           <TouchableOpacity style={styles.qaWa} onPress={() => abrirWhatsApp(cliente.telefono, cliente.nombre)}>
             <Ionicons name="logo-whatsapp" size={14} color="#25D366" />
@@ -534,8 +530,6 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 52 },
 
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4, paddingRight: 8 },
-  backText: { fontSize: 14, fontWeight: '600', color: '#1a6470' },
   quickActions: { flexDirection: 'row', gap: 8 },
   qaWa: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

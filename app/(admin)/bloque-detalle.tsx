@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
 } from 'react-native'
-import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
@@ -208,7 +208,6 @@ const uS = StyleSheet.create({
 // ── Pantalla ────────────────────────────────────────────────────────────────
 export default function BloqueDetalle() {
   useSupervisorBlock()
-  const router = useRouter()
   const { id, nombre } = useLocalSearchParams<{ id: string; nombre: string }>()
   const [periodo, setPeriodo] = useState<Periodo>('24h')
   const [usuarios, setUsuarios] = useState<UsuarioMetricas[]>([])
@@ -248,9 +247,6 @@ export default function BloqueDetalle() {
     <View style={{ flex: 1, backgroundColor: '#0d1b2a' }}>
       {/* Header */}
       <View style={s.headerBar}>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/bloques')} activeOpacity={0.7}>
-          <Text style={s.backBtnTxt}>← Regresar</Text>
-        </TouchableOpacity>
         <Text style={s.headerTitle} numberOfLines={1}>🧩 {nombre ?? 'Bloque'}</Text>
         <View style={{ width: 90 }} />
       </View>
@@ -357,8 +353,6 @@ export default function BloqueDetalle() {
 
 const s = StyleSheet.create({
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0d1b2a', borderBottomWidth: 1, borderBottomColor: '#1e3448', paddingHorizontal: 16, paddingVertical: 12, paddingTop: 16 },
-  backBtn:   { backgroundColor: '#1e3448', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, minWidth: 90 },
-  backBtnTxt:{ color: '#7a9ab5', fontSize: 13, fontWeight: '700' },
   headerTitle: { color: '#fff', fontSize: 16, fontWeight: '900', flex: 1, textAlign: 'center' },
 
   tabsContainer: { flexDirection: 'row', backgroundColor: '#0d1b2a', borderBottomWidth: 1, borderBottomColor: '#1e3448', paddingHorizontal: 12, paddingTop: 10, gap: 8 },

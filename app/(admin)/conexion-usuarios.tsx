@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView,
   ActivityIndicator, TouchableOpacity, useWindowDimensions,
 } from 'react-native'
-import { useFocusEffect, router } from 'expo-router'
+import { useFocusEffect } from 'expo-router'
 import Svg, { Rect, Text as SvgText, Line } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
@@ -138,10 +138,6 @@ export default function ConexionUsuarios() {
 
   return (
     <ScrollView style={[ss.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 40 }}>
-      <TouchableOpacity style={ss.backBtn} onPress={() => router.back()}>
-        <Text style={ss.backTxt}>← Volver</Text>
-      </TouchableOpacity>
-
       <View style={ss.header}>
         <View>
           <Text style={[ss.title, { color: c.text }]}>Tiempo conectado</Text>
@@ -208,8 +204,6 @@ export default function ConexionUsuarios() {
 
 const ss = StyleSheet.create({
   container: { flex: 1 },
-  backBtn:   { padding: 16, paddingBottom: 0 },
-  backTxt:   { color: TEAL, fontSize: 15, fontWeight: '600' },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

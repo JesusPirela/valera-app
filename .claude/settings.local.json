@@ -86,7 +86,9 @@
       "Bash(xargs grep -l \"CREATE TABLE.*clientes\")",
       "Bash(xargs -I{} sh -c 'echo ==={}===; cat {}')",
       "Bash(grep -E \"tipo\\\\\\)|'[a-z_]+'\\\\s*$|VALUES|SELECT\")",
-      "Bash(grep -iv \"precioNum\\\\|setPrecio\\\\|precio}\\\\s*onChangeText\\\\|value={precio\\\\|precio,\\\\|precio:\\\\|precio !=\\\\|precio ==\\\\|precio?\\\\.\\\\|presupuesto\")"
+      "Bash(grep -iv \"precioNum\\\\|setPrecio\\\\|precio}\\\\s*onChangeText\\\\|value={precio\\\\|precio,\\\\|precio:\\\\|precio !=\\\\|precio ==\\\\|precio?\\\\.\\\\|presupuesto\")",
+      "Bash(git worktree *)",
+      "Bash(git branch *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\carbe\\OneDrive\\Escritorio\\valera_app\\supabase\\_tmp_pending"

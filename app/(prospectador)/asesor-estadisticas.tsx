@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native'
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { calcularCrmMetricas, type CrmMetricas } from '../../lib/crmMetricas'
@@ -30,10 +30,6 @@ export default function AsesorEstadisticas() {
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(prospectador)/asesor')}>
-        <Text style={styles.backBtnText}>← Volver</Text>
-      </TouchableOpacity>
-
       <Text style={[styles.titulo, { color: c.text }]}>Estadísticas</Text>
 
       <View style={[styles.toggleRow, { borderColor: c.border }]}>
@@ -64,9 +60,7 @@ export default function AsesorEstadisticas() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  backBtn: { alignSelf: 'flex-start', marginTop: 16, marginLeft: 16, paddingVertical: 4 },
-  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
-  titulo: { fontSize: 22, fontWeight: '800', marginHorizontal: 16, marginTop: 8 },
+  titulo: { fontSize: 22, fontWeight: '800', marginHorizontal: 16, marginTop: 16 },
   toggleRow: {
     flexDirection: 'row',
     marginHorizontal: 16,

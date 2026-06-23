@@ -318,9 +318,6 @@ export default function UniversityCursoForm() {
   return (
     <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
       <View style={estilos.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={estilos.backText}>← Volver</Text>
-        </TouchableOpacity>
         <Text style={estilos.titulo}>{esEdicion ? 'Editar curso' : 'Nuevo curso'}</Text>
       </View>
 
@@ -455,7 +452,6 @@ export default function UniversityCursoForm() {
 const estilos = StyleSheet.create({
   container: { flex: 1 },
   header: { backgroundColor: '#1a6470', padding: 20, paddingTop: 16, gap: 8 },
-  backText: { color: '#c9a84c', fontSize: 14, fontWeight: '600' },
   titulo: { color: '#fff', fontSize: 20, fontWeight: '800' },
   body: { padding: 20 },
   seccion: { fontSize: 11, fontWeight: '700', color: '#1a6470', letterSpacing: 1, marginBottom: 12, marginTop: 8 },

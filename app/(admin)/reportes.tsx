@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Platform, Alert,
 } from 'react-native'
-import { useFocusEffect, useRouter } from 'expo-router'
+import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 
@@ -412,7 +412,6 @@ ${tendencia.length > 0 ? `
 // ── Pantalla principal ────────────────────────────────────────────────────────
 export default function Reportes() {
   const col = useColors()
-  const router = useRouter()
   const [periodo, setPeriodo] = useState<Periodo>('24h')
   const [usuarios, setUsuarios]   = useState<UsuarioMetricas[]>([])
   const [tendencia, setTendencia] = useState<DiaActividad[]>([])
@@ -555,9 +554,6 @@ export default function Reportes() {
 
       {/* ── Header con botón de regreso ── */}
       <View style={s.headerBar}>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={s.backBtnTxt}>← Regresar</Text>
-        </TouchableOpacity>
         <Text style={s.headerTitle}>Reportes</Text>
         <View style={{ width: 90 }} />
       </View>
@@ -910,18 +906,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     paddingTop: 16,
-  },
-  backBtn: {
-    backgroundColor: '#1e3448',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    minWidth: 90,
-  },
-  backBtnTxt: {
-    color: '#7a9ab5',
-    fontSize: 13,
-    fontWeight: '700',
   },
   headerTitle: {
     color: '#fff',

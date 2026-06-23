@@ -198,9 +198,6 @@ export default function GestionCofres() {
 
       {/* Header */}
       <View style={[st.header, { backgroundColor: c.card, borderBottomColor: c.border }]}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
-          <Text style={{ color: '#1a6470', fontSize: 15, fontWeight: '600' }}>← Volver</Text>
-        </TouchableOpacity>
         <Text style={[st.headerTitle, { color: c.text }]}>🎁 Gestión de Cofres</Text>
         <View style={{ width: 60 }} />
       </View>

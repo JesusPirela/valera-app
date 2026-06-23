@@ -1300,9 +1300,6 @@ export default function DetallePropiedad() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
       <OfflineBanner />
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(prospectador)/propiedades')}>
-        <Text style={styles.backBtnText}>← Volver</Text>
-      </TouchableOpacity>
       {/* Galería de imágenes */}
       {imagenes.length > 0 ? (
         <View>
@@ -2093,8 +2090,6 @@ export default function DetallePropiedad() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
-  backBtn: { alignSelf: 'flex-start', margin: 16, marginBottom: 0, paddingVertical: 4 },
-  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: '#aaa', fontSize: 15 },
 

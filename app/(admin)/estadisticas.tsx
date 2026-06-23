@@ -334,10 +334,6 @@ export default function Estadisticas() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 48 }}>
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
-        <Text style={styles.backBtnText}>← Volver</Text>
-      </TouchableOpacity>
-
       <View style={styles.pageHeader}>
         <Text style={[styles.pageTitle, { color: c.text }]}>Estadísticas</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -528,8 +524,6 @@ const styles = StyleSheet.create({
   reintentarBtn: { borderWidth: 1, borderColor: C.teal, borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10 },
   reintentarText: { color: C.teal, fontWeight: '600' },
 
-  backBtn: { alignSelf: 'flex-start', paddingVertical: 14, paddingRight: 12 },
-  backBtnText: { color: C.teal, fontSize: 15, fontWeight: '600' },
   pageHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   pageTitle: { fontSize: 24, fontWeight: '800' },
   conexionBtn: {

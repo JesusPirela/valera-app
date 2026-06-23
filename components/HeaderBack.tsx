@@ -3,15 +3,18 @@ import { useNavigation, router } from 'expo-router'
 
 // Botón "atrás" para el header de los navegadores (Stack admin y Tabs prospectador).
 // - Sin `to`: usa navigation.goBack() (correcto en el Stack del admin).
-// - Con `to`: navega explícitamente a esa ruta. En el navegador de Tabs el
-//   goBack() salta a la pestaña inicial (propiedades), así que las pantallas de
-//   detalle que viven en Tabs (ej. detalle-cliente) deben pasar su destino real.
+// - Con `to`: es solo un respaldo. Si SÍ hay historial real de navegación
+//   (router.canGoBack()), se prefiere siempre router.back() — así se conserva
+//   el estado de la pantalla anterior (filtros, scroll) en vez de remontarla
+//   con replace(). `to` solo se usa cuando no hay historial (ej. la pantalla
+//   se abrió directo desde una notificación o un deep link).
 export default function HeaderBack({ color = '#c9a84c', to }: { color?: string; to?: string }) {
   const navigation = useNavigation()
   const puede = typeof (navigation as any).canGoBack === 'function' ? (navigation as any).canGoBack() : false
   if (!to && !puede) return null
   const onPress = () => {
-    if (to) router.replace(to as any)
+    if (router.canGoBack()) router.back()
+    else if (to) router.replace(to as any)
     else navigation.goBack()
   }
   return (

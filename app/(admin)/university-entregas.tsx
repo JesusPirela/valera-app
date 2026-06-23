@@ -170,9 +170,6 @@ export default function AdminEntregas() {
     <View style={[s.container, { backgroundColor: c.bg2 }]}>
       {/* Header */}
       <View style={[s.header, { backgroundColor: c.card, borderBottomColor: c.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Text style={s.backText}>← Volver</Text>
-        </TouchableOpacity>
         <Text style={[s.titulo, { color: c.text }]}>Entregas de Tareas</Text>
       </View>
 
@@ -357,8 +354,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16,
     borderBottomWidth: 1,
   },
-  backBtn: { padding: 4 },
-  backText: { color: '#c9a84c', fontSize: 14 },
   titulo: { fontSize: 20, fontWeight: '700', flex: 1 },
   filtros: {
     flexDirection: 'row', gap: 8, paddingHorizontal: 16,

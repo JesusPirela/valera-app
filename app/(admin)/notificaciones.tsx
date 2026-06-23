@@ -269,10 +269,6 @@ export default function AdminNotificaciones() {
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
-        <Text style={styles.backBtnText}>← Volver</Text>
-      </TouchableOpacity>
-
       {hayNoLeidas && (
         <TouchableOpacity
           style={styles.marcarTodasBtn}
@@ -317,8 +313,6 @@ export default function AdminNotificaciones() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
-  backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
-  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
   marcarTodasBtn: {
     alignSelf: 'flex-end', marginBottom: 12,
     paddingHorizontal: 14, paddingVertical: 7,

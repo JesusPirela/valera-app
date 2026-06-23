@@ -295,10 +295,6 @@ export default function AdminCRM() {
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
 
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
-        <Text style={styles.backBtnText}>← Volver</Text>
-      </TouchableOpacity>
-
       {/* Stats banner */}
       <View style={styles.statsBanner}>
         <View style={styles.statItem}>
@@ -643,8 +639,6 @@ export default function AdminCRM() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f2f5f8' },
 
-  backBtn: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4 },
-  backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
 
   // Stats
   statsBanner: {

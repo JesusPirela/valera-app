@@ -90,10 +90,6 @@ export default function Bloques() {
 
   return (
     <View style={[s.container, { backgroundColor: c.bg }]}>
-      <TouchableOpacity style={s.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
-        <Text style={s.backTxt}>← Volver</Text>
-      </TouchableOpacity>
-
       <View style={s.headerRow}>
         <View>
           <Text style={[s.title, { color: c.text }]}>🧩 Bloques</Text>
@@ -206,8 +202,6 @@ export default function Bloques() {
 
 const s = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
-  backBtn: { alignSelf: 'flex-start', paddingVertical: 10, paddingRight: 12 },
-  backTxt: { color: TEAL, fontSize: 15, fontWeight: '600' },
 
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 },
   title: { fontSize: 22, fontWeight: '900' },

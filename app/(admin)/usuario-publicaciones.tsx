@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ActivityIndicator, TouchableOpacity,
   FlatList, Image, TextInput, Alert, Platform,
 } from 'react-native'
-import { useLocalSearchParams, router } from 'expo-router'
+import { useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { thumb } from '../../lib/img'
@@ -96,10 +96,6 @@ export default function UsuarioPublicaciones() {
 
   const header = (
     <View>
-      <TouchableOpacity style={s.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/prospectadores')}>
-        <Text style={s.backTxt}>← Volver</Text>
-      </TouchableOpacity>
-
       <Text style={[s.title, { color: c.text }]}>📤 Publicaciones</Text>
       <Text style={[s.sub, { color: c.textMute }]}>{nombre} · {pubs.length} {pubs.length === 1 ? 'publicación' : 'publicaciones'}</Text>
 
@@ -175,8 +171,6 @@ export default function UsuarioPublicaciones() {
 
 const s = StyleSheet.create({
   container: { flex: 1, paddingTop: 8 },
-  backBtn: { alignSelf: 'flex-start', paddingVertical: 10 },
-  backTxt: { color: TEAL, fontSize: 15, fontWeight: '600' },
   title: { fontSize: 22, fontWeight: '900' },
   sub: { fontSize: 13, marginTop: 2, marginBottom: 14, fontWeight: '600' },
 

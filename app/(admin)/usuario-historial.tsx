@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
   TouchableOpacity, FlatList,
 } from 'react-native'
-import { useLocalSearchParams, router } from 'expo-router'
+import { useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 
@@ -121,10 +121,6 @@ export default function UsuarioHistorial() {
 
   const header = (
     <View>
-      <TouchableOpacity style={s.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/prospectadores')}>
-        <Text style={s.backTxt}>← Volver</Text>
-      </TouchableOpacity>
-
       <Text style={[s.title, { color: c.text }]}>📋 Historial</Text>
       <Text style={[s.sub, { color: c.textMute }]}>{nombre}</Text>
 
@@ -214,8 +210,6 @@ export default function UsuarioHistorial() {
 
 const s = StyleSheet.create({
   container: { flex: 1, paddingTop: 8 },
-  backBtn: { alignSelf: 'flex-start', paddingVertical: 10 },
-  backTxt: { color: PURPLE, fontSize: 15, fontWeight: '600' },
   title: { fontSize: 22, fontWeight: '900' },
   sub: { fontSize: 14, marginTop: 2, marginBottom: 14, fontWeight: '600' },
 

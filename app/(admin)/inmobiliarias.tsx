@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Platform, Alert, Modal,
 } from 'react-native'
-import { router, useFocusEffect } from 'expo-router'
+import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
@@ -115,9 +115,6 @@ export default function AdminInmobiliarias() {
   return (
     <View style={[s.container, { backgroundColor: c.bg2 }]}>
       <View style={[s.header, { borderBottomColor: c.border }]}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={s.backText}>← Volver</Text>
-        </TouchableOpacity>
         <Text style={[s.titulo, { color: c.text }]}>Inmobiliarias</Text>
         <TouchableOpacity style={s.btnNuevo} onPress={abrirNueva}>
           <Text style={s.btnNuevoText}>+ Nueva</Text>
@@ -270,7 +267,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16,
     borderBottomWidth: 1,
   },
-  backText: { color: '#c9a84c', fontSize: 14 },
   titulo: { fontSize: 20, fontWeight: '700', flex: 1 },
   btnNuevo: { backgroundColor: '#c9a84c', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
   btnNuevoText: { color: '#000', fontWeight: '700', fontSize: 13 },

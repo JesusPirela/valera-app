@@ -100,9 +100,6 @@ export default function AdminUniversity() {
     <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 48 }}>
       {/* Header */}
       <View style={estilos.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={estilos.backText}>← Volver</Text>
-        </TouchableOpacity>
         <View style={estilos.logoRow}>
           <Text style={estilos.logoIcon}>🎓</Text>
           <View>
@@ -266,7 +263,6 @@ function StatCard({ icon, label, value, color = '#1a6470', bg }: { icon: string;
 const estilos = StyleSheet.create({
   container: { flex: 1 },
   header: { backgroundColor: '#1a6470', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
-  backText: { color: '#c9a84c', fontSize: 14, fontWeight: '600', marginBottom: 12 },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   logoIcon: { fontSize: 36 },
   logoTitle: { color: '#c9a84c', fontSize: 20, fontWeight: '800' },

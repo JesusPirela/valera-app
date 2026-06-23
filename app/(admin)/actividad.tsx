@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native'
-import { useFocusEffect, router } from 'expo-router'
+import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 
@@ -94,9 +94,6 @@ export default function ActividadAdmin() {
 
   return (
     <View style={s.container}>
-      <TouchableOpacity style={s.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
-        <Text style={s.backBtnText}>← Volver</Text>
-      </TouchableOpacity>
       {/* Resumen estadísticas */}
       <View style={s.statsRow}>
         <View style={s.statCard}>
@@ -174,8 +171,6 @@ export default function ActividadAdmin() {
 function makeStyles(c: AppColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg, padding: 16 },
-    backBtn: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 4 },
-    backBtnText: { color: '#1a6470', fontSize: 15, fontWeight: '600' as const },
 
     statsRow: {
       flexDirection: 'row',

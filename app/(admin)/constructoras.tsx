@@ -163,9 +163,6 @@ export default function AdminConstructoras() {
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
-          <Text style={styles.backTxt}>← Volver</Text>
-        </TouchableOpacity>
         {esAdmin && (
           <TouchableOpacity
             style={[styles.toggleBtn, vista === 'contactos' && styles.toggleBtnActivo]}
@@ -333,8 +330,6 @@ export default function AdminConstructoras() {
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
-  backBtn: { alignSelf: 'flex-start', paddingVertical: 10, paddingRight: 12 },
-  backTxt: { color: '#1a6470', fontSize: 15, fontWeight: '600' },
   toggleBtn: { backgroundColor: '#eef2f2', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
   toggleBtnActivo: { backgroundColor: '#1a6470' },
   toggleBtnTxt: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
