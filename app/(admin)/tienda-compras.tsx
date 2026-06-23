@@ -110,7 +110,7 @@ export default function TiendaCompras() {
   function abrirRechazo(compraArg: Compra) {
     setCompraRechazo(compraArg)
     setMotivoRechazo(esCofre(compraArg)
-      ? 'Lo sentimos, en este momento no podemos procesar el premio de este cofre. Tu cofre ha sido devuelto.'
+      ? 'Lo sentimos, en este momento no podemos procesar el premio de este cofre.'
       : 'Lo sentimos, en este momento no podemos procesar tu solicitud. Tus Valera Coins han sido reintegrados.')
     setModalRechazo(true)
   }
