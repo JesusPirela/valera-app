@@ -67,17 +67,23 @@ export const ESTADOS_CITA: Record<EstadoCita, {
   cancelada:                { label: 'Cancelada',                  color: '#64748b', bg: '#f8fafc', dark: '#475569', icon: 'close-circle-outline',        emoji: '⚫' },
 }
 
-// Pipeline nuevo: venta pasa por las 5 etapas, renta se salta "Aprobando
-// crédito" y "Escrituración" (no aplican a una renta).
+const ORDEN_ESTADOS: EstadoCita[] = [
+  'por_contactar', 'primer_contacto', 'buscando_opciones',
+  'en_coordinacion', 'coordinada', 'reagendada',
+  'no_responde_asesor', 'realizada',
+  'aparto', 'recaudando_documentacion', 'aprobando_credito', 'firma_contrato', 'escrituracion',
+  'cancelada',
+]
+
+// Vista simplificada exclusiva del rol "asesor": solo las 5 etapas
+// posteriores al cierre (venta), o esas mismas sin crédito/escrituración
+// (renta) — el admin sigue viendo el pipeline completo de arriba, sin tocar.
 const ORDEN_ESTADOS_VENTA: EstadoCita[] = [
   'aparto', 'recaudando_documentacion', 'aprobando_credito', 'firma_contrato', 'escrituracion',
 ]
 const ORDEN_ESTADOS_RENTA: EstadoCita[] = [
   'aparto', 'recaudando_documentacion', 'firma_contrato',
 ]
-// Usado para la franja de KPIs y conteos generales — superset de ambos pipelines.
-const ORDEN_ESTADOS: EstadoCita[] = ORDEN_ESTADOS_VENTA
-
 function ordenPorOperacion(tipoOperacion: string | null): EstadoCita[] {
   return tipoOperacion === 'renta' ? ORDEN_ESTADOS_RENTA : ORDEN_ESTADOS_VENTA
 }
@@ -216,11 +222,11 @@ function DropdownSelector({
 // ─── ModalEdicion ─────────────────────────────────────────────────────────────
 
 function ModalEdicion({
-  cita, admins, asesores, onClose, onGuardar, onEliminar,
+  cita, admins, asesores, vistaAsesor, onClose, onGuardar, onEliminar,
 }: {
-  cita: Cita | null; admins: Profile[]; asesores: Profile[]; onClose: () => void; onGuardar: () => void; onEliminar: (cita: Cita) => void
+  cita: Cita | null; admins: Profile[]; asesores: Profile[]; vistaAsesor?: boolean; onClose: () => void; onGuardar: () => void; onEliminar: (cita: Cita) => void
 }) {
-  const [estado, setEstado]               = useState<EstadoCita>(cita?.estado ?? 'aparto')
+  const [estado, setEstado]               = useState<EstadoCita>(cita?.estado ?? 'por_contactar')
   const [notas, setNotas]                 = useState(cita?.notas ?? '')
   const [fechaTexto, setFechaTexto]       = useState(aFechaLocalInput(cita?.fecha_cita ?? null))
   const [coordinadorId, setCoordinadorId] = useState(cita?.coordinado_por ?? '')
@@ -250,6 +256,7 @@ function ModalEdicion({
 
   if (!cita) return null
   const inf = ESTADOS_CITA[estado]
+  const opcionesEstado = vistaAsesor ? ordenPorOperacion(cita.clientes.tipo_operacion) : ORDEN_ESTADOS
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -274,7 +281,7 @@ function ModalEdicion({
             <Text style={s.fieldLabel}>Estado</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
               <View style={{ flexDirection: 'row', gap: 8, paddingRight: 8 }}>
-                {ordenPorOperacion(cita.clientes.tipo_operacion).map(e => {
+                {opcionesEstado.map(e => {
                   const i = ESTADOS_CITA[e]; const activo = estado === e
                   return (
                     <TouchableOpacity key={e}
@@ -341,8 +348,8 @@ function ModalEdicion({
 
 // ─── ModalNuevaCita ───────────────────────────────────────────────────────────
 
-function ModalNuevaCita({ admins, asesores, onClose, onGuardar }: {
-  admins: Profile[]; asesores: Profile[]; onClose: () => void; onGuardar: () => void
+function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
+  admins: Profile[]; asesores: Profile[]; vistaAsesor?: boolean; onClose: () => void; onGuardar: () => void
 }) {
   const [busqueda, setBusqueda]               = useState('')
   const [clientes, setClientes]               = useState<{ id: string; nombre: string; telefono: string; tipo_operacion: string | null }[]>([])
@@ -352,7 +359,7 @@ function ModalNuevaCita({ admins, asesores, onClose, onGuardar }: {
   const [nuevoNombre, setNuevoNombre]         = useState('')
   const [nuevoTelefono, setNuevoTelefono]     = useState('')
   const [tipoOperacion, setTipoOperacion]     = useState<'venta' | 'renta'>('venta')
-  const [estado, setEstado]                   = useState<EstadoCita>('aparto')
+  const [estado, setEstado]                   = useState<EstadoCita>(vistaAsesor ? 'aparto' : 'por_contactar')
   const [notas, setNotas]                     = useState('')
   const [fechaTexto, setFechaTexto]           = useState('')
   const [coordinadorId, setCoordinadorId]     = useState('')
@@ -384,9 +391,10 @@ function ModalNuevaCita({ admins, asesores, onClose, onGuardar }: {
   // Si el set de estados disponible cambia (venta ⇄ renta) y el estado elegido
   // ya no aplica (ej. "Escrituración" no existe en renta), se reajusta al primero.
   useEffect(() => {
+    if (!vistaAsesor) return
     const disponibles = ordenPorOperacion(tipoOperacion)
     if (!disponibles.includes(estado)) setEstado(disponibles[0])
-  }, [tipoOperacion])
+  }, [tipoOperacion, vistaAsesor])
 
   async function guardar() {
     setGuardando(true)
@@ -399,7 +407,8 @@ function ModalNuevaCita({ admins, asesores, onClose, onGuardar }: {
         const { data: { user } } = await supabase.auth.getUser()
         const { data: nuevo, error: errC } = await supabase.from('clientes').insert({
           nombre: nuevoNombre.trim(), telefono: nuevoTelefono.trim(),
-          fuente_lead: 'otro', estado: 'por_perfilar', tipo_operacion: tipoOperacion,
+          fuente_lead: 'otro', estado: 'por_perfilar',
+          ...(vistaAsesor ? { tipo_operacion: tipoOperacion } : {}),
           responsable_id: prospectadorId || user!.id,
         }).select('id').single()
         if (errC) { alerta(errC.message); setGuardando(false); return }
@@ -471,7 +480,7 @@ function ModalNuevaCita({ admins, asesores, onClose, onGuardar }: {
                       <TouchableOpacity key={c.id} style={s.clienteRow}
                         onPress={() => {
                           setClienteId(c.id); setClienteNombre(c.nombre); setClientes([])
-                          setTipoOperacion(c.tipo_operacion === 'renta' ? 'renta' : 'venta')
+                          if (vistaAsesor) setTipoOperacion(c.tipo_operacion === 'renta' ? 'renta' : 'venta')
                         }}>
                         <Text style={s.clienteRowNombre}>{c.nombre}</Text>
                         <Text style={s.clienteRowTel}>{c.telefono}</Text>
@@ -482,34 +491,33 @@ function ModalNuevaCita({ admins, asesores, onClose, onGuardar }: {
               </>
             )}
 
-            <Text style={[s.fieldLabel, { marginTop: 14 }]}>Operación</Text>
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-              {(['venta', 'renta'] as const).map(op => {
-                const activo = tipoOperacion === op
-                return (
-                  <TouchableOpacity
-                    key={op}
-                    style={[s.estadoChip, activo && { backgroundColor: '#1a6470', borderColor: '#1a6470' }, !modoNuevo && clienteId && { opacity: 0.5 }]}
-                    onPress={() => { if (modoNuevo || !clienteId) setTipoOperacion(op) }}
-                    disabled={!modoNuevo && !!clienteId}
-                  >
-                    <Text style={[s.estadoChipTxt, activo && { color: '#fff', fontWeight: '700' }]}>
-                      {op === 'venta' ? 'Venta' : 'Renta'}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-            {!modoNuevo && clienteId && (
-              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: -10, marginBottom: 14 }}>
-                Tomado del cliente seleccionado
-              </Text>
+            {vistaAsesor && (
+              <>
+                <Text style={[s.fieldLabel, { marginTop: 14 }]}>Operación</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                  {(['venta', 'renta'] as const).map(op => {
+                    const activo = tipoOperacion === op
+                    return (
+                      <TouchableOpacity
+                        key={op}
+                        style={[s.estadoChip, activo && { backgroundColor: '#1a6470', borderColor: '#1a6470' }, !modoNuevo && clienteId && { opacity: 0.5 }]}
+                        onPress={() => { if (modoNuevo || !clienteId) setTipoOperacion(op) }}
+                        disabled={!modoNuevo && !!clienteId}
+                      >
+                        <Text style={[s.estadoChipTxt, activo && { color: '#fff', fontWeight: '700' }]}>
+                          {op === 'venta' ? 'Venta' : 'Renta'}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              </>
             )}
 
-            <Text style={s.fieldLabel}>Estado inicial</Text>
+            <Text style={[s.fieldLabel, { marginTop: 14 }]}>Estado inicial</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
               <View style={{ flexDirection: 'row', gap: 8, paddingRight: 8 }}>
-                {ordenPorOperacion(tipoOperacion).map(e => {
+                {(vistaAsesor ? ordenPorOperacion(tipoOperacion) : ORDEN_ESTADOS).map(e => {
                   const i = ESTADOS_CITA[e]; const activo = estado === e
                   return (
                     <TouchableOpacity key={e}
@@ -560,10 +568,11 @@ function ModalNuevaCita({ admins, asesores, onClose, onGuardar }: {
 
 // ─── ModalMover (cambio rápido de columna) ────────────────────────────────────
 
-function ModalMover({ cita, onClose, onMover }: {
-  cita: Cita | null; onClose: () => void; onMover: (cita: Cita, estado: EstadoCita) => void
+function ModalMover({ cita, vistaAsesor, onClose, onMover }: {
+  cita: Cita | null; vistaAsesor?: boolean; onClose: () => void; onMover: (cita: Cita, estado: EstadoCita) => void
 }) {
   if (!cita) return null
+  const opcionesEstado = vistaAsesor ? ordenPorOperacion(cita.clientes.tipo_operacion) : ORDEN_ESTADOS
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={onClose}>
@@ -574,7 +583,7 @@ function ModalMover({ cita, onClose, onMover }: {
             {cita.clientes.nombre}
           </Text>
           <ScrollView showsVerticalScrollIndicator={false}>
-            {ordenPorOperacion(cita.clientes.tipo_operacion).map(e => {
+            {opcionesEstado.map(e => {
               const inf = ESTADOS_CITA[e]
               const esActual = cita.estado === e
               return (
@@ -843,6 +852,7 @@ export default function CoordinacionCitas() {
   const [modalNueva, setModalNueva]     = useState(false)
   const [busqueda, setBusqueda]             = useState('')
   const [filtroAdmin, setFiltroAdmin]       = useState<string | null>(null)
+  const [filtroOperacion, setFiltroOperacion] = useState<'venta' | 'renta' | null>(null)
   const [showSearch, setShowSearch]         = useState(false)
   const [draggingCita, setDraggingCita] = useState<Cita | null>(null)
   const [dragOverEstado, setDragOverEstado] = useState<EstadoCita | null>(null)
@@ -944,6 +954,9 @@ export default function CoordinacionCitas() {
       if (filtroAdmin === 'sin_asignar' && c.coordinado_por) return false
       if (filtroAdmin !== 'sin_asignar' && c.coordinado_por !== filtroAdmin) return false
     }
+    if (filtroOperacion) {
+      if (c.clientes.tipo_operacion !== filtroOperacion) return false
+    }
     if (busqueda.trim()) {
       const q = busqueda.toLowerCase()
       return (
@@ -965,11 +978,15 @@ export default function CoordinacionCitas() {
 
   const ahora   = Date.now()
   const urgentes = citas.filter(c =>
-    c.fecha_cita &&
+    c.estado === 'coordinada' && c.fecha_cita &&
     new Date(c.fecha_cita).getTime() - ahora < 48 * 3600 * 1000 &&
     new Date(c.fecha_cita).getTime() > ahora
   ).length
 
+  // El rol "asesor" usa una vista simplificada (solo etapas posteriores al
+  // cierre, separadas en dos tableros Venta/Renta) — admin sigue viendo el
+  // pipeline completo de siempre, sin ningún cambio.
+  const vistaAsesor = miRole === 'asesor'
   const citasVenta = citasFiltradas.filter(c => c.clientes.tipo_operacion !== 'renta')
   const citasRenta = citasFiltradas.filter(c => c.clientes.tipo_operacion === 'renta')
 
@@ -1068,82 +1085,128 @@ export default function CoordinacionCitas() {
         </ScrollView>
       )}
 
-      {/* ── Boards: Venta arriba, Renta abajo, siempre ambos visibles ── */}
-      {loading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-          <ActivityIndicator size="large" color="#1a6470" />
-          <Text style={{ color: '#94a3b8', fontSize: 13 }}>Cargando pipeline…</Text>
-        </View>
-      ) : (
-        <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-          <View style={s.seccionHead}>
-            <Text style={s.seccionTitulo}>🏠 Venta</Text>
-            <Text style={s.seccionCnt}>{citasVenta.length}</Text>
+      {vistaAsesor ? (
+        /* ── Vista asesor: Venta arriba, Renta abajo, siempre ambos visibles ── */
+        loading ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+            <ActivityIndicator size="large" color="#1a6470" />
+            <Text style={{ color: '#94a3b8', fontSize: 13 }}>Cargando pipeline…</Text>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator
-            contentContainerStyle={s.boardContent}
-            style={s.board}
-            decelerationRate="fast"
-          >
-            {ORDEN_ESTADOS_VENTA.map(estado => (
-              <KanbanColumn
-                key={estado}
-                estado={estado}
-                citas={citasVenta.filter(c => c.estado === estado)}
-                onCardPress={setCitaEditando}
-                onCardLongPress={setCitaMoviendo}
-                draggingCita={draggingCita}
-                isDragOver={dragOverEstado === estado}
-                onDragStart={setDraggingCita}
-                onDragOver={() => setDragOverEstado(estado)}
-                onDragLeave={() => setDragOverEstado(null)}
-                onDrop={() => {
-                  if (draggingCita && draggingCita.estado !== estado) {
-                    moverCita(draggingCita, estado)
-                  }
-                  setDraggingCita(null)
-                  setDragOverEstado(null)
-                }}
-              />
-            ))}
-          </ScrollView>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+            <View style={s.seccionHead}>
+              <Text style={s.seccionTitulo}>🏠 Venta</Text>
+              <Text style={s.seccionCnt}>{citasVenta.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={s.boardContent} style={s.boardAsesor} decelerationRate="fast">
+              {ORDEN_ESTADOS_VENTA.map(estado => (
+                <KanbanColumn
+                  key={estado}
+                  estado={estado}
+                  citas={citasVenta.filter(c => c.estado === estado)}
+                  onCardPress={setCitaEditando}
+                  onCardLongPress={setCitaMoviendo}
+                  draggingCita={draggingCita}
+                  isDragOver={dragOverEstado === estado}
+                  onDragStart={setDraggingCita}
+                  onDragOver={() => setDragOverEstado(estado)}
+                  onDragLeave={() => setDragOverEstado(null)}
+                  onDrop={() => {
+                    if (draggingCita && draggingCita.estado !== estado) moverCita(draggingCita, estado)
+                    setDraggingCita(null); setDragOverEstado(null)
+                  }}
+                />
+              ))}
+            </ScrollView>
 
-          <View style={s.seccionHead}>
-            <Text style={s.seccionTitulo}>🔑 Renta</Text>
-            <Text style={s.seccionCnt}>{citasRenta.length}</Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator
-            contentContainerStyle={s.boardContent}
-            style={s.board}
-            decelerationRate="fast"
-          >
-            {ORDEN_ESTADOS_RENTA.map(estado => (
-              <KanbanColumn
-                key={estado}
-                estado={estado}
-                citas={citasRenta.filter(c => c.estado === estado)}
-                onCardPress={setCitaEditando}
-                onCardLongPress={setCitaMoviendo}
-                draggingCita={draggingCita}
-                isDragOver={dragOverEstado === estado}
-                onDragStart={setDraggingCita}
-                onDragOver={() => setDragOverEstado(estado)}
-                onDragLeave={() => setDragOverEstado(null)}
-                onDrop={() => {
-                  if (draggingCita && draggingCita.estado !== estado) {
-                    moverCita(draggingCita, estado)
-                  }
-                  setDraggingCita(null)
-                  setDragOverEstado(null)
-                }}
-              />
-            ))}
+            <View style={s.seccionHead}>
+              <Text style={s.seccionTitulo}>🔑 Renta</Text>
+              <Text style={s.seccionCnt}>{citasRenta.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={s.boardContent} style={s.boardAsesor} decelerationRate="fast">
+              {ORDEN_ESTADOS_RENTA.map(estado => (
+                <KanbanColumn
+                  key={estado}
+                  estado={estado}
+                  citas={citasRenta.filter(c => c.estado === estado)}
+                  onCardPress={setCitaEditando}
+                  onCardLongPress={setCitaMoviendo}
+                  draggingCita={draggingCita}
+                  isDragOver={dragOverEstado === estado}
+                  onDragStart={setDraggingCita}
+                  onDragOver={() => setDragOverEstado(estado)}
+                  onDragLeave={() => setDragOverEstado(null)}
+                  onDrop={() => {
+                    if (draggingCita && draggingCita.estado !== estado) moverCita(draggingCita, estado)
+                    setDraggingCita(null); setDragOverEstado(null)
+                  }}
+                />
+              ))}
+            </ScrollView>
           </ScrollView>
-        </ScrollView>
+        )
+      ) : (
+        <>
+          {/* ── Filtro venta / renta (solo admin/supervisor, tal cual estaba) ── */}
+          <View style={s.opRow}>
+            {([null, 'venta', 'renta'] as const).map(op => {
+              const activo = filtroOperacion === op
+              const label = op === null ? 'Todos' : op.charAt(0).toUpperCase() + op.slice(1)
+              const cnt = op === null ? citasFiltradas.length : citas.filter(c => c.clientes.tipo_operacion === op && (filtroAdmin
+                ? filtroAdmin === 'sin_asignar' ? !c.coordinado_por : c.coordinado_por === filtroAdmin
+                : true)).length
+              return (
+                <TouchableOpacity
+                  key={String(op)}
+                  style={[s.opChip, activo && s.opChipActivo]}
+                  onPress={() => setFiltroOperacion(activo && op !== null ? null : op)}
+                >
+                  <Text style={[s.opChipTxt, activo && { color: '#fff', fontWeight: '700' }]}>
+                    {label} · {cnt}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+
+          {/* ── Board kanban ── */}
+          {loading ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+              <ActivityIndicator size="large" color="#1a6470" />
+              <Text style={{ color: '#94a3b8', fontSize: 13 }}>Cargando pipeline…</Text>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator
+              contentContainerStyle={s.boardContent}
+              style={s.board}
+              decelerationRate="fast"
+            >
+              {ORDEN_ESTADOS.map(estado => (
+                <KanbanColumn
+                  key={estado}
+                  estado={estado}
+                  citas={citasFiltradas.filter(c => c.estado === estado)}
+                  onCardPress={setCitaEditando}
+                  onCardLongPress={setCitaMoviendo}
+                  draggingCita={draggingCita}
+                  isDragOver={dragOverEstado === estado}
+                  onDragStart={setDraggingCita}
+                  onDragOver={() => setDragOverEstado(estado)}
+                  onDragLeave={() => setDragOverEstado(null)}
+                  onDrop={() => {
+                    if (draggingCita && draggingCita.estado !== estado) {
+                      moverCita(draggingCita, estado)
+                    }
+                    setDraggingCita(null)
+                    setDragOverEstado(null)
+                  }}
+                />
+              ))}
+            </ScrollView>
+          )}
+        </>
       )}
 
       {/* ── Modales — renderizado condicional para que el estado local
@@ -1153,6 +1216,7 @@ export default function CoordinacionCitas() {
           cita={citaEditando}
           admins={admins}
           asesores={asesores}
+          vistaAsesor={vistaAsesor}
           onClose={() => setCitaEditando(null)}
           onGuardar={cargar}
           onEliminar={confirmarEliminarCita}
@@ -1161,6 +1225,7 @@ export default function CoordinacionCitas() {
       {citaMoviendo && (
         <ModalMover
           cita={citaMoviendo}
+          vistaAsesor={vistaAsesor}
           onClose={() => setCitaMoviendo(null)}
           onMover={moverCita}
         />
@@ -1169,6 +1234,7 @@ export default function CoordinacionCitas() {
         <ModalNuevaCita
           admins={admins}
           asesores={asesores}
+          vistaAsesor={vistaAsesor}
           onClose={() => setModalNueva(false)}
           onGuardar={cargar}
         />
@@ -1224,10 +1290,12 @@ const s = StyleSheet.create({
   opChipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   opChipTxt: { fontSize: 12, color: '#64748b', fontWeight: '500' },
 
-  // Board — altura fija: cada sección (Venta/Renta) scrollea sus columnas de
-  // forma independiente, y el scroll vertical exterior mueve entre secciones.
-  board:        { height: 440, backgroundColor: '#f1f5f9' },
-  boardContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 16, flexDirection: 'row' },
+  // Board
+  board:        { flex: 1, backgroundColor: '#f1f5f9' },
+  boardContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 40, flexDirection: 'row' },
+  // Vista asesor: altura fija porque va dentro de un ScrollView vertical que
+  // apila Venta y Renta (flex:1 no funciona dentro de un scroll de contenido).
+  boardAsesor:  { height: 440, backgroundColor: '#f1f5f9' },
   seccionHead:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingTop: 16, paddingBottom: 6 },
   seccionTitulo:{ fontSize: 15, fontWeight: '800', color: '#0f172a' },
   seccionCnt:   { fontSize: 12, fontWeight: '700', color: '#64748b', backgroundColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
