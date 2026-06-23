@@ -371,7 +371,7 @@ export default function DetallePropiedad() {
       .from('propiedad_publicacion')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
-      .eq('publicada', true)
+      .gt('veces_publicada', 0)
 
     const totalPublicadas = count ?? 0
 
@@ -380,7 +380,7 @@ export default function DetallePropiedad() {
       .select('id, tarea:tareas!inner(tipo, meta_cantidad)')
       .eq('user_id', user.id)
       .eq('completada', false)
-      .eq('tarea.tipo', 'publicar_propiedades')
+      .eq('tareas.tipo', 'publicar_propiedades')
 
     for (const a of (asigs ?? []) as any[]) {
       const meta = a.tarea?.meta_cantidad ?? 1

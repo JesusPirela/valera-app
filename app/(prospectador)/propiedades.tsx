@@ -216,6 +216,7 @@ export default function ProspectadorPropiedades() {
         .from('propiedad_publicacion')
         .select('propiedad_id, veces_publicada, fecha_publicacion')
         .eq('user_id', uid)
+        .gt('veces_publicada', 0)
       return {
         publicacionesMap: Object.fromEntries(
           (data ?? []).map((r: { propiedad_id: string; veces_publicada: number }) => [r.propiedad_id, r.veces_publicada ?? 0])
