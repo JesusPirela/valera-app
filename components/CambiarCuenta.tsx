@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { View, Text, TouchableOpacity, ActivityIndicator, Platform, Alert, StyleSheet, TextInput } from 'react-native'
 import { router } from 'expo-router'
 import { useQueryClient } from '@tanstack/react-query'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   listarCuentas, cambiarACuenta, cambiarACuentaConPassword,
   olvidarCuenta, type CuentaGuardada,
@@ -46,7 +47,15 @@ export default function CambiarCuenta() {
   const otras = cuentas.filter(x => x.user_id !== actualId)
   if (otras.length === 0) return null
 
-  function irAHome(role: string | null | undefined) {
+  async function irAHome(role: string | null | undefined) {
+    // Borramos el caché persistido para que el nuevo usuario no vea datos del anterior
+    try { await AsyncStorage.removeItem('VALERA_CACHE') } catch {}
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // Reload completo en web: garantiza que React Query y todos los contextos
+      // reinicien desde cero con la sesión del nuevo usuario ya en localStorage.
+      window.location.replace('/')
+      return
+    }
     qc.clear()
     const destino = (role === 'admin' || role === 'supervisor')
       ? '/(admin)/propiedades'
@@ -70,7 +79,7 @@ export default function CambiarCuenta() {
       }
       return
     }
-    irAHome(res.role)
+    await irAHome(res.role)
   }
 
   async function confirmarPassword() {
@@ -88,7 +97,7 @@ export default function CambiarCuenta() {
     }
     setNecesitaPass(null)
     setPassword('')
-    irAHome(cuenta.role)
+    await irAHome(cuenta.role)
   }
 
   function cancelarPassword() {
