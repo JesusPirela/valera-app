@@ -220,7 +220,7 @@ export default function FichaPublica() {
             <View style={s.mapBox}>
               <Text style={s.descTitle}>Ubicación</Text>
               <View style={s.mapWrapper}>
-                <PropMapa lat={propiedad.lat} lng={propiedad.lng} titulo={propiedad.titulo} height={300} />
+                <PropMapa key={propiedad.id} lat={propiedad.lat} lng={propiedad.lng} titulo={propiedad.titulo} height={300} />
                 <TouchableOpacity
                   style={s.mapOverlayBtn}
                   activeOpacity={0.85}

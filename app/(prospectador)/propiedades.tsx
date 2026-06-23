@@ -107,6 +107,12 @@ function formatPrecio(precio: number | null) {
   return `$${precio.toLocaleString('es-MX')} MXN`
 }
 
+function formatearInputPrecio(texto: string): string {
+  const digitos = texto.replace(/\D/g, '')
+  if (!digitos) return ''
+  return parseInt(digitos, 10).toLocaleString('es-MX')
+}
+
 function agruparPorZona(propiedades: Propiedad[]): [string, Propiedad[]][] {
   const result: [string, Propiedad[]][] = []
   for (const z of ZONAS_CONFIG) {
@@ -760,7 +766,7 @@ export default function ProspectadorPropiedades() {
                   placeholder="Ej. 500,000"
                   placeholderTextColor="#bbb"
                   value={precioMin}
-                  onChangeText={setPrecioMin}
+                  onChangeText={(t) => setPrecioMin(formatearInputPrecio(t))}
                   keyboardType="numeric"
                   maxLength={12}
                 />
@@ -773,7 +779,7 @@ export default function ProspectadorPropiedades() {
                   placeholder="Ej. 3,000,000"
                   placeholderTextColor="#bbb"
                   value={precioMax}
-                  onChangeText={setPrecioMax}
+                  onChangeText={(t) => setPrecioMax(formatearInputPrecio(t))}
                   keyboardType="numeric"
                   maxLength={12}
                 />

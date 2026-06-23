@@ -68,6 +68,49 @@ type ClienteCRM = {
   nombre: string
   telefono: string
   estado: string
+  tipo_operacion?: 'venta' | 'renta' | null
+  nivel_interes?: 'alto' | 'medio' | 'bajo' | null
+  email?: string | null
+  tipo_credito?: string | null
+  presupuesto?: string | null
+  zona_busqueda?: string | null
+  num_personas?: string | null
+  tiene_mascotas?: boolean | null
+  detalle_mascotas?: string | null
+  fecha_mudanza?: string | null
+  problemas_poliza?: boolean | null
+}
+
+const TIPOS_CREDITO_LABEL: Record<string, string> = {
+  infonavit: 'Infonavit',
+  fovisste: 'Fovisste',
+  bancario: 'Bancario',
+  contado: 'Contado',
+  otro: 'Otro',
+}
+
+function construirInfoCliente(cliente: ClienteCRM): string {
+  const datos: string[] = []
+  if (cliente.nivel_interes) {
+    const label = { alto: '🔥 Alto', medio: '🌡️ Medio', bajo: '❄️ Bajo' }[cliente.nivel_interes]
+    datos.push(`• Nivel de interés: ${label}`)
+  }
+  if (cliente.tipo_operacion === 'venta') {
+    if (cliente.email) datos.push(`• Email: ${cliente.email}`)
+    if (cliente.tipo_credito) datos.push(`• Tipo de crédito: ${TIPOS_CREDITO_LABEL[cliente.tipo_credito] ?? cliente.tipo_credito}`)
+    if (cliente.presupuesto) datos.push(`• Presupuesto: ${cliente.presupuesto}`)
+    if (cliente.zona_busqueda) datos.push(`• Zona de búsqueda: ${cliente.zona_busqueda}`)
+  } else if (cliente.tipo_operacion === 'renta') {
+    if (cliente.num_personas) datos.push(`• Personas: ${cliente.num_personas}`)
+    if (cliente.tiene_mascotas != null) {
+      datos.push(`• Mascotas: ${cliente.tiene_mascotas ? `Sí${cliente.detalle_mascotas ? ` (${cliente.detalle_mascotas})` : ''}` : 'No'}`)
+    }
+    if (cliente.fecha_mudanza) datos.push(`• Mudanza: ${cliente.fecha_mudanza}`)
+    if (cliente.presupuesto) datos.push(`• Presupuesto: ${cliente.presupuesto}`)
+    if (cliente.zona_busqueda) datos.push(`• Zonas de interés: ${cliente.zona_busqueda}`)
+    if (cliente.problemas_poliza != null) datos.push(`• Problemas con póliza: ${cliente.problemas_poliza ? 'Sí' : 'No'}`)
+  }
+  return datos.length > 0 ? `\n${datos.join('\n')}` : ''
 }
 
 const GMAPS_KEY = 'AIzaSyCPML-wonbnHif1HswVfTk-ypInP1u94sE'
@@ -953,7 +996,7 @@ export default function DetallePropiedad() {
     const { data: { user } } = await supabase.auth.getUser()
     const { data } = await supabase
       .from('clientes')
-      .select('id, nombre, telefono, estado')
+      .select('id, nombre, telefono, estado, tipo_operacion, nivel_interes, email, tipo_credito, presupuesto, zona_busqueda, num_personas, tiene_mascotas, detalle_mascotas, fecha_mudanza, problemas_poliza')
       .eq('responsable_id', user?.id)
       .order('nombre', { ascending: true })
     setClientesCRM(data ?? [])
@@ -1042,7 +1085,8 @@ export default function DetallePropiedad() {
     const constructoraStr = propiedad.es_constructora && propiedad.nombre_constructora
       ? ` (${propiedad.nombre_constructora})`
       : ''
-    const mensaje = `Hola, quiero coordinar una cita para *${clienteParaCita.nombre}* (${clienteParaCita.telefono}) para la propiedad *${propiedad.codigo}*${constructoraStr} el *${fechaStr}*.`
+    const infoCliente = construirInfoCliente(clienteParaCita)
+    const mensaje = `Hola, quiero coordinar una cita para *${clienteParaCita.nombre}* (${clienteParaCita.telefono}) para la propiedad *${propiedad.codigo}*${constructoraStr} el *${fechaStr}*.${infoCliente}`
     if (subidoPor?.telefono) {
       let phone = subidoPor.telefono.replace(/\D/g, '')
       if (phone.startsWith('5252')) phone = phone.slice(2)
@@ -1451,7 +1495,7 @@ export default function DetallePropiedad() {
           <View style={styles.seccion}>
             <Text style={styles.seccionTitulo}>Ubicación</Text>
             <View style={styles.mapaWrapper}>
-              <PropMapa lat={propiedad.lat} lng={propiedad.lng} titulo={propiedad.titulo} height={340} />
+              <PropMapa key={propiedad.id} lat={propiedad.lat} lng={propiedad.lng} titulo={propiedad.titulo} height={340} />
               <TouchableOpacity
                 style={styles.mapaOverlayBtn}
                 activeOpacity={0.85}

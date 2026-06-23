@@ -37,6 +37,16 @@ export default function Constructoras() {
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
+  async function consultarModelos() {
+    return supabase
+      .from('propiedades')
+      .select('id, codigo, titulo, precio, nombre_constructora, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, orden)')
+      .eq('es_constructora', true)
+      .eq('es_inventario', false)
+      .order('nombre_constructora', { ascending: true, nullsFirst: false })
+      .order('precio', { ascending: true, nullsFirst: false })
+  }
+
   async function cargar() {
     const { data: { session } } = await supabase.auth.getSession()
     const userId = session?.user?.id
@@ -48,13 +58,17 @@ export default function Constructoras() {
     rol = vistaComo ?? rol  // rol efectivo (admin "viendo como")
     setRol(rol)
 
-    const { data } = await supabase
-      .from('propiedades')
-      .select('id, codigo, titulo, precio, nombre_constructora, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, orden)')
-      .eq('es_constructora', true)
-      .eq('es_inventario', false)
-      .order('nombre_constructora', { ascending: true, nullsFirst: false })
-      .order('precio', { ascending: true, nullsFirst: false })
+    let { data, error } = await consultarModelos()
+    // En web, justo al entrar/recargar la pantalla, la sesión puede tardar unos
+    // milisegundos en adjuntarse a las peticiones (el cliente de Supabase aún
+    // está restaurándola desde localStorage). Eso hace que la consulta viaje
+    // como anónima y la RLS de "propiedades" la devuelva vacía sin error.
+    // Reintentamos una vez tras una breve espera para esos casos.
+    if ((error || !data || data.length === 0) && userId) {
+      await new Promise((r) => setTimeout(r, 500))
+      const retry = await consultarModelos()
+      data = retry.data
+    }
 
     let lista = (data ?? []).map((p: any) => ({
       ...p,

@@ -186,8 +186,20 @@ function onYouTubeIframeAPIReady(){
 }
 </script></body></html>` : null
 
+  // Drive: cargar el /preview directo como `uri` le entrega a Google su
+  // página completa sin que controlemos el viewport — en WebViews móviles
+  // eso hace que se vea la barra de miniaturas superpuesta. Envolviéndolo en
+  // un HTML propio con viewport e iframe a tamaño fijo (mismo truco que
+  // YouTube arriba) lo deja consistente en iOS y Android.
+  const htmlDrive = !isYoutubeUrl(url) ? `<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>*{margin:0;padding:0}html,body{height:100%;background:#000;overflow:hidden}iframe{width:100%;height:100%;border:0;display:block}</style>
+</head><body><iframe src="${embed}" allow="autoplay; fullscreen" allowfullscreen></iframe></body></html>` : null
+
   const fuente = isYoutubeUrl(url) && htmlYoutube
     ? { html: htmlYoutube, baseUrl: 'https://valerarealestate.com' }
+    : htmlDrive
+    ? { html: htmlDrive, baseUrl: 'https://valerarealestate.com' }
     : { uri: embed }
 
   return (

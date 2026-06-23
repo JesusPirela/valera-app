@@ -122,10 +122,38 @@ serve(async (req) => {
     if (action === 'hilos') {
       const cutoffMs = Date.now() - DIAS_HISTORIAL * 24 * 3600 * 1000
 
-      const [salientes, entrantes] = await Promise.all([
-        fetchTwilioMessages({ From: NUMERO_BOT }, twilioAuth, accountSid, { maxTotal: MAX_MENSAJES_POR_DIRECCION, cutoffMs }),
-        fetchTwilioMessages({ To: NUMERO_BOT }, twilioAuth, accountSid, { maxTotal: MAX_MENSAJES_POR_DIRECCION, cutoffMs }),
-      ])
+      // Para staff se trae todo el tráfico del bot (tope global de seguridad).
+      // Para un prospectador, traer solo el tráfico global puede dejar fuera a
+      // sus propios leads si la cuenta tiene mucho volumen (se llega al tope
+      // MAX_MENSAJES_POR_DIRECCION antes de alcanzar mensajes de ese lead) o si
+      // el contacto fue hace más de 30 días. Por eso, para no-staff se consulta
+      // directamente Twilio solo por los teléfonos de sus propios leads.
+      let salientes: TwilioMessage[]
+      let entrantes: TwilioMessage[]
+
+      if (esStaff) {
+        ;[salientes, entrantes] = await Promise.all([
+          fetchTwilioMessages({ From: NUMERO_BOT }, twilioAuth, accountSid, { maxTotal: MAX_MENSAJES_POR_DIRECCION, cutoffMs }),
+          fetchTwilioMessages({ To: NUMERO_BOT }, twilioAuth, accountSid, { maxTotal: MAX_MENSAJES_POR_DIRECCION, cutoffMs }),
+        ])
+      } else {
+        const { data: leadsPropios } = await supabaseAdmin
+          .from('chatbot_leads')
+          .select('telefono')
+          .eq('prospectador_id', user.id)
+
+        const variantesPropias = [...new Set((leadsPropios ?? []).flatMap((l) => variantesWhatsapp(l.telefono)))]
+
+        const lotes = await Promise.all(
+          variantesPropias.flatMap((v) => [
+            fetchTwilioMessages({ From: v }, twilioAuth, accountSid, { maxTotal: MAX_MENSAJES_POR_DIRECCION }),
+            fetchTwilioMessages({ To: v }, twilioAuth, accountSid, { maxTotal: MAX_MENSAJES_POR_DIRECCION }),
+          ])
+        )
+        const todas = lotes.flat()
+        salientes = todas.filter((m) => m.direction !== 'inbound')
+        entrantes = todas.filter((m) => m.direction === 'inbound')
+      }
 
       type Acumulado = {
         ultimo_mensaje: string

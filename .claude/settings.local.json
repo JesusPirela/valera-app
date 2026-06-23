@@ -84,7 +84,9 @@
       "Bash(find /c/Users/carbe/OneDrive\\\\Escritorio\\\\valera_app/supabase/migrations -name \"*clientes*\" -o -name \"*crm*\" | sort)",
       "Read(//c/Users/carbe/OneDriveEscritoriovalera_app/supabase/**)",
       "Bash(xargs grep -l \"CREATE TABLE.*clientes\")",
-      "Bash(xargs -I{} sh -c 'echo ==={}===; cat {}')"
+      "Bash(xargs -I{} sh -c 'echo ==={}===; cat {}')",
+      "Bash(grep -E \"tipo\\\\\\)|'[a-z_]+'\\\\s*$|VALUES|SELECT\")",
+      "Bash(grep -iv \"precioNum\\\\|setPrecio\\\\|precio}\\\\s*onChangeText\\\\|value={precio\\\\|precio,\\\\|precio:\\\\|precio !=\\\\|precio ==\\\\|precio?\\\\.\\\\|presupuesto\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\carbe\\OneDrive\\Escritorio\\valera_app\\supabase\\_tmp_pending"
