@@ -154,6 +154,7 @@ export default function ProspectadorPropiedades() {
   const [visibleCount, setVisibleCount] = useState(PAGE_WEB)
   const [showHelp, setShowHelp] = useState(false)
   const [mensajeAyuda, setMensajeAyuda] = useState('')
+  const [imagenModal, setImagenModal] = useState<string | null>(null)
   const { vistaComo } = useVistaComo()
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
     queryKey: ['prospectador-propiedades', vistaComo],
@@ -549,7 +550,20 @@ export default function ProspectadorPropiedades() {
         onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.id}`)}
       >
         {primera?.url && (
-          <Image source={{ uri: thumb(primera.url, { width: 640, quality: 65 }) }} style={styles.cardImagen} resizeMode="cover" />
+          <View style={styles.cardImagenWrap}>
+            <Image
+              source={{ uri: thumb(primera.url, { width: 640, quality: 65 }) }}
+              style={styles.cardImagen}
+              resizeMode="contain"
+            />
+            <TouchableOpacity
+              style={styles.lupitaBtn}
+              onPress={(e) => { e.stopPropagation(); setImagenModal(thumb(primera.url, { width: 1200, quality: 85 }) ?? null) }}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Text style={styles.lupitaText}>🔍</Text>
+            </TouchableOpacity>
+          </View>
         )}
         {item.exclusiva && (
           <View style={styles.exclusivaBanner}>
@@ -923,6 +937,18 @@ export default function ProspectadorPropiedades() {
         <Ionicons name="help" size={20} color="#fff" />
       </TouchableOpacity>
 
+      {/* Modal imagen completa */}
+      <Modal visible={imagenModal != null} transparent animationType="fade" onRequestClose={() => setImagenModal(null)}>
+        <TouchableOpacity style={styles.imgModalOverlay} onPress={() => setImagenModal(null)} activeOpacity={1}>
+          {imagenModal && (
+            <Image source={{ uri: imagenModal }} style={styles.imgModalImg} resizeMode="contain" />
+          )}
+          <View style={styles.imgModalCerrar}>
+            <Text style={styles.imgModalCerrarText}>✕</Text>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Modal de ayuda */}
       <Modal visible={showHelp} transparent animationType="fade" onRequestClose={() => setShowHelp(false)}>
         <View style={styles.modalOverlay}>
@@ -1234,7 +1260,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f5e07a',
   },
-  cardImagen: { width: '100%', height: Platform.OS === 'web' ? 200 : 180 },
+  cardImagenWrap: { width: '100%', height: Platform.OS === 'web' ? 200 : 180, backgroundColor: '#f0f4f5', overflow: 'hidden' },
+  cardImagen: { width: '100%', height: '100%' },
+  lupitaBtn: {
+    position: 'absolute', top: 8, right: 8,
+    backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18,
+    width: 34, height: 34, alignItems: 'center', justifyContent: 'center',
+  },
+  lupitaText: { fontSize: 17 },
+  imgModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', justifyContent: 'center', alignItems: 'center' },
+  imgModalImg: { width: '100%', height: '85%' },
+  imgModalCerrar: {
+    position: 'absolute', top: 44, right: 18,
+    backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 20,
+    width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
+  },
+  imgModalCerrarText: { color: '#fff', fontSize: 20, fontWeight: '800' },
   cardBody: { padding: 14 },
   cardHeaderRow: {
     flexDirection: 'row',

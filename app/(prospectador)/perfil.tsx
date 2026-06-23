@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Platform, Alert, Image,
@@ -11,18 +11,18 @@ import ToggleSwitch from '../../components/ToggleSwitch'
 import CambiarCuenta from '../../components/CambiarCuenta'
 import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
 
-const COLORES_PRESET = [
-  { label: 'Verde Valera',  valor: '#1a6470' },
-  { label: 'Dorado',        valor: '#c9a84c' },
-  { label: 'Azul marino',   valor: '#1e3a5f' },
-  { label: 'Vino',          valor: '#7b1e3a' },
-  { label: 'Verde bosque',  valor: '#2d6a4f' },
-  { label: 'Gris elegante', valor: '#4a4a4a' },
-  { label: 'Morado',        valor: '#5c3d99' },
-  { label: 'Naranja',       valor: '#c45c1a' },
+const COLORES_LIBRES = [
+  '#1a6470', '#c9a84c', '#1e3a5f', '#7b1e3a',
+  '#2d6a4f', '#4a4a4a', '#5c3d99', '#c45c1a',
+]
+const COLORES_PREMIUM = [
+  '#c2185b', '#e64a19', '#00838f', '#558b2f',
+  '#283593', '#ff6f00', '#006064', '#4a148c',
+  '#37474f', '#1b5e20', '#880e4f', '#bf360c',
 ]
 
-const AVATARES_PRESET = ['👤','🏠','⭐','🦁','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
+const AVATARES_LIBRES  = ['👤','🏠','⭐','🦁','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
+const AVATARES_PREMIUM = ['🔥','⚡','🌈','🦋','🐉','🦄','👑','💫','🎭','🌺','🔮','🌊','🏆','🌙','✨','🎸']
 
 function mostrarAlerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
@@ -35,8 +35,28 @@ export default function Perfil() {
 
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
+  const [packIconos, setPackIconos] = useState(false)
 
   const [userId, setUserId] = useState('')
+
+  // Inyectar keyframes para animación de avatares premium en web
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return
+    if (document.getElementById('perfil-premium-anim')) return
+    const s = document.createElement('style')
+    s.id = 'perfil-premium-anim'
+    s.textContent = `
+      @keyframes avatarPremiumIdle {
+        0%,100%{box-shadow:0 0 6px 2px rgba(201,168,76,0.35)}
+        50%{box-shadow:0 0 14px 5px rgba(201,168,76,0.75)}
+      }
+      @keyframes avatarPremiumSelected {
+        0%,100%{box-shadow:0 0 8px 3px rgba(255,255,255,0.4),0 0 16px 6px rgba(201,168,76,0.6)}
+        50%{box-shadow:0 0 16px 6px rgba(255,255,255,0.7),0 0 28px 10px rgba(201,168,76,0.9)}
+      }
+    `
+    document.head.appendChild(s)
+  }, [])
   const [nombre, setNombre] = useState('')
   const [stats, setStats] = useState<UserStats | null>(null)
   const [telefono, setTelefono] = useState('')
@@ -56,11 +76,13 @@ export default function Perfil() {
     setUserId(user.id)
     setEmail(user.email ?? '')
 
-    const [{ data }, statsData] = await Promise.all([
+    const [{ data }, statsData, comprasRes] = await Promise.all([
       supabase.from('profiles').select('nombre, telefono, avatar_url, color_acento').eq('id', user.id).single(),
       getUserStats(user.id),
+      supabase.from('store_compras').select('id, store_items(tipo)').eq('user_id', user.id).eq('estado', 'entregado'),
     ])
     setStats(statsData)
+    setPackIconos((comprasRes.data ?? []).some((c: any) => c.store_items?.tipo === 'pack_iconos'))
 
     if (data) {
       setNombre(data.nombre ?? '')
@@ -254,13 +276,49 @@ export default function Perfil() {
 
         <Text style={s.label}>Avatares prediseñados</Text>
         <View style={s.emojiGrid}>
-          {AVATARES_PRESET.map(e => (
+          {AVATARES_LIBRES.map(e => (
             <TouchableOpacity
               key={e}
               style={[s.emojiBtn, { backgroundColor: c.card, borderColor: c.border }, avatarEmoji === e && !avatarMostrado && { borderColor: colorAcento, borderWidth: 3 }]}
               onPress={() => seleccionarEmoji(e)}
             >
               <Text style={s.emojiBtnText}>{e}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={s.premiumHeader}>
+          <Text style={s.premiumLabel}>✨ Avatares premium</Text>
+          {!packIconos && <Text style={s.premiumTag}>Pack 500 💰</Text>}
+        </View>
+        <View style={s.emojiGrid}>
+          {AVATARES_PREMIUM.map(e => (
+            <TouchableOpacity
+              key={e}
+              style={[
+                s.emojiBtn,
+                packIconos
+                  ? { backgroundColor: '#1a1200', borderColor: '#c9a84c88' }
+                  : { backgroundColor: c.card, borderColor: c.border, opacity: 0.55 },
+                avatarEmoji === e && !avatarMostrado && packIconos && {
+                  borderColor: '#c9a84c', borderWidth: 3,
+                  ...(Platform.OS === 'web' ? { animation: 'avatarPremiumSelected 1.4s ease-in-out infinite' } as any : {}),
+                },
+                packIconos && avatarEmoji !== e && Platform.OS === 'web'
+                  ? { animation: 'avatarPremiumIdle 2.2s ease-in-out infinite' } as any
+                  : {},
+              ]}
+              onPress={() => {
+                if (!packIconos) { mostrarAlerta('Desbloquea el Pack Premium de Iconos y Colores en la Tienda 🎨 (500 Valera Coins)'); return }
+                seleccionarEmoji(e)
+              }}
+            >
+              <Text style={s.emojiBtnText}>{e}</Text>
+              {!packIconos && (
+                <View style={s.lockOverlay}>
+                  <Text style={s.lockIcon}>🔒</Text>
+                </View>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -343,17 +401,42 @@ export default function Perfil() {
         <Text style={s.seccion}>COLOR DE LA APLICACIÓN</Text>
         <Text style={s.label}>Elige tu color principal</Text>
         <View style={s.coloresGrid}>
-          {COLORES_PRESET.map(c => (
+          {COLORES_LIBRES.map(valor => (
             <TouchableOpacity
-              key={c.valor}
+              key={valor}
+              style={[s.colorBtn, { backgroundColor: valor }, colorAcento === valor && s.colorBtnActivo]}
+              onPress={() => setColorAcento(valor)}
+            >
+              {colorAcento === valor && <Text style={s.colorCheck}>✓</Text>}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={s.premiumHeader}>
+          <Text style={s.premiumLabel}>✨ Colores premium</Text>
+          {!packIconos && <Text style={s.premiumTag}>Pack 500 💰</Text>}
+        </View>
+        <View style={s.coloresGrid}>
+          {COLORES_PREMIUM.map(valor => (
+            <TouchableOpacity
+              key={valor}
               style={[
                 s.colorBtn,
-                { backgroundColor: c.valor },
-                colorAcento === c.valor && s.colorBtnActivo,
+                { backgroundColor: valor },
+                !packIconos && { opacity: 0.45 },
+                colorAcento === valor && packIconos && s.colorBtnActivo,
               ]}
-              onPress={() => setColorAcento(c.valor)}
+              onPress={() => {
+                if (!packIconos) { mostrarAlerta('Desbloquea el Pack Premium de Iconos y Colores en la Tienda 🎨 (500 Valera Coins)'); return }
+                setColorAcento(valor)
+              }}
             >
-              {colorAcento === c.valor && <Text style={s.colorCheck}>✓</Text>}
+              {colorAcento === valor && packIconos && <Text style={s.colorCheck}>✓</Text>}
+              {!packIconos && (
+                <View style={s.lockOverlay}>
+                  <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
+                </View>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -426,6 +509,11 @@ const s = StyleSheet.create({
     borderWidth: 2, borderColor: '#dde8e9',
   },
   emojiBtnText: { fontSize: 26 },
+  premiumHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: 4 },
+  premiumLabel: { fontSize: 13, fontWeight: '700', color: '#c9a84c' },
+  premiumTag: { fontSize: 11, fontWeight: '700', color: '#fff', backgroundColor: '#c9a84c', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  lockOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 26 },
+  lockIcon: { fontSize: 18 },
   btnFoto: {
     borderWidth: 2, borderStyle: 'dashed', borderRadius: 10,
     paddingVertical: 14, alignItems: 'center', marginBottom: 16,
