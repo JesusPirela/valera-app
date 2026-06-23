@@ -74,7 +74,7 @@ export async function cambiarACuenta(
 ): Promise<{ ok: boolean; error?: string; tokenVencido?: boolean; role?: string | null }> {
   accountSwitch.pending = true
   try {
-    const timeoutMs = 12_000
+    const timeoutMs = 4_000
     const result = await Promise.race([
       supabase.auth.setSession({
         access_token: target.access_token,

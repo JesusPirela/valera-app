@@ -14,7 +14,8 @@ type UsuarioMetricas = {
   id: string
   nombre: string | null
   clientes_nuevos: number
-  propiedades_publicadas: number
+  propiedades_publicadas: number  // total del log (cuenta repetidas)
+  propiedades_unicas: number      // casas distintas publicadas
   seguimientos: number
   interacciones: number
   citas: number
@@ -237,9 +238,9 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo }: {
           <View style={uS.detailGrid}>
             <View style={uS.detailCol}>
               <MetricRow icono="👥" label="Clientes nuevos"       valor={u.clientes_nuevos}        color="#1a6470" />
-              <MetricRow icono="🏠" label="Propiedades public."   valor={u.propiedades_publicadas} color="#1a6470" />
+              <MetricRow icono="📤" label="Publicaciones"         valor={u.propiedades_publicadas} color="#1a6470" />
+              <MetricRow icono="🏠" label="Propiedades"           valor={u.propiedades_unicas}     color="#1a9aaa" />
               <MetricRow icono="✅" label="Seguimientos"          valor={u.seguimientos}            color="#2ecc71" />
-              <MetricRow icono="💬" label="Interacciones"         valor={u.interacciones}           />
             </View>
             <View style={uS.detailCol}>
               <MetricRow icono="📅" label="Citas generadas"       valor={u.citas}                  color="#c9a84c" />
@@ -323,8 +324,8 @@ function generarReporteHTML(
         <td class="center">${st.emoji} ${st.label}</td>
         <td class="center">${u.clientes_nuevos}</td>
         <td class="center">${u.propiedades_publicadas}</td>
+        <td class="center">${u.propiedades_unicas}</td>
         <td class="center">${u.seguimientos}</td>
-        <td class="center">${u.interacciones}</td>
         <td class="center">${u.citas}</td>
         <td class="center">${formatMinutos(u.minutos_conexion)}</td>
         <td class="center bold">${u.actividad_total}</td>
@@ -394,8 +395,8 @@ ${tendencia.length > 0 ? `
   <table>
     <thead><tr>
       <th>#</th><th>Usuario</th><th>Estado</th>
-      <th class="center">Clientes</th><th class="center">Propied.</th>
-      <th class="center">Seguim.</th><th class="center">Interac.</th>
+      <th class="center">Clientes</th><th class="center">Public.</th>
+      <th class="center">Propied.</th><th class="center">Seguim.</th>
       <th class="center">Citas</th><th class="center">Tiempo</th>
       <th class="center">Score</th>
     </tr></thead>
@@ -719,9 +720,9 @@ export default function Reportes() {
               <View style={s.teamCard}>
                 {[
                   { icono: '👥', label: 'Clientes nuevos',        val: usuarios.reduce((a,u)=>a+u.clientes_nuevos,0) },
-                  { icono: '🏠', label: 'Propiedades publicadas',  val: usuarios.reduce((a,u)=>a+u.propiedades_publicadas,0) },
+                  { icono: '📤', label: 'Publicaciones',           val: usuarios.reduce((a,u)=>a+u.propiedades_publicadas,0) },
+                  { icono: '🏠', label: 'Propiedades únicas',      val: usuarios.reduce((a,u)=>a+u.propiedades_unicas,0) },
                   { icono: '✅', label: 'Seguimientos',            val: usuarios.reduce((a,u)=>a+u.seguimientos,0) },
-                  { icono: '💬', label: 'Interacciones',           val: usuarios.reduce((a,u)=>a+u.interacciones,0) },
                   { icono: '📅', label: 'Citas generadas',         val: usuarios.reduce((a,u)=>a+u.citas,0) },
                   { icono: '🎓', label: 'Cursos completados',      val: usuarios.reduce((a,u)=>a+u.cursos_completados,0) },
                   { icono: '👁️',  label: 'Fichas vistas',           val: usuarios.reduce((a,u)=>a+u.vistas_propiedades,0) },

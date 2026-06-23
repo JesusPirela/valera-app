@@ -66,32 +66,30 @@ export default function CambiarCuenta() {
 
   async function switchTo(cuenta: CuentaGuardada) {
     setCambiando(cuenta.user_id)
-    const res = await cambiarACuenta(cuenta)
-    if (!res.ok) {
-      if (res.tokenVencido) {
-        // Tokens inválidos: intentar con contraseña guardada primero.
-        const passGuardada = await obtenerPasswordCuenta(cuenta.user_id)
-        if (passGuardada) {
-          const res2 = await cambiarACuentaConPassword(cuenta, passGuardada)
-          setCambiando(null)
-          if (res2.ok) {
-            await irAHome(cuenta.role)
-            return
-          }
-          // La contraseña guardada ya no es válida: pedir de nuevo.
-        } else {
-          setCambiando(null)
-        }
-        // Mostrar campo de contraseña inline.
-        setNecesitaPass(cuenta)
-      } else {
-        setCambiando(null)
-        const msg = 'No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.'
-        Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error de conexión', msg)
+
+    // Si hay contraseña guardada, usarla directamente. setSession es poco
+    // confiable en web (puede colgar hasta 12 s), signInWithPassword siempre funciona.
+    const passGuardada = await obtenerPasswordCuenta(cuenta.user_id)
+    if (passGuardada) {
+      const res = await cambiarACuentaConPassword(cuenta, passGuardada)
+      setCambiando(null)
+      if (res.ok) {
+        await irAHome(cuenta.role)
+        return
       }
+      // La contraseña guardada caducó o cambió: pedir de nuevo.
+      setNecesitaPass(cuenta)
       return
     }
+
+    // Sin contraseña guardada: intentar con tokens (setSession con timeout corto).
+    const res = await cambiarACuenta(cuenta)
     setCambiando(null)
+    if (!res.ok) {
+      // Token inválido o red lenta: pedir contraseña.
+      setNecesitaPass(cuenta)
+      return
+    }
     await irAHome(res.role)
   }
 
