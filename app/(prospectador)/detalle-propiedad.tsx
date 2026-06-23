@@ -324,13 +324,13 @@ export default function DetallePropiedad() {
 
   useEffect(() => {
     if (!id || !isOnline) return
-    // Reset inmediato al navegar entre propiedades: evita mostrar estado de la
-    // propiedad anterior mientras carga la publicación de la nueva.
     setPublicada(false)
     setVecesPublicada(0)
     setFechaPublicacion(null)
-    registrarActividad('vista')
     cargarPublicacion()
+    // Registrar vista solo si el usuario permanece ≥30 s en la propiedad.
+    const timer = setTimeout(() => registrarActividad('vista'), 30_000)
+    return () => clearTimeout(timer)
   }, [id])
 
   // Resetear estado de carga al cambiar de imagen en el lightbox
