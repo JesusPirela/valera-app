@@ -245,8 +245,8 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo }: {
             <View style={uS.detailCol}>
               <MetricRow icono="📅" label="Citas generadas"       valor={u.citas}                  color="#c9a84c" />
               <MetricRow icono="🎓" label="Cursos completados"    valor={u.cursos_completados}      />
-              <MetricRow icono="👁️"  label="Fichas vistas"         valor={u.vistas_propiedades}      />
-              <MetricRow icono="📥" label="Fotos guardadas"       valor={u.descargas_propiedades}   />
+              <MetricRow icono="👁️"  label="Propiedades vistas"         valor={u.vistas_propiedades}      />
+              <MetricRow icono="📥" label="Propiedades descargadas"       valor={u.descargas_propiedades}   />
             </View>
           </View>
           <View style={uS.tiempoRow}>
@@ -725,8 +725,8 @@ export default function Reportes() {
                   { icono: '✅', label: 'Seguimientos',            val: usuarios.reduce((a,u)=>a+u.seguimientos,0) },
                   { icono: '📅', label: 'Citas generadas',         val: usuarios.reduce((a,u)=>a+u.citas,0) },
                   { icono: '🎓', label: 'Cursos completados',      val: usuarios.reduce((a,u)=>a+u.cursos_completados,0) },
-                  { icono: '👁️',  label: 'Fichas vistas',           val: usuarios.reduce((a,u)=>a+u.vistas_propiedades,0) },
-                  { icono: '📥', label: 'Fotos guardadas',         val: usuarios.reduce((a,u)=>a+u.descargas_propiedades,0) },
+                  { icono: '👁️',  label: 'Propiedades vistas',           val: usuarios.reduce((a,u)=>a+u.vistas_propiedades,0) },
+                  { icono: '📥', label: 'Propiedades descargadas',         val: usuarios.reduce((a,u)=>a+u.descargas_propiedades,0) },
                 ].map(m => (
                   <View key={m.label} style={s.teamMetric}>
                     <Text style={s.teamMetricIcn}>{m.icono}</Text>
