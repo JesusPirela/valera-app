@@ -30,7 +30,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { conReintentoData, generarIdemKey, conTimeout } from '../../lib/redIntentos'
 import PropMapa from '../../components/PropMapa'
-import { actualizarMisionesPorCategoria } from '../../lib/gamification'
+import { actualizarMisionesPorCategoria, registrarAccion } from '../../lib/gamification'
 
 
 type Propiedad = {
@@ -261,6 +261,13 @@ export default function DetallePropiedad() {
   const [togglingPublicacion, setTogglingPublicacion] = useState(false)
   const [vecesPublicada, setVecesPublicada] = useState(0)
   const [deshaciendoPub, setDeshaciendoPub] = useState(false)
+
+  // Modal "Registrar con constructora"
+  const [modalConstructoraVisible, setModalConstructoraVisible] = useState(false)
+  const [regNombre, setRegNombre] = useState('')
+  const [regTelefono, setRegTelefono] = useState('')
+  const [regCorreo, setRegCorreo] = useState('')
+  const [registrandoConstructora, setRegistrandoConstructora] = useState(false)
 
   // Paso 2: selección de fecha/hora de la cita
   const [clienteParaCita, setClienteParaCita] = useState<ClienteCRM | null>(null)
@@ -826,6 +833,83 @@ export default function DetallePropiedad() {
     Linking.openURL(`https://wa.me/524428790740?text=${encodeURIComponent(mensaje)}`)
   }
 
+  function normalizarTelMx(telRaw: string): string {
+    let phone = telRaw.replace(/\D/g, '')
+    if (phone.startsWith('5252')) phone = phone.slice(2)
+    if (phone.startsWith('521') && phone.length === 13) phone = '52' + phone.slice(3)
+    return phone.length === 10 ? `52${phone}` : phone
+  }
+
+  function abrirWhatsApp(telefono: string, mensaje: string) {
+    const url = `https://wa.me/${normalizarTelMx(telefono)}?text=${encodeURIComponent(mensaje)}`
+    if (Platform.OS === 'web') window.open(url, '_blank')
+    else Linking.openURL(url)
+  }
+
+  // Registra al cliente en el CRM y abre WhatsApp con el mensaje listo para
+  // enviárselo a la constructora — automatiza lo que antes se redactaba a
+  // mano cada vez que un cliente se interesaba en un desarrollo.
+  async function registrarConConstructora() {
+    if (!propiedad) return
+    if (!regNombre.trim() || !regTelefono.trim() || !regCorreo.trim()) {
+      Alert.alert('Faltan datos', 'Nombre, teléfono y correo son obligatorios para registrar al cliente con la constructora.')
+      return
+    }
+    setRegistrandoConstructora(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const nombreConstructora = propiedad.nombre_constructora?.trim() ?? ''
+      const { data: constructora } = nombreConstructora
+        ? await supabase.from('constructoras').select('telefono_contacto').eq('nombre', nombreConstructora).maybeSingle()
+        : { data: null }
+
+      const { data: clienteCreado, error: errorCliente } = await supabase
+        .from('clientes')
+        .insert({
+          nombre: regNombre.trim(),
+          telefono: regTelefono.trim(),
+          email: regCorreo.trim(),
+          fuente_lead: 'constructora',
+          estado: 'por_perfilar',
+          notas: `Registrado con constructora "${nombreConstructora || propiedad.nombre_constructora}" — propiedad ${propiedad.codigo}: ${propiedad.titulo}`,
+          responsable_id: user.id,
+        })
+        .select('id')
+        .single()
+      if (errorCliente) { Alert.alert('Error al registrar', errorCliente.message); return }
+
+      await supabase.from('interacciones').insert({
+        cliente_id: clienteCreado.id, user_id: user.id,
+        tipo: 'nota', descripcion: `Cliente registrado con constructora "${nombreConstructora}".`,
+      })
+      await supabase.rpc('notificar_admins_nuevo_cliente', {
+        p_cliente_nombre: regNombre.trim(),
+        p_cliente_id: clienteCreado.id,
+        p_prospectador_nombre: nombreUsuario ?? 'Un prospectador',
+      })
+      registrarAccion(user.id, 'agregar_cliente').catch(() => {})
+
+      setModalConstructoraVisible(false)
+      setRegNombre(''); setRegTelefono(''); setRegCorreo('')
+
+      const telConstructora = constructora?.telefono_contacto?.trim()
+      if (!telConstructora) {
+        Alert.alert(
+          'Cliente registrado',
+          `Se guardó el cliente en el CRM, pero "${nombreConstructora}" no tiene teléfono de contacto configurado todavía. Pide a un admin que lo agregue en Constructoras para poder enviar el WhatsApp automáticamente la próxima vez.`,
+        )
+        return
+      }
+
+      const mensaje = `Hola, quiero registrar un cliente interesado en ${propiedad.titulo} (${propiedad.codigo}):\n\nNombre: ${regNombre.trim()}\nTeléfono: ${regTelefono.trim()}\nCorreo: ${regCorreo.trim()}`
+      abrirWhatsApp(telConstructora, mensaje)
+    } finally {
+      setRegistrandoConstructora(false)
+    }
+  }
+
   function agendarValera() {
     if (!propiedad) return
     const nombre = nombreUsuario ?? 'Un prospectador'
@@ -1263,6 +1347,14 @@ export default function DetallePropiedad() {
                 <Text style={styles.accionBtnText}>📞 Llamar</Text>
               </TouchableOpacity>
             </>
+          )}
+          {propiedad.es_constructora && (
+            <TouchableOpacity
+              style={[styles.accionBtn, { backgroundColor: '#c9a84c' }]}
+              onPress={() => setModalConstructoraVisible(true)}
+            >
+              <Text style={styles.accionBtnText}>🏗 Registrar con constructora</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -1868,6 +1960,61 @@ export default function DetallePropiedad() {
                 </TouchableOpacity>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: Registrar con constructora */}
+      <Modal visible={modalConstructoraVisible} transparent animationType="slide" onRequestClose={() => setModalConstructoraVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitulo}>Registrar con constructora</Text>
+              <TouchableOpacity onPress={() => setModalConstructoraVisible(false)}>
+                <Text style={styles.modalCerrar}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.pickerHint, { marginBottom: 12 }]}>
+              Estos datos se guardan en el CRM y se preparan en un mensaje de WhatsApp listo para enviárselo a {propiedad?.nombre_constructora ?? 'la constructora'}.
+            </Text>
+
+            <TextInput
+              style={styles.formInput}
+              placeholder="Nombre del cliente *"
+              value={regNombre}
+              onChangeText={setRegNombre}
+              autoCapitalize="words"
+            />
+            <TextInput
+              style={styles.formInput}
+              placeholder="Teléfono del cliente *"
+              value={regTelefono}
+              onChangeText={setRegTelefono}
+              keyboardType="phone-pad"
+            />
+            <TextInput
+              style={styles.formInput}
+              placeholder="Correo del cliente *"
+              value={regCorreo}
+              onChangeText={setRegCorreo}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+
+            <TouchableOpacity
+              style={[styles.btnConfirmarCita, registrandoConstructora && { opacity: 0.6 }]}
+              onPress={registrarConConstructora}
+              disabled={registrandoConstructora}
+            >
+              {registrandoConstructora
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.btnConfirmarCitaText}>Registrar y abrir WhatsApp</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnVolverPaso} onPress={() => setModalConstructoraVisible(false)}>
+              <Text style={styles.btnVolverPasoText}>Cancelar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

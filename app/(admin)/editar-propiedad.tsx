@@ -690,6 +690,14 @@ export default function EditarPropiedad() {
         throw new Error('No se guardó la propiedad. Verifica los permisos de edición en Supabase (RLS UPDATE en tabla propiedades).')
       }
 
+      // Si es una constructora nueva (no estaba en el selector), se registra
+      // también en la tabla `constructoras` para poder configurarle el
+      // teléfono de contacto después.
+      if (esConstructora && nombreConstructora.trim()) {
+        await supabase.from('constructoras')
+          .upsert({ nombre: nombreConstructora.trim() }, { onConflict: 'nombre', ignoreDuplicates: true })
+      }
+
       if (imagenesEliminar.length > 0) {
         const { data: borradas, error } = await supabase
           .from('propiedad_imagenes')
@@ -1163,6 +1171,9 @@ export default function EditarPropiedad() {
                 autoCapitalize="words"
               />
             )}
+            <TouchableOpacity style={{ marginTop: 8 }} onPress={() => router.push({ pathname: '/(admin)/constructoras', params: { vista: 'contactos' } })}>
+              <Text style={{ fontSize: 12, color: '#1a6470', fontWeight: '600' }}>📞 Administrar teléfonos de constructoras →</Text>
+            </TouchableOpacity>
           </View>
         )}
 

@@ -704,6 +704,15 @@ export default function NuevaPropiedad() {
 
       if (errorPropiedad) throw new Error(`${errorPropiedad.message} (code: ${errorPropiedad.code}, details: ${errorPropiedad.details}, hint: ${errorPropiedad.hint})`)
 
+      // Si es una constructora nueva (no estaba en el selector), se registra
+      // también en la tabla `constructoras` para poder configurarle el
+      // teléfono de contacto después — sin esto, solo viviría en el nombre
+      // de texto libre de la propiedad y no aparecería en esa pantalla.
+      if (esConstructora && nombreConstructora.trim()) {
+        await supabase.from('constructoras')
+          .upsert({ nombre: nombreConstructora.trim() }, { onConflict: 'nombre', ignoreDuplicates: true })
+      }
+
       if (imagenes.length > 0) {
         const registros = await Promise.all(
           imagenes.map(async (uri, index) => {
@@ -1107,6 +1116,9 @@ export default function NuevaPropiedad() {
                 autoCapitalize="words"
               />
             )}
+            <TouchableOpacity style={{ marginTop: 8 }} onPress={() => router.push({ pathname: '/(admin)/constructoras', params: { vista: 'contactos' } })}>
+              <Text style={{ fontSize: 12, color: '#1a6470', fontWeight: '600' }}>📞 Administrar teléfonos de constructoras →</Text>
+            </TouchableOpacity>
           </View>
         )}
 
