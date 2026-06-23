@@ -324,6 +324,11 @@ export default function DetallePropiedad() {
 
   useEffect(() => {
     if (!id || !isOnline) return
+    // Reset inmediato al navegar entre propiedades: evita mostrar estado de la
+    // propiedad anterior mientras carga la publicación de la nueva.
+    setPublicada(false)
+    setVecesPublicada(0)
+    setFechaPublicacion(null)
     registrarActividad('vista')
     cargarPublicacion()
   }, [id])

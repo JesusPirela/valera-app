@@ -5,7 +5,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   listarCuentas, cambiarACuenta, cambiarACuentaConPassword,
-  olvidarCuenta, type CuentaGuardada,
+  olvidarCuenta, guardarPasswordCuenta, obtenerPasswordCuenta,
+  type CuentaGuardada,
 } from '../lib/cuentas'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
@@ -66,27 +67,40 @@ export default function CambiarCuenta() {
   async function switchTo(cuenta: CuentaGuardada) {
     setCambiando(cuenta.user_id)
     const res = await cambiarACuenta(cuenta)
-    setCambiando(null)
     if (!res.ok) {
       if (res.tokenVencido) {
-        // Tokens inválidos: mostrar campo de contraseña inline.
-        // NO eliminamos la cuenta porque podría ser un fallo transitorio
-        // y queremos que el usuario pueda reintentarlo con su contraseña.
+        // Tokens inválidos: intentar con contraseña guardada primero.
+        const passGuardada = await obtenerPasswordCuenta(cuenta.user_id)
+        if (passGuardada) {
+          const res2 = await cambiarACuentaConPassword(cuenta, passGuardada)
+          setCambiando(null)
+          if (res2.ok) {
+            await irAHome(cuenta.role)
+            return
+          }
+          // La contraseña guardada ya no es válida: pedir de nuevo.
+        } else {
+          setCambiando(null)
+        }
+        // Mostrar campo de contraseña inline.
         setNecesitaPass(cuenta)
       } else {
+        setCambiando(null)
         const msg = 'No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.'
         Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error de conexión', msg)
       }
       return
     }
+    setCambiando(null)
     await irAHome(res.role)
   }
 
   async function confirmarPassword() {
     if (!necesitaPass || !password.trim()) return
     const cuenta = necesitaPass
+    const pass = password.trim()
     setCambiando(cuenta.user_id)
-    const res = await cambiarACuentaConPassword(cuenta, password.trim())
+    const res = await cambiarACuentaConPassword(cuenta, pass)
     setCambiando(null)
     if (!res.ok) {
       const msg = res.error?.includes('Invalid login') || res.error?.includes('invalid')
@@ -95,6 +109,8 @@ export default function CambiarCuenta() {
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg)
       return
     }
+    // Guardar la contraseña para futuros cambios de cuenta sin pedirla de nuevo.
+    guardarPasswordCuenta(cuenta.user_id, pass).catch(() => {})
     setNecesitaPass(null)
     setPassword('')
     await irAHome(cuenta.role)

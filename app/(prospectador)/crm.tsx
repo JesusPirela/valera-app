@@ -456,21 +456,21 @@ export default function CRM() {
   // ── Excel table columns ───────────────────────────────────────
   type TCol = { id: string; label: string; flex: number; mw: number; sortable?: boolean; filterable?: boolean }
   const TABLE_COLS: TCol[] = isWeb ? [
-    { id: 'nombre',    label: 'Nombre',     flex: 3,   mw: 0, sortable: true },
-    { id: 'telefono',  label: 'Teléfono',   flex: 1.8, mw: 0 },
-    { id: 'estado',    label: 'Estado',     flex: 2.5, mw: 0, sortable: true, filterable: true },
-    { id: 'operacion', label: 'Operación',  flex: 1.5, mw: 0, filterable: true },
-    { id: 'interes',   label: 'Interés',    flex: 1.5, mw: 0, filterable: true },
-    { id: 'fecha',     label: 'Próx. seguimiento', flex: 2, mw: 0, sortable: true },
-    { id: 'notas',     label: 'Notas',      flex: 3, mw: 0 },
+    { id: 'nombre',    label: 'Nombre',       flex: 2.5, mw: 0, sortable: true },
+    { id: 'telefono',  label: 'Teléfono',     flex: 1.4, mw: 0 },
+    { id: 'estado',    label: 'Estado',       flex: 2,   mw: 0, sortable: true, filterable: true },
+    { id: 'operacion', label: 'Op.',          flex: 0.9, mw: 0, filterable: true },
+    { id: 'interes',   label: 'Interés',      flex: 0.9, mw: 0, filterable: true },
+    { id: 'fecha',     label: 'Prox. seguim.', flex: 1.7, mw: 0, sortable: true },
+    { id: 'notas',     label: 'Notas',        flex: 4,   mw: 0 },
   ] : [
-    { id: 'nombre',    label: 'Nombre',     flex: 0, mw: 155 },
-    { id: 'telefono',  label: 'Teléfono',   flex: 0, mw: 115 },
-    { id: 'estado',    label: 'Estado',     flex: 0, mw: 145, sortable: true, filterable: true },
-    { id: 'operacion', label: 'Op.',        flex: 0, mw: 80,  filterable: true },
-    { id: 'interes',   label: 'Interés',    flex: 0, mw: 90,  filterable: true },
-    { id: 'fecha',     label: 'Próx. seguim.', flex: 0, mw: 120, sortable: true },
-    { id: 'notas',     label: 'Notas',      flex: 0, mw: 180 },
+    { id: 'nombre',    label: 'Nombre',       flex: 0, mw: 145 },
+    { id: 'telefono',  label: 'Teléfono',     flex: 0, mw: 105 },
+    { id: 'estado',    label: 'Estado',       flex: 0, mw: 130, sortable: true, filterable: true },
+    { id: 'operacion', label: 'Op.',          flex: 0, mw: 65,  filterable: true },
+    { id: 'interes',   label: 'Interés',      flex: 0, mw: 75,  filterable: true },
+    { id: 'fecha',     label: 'Prox. seguim.', flex: 0, mw: 110, sortable: true },
+    { id: 'notas',     label: 'Notas',        flex: 0, mw: 220 },
   ]
 
   function cStyle(col: TCol) {
@@ -697,18 +697,44 @@ export default function CRM() {
                         </View>
                       )
                     }
+                    if (col.id === 'notas' && isWeb) {
+                      return (
+                        <View key={col.id} style={[s.excelTdCell, cs, { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 6 }]}>
+                          {createElement('textarea', {
+                            autoFocus: true,
+                            value: editValue,
+                            onChange: (e: any) => setEditValue(e.target.value),
+                            onBlur: guardarTexto,
+                            onKeyDown: (e: any) => { if (e.key === 'Escape') { guardarTexto(); } },
+                            placeholder: 'Escribe una nota...',
+                            rows: 4,
+                            style: {
+                              width: '100%', minHeight: 80, resize: 'vertical',
+                              padding: '6px 8px', borderRadius: 6,
+                              border: '1.5px solid #1a9aaa', fontSize: 12,
+                              fontFamily: 'inherit', lineHeight: '1.45',
+                              color: darkMode ? '#fff' : '#111',
+                              background: darkMode ? '#0a1827' : '#fff',
+                              outline: 'none',
+                            },
+                          })}
+                        </View>
+                      )
+                    }
                     return (
-                      <View key={col.id} style={[s.excelTdCell, cs]}>
+                      <View key={col.id} style={[s.excelTdCell, cs, col.id === 'notas' && { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 6 }]}>
                         <TextInput
                           autoFocus
                           value={editValue}
                           onChangeText={setEditValue}
                           onBlur={guardarTexto}
-                          onSubmitEditing={guardarTexto}
+                          onSubmitEditing={col.id !== 'notas' ? guardarTexto : undefined}
                           placeholder={col.id === 'fecha' ? 'AAAA-MM-DD' : col.id === 'notas' ? 'Escribe una nota...' : ''}
                           placeholderTextColor={c.textMute}
                           keyboardType={col.id === 'telefono' ? 'phone-pad' : 'default'}
-                          style={[s.cellInput, { color: c.text, borderColor: '#1a9aaa', backgroundColor: c.bg }]}
+                          multiline={col.id === 'notas'}
+                          numberOfLines={col.id === 'notas' ? 4 : 1}
+                          style={[s.cellInput, { color: c.text, borderColor: '#1a9aaa', backgroundColor: c.bg }, col.id === 'notas' && { minHeight: 80, textAlignVertical: 'top' }]}
                         />
                       </View>
                     )
@@ -778,9 +804,9 @@ export default function CRM() {
                     }
                     case 'notas':
                       return (
-                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'notas')} activeOpacity={0.6}>
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs, { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 8 }]} onPress={() => abrirEdicion(item, 'notas')} activeOpacity={0.6}>
                           {item.notas
-                            ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub }]} numberOfLines={1}>{item.notas}</Text>
+                            ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub, fontSize: 12, lineHeight: 17 }]} numberOfLines={3}>{item.notas}</Text>
                             : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ agregar</Text>
                           }
                         </TouchableOpacity>

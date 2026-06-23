@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
 
 const KEY = '@valera_cuentas'
+const KEY_PASS = '@valera_account_passwords'
 
 // Objeto mutable compartido entre módulos. Usar un objeto (no un `export let`)
 // garantiza que el consumidor siempre lea el valor actual del campo, sin depender
@@ -114,6 +115,33 @@ export async function cambiarACuenta(
 export async function olvidarCuenta(user_id: string): Promise<void> {
   const lista = await listarCuentas()
   await AsyncStorage.setItem(KEY, JSON.stringify(lista.filter(c => c.user_id !== user_id)))
+  // Borra la contraseña guardada también
+  try {
+    const raw = await AsyncStorage.getItem(KEY_PASS)
+    const map: Record<string, string> = raw ? JSON.parse(raw) : {}
+    delete map[user_id]
+    await AsyncStorage.setItem(KEY_PASS, JSON.stringify(map))
+  } catch {}
+}
+
+// Guarda la contraseña de una cuenta para reutilizarla en cambios futuros.
+export async function guardarPasswordCuenta(user_id: string, password: string): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(KEY_PASS)
+    const map: Record<string, string> = raw ? JSON.parse(raw) : {}
+    map[user_id] = password
+    await AsyncStorage.setItem(KEY_PASS, JSON.stringify(map))
+  } catch {}
+}
+
+// Recupera la contraseña guardada para una cuenta (null si no existe).
+export async function obtenerPasswordCuenta(user_id: string): Promise<string | null> {
+  try {
+    const raw = await AsyncStorage.getItem(KEY_PASS)
+    if (!raw) return null
+    const map: Record<string, string> = JSON.parse(raw)
+    return map[user_id] ?? null
+  } catch { return null }
 }
 
 // Cambia de cuenta con contraseña explícita (fallback cuando los tokens caducaron).
