@@ -300,6 +300,7 @@ export default function UniversityLeccion() {
       const { data, error } = await supabase.rpc('completar_leccion', {
         p_leccion_id: leccion.id,
         p_curso_id: cursoId,
+        p_user_id: user?.id ?? null,
       })
       if (!error && data && !data.ya_completada) {
         setYaCompletada(true)
@@ -318,7 +319,7 @@ export default function UniversityLeccion() {
               .select('id, tarea:tareas!inner(tipo, meta_cantidad)')
               .eq('user_id', user.id)
               .eq('completada', false)
-              .eq('tarea.tipo', 'completar_curso')
+              .eq('tareas.tipo', 'completar_curso')
             for (const a of (asigs ?? []) as any[]) {
               const meta = a.tarea?.meta_cantidad ?? 1
               const prog = Math.min(totalCursos ?? 1, meta)

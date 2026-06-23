@@ -82,6 +82,26 @@ export default function LeadsPool() {
   // Eliminando
   const [eliminando, setEliminando] = useState<string | null>(null)
 
+  // Asignación retroactiva
+  const [asignandoRetro, setAsignandoRetro] = useState(false)
+
+  async function asignarPendientes() {
+    setAsignandoRetro(true)
+    const { data, error } = await supabase.rpc('admin_asignar_leads_pendientes')
+    setAsignandoRetro(false)
+    if (error) { alerta('Error: ' + error.message); return }
+    const r = data as any
+    if (r?.asignados === 0) {
+      alerta(r?.sin_lead_en_pool > 0
+        ? 'No hay leads disponibles en el pool. Agrega más y vuelve a intentarlo.'
+        : 'No hay compras pendientes de leads sin asignar.')
+    } else {
+      alerta(`✅ ${r.asignados} lead(s) asignados exitosamente.${r.sin_lead_en_pool > 0 ? `\n⚠️ ${r.sin_lead_en_pool} compra(s) quedaron sin lead por pool vacío.` : ''}`)
+    }
+    cargarPool()
+    cargarHistorial()
+  }
+
   async function cargarPool() {
     setLoadingPool(true)
     const { data } = await supabase.rpc('get_leads_pool_disponibles')
@@ -213,6 +233,24 @@ export default function LeadsPool() {
               {guardando
                 ? <ActivityIndicator size="small" color="#fff" />
                 : <Text style={s.btnAgregarText}>+ Agregar al pool</Text>}
+            </TouchableOpacity>
+          </View>
+
+          {/* Asignar compras pendientes retroactivas */}
+          <View style={[s.card, { backgroundColor: '#fff3e0', borderColor: '#ffe0b2' }]}>
+            <Text style={[s.seccion, { color: '#e65100' }]}>Compras sin asignar (antes de auto-asignación)</Text>
+            <Text style={{ color: '#bf360c', fontSize: 13, lineHeight: 18 }}>
+              Si alguien compró Lead Premium o Lead Meta Ads antes de implementar la asignación automática,
+              su compra quedó pendiente. Toca el botón para asignarles un lead del pool ahora.
+            </Text>
+            <TouchableOpacity
+              style={[s.btnAgregar, { backgroundColor: '#e65100' }, asignandoRetro && { opacity: 0.6 }]}
+              onPress={asignarPendientes}
+              disabled={asignandoRetro}
+            >
+              {asignandoRetro
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={s.btnAgregarText}>🔄 Asignar compras pendientes</Text>}
             </TouchableOpacity>
           </View>
 
