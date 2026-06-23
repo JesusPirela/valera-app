@@ -83,7 +83,8 @@
       "Bash(curl -s '__TRACKED_VAR__/rest/v1/propiedades?select=id&limit=3' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__' -H 'Prefer: count=exact' -i)",
       "Bash(find /c/Users/carbe/OneDrive\\\\Escritorio\\\\valera_app/supabase/migrations -name \"*clientes*\" -o -name \"*crm*\" | sort)",
       "Read(//c/Users/carbe/OneDriveEscritoriovalera_app/supabase/**)",
-      "Bash(xargs grep -l \"CREATE TABLE.*clientes\")"
+      "Bash(xargs grep -l \"CREATE TABLE.*clientes\")",
+      "Bash(xargs -I{} sh -c 'echo ==={}===; cat {}')"
     ],
     "additionalDirectories": [
       "C:\\Users\\carbe\\OneDrive\\Escritorio\\valera_app\\supabase\\_tmp_pending"

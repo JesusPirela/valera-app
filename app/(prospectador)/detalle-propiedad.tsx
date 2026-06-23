@@ -840,12 +840,6 @@ export default function DetallePropiedad() {
     return phone.length === 10 ? `52${phone}` : phone
   }
 
-  function abrirWhatsApp(telefono: string, mensaje: string) {
-    const url = `https://wa.me/${normalizarTelMx(telefono)}?text=${encodeURIComponent(mensaje)}`
-    if (Platform.OS === 'web') window.open(url, '_blank')
-    else Linking.openURL(url)
-  }
-
   // Registra al cliente en el CRM y abre WhatsApp con el mensaje listo para
   // enviárselo a la constructora — automatiza lo que antes se redactaba a
   // mano cada vez que un cliente se interesaba en un desarrollo.
@@ -902,9 +896,40 @@ export default function DetallePropiedad() {
         )
         return
       }
+      if (!propiedad.created_by) {
+        Alert.alert(
+          'Cliente registrado',
+          'Se guardó el cliente en el CRM, pero no se pudo identificar a qué admin avisarle (la propiedad no tiene un creador registrado). Avísale tú mismo al admin correspondiente.',
+        )
+        return
+      }
 
-      const mensaje = `Hola, quiero registrar un cliente interesado en ${propiedad.titulo} (${propiedad.codigo}):\n\nNombre: ${regNombre.trim()}\nTeléfono: ${regTelefono.trim()}\nCorreo: ${regCorreo.trim()}`
-      abrirWhatsApp(telConstructora, mensaje)
+      // El mensaje NO se manda desde el celular del prospectador — eso lo
+      // enviaría desde su propio número. En vez de eso, se le avisa (campanita
+      // + push) al admin que subió la propiedad, con el link de WhatsApp ya
+      // armado, para que LO ENVÍE ÉL desde su número configurado.
+      const mensajeWa = `Hola, quiero registrar un cliente interesado en ${propiedad.titulo} (${propiedad.codigo}):\n\nNombre: ${regNombre.trim()}\nTeléfono: ${regTelefono.trim()}\nCorreo: ${regCorreo.trim()}`
+      const accionUrl = `https://wa.me/${normalizarTelMx(telConstructora)}?text=${encodeURIComponent(mensajeWa)}`
+      const tituloNotif = `Enviar registro a ${nombreConstructora}`
+      const mensajeNotif = `${nombreUsuario ?? 'Un prospectador'} registró a ${regNombre.trim()} para ${propiedad.titulo}. Toca para abrir WhatsApp y enviarlo.`
+
+      await supabase.rpc('notificar_usuario', {
+        p_user_id: propiedad.created_by,
+        p_titulo: tituloNotif,
+        p_mensaje: mensajeNotif,
+        p_tipo: 'registro_constructora',
+        p_propiedad_id: propiedad.id,
+        p_cliente_id: clienteCreado.id,
+        p_accion_url: accionUrl,
+      })
+      supabase.functions.invoke('enviar-push', {
+        body: { userId: propiedad.created_by, titulo: tituloNotif, mensaje: mensajeNotif },
+      }).catch(() => {})
+
+      Alert.alert(
+        'Cliente registrado',
+        `Se le avisó a ${subidoPor?.nombre ?? 'el admin de esta propiedad'} para que envíe el mensaje a ${nombreConstructora} desde su WhatsApp.`,
+      )
     } finally {
       setRegistrandoConstructora(false)
     }

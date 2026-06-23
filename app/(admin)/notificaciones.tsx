@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList,
   ActivityIndicator, TouchableOpacity, Alert,
-  Animated, PanResponder, Platform, Dimensions,
+  Animated, PanResponder, Platform, Dimensions, Linking,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -20,7 +20,8 @@ type Notificacion = {
   propiedad_id: string | null
   cliente_id: string | null
   chatbot_lead_id: string | null
-  tipo: 'nuevo_cliente' | 'login' | 'nueva_propiedad' | 'destacada' | 'lead_caliente' | string
+  accion_url: string | null
+  tipo: 'nuevo_cliente' | 'login' | 'nueva_propiedad' | 'destacada' | 'lead_caliente' | 'registro_constructora' | string
 }
 
 function tiempoRelativo(fechaISO: string): string {
@@ -37,11 +38,12 @@ function tiempoRelativo(fechaISO: string): string {
 }
 
 function iconoPorTipo(tipo: string) {
-  if (tipo === 'nuevo_cliente') return '👤'
-  if (tipo === 'login')         return '🔑'
-  if (tipo === 'destacada')     return '⭐'
-  if (tipo === 'lead_caliente') return '🔥'
-  if (tipo === 'apartado')      return '🏠'
+  if (tipo === 'nuevo_cliente')         return '👤'
+  if (tipo === 'login')                 return '🔑'
+  if (tipo === 'destacada')             return '⭐'
+  if (tipo === 'lead_caliente')         return '🔥'
+  if (tipo === 'apartado')              return '🏠'
+  if (tipo === 'registro_constructora') return '🏗'
   return '🔔'
 }
 
@@ -56,6 +58,7 @@ function ordenarPorPrioridad(items: Notificacion[]): Notificacion[] {
 }
 
 function esNavegable(n: Notificacion): boolean {
+  if (n.tipo === 'registro_constructora' && n.accion_url) return true
   if ((n.tipo === 'nuevo_cliente' || n.tipo === 'apartado') && n.cliente_id) return true
   if (n.tipo === 'lead_caliente' && n.chatbot_lead_id) return true
   if (n.propiedad_id) return true
@@ -208,7 +211,7 @@ export default function AdminNotificaciones() {
 
     const { data, error } = await supabase
       .from('notificaciones')
-      .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, chatbot_lead_id, tipo')
+      .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, chatbot_lead_id, accion_url, tipo')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -242,7 +245,10 @@ export default function AdminNotificaciones() {
   async function handlePress(item: Notificacion) {
     if (!item.leida) marcarLeida(item.id)
 
-    if ((item.tipo === 'apartado' || item.tipo === 'nuevo_cliente') && item.cliente_id) {
+    if (item.tipo === 'registro_constructora' && item.accion_url) {
+      if (Platform.OS === 'web') window.open(item.accion_url, '_blank')
+      else Linking.openURL(item.accion_url)
+    } else if ((item.tipo === 'apartado' || item.tipo === 'nuevo_cliente') && item.cliente_id) {
       router.push(`/(admin)/detalle-cliente?id=${item.cliente_id}`)
     } else if (item.tipo === 'lead_caliente' && item.chatbot_lead_id) {
       const { data: lead } = await supabase
