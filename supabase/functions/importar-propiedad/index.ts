@@ -367,15 +367,85 @@ serve(async (req) => {
     let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
     let imagenes: string[] = []
 
-    // ── 0. TuHabi ────────────────────────────────────────────────────────────
-    // brokers.tuhabi.mx es una SPA privada (requiere login), el HTML es un
-    // shell vacío. No es posible importar sin autenticación.
+    // ── 0. brokers.tuhabi.mx ─────────────────────────────────────────────────
+    // SPA privada que requiere login — el HTML es un shell vacío.
     if (/brokers\.tuhabi\.mx/i.test(url)) {
       throw new Error(
         'El portal de brokers de TuHabi requiere inicio de sesión y no puede importarse automáticamente. ' +
-        'Para importar esta propiedad: abre la ficha en TuHabi, copia los datos manualmente en los campos o ' +
-        'usa la función "Pegar descripción" si el portal tiene opción de compartir enlace público.'
+        'Usa el enlace público de tuficha.mx si el portal lo genera, o copia los datos manualmente.'
       )
+    }
+
+    // ── 0b. TuFicha (tuficha.mx) — API pública de Habi/TuHabi MX ────────────
+    // SPA React que usa la API de Habi. Llamamos directamente al endpoint
+    // cms-globack-api con la clave embebida en el bundle de tuficha.mx.
+    if (/tuficha\.mx/i.test(url)) {
+      const idMatch = url.match(/inmueble[_/](\d+)/) ?? url.match(/inmueble_id=(\d+)/)
+      if (!idMatch) throw new Error('No se encontró el ID de inmueble en la URL de TuFicha.')
+      const propertyId = idMatch[1]
+
+      const habiRes = await fetch(
+        `https://apiv2.habi.co/cms-globack-api/get_property_card?property_id=${propertyId}&country=MX`,
+        {
+          headers: {
+            'x-api-key': 'eevddBBln771X9bIi7ltt5uooE4lxWef4ITpZR2n',
+            'Content-Type': 'application/json',
+            'Origin': 'https://tuficha.mx',
+            'Referer': 'https://tuficha.mx/',
+            ...BROWSER_HEADERS,
+          },
+        }
+      )
+      if (!habiRes.ok) throw new Error(`Error al obtener datos de TuFicha (HTTP ${habiRes.status})`)
+      const habiJson = await habiRes.json()
+      if (!habiJson?.data?.property) throw new Error('La propiedad no fue encontrada en TuFicha.')
+
+      const p   = habiJson.data.property
+      const det = p.property_detail ?? {}
+      const ico = habiJson.data.icon_details?.distribution_details ?? {}
+
+      // Título: si viene vacío construir desde tipo + colonia
+      titulo = p.title?.trim()
+        || [det.property_type, det.suburb, det.city_name].filter(Boolean).join(' en ')
+
+      descripcion = p.description ?? ''
+
+      const pv = parseNum(det.price)
+      if (pv && pv >= 1000) { precio = String(Math.round(pv)); operacion = 'venta' }
+      else {
+        const rv = parseNum(det.price_old)
+        if (rv && rv >= 1000) { precio = String(Math.round(rv)); operacion = 'venta' }
+      }
+
+      recamaras        = cap(parseNum(det.room_num  ?? ico.number_rooms), 5)
+      banos            = cap(parseNum(det.bath       ?? ico.toilets), 4)
+      estacionamientos = cap(parseNum(det.garage     ?? ico.garages), 3)
+      const areaVal    = parseNum(det.area ?? ico.area)
+      if (areaVal) m2  = String(Math.round(areaVal))
+
+      const rawTipo = String(det.property_type ?? '')
+      tipo = mapTipo(rawTipo) ?? tipo
+
+      // Dirección y zona
+      const parts = [det.suburb, det.city_name].filter(Boolean)
+      if (parts.length) direccion = parts.join(', ')
+      const locHay = [det.metropolitan_zone, det.city_name, det.median_zone].join(' ').toLowerCase()
+      if (/quer[eé]taro|qro\b/.test(locHay))                zona = 'queretaro'
+      else if (/monterrey|nuevo\s*le[oó]n|\bmty\b/.test(locHay)) zona = 'monterrey'
+      else if (/puebla/.test(locHay))                        zona = 'puebla'
+
+      // Imágenes: URLs relativas → CDN Habi MX
+      const CDN = 'https://d1yv9l2s30ohmg.cloudfront.net/'
+      if (Array.isArray(p.images)) {
+        imagenes = p.images
+          .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+          .map((img: any) => {
+            const u = typeof img === 'string' ? img : (img.url ?? '')
+            return u.startsWith('http') ? u : (u ? CDN + u : '')
+          })
+          .filter((u: string) => u)
+          .slice(0, 30)
+      }
     }
 
     // ── 0c. NocNok platform (realtydreamsmexico.com y similares) ────────────
