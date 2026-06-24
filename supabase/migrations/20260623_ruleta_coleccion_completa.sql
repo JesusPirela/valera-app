@@ -105,7 +105,7 @@ BEGIN
   SELECT p.id,
     '🎰 Premio ruleta pendiente',
     (SELECT nombre FROM profiles WHERE id = v_user_id LIMIT 1) || ' ganó en la ruleta: ' || v_nombre_real,
-    'sistema'
+    'ruleta'
   FROM profiles p WHERE p.role = 'admin';
 
   RETURN jsonb_build_object('ok', true, 'compra_id', v_compra_id);
