@@ -1353,8 +1353,8 @@ export default function DetallePropiedad() {
 
       {/* Contenido */}
       <View style={styles.content}>
-        {/* Logo de la inmobiliaria */}
-        {propiedad.inmobiliarias?.logo_url && (
+        {/* Logo de la inmobiliaria — solo staff */}
+        {esStaff && propiedad.inmobiliarias?.logo_url && (
           <View style={styles.inmobiliariaLogoWrapper}>
             <Image source={{ uri: propiedad.inmobiliarias.logo_url }} style={styles.inmobiliariaLogo} resizeMode="contain" />
             {propiedad.inmobiliarias.nombre && (
@@ -1385,18 +1385,18 @@ export default function DetallePropiedad() {
               🏗 {propiedad.nombre_constructora ?? 'Constructora'}
             </Text>
           )}
-          {(() => {
+          {esStaff ? (() => {
+            // Staff ve: asesor — empresa (o solo uno si falta el otro)
             const asesorNombre = propiedad.asesores?.nombre?.trim() || null
             const empresa = propiedad.inmobiliarias?.nombre?.trim() || propiedad.asesores?.inmobiliaria?.trim() || null
             const etiqueta = asesorNombre && empresa
               ? `${asesorNombre} — ${empresa}`
-              : (asesorNombre ?? empresa ?? null)
-            return etiqueta ? (
-              <Text style={styles.asesorBadge}>👤 {etiqueta}</Text>
-            ) : subidoPor ? (
-              <Text style={styles.asesorBadge}>👤 {subidoPor.nombre}</Text>
-            ) : null
-          })()}
+              : (asesorNombre ?? empresa ?? subidoPor?.nombre ?? null)
+            return etiqueta ? <Text style={styles.asesorBadge}>👤 {etiqueta}</Text> : null
+          })() : (
+            // Prospectadores solo ven quien la subió
+            subidoPor ? <Text style={styles.asesorBadge}>👤 {subidoPor.nombre}</Text> : null
+          )}
         </View>
 
         {/* Título y precio */}

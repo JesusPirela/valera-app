@@ -52,7 +52,6 @@ type Propiedad = {
   destacada_mensaje: string | null
   destacada_hasta: string | null
   exclusiva: boolean
-  asesores: { nombre: string; inmobiliaria: string | null } | null
   es_constructora: boolean | null
   nombre_constructora: string | null
   recamaras: number | null
@@ -109,12 +108,6 @@ function formatPrecio(precio: number | null) {
   return `$${precio.toLocaleString('es-MX')} MXN`
 }
 
-function contactoLabel(p: { asesores?: { nombre: string; inmobiliaria: string | null } | null; inmobiliarias?: { nombre: string } | null }): string | null {
-  const asesor = p.asesores?.nombre?.trim() || null
-  const empresa = p.inmobiliarias?.nombre?.trim() || p.asesores?.inmobiliaria?.trim() || null
-  if (asesor && empresa) return `${asesor} — ${empresa}`
-  return asesor ?? empresa ?? null
-}
 
 function formatearInputPrecio(texto: string): string {
   const digitos = texto.replace(/\D/g, '')
@@ -183,7 +176,7 @@ export default function ProspectadorPropiedades() {
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria), propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -200,7 +193,6 @@ export default function ProspectadorPropiedades() {
       let propiedades = propsData.map((p: any) => ({
         ...p,
         inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
-        asesores: Array.isArray(p.asesores) ? p.asesores[0] ?? null : p.asesores,
       })) as unknown as Propiedad[]
       if (!esPlusOMejor(rol)) {
         propiedades = propiedades.filter(p => !p.exclusiva && !p.inmobiliarias?.exclusiva)
@@ -620,9 +612,6 @@ export default function ProspectadorPropiedades() {
           )}
           <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
           <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
-          {contactoLabel(item) && (
-            <Text style={styles.contactoBadge} numberOfLines={1}>👤 {contactoLabel(item)}</Text>
-          )}
           {item.descripcion ? (
             <Text style={styles.cardDescripcion} numberOfLines={2}>{item.descripcion}</Text>
           ) : null}
@@ -1343,8 +1332,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardTitulo: { fontSize: 16, fontWeight: '700', marginBottom: 3 },
-  cardDireccion: { fontSize: 13, color: '#888', marginBottom: 4 },
-  contactoBadge: { fontSize: 12, color: '#777', marginBottom: 5 },
+  cardDireccion: { fontSize: 13, color: '#888', marginBottom: 6 },
   cardDescripcion: { fontSize: 13, color: '#666', lineHeight: 19, marginBottom: 8 },
   metaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 10 },
   metaItem: {
