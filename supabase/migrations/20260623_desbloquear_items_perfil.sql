@@ -51,7 +51,7 @@ BEGIN
   -- Registrar en historial (auto-entregado, no requiere acción del admin)
   SELECT id INTO v_item_id FROM store_items WHERE tipo = 'pack_' || p_tipo LIMIT 1;
   IF v_item_id IS NOT NULL THEN
-    INSERT INTO store_compras (user_id, store_item_id, costo_coins, estado, notas_admin)
+    INSERT INTO store_compras (user_id, item_id, costo_coins, estado, notas_admin)
     VALUES (v_uid, v_item_id, v_costo, 'entregado', p_valor);
   END IF;
 
