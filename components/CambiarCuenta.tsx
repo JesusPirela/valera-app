@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   listarCuentas, cambiarACuenta, cambiarACuentaConPassword,
   olvidarCuenta, guardarPasswordCuenta, obtenerPasswordCuenta,
+  accountSwitch,
   type CuentaGuardada,
 } from '../lib/cuentas'
 import { supabase } from '../lib/supabase'
@@ -50,7 +51,11 @@ export default function CambiarCuenta() {
 
   async function irAHome(role: string | null | undefined) {
     // Borramos el caché persistido para que el nuevo usuario no vea datos del anterior
-    try { await AsyncStorage.removeItem('VALERA_CACHE') } catch {}
+    try {
+      const keys = await AsyncStorage.getAllKeys()
+      const cacheKeys = keys.filter(k => k.startsWith('VALERA_CACHE'))
+      if (cacheKeys.length) await AsyncStorage.multiRemove(cacheKeys)
+    } catch {}
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       // Reload completo en web: garantiza que React Query y todos los contextos
       // reinicien desde cero con la sesión del nuevo usuario ya en localStorage.
@@ -87,6 +92,10 @@ export default function CambiarCuenta() {
     setCambiando(null)
     if (!res.ok) {
       // Token inválido o red lenta: pedir contraseña.
+      // Mantener accountSwitch.pending = true mientras el panel esté abierto para
+      // que el SIGNED_OUT del setSession que sigue corriendo en background no
+      // dispare la navegación al login.
+      accountSwitch.pending = true
       setNecesitaPass(cuenta)
       return
     }
@@ -115,6 +124,7 @@ export default function CambiarCuenta() {
   }
 
   function cancelarPassword() {
+    accountSwitch.pending = false
     setNecesitaPass(null)
     setPassword('')
   }
