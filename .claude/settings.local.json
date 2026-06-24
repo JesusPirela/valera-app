@@ -88,7 +88,10 @@
       "Bash(grep -E \"tipo\\\\\\)|'[a-z_]+'\\\\s*$|VALUES|SELECT\")",
       "Bash(grep -iv \"precioNum\\\\|setPrecio\\\\|precio}\\\\s*onChangeText\\\\|value={precio\\\\|precio,\\\\|precio:\\\\|precio !=\\\\|precio ==\\\\|precio?\\\\.\\\\|presupuesto\")",
       "Bash(git worktree *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(ls netlify.toml)",
+      "Bash(ls .github/workflows)",
+      "Bash(find . -maxdepth 1 -iname \"*.toml\" -o -maxdepth 1 -iname \"now.json\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\carbe\\OneDrive\\Escritorio\\valera_app\\supabase\\_tmp_pending"

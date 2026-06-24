@@ -198,7 +198,9 @@ export default function DetalleCliente() {
   const queryClient = useQueryClient()
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['detalle-cliente', id],
+    // Sufijo 'v2': ver nota en (prospectador)/crm.tsx — invalida caché en
+    // disco de antes de restringir la RLS de clientes a supervisor/asesor.
+    queryKey: ['detalle-cliente', id, 'v2'],
     queryFn: async () => {
       const [{ data: c }, { data: i }, { data: r }] = await Promise.all([
         supabase.from('clientes').select('*').eq('id', id).single(),
@@ -314,7 +316,7 @@ export default function DetalleCliente() {
 
   async function completarRecordatorio(recId: string) {
     const { error } = await supabase.from('recordatorios').update({ completado: true }).eq('id', recId)
-    queryClient.setQueryData(['detalle-cliente', id], (old: typeof data) => {
+    queryClient.setQueryData(['detalle-cliente', id, 'v2'], (old: typeof data) => {
       if (!old) return old
       return { ...old, recordatorios: old.recordatorios.map(r => r.id === recId ? { ...r, completado: true } : r) }
     })

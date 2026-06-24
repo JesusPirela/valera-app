@@ -160,7 +160,11 @@ export default function CRM() {
   const isWeb = Platform.OS === 'web'
 
   const { data: clientes = [], isLoading, refetch } = useQuery<Cliente[]>({
-    queryKey: ['clientes', soloMios ? 'mios' : 'all'],
+    // Sufijo 'v2': invalida cualquier caché persistido en disco de antes del
+    // 23/jun/2026, cuando supervisor/asesor todavía veían los clientes de
+    // todo el equipo. Sin esto, un asesor podría ver por un instante (o más,
+    // si está offline) datos cacheados de antes de restringir la RLS.
+    queryKey: ['clientes', soloMios ? 'mios' : 'all', 'v2'],
     queryFn: async () => {
       let q = supabase
         .from('clientes')
@@ -184,7 +188,7 @@ export default function CRM() {
     if (!clientes.length) return
     for (const c of clientes) {
       queryClient.setQueryData(
-        ['detalle-cliente', c.id],
+        ['detalle-cliente', c.id, 'v2'],
         (old: unknown) => old ?? { cliente: c, interacciones: [], recordatorios: c.recordatorios ?? [] }
       )
     }
@@ -326,7 +330,7 @@ export default function CRM() {
     setSavingCell(true)
     // Optimista: actualiza la caché de inmediato. Debe usar la MISMA clave que
     // el useQuery (incluye 'mios'/'all'), si no el cambio no se refleja.
-    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all'], (old) =>
+    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v2'], (old) =>
       (old ?? []).map(cl => cl.id === id ? { ...cl, [campo]: value } as Cliente : cl)
     )
     const { error } = await supabase.from('clientes').update({ [campo]: value }).eq('id', id)
