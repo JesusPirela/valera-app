@@ -37,7 +37,7 @@ const AVATARES_PREMIUM: AvatarPremium[] = [
   { emoji: '🦄', gif: NOTO('1f984'), nombre: 'Unicornio'    },
   { emoji: '👑', gif: NOTO('1f451'), nombre: 'Corona'       },
   { emoji: '💫', gif: NOTO('1f4ab'), nombre: 'Destello'     },
-  { emoji: '🌺', gif: NOTO('1f33a'), nombre: 'Flor'         },
+  { emoji: '🌸', gif: NOTO('1f338'), nombre: 'Cerezo'       },
   { emoji: '🔮', gif: NOTO('1f52e'), nombre: 'Bola mágica'  },
   { emoji: '🌊', gif: NOTO('1f30a'), nombre: 'Ola'          },
   { emoji: '🏆', gif: NOTO('1f3c6'), nombre: 'Trofeo'       },
