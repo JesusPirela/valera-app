@@ -246,17 +246,25 @@ function extractNextData(html: string): any {
 }
 
 // Recorre un objeto buscando la primera hoja que parezca ser la propiedad.
-// TuHabi embebe los datos bajo props.pageProps, pero la clave varía.
 function findPropertyNode(obj: any, depth = 0): any {
   if (depth > 6 || !obj || typeof obj !== 'object') return null
-  // Heurística: el nodo tiene al menos precio O recámaras O imagenes/fotos.
   const keys = Object.keys(obj)
   const looksLikeProp = keys.some(k =>
-    /^(precio|price|valorVenta|habitaciones|bedrooms|recamaras|imagenes|fotos|photos|images)$/.test(k))
+    /^(precio|price|valorVenta|habitaciones|bedrooms|recamaras|imagenes|fotos|photos|images|title|description|bathrooms|rooms|area|nid|area_construida|price_cop|tipo_inmueble)$/.test(k))
   if (looksLikeProp) return obj
   for (const k of keys) {
-    if (Array.isArray(obj[k])) continue // no recorremos arrays
-    const found = findPropertyNode(obj[k], depth + 1)
+    const val = obj[k]
+    if (Array.isArray(val)) {
+      // Buscar dentro de los primeros 3 elementos del array
+      for (const item of val.slice(0, 3)) {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          const found = findPropertyNode(item, depth + 1)
+          if (found) return found
+        }
+      }
+      continue
+    }
+    const found = findPropertyNode(val, depth + 1)
     if (found) return found
   }
   return null
@@ -359,84 +367,111 @@ serve(async (req) => {
     let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
     let imagenes: string[] = []
 
-    // ── 0. TuHabi (brokers.tuhabi.mx) ────────────────────────────────────────
-    // Es un app Next.js: los datos vienen en __NEXT_DATA__ o via API propia.
+    // ── 0. TuHabi (brokers.tuhabi.mx / www.tuhabi.mx) ────────────────────────
     if (/tuhabi\.mx/i.test(url)) {
-      // Intento 1: API interna (evita HTML rendering)
       const idMatch = url.match(/\/propiedad\/(\d+)/)
-      if (idMatch) {
-        try {
-          const apiUrl = `https://brokers.tuhabi.mx/api/propiedad/${idMatch[1]}`
-          const apiRes = await fetch(apiUrl, { headers: BROWSER_HEADERS })
-          if (apiRes.ok) {
-            const apiJson = await apiRes.json()
-            const prop = findPropertyNode(apiJson) ?? apiJson
-            applyTuHabi(prop)
-          }
-        } catch { /* fall through a __NEXT_DATA__ */ }
+      const nid = idMatch?.[1]
+      let thProp: any = null
+
+      // Helper: extrae propiedad de un bloque __NEXT_DATA__
+      function tuHabiFromNextData(nd: any): any {
+        if (!nd) return null
+        const pp = nd?.props?.pageProps
+        if (!pp) return null
+        // Prueba rutas específicas primero, luego traversal genérico
+        return pp?.property
+            ?? pp?.propertyDetail
+            ?? pp?.data?.property
+            ?? pp?.initialData?.property
+            ?? pp?.propertyData
+            ?? findPropertyNode(pp)
+            ?? (Object.keys(pp).length > 0 ? pp : null)
       }
-      // Intento 2: __NEXT_DATA__ del HTML ya descargado
-      if (!titulo && !precio) {
-        const nd = extractNextData(html)
-        if (nd) {
-          const pp = nd?.props?.pageProps
-          const prop = findPropertyNode(pp) ?? pp
-          if (prop) applyTuHabi(prop)
+
+      // Intento 1: __NEXT_DATA__ del HTML ya descargado (brokers o www)
+      const nd1 = extractNextData(html)
+      thProp = tuHabiFromNextData(nd1)
+
+      // Intento 2: Página pública www.tuhabi.mx (no requiere auth)
+      if (!thProp && nid) {
+        try {
+          const pubHtml = await fetchHtml(`https://www.tuhabi.mx/propiedad/${nid}`)
+          thProp = tuHabiFromNextData(extractNextData(pubHtml))
+        } catch { /* ignorar */ }
+      }
+
+      // Intento 3: API pública de microservicios Habi
+      if (!thProp && nid) {
+        const apis = [
+          `https://ms.habi.co/property-listing/api/v2/property?nid=${nid}`,
+          `https://www.tuhabi.mx/api/propiedad/${nid}`,
+        ]
+        for (const apiUrl of apis) {
+          try {
+            const r = await fetch(apiUrl, { headers: BROWSER_HEADERS })
+            if (r.ok) {
+              const j = await r.json()
+              const found = findPropertyNode(j) ?? (j && typeof j === 'object' && !Array.isArray(j) ? j : null)
+              if (found && Object.keys(found).length > 2) { thProp = found; break }
+            }
+          } catch { /* continuar */ }
         }
       }
+
+      if (thProp) applyTuHabi(thProp)
     }
 
     // Aplica los campos de un objeto TuHabi a las variables locales.
     function applyTuHabi(prop: any) {
       if (!prop || typeof prop !== 'object') return
       // Título
-      const rawTitulo = String(prop.titulo ?? prop.nombre ?? prop.title ?? prop.nombrePropiedad ?? '')
+      const rawTitulo = String(prop.titulo ?? prop.nombre ?? prop.title ?? prop.nombrePropiedad ?? prop.name ?? '')
       if (rawTitulo) titulo = rawTitulo
       // Descripción
-      const rawDesc = String(prop.descripcion ?? prop.description ?? prop.observaciones ?? '')
+      const rawDesc = String(prop.descripcion ?? prop.description ?? prop.observaciones ?? prop.descripcion_interna ?? prop.obs ?? '')
       if (rawDesc) descripcion = htmlText(rawDesc)
-      // Precio
-      const pv = parseNum(prop.precio ?? prop.price ?? prop.valorVenta ?? prop.salePrice ?? prop.valor)
+      // Precio (TuHabi usa price, price_cop, precio, valorVenta según mercado)
+      const pv = parseNum(prop.precio ?? prop.price ?? prop.valorVenta ?? prop.salePrice ?? prop.valor ?? prop.price_cop ?? prop.price_usd ?? prop.precio_venta ?? prop.sale_price)
       if (pv && pv >= 1000) { precio = String(Math.round(pv)); operacion = operacion ?? 'venta' }
-      const rv = parseNum(prop.precioRenta ?? prop.rentPrice)
+      const rv = parseNum(prop.precioRenta ?? prop.rentPrice ?? prop.precio_renta ?? prop.rent_price)
       if (rv && rv >= 1000 && !precio) { precio = String(Math.round(rv)); operacion = 'renta' }
       // Características
-      if (recamaras   === null) recamaras   = cap(parseNum(prop.habitaciones ?? prop.bedrooms ?? prop.recamaras  ?? prop.dormitorios), 5)
-      if (banos       === null) banos       = cap(parseNum(prop.banos ?? prop.bathrooms ?? prop.banosCompletos ?? prop.numeroBanos), 4)
-      if (mediosBanos === null) mediosBanos = cap(parseNum(prop.mediosBanos ?? prop.halfBathrooms ?? prop.saniParcial), 2)
-      if (estacionamientos === null) estacionamientos = cap(parseNum(prop.garajes ?? prop.estacionamientos ?? prop.parking ?? prop.parkingSpaces), 3)
+      if (recamaras   === null) recamaras   = cap(parseNum(prop.habitaciones ?? prop.bedrooms ?? prop.recamaras ?? prop.dormitorios ?? prop.rooms ?? prop.num_rooms ?? prop.num_bedrooms), 5)
+      if (banos       === null) banos       = cap(parseNum(prop.banos ?? prop.bathrooms ?? prop.banosCompletos ?? prop.numeroBanos ?? prop.num_bathrooms ?? prop.full_bathrooms), 4)
+      if (mediosBanos === null) mediosBanos = cap(parseNum(prop.mediosBanos ?? prop.halfBathrooms ?? prop.saniParcial ?? prop.half_bathrooms ?? prop.toilets), 2)
+      if (estacionamientos === null) estacionamientos = cap(parseNum(prop.garajes ?? prop.estacionamientos ?? prop.parking ?? prop.parkingSpaces ?? prop.garage ?? prop.parking_spots), 3)
       // Superficie
-      const area = parseNum(prop.area ?? prop.areaConstruida ?? prop.areaTotal ?? prop.m2 ?? prop.metrosCuadrados)
+      const area = parseNum(prop.area ?? prop.areaConstruida ?? prop.areaTotal ?? prop.m2 ?? prop.metrosCuadrados ?? prop.area_construida ?? prop.construction_area ?? prop.built_area ?? prop.total_area)
       if (area && !m2) m2 = String(Math.round(area))
-      const areaT = parseNum(prop.areaTerreno ?? prop.lotSize ?? prop.areaPredial)
+      const areaT = parseNum(prop.areaTerreno ?? prop.lotSize ?? prop.areaPredial ?? prop.land_area ?? prop.lot_area ?? prop.area_lote ?? prop.lot_size)
       if (areaT && !m2Terreno) m2Terreno = String(Math.round(areaT))
       // Tipo / operación
-      const rawTipo = String(prop.tipoInmueble ?? prop.tipo ?? prop.type ?? prop.propertyType ?? '')
+      const rawTipo = String(prop.tipoInmueble ?? prop.tipo ?? prop.type ?? prop.propertyType ?? prop.tipo_inmueble ?? prop.property_type ?? '')
       if (!tipo) tipo = mapTipo(rawTipo)
-      const rawOp = String(prop.tipoNegocio ?? prop.operacion ?? prop.operationType ?? '')
+      const rawOp = String(prop.tipoNegocio ?? prop.operacion ?? prop.operationType ?? prop.tipo_negocio ?? prop.business_type ?? '')
       if (!operacion) operacion = mapOp(rawOp)
       // Dirección
       if (!direccion) {
         const parts = [
-          prop.barrio ?? prop.colonia ?? prop.neighborhood,
-          prop.municipio ?? prop.ciudad ?? prop.city,
-          prop.estado ?? prop.state,
+          prop.barrio ?? prop.colonia ?? prop.neighborhood ?? prop.barrio_nombre ?? prop.sector ?? prop.localidad,
+          prop.municipio ?? prop.ciudad ?? prop.city ?? prop.locality,
+          prop.estado ?? prop.state ?? prop.departamento ?? prop.region,
         ].filter(Boolean).map(String)
         if (parts.length) direccion = parts.join(', ')
       }
       // Zona
       if (!zona) {
-        const loc = (direccion + ' ' + (prop.ciudad ?? '') + ' ' + (prop.estado ?? '')).toLowerCase()
-        if (/quer[eé]taro|qro\b/.test(loc))               zona = 'queretaro'
+        const loc = [direccion, prop.ciudad, prop.estado, prop.city, prop.state, prop.region].filter(Boolean).join(' ').toLowerCase()
+        if (/quer[eé]taro|qro\b/.test(loc))                zona = 'queretaro'
         else if (/monterrey|nuevo\s*le[oó]n|\bmty\b/.test(loc)) zona = 'monterrey'
-        else if (/puebla/.test(loc))                       zona = 'puebla'
+        else if (/puebla/.test(loc))                        zona = 'puebla'
       }
       // Imágenes
       if (!imagenes.length) {
-        const imgs = prop.imagenes ?? prop.fotos ?? prop.photos ?? prop.images ?? prop.multimedia ?? []
+        const imgs = prop.imagenes ?? prop.fotos ?? prop.photos ?? prop.images ?? prop.multimedia ?? prop.gallery ?? prop.picture_urls ?? prop.pictureUrls ?? []
         if (Array.isArray(imgs)) {
           imagenes = imgs.slice(0, 30)
-            .map((img: any) => typeof img === 'string' ? img : (img.url ?? img.src ?? img.href ?? img.imagen ?? ''))
+            .map((img: any) => typeof img === 'string' ? img : (img.url ?? img.src ?? img.href ?? img.imagen ?? img.photo_url ?? img.image_url ?? ''))
             .filter((u: string) => u && u.startsWith('http'))
         }
       }
