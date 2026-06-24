@@ -29,22 +29,22 @@ const NOTO = (hex: string) => `https://fonts.gstatic.com/s/e/notoemoji/latest/${
 
 type AvatarPremium = { emoji: string; gif: string; nombre: string }
 const AVATARES_PREMIUM: AvatarPremium[] = [
-  { emoji: '🔥', gif: NOTO('1f525'), nombre: 'Fuego'       },
-  { emoji: '⚡', gif: NOTO('26a1'),  nombre: 'Rayo'        },
-  { emoji: '🌈', gif: NOTO('1f308'), nombre: 'Arcoíris'    },
-  { emoji: '🦋', gif: NOTO('1f98b'), nombre: 'Mariposa'    },
-  { emoji: '🐉', gif: NOTO('1f409'), nombre: 'Dragón'      },
-  { emoji: '🦄', gif: NOTO('1f984'), nombre: 'Unicornio'   },
-  { emoji: '👑', gif: NOTO('1f451'), nombre: 'Corona'      },
-  { emoji: '💫', gif: NOTO('1f4ab'), nombre: 'Destello'    },
-  { emoji: '🌺', gif: NOTO('1f33a'), nombre: 'Flor'        },
-  { emoji: '🔮', gif: NOTO('1f52e'), nombre: 'Bola mágica' },
-  { emoji: '🌊', gif: NOTO('1f30a'), nombre: 'Ola'         },
-  { emoji: '🏆', gif: NOTO('1f3c6'), nombre: 'Trofeo'      },
-  { emoji: '🌙', gif: NOTO('1f319'), nombre: 'Luna'        },
-  { emoji: '✨', gif: NOTO('2728'),  nombre: 'Brillos'     },
-  { emoji: '🎆', gif: NOTO('1f386'), nombre: 'Fuegos artificiales' },
-  { emoji: '🦅', gif: NOTO('1f985'), nombre: 'Águila'      },
+  { emoji: '🔥', gif: NOTO('1f525'), nombre: 'Fuego'        },
+  { emoji: '⚡', gif: NOTO('26a1'),  nombre: 'Rayo'         },
+  { emoji: '🌈', gif: NOTO('1f308'), nombre: 'Arcoíris'     },
+  { emoji: '🦋', gif: NOTO('1f98b'), nombre: 'Mariposa'     },
+  { emoji: '🐉', gif: NOTO('1f409'), nombre: 'Dragón'       },
+  { emoji: '🦄', gif: NOTO('1f984'), nombre: 'Unicornio'    },
+  { emoji: '👑', gif: NOTO('1f451'), nombre: 'Corona'       },
+  { emoji: '💫', gif: NOTO('1f4ab'), nombre: 'Destello'     },
+  { emoji: '🌺', gif: NOTO('1f33a'), nombre: 'Flor'         },
+  { emoji: '🔮', gif: NOTO('1f52e'), nombre: 'Bola mágica'  },
+  { emoji: '🌊', gif: NOTO('1f30a'), nombre: 'Ola'          },
+  { emoji: '🏆', gif: NOTO('1f3c6'), nombre: 'Trofeo'       },
+  { emoji: '🎉', gif: NOTO('1f389'), nombre: 'Fiesta'       },
+  { emoji: '✨', gif: NOTO('2728'),  nombre: 'Brillos'      },
+  { emoji: '🦁', gif: NOTO('1f981'), nombre: 'León'         },
+  { emoji: '🐺', gif: NOTO('1f43a'), nombre: 'Lobo'         },
 ]
 
 // Mapa rápido emoji → GIF para el header
@@ -66,6 +66,7 @@ export default function Perfil() {
   const [comprando, setComprando] = useState<string | null>(null)
   const [coloresDesbloqueados, setColoresDesbloqueados] = useState<string[]>([])
   const [avatarsDesbloqueados, setAvatarsDesbloqueados] = useState<string[]>([])
+  const [gifsFallidos, setGifsFallidos] = useState<Set<string>>(new Set())
   const [userId, setUserId] = useState('')
   const [nombre, setNombre] = useState('')
   const [stats, setStats] = useState<UserStats | null>(null)
@@ -254,13 +255,13 @@ export default function Perfil() {
         <View style={s.avatarWrap}>
           {avatarMostrado ? (
             <Image source={{ uri: avatarMostrado }} style={s.avatarImg} />
-          ) : GIF_MAP[avatarEmoji] && avatarsDesbloqueados.includes(avatarEmoji) ? (
-            // Avatar premium desbloqueado → GIF animado en el header
+          ) : GIF_MAP[avatarEmoji] && avatarsDesbloqueados.includes(avatarEmoji) && !gifsFallidos.has(avatarEmoji) ? (
             <View style={[s.avatarEmoji, { backgroundColor: '#1a1200', borderColor: '#c9a84c' }]}>
               <Image
                 source={{ uri: GIF_MAP[avatarEmoji] }}
                 style={{ width: 66, height: 66 }}
                 resizeMode="contain"
+                onError={() => setGifsFallidos(prev => new Set([...prev, avatarEmoji]))}
               />
             </View>
           ) : (
@@ -377,9 +378,13 @@ export default function Perfil() {
                 }}
                 disabled={enCompra}
               >
-                {desbloqueado ? (
-                  // GIF animado real de Google Noto Emoji
-                  <Image source={{ uri: gif }} style={{ width: 38, height: 38 }} resizeMode="contain" />
+                {desbloqueado && !gifsFallidos.has(e) ? (
+                  <Image
+                    source={{ uri: gif }}
+                    style={{ width: 38, height: 38 }}
+                    resizeMode="contain"
+                    onError={() => setGifsFallidos(prev => new Set([...prev, e]))}
+                  />
                 ) : (
                   <Text style={s.emojiBtnText}>{e}</Text>
                 )}
