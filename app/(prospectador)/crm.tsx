@@ -15,6 +15,8 @@ import { useColors, useTheme } from '../../lib/ThemeContext'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
+import { useOfflineSync } from '../../hooks/useOfflineSync'
+import { enqueueClienteUpdate } from '../../lib/offline-queue'
 
 type Cliente = {
   id: string
@@ -116,6 +118,7 @@ export default function CRM() {
   const c = useColors()
   const { darkMode } = useTheme()
   const queryClient = useQueryClient()
+  const { isOnline, refreshPending } = useOfflineSync()
   const [userRole, setUserRole]           = useState<string | null>(null)
   const [busqueda, setBusqueda]           = useState('')
   const [estadoFiltro, setEstadoFiltro]   = useState<string | null>(null)
@@ -346,11 +349,20 @@ export default function CRM() {
     if (!campo) return
     const estadoPrevio = clientes.find(cl => cl.id === id)?.estado
     setSavingCell(true)
-    // Optimista: actualiza la caché de inmediato. Debe usar la MISMA clave que
-    // el useQuery (incluye 'mios'/'all'), si no el cambio no se refleja.
+    // Actualización optimista inmediata en cache
     queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v2'], (old) =>
       (old ?? []).map(cl => cl.id === id ? { ...cl, [campo]: value } as Cliente : cl)
     )
+
+    if (!isOnline) {
+      // Sin conexión: encolar y salir; el banner mostrará el pendiente
+      await enqueueClienteUpdate(id, { [campo]: value })
+      await refreshPending()
+      setSavingCell(false)
+      setEditCell(null)
+      return
+    }
+
     const { error } = await supabase.from('clientes').update({ [campo]: value }).eq('id', id)
     if (error) {
       const m = `No se pudo guardar: ${error.message}`
@@ -364,13 +376,11 @@ export default function CRM() {
           if (value === 'cita_agendada') registrarAccion(user.id, 'agendar_cita').catch(() => {})
           else if (value === 'compro')   registrarAccion(user.id, 'cerrar_venta').catch(() => {})
         }
-        // Mensaje informativo al usuario no-admin que marcó apartado
         if (value === 'compro' && userRole !== 'admin') {
           const msg = '✅ Solicitud de apartado enviada. El equipo lo revisará y confirmará pronto.'
           Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Solicitud enviada', msg)
         }
       }
-      // Asegura persistencia/consistencia con el servidor
       queryClient.invalidateQueries({ queryKey: ['clientes'] })
     }
     setSavingCell(false)

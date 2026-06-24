@@ -13,6 +13,9 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ETAPAS_CLIENTE } from './crm'
 import { registrarAccion } from '../../lib/gamification'
+import { useOfflineSync } from '../../hooks/useOfflineSync'
+import { enqueueClienteUpdate, enqueueClienteCreate, genUUID } from '../../lib/offline-queue'
+import { useQueryClient } from '@tanstack/react-query'
 
 // ── Fuentes de lead ──────────────────────────────────────
 const FUENTES = [
@@ -194,6 +197,8 @@ function ChipSelector<T extends string>({
 // ── Pantalla principal ───────────────────────────────────
 export default function ClienteForm() {
   const c = useColors()
+  const queryClient = useQueryClient()
+  const { isOnline, refreshPending } = useOfflineSync()
   const params = useLocalSearchParams<{ id?: string; fromAdmin?: string }>()
   const esEdicion = !!params.id
   const fromAdmin = params.fromAdmin === '1'
@@ -351,6 +356,29 @@ export default function ClienteForm() {
         problemas_poliza: esRenta ? problemasPoliza : null,
       }
 
+      // ── OFFLINE: encolar y salir ────────────────────────────────
+      if (!isOnline) {
+        if (esEdicion) {
+          await enqueueClienteUpdate(params.id!, payload)
+          // Actualización optimista en cache
+          queryClient.setQueryData<any[]>(['clientes', 'mios', 'v2'], (old) =>
+            (old ?? []).map(cl => cl.id === params.id ? { ...cl, ...payload } : cl))
+          queryClient.setQueryData<any[]>(['clientes', 'all', 'v2'], (old) =>
+            (old ?? []).map(cl => cl.id === params.id ? { ...cl, ...payload } : cl))
+        } else {
+          const tempId = genUUID()
+          const fullPayload = { ...payload, responsable_id: user.id, id: tempId, created_at: new Date().toISOString() }
+          await enqueueClienteCreate(tempId, { ...payload, responsable_id: user.id })
+          // Insertar optimistamente en cache con el UUID local
+          queryClient.setQueryData<any[]>(['clientes', 'mios', 'v2'], (old) => [fullPayload, ...(old ?? [])])
+          queryClient.setQueryData<any[]>(['clientes', 'all', 'v2'], (old) => [fullPayload, ...(old ?? [])])
+        }
+        await refreshPending()
+        irAtras()
+        return
+      }
+
+      // ── ONLINE: guardar directamente ────────────────────────────
       if (esEdicion) {
         const { error } = await supabase.from('clientes').update(payload).eq('id', params.id!)
         if (error) { mostrarError('Error al guardar', error.message); return }
@@ -358,7 +386,6 @@ export default function ClienteForm() {
           cliente_id: params.id!, user_id: user.id,
           tipo: 'nota', descripcion: 'Información del cliente actualizada.',
         })
-        // Valera Coins al cambiar de etapa a cita agendada / venta cerrada
         if (estado !== estadoOriginalRef.current) {
           if (estado === 'cita_agendada') registrarAccion(user.id, 'agendar_cita').catch(() => {})
           else if (estado === 'compro')   registrarAccion(user.id, 'cerrar_venta').catch(() => {})
