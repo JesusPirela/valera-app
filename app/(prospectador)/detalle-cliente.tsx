@@ -467,9 +467,9 @@ export default function DetalleCliente() {
           {cliente.email          ? <InfoRow icon="mail-outline"   label="Email"       value={cliente.email}                                      accentColor={info.color} /> : null}
           <InfoRow icon="megaphone-outline"   label="Fuente"      value={FUENTE_LABELS[cliente.fuente_lead] ?? cliente.fuente_lead}               accentColor={info.color} />
           {cliente.tipo_operacion ? <InfoRow icon="home-outline"   label="Busca en"    value={cliente.tipo_operacion === 'venta' ? 'Venta' : 'Renta'} accentColor={info.color} /> : null}
-          {cliente.zona_busqueda  ? <InfoRow icon="map-outline"    label="Zona"        value={cliente.zona_busqueda}                               accentColor={info.color} /> : null}
+          <InfoRow icon="map-outline"    label="Zona"        value={cliente.zona_busqueda ?? '—'}                                accentColor={info.color} />
           {cliente.tipo_credito   ? <InfoRow icon="card-outline"   label="Crédito"     value={CREDITO_LABELS[cliente.tipo_credito] ?? cliente.tipo_credito} accentColor={info.color} /> : null}
-          {cliente.presupuesto    ? <InfoRow icon="cash-outline"   label="Presupuesto" value={cliente.presupuesto} isLast                          accentColor={info.color} /> : null}
+          <InfoRow icon="cash-outline"   label="Presupuesto" value={cliente.presupuesto ?? '—'} isLast                          accentColor={info.color} />
         </View>
         {cliente.notas ? (
           <View style={[styles.notasCard, { borderLeftColor: info.color }]}>

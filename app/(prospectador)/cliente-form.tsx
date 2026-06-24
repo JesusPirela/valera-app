@@ -198,12 +198,10 @@ export default function ClienteForm() {
   const esEdicion = !!params.id
   const fromAdmin = params.fromAdmin === '1'
 
-  // En el navegador de Tabs, router.back() salta a la pestaña inicial en vez
-  // de a la pantalla anterior real. Por eso navegamos explícitamente: al
-  // editar volvemos al detalle del cliente; al crear, al CRM. (admin/
-  // prospectador según de dónde se abrió).
   function irAtras() {
-    if (esEdicion) {
+    if (router.canGoBack()) {
+      router.back()
+    } else if (esEdicion) {
       router.replace(((fromAdmin ? '/(admin)/detalle-cliente?id=' : '/(prospectador)/detalle-cliente?id=') + params.id) as any)
     } else {
       router.replace((fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm') as any)
@@ -309,6 +307,11 @@ export default function ClienteForm() {
   async function guardar() {
     if (!nombre.trim()) { mostrarError('Campo requerido', 'El nombre es obligatorio.'); return }
     if (!telefono.trim()) { mostrarError('Campo requerido', 'El teléfono es obligatorio.'); return }
+    const esRentaCheck = tipoOperacion === 'renta'
+    const zonaVal = esRentaCheck ? zonasInteres.trim() : zonaBusqueda.trim()
+    const presupVal = esRentaCheck ? presupuestoRenta.trim() : presupuesto.trim()
+    if (!zonaVal) { mostrarError('Campo requerido', 'La zona de interés es obligatoria.'); return }
+    if (!presupVal) { mostrarError('Campo requerido', 'El presupuesto es obligatorio.'); return }
 
     setGuardando(true)
     try {
@@ -466,7 +469,7 @@ export default function ClienteForm() {
             placeholder="correo@ejemplo.com" keyboardType="email-address" autoCapitalize="none" />
 
           <Text style={styles.sectionTitle}>Búsqueda</Text>
-          <Text style={styles.fieldLabel}>Zona en la que busca</Text>
+          <Text style={styles.fieldLabel}>Zona de interés *</Text>
           <TextInput style={styles.input} value={zonaBusqueda} onChangeText={setZonaBusqueda}
             placeholder="Ej: Centro, Juriquilla, Cumbres..." autoCapitalize="words" />
 
@@ -487,13 +490,9 @@ export default function ClienteForm() {
               })}
             </View>
           </ScrollView>
-          {tipoCredito && (
-            <>
-              <Text style={styles.fieldLabel}>Monto / detalle</Text>
-              <TextInput style={styles.input} value={presupuesto} onChangeText={setPresupuesto}
-                placeholder="Ej: $1,500,000 o hasta $800k" />
-            </>
-          )}
+          <Text style={styles.fieldLabel}>Presupuesto *</Text>
+          <TextInput style={styles.input} value={presupuesto} onChangeText={setPresupuesto}
+            placeholder="Ej: $1,500,000 o hasta $800k" keyboardType="default" />
         </>
       )}
 
@@ -544,11 +543,11 @@ export default function ClienteForm() {
           <TextInput style={styles.input} value={fechaMudanza} onChangeText={setFechaMudanza}
             placeholder="Ej: Inmediatamente, en 2 meses..." autoCapitalize="sentences" />
 
-          <Text style={styles.fieldLabel}>Presupuesto máximo</Text>
+          <Text style={styles.fieldLabel}>Presupuesto máximo *</Text>
           <TextInput style={styles.input} value={presupuestoRenta} onChangeText={setPresupuestoRenta}
             placeholder="Ej: $8,000 / mes" />
 
-          <Text style={styles.fieldLabel}>Zonas de interés</Text>
+          <Text style={styles.fieldLabel}>Zonas de interés *</Text>
           <TextInput style={styles.input} value={zonasInteres} onChangeText={setZonasInteres}
             placeholder="Ej: Juriquilla, Cumbres, Centro..." autoCapitalize="words" />
 

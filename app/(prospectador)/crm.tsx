@@ -29,6 +29,8 @@ type Cliente = {
   created_at: string
   nivel_interes: 'alto' | 'medio' | 'bajo' | null
   notas: string | null
+  zona_busqueda: string | null
+  presupuesto: string | null
   recordatorios: { id: string; titulo: string; fecha_hora: string; completado: boolean }[]
 }
 
@@ -143,6 +145,7 @@ export default function CRM() {
     })
   }
   const [interesFilter, setInteresFilter] = useState<string | null>(null)
+  const [zonaFilter, setZonaFilter]       = useState<string | null>(null)
   const [excelSort, setExcelSort]         = useState<{ col: string; dir: 'asc' | 'desc' } | null>(null)
   const [excelFilterModal, setExcelFilterModal] = useState<{
     col: string; label: string
@@ -168,7 +171,7 @@ export default function CRM() {
     queryFn: async () => {
       let q = supabase
         .from('clientes')
-        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, nivel_interes, notas, recordatorios(id, titulo, fecha_hora, completado)')
+        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, nivel_interes, notas, zona_busqueda, presupuesto, recordatorios(id, titulo, fecha_hora, completado)')
         .order('updated_at', { ascending: false })
       if (soloMios) {
         const { data: { user } } = await supabase.auth.getUser()
@@ -225,6 +228,7 @@ export default function CRM() {
   if (filtroVencidos) filtrados = filtrados.filter(c => (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora) < new Date()))
   if (opFiltro)     filtrados = filtrados.filter(c => c.tipo_operacion === opFiltro)
   if (interesFilter) filtrados = filtrados.filter(c => c.nivel_interes === interesFilter)
+  if (zonaFilter)   filtrados = filtrados.filter(c => c.zona_busqueda === zonaFilter)
 
   if (sortBy === 'nombre') {
     filtrados = [...filtrados].sort((a, b) => a.nombre.localeCompare(b.nombre))
@@ -267,6 +271,7 @@ export default function CRM() {
     if (colId === 'estado') return estadoFiltro !== null
     if (colId === 'operacion') return opFiltro !== null
     if (colId === 'interes') return interesFilter !== null
+    if (colId === 'zona') return zonaFilter !== null
     return false
   }
 
@@ -274,6 +279,7 @@ export default function CRM() {
     if (colId === 'estado') return estadoFiltro
     if (colId === 'operacion') return opFiltro
     if (colId === 'interes') return interesFilter
+    if (colId === 'zona') return zonaFilter
     return null
   }
 
@@ -281,6 +287,7 @@ export default function CRM() {
     if (col === 'estado') setEstadoFiltro(value)
     else if (col === 'operacion') setOpFiltro(value as any)
     else if (col === 'interes') setInteresFilter(value)
+    else if (col === 'zona') setZonaFilter(value)
     setExcelFilterModal(null)
   }
 
@@ -312,6 +319,17 @@ export default function CRM() {
           { value: 'bajo', label: '❄️ Bajo' },
         ],
       })
+    } else if (colId === 'zona') {
+      const zonasUnicas = [...new Set(
+        clientes.map(cl => cl.zona_busqueda).filter(Boolean)
+      )].sort() as string[]
+      setExcelFilterModal({
+        col: 'zona', label: 'Filtrar por Zona',
+        options: [
+          { value: null, label: 'Todas las zonas' },
+          ...zonasUnicas.map(z => ({ value: z, label: z })),
+        ],
+      })
     }
   }
 
@@ -320,7 +338,7 @@ export default function CRM() {
   const COL_FIELD: Record<string, string> = {
     nombre: 'nombre', telefono: 'telefono', estado: 'estado',
     operacion: 'tipo_operacion', interes: 'nivel_interes', fecha: 'proximo_contacto',
-    notas: 'notas',
+    notas: 'notas', zona: 'zona_busqueda', presupuesto: 'presupuesto',
   }
 
   async function guardarCelda(id: string, col: string, value: string | null) {
@@ -386,12 +404,14 @@ export default function CRM() {
         ],
       })
     } else {
-      // nombre, telefono, fecha, notas → edición de texto inline
+      // nombre, telefono, fecha, notas, zona, presupuesto → edición de texto inline
       const inicial = col === 'fecha'
         ? (item.proximo_contacto ? item.proximo_contacto.slice(0, 10) : '')
         : col === 'nombre' ? item.nombre
         : col === 'telefono' ? item.telefono
-        : col === 'notas' ? (item.notas ?? '') : ''
+        : col === 'notas' ? (item.notas ?? '')
+        : col === 'zona' ? (item.zona_busqueda ?? '')
+        : col === 'presupuesto' ? (item.presupuesto ?? '') : ''
       setEditValue(inicial)
       setEditCell({ id: item.id, col })
     }
@@ -466,21 +486,25 @@ export default function CRM() {
   // ── Excel table columns ───────────────────────────────────────
   type TCol = { id: string; label: string; flex: number; mw: number; sortable?: boolean; filterable?: boolean }
   const TABLE_COLS: TCol[] = isWeb ? [
-    { id: 'nombre',    label: 'Nombre',       flex: 2.5, mw: 0, sortable: true },
-    { id: 'telefono',  label: 'Teléfono',     flex: 1.4, mw: 0 },
-    { id: 'estado',    label: 'Estado',       flex: 2,   mw: 0, sortable: true, filterable: true },
-    { id: 'operacion', label: 'Op.',          flex: 0.9, mw: 0, filterable: true },
-    { id: 'interes',   label: 'Interés',      flex: 0.9, mw: 0, filterable: true },
-    { id: 'fecha',     label: 'Prox. seguim.', flex: 1.7, mw: 0, sortable: true },
-    { id: 'notas',     label: 'Notas',        flex: 4,   mw: 0 },
+    { id: 'nombre',      label: 'Nombre',         flex: 2.2, mw: 0, sortable: true },
+    { id: 'telefono',    label: 'Teléfono',       flex: 1.2, mw: 0 },
+    { id: 'estado',      label: 'Estado',         flex: 1.3, mw: 0, sortable: true, filterable: true },
+    { id: 'operacion',   label: 'Op.',            flex: 0.8, mw: 0, filterable: true },
+    { id: 'interes',     label: 'Interés',        flex: 0.8, mw: 0, filterable: true },
+    { id: 'zona',        label: 'Zona',           flex: 1.4, mw: 0, filterable: true },
+    { id: 'presupuesto', label: 'Presupuesto',    flex: 1.2, mw: 0 },
+    { id: 'fecha',       label: 'Prox. seguim.',  flex: 1.5, mw: 0, sortable: true },
+    { id: 'notas',       label: 'Notas',          flex: 2.5, mw: 0 },
   ] : [
-    { id: 'nombre',    label: 'Nombre',       flex: 0, mw: 145 },
-    { id: 'telefono',  label: 'Teléfono',     flex: 0, mw: 105 },
-    { id: 'estado',    label: 'Estado',       flex: 0, mw: 130, sortable: true, filterable: true },
-    { id: 'operacion', label: 'Op.',          flex: 0, mw: 65,  filterable: true },
-    { id: 'interes',   label: 'Interés',      flex: 0, mw: 75,  filterable: true },
-    { id: 'fecha',     label: 'Prox. seguim.', flex: 0, mw: 110, sortable: true },
-    { id: 'notas',     label: 'Notas',        flex: 0, mw: 220 },
+    { id: 'nombre',      label: 'Nombre',         flex: 0, mw: 130 },
+    { id: 'telefono',    label: 'Teléfono',       flex: 0, mw: 100 },
+    { id: 'estado',      label: 'Estado',         flex: 0, mw: 105, sortable: true, filterable: true },
+    { id: 'operacion',   label: 'Op.',            flex: 0, mw: 60,  filterable: true },
+    { id: 'interes',     label: 'Interés',        flex: 0, mw: 70,  filterable: true },
+    { id: 'zona',        label: 'Zona',           flex: 0, mw: 110, filterable: true },
+    { id: 'presupuesto', label: 'Presupuesto',    flex: 0, mw: 105 },
+    { id: 'fecha',       label: 'Prox. seguim.',  flex: 0, mw: 105, sortable: true },
+    { id: 'notas',       label: 'Notas',          flex: 0, mw: 180 },
   ]
 
   function cStyle(col: TCol) {
@@ -690,8 +714,8 @@ export default function CRM() {
                 {TABLE_COLS.map(col => {
                   const cs = cStyle(col)
                   const editando = editCell?.id === item.id && editCell?.col === col.id
-                  // Editor de texto inline (nombre, teléfono, fecha, notas)
-                  if (editando && (col.id === 'nombre' || col.id === 'telefono' || col.id === 'fecha' || col.id === 'notas')) {
+                  // Editor de texto inline (nombre, teléfono, fecha, notas, zona, presupuesto)
+                  if (editando && (col.id === 'nombre' || col.id === 'telefono' || col.id === 'fecha' || col.id === 'notas' || col.id === 'zona' || col.id === 'presupuesto')) {
                     if (col.id === 'fecha' && isWeb) {
                       return (
                         <View key={col.id} style={[s.excelTdCell, cs]}>
@@ -812,6 +836,24 @@ export default function CRM() {
                         </TouchableOpacity>
                       )
                     }
+                    case 'zona':
+                      return (
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'zona')} activeOpacity={0.6}>
+                          {item.zona_busqueda
+                            ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub }]} numberOfLines={1}>{item.zona_busqueda}</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ zona</Text>
+                          }
+                        </TouchableOpacity>
+                      )
+                    case 'presupuesto':
+                      return (
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'presupuesto')} activeOpacity={0.6}>
+                          {item.presupuesto
+                            ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: '#2e7d32', fontWeight: '700' }]} numberOfLines={1}>{item.presupuesto}</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ presup.</Text>
+                          }
+                        </TouchableOpacity>
+                      )
                     case 'notas':
                       return (
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs, { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 8 }]} onPress={() => abrirEdicion(item, 'notas')} activeOpacity={0.6}>

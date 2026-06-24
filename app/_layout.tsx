@@ -252,15 +252,24 @@ export default function RootLayout() {
         // no sirve y cualquier cambio de cuenta que use el viejo fallará.
         if (session) guardarTokensSesion(session).catch(() => {})
       } else if (event === 'SIGNED_OUT') {
-        // Leer accountSwitch.pending como propiedad de un objeto compartido,
-        // NO como una variable importada, para garantizar el valor más reciente
-        // sin importar cómo el bundler maneje los live bindings de ES modules.
         const esCambioDeCuenta = accountSwitch.pending
         cerrarSesion()
         setSession(null)
         if (!esCambioDeCuenta) {
-          queryClient.clear()
-          router.replace('/(auth)/login')
+          // Antes de ir al login intentar recuperar la sesión: el SIGNED_OUT puede
+          // venir de un fallo de refresh por red caída, no de un cierre real.
+          supabase.auth.getSession().then(({ data }) => {
+            if (data.session) {
+              // Había sesión guardada — el token se renovó correctamente
+              setSession(data.session)
+            } else {
+              queryClient.clear()
+              router.replace('/(auth)/login')
+            }
+          }).catch(() => {
+            queryClient.clear()
+            router.replace('/(auth)/login')
+          })
         }
       }
     })
