@@ -44,10 +44,17 @@ export default function Perfil() {
   const [comprando, setComprando] = useState<string | null>(null)
   const [coloresDesbloqueados, setColoresDesbloqueados] = useState<string[]>([])
   const [avatarsDesbloqueados, setAvatarsDesbloqueados] = useState<string[]>([])
+  const [userId, setUserId] = useState('')
+  const [nombre, setNombre] = useState('')
+  const [stats, setStats] = useState<UserStats | null>(null)
+  const [telefono, setTelefono] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarEmoji, setAvatarEmoji] = useState('👤')
+  const [colorAcento, setColorAcento] = useState('#1a6470')
+  const [email, setEmail] = useState('')
   // Animated value para animaciones nativas (rebota el avatar seleccionado)
   const animVal = useRef(new Animated.Value(0)).current
-
-  const [userId, setUserId] = useState('')
+  const fileRef = useRef<any>(null)
 
   // Inyectar keyframes CSS para animaciones de avatares premium en web
   useEffect(() => {
@@ -88,15 +95,6 @@ export default function Perfil() {
     else { anim.stop(); animVal.setValue(0) }
     return () => anim.stop()
   }, [avatarEmoji, avatarsDesbloqueados])
-  const [nombre, setNombre] = useState('')
-  const [stats, setStats] = useState<UserStats | null>(null)
-  const [telefono, setTelefono] = useState('')
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [avatarEmoji, setAvatarEmoji] = useState('👤')
-  const [colorAcento, setColorAcento] = useState('#1a6470')
-  const [email, setEmail] = useState('')
-
-  const fileRef = useRef<any>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
