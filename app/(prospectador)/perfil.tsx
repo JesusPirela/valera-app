@@ -35,7 +35,8 @@ export default function Perfil() {
 
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
-  const [packIconos, setPackIconos] = useState(false)
+  const [packColor, setPackColor] = useState(false)
+  const [packAvatar, setPackAvatar] = useState(false)
 
   const [userId, setUserId] = useState('')
 
@@ -82,7 +83,9 @@ export default function Perfil() {
       supabase.from('store_compras').select('id, store_items(tipo)').eq('user_id', user.id).eq('estado', 'entregado'),
     ])
     setStats(statsData)
-    setPackIconos((comprasRes.data ?? []).some((c: any) => c.store_items?.tipo === 'pack_iconos'))
+    const compras = (comprasRes.data ?? []) as any[]
+    setPackColor( compras.some(c => c.store_items?.tipo === 'pack_color'))
+    setPackAvatar(compras.some(c => c.store_items?.tipo === 'pack_avatar'))
 
     if (data) {
       setNombre(data.nombre ?? '')
@@ -289,7 +292,7 @@ export default function Perfil() {
 
         <View style={s.premiumHeader}>
           <Text style={s.premiumLabel}>✨ Avatares premium</Text>
-          {!packIconos && <Text style={s.premiumTag}>Pack 500 💰</Text>}
+          {!packAvatar && <Text style={s.premiumTag}>Avatar Animado — 500 💰</Text>}
         </View>
         <View style={s.emojiGrid}>
           {AVATARES_PREMIUM.map(e => (
@@ -297,24 +300,24 @@ export default function Perfil() {
               key={e}
               style={[
                 s.emojiBtn,
-                packIconos
+                packAvatar
                   ? { backgroundColor: '#1a1200', borderColor: '#c9a84c88' }
                   : { backgroundColor: c.card, borderColor: c.border, opacity: 0.55 },
-                avatarEmoji === e && !avatarMostrado && packIconos && {
+                avatarEmoji === e && !avatarMostrado && packAvatar && {
                   borderColor: '#c9a84c', borderWidth: 3,
                   ...(Platform.OS === 'web' ? { animation: 'avatarPremiumSelected 1.4s ease-in-out infinite' } as any : {}),
                 },
-                packIconos && avatarEmoji !== e && Platform.OS === 'web'
+                packAvatar && avatarEmoji !== e && Platform.OS === 'web'
                   ? { animation: 'avatarPremiumIdle 2.2s ease-in-out infinite' } as any
                   : {},
               ]}
               onPress={() => {
-                if (!packIconos) { mostrarAlerta('Desbloquea el Pack Premium de Iconos y Colores en la Tienda 🎨 (500 Valera Coins)'); return }
+                if (!packAvatar) { mostrarAlerta('Compra el pack "Avatar Animado" en la Tienda ✨ (500 Valera Coins)'); return }
                 seleccionarEmoji(e)
               }}
             >
               <Text style={s.emojiBtnText}>{e}</Text>
-              {!packIconos && (
+              {!packAvatar && (
                 <View style={s.lockOverlay}>
                   <Text style={s.lockIcon}>🔒</Text>
                 </View>
@@ -414,7 +417,7 @@ export default function Perfil() {
 
         <View style={s.premiumHeader}>
           <Text style={s.premiumLabel}>✨ Colores premium</Text>
-          {!packIconos && <Text style={s.premiumTag}>Pack 500 💰</Text>}
+          {!packColor && <Text style={s.premiumTag}>Color Premium — 500 💰</Text>}
         </View>
         <View style={s.coloresGrid}>
           {COLORES_PREMIUM.map(valor => (
@@ -423,16 +426,16 @@ export default function Perfil() {
               style={[
                 s.colorBtn,
                 { backgroundColor: valor },
-                !packIconos && { opacity: 0.45 },
-                colorAcento === valor && packIconos && s.colorBtnActivo,
+                !packColor && { opacity: 0.45 },
+                colorAcento === valor && packColor && s.colorBtnActivo,
               ]}
               onPress={() => {
-                if (!packIconos) { mostrarAlerta('Desbloquea el Pack Premium de Iconos y Colores en la Tienda 🎨 (500 Valera Coins)'); return }
+                if (!packColor) { mostrarAlerta('Compra el pack "Color Premium" en la Tienda 🎨 (500 Valera Coins)'); return }
                 setColorAcento(valor)
               }}
             >
-              {colorAcento === valor && packIconos && <Text style={s.colorCheck}>✓</Text>}
-              {!packIconos && (
+              {colorAcento === valor && packColor && <Text style={s.colorCheck}>✓</Text>}
+              {!packColor && (
                 <View style={s.lockOverlay}>
                   <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
                 </View>

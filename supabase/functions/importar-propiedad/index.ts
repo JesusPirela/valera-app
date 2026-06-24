@@ -238,6 +238,30 @@ async function fetchHtml(url: string): Promise<string> {
   throw new Error('No se pudo acceder a la página. El sitio puede estar bloqueando accesos automáticos o tener un certificado de seguridad incompleto. Copia la ficha y pégala manualmente en el campo de descripción.')
 }
 
+// ── Next.js __NEXT_DATA__ extractor ─────────────────────────────────────────
+function extractNextData(html: string): any {
+  const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i)
+  if (!m) return null
+  try { return JSON.parse(m[1]) } catch { return null }
+}
+
+// Recorre un objeto buscando la primera hoja que parezca ser la propiedad.
+// TuHabi embebe los datos bajo props.pageProps, pero la clave varía.
+function findPropertyNode(obj: any, depth = 0): any {
+  if (depth > 6 || !obj || typeof obj !== 'object') return null
+  // Heurística: el nodo tiene al menos precio O recámaras O imagenes/fotos.
+  const keys = Object.keys(obj)
+  const looksLikeProp = keys.some(k =>
+    /^(precio|price|valorVenta|habitaciones|bedrooms|recamaras|imagenes|fotos|photos|images)$/.test(k))
+  if (looksLikeProp) return obj
+  for (const k of keys) {
+    if (Array.isArray(obj[k])) continue // no recorremos arrays
+    const found = findPropertyNode(obj[k], depth + 1)
+    if (found) return found
+  }
+  return null
+}
+
 // ── NocNok platform helper ────────────────────────────────────────────────────
 // realtydreamsmexico.com and other NocNok-powered sites embed all property data
 // in Next.js RSC flight format: self.__next_f.push([1,"...escaped JSON..."]).
@@ -335,7 +359,90 @@ serve(async (req) => {
     let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
     let imagenes: string[] = []
 
-    // ── 0. NocNok platform (realtydreamsmexico.com y similares) ──────────────
+    // ── 0. TuHabi (brokers.tuhabi.mx) ────────────────────────────────────────
+    // Es un app Next.js: los datos vienen en __NEXT_DATA__ o via API propia.
+    if (/tuhabi\.mx/i.test(url)) {
+      // Intento 1: API interna (evita HTML rendering)
+      const idMatch = url.match(/\/propiedad\/(\d+)/)
+      if (idMatch) {
+        try {
+          const apiUrl = `https://brokers.tuhabi.mx/api/propiedad/${idMatch[1]}`
+          const apiRes = await fetch(apiUrl, { headers: BROWSER_HEADERS })
+          if (apiRes.ok) {
+            const apiJson = await apiRes.json()
+            const prop = findPropertyNode(apiJson) ?? apiJson
+            applyTuHabi(prop)
+          }
+        } catch { /* fall through a __NEXT_DATA__ */ }
+      }
+      // Intento 2: __NEXT_DATA__ del HTML ya descargado
+      if (!titulo && !precio) {
+        const nd = extractNextData(html)
+        if (nd) {
+          const pp = nd?.props?.pageProps
+          const prop = findPropertyNode(pp) ?? pp
+          if (prop) applyTuHabi(prop)
+        }
+      }
+    }
+
+    // Aplica los campos de un objeto TuHabi a las variables locales.
+    function applyTuHabi(prop: any) {
+      if (!prop || typeof prop !== 'object') return
+      // Título
+      const rawTitulo = String(prop.titulo ?? prop.nombre ?? prop.title ?? prop.nombrePropiedad ?? '')
+      if (rawTitulo) titulo = rawTitulo
+      // Descripción
+      const rawDesc = String(prop.descripcion ?? prop.description ?? prop.observaciones ?? '')
+      if (rawDesc) descripcion = htmlText(rawDesc)
+      // Precio
+      const pv = parseNum(prop.precio ?? prop.price ?? prop.valorVenta ?? prop.salePrice ?? prop.valor)
+      if (pv && pv >= 1000) { precio = String(Math.round(pv)); operacion = operacion ?? 'venta' }
+      const rv = parseNum(prop.precioRenta ?? prop.rentPrice)
+      if (rv && rv >= 1000 && !precio) { precio = String(Math.round(rv)); operacion = 'renta' }
+      // Características
+      if (recamaras   === null) recamaras   = cap(parseNum(prop.habitaciones ?? prop.bedrooms ?? prop.recamaras  ?? prop.dormitorios), 5)
+      if (banos       === null) banos       = cap(parseNum(prop.banos ?? prop.bathrooms ?? prop.banosCompletos ?? prop.numeroBanos), 4)
+      if (mediosBanos === null) mediosBanos = cap(parseNum(prop.mediosBanos ?? prop.halfBathrooms ?? prop.saniParcial), 2)
+      if (estacionamientos === null) estacionamientos = cap(parseNum(prop.garajes ?? prop.estacionamientos ?? prop.parking ?? prop.parkingSpaces), 3)
+      // Superficie
+      const area = parseNum(prop.area ?? prop.areaConstruida ?? prop.areaTotal ?? prop.m2 ?? prop.metrosCuadrados)
+      if (area && !m2) m2 = String(Math.round(area))
+      const areaT = parseNum(prop.areaTerreno ?? prop.lotSize ?? prop.areaPredial)
+      if (areaT && !m2Terreno) m2Terreno = String(Math.round(areaT))
+      // Tipo / operación
+      const rawTipo = String(prop.tipoInmueble ?? prop.tipo ?? prop.type ?? prop.propertyType ?? '')
+      if (!tipo) tipo = mapTipo(rawTipo)
+      const rawOp = String(prop.tipoNegocio ?? prop.operacion ?? prop.operationType ?? '')
+      if (!operacion) operacion = mapOp(rawOp)
+      // Dirección
+      if (!direccion) {
+        const parts = [
+          prop.barrio ?? prop.colonia ?? prop.neighborhood,
+          prop.municipio ?? prop.ciudad ?? prop.city,
+          prop.estado ?? prop.state,
+        ].filter(Boolean).map(String)
+        if (parts.length) direccion = parts.join(', ')
+      }
+      // Zona
+      if (!zona) {
+        const loc = (direccion + ' ' + (prop.ciudad ?? '') + ' ' + (prop.estado ?? '')).toLowerCase()
+        if (/quer[eé]taro|qro\b/.test(loc))               zona = 'queretaro'
+        else if (/monterrey|nuevo\s*le[oó]n|\bmty\b/.test(loc)) zona = 'monterrey'
+        else if (/puebla/.test(loc))                       zona = 'puebla'
+      }
+      // Imágenes
+      if (!imagenes.length) {
+        const imgs = prop.imagenes ?? prop.fotos ?? prop.photos ?? prop.images ?? prop.multimedia ?? []
+        if (Array.isArray(imgs)) {
+          imagenes = imgs.slice(0, 30)
+            .map((img: any) => typeof img === 'string' ? img : (img.url ?? img.src ?? img.href ?? img.imagen ?? ''))
+            .filter((u: string) => u && u.startsWith('http'))
+        }
+      }
+    }
+
+    // ── 0c. NocNok platform (realtydreamsmexico.com y similares) ────────────
     if (html.includes('nocnok-img')) {
       const np = extractNocNokProperty(html)
       if (np) {
@@ -576,6 +683,8 @@ serve(async (req) => {
     // Skipped when already populated (e.g. by NocNok parser from pictureUrls)
     if (!imagenes.length) {
     const imgPatterns = [
+      /https?:\/\/[^\s"'<>?]*tuhabi\.(?:mx|co)\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,     // TuHabi MX/CO
+      /https?:\/\/[^\s"'<>?]*habi\.co\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,               // Habi (filial)
       /https?:\/\/assets\.easybroker\.com\/property_images\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
       /https?:\/\/static\.tokkobroker\.com\/pictures\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,    // reval (Tokko)
       /https?:\/\/[^\s"'<>?]*inmobay\.com\/upload\/inmuebles\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi, // inmobay
