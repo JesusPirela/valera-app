@@ -21,7 +21,6 @@ import { useColors, AppColors } from '../../lib/ThemeContext'
 import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
 import AsesorPicker from '../../components/ui/AsesorPicker'
-import InmobiliariaPicker from '../../components/ui/InmobiliariaPicker'
 import { COLONIAS } from '../../lib/colonias'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
@@ -169,7 +168,6 @@ export default function NuevaPropiedad() {
   const [geoResults, setGeoResults] = useState<any[]>([])
   const [geoLoading, setGeoLoading] = useState(false)
   const [asesorId, setAsesorId] = useState<string | null>(null)
-  const [inmobiliariaId, setInmobiliariaId] = useState<string | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
@@ -676,7 +674,6 @@ export default function NuevaPropiedad() {
         m2_terreno: m2TerrenoNum,
         estacionamientos,
         asesor_id: asesorId,
-        inmobiliaria_id: inmobiliariaId,
         exclusiva,
         es_constructora: esConstructora,
         nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
@@ -1051,8 +1048,6 @@ export default function NuevaPropiedad() {
         <Text style={styles.label}>Asesor de contacto</Text>
         <AsesorPicker value={asesorId} onChange={setAsesorId} />
 
-        <Text style={styles.label}>Inmobiliaria</Text>
-        <InmobiliariaPicker value={inmobiliariaId} onChange={setInmobiliariaId} />
 
         <View style={styles.exclusivaRow}>
           <View>
