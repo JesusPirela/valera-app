@@ -19,6 +19,7 @@ export const COLONIAS: ColoniaSugerida[] = [
   { label: 'El Refugio Residencial',  zona: 'queretaro', ciudad: 'Querétaro', lat: 20.6270, lng: -100.3680 },
   { label: 'Refugio de los Sauces',   zona: 'queretaro', ciudad: 'Querétaro', lat: 20.6320, lng: -100.3640 },
   { label: 'Vista Residencial',       zona: 'queretaro', ciudad: 'Querétaro', lat: 20.6180, lng: -100.4280 },
+  { label: 'Ciudad del Sol',          zona: 'queretaro', ciudad: 'Querétaro', lat: 20.5650, lng: -100.4100 },
   { label: 'Candiles',            zona: 'queretaro', ciudad: 'Querétaro', lat: 20.6100, lng: -100.4200 },
   { label: 'Constituyentes',      zona: 'queretaro', ciudad: 'Querétaro', lat: 20.5950, lng: -100.4100 },
   { label: 'Cumbres',             zona: 'queretaro', ciudad: 'Querétaro', lat: 20.6500, lng: -100.4300 },
