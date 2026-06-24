@@ -44,7 +44,15 @@ type Propiedad = {
   inmobiliaria_id: string | null
   es_inventario: boolean | null
   inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
+  asesores: { nombre: string; inmobiliaria: string | null } | null
   propiedad_imagenes: { url: string; orden: number }[]
+}
+
+function contactoLabel(p: { asesores?: { nombre: string; inmobiliaria: string | null } | null; inmobiliarias?: { nombre: string } | null }): string | null {
+  const asesor = p.asesores?.nombre?.trim() || null
+  const empresa = p.inmobiliarias?.nombre?.trim() || p.asesores?.inmobiliaria?.trim() || null
+  if (asesor && empresa) return `${asesor} — ${empresa}`
+  return asesor ?? empresa ?? null
 }
 
 type FiltroOperacion = 'venta' | 'renta' | null
@@ -52,8 +60,6 @@ type FiltroEstado = 'disponible' | 'vendida' | null
 type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
 type OrdenPublicaciones = 'desc' | 'asc' | null
-
-type InmobiliariaOpcion = { id: string; nombre: string }
 
 const NAV_ITEMS = [
   { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2', grupo: 'Propiedades' },
@@ -91,7 +97,7 @@ export default function AdminPropiedades() {
   const [ordenPublicaciones, setOrdenPublicaciones] = useState<OrdenPublicaciones>(null)
   const [publicacionesMap, setPublicacionesMap] = useState<Record<string, number>>({})
   const [comprasPendientes, setComprasPendientes] = useState(0)
-  const [filtroInmobiliaria, setFiltroInmobiliaria] = useState<string | null>(null)
+  const [busquedaContacto, setBusquedaContacto] = useState('')
 
   const [modalVisible, setModalVisible] = useState(false)
   const [propSeleccionada, setPropSeleccionada] = useState<Propiedad | null>(null)
@@ -100,7 +106,6 @@ export default function AdminPropiedades() {
   const [guardandoDestacado, setGuardandoDestacado] = useState(false)
 
   const [role, setRole] = useState<string | null>(null)
-  const [inmobiliarias, setInmobiliarias] = useState<InmobiliariaOpcion[]>([])
   const esSupervisor = role === 'supervisor'
 
   // Web: renderizado incremental para no montar 1000+ tarjetas/imágenes de golpe
@@ -117,7 +122,7 @@ export default function AdminPropiedades() {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, destacada_hasta, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, destacada_hasta, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria), propiedad_imagenes(url, orden)')
         .order('created_at', { ascending: false })
         .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
         .limit(1, { referencedTable: 'propiedad_imagenes' })
@@ -131,6 +136,7 @@ export default function AdminPropiedades() {
       const normalizadas = todas.map((p: any) => ({
         ...p,
         inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
+        asesores: Array.isArray(p.asesores) ? p.asesores[0] ?? null : p.asesores,
       }))
       setPropiedades(normalizadas)
       yaCargoRef.current = true
@@ -144,8 +150,6 @@ export default function AdminPropiedades() {
       const { data: perfil } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle()
       setRole(perfil?.role ?? null)
     }
-    const { data: inmobiliariasData } = await supabase.from('inmobiliarias').select('id, nombre').order('nombre')
-    setInmobiliarias(inmobiliariasData ?? [])
 
     const { data: conteo } = await supabase.rpc('get_publicaciones_conteo')
     if (conteo) {
@@ -174,7 +178,7 @@ export default function AdminPropiedades() {
       ].includes(item.route))
     : NAV_ITEMS
 
-  const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, ordenPublicaciones, filtroInmobiliaria].filter(Boolean).length
+  const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, ordenPublicaciones, busquedaContacto].filter(Boolean).length
 
   const inventarioCount = propiedades.filter((p) => p.es_inventario).length
   let propiedadesFiltradas = propiedades.filter((p) => !p.es_inventario)
@@ -190,7 +194,13 @@ export default function AdminPropiedades() {
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroEstado) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.estado === filtroEstado)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
-  if (filtroInmobiliaria) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.inmobiliaria_id === filtroInmobiliaria)
+  if (busquedaContacto.trim()) {
+    const qc = normalizar(busquedaContacto.trim())
+    propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
+      const label = contactoLabel(p)
+      return label ? normalizar(label).includes(qc) : false
+    })
+  }
   if (ordenPrecio) {
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
       ordenPrecio === 'asc'
@@ -219,7 +229,7 @@ export default function AdminPropiedades() {
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
   useEffect(() => { setVisibleCount(PAGE_WEB) }, [
     busqueda, filtroOperacion, filtroEstado, filtroTipo, ordenPrecio,
-    ordenPublicaciones, filtroInmobiliaria,
+    ordenPublicaciones, busquedaContacto,
   ])
 
   function ejecutarBorrado(id: string) {
@@ -298,7 +308,7 @@ export default function AdminPropiedades() {
     setFiltroTipo(null)
     setOrdenPrecio(null)
     setOrdenPublicaciones(null)
-    setFiltroInmobiliaria(null)
+    setBusquedaContacto('')
   }
 
   function FiltroChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
@@ -422,22 +432,52 @@ export default function AdminPropiedades() {
             <FiltroChip label="🔥 Más publicadas" active={ordenPublicaciones === 'desc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'desc' ? null : 'desc')} />
             <FiltroChip label="Menos publicadas" active={ordenPublicaciones === 'asc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'asc' ? null : 'asc')} />
           </ScrollView>
-          {inmobiliarias.length > 0 && (
-            <>
-              <Text style={[styles.filtroLabel, { color: c.textMute }]}>Inmobiliaria</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-                <FiltroChip label="Todas" active={filtroInmobiliaria === null} onPress={() => setFiltroInmobiliaria(null)} />
-                {inmobiliarias.map((inm) => (
-                  <FiltroChip
-                    key={inm.id}
-                    label={inm.nombre}
-                    active={filtroInmobiliaria === inm.id}
-                    onPress={() => setFiltroInmobiliaria(filtroInmobiliaria === inm.id ? null : inm.id)}
+          {(() => {
+            // Sugerencias: etiquetas únicas que coinciden con el texto escrito
+            const qc = normalizar(busquedaContacto.trim())
+            const labels = new Set<string>()
+            propiedades.filter(p => !p.es_inventario).forEach(p => {
+              const l = contactoLabel(p)
+              if (l) labels.add(l)
+            })
+            const sugerencias = Array.from(labels)
+              .filter(l => !qc || normalizar(l).includes(qc))
+              .sort()
+              .slice(0, 12)
+            return (
+              <>
+                <Text style={[styles.filtroLabel, { color: c.textMute }]}>Contacto responsable</Text>
+                <View style={styles.contactoInputRow}>
+                  <TextInput
+                    style={[styles.contactoInput, { color: c.inputText, borderColor: busquedaContacto ? '#1a6470' : c.border }]}
+                    placeholder="Buscar asesor o inmobiliaria..."
+                    placeholderTextColor={c.placeholder}
+                    value={busquedaContacto}
+                    onChangeText={setBusquedaContacto}
+                    autoCapitalize="none"
+                    autoCorrect={false}
                   />
-                ))}
-              </ScrollView>
-            </>
-          )}
+                  {busquedaContacto.length > 0 && (
+                    <TouchableOpacity onPress={() => setBusquedaContacto('')} style={styles.contactoLimpiar}>
+                      <Text style={{ color: '#888', fontSize: 13 }}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {sugerencias.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                    {sugerencias.map(label => (
+                      <FiltroChip
+                        key={label}
+                        label={label}
+                        active={normalizar(busquedaContacto.trim()) === normalizar(label)}
+                        onPress={() => setBusquedaContacto(busquedaContacto.trim() === label ? '' : label)}
+                      />
+                    ))}
+                  </ScrollView>
+                )}
+              </>
+            )
+          })()}
           {filtrosActivos > 0 && (
             <TouchableOpacity style={styles.limpiarBtn} onPress={limpiarFiltros}>
               <Text style={styles.limpiarText}>Limpiar filtros</Text>
@@ -506,6 +546,9 @@ export default function AdminPropiedades() {
           )}
           <Text style={[styles.cardTitulo, { color: c.text }]}>{item.titulo}</Text>
           <Text style={[styles.cardDireccion, { color: c.textMute }]} numberOfLines={1}>📍 {item.direccion}</Text>
+          {contactoLabel(item) && (
+            <Text style={[styles.contactoBadge, { color: c.textMute }]} numberOfLines={1}>👤 {contactoLabel(item)}</Text>
+          )}
           <Text style={styles.pubBadge}>📤 {publicacionesMap[item.id] ?? 0} publicaciones</Text>
           {tieneMeta && (
             <View style={styles.metaRow}>
@@ -1006,6 +1049,13 @@ const styles = StyleSheet.create({
     minHeight: 80,
     marginBottom: 8,
   },
+  contactoInputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  contactoInput: {
+    flex: 1, backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1,
+    paddingHorizontal: 10, paddingVertical: 8, fontSize: 13,
+  },
+  contactoLimpiar: { paddingHorizontal: 10, paddingVertical: 8 },
+  contactoBadge: { fontSize: 12, marginBottom: 4 },
   duracionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   duracionChip: {
     paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,

@@ -56,6 +56,7 @@ type Propiedad = {
   nombre_constructora: string | null
   inmobiliaria_id: string | null
   inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
+  asesores: { nombre: string; inmobiliaria: string | null; telefono: string | null } | null
   lat: number | null
   lng: number | null
   propiedad_imagenes: { url: string; orden: number }[]
@@ -201,7 +202,7 @@ export default function DetallePropiedad() {
 
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), lat, lng, propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)')
         .eq('id', id)
         .single()
 
@@ -210,6 +211,7 @@ export default function DetallePropiedad() {
       const dataNormalizada = {
         ...data,
         inmobiliarias: Array.isArray((data as any).inmobiliarias) ? (data as any).inmobiliarias[0] ?? null : (data as any).inmobiliarias,
+        asesores: Array.isArray((data as any).asesores) ? (data as any).asesores[0] ?? null : (data as any).asesores,
       }
 
       // Restricción: Prospectador/Nuevo no pueden ver propiedades de inmobiliarias exclusivas
@@ -1383,9 +1385,18 @@ export default function DetallePropiedad() {
               🏗 {propiedad.nombre_constructora ?? 'Constructora'}
             </Text>
           )}
-          {subidoPor && (
-            <Text style={styles.asesorBadge}>👤 {subidoPor.nombre}</Text>
-          )}
+          {(() => {
+            const asesorNombre = propiedad.asesores?.nombre?.trim() || null
+            const empresa = propiedad.inmobiliarias?.nombre?.trim() || propiedad.asesores?.inmobiliaria?.trim() || null
+            const etiqueta = asesorNombre && empresa
+              ? `${asesorNombre} — ${empresa}`
+              : (asesorNombre ?? empresa ?? null)
+            return etiqueta ? (
+              <Text style={styles.asesorBadge}>👤 {etiqueta}</Text>
+            ) : subidoPor ? (
+              <Text style={styles.asesorBadge}>👤 {subidoPor.nombre}</Text>
+            ) : null
+          })()}
         </View>
 
         {/* Título y precio */}
