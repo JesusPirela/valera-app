@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Platform, Alert, Image,
+  TextInput, ActivityIndicator, Platform, Alert, Image, Animated,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
@@ -22,7 +22,13 @@ const COLORES_PREMIUM = [
 ]
 
 const AVATARES_LIBRES  = ['👤','🏠','⭐','🦁','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
-const AVATARES_PREMIUM = ['🔥','⚡','🌈','🦋','🐉','🦄','👑','💫','🎭','🌺','🔮','🌊','🏆','🌙','✨','🎸']
+// [emoji, animación CSS web]
+const AVATARES_PREMIUM: [string, string][] = [
+  ['🔥','bounce'], ['⚡','flash'],  ['🌈','spin'],   ['🦋','flutter'],
+  ['🐉','roar'],   ['🦄','jump'],   ['👑','shimmer'], ['💫','orbit'],
+  ['🎭','wobble'], ['🌺','sway'],   ['🔮','pulse'],   ['🌊','wave'],
+  ['🏆','bounce'], ['🌙','float'],  ['✨','twinkle'], ['🎸','shake'],
+]
 
 function mostrarAlerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
@@ -35,29 +41,53 @@ export default function Perfil() {
 
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
-  const [packColor, setPackColor] = useState(false)
-  const [packAvatar, setPackAvatar] = useState(false)
+  const [comprando, setComprando] = useState<string | null>(null)
+  const [coloresDesbloqueados, setColoresDesbloqueados] = useState<string[]>([])
+  const [avatarsDesbloqueados, setAvatarsDesbloqueados] = useState<string[]>([])
+  // Animated value para animaciones nativas (rebota el avatar seleccionado)
+  const animVal = useRef(new Animated.Value(0)).current
 
   const [userId, setUserId] = useState('')
 
-  // Inyectar keyframes para animación de avatares premium en web
+  // Inyectar keyframes CSS para animaciones de avatares premium en web
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return
     if (document.getElementById('perfil-premium-anim')) return
     const s = document.createElement('style')
     s.id = 'perfil-premium-anim'
     s.textContent = `
-      @keyframes avatarPremiumIdle {
-        0%,100%{box-shadow:0 0 6px 2px rgba(201,168,76,0.35)}
-        50%{box-shadow:0 0 14px 5px rgba(201,168,76,0.75)}
-      }
-      @keyframes avatarPremiumSelected {
-        0%,100%{box-shadow:0 0 8px 3px rgba(255,255,255,0.4),0 0 16px 6px rgba(201,168,76,0.6)}
-        50%{box-shadow:0 0 16px 6px rgba(255,255,255,0.7),0 0 28px 10px rgba(201,168,76,0.9)}
-      }
+      @keyframes av-bounce  {0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+      @keyframes av-flash   {0%,90%,100%{opacity:1}45%{opacity:0.2}}
+      @keyframes av-spin    {0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+      @keyframes av-flutter {0%,100%{transform:rotate(0deg) scaleX(1)}25%{transform:rotate(-15deg) scaleX(0.7)}75%{transform:rotate(15deg) scaleX(0.7)}}
+      @keyframes av-roar    {0%,100%{transform:scale(1)}30%{transform:scale(1.3) rotate(-5deg)}60%{transform:scale(1.3) rotate(5deg)}}
+      @keyframes av-jump    {0%,100%{transform:translateY(0) scaleY(1)}40%{transform:translateY(-12px) scaleY(1.1)}90%{transform:translateY(0) scaleY(0.85)}}
+      @keyframes av-shimmer {0%,100%{filter:brightness(1)}50%{filter:brightness(1.5) drop-shadow(0 0 6px gold)}}
+      @keyframes av-orbit   {0%{transform:rotate(0deg) translateX(4px) rotate(0deg)}100%{transform:rotate(360deg) translateX(4px) rotate(-360deg)}}
+      @keyframes av-wobble  {0%,100%{transform:rotate(0deg)}20%{transform:rotate(-15deg)}40%{transform:rotate(10deg)}60%{transform:rotate(-8deg)}80%{transform:rotate(5deg)}}
+      @keyframes av-sway    {0%,100%{transform:rotate(0deg) translateY(0)}50%{transform:rotate(10deg) translateY(-4px)}}
+      @keyframes av-pulse   {0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+      @keyframes av-wave    {0%,100%{transform:skewX(0deg)}25%{transform:skewX(-10deg)}75%{transform:skewX(10deg)}}
+      @keyframes av-float   {0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+      @keyframes av-twinkle {0%,100%{transform:scale(1) rotate(0deg)}50%{transform:scale(1.3) rotate(180deg)}}
+      @keyframes av-shake   {0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
     `
     document.head.appendChild(s)
   }, [])
+
+  // Animación nativa para avatar seleccionado premium (rebote continuo)
+  useEffect(() => {
+    if (Platform.OS === 'web') return
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(animVal, { toValue: -8, duration: 400, useNativeDriver: true }),
+        Animated.timing(animVal, { toValue: 0,  duration: 400, useNativeDriver: true }),
+      ])
+    )
+    if (avatarsDesbloqueados.includes(avatarEmoji)) anim.start()
+    else { anim.stop(); animVal.setValue(0) }
+    return () => anim.stop()
+  }, [avatarEmoji, avatarsDesbloqueados])
   const [nombre, setNombre] = useState('')
   const [stats, setStats] = useState<UserStats | null>(null)
   const [telefono, setTelefono] = useState('')
@@ -77,20 +107,18 @@ export default function Perfil() {
     setUserId(user.id)
     setEmail(user.email ?? '')
 
-    const [{ data }, statsData, comprasRes] = await Promise.all([
-      supabase.from('profiles').select('nombre, telefono, avatar_url, color_acento').eq('id', user.id).single(),
+    const [{ data }, statsData] = await Promise.all([
+      supabase.from('profiles').select('nombre, telefono, avatar_url, color_acento, colores_desbloqueados, avatares_desbloqueados').eq('id', user.id).single(),
       getUserStats(user.id),
-      supabase.from('store_compras').select('id, store_items(tipo)').eq('user_id', user.id).eq('estado', 'entregado'),
     ])
     setStats(statsData)
-    const compras = (comprasRes.data ?? []) as any[]
-    setPackColor( compras.some(c => c.store_items?.tipo === 'pack_color'))
-    setPackAvatar(compras.some(c => c.store_items?.tipo === 'pack_avatar'))
 
     if (data) {
       setNombre(data.nombre ?? '')
       setTelefono(data.telefono ?? '')
       setColorAcento(data.color_acento ?? '#1a6470')
+      setColoresDesbloqueados((data as any).colores_desbloqueados ?? [])
+      setAvatarsDesbloqueados((data as any).avatares_desbloqueados ?? [])
       if (data.avatar_url?.startsWith('emoji:')) {
         setAvatarEmoji(data.avatar_url.replace('emoji:', ''))
         setAvatarUrl(null)
@@ -99,6 +127,26 @@ export default function Perfil() {
       }
     }
     setLoading(false)
+  }
+
+  async function comprarItem(tipo: 'color' | 'avatar', valor: string) {
+    if (comprando) return
+    const label = tipo === 'color' ? `el color ${valor}` : `el avatar ${valor}`
+    const confirmar = Platform.OS === 'web'
+      ? window.confirm(`¿Desbloquear ${label} por 500 Valera Coins?`)
+      : await new Promise<boolean>(r => Alert.alert('Desbloquear', `¿Desbloquear ${label} por 500 Valera Coins?`,
+          [{ text: 'Cancelar', style: 'cancel', onPress: () => r(false) }, { text: 'Comprar', onPress: () => r(true) }]))
+    if (!confirmar) return
+    setComprando(valor)
+    const { data, error } = await supabase.rpc('desbloquear_item_perfil', { p_tipo: tipo, p_valor: valor })
+    setComprando(null)
+    if (error || !data?.ok) {
+      mostrarAlerta(data?.error ?? error?.message ?? 'Error al desbloquear')
+      return
+    }
+    if (tipo === 'color') setColoresDesbloqueados(prev => [...prev, valor])
+    else setAvatarsDesbloqueados(prev => [...prev, valor])
+    mostrarAlerta(`¡Desbloqueado! Te quedan ${data.coins_restantes} Valera Coins 🎉`)
   }
 
   async function subirArchivo(payload: ArrayBuffer | File, mimeType: string, ext: string): Promise<string | null> {
@@ -291,39 +339,55 @@ export default function Perfil() {
         </View>
 
         <View style={s.premiumHeader}>
-          <Text style={s.premiumLabel}>✨ Avatares premium</Text>
-          {!packAvatar && <Text style={s.premiumTag}>Avatar Animado — 500 💰</Text>}
+          <Text style={s.premiumLabel}>✨ Avatares animados</Text>
+          <Text style={s.premiumTag}>500 💰 c/u</Text>
         </View>
         <View style={s.emojiGrid}>
-          {AVATARES_PREMIUM.map(e => (
-            <TouchableOpacity
-              key={e}
-              style={[
-                s.emojiBtn,
-                packAvatar
-                  ? { backgroundColor: '#1a1200', borderColor: '#c9a84c88' }
-                  : { backgroundColor: c.card, borderColor: c.border, opacity: 0.55 },
-                avatarEmoji === e && !avatarMostrado && packAvatar && {
-                  borderColor: '#c9a84c', borderWidth: 3,
-                  ...(Platform.OS === 'web' ? { animation: 'avatarPremiumSelected 1.4s ease-in-out infinite' } as any : {}),
-                },
-                packAvatar && avatarEmoji !== e && Platform.OS === 'web'
-                  ? { animation: 'avatarPremiumIdle 2.2s ease-in-out infinite' } as any
-                  : {},
-              ]}
-              onPress={() => {
-                if (!packAvatar) { mostrarAlerta('Compra el pack "Avatar Animado" en la Tienda ✨ (500 Valera Coins)'); return }
-                seleccionarEmoji(e)
-              }}
-            >
-              <Text style={s.emojiBtnText}>{e}</Text>
-              {!packAvatar && (
-                <View style={s.lockOverlay}>
-                  <Text style={s.lockIcon}>🔒</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
+          {AVATARES_PREMIUM.map(([e, anim]) => {
+            const desbloqueado = avatarsDesbloqueados.includes(e)
+            const seleccionado = avatarEmoji === e && !avatarMostrado
+            const enCompra = comprando === e
+            return (
+              <TouchableOpacity
+                key={e}
+                style={[
+                  s.emojiBtn,
+                  desbloqueado
+                    ? { backgroundColor: '#1a1200', borderColor: '#c9a84c88' }
+                    : { backgroundColor: c.card, borderColor: c.border, opacity: 0.6 },
+                  seleccionado && desbloqueado && { borderColor: '#c9a84c', borderWidth: 3 },
+                ]}
+                onPress={() => {
+                  if (desbloqueado) { seleccionarEmoji(e); return }
+                  comprarItem('avatar', e)
+                }}
+                disabled={enCompra}
+              >
+                {/* Emoji con animación web o nativo */}
+                {desbloqueado && Platform.OS === 'web' ? (
+                  <Text style={[s.emojiBtnText, { animation: `av-${anim} ${anim === 'spin' ? '2s linear' : '1.5s ease-in-out'} infinite` } as any]}>
+                    {e}
+                  </Text>
+                ) : desbloqueado && seleccionado ? (
+                  <Animated.Text style={[s.emojiBtnText, { transform: [{ translateY: animVal }] }]}>
+                    {e}
+                  </Animated.Text>
+                ) : (
+                  <Text style={s.emojiBtnText}>{e}</Text>
+                )}
+                {enCompra && (
+                  <View style={s.lockOverlay}>
+                    <ActivityIndicator size="small" color="#c9a84c" />
+                  </View>
+                )}
+                {!desbloqueado && !enCompra && (
+                  <View style={s.lockOverlay}>
+                    <Text style={s.lockIcon}>🔒</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )
+          })}
         </View>
 
         {/* Subir foto — funciona en web y nativo */}
@@ -417,31 +481,41 @@ export default function Perfil() {
 
         <View style={s.premiumHeader}>
           <Text style={s.premiumLabel}>✨ Colores premium</Text>
-          {!packColor && <Text style={s.premiumTag}>Color Premium — 500 💰</Text>}
+          <Text style={s.premiumTag}>500 💰 c/u</Text>
         </View>
         <View style={s.coloresGrid}>
-          {COLORES_PREMIUM.map(valor => (
-            <TouchableOpacity
-              key={valor}
-              style={[
-                s.colorBtn,
-                { backgroundColor: valor },
-                !packColor && { opacity: 0.45 },
-                colorAcento === valor && packColor && s.colorBtnActivo,
-              ]}
-              onPress={() => {
-                if (!packColor) { mostrarAlerta('Compra el pack "Color Premium" en la Tienda 🎨 (500 Valera Coins)'); return }
-                setColorAcento(valor)
-              }}
-            >
-              {colorAcento === valor && packColor && <Text style={s.colorCheck}>✓</Text>}
-              {!packColor && (
-                <View style={s.lockOverlay}>
-                  <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
+          {COLORES_PREMIUM.map(valor => {
+            const desbloqueado = coloresDesbloqueados.includes(valor)
+            const enCompra = comprando === valor
+            return (
+              <TouchableOpacity
+                key={valor}
+                style={[
+                  s.colorBtn,
+                  { backgroundColor: valor },
+                  !desbloqueado && { opacity: 0.45 },
+                  colorAcento === valor && desbloqueado && s.colorBtnActivo,
+                ]}
+                onPress={() => {
+                  if (desbloqueado) { setColorAcento(valor); return }
+                  comprarItem('color', valor)
+                }}
+                disabled={enCompra}
+              >
+                {colorAcento === valor && desbloqueado && <Text style={s.colorCheck}>✓</Text>}
+                {enCompra && (
+                  <View style={s.lockOverlay}>
+                    <ActivityIndicator size="small" color="#fff" />
+                  </View>
+                )}
+                {!desbloqueado && !enCompra && (
+                  <View style={s.lockOverlay}>
+                    <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )
+          })}
         </View>
         <View style={[s.colorPreview, { backgroundColor: colorAcento }]}>
           <Text style={s.colorPreviewText}>Vista previa del color seleccionado</Text>
