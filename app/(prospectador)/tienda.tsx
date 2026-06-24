@@ -61,6 +61,8 @@ export default function Tienda() {
   const [coins, setCoins]         = useState(0)
   const [items, setItems]         = useState<StoreItem[]>([])
   const [compras, setCompras]     = useState<Compra[]>([])
+  const [coloresDesbloqueados, setColoresDesbloqueados] = useState<string[]>([])
+  const [avatarsDesbloqueados, setAvatarsDesbloqueados] = useState<string[]>([])
   const [tab, setTab]             = useState<'tienda' | 'historial' | 'cofre'>('tienda')
   const [loading, setLoading]     = useState(true)
   const [loadingHistorial, setLoadingHistorial] = useState(false)
@@ -82,7 +84,7 @@ export default function Tienda() {
     if (!user) { setLoading(false); return }
     setUserId(user.id)
 
-    const [statsRes, itemsRes, comprasRes, cfgRes, cofresStatsRes] = await Promise.all([
+    const [statsRes, itemsRes, comprasRes, cfgRes, cofresStatsRes, perfilRes] = await Promise.all([
       supabase.from('user_stats').select('valera_coins, xp, cofres_pendientes').eq('id', user.id).maybeSingle(),
       supabase.from('store_items').select('*').eq('disponible', true).order('orden'),
       supabase.from('store_compras')
@@ -91,6 +93,7 @@ export default function Tienda() {
         .order('created_at', { ascending: false }),
       supabase.from('app_config').select('value').eq('key', 'ruleta_config').maybeSingle(),
       supabase.rpc('get_cofres_stats'),
+      supabase.from('profiles').select('colores_desbloqueados, avatares_desbloqueados').eq('id', user.id).maybeSingle(),
     ])
 
     // Cargar config de ruleta desde Supabase
@@ -104,6 +107,8 @@ export default function Tienda() {
     setCofresPendientes((statsRes.data as any)?.cofres_pendientes ?? 0)
     setItems((itemsRes.data ?? []) as StoreItem[])
     setCompras((comprasRes.data ?? []) as Compra[])
+    setColoresDesbloqueados((perfilRes.data as any)?.colores_desbloqueados ?? [])
+    setAvatarsDesbloqueados((perfilRes.data as any)?.avatares_desbloqueados ?? [])
 
     // Estadísticas de cofres del RPC
     const cs = cofresStatsRes.data as any
@@ -186,6 +191,11 @@ export default function Tienda() {
     const result = await registrarPremioRuleta(premio.tipo, premio.nombre, 0, ruletaMilestone)
     if (!result.ok) {
       alerta(`No se pudo registrar tu premio "${premio.nombre}". Captura pantalla y contacta al equipo.\n\nError: ${result.error ?? 'desconocido'}`)
+    } else if (result.convertido && result.mensaje) {
+      // Colección completa → convertido a coins
+      alerta(result.mensaje)
+      cargar()
+      return
     }
     // Incrementar cofresAbiertos inmediatamente (para desbloquear premios en misma sesión)
     setCofresAbiertos(prev => prev + 1)
@@ -302,7 +312,11 @@ export default function Tienda() {
 
           {/* Items */}
           <View style={s.grid}>
-            {items.map(item => {
+            {items.filter(item => {
+              if (item.tipo === 'pack_color'  && coloresDesbloqueados.length >= 12) return false
+              if (item.tipo === 'pack_avatar' && avatarsDesbloqueados.length  >= 16) return false
+              return true
+            }).map(item => {
               const puedePagar = coins >= item.costo_coins
               const cargando   = comprando === item.id
               return (

@@ -469,7 +469,7 @@ export async function registrarPremioRuleta(
   nombre: string,
   costo: number,
   esMilestone: boolean
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; convertido?: boolean; mensaje?: string }> {
   try {
     const { data, error } = await supabase.rpc('registrar_premio_ruleta', {
       p_tipo_premio:  tipo,
@@ -479,7 +479,7 @@ export async function registrarPremioRuleta(
     })
     if (error) return { ok: false, error: error.message }
     if (!data?.ok) return { ok: false, error: data?.error ?? 'Error al registrar premio' }
-    return { ok: true }
+    return { ok: true, convertido: data?.convertido ?? false, mensaje: data?.mensaje }
   } catch (e: any) {
     return { ok: false, error: e.message }
   }
