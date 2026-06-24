@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Platform, Alert, Image, Animated,
+  TextInput, ActivityIndicator, Platform, Alert, Image,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
@@ -22,13 +22,35 @@ const COLORES_PREMIUM = [
 ]
 
 const AVATARES_LIBRES  = ['👤','🏠','⭐','🦁','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
-// [emoji, animación CSS web]
-const AVATARES_PREMIUM: [string, string][] = [
-  ['🔥','bounce'], ['⚡','flash'],  ['🌈','spin'],   ['🦋','flutter'],
-  ['🐉','roar'],   ['🦄','jump'],   ['👑','shimmer'], ['💫','orbit'],
-  ['🎭','wobble'], ['🌺','sway'],   ['🔮','pulse'],   ['🌊','wave'],
-  ['🏆','bounce'], ['🌙','float'],  ['✨','twinkle'], ['🎸','shake'],
+
+// GIFs animados de Google Noto Emoji (CDN oficial de Google, gratuito)
+// URL: https://fonts.gstatic.com/s/e/notoemoji/latest/{hex}/512.gif
+const NOTO = (hex: string) => `https://fonts.gstatic.com/s/e/notoemoji/latest/${hex}/512.gif`
+
+type AvatarPremium = { emoji: string; gif: string; nombre: string }
+const AVATARES_PREMIUM: AvatarPremium[] = [
+  { emoji: '🔥', gif: NOTO('1f525'), nombre: 'Fuego'       },
+  { emoji: '⚡', gif: NOTO('26a1'),  nombre: 'Rayo'        },
+  { emoji: '🌈', gif: NOTO('1f308'), nombre: 'Arcoíris'    },
+  { emoji: '🦋', gif: NOTO('1f98b'), nombre: 'Mariposa'    },
+  { emoji: '🐉', gif: NOTO('1f409'), nombre: 'Dragón'      },
+  { emoji: '🦄', gif: NOTO('1f984'), nombre: 'Unicornio'   },
+  { emoji: '👑', gif: NOTO('1f451'), nombre: 'Corona'      },
+  { emoji: '💫', gif: NOTO('1f4ab'), nombre: 'Destello'    },
+  { emoji: '🌺', gif: NOTO('1f33a'), nombre: 'Flor'        },
+  { emoji: '🔮', gif: NOTO('1f52e'), nombre: 'Bola mágica' },
+  { emoji: '🌊', gif: NOTO('1f30a'), nombre: 'Ola'         },
+  { emoji: '🏆', gif: NOTO('1f3c6'), nombre: 'Trofeo'      },
+  { emoji: '🌙', gif: NOTO('1f319'), nombre: 'Luna'        },
+  { emoji: '✨', gif: NOTO('2728'),  nombre: 'Brillos'     },
+  { emoji: '🎆', gif: NOTO('1f386'), nombre: 'Fuegos artificiales' },
+  { emoji: '🦅', gif: NOTO('1f985'), nombre: 'Águila'      },
 ]
+
+// Mapa rápido emoji → GIF para el header
+const GIF_MAP: Record<string, string> = Object.fromEntries(
+  AVATARES_PREMIUM.map(a => [a.emoji, a.gif])
+)
 
 function mostrarAlerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
@@ -52,8 +74,6 @@ export default function Perfil() {
   const [avatarEmoji, setAvatarEmoji] = useState('👤')
   const [colorAcento, setColorAcento] = useState('#1a6470')
   const [email, setEmail] = useState('')
-  // Animated value para animaciones nativas (rebota el avatar seleccionado)
-  const animVal = useRef(new Animated.Value(0)).current
   const fileRef = useRef<any>(null)
 
   // Inyectar keyframes CSS para animaciones de avatares premium en web
@@ -82,19 +102,6 @@ export default function Perfil() {
     document.head.appendChild(s)
   }, [])
 
-  // Animación nativa para avatar seleccionado premium (rebote continuo)
-  useEffect(() => {
-    if (Platform.OS === 'web') return
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(animVal, { toValue: -8, duration: 400, useNativeDriver: true }),
-        Animated.timing(animVal, { toValue: 0,  duration: 400, useNativeDriver: true }),
-      ])
-    )
-    if (avatarsDesbloqueados.includes(avatarEmoji)) anim.start()
-    else { anim.stop(); animVal.setValue(0) }
-    return () => anim.stop()
-  }, [avatarEmoji, avatarsDesbloqueados])
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -247,6 +254,15 @@ export default function Perfil() {
         <View style={s.avatarWrap}>
           {avatarMostrado ? (
             <Image source={{ uri: avatarMostrado }} style={s.avatarImg} />
+          ) : GIF_MAP[avatarEmoji] && avatarsDesbloqueados.includes(avatarEmoji) ? (
+            // Avatar premium desbloqueado → GIF animado en el header
+            <View style={[s.avatarEmoji, { backgroundColor: '#1a1200', borderColor: '#c9a84c' }]}>
+              <Image
+                source={{ uri: GIF_MAP[avatarEmoji] }}
+                style={{ width: 66, height: 66 }}
+                resizeMode="contain"
+              />
+            </View>
           ) : (
             <View style={[s.avatarEmoji, { backgroundColor: colorAcento + 'cc' }]}>
               <Text style={s.avatarEmojiText}>{avatarEmoji}</Text>
@@ -341,7 +357,7 @@ export default function Perfil() {
           <Text style={s.premiumTag}>500 💰 c/u</Text>
         </View>
         <View style={s.emojiGrid}>
-          {AVATARES_PREMIUM.map(([e, anim]) => {
+          {AVATARES_PREMIUM.map(({ emoji: e, gif, nombre }) => {
             const desbloqueado = avatarsDesbloqueados.includes(e)
             const seleccionado = avatarEmoji === e && !avatarMostrado
             const enCompra = comprando === e
@@ -361,15 +377,9 @@ export default function Perfil() {
                 }}
                 disabled={enCompra}
               >
-                {/* Emoji con animación web o nativo */}
-                {desbloqueado && Platform.OS === 'web' ? (
-                  <Text style={[s.emojiBtnText, { animation: `av-${anim} ${anim === 'spin' ? '2s linear' : '1.5s ease-in-out'} infinite` } as any]}>
-                    {e}
-                  </Text>
-                ) : desbloqueado && seleccionado ? (
-                  <Animated.Text style={[s.emojiBtnText, { transform: [{ translateY: animVal }] }]}>
-                    {e}
-                  </Animated.Text>
+                {desbloqueado ? (
+                  // GIF animado real de Google Noto Emoji
+                  <Image source={{ uri: gif }} style={{ width: 38, height: 38 }} resizeMode="contain" />
                 ) : (
                   <Text style={s.emojiBtnText}>{e}</Text>
                 )}
