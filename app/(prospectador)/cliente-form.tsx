@@ -320,11 +320,10 @@ export default function ClienteForm() {
 
     setGuardando(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      // getSession() lee del storage local — funciona offline (getUser() hace red y falla)
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
       if (!user) { mostrarError('Error', 'Sesión expirada, vuelve a iniciar sesión.'); return }
-
-      const { data: perfil } = await supabase.from('profiles').select('nombre').eq('id', user.id).single()
-      const nombreProspectador = perfil?.nombre ?? 'Un prospectador'
 
       const esRenta = tipoOperacion === 'renta'
 
@@ -379,6 +378,9 @@ export default function ClienteForm() {
       }
 
       // ── ONLINE: guardar directamente ────────────────────────────
+      const { data: perfil } = await supabase.from('profiles').select('nombre').eq('id', user.id).single()
+      const nombreProspectador = perfil?.nombre ?? 'Un prospectador'
+
       if (esEdicion) {
         const { error } = await supabase.from('clientes').update(payload).eq('id', params.id!)
         if (error) { mostrarError('Error al guardar', error.message); return }
