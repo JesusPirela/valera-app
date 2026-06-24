@@ -32,6 +32,7 @@ type Propiedad = {
   estado: string | null
   destacada: boolean
   destacada_mensaje: string | null
+  destacada_hasta: string | null
   es_constructora: boolean | null
   nombre_constructora: string | null
   recamaras: number | null
@@ -95,6 +96,7 @@ export default function AdminPropiedades() {
   const [modalVisible, setModalVisible] = useState(false)
   const [propSeleccionada, setPropSeleccionada] = useState<Propiedad | null>(null)
   const [mensajeDestacado, setMensajeDestacado] = useState('')
+  const [diasDestacado, setDiasDestacado] = useState<7 | 15 | 30 | 60 | null>(null)
   const [guardandoDestacado, setGuardandoDestacado] = useState(false)
 
   const [role, setRole] = useState<string | null>(null)
@@ -115,7 +117,7 @@ export default function AdminPropiedades() {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, destacada_hasta, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
         .order('created_at', { ascending: false })
         .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
         .limit(1, { referencedTable: 'propiedad_imagenes' })
@@ -204,6 +206,16 @@ export default function AdminPropiedades() {
     })
   }
 
+  // Destacadas siempre al tope (dentro de lo que queda tras filtros y sort)
+  const ahora = Date.now()
+  const estaDestacada = (p: Propiedad) =>
+    p.destacada && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > ahora)
+  propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
+    const aD = estaDestacada(a) ? 1 : 0
+    const bD = estaDestacada(b) ? 1 : 0
+    return bD - aD
+  })
+
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
   useEffect(() => { setVisibleCount(PAGE_WEB) }, [
     busqueda, filtroOperacion, filtroEstado, filtroTipo, ordenPrecio,
@@ -235,6 +247,7 @@ export default function AdminPropiedades() {
   function abrirModalDestacar(prop: Propiedad) {
     setPropSeleccionada(prop)
     setMensajeDestacado('')
+    setDiasDestacado(null)
     setModalVisible(true)
   }
 
@@ -244,16 +257,25 @@ export default function AdminPropiedades() {
     const { error } = await supabase.rpc('destacar_propiedad_manual', {
       p_id: propSeleccionada.id,
       p_mensaje: mensajeDestacado.trim() || null,
+      p_dias: diasDestacado,
     })
     setGuardandoDestacado(false)
     setModalVisible(false)
     if (error) {
       Alert.alert('Error', 'No se pudo destacar la propiedad.')
     } else {
+      const hasta = diasDestacado
+        ? new Date(Date.now() + diasDestacado * 86400_000).toISOString()
+        : null
       setPropiedades((prev) =>
         prev.map((p) =>
           p.id === propSeleccionada.id
-            ? { ...p, destacada: true, destacada_mensaje: mensajeDestacado.trim() || 'El administrador ha destacado esta propiedad como una oportunidad especial.' }
+            ? {
+                ...p,
+                destacada: true,
+                destacada_mensaje: mensajeDestacado.trim() || 'El administrador ha destacado esta propiedad como una oportunidad especial.',
+                destacada_hasta: hasta,
+              }
             : p
         )
       )
@@ -262,7 +284,7 @@ export default function AdminPropiedades() {
 
   async function quitarDestacada(id: string) {
     const { error } = await supabase.rpc('quitar_destacada', { p_id: id })
-    if (!error) setPropiedades((prev) => prev.map((p) => p.id === id ? { ...p, destacada: false, destacada_mensaje: null } : p))
+    if (!error) setPropiedades((prev) => prev.map((p) => p.id === id ? { ...p, destacada: false, destacada_mensaje: null, destacada_hasta: null } : p))
   }
 
   function formatPrecio(precio: number | null) {
@@ -466,6 +488,11 @@ export default function AdminPropiedades() {
           {item.destacada && item.destacada_mensaje ? (
             <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
           ) : null}
+          {item.destacada && item.destacada_hasta ? (
+            <Text style={styles.destacadaHasta}>
+              ⏱ Destacada hasta {new Date(item.destacada_hasta).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </Text>
+          ) : null}
           {item.tipo && (
             <Text style={[styles.cardTipo, { color: c.textMute }]}>
               {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
@@ -594,7 +621,23 @@ export default function AdminPropiedades() {
             <Text style={styles.modalSubtitulo}>
               {propSeleccionada?.codigo} – {propSeleccionada?.titulo}
             </Text>
-            <Text style={[styles.modalLabel, { color: c.textSub }]}>Mensaje para los prospectadores (opcional)</Text>
+            <Text style={[styles.modalLabel, { color: c.textSub }]}>Duración del destacado (opcional)</Text>
+            <View style={styles.duracionRow}>
+              {([null, 7, 15, 30, 60] as const).map((d) => {
+                const label = d === null ? 'Sin límite' : d === 60 ? '2 meses' : `${d} días`
+                const activo = diasDestacado === d
+                return (
+                  <TouchableOpacity
+                    key={String(d)}
+                    style={[styles.duracionChip, activo && styles.duracionChipActivo]}
+                    onPress={() => setDiasDestacado(d)}
+                  >
+                    <Text style={[styles.duracionChipText, activo && styles.duracionChipTextActivo]}>{label}</Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+            <Text style={[styles.modalLabel, { color: c.textSub, marginTop: 12 }]}>Mensaje para los prospectadores (opcional)</Text>
             <TextInput
               style={styles.modalInput}
               placeholder="Ej: Se están agendando muchas citas en esta propiedad..."
@@ -854,6 +897,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f5e07a',
   },
+  destacadaHasta: {
+    fontSize: 11,
+    color: '#9e7a00',
+    marginBottom: 6,
+    fontWeight: '600',
+  },
   cardTipo: { fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '600' },
   constructoraBadge: {
     alignSelf: 'flex-start',
@@ -957,6 +1006,14 @@ const styles = StyleSheet.create({
     minHeight: 80,
     marginBottom: 8,
   },
+  duracionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  duracionChip: {
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1.5, borderColor: '#ccc', backgroundColor: '#f5f5f5',
+  },
+  duracionChipActivo: { borderColor: '#1a6470', backgroundColor: '#e8f4f5' },
+  duracionChipText: { fontSize: 13, color: '#666', fontWeight: '600' },
+  duracionChipTextActivo: { color: '#1a6470' },
   modalHint: { fontSize: 12, color: '#aaa', marginBottom: 20, lineHeight: 17 },
   modalAcciones: { flexDirection: 'row', gap: 10 },
   modalCancelar: {

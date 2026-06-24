@@ -50,6 +50,7 @@ type Propiedad = {
   lng: number | null
   destacada: boolean
   destacada_mensaje: string | null
+  destacada_hasta: string | null
   exclusiva: boolean
   es_constructora: boolean | null
   nombre_constructora: string | null
@@ -174,7 +175,7 @@ export default function ProspectadorPropiedades() {
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -488,6 +489,16 @@ export default function ProspectadorPropiedades() {
     )
   }
 
+  // Destacadas siempre al tope (respetando expiración y sin pisar exclusivas)
+  const _ahora = Date.now()
+  const _estaDestacada = (p: Propiedad) =>
+    p.destacada && !p.exclusiva && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > _ahora)
+  propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
+    const aD = _estaDestacada(a) ? 1 : 0
+    const bD = _estaDestacada(b) ? 1 : 0
+    return bD - aD
+  })
+
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
   useEffect(() => { setVisibleCount(PAGE_WEB) }, [
     busqueda, filtroOperacion, filtroTipo, ordenPrecio, precioMin, precioMax,
@@ -572,7 +583,12 @@ export default function ProspectadorPropiedades() {
         )}
         {item.destacada && !item.exclusiva && (
           <View style={styles.destacadaBanner}>
-            <Text style={styles.destacadaBannerText}>★ Propiedad destacada</Text>
+            <Text style={styles.destacadaBannerText}>
+              ★ Propiedad destacada
+              {item.destacada_hasta
+                ? `  ·  hasta el ${new Date(item.destacada_hasta).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`
+                : ''}
+            </Text>
           </View>
         )}
         <View style={styles.cardBody}>
