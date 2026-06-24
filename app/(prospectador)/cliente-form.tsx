@@ -327,7 +327,9 @@ export default function ClienteForm() {
         estado,
         tipo_operacion: tipoOperacion,
         notas: notas.trim() || null,
-        proximo_contacto: proximoContacto?.toISOString() ?? null,
+        // Solo incluir proximo_contacto si el usuario seleccionó una fecha.
+        // Si está vacío NO escribir null — el trigger de recordatorios gestiona este campo.
+        ...(proximoContacto ? { proximo_contacto: proximoContacto.toISOString() } : {}),
         nivel_interes: nivelInteres,
         // Venta
         email: !esRenta ? email.trim() || null : null,

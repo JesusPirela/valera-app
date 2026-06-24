@@ -399,11 +399,17 @@ export default function CRM() {
 
   function guardarTexto() {
     if (!editCell) return
-    // Para la fecha guardamos al mediodía para que el huso horario no la corra un día
-    const val = editCell.col === 'fecha'
-      ? (editValue.trim() ? `${editValue.trim()}T12:00:00` : null)
-      : editValue.trim()
-    guardarCelda(editCell.id, editCell.col, val)
+    if (editCell.col === 'fecha') {
+      const trimmed = editValue.trim()
+      if (!trimmed) {
+        // Campo vacío → no borrar la fecha; solo cerrar el editor
+        setEditCell(null)
+        return
+      }
+      guardarCelda(editCell.id, editCell.col, `${trimmed}T12:00:00`)
+    } else {
+      guardarCelda(editCell.id, editCell.col, editValue.trim() || null)
+    }
   }
 
   // ── Importar CSV ──────────────────────────────────────────────
