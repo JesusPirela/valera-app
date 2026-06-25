@@ -91,7 +91,9 @@
       "Bash(git branch *)",
       "Bash(ls netlify.toml)",
       "Bash(ls .github/workflows)",
-      "Bash(find . -maxdepth 1 -iname \"*.toml\" -o -maxdepth 1 -iname \"now.json\")"
+      "Bash(find . -maxdepth 1 -iname \"*.toml\" -o -maxdepth 1 -iname \"now.json\")",
+      "Bash(grep -rln \"passive\" node_modules/react-dom/cjs/*.js)",
+      "Bash(grep -rln \"passive\" node_modules/scheduler/cjs/*.js)"
     ],
     "additionalDirectories": [
       "C:\\Users\\carbe\\OneDrive\\Escritorio\\valera_app\\supabase\\_tmp_pending"
