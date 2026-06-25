@@ -543,16 +543,16 @@ export default function DetallePropiedad() {
   // resolución completa al renderizar el PDF, reproduciendo el mismo
   // OutOfMemoryError que se intenta evitar.
   async function imagenABase64(url: string, anchoMax = 1100): Promise<string | null> {
-    const urlOptimizada = thumb(url, { width: anchoMax, quality: 75, resize: 'contain' }) ?? url
     if (Platform.OS === 'web') {
-      // Convertir a base64 en web también: las data-URIs no tienen restricciones
-      // CORS, así html2canvas las renderiza siempre aunque el servidor no devuelva
-      // el header Access-Control-Allow-Origin (que en Supabase render puede fallar).
+      // En web usamos la URL ORIGINAL (/object/public/) para el fetch porque el
+      // endpoint de transformación (/render/image/public/) no devuelve headers CORS,
+      // lo que hace que fetch() con mode:'cors' falle y las imágenes queden en null.
+      // La URL original sí tiene Access-Control-Allow-Origin: * en Supabase.
       for (let intento = 1; intento <= 3; intento++) {
         try {
           const ctrl = new AbortController()
-          const timer = setTimeout(() => ctrl.abort(), 12000)
-          const resp = await fetch(urlOptimizada, { mode: 'cors', signal: ctrl.signal })
+          const timer = setTimeout(() => ctrl.abort(), 15000)
+          const resp = await fetch(url, { mode: 'cors', signal: ctrl.signal })
           clearTimeout(timer)
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
           const blob = await resp.blob()
@@ -563,11 +563,13 @@ export default function DetallePropiedad() {
             reader.readAsDataURL(blob)
           })
         } catch {
-          if (intento < 3) await new Promise((r) => setTimeout(r, 600 * intento))
+          if (intento < 3) await new Promise((r) => setTimeout(r, 800 * intento))
         }
       }
       return null
     }
+    // Nativo: descarga optimizada via thumb() al sistema de archivos
+    const urlOptimizada = thumb(url, { width: anchoMax, quality: 75, resize: 'contain' }) ?? url
     for (let intento = 1; intento <= 3; intento++) {
       try {
         const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'

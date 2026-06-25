@@ -21,7 +21,14 @@ function getMeta(html: string, prop: string): string {
 
 function parseNum(val: unknown): number | null {
   if (val == null) return null
-  const n = parseFloat(String(val).replace(/,/g, ''))
+  const s = String(val).trim().replace(/\s/g, '')
+  // Formato europeo/español: "4.080" o "1.234.567" (punto = miles, coma = decimal)
+  if (/^\d{1,3}(\.\d{3})+(,\d*)?$/.test(s)) {
+    const n = parseFloat(s.replace(/\./g, '').replace(',', '.'))
+    return isNaN(n) ? null : n
+  }
+  // Formato US/MX: coma = miles, punto = decimal
+  const n = parseFloat(s.replace(/,/g, ''))
   return isNaN(n) ? null : n
 }
 
@@ -101,9 +108,20 @@ function normLabel(s: string): string {
     .replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim()
 }
 
+// Strips thousands separators from a raw number string (supports 4.080 and 4,080).
+function stripThousands(s: string): string {
+  if (/^\d{1,3}(\.\d{3})+$/.test(s.trim())) return s.replace(/\./g, '')
+  return s.replace(/,/g, '')
+}
+
 function firstInt(v: unknown): number | null {
   if (v == null) return null
-  const m = String(v).match(/\d{1,5}/)
+  const s = String(v)
+  // Miles con separador punto o coma: "4.080", "4,080", "1.234.567"
+  const th = s.match(/\d{1,3}(?:[,.]\d{3})+/)
+  if (th) return parseInt(th[0].replace(/[,.]/g, ''), 10)
+  // Entero simple
+  const m = s.match(/\d+/)
   return m ? parseInt(m[0], 10) : null
 }
 
@@ -684,8 +702,8 @@ serve(async (req) => {
       const mc = dhtml.match(/construcci[oó]n[\s\S]{0,80}?([\d,.]+)\s*m[²2]/i)
               || dhtml.match(/([\d,.]+)\s*m[²2][\s\S]{0,40}?construcci[oó]n/i)
       if (sp != null) m2 = String(sp)
-      else if (lam) m2 = lam[1].replace(/,/g, '')
-      else if (mc) m2 = mc[1].replace(/,/g, '')
+      else if (lam) m2 = stripThousands(lam[1])
+      else if (mc) m2 = stripThousands(mc[1])
     }
     if (!m2Terreno) {
       const sp = specInt('terreno', 'superficie terreno', 'superficie del terreno', 'sup terreno', 'm terreno')
@@ -694,8 +712,8 @@ serve(async (req) => {
       const mt = dhtml.match(/terreno[\s\S]{0,80}?([\d,.]+)\s*m[²2]/i)
               || dhtml.match(/([\d,.]+)\s*m[²2][\s\S]{0,40}?terreno/i)
       if (sp != null) m2Terreno = String(sp)
-      else if (lot) m2Terreno = lot[1].replace(/,/g, '')
-      else if (mt) m2Terreno = mt[1].replace(/,/g, '')
+      else if (lot) m2Terreno = stripThousands(lot[1])
+      else if (mt) m2Terreno = stripThousands(mt[1])
     }
 
     // ── 9. Precio (orden de prioridad por fiabilidad) ─────────────────────────
