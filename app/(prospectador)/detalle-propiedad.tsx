@@ -543,13 +543,31 @@ export default function DetallePropiedad() {
   // resolución completa al renderizar el PDF, reproduciendo el mismo
   // OutOfMemoryError que se intenta evitar.
   async function imagenABase64(url: string, anchoMax = 1100): Promise<string | null> {
-    if (Platform.OS === 'web') {
-      // Evita usar una versión en caché sin cabeceras CORS, que html2canvas
-      // no puede leer y renderiza como un recuadro en blanco.
-      const sep = url.includes('?') ? '&' : '?'
-      return `${url}${sep}_cb=${Date.now()}`
-    }
     const urlOptimizada = thumb(url, { width: anchoMax, quality: 75, resize: 'contain' }) ?? url
+    if (Platform.OS === 'web') {
+      // Convertir a base64 en web también: las data-URIs no tienen restricciones
+      // CORS, así html2canvas las renderiza siempre aunque el servidor no devuelva
+      // el header Access-Control-Allow-Origin (que en Supabase render puede fallar).
+      for (let intento = 1; intento <= 3; intento++) {
+        try {
+          const ctrl = new AbortController()
+          const timer = setTimeout(() => ctrl.abort(), 12000)
+          const resp = await fetch(urlOptimizada, { mode: 'cors', signal: ctrl.signal })
+          clearTimeout(timer)
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+          const blob = await resp.blob()
+          return await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result as string)
+            reader.onerror = reject
+            reader.readAsDataURL(blob)
+          })
+        } catch {
+          if (intento < 3) await new Promise((r) => setTimeout(r, 600 * intento))
+        }
+      }
+      return null
+    }
     for (let intento = 1; intento <= 3; intento++) {
       try {
         const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
@@ -732,7 +750,8 @@ export default function DetallePropiedad() {
             setTimeout(resolve, 8000)
           })
           const canvas = await html2canvas(container, {
-            useCORS: true,
+            useCORS: false,
+            allowTaint: true,
             scale: 2,
             width: 800,
             windowWidth: 800,
