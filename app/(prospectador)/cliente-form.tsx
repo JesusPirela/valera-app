@@ -204,9 +204,7 @@ export default function ClienteForm() {
   const fromAdmin = params.fromAdmin === '1'
 
   function irAtras() {
-    if (router.canGoBack()) {
-      router.back()
-    } else if (esEdicion) {
+    if (esEdicion) {
       router.replace(((fromAdmin ? '/(admin)/detalle-cliente?id=' : '/(prospectador)/detalle-cliente?id=') + params.id) as any)
     } else {
       router.replace((fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm') as any)

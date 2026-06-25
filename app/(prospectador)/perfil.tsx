@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, memo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Platform, Alert, Image,
@@ -23,9 +23,8 @@ const COLORES_PREMIUM = [
 
 const AVATARES_LIBRES  = ['👤','🏠','⭐','🦁','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
 
-// GIFs animados de Google Noto Emoji (CDN oficial de Google, gratuito)
-// URL: https://fonts.gstatic.com/s/e/notoemoji/latest/{hex}/512.gif
-const NOTO = (hex: string) => `https://fonts.gstatic.com/s/e/notoemoji/latest/${hex}/512.gif`
+// GIFs animados de Google Noto Emoji — usamos 64px para carga rápida en móvil
+const NOTO = (hex: string) => `https://fonts.gstatic.com/s/e/notoemoji/latest/${hex}/64.gif`
 
 type AvatarPremium = { emoji: string; gif: string; nombre: string }
 const AVATARES_PREMIUM: AvatarPremium[] = [
@@ -56,6 +55,69 @@ function mostrarAlerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
   else Alert.alert('Aviso', msg)
 }
+
+type AvatarGridProps = {
+  avatarsDesbloqueados: string[]
+  avatarEmoji: string
+  avatarMostrado: string | null
+  comprando: string | null
+  gifsFallidos: Set<string>
+  seleccionarEmoji: (e: string) => void
+  comprarItem: (tipo: string, valor: string) => void
+  onGifError: (e: string) => void
+}
+const AvatarGrid = memo(function AvatarGrid({
+  avatarsDesbloqueados, avatarEmoji, avatarMostrado, comprando,
+  gifsFallidos, seleccionarEmoji, comprarItem, onGifError,
+}: AvatarGridProps) {
+  return (
+    <View style={s.emojiGrid}>
+      {AVATARES_PREMIUM.map(({ emoji: e, gif, nombre }) => {
+        const desbloqueado = avatarsDesbloqueados.includes(e)
+        const seleccionado = avatarEmoji === e && !avatarMostrado
+        const enCompra = comprando === e
+        return (
+          <TouchableOpacity
+            key={e}
+            style={[
+              s.emojiBtn,
+              desbloqueado
+                ? { backgroundColor: '#1a1200', borderColor: '#c9a84c88' }
+                : { backgroundColor: '#f5f5f5', borderColor: '#ddd', opacity: 0.6 },
+              seleccionado && desbloqueado && { borderColor: '#c9a84c', borderWidth: 3 },
+            ]}
+            onPress={() => {
+              if (desbloqueado) { seleccionarEmoji(e); return }
+              comprarItem('avatar', e)
+            }}
+            disabled={enCompra}
+          >
+            {desbloqueado && !gifsFallidos.has(e) ? (
+              <Image
+                source={{ uri: gif }}
+                style={{ width: 38, height: 38 }}
+                resizeMode="contain"
+                onError={() => onGifError(e)}
+              />
+            ) : (
+              <Text style={s.emojiBtnText}>{e}</Text>
+            )}
+            {enCompra && (
+              <View style={s.lockOverlay}>
+                <ActivityIndicator size="small" color="#c9a84c" />
+              </View>
+            )}
+            {!desbloqueado && !enCompra && (
+              <View style={s.lockOverlay}>
+                <Text style={s.lockIcon}>🔒</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )
+      })}
+    </View>
+  )
+})
 
 export default function Perfil() {
   const { setPrimaryColor, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap } = useTheme()
@@ -244,6 +306,10 @@ export default function Perfil() {
     setAvatarUrl(null)
   }
 
+  const handleGifError = useCallback((e: string) => {
+    setGifsFallidos(prev => new Set([...prev, e]))
+  }, [])
+
   const avatarMostrado = avatarUrl ?? null
 
   if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
@@ -357,51 +423,16 @@ export default function Perfil() {
           <Text style={s.premiumLabel}>✨ Avatares animados</Text>
           <Text style={s.premiumTag}>500 💰 c/u</Text>
         </View>
-        <View style={s.emojiGrid}>
-          {AVATARES_PREMIUM.map(({ emoji: e, gif, nombre }) => {
-            const desbloqueado = avatarsDesbloqueados.includes(e)
-            const seleccionado = avatarEmoji === e && !avatarMostrado
-            const enCompra = comprando === e
-            return (
-              <TouchableOpacity
-                key={e}
-                style={[
-                  s.emojiBtn,
-                  desbloqueado
-                    ? { backgroundColor: '#1a1200', borderColor: '#c9a84c88' }
-                    : { backgroundColor: c.card, borderColor: c.border, opacity: 0.6 },
-                  seleccionado && desbloqueado && { borderColor: '#c9a84c', borderWidth: 3 },
-                ]}
-                onPress={() => {
-                  if (desbloqueado) { seleccionarEmoji(e); return }
-                  comprarItem('avatar', e)
-                }}
-                disabled={enCompra}
-              >
-                {desbloqueado && !gifsFallidos.has(e) ? (
-                  <Image
-                    source={{ uri: gif }}
-                    style={{ width: 38, height: 38 }}
-                    resizeMode="contain"
-                    onError={() => setGifsFallidos(prev => new Set([...prev, e]))}
-                  />
-                ) : (
-                  <Text style={s.emojiBtnText}>{e}</Text>
-                )}
-                {enCompra && (
-                  <View style={s.lockOverlay}>
-                    <ActivityIndicator size="small" color="#c9a84c" />
-                  </View>
-                )}
-                {!desbloqueado && !enCompra && (
-                  <View style={s.lockOverlay}>
-                    <Text style={s.lockIcon}>🔒</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            )
-          })}
-        </View>
+        <AvatarGrid
+          avatarsDesbloqueados={avatarsDesbloqueados}
+          avatarEmoji={avatarEmoji}
+          avatarMostrado={avatarMostrado}
+          comprando={comprando}
+          gifsFallidos={gifsFallidos}
+          seleccionarEmoji={seleccionarEmoji}
+          comprarItem={comprarItem}
+          onGifError={handleGifError}
+        />
 
         {/* Subir foto — funciona en web y nativo */}
         <Text style={s.label}>O sube tu foto de perfil</Text>
