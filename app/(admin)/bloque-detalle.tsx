@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  TextInput, Switch,
+  TextInput,
 } from 'react-native'
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -125,12 +125,12 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo,
   const st = statusConfig(u.actividad_total, maxActividad)
   const pct = maxActividad > 0 ? u.actividad_total / maxActividad : 0
   const horas = Math.floor(u.minutos_conexion / 60), mins = u.minutos_conexion % 60
-  const hoy = hoyISO()
-  const contestoHoy = u.contesto_fecha === hoy && u.contesto_ok
+  const contestoHoy = u.contesto_fecha === hoyISO() && u.contesto_ok
   const notaCambio = notaEdit !== (u.notas_bloque ?? '')
 
   return (
     <View style={uS.card}>
+      {/* ── Header (toca para expandir métricas) ── */}
       <TouchableOpacity style={uS.header} onPress={onToggle} activeOpacity={0.8}>
         <View style={[uS.rankBadge, rank <= 3 ? uS.rankTop : null]}>
           <Text style={[uS.rankTxt, rank <= 3 ? uS.rankTopTxt : null]}>#{rank}</Text>
@@ -152,52 +152,60 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo,
         <View style={[uS.barFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: st.color }]} />
       </View>
 
+      {/* ── Feedback strip — siempre visible ── */}
+      <View style={uS.feedbackStrip}>
+        {/* ¿Contestó hoy? — botones Sí / No */}
+        {periodo === '24h' && (
+          <View style={uS.contestoGroup}>
+            <Text style={uS.contestoLbl}>¿Hoy?</Text>
+            {contestoGuardando
+              ? <ActivityIndicator size="small" color="#2ecc71" style={{ marginHorizontal: 4 }} />
+              : <>
+                  <TouchableOpacity
+                    style={[uS.contestoBtn, contestoHoy && uS.contestoBtnSi]}
+                    onPress={() => { if (!contestoHoy) onToggleContesto() }}
+                  >
+                    <Text style={[uS.contestoBtnTxt, contestoHoy && uS.contestoBtnTxtSi]}>✓ Sí</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[uS.contestoBtn, !contestoHoy && uS.contestoBtnNo]}
+                    onPress={() => { if (contestoHoy) onToggleContesto() }}
+                  >
+                    <Text style={[uS.contestoBtnTxt, !contestoHoy && uS.contestoBtnTxtNo]}>✗ No</Text>
+                  </TouchableOpacity>
+                </>}
+          </View>
+        )}
+
+        {/* Nota inline */}
+        <View style={uS.notaInlineWrap}>
+          <TextInput
+            style={uS.notaInline}
+            placeholder="Nota..."
+            placeholderTextColor="#3a5468"
+            value={notaEdit}
+            onChangeText={onNotaChange}
+            onBlur={() => { if (notaCambio) onNotaGuardar() }}
+            returnKeyType="done"
+            onSubmitEditing={() => { if (notaCambio) onNotaGuardar() }}
+          />
+          {notaCambio && (
+            <TouchableOpacity
+              style={[uS.notaSaveBtn, { opacity: notaGuardando ? 0.5 : 1 }]}
+              onPress={onNotaGuardar}
+              disabled={notaGuardando}
+            >
+              {notaGuardando
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={uS.notaSaveTxt}>✓</Text>}
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* ── Detalle expandido — solo métricas (como antes) ── */}
       {expanded && (
         <View style={uS.detail}>
-          {/* ¿Contestó hoy? — solo en período Hoy */}
-          {periodo === '24h' && (
-            <View style={uS.contestoRow}>
-              <Text style={uS.contestoLbl}>¿Contestó hoy?</Text>
-              {contestoGuardando
-                ? <ActivityIndicator size="small" color="#2ecc71" />
-                : <Switch
-                    value={contestoHoy}
-                    onValueChange={onToggleContesto}
-                    trackColor={{ false: '#1e3448', true: '#2e7d3288' }}
-                    thumbColor={contestoHoy ? '#2ecc71' : '#556a7a'}
-                  />}
-              {contestoHoy && <Text style={uS.contestoBadge}>✅ Sí</Text>}
-              {!contestoHoy && u.contesto_fecha && (
-                <Text style={uS.contestoFecha}>Último: {u.contesto_fecha}</Text>
-              )}
-            </View>
-          )}
-
-          {/* Notas */}
-          <View style={uS.notaWrap}>
-            <TextInput
-              style={uS.notaInput}
-              placeholder="Nota sobre este usuario..."
-              placeholderTextColor="#556a7a"
-              value={notaEdit}
-              onChangeText={onNotaChange}
-              multiline
-              numberOfLines={2}
-              onBlur={() => { if (notaCambio) onNotaGuardar() }}
-            />
-            {notaCambio && (
-              <TouchableOpacity
-                style={[uS.notaBtn, { opacity: notaGuardando ? 0.5 : 1 }]}
-                onPress={onNotaGuardar}
-                disabled={notaGuardando}
-              >
-                {notaGuardando
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={uS.notaBtnTxt}>Guardar nota</Text>}
-              </TouchableOpacity>
-            )}
-          </View>
-
           <View style={uS.detailGrid}>
             <View style={uS.detailCol}>
               <MetricRow icono="👥" label="Clientes nuevos"     valor={u.clientes_nuevos}        color="#1a6470" />
@@ -252,6 +260,35 @@ const uS = StyleSheet.create({
   qmLbl:      { fontSize: 9, color: '#556a7a', marginTop: 1 },
   barBg:      { height: 3, backgroundColor: '#1e3448' },
   barFill:    { height: 3 },
+
+  // Feedback strip — siempre visible debajo del header
+  feedbackStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderTopWidth: 1, borderTopColor: '#182636',
+    backgroundColor: '#0d1b2a',
+  },
+  contestoGroup: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  contestoLbl:   { fontSize: 11, color: '#556a7a', fontWeight: '600', marginRight: 2 },
+  contestoBtn:   { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#2a475e' },
+  contestoBtnSi: { backgroundColor: '#1a3d1a', borderColor: '#2ecc71' },
+  contestoBtnNo: { backgroundColor: '#2a1a1a', borderColor: '#e74c3c' },
+  contestoBtnTxt:    { fontSize: 11, fontWeight: '700', color: '#556a7a' },
+  contestoBtnTxtSi:  { color: '#2ecc71' },
+  contestoBtnTxtNo:  { color: '#e74c3c' },
+
+  notaInlineWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  notaInline: {
+    flex: 1, height: 28, paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: '#111f2e', borderWidth: 1, borderColor: '#1e3448',
+    borderRadius: 6, fontSize: 12, color: '#c0d0dc',
+  },
+  notaSaveBtn: {
+    width: 28, height: 28, backgroundColor: '#1a6470', borderRadius: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  notaSaveTxt: { color: '#fff', fontSize: 14, fontWeight: '900' },
+
   detail:     { padding: 14, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#1e3448' },
   detailGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   detailCol:  { flex: 1 },
@@ -262,24 +299,6 @@ const uS = StyleSheet.create({
   scoreRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   scoreLbl:   { fontSize: 12, fontWeight: '700' },
   scoreVal:   { fontSize: 20, fontWeight: '900' },
-
-  contestoRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, backgroundColor: '#0d1b2a', borderRadius: 8, padding: 8 },
-  contestoLbl:  { fontSize: 13, fontWeight: '600', color: '#c0d0dc', flex: 1 },
-  contestoBadge:{ fontSize: 12, fontWeight: '700', color: '#2ecc71' },
-  contestoFecha:{ fontSize: 11, color: '#556a7a', fontStyle: 'italic' },
-
-  notaWrap: { marginBottom: 12 },
-  notaInput: {
-    borderWidth: 1, borderColor: '#1e3448', borderRadius: 8, padding: 8,
-    fontSize: 13, color: '#c0d0dc', backgroundColor: '#0d1b2a',
-    minHeight: 52, textAlignVertical: 'top',
-  },
-  notaBtn: {
-    marginTop: 6, backgroundColor: '#1a6470', borderRadius: 8,
-    paddingVertical: 7, paddingHorizontal: 14, alignSelf: 'flex-end',
-    alignItems: 'center', justifyContent: 'center', minWidth: 110,
-  },
-  notaBtnTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
 })
 
 // ── Pantalla ────────────────────────────────────────────────────────────────
