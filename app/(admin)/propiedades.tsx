@@ -201,6 +201,12 @@ export default function AdminPropiedades() {
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroEstado) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.estado === filtroEstado)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
+  // Base para las sugerencias de "Contacto responsable": antes de aplicar el
+  // propio filtro de contacto, pero después de los demás filtros activos. Así
+  // un chip sugerido siempre tiene al menos 1 resultado al hacer clic — antes
+  // se construían desde TODAS las propiedades sin filtrar, así que un chip
+  // podía no tener ninguna coincidencia dentro de lo que ya estaba filtrado.
+  const propiedadesParaSugerenciasContacto = propiedadesFiltradas
   if (busquedaContacto.trim()) {
     const qc = normalizar(busquedaContacto.trim())
     propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
@@ -435,14 +441,13 @@ export default function AdminPropiedades() {
             // Sugerencias: etiquetas únicas que coinciden con el texto escrito
             const qc = normalizar(busquedaContacto.trim())
             const labels = new Set<string>()
-            propiedades.filter(p => !p.es_inventario).forEach(p => {
+            propiedadesParaSugerenciasContacto.forEach(p => {
               const l = contactoLabel(p)
               if (l) labels.add(l)
             })
             const sugerencias = Array.from(labels)
               .filter(l => !qc || normalizar(l).includes(qc))
               .sort()
-              .slice(0, 12)
             return (
               <>
                 <Text style={[styles.filtroLabel, { color: c.textMute }]}>Contacto responsable</Text>
