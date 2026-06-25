@@ -290,6 +290,7 @@ export default function RootLayout() {
     if (loading) return
     if (pathnameRef.current.startsWith('/ficha')) return  // ruta pública, sin auth
     if (!session) {
+      if (accountSwitch.pending) return  // cambio de cuenta en progreso — no ir al login
       router.replace('/(auth)/login')
       return
     }

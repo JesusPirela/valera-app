@@ -105,9 +105,7 @@ export async function cambiarACuenta(
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'Error desconocido', tokenVencido: false }
   } finally {
-    // Limpiar el flag un tick después para que el handler de SIGNED_OUT
-    // ya lo haya leído antes de que lo borremos.
-    setTimeout(() => { accountSwitch.pending = false }, 500)
+    setTimeout(() => { accountSwitch.pending = false }, 3000)
   }
 }
 
@@ -152,15 +150,18 @@ export async function cambiarACuentaConPassword(
 ): Promise<{ ok: boolean; error?: string }> {
   accountSwitch.pending = true
   try {
-    const { error } = await supabase.auth.signInWithPassword({
-      email: target.email,
-      password,
-    })
-    if (error) return { ok: false, error: error.message }
+    const timeoutMs = 10_000
+    const result = await Promise.race([
+      supabase.auth.signInWithPassword({ email: target.email, password }),
+      new Promise<{ error: Error }>((_, reject) =>
+        setTimeout(() => reject(new Error('Tiempo de espera agotado. Verifica tu conexión.')), timeoutMs)
+      ),
+    ]) as Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>
+    if (result.error) return { ok: false, error: result.error.message }
     return { ok: true }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'Error desconocido' }
   } finally {
-    setTimeout(() => { accountSwitch.pending = false }, 500)
+    setTimeout(() => { accountSwitch.pending = false }, 3000)
   }
 }

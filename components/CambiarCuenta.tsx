@@ -133,7 +133,21 @@ export default function CambiarCuenta() {
     if (!email || !pass) return
     setAgregandoLoad(true)
     accountSwitch.pending = true
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
+    let data: any, error: any
+    try {
+      const result = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password: pass }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Tiempo de espera agotado. Verifica tu conexión.')), 10_000)
+        ),
+      ]) as Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>
+      data = result.data; error = result.error
+    } catch (e: any) {
+      setAgregandoLoad(false)
+      accountSwitch.pending = false
+      Platform.OS === 'web' ? window.alert(e.message) : Alert.alert('Error', e.message)
+      return
+    }
     setAgregandoLoad(false)
     if (error || !data.session) {
       accountSwitch.pending = false
@@ -165,6 +179,8 @@ export default function CambiarCuenta() {
             placeholder="Contraseña"
             placeholderTextColor={c.placeholder}
             secureTextEntry
+            autoComplete="current-password"
+            textContentType="password"
             value={password}
             onChangeText={setPassword}
             autoFocus
@@ -250,6 +266,8 @@ export default function CambiarCuenta() {
             placeholder="Contraseña"
             placeholderTextColor={c.placeholder}
             secureTextEntry
+            autoComplete="current-password"
+            textContentType="password"
             value={nuevoPass}
             onChangeText={setNuevoPass}
             onSubmitEditing={agregarCuenta}
