@@ -542,17 +542,38 @@ export default function DetallePropiedad() {
   // falle para que el WebView de Android tenga que decodificarla a
   // resolución completa al renderizar el PDF, reproduciendo el mismo
   // OutOfMemoryError que se intenta evitar.
-  async function imagenABase64(url: string, anchoMax = 1100): Promise<string | null> {
+  async function imagenABase64(url: string, _anchoMax = 1100): Promise<string | null> {
     if (Platform.OS === 'web') {
-      // En web usamos la URL ORIGINAL (/object/public/) para el fetch porque el
-      // endpoint de transformación (/render/image/public/) no devuelve headers CORS,
-      // lo que hace que fetch() con mode:'cors' falle y las imágenes queden en null.
-      // La URL original sí tiene Access-Control-Allow-Origin: * en Supabase.
+      // Estrategia web: descargar via Supabase Storage JS client (incluye auth header
+      // automáticamente) → FileReader → data URI. Esto evita problemas de CORS con
+      // el endpoint /render/image/public/ y funciona tanto para buckets públicos
+      // como para objetos que requieren autenticación.
+      // Extrae bucket y path de la URL de Supabase Storage.
+      const storageMatch = url.match(/\/storage\/v1\/object\/(?:public|authenticated)\/([^/?#]+)\/(.+?)(?:\?.*)?$/)
+      if (storageMatch) {
+        const [, bucket, path] = storageMatch
+        for (let intento = 1; intento <= 3; intento++) {
+          try {
+            const { data, error } = await supabase.storage.from(bucket).download(path)
+            if (error || !data) throw new Error(error?.message ?? 'sin datos')
+            return await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onloadend = () => resolve(reader.result as string)
+              reader.onerror = reject
+              reader.readAsDataURL(data)
+            })
+          } catch {
+            if (intento < 3) await new Promise((r) => setTimeout(r, 800 * intento))
+          }
+        }
+        return null
+      }
+      // Fallback para URLs externas (e.g. Google Maps static, logos de inmobiliarias)
       for (let intento = 1; intento <= 3; intento++) {
         try {
           const ctrl = new AbortController()
           const timer = setTimeout(() => ctrl.abort(), 15000)
-          const resp = await fetch(url, { mode: 'cors', signal: ctrl.signal })
+          const resp = await fetch(url, { signal: ctrl.signal })
           clearTimeout(timer)
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
           const blob = await resp.blob()
@@ -569,7 +590,7 @@ export default function DetallePropiedad() {
       return null
     }
     // Nativo: descarga optimizada via thumb() al sistema de archivos
-    const urlOptimizada = thumb(url, { width: anchoMax, quality: 75, resize: 'contain' }) ?? url
+    const urlOptimizada = thumb(url, { width: _anchoMax, quality: 75, resize: 'contain' }) ?? url
     for (let intento = 1; intento <= 3; intento++) {
       try {
         const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
