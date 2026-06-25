@@ -3,11 +3,6 @@ import {
   View, Text, TextInput, StyleSheet, ScrollView,
   TouchableOpacity, ActivityIndicator, Alert, Modal, Platform,
 } from 'react-native'
-
-function mostrarError(titulo: string, msg: string) {
-  if (Platform.OS === 'web') window.alert(`${titulo}: ${msg}`)
-  else Alert.alert(titulo, msg)
-}
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
@@ -16,6 +11,11 @@ import { registrarAccion } from '../../lib/gamification'
 import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueClienteUpdate, enqueueClienteCreate, genUUID } from '../../lib/offline-queue'
 import { useQueryClient } from '@tanstack/react-query'
+
+function mostrarError(titulo: string, msg: string) {
+  if (Platform.OS === 'web') window.alert(`${titulo}: ${msg}`)
+  else Alert.alert(titulo, msg)
+}
 
 // ── Fuentes de lead ──────────────────────────────────────
 const FUENTES = [

@@ -94,8 +94,10 @@ export default function Bloques() {
   async function guardarNota(userId: string) {
     const nota = (notasEdit[userId] ?? '').trim()
     setNotasGuardando(prev => new Set([...prev, userId]))
-    await supabase.rpc('guardar_nota_bloque', { p_user_id: userId, p_nota: nota })
-    setUsuarios(prev => prev.map(u => u.user_id === userId ? { ...u, notas_bloque: nota || null } : u))
+    const { error } = await supabase.rpc('guardar_nota_bloque', { p_user_id: userId, p_nota: nota })
+    if (!error) {
+      setUsuarios(prev => prev.map(u => u.user_id === userId ? { ...u, notas_bloque: nota || null } : u))
+    }
     setNotasGuardando(prev => { const n = new Set(prev); n.delete(userId); return n })
   }
 
@@ -105,7 +107,12 @@ export default function Bloques() {
     setUsuarios(prev => prev.map(u =>
       u.user_id === userId ? { ...u, contesto_ok: nuevoValor, contesto_fecha: nuevoValor ? hoyISO() : null } : u
     ))
-    await supabase.rpc('marcar_contesto_hoy', { p_user_id: userId, p_ok: nuevoValor })
+    const { error } = await supabase.rpc('marcar_contesto_hoy', { p_user_id: userId, p_ok: nuevoValor })
+    if (error) {
+      setUsuarios(prev => prev.map(u =>
+        u.user_id === userId ? { ...u, contesto_ok: valorActual, contesto_fecha: valorActual ? hoyISO() : null } : u
+      ))
+    }
     setContesoGuardando(prev => { const n = new Set(prev); n.delete(userId); return n })
   }
 
