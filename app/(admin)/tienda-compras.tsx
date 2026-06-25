@@ -1,8 +1,32 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Modal, TextInput, Alert, Platform,
+  ActivityIndicator, Modal, TextInput, Alert, Platform, Image,
 } from 'react-native'
+
+const AVATARES_PREMIUM = [
+  { emoji: '🔥', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/512.gif' },
+  { emoji: '⚡', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/26a1/512.gif'  },
+  { emoji: '🌈', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f308/512.gif' },
+  { emoji: '🦋', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f98b/512.gif' },
+  { emoji: '🐉', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f409/512.gif' },
+  { emoji: '🦄', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f984/512.gif' },
+  { emoji: '👑', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f451/512.gif' },
+  { emoji: '💫', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f4ab/512.gif' },
+  { emoji: '🌸', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f338/512.gif' },
+  { emoji: '🔮', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f52e/512.gif' },
+  { emoji: '🌊', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f30a/512.gif' },
+  { emoji: '🏆', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f3c6/512.gif' },
+  { emoji: '🎉', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f389/512.gif' },
+  { emoji: '✨', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/2728/512.gif'  },
+  { emoji: '🦁', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f981/512.gif' },
+  { emoji: '🐺', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f43a/512.gif' },
+]
+const COLORES_PREMIUM = [
+  '#c2185b','#e64a19','#00838f','#558b2f',
+  '#283593','#ff6f00','#006064','#4a148c',
+  '#37474f','#1b5e20','#880e4f','#bf360c',
+]
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
@@ -57,6 +81,7 @@ export default function TiendaCompras() {
   const [modal, setModal]           = useState(false)
   const [seleccionada, setSeleccionada] = useState<Compra | null>(null)
   const [mensaje, setMensaje]       = useState('')
+  const [valorItem, setValorItem]   = useState('')   // emoji o color a desbloquear
   const [enviando, setEnviando]     = useState(false)
 
   // Mini-form de lead
@@ -95,14 +120,23 @@ export default function TiendaCompras() {
   async function entregar() {
     if (!seleccionada) return
     if (!mensaje.trim()) { alerta('Escribe un mensaje para el usuario.'); return }
+    const esAvatarOColor = seleccionada.item_tipo === 'pack_avatar' || seleccionada.item_tipo === 'pack_color'
+    if (esAvatarOColor && !valorItem) {
+      alerta(seleccionada.item_tipo === 'pack_avatar'
+        ? 'Selecciona el avatar animado a desbloquear.'
+        : 'Selecciona el color premium a desbloquear.')
+      return
+    }
     setEnviando(true)
     const { error } = await supabase.rpc('admin_entregar_recompensa', {
       p_compra_id: seleccionada.id,
       p_user_id:   seleccionada.user_id,
       p_mensaje:   mensaje.trim(),
+      p_valor:     esAvatarOColor ? valorItem : null,
     })
     setEnviando(false)
     if (error) { alerta('Error: ' + error.message); return }
+    setValorItem('')
     setModal(false)
     cargar()
   }
@@ -266,7 +300,7 @@ export default function TiendaCompras() {
       </ScrollView>
 
       {/* Modal de atención */}
-      <Modal visible={modal} animationType="slide" transparent onRequestClose={() => setModal(false)}>
+      <Modal visible={modal} animationType="slide" transparent onRequestClose={() => { setValorItem(''); setModal(false) }}>
         <View style={s.modalOverlay}>
           <ScrollView style={[s.modalSheet, { backgroundColor: c.card }]} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
             {seleccionada && (
@@ -322,6 +356,57 @@ export default function TiendaCompras() {
                   </View>
                 )}
 
+                {/* Picker de avatar animado */}
+                {seleccionada.item_tipo === 'pack_avatar' && (
+                  <View style={s.seccion}>
+                    <Text style={[s.seccionTitle, { color: c.text }]}>✨ Elige el avatar a desbloquear *</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
+                      {AVATARES_PREMIUM.map(av => (
+                        <TouchableOpacity
+                          key={av.emoji}
+                          onPress={() => setValorItem(av.emoji)}
+                          style={{
+                            width: 54, height: 54, borderRadius: 12,
+                            borderWidth: valorItem === av.emoji ? 3 : 1.5,
+                            borderColor: valorItem === av.emoji ? '#c9a84c' : '#ccc',
+                            alignItems: 'center', justifyContent: 'center',
+                            backgroundColor: valorItem === av.emoji ? '#fff8e1' : '#f5f5f5',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <Image source={{ uri: av.gif }} style={{ width: 40, height: 40 }} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {valorItem ? <Text style={{ marginTop: 8, color: '#1a6470', fontWeight: '700' }}>Seleccionado: {valorItem}</Text> : null}
+                  </View>
+                )}
+
+                {/* Picker de color premium */}
+                {seleccionada.item_tipo === 'pack_color' && (
+                  <View style={s.seccion}>
+                    <Text style={[s.seccionTitle, { color: c.text }]}>🎨 Elige el color a desbloquear *</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
+                      {COLORES_PREMIUM.map(color => (
+                        <TouchableOpacity
+                          key={color}
+                          onPress={() => setValorItem(color)}
+                          style={{
+                            width: 44, height: 44, borderRadius: 22,
+                            backgroundColor: color,
+                            borderWidth: valorItem === color ? 4 : 1.5,
+                            borderColor: valorItem === color ? '#c9a84c' : '#ccc',
+                            alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >
+                          {valorItem === color && <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>✓</Text>}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {valorItem ? <Text style={{ marginTop: 8, color: '#1a6470', fontWeight: '700' }}>Seleccionado: {valorItem}</Text> : null}
+                  </View>
+                )}
+
                 {/* Enviar notificación */}
                 <View style={s.seccion}>
                   <Text style={[s.seccionTitle, { color: c.text }]}>💬 Mensaje para el usuario</Text>
@@ -345,7 +430,7 @@ export default function TiendaCompras() {
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity style={s.btnCancelar} onPress={() => setModal(false)}>
+                <TouchableOpacity style={s.btnCancelar} onPress={() => { setValorItem(''); setModal(false) }}>
                   <Text style={s.btnCancelarTxt}>Cancelar</Text>
                 </TouchableOpacity>
               </>
