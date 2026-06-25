@@ -482,6 +482,52 @@ serve(async (req) => {
       }
     }
 
+    // ── 0d. Inmobay — tipo/operación desde slug + __NEXT_DATA__ ─────────────────
+    if (/inmobay\.com/i.test(url)) {
+      // Slug contiene tipo y operación siempre (ej: "terreno-en-venta-hacienda-...")
+      const slugMatch = url.match(/\/(?:propiedad|property)\/([^/?#]+)/i)
+      if (slugMatch) {
+        const slugWords = slugMatch[1].replace(/-/g, ' ')
+        if (!tipo) tipo = mapTipo(slugWords)
+        if (!operacion) operacion = mapOp(slugWords)
+        if (!zona) {
+          if (/quer[eé]taro|queretaro/.test(slugMatch[1])) zona = 'queretaro'
+          else if (/monterrey|nuevo[\s-]?leon/.test(slugMatch[1])) zona = 'monterrey'
+          else if (/puebla/.test(slugMatch[1])) zona = 'puebla'
+        }
+      }
+      // __NEXT_DATA__ si el sitio usa Next.js (datos embebidos en el HTML)
+      const nd = extractNextData(html)
+      if (nd) {
+        const pn = findPropertyNode(nd)
+        if (pn) {
+          if (!titulo && (pn.titulo ?? pn.title)) titulo = String(pn.titulo ?? pn.title)
+          if (!descripcion && pn.description) descripcion = htmlText(String(pn.description))
+          const sp = parseNum(pn.precio ?? pn.price ?? pn.precio_venta ?? pn.sale_price)
+          if (sp && !precio) { precio = String(Math.round(sp)); operacion = operacion ?? 'venta' }
+          const beds = parseNum(pn.recamaras ?? pn.bedrooms ?? pn.habitaciones)
+          if (beds != null && recamaras === null) recamaras = cap(beds, 5)
+          const bths = parseNum(pn.banos ?? pn.bathrooms ?? pn.banos_completos)
+          if (bths != null && banos === null) banos = cap(bths, 4)
+          const est = parseNum(pn.estacionamientos ?? pn.parking ?? pn.garage)
+          if (est != null && estacionamientos === null) estacionamientos = cap(est, 3)
+          const m2c = parseNum(pn.m2 ?? pn.area ?? pn.superficie_construida ?? pn.construccion)
+          if (m2c && !m2) m2 = String(Math.round(m2c))
+          const m2t = parseNum(pn.m2_terreno ?? pn.lot_size ?? pn.terreno)
+          if (m2t && !m2Terreno) m2Terreno = String(Math.round(m2t))
+        }
+      }
+      // Imágenes: patrón amplio para cualquier ruta de Inmobay (CDN puede variar)
+      if (!imagenes.length) {
+        const inm: string[] = []
+        for (const m of html.matchAll(/https?:\/\/[^\s"'<>]+inmobay\.com\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi)) {
+          const u = m[0].split('?')[0]
+          if (!inm.includes(u)) inm.push(u)
+        }
+        if (inm.length) imagenes = inm.slice(0, 30)
+      }
+    }
+
     // ── 1. EasyBroker: JSON embebido HTML-encoded ─────────────────────────────
     // Patrón: {"Property ID":"EB-XXXX","Bedrooms":N,...}
     const ebMatch = html.match(/\{[^{}]*&quot;Property ID&quot;[^{}]*\}/)
@@ -693,7 +739,7 @@ serve(async (req) => {
       /https?:\/\/[^\s"'<>?]*habi\.co\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,               // Habi (filial)
       /https?:\/\/assets\.easybroker\.com\/property_images\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
       /https?:\/\/static\.tokkobroker\.com\/pictures\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,    // reval (Tokko)
-      /https?:\/\/[^\s"'<>?]*inmobay\.com\/upload\/inmuebles\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi, // inmobay
+      /https?:\/\/[^\s"'<>?]*inmobay\.com\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi, // inmobay (cualquier ruta)
       /https?:\/\/[^\s"'<>?]+\/wp-content\/uploads\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,        // WordPress (gminmobiliaria)
       /https?:\/\/[^\s"'<>?]+\.(?:cloudfront\.net|amazonaws\.com)\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
       // Lamudi: URLs base64 SIN extensión (img.lamudi.com.mx/<token>)

@@ -1,10 +1,13 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
+  TextInput, Switch,
 } from 'react-native'
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+
+const hoyISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 
 // ── Types ───────────────────────────────────────────────────────────────────
 type Periodo = '24h' | '7dias' | '30dias'
@@ -24,6 +27,9 @@ type UsuarioMetricas = {
   primer_acceso: string | null
   ultimo_acceso: string | null
   actividad_total: number
+  notas_bloque: string | null
+  contesto_fecha: string | null
+  contesto_ok: boolean
 }
 
 const GOLD = '#c9a84c'
@@ -108,12 +114,21 @@ const mS = StyleSheet.create({
   valor: { fontSize: 14, fontWeight: '800', color: '#fff', minWidth: 30, textAlign: 'right' },
 })
 
-function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo }: {
+function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo,
+  notaEdit, onNotaChange, onNotaGuardar, notaGuardando,
+  contestoGuardando, onToggleContesto,
+}: {
   u: UsuarioMetricas; rank: number; maxActividad: number; expanded: boolean; onToggle: () => void; periodo: Periodo
+  notaEdit: string; onNotaChange: (v: string) => void; onNotaGuardar: () => void; notaGuardando: boolean
+  contestoGuardando: boolean; onToggleContesto: () => void
 }) {
   const st = statusConfig(u.actividad_total, maxActividad)
   const pct = maxActividad > 0 ? u.actividad_total / maxActividad : 0
   const horas = Math.floor(u.minutos_conexion / 60), mins = u.minutos_conexion % 60
+  const hoy = hoyISO()
+  const contestoHoy = u.contesto_fecha === hoy && u.contesto_ok
+  const notaCambio = notaEdit !== (u.notas_bloque ?? '')
+
   return (
     <View style={uS.card}>
       <TouchableOpacity style={uS.header} onPress={onToggle} activeOpacity={0.8}>
@@ -139,6 +154,50 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo }: {
 
       {expanded && (
         <View style={uS.detail}>
+          {/* ¿Contestó hoy? — solo en período Hoy */}
+          {periodo === '24h' && (
+            <View style={uS.contestoRow}>
+              <Text style={uS.contestoLbl}>¿Contestó hoy?</Text>
+              {contestoGuardando
+                ? <ActivityIndicator size="small" color="#2ecc71" />
+                : <Switch
+                    value={contestoHoy}
+                    onValueChange={onToggleContesto}
+                    trackColor={{ false: '#1e3448', true: '#2e7d3288' }}
+                    thumbColor={contestoHoy ? '#2ecc71' : '#556a7a'}
+                  />}
+              {contestoHoy && <Text style={uS.contestoBadge}>✅ Sí</Text>}
+              {!contestoHoy && u.contesto_fecha && (
+                <Text style={uS.contestoFecha}>Último: {u.contesto_fecha}</Text>
+              )}
+            </View>
+          )}
+
+          {/* Notas */}
+          <View style={uS.notaWrap}>
+            <TextInput
+              style={uS.notaInput}
+              placeholder="Nota sobre este usuario..."
+              placeholderTextColor="#556a7a"
+              value={notaEdit}
+              onChangeText={onNotaChange}
+              multiline
+              numberOfLines={2}
+              onBlur={() => { if (notaCambio) onNotaGuardar() }}
+            />
+            {notaCambio && (
+              <TouchableOpacity
+                style={[uS.notaBtn, { opacity: notaGuardando ? 0.5 : 1 }]}
+                onPress={onNotaGuardar}
+                disabled={notaGuardando}
+              >
+                {notaGuardando
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={uS.notaBtnTxt}>Guardar nota</Text>}
+              </TouchableOpacity>
+            )}
+          </View>
+
           <View style={uS.detailGrid}>
             <View style={uS.detailCol}>
               <MetricRow icono="👥" label="Clientes nuevos"     valor={u.clientes_nuevos}        color="#1a6470" />
@@ -203,6 +262,24 @@ const uS = StyleSheet.create({
   scoreRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   scoreLbl:   { fontSize: 12, fontWeight: '700' },
   scoreVal:   { fontSize: 20, fontWeight: '900' },
+
+  contestoRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, backgroundColor: '#0d1b2a', borderRadius: 8, padding: 8 },
+  contestoLbl:  { fontSize: 13, fontWeight: '600', color: '#c0d0dc', flex: 1 },
+  contestoBadge:{ fontSize: 12, fontWeight: '700', color: '#2ecc71' },
+  contestoFecha:{ fontSize: 11, color: '#556a7a', fontStyle: 'italic' },
+
+  notaWrap: { marginBottom: 12 },
+  notaInput: {
+    borderWidth: 1, borderColor: '#1e3448', borderRadius: 8, padding: 8,
+    fontSize: 13, color: '#c0d0dc', backgroundColor: '#0d1b2a',
+    minHeight: 52, textAlignVertical: 'top',
+  },
+  notaBtn: {
+    marginTop: 6, backgroundColor: '#1a6470', borderRadius: 8,
+    paddingVertical: 7, paddingHorizontal: 14, alignSelf: 'flex-end',
+    alignItems: 'center', justifyContent: 'center', minWidth: 110,
+  },
+  notaBtnTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
 })
 
 // ── Pantalla ────────────────────────────────────────────────────────────────
@@ -213,6 +290,9 @@ export default function BloqueDetalle() {
   const [usuarios, setUsuarios] = useState<UsuarioMetricas[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [notasEdit, setNotasEdit] = useState<Record<string, string>>({})
+  const [notasGuardando, setNotasGuardando] = useState<Set<string>>(new Set())
+  const [contestoGuardando, setContesoGuardando] = useState<Set<string>>(new Set())
   const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { setPeriodo('24h'); cargar('24h') }, []))
@@ -221,17 +301,50 @@ export default function BloqueDetalle() {
     if (!yaCargoRef.current) setLoading(true)
     const { inicio, fin } = getRango(p)
     const [miembrosRes, prodRes] = await Promise.all([
-      supabase.from('profiles').select('id').eq('bloque_id', id),
+      supabase.from('profiles').select('id, notas_bloque, contesto_fecha, contesto_ok').eq('bloque_id', id),
       supabase.rpc('get_productividad_equipo', { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
     ])
-    const ids = new Set((miembrosRes.data ?? []).map((m: any) => m.id))
+    const perfilMap: Record<string, { notas_bloque: string | null; contesto_fecha: string | null; contesto_ok: boolean }> = {}
+    for (const m of (miembrosRes.data ?? []) as any[]) {
+      perfilMap[m.id] = { notas_bloque: m.notas_bloque ?? null, contesto_fecha: m.contesto_fecha ?? null, contesto_ok: m.contesto_ok ?? false }
+    }
+    const ids = new Set(Object.keys(perfilMap))
     const todos = (prodRes.data as UsuarioMetricas[] | null) ?? []
     const delBloque = todos
       .filter((u) => ids.has(u.id))
+      .map((u) => ({ ...u, ...(perfilMap[u.id] ?? { notas_bloque: null, contesto_fecha: null, contesto_ok: false }) }))
       .sort((a, b) => b.actividad_total - a.actividad_total)
     setUsuarios(delBloque)
+    setNotasEdit(prev => {
+      const n: Record<string, string> = {}
+      for (const u of delBloque) n[u.id] = prev[u.id] ?? (u.notas_bloque ?? '')
+      return n
+    })
     yaCargoRef.current = true
     setLoading(false)
+  }
+
+  async function guardarNota(userId: string) {
+    const nota = (notasEdit[userId] ?? '').trim()
+    setNotasGuardando(prev => new Set([...prev, userId]))
+    const { error } = await supabase.rpc('guardar_nota_bloque', { p_user_id: userId, p_nota: nota })
+    if (!error) setUsuarios(prev => prev.map(u => u.id === userId ? { ...u, notas_bloque: nota || null } : u))
+    setNotasGuardando(prev => { const n = new Set(prev); n.delete(userId); return n })
+  }
+
+  async function toggleContesto(userId: string, valorActual: boolean) {
+    const nuevoValor = !valorActual
+    setContesoGuardando(prev => new Set([...prev, userId]))
+    setUsuarios(prev => prev.map(u =>
+      u.id === userId ? { ...u, contesto_ok: nuevoValor, contesto_fecha: nuevoValor ? hoyISO() : null } : u
+    ))
+    const { error } = await supabase.rpc('marcar_contesto_hoy', { p_user_id: userId, p_ok: nuevoValor })
+    if (error) {
+      setUsuarios(prev => prev.map(u =>
+        u.id === userId ? { ...u, contesto_ok: valorActual, contesto_fecha: valorActual ? hoyISO() : null } : u
+      ))
+    }
+    setContesoGuardando(prev => { const n = new Set(prev); n.delete(userId); return n })
   }
 
   const { inicio, fin } = getRango(periodo)
@@ -316,6 +429,12 @@ export default function BloqueDetalle() {
                 expanded={expandedId === u.id}
                 onToggle={() => setExpandedId(expandedId === u.id ? null : u.id)}
                 periodo={periodo}
+                notaEdit={notasEdit[u.id] ?? (u.notas_bloque ?? '')}
+                onNotaChange={v => setNotasEdit(prev => ({ ...prev, [u.id]: v }))}
+                onNotaGuardar={() => guardarNota(u.id)}
+                notaGuardando={notasGuardando.has(u.id)}
+                contestoGuardando={contestoGuardando.has(u.id)}
+                onToggleContesto={() => toggleContesto(u.id, u.contesto_ok && u.contesto_fecha === hoyISO())}
               />
             ))}
           </View>
