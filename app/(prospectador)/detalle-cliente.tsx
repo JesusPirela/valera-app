@@ -286,15 +286,25 @@ export default function DetalleCliente() {
     if (!tituloRec.trim()) { Alert.alert('Requerido', 'El título es obligatorio.'); return }
     if (!fechaRec) { Alert.alert('Requerido', 'Selecciona una fecha y hora.'); return }
     setGuardandoRec(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const { error } = await supabase.from('recordatorios').insert({
-      cliente_id: id, user_id: user!.id, titulo: tituloRec.trim(),
-      descripcion: descRec.trim() || null, fecha_hora: fechaRec.toISOString(),
-    })
-    setGuardandoRec(false)
-    if (error) { Alert.alert('Error', error.message); return }
-    setTituloRec(''); setDescRec(''); setFechaRec(null); setModalRecordatorio(false)
-    refetch()
+    try {
+      // getSession() lee del storage local — funciona aunque haya red inestable.
+      // getUser() hace una petición de red; si falla, user es null y user!.id lanza
+      // TypeError sin try/catch, silenciando el error para el usuario.
+      const { data: { session } } = await supabase.auth.getSession()
+      const uid = session?.user?.id
+      if (!uid) { Alert.alert('Error', 'Sesión expirada. Vuelve a iniciar sesión.'); return }
+      const { error } = await supabase.from('recordatorios').insert({
+        cliente_id: id, user_id: uid, titulo: tituloRec.trim(),
+        descripcion: descRec.trim() || null, fecha_hora: fechaRec.toISOString(),
+      })
+      if (error) { Alert.alert('Error al guardar', error.message); return }
+      setTituloRec(''); setDescRec(''); setFechaRec(null); setModalRecordatorio(false)
+      refetch()
+    } catch (e: any) {
+      Alert.alert('Error inesperado', e?.message ?? 'Intenta de nuevo.')
+    } finally {
+      setGuardandoRec(false)
+    }
   }
 
   async function aplazar15min(recId: string, fechaActual: string) {

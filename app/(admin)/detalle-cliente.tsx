@@ -139,7 +139,8 @@ export default function AdminDetalleCliente() {
     if (!cliente) return
     const nuevoValor = !cliente.cierre_completado
     setGuardandoCierre(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const uid = session?.user?.id ?? null
     const { error } = await supabase.from('clientes').update({ cierre_completado: nuevoValor }).eq('id', id)
     setGuardandoCierre(false)
     if (error) {
@@ -147,9 +148,9 @@ export default function AdminDetalleCliente() {
       else Alert.alert('Error', error.message)
       return
     }
-    if (user) {
+    if (uid) {
       await supabase.from('interacciones').insert({
-        cliente_id: id, user_id: user.id,
+        cliente_id: id, user_id: uid,
         tipo: 'estado_cambiado',
         descripcion: nuevoValor ? 'Cierre marcado como completado.' : 'Cierre marcado como pendiente.',
       })
@@ -202,7 +203,8 @@ export default function AdminDetalleCliente() {
   async function guardarEstado() {
     if (!estadoSeleccionado || estadoSeleccionado === cliente?.estado) { setModalEstado(false); return }
     setGuardandoEstado(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const uid = session?.user?.id ?? null
     const estadoAnterior = cliente?.estado ?? ''
     const { error } = await supabase.from('clientes').update({ estado: estadoSeleccionado }).eq('id', id)
     setGuardandoEstado(false)
@@ -211,9 +213,9 @@ export default function AdminDetalleCliente() {
       else Alert.alert('Error', error.message)
       return
     }
-    if (user) {
+    if (uid) {
       await supabase.from('interacciones').insert({
-        cliente_id: id, user_id: user.id,
+        cliente_id: id, user_id: uid,
         tipo: 'estado_cambiado',
         descripcion: `Estado cambiado de "${ESTADOS[estadoAnterior]?.label ?? estadoAnterior}" a "${ESTADOS[estadoSeleccionado]?.label ?? estadoSeleccionado}" por el administrador.`,
       })
