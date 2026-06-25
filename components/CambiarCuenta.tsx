@@ -17,10 +17,6 @@ const ROLE_LABEL: Record<string, string> = {
   prospectador: 'Prospectador', prospectador_plus: 'Prospectador Plus', nuevo: 'Nuevo',
 }
 
-// Botón/sección "Cambiar de cuenta". Solo se muestra si en este dispositivo se
-// ha iniciado sesión en 2 o más cuentas. El cambio es inmediato (sin contraseña)
-// usando la sesión guardada de cada cuenta. Si los tokens caducaron se pide la
-// contraseña directamente en este componente, sin obligar al usuario a salir.
 export default function CambiarCuenta() {
   const c = useColors()
   const qc = useQueryClient()
@@ -28,9 +24,14 @@ export default function CambiarCuenta() {
   const [actualId, setActualId] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
   const [cambiando, setCambiando] = useState<string | null>(null)
-  // Cuando los tokens de una cuenta caducaron: pedimos la contraseña inline
   const [necesitaPass, setNecesitaPass] = useState<CuentaGuardada | null>(null)
   const [password, setPassword] = useState('')
+
+  // Agregar nueva cuenta
+  const [agregando, setAgregando] = useState(false)
+  const [nuevoEmail, setNuevoEmail] = useState('')
+  const [nuevoPass, setNuevoPass] = useState('')
+  const [agregandoLoad, setAgregandoLoad] = useState(false)
 
   useEffect(() => {
     async function init() {
@@ -46,19 +47,14 @@ export default function CambiarCuenta() {
   }, [])
 
   if (!listo) return null
-  const otras = cuentas.filter(x => x.user_id !== actualId)
-  if (otras.length === 0) return null
 
   async function irAHome(role: string | null | undefined) {
-    // Borramos el caché persistido para que el nuevo usuario no vea datos del anterior
     try {
       const keys = await AsyncStorage.getAllKeys()
       const cacheKeys = keys.filter(k => k.startsWith('VALERA_CACHE'))
       if (cacheKeys.length) await AsyncStorage.multiRemove(cacheKeys)
     } catch {}
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      // Reload completo en web: garantiza que React Query y todos los contextos
-      // reinicien desde cero con la sesión del nuevo usuario ya en localStorage.
       window.location.replace('/')
       return
     }
@@ -71,30 +67,17 @@ export default function CambiarCuenta() {
 
   async function switchTo(cuenta: CuentaGuardada) {
     setCambiando(cuenta.user_id)
-
-    // Si hay contraseña guardada, usarla directamente. setSession es poco
-    // confiable en web (puede colgar hasta 12 s), signInWithPassword siempre funciona.
     const passGuardada = await obtenerPasswordCuenta(cuenta.user_id)
     if (passGuardada) {
       const res = await cambiarACuentaConPassword(cuenta, passGuardada)
       setCambiando(null)
-      if (res.ok) {
-        await irAHome(cuenta.role)
-        return
-      }
-      // La contraseña guardada caducó o cambió: pedir de nuevo.
+      if (res.ok) { await irAHome(cuenta.role); return }
       setNecesitaPass(cuenta)
       return
     }
-
-    // Sin contraseña guardada: intentar con tokens (setSession con timeout corto).
     const res = await cambiarACuenta(cuenta)
     setCambiando(null)
     if (!res.ok) {
-      // Token inválido o red lenta: pedir contraseña.
-      // Mantener accountSwitch.pending = true mientras el panel esté abierto para
-      // que el SIGNED_OUT del setSession que sigue corriendo en background no
-      // dispare la navegación al login.
       accountSwitch.pending = true
       setNecesitaPass(cuenta)
       return
@@ -116,7 +99,6 @@ export default function CambiarCuenta() {
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg)
       return
     }
-    // Guardar la contraseña para futuros cambios de cuenta sin pedirla de nuevo.
     guardarPasswordCuenta(cuenta.user_id, pass).catch(() => {})
     setNecesitaPass(null)
     setPassword('')
@@ -128,6 +110,45 @@ export default function CambiarCuenta() {
     setNecesitaPass(null)
     setPassword('')
   }
+
+  async function eliminarCuenta(cuenta: CuentaGuardada) {
+    const confirmar = Platform.OS === 'web'
+      ? window.confirm(`¿Eliminar la cuenta de ${cuenta.nombre || cuenta.email}?`)
+      : await new Promise<boolean>(resolve =>
+          Alert.alert(
+            'Eliminar cuenta',
+            `¿Quitar la cuenta de ${cuenta.nombre || cuenta.email} de este dispositivo?`,
+            [{ text: 'Cancelar', onPress: () => resolve(false), style: 'cancel' },
+             { text: 'Eliminar', onPress: () => resolve(true), style: 'destructive' }],
+          ))
+    if (!confirmar) return
+    await olvidarCuenta(cuenta.user_id)
+    setCuentas(prev => prev.filter(c => c.user_id !== cuenta.user_id))
+    if (necesitaPass?.user_id === cuenta.user_id) cancelarPassword()
+  }
+
+  async function agregarCuenta() {
+    const email = nuevoEmail.trim()
+    const pass = nuevoPass.trim()
+    if (!email || !pass) return
+    setAgregandoLoad(true)
+    accountSwitch.pending = true
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
+    setAgregandoLoad(false)
+    if (error || !data.session) {
+      accountSwitch.pending = false
+      const msg = error?.message?.includes('Invalid') ? 'Email o contraseña incorrectos.' : (error?.message ?? 'No se pudo iniciar sesión.')
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg)
+      return
+    }
+    guardarPasswordCuenta(data.session.user.id, pass).catch(() => {})
+    setNuevoEmail('')
+    setNuevoPass('')
+    setAgregando(false)
+    await irAHome(data.session.user.user_metadata?.role ?? null)
+  }
+
+  const otras = cuentas.filter(x => x.user_id !== actualId)
 
   return (
     <View style={s.wrap}>
@@ -151,10 +172,7 @@ export default function CambiarCuenta() {
             returnKeyType="go"
           />
           <View style={s.passRow}>
-            <TouchableOpacity
-              style={[s.passBtnSecondary, { borderColor: c.border }]}
-              onPress={cancelarPassword}
-            >
+            <TouchableOpacity style={[s.passBtnSecondary, { borderColor: c.border }]} onPress={cancelarPassword}>
               <Text style={[s.passBtnSecondaryText, { color: c.textMute }]}>Cancelar</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -170,39 +188,100 @@ export default function CambiarCuenta() {
         </View>
       )}
 
+      {/* Cuentas guardadas */}
       {otras.map(cuenta => {
         const inicial = (cuenta.nombre || cuenta.email || '?')[0].toUpperCase()
         const estaEsperandoPass = necesitaPass?.user_id === cuenta.user_id
         return (
-          <TouchableOpacity
-            key={cuenta.user_id}
-            style={[
-              s.fila,
-              { backgroundColor: c.card, borderColor: estaEsperandoPass ? '#c9a84c' : c.border },
-            ]}
-            onPress={() => {
-              if (estaEsperandoPass) return  // ya tiene el panel abierto
-              switchTo(cuenta)
-            }}
-            disabled={!!cambiando}
-            activeOpacity={0.8}
-          >
-            <View style={s.avatar}><Text style={s.avatarTxt}>{inicial}</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.nombre, { color: c.text }]} numberOfLines={1}>{cuenta.nombre || cuenta.email}</Text>
-              <Text style={[s.meta, { color: c.textMute }]} numberOfLines={1}>
-                {cuenta.email}{cuenta.role ? ` · ${ROLE_LABEL[cuenta.role] ?? cuenta.role}` : ''}
-              </Text>
-              {estaEsperandoPass && (
-                <Text style={[s.passHint, { color: '#c9a84c' }]}>Requiere contraseña ↑</Text>
-              )}
-            </View>
-            {cambiando === cuenta.user_id
-              ? <ActivityIndicator size="small" color="#1a6470" />
-              : <Text style={[s.chevron, { color: c.textMute }]}>⇄</Text>}
-          </TouchableOpacity>
+          <View key={cuenta.user_id} style={[s.fila, { backgroundColor: c.card, borderColor: estaEsperandoPass ? '#c9a84c' : c.border }]}>
+            <TouchableOpacity
+              style={s.filaMain}
+              onPress={() => {
+                if (estaEsperandoPass) return
+                switchTo(cuenta)
+              }}
+              disabled={!!cambiando}
+              activeOpacity={0.8}
+            >
+              <View style={s.avatar}><Text style={s.avatarTxt}>{inicial}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.nombre, { color: c.text }]} numberOfLines={1}>{cuenta.nombre || cuenta.email}</Text>
+                <Text style={[s.meta, { color: c.textMute }]} numberOfLines={1}>
+                  {cuenta.email}{cuenta.role ? ` · ${ROLE_LABEL[cuenta.role] ?? cuenta.role}` : ''}
+                </Text>
+                {estaEsperandoPass && (
+                  <Text style={[s.passHint, { color: '#c9a84c' }]}>Requiere contraseña ↑</Text>
+                )}
+              </View>
+              {cambiando === cuenta.user_id
+                ? <ActivityIndicator size="small" color="#1a6470" />
+                : <Text style={[s.chevron, { color: c.textMute }]}>⇄</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.eliminarBtn}
+              onPress={() => eliminarCuenta(cuenta)}
+              disabled={!!cambiando}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={s.eliminarIcon}>✕</Text>
+            </TouchableOpacity>
+          </View>
         )
       })}
+
+      {/* Agregar nueva cuenta */}
+      {agregando ? (
+        <View style={[s.passPanel, { backgroundColor: c.card, borderColor: c.border }]}>
+          <Text style={[s.passLabel, { color: c.text }]}>Iniciar sesión en otra cuenta</Text>
+          <TextInput
+            style={[s.passInput, { color: c.inputText, backgroundColor: c.input, borderColor: c.border }]}
+            placeholder="Correo electrónico"
+            placeholderTextColor={c.placeholder}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={nuevoEmail}
+            onChangeText={setNuevoEmail}
+            autoFocus
+            returnKeyType="next"
+          />
+          <TextInput
+            style={[s.passInput, { color: c.inputText, backgroundColor: c.input, borderColor: c.border }]}
+            placeholder="Contraseña"
+            placeholderTextColor={c.placeholder}
+            secureTextEntry
+            value={nuevoPass}
+            onChangeText={setNuevoPass}
+            onSubmitEditing={agregarCuenta}
+            returnKeyType="go"
+          />
+          <View style={s.passRow}>
+            <TouchableOpacity
+              style={[s.passBtnSecondary, { borderColor: c.border }]}
+              onPress={() => { setAgregando(false); setNuevoEmail(''); setNuevoPass('') }}
+            >
+              <Text style={[s.passBtnSecondaryText, { color: c.textMute }]}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.passBtn, { backgroundColor: '#1a6470', opacity: agregandoLoad || !nuevoEmail.trim() || !nuevoPass.trim() ? 0.6 : 1 }]}
+              onPress={agregarCuenta}
+              disabled={agregandoLoad || !nuevoEmail.trim() || !nuevoPass.trim()}
+            >
+              {agregandoLoad
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={s.passBtnText}>Entrar</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={[s.agregarBtn, { borderColor: c.border }]}
+          onPress={() => setAgregando(true)}
+          disabled={!!cambiando}
+        >
+          <Text style={[s.agregarTxt, { color: c.textMute }]}>＋ Agregar otra cuenta</Text>
+        </TouchableOpacity>
+      )}
     </View>
   )
 }
@@ -211,8 +290,11 @@ const s = StyleSheet.create({
   wrap: { marginTop: 8, marginBottom: 8 },
   titulo: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6, marginBottom: 8, marginLeft: 2 },
   fila: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8,
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 12, borderWidth: 1, marginBottom: 8, overflow: 'hidden',
+  },
+  filaMain: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12,
   },
   avatar: {
     width: 38, height: 38, borderRadius: 19, backgroundColor: '#1a6470',
@@ -223,6 +305,12 @@ const s = StyleSheet.create({
   meta: { fontSize: 12, marginTop: 1 },
   chevron: { fontSize: 20, fontWeight: '700' },
   passHint: { fontSize: 11, marginTop: 3, fontWeight: '600' },
+  eliminarBtn: {
+    paddingHorizontal: 14, paddingVertical: 12,
+    alignItems: 'center', justifyContent: 'center',
+    borderLeftWidth: 1, borderLeftColor: '#eee',
+  },
+  eliminarIcon: { fontSize: 14, color: '#aaa', fontWeight: '700' },
   passPanel: {
     borderRadius: 12, borderWidth: 1.5, padding: 14, marginBottom: 10, gap: 10,
   },
@@ -241,4 +329,9 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', minWidth: 80,
   },
   passBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  agregarBtn: {
+    borderRadius: 12, borderWidth: 1, borderStyle: 'dashed',
+    paddingVertical: 12, alignItems: 'center', marginBottom: 4,
+  },
+  agregarTxt: { fontSize: 14, fontWeight: '600' },
 })
