@@ -4,11 +4,12 @@ import { router } from 'expo-router'
 // Botón "atrás". Prefiere router.back() para respetar el historial real de
 // navegación (evita duplicados en el historial del navegador). Solo usa
 // router.replace(to) cuando no hay historial al que volver (deep links).
-export default function HeaderBack({ color = '#c9a84c', to }: { color?: string; to?: string }) {
+export default function HeaderBack({ color = '#c9a84c', to, alwaysReplace }: { color?: string; to?: string; alwaysReplace?: boolean }) {
   const puede = router.canGoBack()
   if (!to && !puede) return null
   const onPress = () => {
-    if (puede) router.back()
+    if (to && alwaysReplace) router.replace(to as any)
+    else if (puede) router.back()
     else if (to) router.replace(to as any)
   }
   return (

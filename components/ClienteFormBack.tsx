@@ -10,5 +10,5 @@ export default function ClienteFormBack() {
   const to = id
     ? (esAdmin ? `/(admin)/detalle-cliente?id=${id}` : `/(prospectador)/detalle-cliente?id=${id}`)
     : (esAdmin ? '/(admin)/crm' : '/(prospectador)/crm')
-  return <HeaderBack to={to} />
+  return <HeaderBack to={to} alwaysReplace />
 }
