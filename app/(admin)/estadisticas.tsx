@@ -234,10 +234,7 @@ export default function Estadisticas() {
     setLoading(false)
   }
 
-  // Al entrar a la pantalla siempre se muestra "Hoy"
-  useFocusEffect(useCallback(() => { setPeriodo('dia') }, []))
-
-  useFocusEffect(useCallback(() => { cargar(periodo) }, [periodo]))
+  useFocusEffect(useCallback(() => { setPeriodo('dia'); cargar('dia') }, []))
 
   if (loading) {
     return (

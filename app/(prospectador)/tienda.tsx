@@ -86,7 +86,7 @@ export default function Tienda() {
 
     const [statsRes, itemsRes, comprasRes, cfgRes, cofresStatsRes, perfilRes] = await Promise.all([
       supabase.from('user_stats').select('valera_coins, xp, cofres_pendientes').eq('id', user.id).maybeSingle(),
-      supabase.from('store_items').select('*').eq('disponible', true).order('orden'),
+      supabase.from('store_items').select('id, nombre, descripcion, costo_coins, tipo, disponible, stock, icono, orden').eq('disponible', true).order('orden'),
       supabase.from('store_compras')
         .select('id, created_at, costo_coins, estado, notas_admin, es_ruleta, es_milestone, nombre_premio, store_items(nombre, icono)')
         .eq('user_id', user.id)

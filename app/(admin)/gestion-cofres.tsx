@@ -81,30 +81,18 @@ export default function GestionCofres() {
 
   async function cargarUsuarios() {
     setLoadingUsuarios(true)
-    // Igual que tienda-compras: primero profiles, luego user_stats por IDs
     const { data: perfs } = await supabase
       .from('profiles')
-      .select('id, nombre')
+      .select('id, nombre, user_stats(cofres_pendientes)')
       .neq('role', 'admin')
       .order('nombre')
     if (!perfs) { setLoadingUsuarios(false); return }
-
-    const ids = perfs.map((p: any) => p.id)
-    const { data: stats } = await supabase
-      .from('user_stats')
-      .select('id, cofres_pendientes')
-      .in('id', ids)
-
-    const statsMap: Record<string, number> = {}
-    for (const s of (stats ?? [])) {
-      statsMap[(s as any).id] = (s as any).cofres_pendientes ?? 0
-    }
 
     setUsuarios(perfs.map((p: any) => ({
       id: p.id,
       nombre: p.nombre,
       email: '',
-      cofres_pendientes: statsMap[p.id] ?? 0,
+      cofres_pendientes: (Array.isArray(p.user_stats) ? p.user_stats[0] : p.user_stats)?.cofres_pendientes ?? 0,
     })))
     setLoadingUsuarios(false)
   }

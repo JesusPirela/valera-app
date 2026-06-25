@@ -81,6 +81,14 @@ const NAV_ITEMS = [
 
 const NAV_GRUPOS = ['Propiedades', 'Gestión', 'Crecimiento']
 
+function FiltroChip({ label, active, onPress, textSubColor }: { label: string; active: boolean; onPress: () => void; textSubColor: string }) {
+  return (
+    <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
+      <Text style={[styles.chipText, { color: textSubColor }, active && styles.chipTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  )
+}
+
 export default function AdminPropiedades() {
   useSupervisorBlock()
   const c = useColors()
@@ -146,21 +154,20 @@ export default function AdminPropiedades() {
 
   async function cargarRolEInmobiliarias() {
     const { data: { session } } = await supabase.auth.getSession()
-    if (session?.user?.id) {
-      const { data: perfil } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle()
-      setRole(perfil?.role ?? null)
-    }
-
-    const { data: conteo } = await supabase.rpc('get_publicaciones_conteo')
+    const uid = session?.user?.id ?? null
+    const [perfilRes, conteoRes, pendRes] = await Promise.all([
+      uid ? supabase.from('profiles').select('role').eq('id', uid).maybeSingle() : Promise.resolve({ data: null }),
+      supabase.rpc('get_publicaciones_conteo'),
+      supabase.rpc('get_compras_pendientes_count'),
+    ])
+    setRole((perfilRes as any).data?.role ?? null)
+    const conteo = (conteoRes as any).data
     if (conteo) {
       setPublicacionesMap(Object.fromEntries(
         (conteo as { propiedad_id: string; total: number }[]).map((r) => [r.propiedad_id, r.total])
       ))
     }
-
-    // Badge de la Tienda: compras/cofres pendientes de atender
-    const { data: pend } = await supabase.rpc('get_compras_pendientes_count')
-    setComprasPendientes(typeof pend === 'number' ? pend : 0)
+    setComprasPendientes(typeof (pendRes as any).data === 'number' ? (pendRes as any).data : 0)
   }
 
   useFocusEffect(useCallback(() => { cargarPropiedades(); cargarRolEInmobiliarias() }, []))
@@ -311,14 +318,6 @@ export default function AdminPropiedades() {
     setBusquedaContacto('')
   }
 
-  function FiltroChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-    return (
-      <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
-        <Text style={[styles.chipText, { color: c.textSub }, active && styles.chipTextActive]}>{label}</Text>
-      </TouchableOpacity>
-    )
-  }
-
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
   const numCols = isWeb ? 4 : 1
@@ -402,35 +401,35 @@ export default function AdminPropiedades() {
         <View style={[styles.filtrosPanel, { backgroundColor: c.card, borderColor: c.border }]}>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Operación</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-            <FiltroChip label="Todas" active={filtroOperacion === null} onPress={() => setFiltroOperacion(null)} />
-            <FiltroChip label="Venta" active={filtroOperacion === 'venta'} onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')} />
-            <FiltroChip label="Renta" active={filtroOperacion === 'renta'} onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')} />
+            <FiltroChip label="Todas" active={filtroOperacion === null} onPress={() => setFiltroOperacion(null)} textSubColor={c.textSub}  textSubColor={c.textSub}/>
+            <FiltroChip label="Venta" active={filtroOperacion === 'venta'} onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')} textSubColor={c.textSub}  textSubColor={c.textSub}/>
+            <FiltroChip label="Renta" active={filtroOperacion === 'renta'} onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')} textSubColor={c.textSub}  textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Estado</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-            <FiltroChip label="Todos" active={filtroEstado === null} onPress={() => setFiltroEstado(null)} />
-            <FiltroChip label="Disponible" active={filtroEstado === 'disponible'} onPress={() => setFiltroEstado(filtroEstado === 'disponible' ? null : 'disponible')} />
-            <FiltroChip label="Vendida" active={filtroEstado === 'vendida'} onPress={() => setFiltroEstado(filtroEstado === 'vendida' ? null : 'vendida')} />
+            <FiltroChip label="Todos" active={filtroEstado === null} onPress={() => setFiltroEstado(null)}  textSubColor={c.textSub}/>
+            <FiltroChip label="Disponible" active={filtroEstado === 'disponible'} onPress={() => setFiltroEstado(filtroEstado === 'disponible' ? null : 'disponible')}  textSubColor={c.textSub}/>
+            <FiltroChip label="Vendida" active={filtroEstado === 'vendida'} onPress={() => setFiltroEstado(filtroEstado === 'vendida' ? null : 'vendida')}  textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Tipo</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-            <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)} />
-            <FiltroChip label="Casa" active={filtroTipo === 'casa'} onPress={() => setFiltroTipo(filtroTipo === 'casa' ? null : 'casa')} />
-            <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')} />
-            <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')} />
-            <FiltroChip label="Terreno" active={filtroTipo === 'terreno'} onPress={() => setFiltroTipo(filtroTipo === 'terreno' ? null : 'terreno')} />
+            <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)}  textSubColor={c.textSub}/>
+            <FiltroChip label="Casa" active={filtroTipo === 'casa'} onPress={() => setFiltroTipo(filtroTipo === 'casa' ? null : 'casa')}  textSubColor={c.textSub}/>
+            <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')}  textSubColor={c.textSub}/>
+            <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')}  textSubColor={c.textSub}/>
+            <FiltroChip label="Terreno" active={filtroTipo === 'terreno'} onPress={() => setFiltroTipo(filtroTipo === 'terreno' ? null : 'terreno')}  textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Precio</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-            <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)} />
-            <FiltroChip label="↑ Menor" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} />
-            <FiltroChip label="↓ Mayor" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} />
+            <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)}  textSubColor={c.textSub}/>
+            <FiltroChip label="↑ Menor" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')}  textSubColor={c.textSub}/>
+            <FiltroChip label="↓ Mayor" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')}  textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Publicaciones</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-            <FiltroChip label="Sin orden" active={ordenPublicaciones === null} onPress={() => setOrdenPublicaciones(null)} />
-            <FiltroChip label="🔥 Más publicadas" active={ordenPublicaciones === 'desc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'desc' ? null : 'desc')} />
-            <FiltroChip label="Menos publicadas" active={ordenPublicaciones === 'asc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'asc' ? null : 'asc')} />
+            <FiltroChip label="Sin orden" active={ordenPublicaciones === null} onPress={() => setOrdenPublicaciones(null)}  textSubColor={c.textSub}/>
+            <FiltroChip label="🔥 Más publicadas" active={ordenPublicaciones === 'desc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'desc' ? null : 'desc')}  textSubColor={c.textSub}/>
+            <FiltroChip label="Menos publicadas" active={ordenPublicaciones === 'asc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'asc' ? null : 'asc')}  textSubColor={c.textSub}/>
           </ScrollView>
           {(() => {
             // Sugerencias: etiquetas únicas que coinciden con el texto escrito
@@ -471,6 +470,7 @@ export default function AdminPropiedades() {
                         label={label}
                         active={normalizar(busquedaContacto.trim()) === normalizar(label)}
                         onPress={() => setBusquedaContacto(busquedaContacto.trim() === label ? '' : label)}
+                        textSubColor={c.textSub}
                       />
                     ))}
                   </ScrollView>

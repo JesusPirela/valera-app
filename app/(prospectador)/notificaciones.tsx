@@ -18,6 +18,7 @@ import { useColors, useTheme } from '../../lib/ThemeContext'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const SWIPE_THRESHOLD = -80
+const ListSeparator10 = () => <View style={{ height: 10 }} />
 
 type Notificacion = {
   id: string
@@ -367,7 +368,7 @@ export default function Notificaciones() {
               onDelete={eliminarNotificacion}
             />
           )}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          ItemSeparatorComponent={ListSeparator10}
         />
       )}
     </View>

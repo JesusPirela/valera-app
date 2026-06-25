@@ -160,9 +160,9 @@ export default function Misiones() {
     if (sincronizandoRef.current) return
     const hoy = getHoyMX()
     const [statsRes, misionesRes, progresoRes, conteosMap] = await Promise.all([
-      supabase.from('user_stats').select('*').eq('id', uid).maybeSingle(),
-      supabase.from('misiones').select('*').eq('activa', true).order('orden'),
-      supabase.from('user_misiones').select('*').eq('user_id', uid),
+      supabase.from('user_stats').select('xp, valera_coins, streak_dias, total_propiedades, total_clientes, total_cursos, total_seguimientos, total_ventas').eq('id', uid).maybeSingle(),
+      supabase.from('misiones').select('id, tipo, categoria, titulo, descripcion, meta, recompensa_xp, recompensa_coins, orden, icono').eq('activa', true).order('orden'),
+      supabase.from('user_misiones').select('mision_id, progreso, completada, fecha_reset').eq('user_id', uid),
       getConteosDiarios(uid),
     ])
     if (statsRes.data) setStats(statsRes.data as UserStats)
@@ -176,9 +176,9 @@ export default function Misiones() {
     setUserId(user.id)
 
     const [statsRes, misionesRes, progresoRes] = await Promise.all([
-      supabase.from('user_stats').select('*').eq('id', user.id).maybeSingle(),
-      supabase.from('misiones').select('*').eq('activa', true).order('orden'),
-      supabase.from('user_misiones').select('*').eq('user_id', user.id),
+      supabase.from('user_stats').select('xp, valera_coins, streak_dias, total_propiedades, total_clientes, total_cursos, total_seguimientos, total_ventas').eq('id', user.id).maybeSingle(),
+      supabase.from('misiones').select('id, tipo, categoria, titulo, descripcion, meta, recompensa_xp, recompensa_coins, orden, icono').eq('activa', true).order('orden'),
+      supabase.from('user_misiones').select('mision_id, progreso, completada, fecha_reset').eq('user_id', user.id),
     ])
 
     const s = statsRes.data as UserStats | null

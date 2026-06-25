@@ -215,8 +215,7 @@ export default function BloqueDetalle() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const yaCargoRef = useRef(false)
 
-  useFocusEffect(useCallback(() => { setPeriodo('24h') }, []))
-  useFocusEffect(useCallback(() => { cargar(periodo) }, [periodo]))
+  useFocusEffect(useCallback(() => { setPeriodo('24h'); cargar('24h') }, []))
 
   async function cargar(p: Periodo) {
     if (!yaCargoRef.current) setLoading(true)

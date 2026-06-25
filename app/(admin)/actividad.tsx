@@ -26,6 +26,7 @@ type Registro = {
 }
 
 type FiltroTipo = 'todos' | 'descarga' | 'vista'
+const ListSeparator6 = () => <View style={{ height: 6 }} />
 
 function tiempoRelativo(fechaISO: string): string {
   const ahora = new Date()
@@ -161,7 +162,7 @@ export default function ActividadAdmin() {
               </View>
             </View>
           )}
-          ItemSeparatorComponent={() => <View style={s.separator} />}
+          ItemSeparatorComponent={ListSeparator6}
         />
       )}
     </View>

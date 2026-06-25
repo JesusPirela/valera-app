@@ -60,6 +60,7 @@ type CoinsModal = {
 
 
 // Orden jerárquico para listar usuarios
+const ListSeparator8 = () => <View style={{ height: 8 }} />
 const RANGO_ROL: Record<string, number> = {
   admin: 0, supervisor: 1, asesor: 2, prospectador_plus: 3, prospectador: 4, nuevo: 5,
 }
@@ -454,7 +455,7 @@ export default function Prospectadores() {
               )}
             </View>
           )}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          ItemSeparatorComponent={ListSeparator8}
         />
       )}
 

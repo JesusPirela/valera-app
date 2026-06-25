@@ -84,7 +84,7 @@ export default function TiendaItems() {
   async function cargar() {
     setLoading(true)
     const [itemsRes, cfgRes] = await Promise.all([
-      supabase.from('store_items').select('*').order('orden'),
+      supabase.from('store_items').select('id, nombre, descripcion, costo_coins, tipo, disponible, stock, icono, orden').order('orden'),
       supabase.from('app_config').select('value').eq('key', 'ruleta_config').maybeSingle(),
     ])
     setItems((itemsRes.data ?? []) as StoreItem[])

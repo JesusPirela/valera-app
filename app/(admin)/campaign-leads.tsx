@@ -53,7 +53,10 @@ export default function CampaignLeads() {
   async function cargar() {
     setLoading(true)
     const [leadsRes, usersRes] = await Promise.all([
-      supabase.from('campaign_leads').select('*').order('fecha_lead', { ascending: false }),
+      supabase.from('campaign_leads')
+        .select('id, nombre, telefono, presupuesto, zona_busqueda, fuente_lead, fecha_lead, estado, responsable_id')
+        .order('fecha_lead', { ascending: false })
+        .limit(300),
       supabase.from('profiles').select('id, nombre').neq('role', 'admin').order('nombre'),
     ])
     setLeads((leadsRes.data ?? []) as Lead[])

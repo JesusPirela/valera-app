@@ -437,17 +437,11 @@ export default function Reportes() {
 
   const yaCargoRef = useRef(false)
 
-  // Al entrar a la pantalla siempre se muestra "Hoy"
-  useFocusEffect(useCallback(() => { setPeriodo('24h') }, []))
+  useFocusEffect(useCallback(() => { setPeriodo('24h'); cargar('24h'); cargarProgramados() }, []))
 
-  useFocusEffect(useCallback(() => {
-    cargar()
-    cargarProgramados()
-  }, [periodo]))
-
-  async function cargar() {
+  async function cargar(p: Periodo = periodo) {
     if (!yaCargoRef.current) setLoading(true)
-    const { inicio, fin } = getRango(periodo)
+    const { inicio, fin } = getRango(p)
     const [uRes, tRes] = await Promise.all([
       supabase.rpc('get_productividad_equipo', { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
       supabase.rpc('get_tendencia_equipo',     { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
@@ -567,7 +561,7 @@ export default function Reportes() {
             <TouchableOpacity
               key={p.key}
               style={[s.tab, activo && s.tabActivo]}
-              onPress={() => { if (!activo) setPeriodo(p.key) }}
+              onPress={() => { if (!activo) { setPeriodo(p.key); cargar(p.key); cargarProgramados() } }}
               activeOpacity={0.75}
             >
               <Text style={[s.tabLabel, activo && s.tabLabelActivo]}>{p.label}</Text>
