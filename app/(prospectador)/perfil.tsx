@@ -23,8 +23,7 @@ const COLORES_PREMIUM = [
 
 const AVATARES_LIBRES  = ['👤','🏠','⭐','🦁','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
 
-// GIFs animados de Google Noto Emoji — usamos 64px para carga rápida en móvil
-const NOTO = (hex: string) => `https://fonts.gstatic.com/s/e/notoemoji/latest/${hex}/64.gif`
+const NOTO = (hex: string) => `https://fonts.gstatic.com/s/e/notoemoji/latest/${hex}/512.gif`
 
 type AvatarPremium = { emoji: string; gif: string; nombre: string }
 const AVATARES_PREMIUM: AvatarPremium[] = [
