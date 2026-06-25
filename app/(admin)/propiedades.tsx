@@ -81,6 +81,16 @@ const NAV_ITEMS = [
 
 const NAV_GRUPOS = ['Propiedades', 'Gestión', 'Crecimiento']
 
+// En web, las filas de chips horizontales no se pueden arrastrar con el mouse
+// (sin scrollbar visible) y la rueda del mouse solo hace scroll vertical. Esto
+// traduce el scroll vertical de la rueda en scroll horizontal de la fila.
+function onWheelHorizontal(e: any) {
+  if (Platform.OS !== 'web') return
+  if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+  e.currentTarget.scrollLeft += e.deltaY
+  e.preventDefault()
+}
+
 function FiltroChip({ label, active, onPress, textSubColor }: { label: string; active: boolean; onPress: () => void; textSubColor: string }) {
   return (
     <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
@@ -406,19 +416,19 @@ export default function AdminPropiedades() {
       {mostrarFiltros && (
         <View style={[styles.filtrosPanel, { backgroundColor: c.card, borderColor: c.border }]}>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Operación</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} {...({ onWheel: onWheelHorizontal } as any)}>
             <FiltroChip label="Todas" active={filtroOperacion === null} onPress={() => setFiltroOperacion(null)} textSubColor={c.textSub}  textSubColor={c.textSub}/>
             <FiltroChip label="Venta" active={filtroOperacion === 'venta'} onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')} textSubColor={c.textSub}  textSubColor={c.textSub}/>
             <FiltroChip label="Renta" active={filtroOperacion === 'renta'} onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')} textSubColor={c.textSub}  textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Estado</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} {...({ onWheel: onWheelHorizontal } as any)}>
             <FiltroChip label="Todos" active={filtroEstado === null} onPress={() => setFiltroEstado(null)}  textSubColor={c.textSub}/>
             <FiltroChip label="Disponible" active={filtroEstado === 'disponible'} onPress={() => setFiltroEstado(filtroEstado === 'disponible' ? null : 'disponible')}  textSubColor={c.textSub}/>
             <FiltroChip label="Vendida" active={filtroEstado === 'vendida'} onPress={() => setFiltroEstado(filtroEstado === 'vendida' ? null : 'vendida')}  textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Tipo</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} {...({ onWheel: onWheelHorizontal } as any)}>
             <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)}  textSubColor={c.textSub}/>
             <FiltroChip label="Casa" active={filtroTipo === 'casa'} onPress={() => setFiltroTipo(filtroTipo === 'casa' ? null : 'casa')}  textSubColor={c.textSub}/>
             <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')}  textSubColor={c.textSub}/>
@@ -426,13 +436,13 @@ export default function AdminPropiedades() {
             <FiltroChip label="Terreno" active={filtroTipo === 'terreno'} onPress={() => setFiltroTipo(filtroTipo === 'terreno' ? null : 'terreno')}  textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Precio</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} {...({ onWheel: onWheelHorizontal } as any)}>
             <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)}  textSubColor={c.textSub}/>
             <FiltroChip label="↑ Menor" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')}  textSubColor={c.textSub}/>
             <FiltroChip label="↓ Mayor" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')}  textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Publicaciones</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} {...({ onWheel: onWheelHorizontal } as any)}>
             <FiltroChip label="Sin orden" active={ordenPublicaciones === null} onPress={() => setOrdenPublicaciones(null)}  textSubColor={c.textSub}/>
             <FiltroChip label="🔥 Más publicadas" active={ordenPublicaciones === 'desc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'desc' ? null : 'desc')}  textSubColor={c.textSub}/>
             <FiltroChip label="Menos publicadas" active={ordenPublicaciones === 'asc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'asc' ? null : 'asc')}  textSubColor={c.textSub}/>
@@ -468,7 +478,7 @@ export default function AdminPropiedades() {
                   )}
                 </View>
                 {sugerencias.length > 0 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} {...({ onWheel: onWheelHorizontal } as any)}>
                     {sugerencias.map(label => (
                       <FiltroChip
                         key={label}
