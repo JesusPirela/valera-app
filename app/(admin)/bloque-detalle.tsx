@@ -27,9 +27,9 @@ type UsuarioMetricas = {
   primer_acceso: string | null
   ultimo_acceso: string | null
   actividad_total: number
-  notas_bloque: string | null
-  contesto_fecha: string | null
-  contesto_ok: boolean
+  // datos del día actual (tabla bloque_diario)
+  contesto_hoy: boolean | null  // null = sin marcar hoy
+  nota_hoy: string | null
 }
 
 const GOLD = '#c9a84c'
@@ -120,13 +120,14 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo,
 }: {
   u: UsuarioMetricas; rank: number; maxActividad: number; expanded: boolean; onToggle: () => void; periodo: Periodo
   notaEdit: string; onNotaChange: (v: string) => void; onNotaGuardar: () => void; notaGuardando: boolean
-  contestoGuardando: boolean; onToggleContesto: () => void
+  contestoGuardando: boolean; onToggleContesto: (v: boolean) => void
 }) {
   const st = statusConfig(u.actividad_total, maxActividad)
   const pct = maxActividad > 0 ? u.actividad_total / maxActividad : 0
   const horas = Math.floor(u.minutos_conexion / 60), mins = u.minutos_conexion % 60
-  const contestoHoy = u.contesto_fecha === hoyISO() && u.contesto_ok
-  const notaCambio = notaEdit !== (u.notas_bloque ?? '')
+  const contestoSi = u.contesto_hoy === true
+  const contestoNo = u.contesto_hoy === false
+  const notaCambio = notaEdit !== (u.nota_hoy ?? '')
 
   return (
     <View style={uS.card}>
@@ -162,16 +163,16 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo,
               ? <ActivityIndicator size="small" color="#2ecc71" style={{ marginHorizontal: 4 }} />
               : <>
                   <TouchableOpacity
-                    style={[uS.contestoBtn, contestoHoy && uS.contestoBtnSi]}
-                    onPress={() => { if (!contestoHoy) onToggleContesto() }}
+                    style={[uS.contestoBtn, contestoSi && uS.contestoBtnSi]}
+                    onPress={() => { if (!contestoSi) onToggleContesto(true) }}
                   >
-                    <Text style={[uS.contestoBtnTxt, contestoHoy && uS.contestoBtnTxtSi]}>✓ Sí</Text>
+                    <Text style={[uS.contestoBtnTxt, contestoSi && uS.contestoBtnTxtSi]}>✓ Sí</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[uS.contestoBtn, !contestoHoy && uS.contestoBtnNo]}
-                    onPress={() => { if (contestoHoy) onToggleContesto() }}
+                    style={[uS.contestoBtn, contestoNo && uS.contestoBtnNo]}
+                    onPress={() => { if (!contestoNo) onToggleContesto(false) }}
                   >
-                    <Text style={[uS.contestoBtnTxt, !contestoHoy && uS.contestoBtnTxtNo]}>✗ No</Text>
+                    <Text style={[uS.contestoBtnTxt, contestoNo && uS.contestoBtnTxtNo]}>✗ No</Text>
                   </TouchableOpacity>
                 </>}
           </View>
@@ -319,24 +320,29 @@ export default function BloqueDetalle() {
   async function cargar(p: Periodo) {
     if (!yaCargoRef.current) setLoading(true)
     const { inicio, fin } = getRango(p)
-    const [miembrosRes, prodRes] = await Promise.all([
-      supabase.from('profiles').select('id, notas_bloque, contesto_fecha, contesto_ok').eq('bloque_id', id),
+    const [miembrosRes, prodRes, diariosRes] = await Promise.all([
+      supabase.from('profiles').select('id').eq('bloque_id', id),
       supabase.rpc('get_productividad_equipo', { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
+      supabase.from('bloque_diario').select('user_id, contesto, nota').eq('fecha', hoyISO()),
     ])
-    const perfilMap: Record<string, { notas_bloque: string | null; contesto_fecha: string | null; contesto_ok: boolean }> = {}
-    for (const m of (miembrosRes.data ?? []) as any[]) {
-      perfilMap[m.id] = { notas_bloque: m.notas_bloque ?? null, contesto_fecha: m.contesto_fecha ?? null, contesto_ok: m.contesto_ok ?? false }
+    const bloqueIds = new Set((miembrosRes.data ?? []).map((m: any) => m.id as string))
+    const diariosHoy: Record<string, { contesto: boolean | null; nota: string | null }> = {}
+    for (const d of (diariosRes.data ?? []) as any[]) {
+      diariosHoy[d.user_id] = { contesto: d.contesto ?? null, nota: d.nota ?? null }
     }
-    const ids = new Set(Object.keys(perfilMap))
     const todos = (prodRes.data as UsuarioMetricas[] | null) ?? []
     const delBloque = todos
-      .filter((u) => ids.has(u.id))
-      .map((u) => ({ ...u, ...(perfilMap[u.id] ?? { notas_bloque: null, contesto_fecha: null, contesto_ok: false }) }))
+      .filter((u) => bloqueIds.has(u.id))
+      .map((u) => ({
+        ...u,
+        contesto_hoy: diariosHoy[u.id]?.contesto ?? null,
+        nota_hoy: diariosHoy[u.id]?.nota ?? null,
+      }))
       .sort((a, b) => b.actividad_total - a.actividad_total)
     setUsuarios(delBloque)
     setNotasEdit(prev => {
       const n: Record<string, string> = {}
-      for (const u of delBloque) n[u.id] = prev[u.id] ?? (u.notas_bloque ?? '')
+      for (const u of delBloque) n[u.id] = prev[u.id] ?? (u.nota_hoy ?? '')
       return n
     })
     yaCargoRef.current = true
@@ -347,20 +353,19 @@ export default function BloqueDetalle() {
     const nota = (notasEdit[userId] ?? '').trim()
     setNotasGuardando(prev => new Set([...prev, userId]))
     const { error } = await supabase.rpc('guardar_nota_bloque', { p_user_id: userId, p_nota: nota })
-    if (!error) setUsuarios(prev => prev.map(u => u.id === userId ? { ...u, notas_bloque: nota || null } : u))
+    if (!error) setUsuarios(prev => prev.map(u => u.id === userId ? { ...u, nota_hoy: nota || null } : u))
     setNotasGuardando(prev => { const n = new Set(prev); n.delete(userId); return n })
   }
 
-  async function toggleContesto(userId: string, valorActual: boolean) {
-    const nuevoValor = !valorActual
+  async function toggleContesto(userId: string, valorActual: boolean | null, nuevoValor: boolean) {
     setContesoGuardando(prev => new Set([...prev, userId]))
     setUsuarios(prev => prev.map(u =>
-      u.id === userId ? { ...u, contesto_ok: nuevoValor, contesto_fecha: nuevoValor ? hoyISO() : null } : u
+      u.id === userId ? { ...u, contesto_hoy: nuevoValor } : u
     ))
     const { error } = await supabase.rpc('marcar_contesto_hoy', { p_user_id: userId, p_ok: nuevoValor })
     if (error) {
       setUsuarios(prev => prev.map(u =>
-        u.id === userId ? { ...u, contesto_ok: valorActual, contesto_fecha: valorActual ? hoyISO() : null } : u
+        u.id === userId ? { ...u, contesto_hoy: valorActual } : u
       ))
     }
     setContesoGuardando(prev => { const n = new Set(prev); n.delete(userId); return n })
@@ -448,12 +453,12 @@ export default function BloqueDetalle() {
                 expanded={expandedId === u.id}
                 onToggle={() => setExpandedId(expandedId === u.id ? null : u.id)}
                 periodo={periodo}
-                notaEdit={notasEdit[u.id] ?? (u.notas_bloque ?? '')}
+                notaEdit={notasEdit[u.id] ?? (u.nota_hoy ?? '')}
                 onNotaChange={v => setNotasEdit(prev => ({ ...prev, [u.id]: v }))}
                 onNotaGuardar={() => guardarNota(u.id)}
                 notaGuardando={notasGuardando.has(u.id)}
                 contestoGuardando={contestoGuardando.has(u.id)}
-                onToggleContesto={() => toggleContesto(u.id, u.contesto_ok && u.contesto_fecha === hoyISO())}
+                onToggleContesto={(v) => toggleContesto(u.id, u.contesto_hoy, v)}
               />
             ))}
           </View>
