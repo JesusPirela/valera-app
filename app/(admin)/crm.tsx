@@ -169,8 +169,16 @@ export default function AdminCRM() {
     setModalNuevo(true)
   }
 
-  function confirmarEliminarCliente(item: ClienteAdmin) {
-    const mensaje = `¿Eliminar a "${item.nombre}"? Esta acción no se puede deshacer.`
+  async function confirmarEliminarCliente(item: ClienteAdmin) {
+    const { count } = await supabase
+      .from('recordatorios')
+      .select('id', { count: 'exact', head: true })
+      .eq('cliente_id', item.id)
+    const seguimientos = count ?? 0
+    const aviso = seguimientos > 0
+      ? `\n\n⚠️ Este cliente tiene ${seguimientos} seguimiento${seguimientos > 1 ? 's' : ''} registrado${seguimientos > 1 ? 's' : ''}. Al eliminarlo se perderán esos datos.`
+      : ''
+    const mensaje = `¿Eliminar a "${item.nombre}"? Esta acción no se puede deshacer.${aviso}`
     if (Platform.OS === 'web') {
       if (window.confirm(mensaje)) eliminarCliente(item.id)
     } else {

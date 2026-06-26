@@ -232,6 +232,10 @@ export default function DetalleCliente() {
   const [fechaRec, setFechaRec] = useState<Date | null>(null)
   const [guardandoRec, setGuardandoRec] = useState(false)
 
+  const [modalSeguimientoRapido, setModalSeguimientoRapido] = useState(false)
+  const [tituloSeguimiento, setTituloSeguimiento] = useState('')
+  const [guardandoSeguimiento, setGuardandoSeguimiento] = useState(false)
+
   async function cambiarEstado(nuevoEstado: string) {
     if (!cliente || nuevoEstado === cliente.estado) return
     const estadoAnterior = ESTADOS[cliente.estado]?.label ?? cliente.estado
@@ -333,6 +337,30 @@ export default function DetalleCliente() {
     if (!error) {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) registrarAccion(user.id, 'completar_seguimiento').catch(() => {})
+    }
+  }
+
+  async function registrarSeguimientoRapido() {
+    const titulo = tituloSeguimiento.trim() || 'Seguimiento'
+    setGuardandoSeguimiento(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const uid = session?.user?.id
+      if (!uid) { Alert.alert('Error', 'Sesión expirada.'); return }
+      const ahora = new Date().toISOString()
+      const { error } = await supabase.from('recordatorios').insert({
+        cliente_id: id, user_id: uid, titulo,
+        fecha_hora: ahora, completado: true,
+      })
+      if (error) { Alert.alert('Error al guardar', error.message); return }
+      registrarAccion(uid, 'completar_seguimiento').catch(() => {})
+      setTituloSeguimiento('')
+      setModalSeguimientoRapido(false)
+      refetch()
+    } catch (e: any) {
+      Alert.alert('Error inesperado', e?.message ?? 'Intenta de nuevo.')
+    } finally {
+      setGuardandoSeguimiento(false)
     }
   }
 
@@ -582,10 +610,19 @@ export default function DetalleCliente() {
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <SectionTitle icon="alarm-outline" label="Recordatorios" accentColor={info.color} />
-          <TouchableOpacity style={[styles.addBtn, { borderColor: info.color }]} onPress={() => setModalRecordatorio(true)}>
-            <Ionicons name="add" size={14} color={info.color} />
-            <Text style={[styles.addBtnText, { color: info.color }]}>Agregar</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <TouchableOpacity
+              style={[styles.addBtn, { borderColor: '#16a34a', backgroundColor: '#f0fdf4' }]}
+              onPress={() => { setTituloSeguimiento(''); setModalSeguimientoRapido(true) }}
+            >
+              <Ionicons name="checkmark-done-outline" size={14} color="#16a34a" />
+              <Text style={[styles.addBtnText, { color: '#16a34a' }]}>Seguimiento rápido</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.addBtn, { borderColor: info.color }]} onPress={() => setModalRecordatorio(true)}>
+              <Ionicons name="add" size={14} color={info.color} />
+              <Text style={[styles.addBtnText, { color: info.color }]}>Agendar</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         {recPendientes.length === 0 ? (
           <Text style={styles.emptyText}>Sin recordatorios pendientes.</Text>
@@ -741,6 +778,42 @@ export default function DetalleCliente() {
               </TouchableOpacity>
             </View>
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Modal: Seguimiento rápido ─────────────────── */}
+      <Modal visible={modalSeguimientoRapido} transparent animationType="slide">
+        <View style={modal.overlay}>
+          <View style={modal.sheetContent}>
+            <Text style={modal.title}>Registrar seguimiento</Text>
+            <Text style={[modal.fieldLabel, { marginBottom: 4 }]}>
+              Se guarda como seguimiento completado ahora mismo.
+            </Text>
+            <Text style={modal.fieldLabel}>Descripción (opcional)</Text>
+            <TextInput
+              style={modal.input}
+              value={tituloSeguimiento}
+              onChangeText={setTituloSeguimiento}
+              placeholder="Ej: Llamé, envié propiedades, visita realizada…"
+              autoFocus
+            />
+            <View style={modal.actions}>
+              <TouchableOpacity
+                style={modal.btnCancel}
+                onPress={() => { setModalSeguimientoRapido(false); setTituloSeguimiento('') }}
+              >
+                <Text style={modal.btnCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[modal.btnConfirm, { backgroundColor: '#16a34a' }, guardandoSeguimiento && { opacity: 0.6 }]}
+                onPress={registrarSeguimientoRapido} disabled={guardandoSeguimiento}
+              >
+                {guardandoSeguimiento
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={modal.btnConfirmText}>✓ Guardar seguimiento</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </ScrollView>
