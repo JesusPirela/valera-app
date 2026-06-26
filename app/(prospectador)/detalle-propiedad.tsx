@@ -1684,27 +1684,36 @@ export default function DetallePropiedad() {
           )}
         </View>
 
-        {/* Botón descargar imágenes */}
+        {/* Botones descargar imágenes */}
         {imagenes.length > 0 && (
-          <TouchableOpacity
-            style={[styles.descargarBtn, descargando && styles.btnDisabled]}
-            onPress={() => {
-              setSeleccionadas(new Set(imagenes.map((_, i) => i)))
-              setModalSeleccion(true)
-            }}
-            disabled={descargando}
-          >
-            {descargando ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.descargarText}>
-                {Platform.OS === 'web'
-                  ? `Descargar ${imagenes.length === 1 ? '1 imagen' : `${imagenes.length} imágenes`}`
-                  : `Guardar en galería (${imagenes.length})`
-                }
-              </Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.descargarRow}>
+            {/* Descargar todas directamente */}
+            <TouchableOpacity
+              style={[styles.descargarBtn, styles.descargarBtnTodas, descargando && styles.btnDisabled]}
+              onPress={() => descargarImagenes()}
+              disabled={descargando}
+            >
+              {descargando ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.descargarText}>
+                  {Platform.OS === 'web' ? '⬇ Todas' : '⬇ Guardar todas'}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Elegir cuáles descargar */}
+            <TouchableOpacity
+              style={[styles.descargarBtn, styles.descargarBtnElegir, descargando && styles.btnDisabled]}
+              onPress={() => {
+                setSeleccionadas(new Set())
+                setModalSeleccion(true)
+              }}
+              disabled={descargando}
+            >
+              <Text style={styles.descargarText}>☑ Elegir</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Botón generar ficha PDF */}
@@ -2356,13 +2365,19 @@ const styles = StyleSheet.create({
 
   btnDisabled: { opacity: 0.6 },
 
+  descargarRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
   descargarBtn: {
     backgroundColor: '#1a6470',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
-    marginBottom: 12,
   },
+  descargarBtnTodas: { flex: 3 },
+  descargarBtnElegir: { flex: 2, backgroundColor: '#1e3a4a' },
   descargarText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
   modalSeleccionCard: {
