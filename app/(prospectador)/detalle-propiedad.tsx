@@ -544,47 +544,32 @@ export default function DetallePropiedad() {
   // OutOfMemoryError que se intenta evitar.
   async function imagenABase64(url: string, _anchoMax = 1100): Promise<string | null> {
     if (Platform.OS === 'web') {
-      // Estrategia web: descargar via Supabase Storage JS client (incluye auth header
-      // automáticamente) → FileReader → data URI. Esto evita problemas de CORS con
-      // el endpoint /render/image/public/ y funciona tanto para buckets públicos
-      // como para objetos que requieren autenticación.
-      // Extrae bucket y path de la URL de Supabase Storage.
-      const storageMatch = url.match(/\/storage\/v1\/object\/(?:public|authenticated)\/([^/?#]+)\/(.+?)(?:\?.*)?$/)
-      if (storageMatch) {
-        const [, bucket, path] = storageMatch
-        for (let intento = 1; intento <= 3; intento++) {
-          try {
-            const { data, error } = await supabase.storage.from(bucket).download(path)
-            if (error || !data) throw new Error(error?.message ?? 'sin datos')
-            return await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader()
-              reader.onloadend = () => resolve(reader.result as string)
-              reader.onerror = reject
-              reader.readAsDataURL(data)
-            })
-          } catch {
-            if (intento < 3) await new Promise((r) => setTimeout(r, 800 * intento))
+      // Bucket propiedades es público (CORS: Access-Control-Allow-Origin: * confirmado).
+      // Usamos fetch() directo — más simple y sin capas de auth que puedan fallar.
+      // Estrategia: 3 intentos con tiempo de espera creciente.
+      const fetchBlob = async (u: string): Promise<string> => {
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 20000)
+        const resp = await fetch(u, { signal: ctrl.signal })
+        clearTimeout(timer)
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const blob = await resp.blob()
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            const result = reader.result
+            if (typeof result === 'string' && result.length > 50) resolve(result)
+            else reject(new Error('resultado vacío'))
           }
-        }
-        return null
+          reader.onerror = () => reject(reader.error)
+          reader.readAsDataURL(blob)
+        })
       }
-      // Fallback para URLs externas (e.g. Google Maps static, logos de inmobiliarias)
       for (let intento = 1; intento <= 3; intento++) {
         try {
-          const ctrl = new AbortController()
-          const timer = setTimeout(() => ctrl.abort(), 15000)
-          const resp = await fetch(url, { signal: ctrl.signal })
-          clearTimeout(timer)
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-          const blob = await resp.blob()
-          return await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onloadend = () => resolve(reader.result as string)
-            reader.onerror = reject
-            reader.readAsDataURL(blob)
-          })
+          return await fetchBlob(url)
         } catch {
-          if (intento < 3) await new Promise((r) => setTimeout(r, 800 * intento))
+          if (intento < 3) await new Promise((r) => setTimeout(r, 500 * intento))
         }
       }
       return null
