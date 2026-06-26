@@ -544,34 +544,61 @@ export default function DetallePropiedad() {
   // OutOfMemoryError que se intenta evitar.
   async function imagenABase64(url: string, _anchoMax = 1100): Promise<string | null> {
     if (Platform.OS === 'web') {
-      // Bucket propiedades es público (CORS: Access-Control-Allow-Origin: * confirmado).
-      // Usamos fetch() directo — más simple y sin capas de auth que puedan fallar.
-      // Estrategia: 3 intentos con tiempo de espera creciente.
-      const fetchBlob = async (u: string): Promise<string> => {
-        const ctrl = new AbortController()
-        const timer = setTimeout(() => ctrl.abort(), 20000)
-        const resp = await fetch(u, { signal: ctrl.signal })
-        clearTimeout(timer)
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-        const blob = await resp.blob()
-        return new Promise<string>((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onloadend = () => {
-            const result = reader.result
-            if (typeof result === 'string' && result.length > 50) resolve(result)
-            else reject(new Error('resultado vacío'))
+      // Carga la imagen con crossOrigin='anonymous' (CORS: * confirmado en bucket propiedades)
+      // y convierte via canvas.toDataURL. Esto evita todo problema de fetch/CORS/supabase client.
+      const cargarConCanvas = (): Promise<string | null> =>
+        new Promise((resolve) => {
+          const img = new window.Image()
+          img.crossOrigin = 'anonymous'
+          const timer = setTimeout(() => { img.src = ''; resolve(null) }, 20000)
+          img.onload = () => {
+            clearTimeout(timer)
+            try {
+              const MAX = 1100
+              const ratio = Math.min(1, MAX / (img.naturalWidth || 1), MAX / (img.naturalHeight || 1))
+              const canvas = document.createElement('canvas')
+              canvas.width  = Math.round((img.naturalWidth  || 1) * ratio)
+              canvas.height = Math.round((img.naturalHeight || 1) * ratio)
+              const ctx = canvas.getContext('2d')
+              if (!ctx) { resolve(null); return }
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+              const data = canvas.toDataURL('image/jpeg', 0.88)
+              resolve(data && data.length > 100 ? data : null)
+            } catch (e) {
+              console.error('[PDF] canvas error:', url, e)
+              resolve(null)
+            }
           }
-          reader.onerror = () => reject(reader.error)
-          reader.readAsDataURL(blob)
+          img.onerror = (e) => {
+            clearTimeout(timer)
+            console.error('[PDF] img error:', url, e)
+            resolve(null)
+          }
+          // Cache-bust para evitar respuesta sin CORS del caché del navegador
+          img.src = url + (url.includes('?') ? '&' : '?') + '_pdf=' + Date.now()
         })
-      }
-      for (let intento = 1; intento <= 3; intento++) {
-        try {
-          return await fetchBlob(url)
-        } catch {
-          if (intento < 3) await new Promise((r) => setTimeout(r, 500 * intento))
+
+      // Primer intento con canvas
+      const r1 = await cargarConCanvas()
+      if (r1) return r1
+
+      // Fallback: fetch + FileReader (en caso de que canvas falle)
+      try {
+        const resp = await fetch(url)
+        if (resp.ok) {
+          const blob = await resp.blob()
+          const b64 = await new Promise<string | null>((res) => {
+            const reader = new FileReader()
+            reader.onloadend = () => res(typeof reader.result === 'string' && reader.result.length > 100 ? reader.result : null)
+            reader.onerror = () => res(null)
+            reader.readAsDataURL(blob)
+          })
+          if (b64) return b64
         }
+      } catch (e) {
+        console.error('[PDF] fetch fallback error:', url, e)
       }
+
       return null
     }
     // Nativo: descarga optimizada via thumb() al sistema de archivos
@@ -613,12 +640,11 @@ export default function DetallePropiedad() {
 
       const [imagenesConSrcRaw, logoSrc, inmobiliariaLogoSrc] = await Promise.all([
         Promise.all(
-          imagenes.slice(0, 13).map(async (img, i) => ({
-            ...img,
-            // La imagen principal se ve más grande en el PDF (420px de alto a
-            // todo el ancho); el resto son miniaturas de galería más pequeñas.
-            src: await imagenABase64(img.url, i === 0 ? 1100 : 700),
-          }))
+          imagenes.slice(0, 13).map(async (img, i) => {
+            const src = await imagenABase64(img.url, i === 0 ? 1100 : 700)
+            if (!src) console.error('[PDF] imagen no cargó:', img.url)
+            return { ...img, src }
+          })
         ),
         getLogoBase64(),
         propiedad.inmobiliarias?.logo_url ? imagenABase64(propiedad.inmobiliarias.logo_url) : Promise.resolve(null),
@@ -630,6 +656,7 @@ export default function DetallePropiedad() {
         (img): img is typeof img & { src: string } => !!img.src
       )
 
+      console.log(`[PDF] ${imagenesConSrc.length}/${imagenes.length} imágenes cargadas`)
       const imagenPrincipal = imagenesConSrc[0]
       // Agrupar el resto de imágenes en bloques de máximo 6 por hoja
       const fotosRestantes = imagenesConSrc.slice(1)
