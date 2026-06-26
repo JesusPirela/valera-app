@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
 import { supabase } from '../../lib/supabase'
 import { useTheme } from '../../lib/ThemeContext'
+import { AccentBackground } from '../../lib/patrones'
 import { trackLoginDiario } from '../../lib/gamification'
 import { programarRecordatorios, solicitarPermisoWeb, notificarWeb } from '../../lib/notificaciones-locales'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -78,7 +79,7 @@ export default function ProspectadorLayout() {
   const [showCrmPopup, setShowCrmPopup] = useState(false)
   const [role, setRole] = useState<string | null>(null)
   const { vistaComo } = useVistaComo()
-  const { primaryColor: colorAcento, darkMode } = useTheme()
+  const { primaryColor: colorAcento, acentoId, darkMode } = useTheme()
   const pathname = usePathname()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(false)
@@ -248,7 +249,10 @@ export default function ProspectadorLayout() {
           fontWeight: '600',
           marginTop: 2,
         },
-        headerStyle: { backgroundColor: colorAcento },
+        headerBackground: () => (
+          <AccentBackground acentoId={acentoId} style={StyleSheet.absoluteFillObject} />
+        ),
+        headerStyle: { backgroundColor: 'transparent' },
         headerTintColor: '#c9a84c',
         headerTitleStyle: { fontWeight: 'bold' },
         headerTitle: () => (

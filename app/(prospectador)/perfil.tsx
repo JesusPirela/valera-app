@@ -1,13 +1,16 @@
 import { useState, useCallback, useRef, useEffect, memo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Platform, Alert, Image, Animated, Easing,
+  TextInput, ActivityIndicator, Platform, Alert, Image,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
-import { LinearGradient } from 'expo-linear-gradient'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { useTheme, useColors } from '../../lib/ThemeContext'
+import {
+  PATRONES_ANIMADOS, baseColorDeAcento, AnimatedGradientView, AccentBackground,
+  type PatronAnimado,
+} from '../../lib/patrones'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import CambiarCuenta from '../../components/CambiarCuenta'
 import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
@@ -16,67 +19,6 @@ const COLORES_LIBRES = [
   '#1a6470', '#c9a84c', '#1e3a5f', '#7b1e3a',
   '#2d6a4f', '#4a4a4a', '#5c3d99', '#c45c1a',
 ]
-const COLORES_PREMIUM = [
-  '#c2185b', '#e64a19', '#00838f', '#558b2f',
-  '#283593', '#ff6f00', '#006064', '#4a148c',
-  '#37474f', '#1b5e20', '#880e4f', '#bf360c',
-]
-type PatronAnimado = { id: string; nombre: string; colores: [string, string, string]; base: string }
-const PATRONES_ANIMADOS: PatronAnimado[] = [
-  { id: 'aurora',  nombre: 'Aurora',    colores: ['#5c3d99', '#00838f', '#283593'], base: '#5c3d99' },
-  { id: 'lava',    nombre: 'Lava',      colores: ['#e65100', '#b71c1c', '#c62828'], base: '#c62828' },
-  { id: 'ocean',   nombre: 'Océano',    colores: ['#01579b', '#006064', '#0288d1'], base: '#01579b' },
-  { id: 'forest',  nombre: 'Bosque',    colores: ['#1b5e20', '#004d40', '#33691e'], base: '#2e7d32' },
-  { id: 'sunset',  nombre: 'Atardecer', colores: ['#ad1457', '#e65100', '#c9a84c'], base: '#e65100' },
-  { id: 'galaxy',  nombre: 'Galaxia',   colores: ['#4a148c', '#1a237e', '#311b92'], base: '#4a148c' },
-  { id: 'rose',    nombre: 'Rosa',      colores: ['#ad1457', '#880e4f', '#e91e63'], base: '#ad1457' },
-  { id: 'arctic',  nombre: 'Ártico',    colores: ['#0097a7', '#0277bd', '#00bcd4'], base: '#0097a7' },
-]
-
-function baseColorDeAcento(acento: string): string {
-  if (acento.startsWith('animated:')) {
-    const id = acento.replace('animated:', '')
-    return PATRONES_ANIMADOS.find(p => p.id === id)?.base ?? '#1a6470'
-  }
-  return acento
-}
-
-function AnimatedGradientView({ patron, style, children }: {
-  patron: PatronAnimado
-  style?: any
-  children?: React.ReactNode
-}) {
-  const anim = useRef(new Animated.Value(0)).current
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    )
-    loop.start()
-    return () => loop.stop()
-  }, [patron.id])
-  return (
-    <View style={[{ overflow: 'hidden' }, style]}>
-      <LinearGradient colors={patron.colores} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFillObject} />
-      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: anim }]}>
-        <LinearGradient colors={[patron.colores[2], patron.colores[0], patron.colores[1]]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
-      </Animated.View>
-      {children}
-    </View>
-  )
-}
-
-function AccentBackground({ acentoId, style, children }: {
-  acentoId: string
-  style?: any
-  children?: React.ReactNode
-}) {
-  const patron = PATRONES_ANIMADOS.find(p => `animated:${p.id}` === acentoId)
-  if (patron) return <AnimatedGradientView patron={patron} style={style}>{children}</AnimatedGradientView>
-  return <View style={[style, { backgroundColor: acentoId }]}>{children}</View>
-}
 
 const AVATARES_LIBRES  = ['👤','🏠','⭐','🦁','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
 
@@ -176,7 +118,7 @@ const AvatarGrid = memo(function AvatarGrid({
 })
 
 export default function Perfil() {
-  const { setPrimaryColor, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap } = useTheme()
+  const { setPrimaryColor, setAcentoId, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap } = useTheme()
   const c = useColors()
 
   const [loading, setLoading] = useState(true)
@@ -318,6 +260,7 @@ export default function Perfil() {
         .eq('id', userId)
 
       if (error) throw error
+      setAcentoId(colorAcento)
       setPrimaryColor(baseColorDeAcento(colorAcento))
       mostrarAlerta('¡Perfil actualizado!')
       cargar()
@@ -573,7 +516,7 @@ export default function Perfil() {
             <TouchableOpacity
               key={valor}
               style={[s.colorBtn, { backgroundColor: valor }, colorAcento === valor && s.colorBtnActivo]}
-              onPress={() => { setColorAcento(valor); setPrimaryColor(valor) }}
+              onPress={() => { setColorAcento(valor); setPrimaryColor(valor); setAcentoId(valor) }}
             >
               {colorAcento === valor && <Text style={s.colorCheck}>✓</Text>}
             </TouchableOpacity>
@@ -595,7 +538,7 @@ export default function Perfil() {
                 <TouchableOpacity
                   style={[s.colorBtn, { overflow: 'hidden' }, !desbloqueado && { opacity: 0.55 }, seleccionado && s.colorBtnActivo]}
                   onPress={() => {
-                    if (desbloqueado) { setColorAcento(id); setPrimaryColor(patron.base); return }
+                    if (desbloqueado) { setColorAcento(id); setPrimaryColor(patron.base); setAcentoId(id); return }
                     comprarItem('color', patron.id)
                   }}
                   disabled={enCompra}

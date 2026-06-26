@@ -19,6 +19,8 @@ const FONT_CAP_MULTIPLIER = 1.15
 type ThemeCtx = {
   primaryColor: string
   setPrimaryColor: (color: string) => void
+  acentoId: string
+  setAcentoId: (id: string) => void
   darkMode: boolean
   toggleDarkMode: () => void
   fontScaleCap: boolean
@@ -28,6 +30,8 @@ type ThemeCtx = {
 const ThemeContext = createContext<ThemeCtx>({
   primaryColor:    DEFAULT_COLOR,
   setPrimaryColor: () => {},
+  acentoId:        DEFAULT_COLOR,
+  setAcentoId:     () => {},
   darkMode:        true,
   toggleDarkMode:  () => {},
   fontScaleCap:       false,
@@ -44,6 +48,7 @@ function aplicarTopeFuente(activo: boolean) {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [primaryColor, setPrimaryColor] = useState(DEFAULT_COLOR)
+  const [acentoId, setAcentoId]         = useState(DEFAULT_COLOR)
   const [darkMode, setDarkMode]         = useState(false)
   const [fontScaleCap, setFontScaleCap] = useState(false)
 
@@ -70,8 +75,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           .select('color_acento')
           .eq('id', session.user.id)
           .single()
-        if (data?.color_acento) setPrimaryColor(resolverColor(data.color_acento))
+        if (data?.color_acento) {
+          setAcentoId(data.color_acento)
+          setPrimaryColor(resolverColor(data.color_acento))
+        }
       } else {
+        setAcentoId(DEFAULT_COLOR)
         setPrimaryColor(DEFAULT_COLOR)
       }
     })
@@ -96,7 +105,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ThemeContext.Provider value={{ primaryColor, setPrimaryColor, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap }}>
+    <ThemeContext.Provider value={{ primaryColor, setPrimaryColor, acentoId, setAcentoId, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap }}>
       {children}
     </ThemeContext.Provider>
   )
