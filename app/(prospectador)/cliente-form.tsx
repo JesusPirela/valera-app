@@ -269,10 +269,11 @@ export default function ClienteForm() {
   // persiste entre visitas. Reinicializamos en CADA foco: si hay id cargamos el
   // cliente; si no, dejamos todo en blanco (antes salían los datos del anterior).
   useFocusEffect(useCallback(() => {
+    let cancelled = false
     if (!params.id) {
       limpiarFormulario()
       setLoading(false)
-      return
+      return () => { cancelled = true }
     }
     setLoading(true)
     supabase
@@ -281,6 +282,7 @@ export default function ClienteForm() {
       .eq('id', params.id)
       .single()
       .then(({ data }) => {
+        if (cancelled) return
         if (data) {
           setTipoOperacion(data.tipo_operacion ?? null)
           setNombre(data.nombre ?? '')
@@ -305,6 +307,7 @@ export default function ClienteForm() {
         }
         setLoading(false)
       })
+    return () => { cancelled = true }
   }, [params.id]))
 
   async function guardar() {
