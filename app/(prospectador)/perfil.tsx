@@ -200,8 +200,8 @@ export default function Perfil() {
     if (comprando) return
     const label = tipo === 'color' ? `el color ${valor}` : `el avatar ${valor}`
     const confirmar = Platform.OS === 'web'
-      ? window.confirm(`¿Desbloquear ${label} por 500 Valera Coins?`)
-      : await new Promise<boolean>(r => Alert.alert('Desbloquear', `¿Desbloquear ${label} por 500 Valera Coins?`,
+      ? window.confirm(`¿Desbloquear ${label} por 300 Valera Coins?`)
+      : await new Promise<boolean>(r => Alert.alert('Desbloquear', `¿Desbloquear ${label} por 300 Valera Coins?`,
           [{ text: 'Cancelar', style: 'cancel', onPress: () => r(false) }, { text: 'Comprar', onPress: () => r(true) }]))
     if (!confirmar) return
     setComprando(valor)
@@ -420,7 +420,7 @@ export default function Perfil() {
 
         <View style={s.premiumHeader}>
           <Text style={s.premiumLabel}>✨ Avatares animados</Text>
-          <Text style={s.premiumTag}>500 💰 c/u</Text>
+          <Text style={s.premiumTag}>300 💰 c/u</Text>
         </View>
         <AvatarGrid
           avatarsDesbloqueados={avatarsDesbloqueados}
@@ -524,7 +524,7 @@ export default function Perfil() {
 
         <View style={s.premiumHeader}>
           <Text style={s.premiumLabel}>✨ Colores premium</Text>
-          <Text style={s.premiumTag}>500 💰 c/u</Text>
+          <Text style={s.premiumTag}>300 💰 c/u</Text>
         </View>
         <View style={s.coloresGrid}>
           {COLORES_PREMIUM.map(valor => {
