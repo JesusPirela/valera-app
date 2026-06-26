@@ -16,6 +16,11 @@ const COLORES_LIBRES = [
   '#1a6470', '#c9a84c', '#1e3a5f', '#7b1e3a',
   '#2d6a4f', '#4a4a4a', '#5c3d99', '#c45c1a',
 ]
+const COLORES_PREMIUM = [
+  '#c2185b', '#e64a19', '#00838f', '#558b2f',
+  '#283593', '#ff6f00', '#006064', '#4a148c',
+  '#37474f', '#1b5e20', '#880e4f', '#bf360c',
+]
 type PatronAnimado = { id: string; nombre: string; colores: [string, string, string]; base: string }
 const PATRONES_ANIMADOS: PatronAnimado[] = [
   { id: 'aurora',  nombre: 'Aurora',    colores: ['#5c3d99', '#00838f', '#283593'], base: '#5c3d99' },
@@ -573,6 +578,45 @@ export default function Perfil() {
               {colorAcento === valor && <Text style={s.colorCheck}>✓</Text>}
             </TouchableOpacity>
           ))}
+        </View>
+
+        <View style={s.premiumHeader}>
+          <Text style={s.premiumLabel}>✨ Colores premium</Text>
+          <Text style={s.premiumTag}>300 💰 c/u</Text>
+        </View>
+        <View style={s.coloresGrid}>
+          {COLORES_PREMIUM.map(valor => {
+            const desbloqueado = coloresDesbloqueados.includes(valor)
+            const enCompra = comprando === valor
+            return (
+              <TouchableOpacity
+                key={valor}
+                style={[
+                  s.colorBtn,
+                  { backgroundColor: valor },
+                  !desbloqueado && { opacity: 0.45 },
+                  colorAcento === valor && desbloqueado && s.colorBtnActivo,
+                ]}
+                onPress={() => {
+                  if (desbloqueado) { setColorAcento(valor); return }
+                  comprarItem('color', valor)
+                }}
+                disabled={enCompra}
+              >
+                {colorAcento === valor && desbloqueado && <Text style={s.colorCheck}>✓</Text>}
+                {enCompra && (
+                  <View style={s.lockOverlay}>
+                    <ActivityIndicator size="small" color="#fff" />
+                  </View>
+                )}
+                {!desbloqueado && !enCompra && (
+                  <View style={s.lockOverlay}>
+                    <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )
+          })}
         </View>
 
         <View style={s.premiumHeader}>
