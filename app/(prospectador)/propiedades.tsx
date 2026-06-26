@@ -284,6 +284,7 @@ export default function ProspectadorPropiedades() {
   const propiedades = queryData?.propiedades ?? []
   const publicaciones = pubData?.publicacionesMap ?? {}
   const publicacionFechas = pubData?.publicacionFechasMap ?? {}
+  const esAdmin = queryData?.rol === 'admin'
 
   async function publicarPropiedad(propiedadId: string) {
     if (togglingRef.current.has(propiedadId)) return
@@ -490,10 +491,10 @@ export default function ProspectadorPropiedades() {
     )
   }
 
-  // Destacadas siempre al tope (respetando expiración y sin pisar exclusivas)
+  // Destacadas al tope solo para admins (los prospectadores no ven el destaque)
   const _ahora = Date.now()
   const _estaDestacada = (p: Propiedad) =>
-    p.destacada && !p.exclusiva && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > _ahora)
+    esAdmin && p.destacada && !p.exclusiva && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > _ahora)
   propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
     const aD = _estaDestacada(a) ? 1 : 0
     const bD = _estaDestacada(b) ? 1 : 0
@@ -555,7 +556,7 @@ export default function ProspectadorPropiedades() {
           styles.card,
           { backgroundColor: c.card, borderColor: c.border },
           item.exclusiva && styles.cardExclusiva,
-          item.destacada && !item.exclusiva && styles.cardDestacada,
+          esAdmin && item.destacada && !item.exclusiva && styles.cardDestacada,
           width != null && { width },
         ]}
         activeOpacity={0.85}
@@ -582,7 +583,7 @@ export default function ProspectadorPropiedades() {
             <Text style={styles.exclusivaBannerText}>★ Propiedad exclusiva</Text>
           </View>
         )}
-        {item.destacada && !item.exclusiva && (
+        {esAdmin && item.destacada && !item.exclusiva && (
           <View style={styles.destacadaBanner}>
             <Text style={styles.destacadaBannerText}>
               ★ Propiedad destacada
@@ -593,7 +594,7 @@ export default function ProspectadorPropiedades() {
           </View>
         )}
         <View style={styles.cardBody}>
-          {item.destacada && item.destacada_mensaje ? (
+          {esAdmin && item.destacada && item.destacada_mensaje ? (
             <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
           ) : null}
           <View style={styles.cardHeaderRow}>
