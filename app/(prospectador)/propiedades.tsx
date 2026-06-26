@@ -159,6 +159,8 @@ export default function ProspectadorPropiedades() {
   const [fechaDesdeCustom, setFechaDesdeCustom] = useState('')
   const [fechaHastaCustom, setFechaHastaCustom] = useState('')
   const [vistaZonas, setVistaZonas] = useState(false)
+  // Orden aleatorio estable por sesión para usuarios no-admin
+  const shuffleMapRef = useRef<Map<string, number>>(new Map())
   const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
   // Web: renderizado incremental para no montar 1000+ tarjetas/imágenes de golpe
   const PAGE_WEB = 24
@@ -276,6 +278,16 @@ export default function ProspectadorPropiedades() {
       refetchPub()
     }
   }, [refetch, refetchPub, queryClient, vistaComo]))
+
+  // Generar orden aleatorio único por sesión cuando llegan las propiedades
+  useEffect(() => {
+    if (!queryData?.propiedades || queryData.propiedades.length === 0) return
+    if (shuffleMapRef.current.size === 0) {
+      const map = new Map<string, number>()
+      queryData.propiedades.forEach(p => map.set(p.id, Math.random()))
+      shuffleMapRef.current = map
+    }
+  }, [queryData?.propiedades])
 
   useEffect(() => {
     if (!queryData?.propiedades) return
@@ -503,15 +515,26 @@ export default function ProspectadorPropiedades() {
     )
   }
 
-  // Destacadas al tope solo para admins (los prospectadores no ven el destaque)
   const _ahora = Date.now()
   const _estaDestacada = (p: Propiedad) =>
-    esAdmin && p.destacada && !p.exclusiva && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > _ahora)
-  propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
-    const aD = _estaDestacada(a) ? 1 : 0
-    const bD = _estaDestacada(b) ? 1 : 0
-    return bD - aD
-  })
+    p.destacada && !p.exclusiva && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > _ahora)
+
+  if (esAdmin) {
+    // Admins: destacadas primero, luego orden original (fecha desc del servidor)
+    propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
+      const aD = _estaDestacada(a) ? 1 : 0
+      const bD = _estaDestacada(b) ? 1 : 0
+      return bD - aD
+    })
+  } else if (!ordenPrecio) {
+    // Usuarios no-admin: destacadas primero, resto en orden aleatorio por sesión
+    propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
+      const aD = _estaDestacada(a) ? 1 : 0
+      const bD = _estaDestacada(b) ? 1 : 0
+      if (aD !== bD) return bD - aD
+      return (shuffleMapRef.current.get(a.id) ?? 0) - (shuffleMapRef.current.get(b.id) ?? 0)
+    })
+  }
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
   useEffect(() => { setVisibleCount(PAGE_WEB) }, [
@@ -568,7 +591,7 @@ export default function ProspectadorPropiedades() {
           styles.card,
           { backgroundColor: c.card, borderColor: c.border },
           item.exclusiva && styles.cardExclusiva,
-          esAdmin && item.destacada && !item.exclusiva && styles.cardDestacada,
+          _estaDestacada(item) && styles.cardDestacada,
           width != null && { width },
         ]}
         activeOpacity={0.85}
@@ -595,18 +618,18 @@ export default function ProspectadorPropiedades() {
             <Text style={styles.exclusivaBannerText}>★ Propiedad exclusiva</Text>
           </View>
         )}
-        {esAdmin && item.destacada && !item.exclusiva && (
+        {_estaDestacada(item) && (
           <View style={styles.destacadaBanner}>
             <Text style={styles.destacadaBannerText}>
               ★ Propiedad destacada
-              {item.destacada_hasta
+              {esAdmin && item.destacada_hasta
                 ? `  ·  hasta el ${new Date(item.destacada_hasta).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`
                 : ''}
             </Text>
           </View>
         )}
         <View style={styles.cardBody}>
-          {esAdmin && item.destacada && item.destacada_mensaje ? (
+          {esAdmin && _estaDestacada(item) && item.destacada_mensaje ? (
             <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
           ) : null}
           <View style={styles.cardHeaderRow}>

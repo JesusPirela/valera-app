@@ -7,6 +7,7 @@ import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { comprarItem, getCoinsDisplay, registrarPremioRuleta, calcularNivel } from '../../lib/gamification'
 import { RuletaModal, checkMilestone, CONFIG_DEFAULT, type Premio, type RuletaConfig } from '../../components/RuletaModal'
+import { PATRONES_ANIMADOS, AnimatedGradientView } from '../../lib/patrones'
 
 type StoreItem = {
   id: string
@@ -67,6 +68,7 @@ export default function Tienda() {
   const [loading, setLoading]     = useState(true)
   const [loadingHistorial, setLoadingHistorial] = useState(false)
   const [comprando, setComprando]       = useState<string | null>(null)
+  const [comprandoPatron, setComprandoPatron] = useState<string | null>(null)
   const [showRuleta, setShowRuleta]           = useState(false)
   const [ruletaMilestone, setRuletaMilestone] = useState(false)
   const [milestoneNivel, setMilestoneNivel]   = useState<number | undefined>()
@@ -134,6 +136,26 @@ export default function Tienda() {
       setMilestoneNivel(milestone)
       setRuletaMilestone(true)
       setShowRuleta(true)
+    }
+  }
+
+  async function comprarPatron(patronId: string) {
+    if (!userId) return
+    const COSTO = 300
+    if (coins < COSTO) {
+      alerta(`Necesitas ${COSTO} Valera Coins para desbloquear este patrón. Tienes ${coins}.`)
+      return
+    }
+    if (coloresDesbloqueados.includes(patronId)) return
+    setComprandoPatron(patronId)
+    const { error } = await supabase.rpc('desbloquear_item_perfil', { p_tipo: 'color', p_valor: patronId })
+    setComprandoPatron(null)
+    if (error) {
+      alerta('Error al desbloquear: ' + error.message)
+    } else {
+      setCoins(prev => prev - COSTO)
+      setColoresDesbloqueados(prev => [...prev, patronId])
+      alerta(`¡Patrón desbloqueado! 🎨 Ahora puedes usarlo en tu perfil.`)
     }
   }
 
@@ -344,6 +366,43 @@ export default function Tienda() {
                 </View>
               )
             })}
+          </View>
+
+          {/* Patrones Animados */}
+          <View style={s.patronesSection}>
+            <Text style={s.patronesTitulo}>✨ Patrones Animados</Text>
+            <Text style={s.patronesSub}>Personaliza tu perfil y encabezado con gradientes animados</Text>
+            <View style={s.patronesGrid}>
+              {PATRONES_ANIMADOS.map(patron => {
+                const desbloqueado = coloresDesbloqueados.includes(patron.id)
+                const cargando = comprandoPatron === patron.id
+                return (
+                  <View key={patron.id} style={s.patronCard}>
+                    <View style={s.patronPreview}>
+                      <AnimatedGradientView patron={patron} style={StyleSheet.absoluteFillObject} />
+                      {desbloqueado && (
+                        <View style={s.patronCheckWrap}>
+                          <Text style={s.patronCheck}>✓</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={s.patronNombre}>{patron.nombre}</Text>
+                    <TouchableOpacity
+                      style={[s.patronBtn, desbloqueado && s.patronBtnDes, !desbloqueado && coins < 300 && s.patronBtnNoCoin]}
+                      onPress={() => comprarPatron(patron.id)}
+                      disabled={desbloqueado || cargando || coins < 300}
+                    >
+                      {cargando
+                        ? <ActivityIndicator size="small" color="#fff" />
+                        : <Text style={[s.patronBtnTxt, (desbloqueado || coins < 300) && { color: '#7a9ab5' }]}>
+                            {desbloqueado ? '✓ Obtenido' : coins >= 300 ? '300 💰' : 'Sin saldo'}
+                          </Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                )
+              })}
+            </View>
           </View>
 
           {/* Cómo ganar coins */}
@@ -738,4 +797,34 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: GOLD + '66',
   },
   ruletaBadgeTxt: { fontSize: 9, fontWeight: '800', color: GOLD, letterSpacing: 1 },
+
+  // Patrones Animados
+  patronesSection: {
+    marginHorizontal: 12, marginBottom: 4, marginTop: 8,
+    backgroundColor: CARD, borderRadius: 16,
+    padding: 16, borderWidth: 1, borderColor: '#1e3448',
+  },
+  patronesTitulo: { fontSize: 15, fontWeight: '900', color: '#fff', marginBottom: 3 },
+  patronesSub:    { fontSize: 11, color: '#7a9ab5', marginBottom: 14, lineHeight: 16 },
+  patronesGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  patronCard:     { width: '22%', minWidth: 72, alignItems: 'center', gap: 6 },
+  patronPreview: {
+    width: 56, height: 56, borderRadius: 16, overflow: 'hidden',
+    borderWidth: 2, borderColor: '#2a4560',
+  },
+  patronCheckWrap: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  patronCheck:    { fontSize: 22, color: '#fff', fontWeight: '900' },
+  patronNombre:   { fontSize: 10, fontWeight: '700', color: '#c0d0dc', textAlign: 'center' },
+  patronBtn: {
+    backgroundColor: GOLD, borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 5,
+    alignItems: 'center', minWidth: 60,
+  },
+  patronBtnDes:    { backgroundColor: '#1b3a24', borderWidth: 1, borderColor: '#22c55e44' },
+  patronBtnNoCoin: { backgroundColor: '#2a3a4a', opacity: 0.7 },
+  patronBtnTxt:    { fontSize: 10, fontWeight: '800', color: '#1a1000', textAlign: 'center' },
 })
