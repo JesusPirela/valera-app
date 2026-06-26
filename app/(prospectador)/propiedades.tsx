@@ -115,6 +115,15 @@ function formatearInputPrecio(texto: string): string {
   return parseInt(digitos, 10).toLocaleString('es-MX')
 }
 
+function mezclar<T>(arr: T[]): T[] {
+  const out = [...arr]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
 function agruparPorZona(propiedades: Propiedad[]): [string, Propiedad[]][] {
   const result: [string, Propiedad[]][] = []
   for (const z of ZONAS_CONFIG) {
@@ -197,6 +206,9 @@ export default function ProspectadorPropiedades() {
       if (!esPlusOMejor(rol)) {
         propiedades = propiedades.filter(p => !p.exclusiva && !p.inmobiliarias?.exclusiva)
       }
+      // Orden aleatorio en vez de "más reciente primero": se mezcla una vez
+      // por cada carga fresca (entrar a la app / refetch), no en cada render.
+      propiedades = mezclar(propiedades)
 
       return {
         rol,

@@ -12,3 +12,9 @@ export function esStaffSupervision(role?: string | null): boolean {
 export function esAdmin(role?: string | null): boolean {
   return role === 'admin'
 }
+
+// Quiénes pueden enviar un cliente al chatbot de leads (no incluye admin:
+// es una herramienta de prospección, no de administración).
+export function puedeEnviarClienteAChatbot(role?: string | null): boolean {
+  return ['prospectador_plus', 'asesor', 'supervisor'].includes(role ?? '')
+}

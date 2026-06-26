@@ -143,6 +143,7 @@ export default function Prospectadores() {
   // Selector de rol inline
   const [editandoRolId, setEditandoRolId] = useState<string | null>(null)
   const [cambiandoRol, setCambiandoRol] = useState(false)
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null)
 
   // Modal crear
   const [modalVisible, setModalVisible] = useState(false)
@@ -217,6 +218,36 @@ export default function Prospectadores() {
       prev.map(p => p.id === userId ? { ...p, role: nuevoRol } : p)
     )
     setEditandoRolId(null)
+  }
+
+  async function eliminarUsuarioConfirmado(item: Prospectador) {
+    setEliminandoId(item.id)
+    const { data, error } = await supabase.functions.invoke('eliminar-usuario', {
+      body: { userId: item.id },
+    })
+    setEliminandoId(null)
+
+    if (error || data?.error) {
+      mostrarError(data?.error ?? 'No se pudo eliminar el usuario.')
+      return
+    }
+
+    setLista(prev => prev.filter(p => p.id !== item.id))
+  }
+
+  function eliminarUsuario(item: Prospectador) {
+    const nombre = item.nombre || item.email
+    const titulo = 'Eliminar usuario'
+    const mensaje = `Esto borrará a ${nombre} de forma PERMANENTE, incluyendo todos sus clientes, citas y notas del CRM. Esta acción no se puede deshacer.\n\n¿Continuar?`
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${titulo}\n\n${mensaje}`)) eliminarUsuarioConfirmado(item)
+    } else {
+      Alert.alert(titulo, mensaje, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => eliminarUsuarioConfirmado(item) },
+      ])
+    }
   }
 
   async function crearProspectador() {
@@ -421,6 +452,18 @@ export default function Prospectadores() {
                 >
                   <Text style={styles.publicacionesBtnSmallText}>📤 Publicaciones</Text>
                 </TouchableOpacity>
+                {item.role !== 'admin' && (
+                  <TouchableOpacity
+                    style={[styles.eliminarBtnSmall, eliminandoId === item.id && styles.btnDisabled]}
+                    onPress={() => eliminarUsuario(item)}
+                    disabled={eliminandoId === item.id}
+                  >
+                    {eliminandoId === item.id
+                      ? <ActivityIndicator size="small" color="#c0392b" />
+                      : <Text style={styles.eliminarBtnSmallText}>🗑 Eliminar</Text>
+                    }
+                  </TouchableOpacity>
+                )}
               </View>
 
               {editandoRolId === item.id && (
@@ -971,6 +1014,16 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   publicacionesBtnSmallText: { color: '#c0392b', fontSize: 12, fontWeight: '700' },
+  eliminarBtnSmall: {
+    backgroundColor: '#c0392b',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minWidth: 76,
+    alignItems: 'center',
+  },
+  eliminarBtnSmallText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  btnDisabled: { opacity: 0.5 },
 
   crmModalBox: { padding: 0, overflow: 'hidden' },
   crmHeader: {

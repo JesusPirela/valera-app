@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, createElement } from 'react'
+﻿import { useState, useCallback, useEffect, createElement } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking, Alert,
   ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions,
@@ -17,6 +17,7 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
 import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueClienteUpdate } from '../../lib/offline-queue'
+import { puedeEnviarClienteAChatbot } from '../../lib/permisos'
 
 type Cliente = {
   id: string
@@ -146,6 +147,14 @@ export default function CRM() {
       AsyncStorage.setItem(VISTA_CRM_KEY, next ? 'tabla' : 'lista').catch(() => {})
       return next
     })
+  }
+
+  // Botón "Enviar al chatbot" (solo Plus/Asesor/Supervisor). Restricciones
+  // pendientes de definir (operación = venta, presupuesto > $1.8M, tope de
+  // 10/mes) — por ahora solo el botón, sin la lógica de validación ni envío.
+  const [clienteChatbot, setClienteChatbot] = useState<Cliente | null>(null)
+  function abrirModalChatbot(item: Cliente) {
+    setClienteChatbot(item)
   }
   const [interesFilter, setInteresFilter] = useState<string | null>(null)
   const [zonaFilter, setZonaFilter]       = useState<string | null>(null)
@@ -1078,6 +1087,15 @@ export default function CRM() {
                         <Ionicons name="call-outline" size={14} color={darkMode ? '#38bdf8' : '#0369a1'} />
                         <Text style={[s.actionCallTxt, darkMode && { color: '#38bdf8' }]}>Llamar</Text>
                       </TouchableOpacity>
+                      {puedeEnviarClienteAChatbot(userRole) && (
+                        <TouchableOpacity
+                          style={[s.actionChatbot, darkMode && { backgroundColor: '#241a33', borderColor: '#6a3fa0' }]}
+                          onPress={() => abrirModalChatbot(item)}
+                        >
+                          <Ionicons name="chatbubbles-outline" size={14} color={darkMode ? '#c084fc' : '#7c3aed'} />
+                          <Text style={[s.actionChatbotTxt, darkMode && { color: '#c084fc' }]}>Chatbot</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
 
                   </View>
@@ -1087,6 +1105,27 @@ export default function CRM() {
           />
         )}
       </View>
+
+      {/* ── Enviar al chatbot (placeholder — falta la lógica de validación) ── */}
+      <Modal visible={!!clienteChatbot} transparent animationType="fade" onRequestClose={() => setClienteChatbot(null)}>
+        <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setClienteChatbot(null)}>
+          <View style={[s.chatbotModalBox, { backgroundColor: c.card }]} onStartShouldSetResponder={() => true}>
+            <Ionicons name="chatbubbles-outline" size={28} color="#7c3aed" style={{ marginBottom: 8 }} />
+            <Text style={[s.chatbotModalTitle, { color: c.text }]}>Enviar al chatbot</Text>
+            <Text style={[s.chatbotModalSub, { color: c.textMute }]}>
+              {clienteChatbot?.nombre}
+            </Text>
+            <Text style={[s.chatbotModalInfo, { color: c.textMute }]}>
+              Próximamente: solo podrá enviarse si la operación es de venta, el
+              presupuesto supera $1.8M y no se haya llegado al límite de 10
+              clientes este mes.
+            </Text>
+            <TouchableOpacity style={s.chatbotModalCerrar} onPress={() => setClienteChatbot(null)}>
+              <Text style={s.chatbotModalCerrarTxt}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* ── Sort bottom sheet ── */}
       <Modal visible={showSort} transparent animationType="slide" onRequestClose={() => setShowSort(false)}>
@@ -1373,6 +1412,25 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: '#bae6fd',
   },
   actionCallTxt: { fontSize: 13, fontWeight: '600', color: '#0369a1' },
+  actionChatbot: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    backgroundColor: '#f5f3ff', borderRadius: 10, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#ddd6fe',
+  },
+  actionChatbotTxt: { fontSize: 13, fontWeight: '600', color: '#7c3aed' },
+
+  // ── Modal "Enviar al chatbot" ───────────────────────────────────
+  chatbotModalBox: {
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, alignItems: 'center',
+  },
+  chatbotModalTitle: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
+  chatbotModalSub: { fontSize: 14, fontWeight: '600', marginBottom: 12 },
+  chatbotModalInfo: { fontSize: 13, textAlign: 'center', lineHeight: 19, marginBottom: 20 },
+  chatbotModalCerrar: {
+    backgroundColor: '#7c3aed', borderRadius: 10, paddingVertical: 11, paddingHorizontal: 32,
+  },
+  chatbotModalCerrarTxt: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   // ── Sort bottom sheet ────────────────────────────────────────────
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
