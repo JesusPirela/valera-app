@@ -573,50 +573,11 @@ export default function Perfil() {
             <TouchableOpacity
               key={valor}
               style={[s.colorBtn, { backgroundColor: valor }, colorAcento === valor && s.colorBtnActivo]}
-              onPress={() => setColorAcento(valor)}
+              onPress={() => { setColorAcento(valor); setPrimaryColor(valor) }}
             >
               {colorAcento === valor && <Text style={s.colorCheck}>✓</Text>}
             </TouchableOpacity>
           ))}
-        </View>
-
-        <View style={s.premiumHeader}>
-          <Text style={s.premiumLabel}>✨ Colores premium</Text>
-          <Text style={s.premiumTag}>300 💰 c/u</Text>
-        </View>
-        <View style={s.coloresGrid}>
-          {COLORES_PREMIUM.map(valor => {
-            const desbloqueado = coloresDesbloqueados.includes(valor)
-            const enCompra = comprando === valor
-            return (
-              <TouchableOpacity
-                key={valor}
-                style={[
-                  s.colorBtn,
-                  { backgroundColor: valor },
-                  !desbloqueado && { opacity: 0.45 },
-                  colorAcento === valor && desbloqueado && s.colorBtnActivo,
-                ]}
-                onPress={() => {
-                  if (desbloqueado) { setColorAcento(valor); return }
-                  comprarItem('color', valor)
-                }}
-                disabled={enCompra}
-              >
-                {colorAcento === valor && desbloqueado && <Text style={s.colorCheck}>✓</Text>}
-                {enCompra && (
-                  <View style={s.lockOverlay}>
-                    <ActivityIndicator size="small" color="#fff" />
-                  </View>
-                )}
-                {!desbloqueado && !enCompra && (
-                  <View style={s.lockOverlay}>
-                    <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            )
-          })}
         </View>
 
         <View style={s.premiumHeader}>
@@ -634,7 +595,7 @@ export default function Perfil() {
                 <TouchableOpacity
                   style={[s.colorBtn, { overflow: 'hidden' }, !desbloqueado && { opacity: 0.55 }, seleccionado && s.colorBtnActivo]}
                   onPress={() => {
-                    if (desbloqueado) { setColorAcento(id); return }
+                    if (desbloqueado) { setColorAcento(id); setPrimaryColor(patron.base); return }
                     comprarItem('color', patron.id)
                   }}
                   disabled={enCompra}
