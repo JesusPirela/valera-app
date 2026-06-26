@@ -24,6 +24,7 @@ type ClienteAdmin = {
   responsable_id: string
   prospectador_nombre: string
   prospectador_email: string
+  eliminado_at?: string | null
 }
 
 type Seccion = {
@@ -87,6 +88,10 @@ export default function AdminCRM() {
   const [nuevoUserId, setNuevoUserId] = useState('')
   const [usuariosLista, setUsuariosLista] = useState<UsuarioSimple[]>([])
   const [guardandoCliente, setGuardandoCliente] = useState(false)
+  const [papeleraModal, setPapeleraModal] = useState(false)
+  const [papeleraClientes, setPapeleraClientes] = useState<ClienteAdmin[]>([])
+  const [papeleraCargando, setPapeleraCargando] = useState(false)
+  const [exportando, setExportando] = useState(false)
 
   async function cargarClientes() {
     if (!cargadoUnaVez.current) setLoading(true)
@@ -102,6 +107,7 @@ export default function AdminCRM() {
     const { data: clientesData, error: errorClientes } = await supabase
       .from('clientes')
       .select('id, nombre, telefono, email, empresa, estado, tipo_operacion, created_at, responsable_id')
+      .is('eliminado_at', null)
       .order('updated_at', { ascending: false })
 
     if (errorClientes) { setErrorMsg(errorClientes.message); setLoading(false); cargadoUnaVez.current = true; return }
@@ -178,7 +184,7 @@ export default function AdminCRM() {
     const aviso = seguimientos > 0
       ? `\n\n⚠️ Este cliente tiene ${seguimientos} seguimiento${seguimientos > 1 ? 's' : ''} registrado${seguimientos > 1 ? 's' : ''}. Al eliminarlo se perderán esos datos.`
       : ''
-    const mensaje = `¿Eliminar a "${item.nombre}"? Esta acción no se puede deshacer.${aviso}`
+    const mensaje = `¿Mover a "${item.nombre}" a la papelera?${aviso}`
     if (Platform.OS === 'web') {
       if (window.confirm(mensaje)) eliminarCliente(item.id)
     } else {
@@ -190,13 +196,78 @@ export default function AdminCRM() {
   }
 
   async function eliminarCliente(id: string) {
-    const { error } = await supabase.from('clientes').delete().eq('id', id)
+    const { error } = await supabase.from('clientes').update({ eliminado_at: new Date().toISOString() }).eq('id', id)
     if (error) { Platform.OS === 'web' ? window.alert(error.message) : Alert.alert('Error', error.message); return }
     setSecciones(prev =>
       prev
         .map(sec => ({ ...sec, data: sec.data.filter(c => c.id !== id), total: sec.total - (sec.data.some(c => c.id === id) ? 1 : 0) }))
         .filter(sec => sec.data.length > 0)
     )
+  }
+
+  async function cargarPapelera() {
+    setPapeleraCargando(true)
+    const { data } = await supabase
+      .from('clientes')
+      .select('id, nombre, telefono, email, empresa, estado, tipo_operacion, created_at, responsable_id, eliminado_at')
+      .not('eliminado_at', 'is', null)
+      .order('eliminado_at', { ascending: false })
+    if (data) {
+      const idsUnicos = [...new Set(data.map((c: any) => c.responsable_id).filter(Boolean))]
+      const { data: perfs } = await supabase.from('profiles').select('id, nombre').in('id', idsUnicos)
+      const mapa = new Map((perfs ?? []).map((p: any) => [p.id, p.nombre ?? 'Sin nombre']))
+      setPapeleraClientes(data.map((c: any) => ({
+        ...c, prospectador_nombre: mapa.get(c.responsable_id) ?? 'Sin asignar', prospectador_email: '',
+      })))
+    }
+    setPapeleraCargando(false)
+  }
+
+  async function restaurarCliente(id: string) {
+    const { error } = await supabase.from('clientes').update({ eliminado_at: null }).eq('id', id)
+    if (error) { Platform.OS === 'web' ? window.alert(error.message) : Alert.alert('Error', error.message); return }
+    setPapeleraClientes(prev => prev.filter(c => c.id !== id))
+    cargarClientes()
+  }
+
+  async function exportarCSV() {
+    setExportando(true)
+    try {
+      const { data } = await supabase
+        .from('clientes')
+        .select('nombre, telefono, email, empresa, estado, tipo_operacion, proximo_contacto, notas, zona_busqueda, presupuesto, created_at, responsable_id')
+        .is('eliminado_at', null)
+        .order('updated_at', { ascending: false })
+      if (!data?.length) return
+      const idsUnicos = [...new Set(data.map((c: any) => c.responsable_id).filter(Boolean))]
+      const { data: perfs } = await supabase.from('profiles').select('id, nombre').in('id', idsUnicos)
+      const mapa = new Map((perfs ?? []).map((p: any) => [p.id, p.nombre ?? '']))
+      const headers = ['Nombre', 'Teléfono', 'Email', 'Empresa', 'Estado', 'Operación', 'Próx. contacto', 'Zona', 'Presupuesto', 'Notas', 'Asesor', 'Fecha alta']
+      const rows = data.map((c: any) => [
+        c.nombre, c.telefono, c.email ?? '', c.empresa ?? '',
+        ESTADOS[c.estado]?.label ?? c.estado,
+        c.tipo_operacion ?? '',
+        c.proximo_contacto ? new Date(c.proximo_contacto).toLocaleDateString('es-MX') : '',
+        c.zona_busqueda ?? '', c.presupuesto ?? '',
+        (c.notas ?? '').replace(/\n/g, ' '),
+        mapa.get(c.responsable_id) ?? '',
+        new Date(c.created_at).toLocaleDateString('es-MX'),
+      ])
+      const csv = [headers, ...rows]
+        .map(r => r.map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+        .join('\n')
+      if (Platform.OS === 'web') {
+        const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `clientes_${new Date().toISOString().split('T')[0]}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } finally {
+      setExportando(false)
+    }
   }
 
   async function guardarNuevoCliente() {
@@ -380,7 +451,21 @@ export default function AdminCRM() {
         <Text style={styles.btnCampanaTxt}>💬 Chats de WhatsApp</Text>
       </TouchableOpacity>
 
-      {/* Búsqueda + botón exportar + botón nuevo */}
+      {/* Fila papelera + exportar */}
+      <View style={styles.accionesRow}>
+        <TouchableOpacity style={[styles.btnAccion, { borderColor: '#e74c3c20', backgroundColor: '#fef5f5' }]}
+          onPress={() => { cargarPapelera(); setPapeleraModal(true) }}>
+          <Ionicons name="trash-outline" size={14} color="#e74c3c" />
+          <Text style={[styles.btnAccionTxt, { color: '#e74c3c' }]}>Papelera</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.btnAccion, { borderColor: '#1a647020', backgroundColor: '#f0f8fa' }]}
+          onPress={exportarCSV} disabled={exportando}>
+          <Ionicons name="download-outline" size={14} color="#1a6470" />
+          <Text style={[styles.btnAccionTxt, { color: '#1a6470' }]}>{exportando ? 'Exportando…' : 'Exportar CSV'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Búsqueda + botón importar + botón nuevo */}
       <View style={styles.searchRow}>
         <View style={[styles.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
           <Ionicons name="search-outline" size={16} color="#9eafb2" style={{ marginRight: 8 }} />
@@ -640,6 +725,46 @@ export default function AdminCRM() {
         onConfirm={handleImportConfirm}
         users={usuariosImport}
       />
+
+      {/* Modal papelera */}
+      <Modal visible={papeleraModal} animationType="slide" transparent onRequestClose={() => setPapeleraModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { backgroundColor: c.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitulo, { color: c.text }]}>Papelera ({papeleraClientes.length})</Text>
+              <TouchableOpacity onPress={() => setPapeleraModal(false)}>
+                <Ionicons name="close" size={22} color="#9eafb2" />
+              </TouchableOpacity>
+            </View>
+            {papeleraCargando ? (
+              <ActivityIndicator size="large" color="#1a6470" style={{ marginVertical: 32 }} />
+            ) : papeleraClientes.length === 0 ? (
+              <View style={{ alignItems: 'center', padding: 32 }}>
+                <Ionicons name="checkmark-circle-outline" size={48} color="#4cdb8a" />
+                <Text style={{ color: '#9eafb2', marginTop: 10, fontSize: 14 }}>La papelera está vacía</Text>
+              </View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 480 }}>
+                {papeleraClientes.map(item => {
+                  const diasEliminado = Math.floor((Date.now() - new Date(item.eliminado_at!).getTime()) / 86400000)
+                  return (
+                    <View key={item.id} style={[styles.papeleraCard, { borderColor: c.border, backgroundColor: c.bg }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.papeleraNombre, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
+                        <Text style={styles.papeleraSub}>{item.prospectador_nombre} · Eliminado hace {diasEliminado === 0 ? 'hoy' : `${diasEliminado}d`}</Text>
+                      </View>
+                      <TouchableOpacity style={styles.btnRestaurar} onPress={() => restaurarCliente(item.id)}>
+                        <Ionicons name="arrow-undo-outline" size={13} color="#1a6470" />
+                        <Text style={styles.btnRestaurarTxt}>Restaurar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -813,6 +938,28 @@ const styles = StyleSheet.create({
   importErrorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#fef2f2', borderRadius: 12, padding: 14, marginBottom: 16 },
   importErrorTxt: { flex: 1, fontSize: 13, color: '#b91c1c', lineHeight: 18 },
   importInfoRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+
+  // Acciones rápidas (papelera + exportar)
+  accionesRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 8 },
+  btnAccion: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    borderWidth: 1.5, borderRadius: 10, paddingVertical: 9,
+  },
+  btnAccionTxt: { fontSize: 12, fontWeight: '700' },
+
+  // Papelera
+  papeleraCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 8,
+  },
+  papeleraNombre: { fontSize: 14, fontWeight: '700' },
+  papeleraSub: { fontSize: 11, color: '#9eafb2', marginTop: 2 },
+  btnRestaurar: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#e0f4f5', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  btnRestaurarTxt: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
   importInfoTxt:  { fontSize: 15, fontWeight: '700' },
   importRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   importRowNombre: { fontSize: 14, fontWeight: '700' },

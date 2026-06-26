@@ -175,6 +175,7 @@ export default function CRM() {
       let q = supabase
         .from('clientes')
         .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, nivel_interes, notas, zona_busqueda, presupuesto, recordatorios(id, titulo, fecha_hora, completado)')
+        .is('eliminado_at', null)
         .order('updated_at', { ascending: false })
       if (soloMios) {
         const { data: { user } } = await supabase.auth.getUser()
