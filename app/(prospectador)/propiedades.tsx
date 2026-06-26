@@ -513,6 +513,12 @@ export default function ProspectadorPropiedades() {
         ? (a.precio ?? Infinity) - (b.precio ?? Infinity)
         : (b.precio ?? -Infinity) - (a.precio ?? -Infinity)
     )
+  } else if (filtroNueva) {
+    // El botón "Nuevas" sí debe ordenar por más reciente primero — el orden
+    // aleatorio es solo el default, no aplica cuando este filtro está activo.
+    propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
   }
 
   const _ahora = Date.now()
