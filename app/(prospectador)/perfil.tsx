@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef, useEffect, memo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Platform, Alert, Image,
+  TextInput, ActivityIndicator, Platform, Alert, Image, Animated, Easing,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
+import { LinearGradient } from 'expo-linear-gradient'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { useTheme, useColors } from '../../lib/ThemeContext'
@@ -15,11 +16,62 @@ const COLORES_LIBRES = [
   '#1a6470', '#c9a84c', '#1e3a5f', '#7b1e3a',
   '#2d6a4f', '#4a4a4a', '#5c3d99', '#c45c1a',
 ]
-const COLORES_PREMIUM = [
-  '#c2185b', '#e64a19', '#00838f', '#558b2f',
-  '#283593', '#ff6f00', '#006064', '#4a148c',
-  '#37474f', '#1b5e20', '#880e4f', '#bf360c',
+type PatronAnimado = { id: string; nombre: string; colores: [string, string, string]; base: string }
+const PATRONES_ANIMADOS: PatronAnimado[] = [
+  { id: 'aurora',  nombre: 'Aurora',    colores: ['#5c3d99', '#00838f', '#283593'], base: '#5c3d99' },
+  { id: 'lava',    nombre: 'Lava',      colores: ['#e65100', '#b71c1c', '#c62828'], base: '#c62828' },
+  { id: 'ocean',   nombre: 'Océano',    colores: ['#01579b', '#006064', '#0288d1'], base: '#01579b' },
+  { id: 'forest',  nombre: 'Bosque',    colores: ['#1b5e20', '#004d40', '#33691e'], base: '#2e7d32' },
+  { id: 'sunset',  nombre: 'Atardecer', colores: ['#ad1457', '#e65100', '#c9a84c'], base: '#e65100' },
+  { id: 'galaxy',  nombre: 'Galaxia',   colores: ['#4a148c', '#1a237e', '#311b92'], base: '#4a148c' },
+  { id: 'rose',    nombre: 'Rosa',      colores: ['#ad1457', '#880e4f', '#e91e63'], base: '#ad1457' },
+  { id: 'arctic',  nombre: 'Ártico',    colores: ['#0097a7', '#0277bd', '#00bcd4'], base: '#0097a7' },
 ]
+
+function baseColorDeAcento(acento: string): string {
+  if (acento.startsWith('animated:')) {
+    const id = acento.replace('animated:', '')
+    return PATRONES_ANIMADOS.find(p => p.id === id)?.base ?? '#1a6470'
+  }
+  return acento
+}
+
+function AnimatedGradientView({ patron, style, children }: {
+  patron: PatronAnimado
+  style?: any
+  children?: React.ReactNode
+}) {
+  const anim = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [patron.id])
+  return (
+    <View style={[{ overflow: 'hidden' }, style]}>
+      <LinearGradient colors={patron.colores} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFillObject} />
+      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: anim }]}>
+        <LinearGradient colors={[patron.colores[2], patron.colores[0], patron.colores[1]]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
+      </Animated.View>
+      {children}
+    </View>
+  )
+}
+
+function AccentBackground({ acentoId, style, children }: {
+  acentoId: string
+  style?: any
+  children?: React.ReactNode
+}) {
+  const patron = PATRONES_ANIMADOS.find(p => `animated:${p.id}` === acentoId)
+  if (patron) return <AnimatedGradientView patron={patron} style={style}>{children}</AnimatedGradientView>
+  return <View style={[style, { backgroundColor: acentoId }]}>{children}</View>
+}
 
 const AVATARES_LIBRES  = ['👤','🏠','⭐','🦁','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
 
@@ -261,7 +313,7 @@ export default function Perfil() {
         .eq('id', userId)
 
       if (error) throw error
-      setPrimaryColor(colorAcento)
+      setPrimaryColor(baseColorDeAcento(colorAcento))
       mostrarAlerta('¡Perfil actualizado!')
       cargar()
     } catch (e: any) {
@@ -310,13 +362,14 @@ export default function Perfil() {
   }, [])
 
   const avatarMostrado = avatarUrl ?? null
+  const colorBase = baseColorDeAcento(colorAcento)
 
   if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
 
   return (
     <ScrollView style={[s.container, darkMode && { backgroundColor: '#0d1b2a' }]} contentContainerStyle={{ paddingBottom: 60 }}>
       {/* Avatar */}
-      <View style={[s.headerBg, { backgroundColor: colorAcento }]}>
+      <AccentBackground acentoId={colorAcento} style={s.headerBg}>
         <View style={s.avatarWrap}>
           {avatarMostrado ? (
             <Image source={{ uri: avatarMostrado }} style={s.avatarImg} />
@@ -330,13 +383,13 @@ export default function Perfil() {
               />
             </View>
           ) : (
-            <View style={[s.avatarEmoji, { backgroundColor: colorAcento + 'cc' }]}>
+            <AccentBackground acentoId={colorAcento} style={s.avatarEmoji}>
               <Text style={s.avatarEmojiText}>{avatarEmoji}</Text>
-            </View>
+            </AccentBackground>
           )}
         </View>
         <Text style={s.emailText}>{email}</Text>
-      </View>
+      </AccentBackground>
 
       {/* Gamification stats */}
       {stats && (() => {
@@ -344,17 +397,17 @@ export default function Perfil() {
         const info = infoNivel(stats.xp)
         const titulo = tituloPorNivel(nivel)
         return (
-          <View style={[s.statsCard, { backgroundColor: c.card, borderColor: colorAcento + '44' }]}>
+          <View style={[s.statsCard, { backgroundColor: c.card, borderColor: colorBase + '44' }]}>
             <View style={s.statsTop}>
-              <View style={[s.nivelBadge, { backgroundColor: colorAcento }]}>
+              <View style={[s.nivelBadge, { backgroundColor: colorBase }]}>
                 <Text style={s.nivelNum}>{nivel}</Text>
                 <Text style={s.nivelLbl}>Nv.</Text>
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={[s.statsTitle, { color: colorAcento }]}>{titulo}</Text>
+                <Text style={[s.statsTitle, { color: colorBase }]}>{titulo}</Text>
                 <Text style={s.statsXP}>{stats.xp.toLocaleString()} XP totales</Text>
                 <View style={s.barTrack}>
-                  <View style={[s.barFill, { width: `${info.porcentaje}%` as any, backgroundColor: colorAcento }]} />
+                  <View style={[s.barFill, { width: `${info.porcentaje}%` as any, backgroundColor: colorBase }]} />
                 </View>
                 <Text style={s.barLabel}>{info.xpActual} / {info.xpNecesario} XP para nivel {nivel + 1}</Text>
               </View>
@@ -410,7 +463,7 @@ export default function Perfil() {
           {AVATARES_LIBRES.map(e => (
             <TouchableOpacity
               key={e}
-              style={[s.emojiBtn, { backgroundColor: c.card, borderColor: c.border }, avatarEmoji === e && !avatarMostrado && { borderColor: colorAcento, borderWidth: 3 }]}
+              style={[s.emojiBtn, { backgroundColor: c.card, borderColor: c.border }, avatarEmoji === e && !avatarMostrado && { borderColor: colorBase, borderWidth: 3 }]}
               onPress={() => seleccionarEmoji(e)}
             >
               <Text style={s.emojiBtnText}>{e}</Text>
@@ -458,14 +511,14 @@ export default function Perfil() {
         )}
 
         <TouchableOpacity
-          style={[s.btnFoto, { borderColor: colorAcento }]}
+          style={[s.btnFoto, { borderColor: colorBase }]}
           onPress={seleccionarFoto}
           disabled={guardando}
         >
           {guardando ? (
-            <ActivityIndicator color={colorAcento} />
+            <ActivityIndicator color={colorBase} />
           ) : (
-            <Text style={[s.btnFotoText, { color: colorAcento }]}>
+            <Text style={[s.btnFotoText, { color: colorBase }]}>
               {avatarMostrado ? '🔄 Cambiar foto' : '📷 Subir foto'}
             </Text>
           )}
@@ -485,8 +538,8 @@ export default function Perfil() {
           <ToggleSwitch
             value={darkMode}
             onValueChange={toggleDarkMode}
-            trackColor={{ false: '#dde8e9', true: colorAcento + '88' }}
-            thumbColor={darkMode ? colorAcento : '#aaa'}
+            trackColor={{ false: '#dde8e9', true: colorBase + '88' }}
+            thumbColor={darkMode ? colorBase : '#aaa'}
           />
         </View>
 
@@ -502,8 +555,8 @@ export default function Perfil() {
           <ToggleSwitch
             value={fontScaleCap}
             onValueChange={toggleFontScaleCap}
-            trackColor={{ false: '#dde8e9', true: colorAcento + '88' }}
-            thumbColor={fontScaleCap ? colorAcento : '#aaa'}
+            trackColor={{ false: '#dde8e9', true: colorBase + '88' }}
+            thumbColor={fontScaleCap ? colorBase : '#aaa'}
           />
         </View>
 
@@ -523,50 +576,50 @@ export default function Perfil() {
         </View>
 
         <View style={s.premiumHeader}>
-          <Text style={s.premiumLabel}>✨ Colores premium</Text>
+          <Text style={s.premiumLabel}>✨ Patrones animados</Text>
           <Text style={s.premiumTag}>300 💰 c/u</Text>
         </View>
         <View style={s.coloresGrid}>
-          {COLORES_PREMIUM.map(valor => {
-            const desbloqueado = coloresDesbloqueados.includes(valor)
-            const enCompra = comprando === valor
+          {PATRONES_ANIMADOS.map(patron => {
+            const id = `animated:${patron.id}`
+            const desbloqueado = coloresDesbloqueados.includes(patron.id)
+            const enCompra = comprando === patron.id
+            const seleccionado = colorAcento === id && desbloqueado
             return (
-              <TouchableOpacity
-                key={valor}
-                style={[
-                  s.colorBtn,
-                  { backgroundColor: valor },
-                  !desbloqueado && { opacity: 0.45 },
-                  colorAcento === valor && desbloqueado && s.colorBtnActivo,
-                ]}
-                onPress={() => {
-                  if (desbloqueado) { setColorAcento(valor); return }
-                  comprarItem('color', valor)
-                }}
-                disabled={enCompra}
-              >
-                {colorAcento === valor && desbloqueado && <Text style={s.colorCheck}>✓</Text>}
-                {enCompra && (
-                  <View style={s.lockOverlay}>
-                    <ActivityIndicator size="small" color="#fff" />
-                  </View>
-                )}
-                {!desbloqueado && !enCompra && (
-                  <View style={s.lockOverlay}>
-                    <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+              <View key={patron.id} style={s.patronItem}>
+                <TouchableOpacity
+                  style={[s.colorBtn, { overflow: 'hidden' }, !desbloqueado && { opacity: 0.55 }, seleccionado && s.colorBtnActivo]}
+                  onPress={() => {
+                    if (desbloqueado) { setColorAcento(id); return }
+                    comprarItem('color', patron.id)
+                  }}
+                  disabled={enCompra}
+                >
+                  <AnimatedGradientView patron={patron} style={StyleSheet.absoluteFillObject} />
+                  {seleccionado && <Text style={s.colorCheck}>✓</Text>}
+                  {enCompra && (
+                    <View style={s.lockOverlay}>
+                      <ActivityIndicator size="small" color="#fff" />
+                    </View>
+                  )}
+                  {!desbloqueado && !enCompra && (
+                    <View style={s.lockOverlay}>
+                      <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <Text style={s.patronNombre}>{patron.nombre}</Text>
+              </View>
             )
           })}
         </View>
-        <View style={[s.colorPreview, { backgroundColor: colorAcento }]}>
+        <AccentBackground acentoId={colorAcento} style={s.colorPreview}>
           <Text style={s.colorPreviewText}>Vista previa del color seleccionado</Text>
-        </View>
+        </AccentBackground>
 
         {/* Guardar */}
         <TouchableOpacity
-          style={[s.btnGuardar, { backgroundColor: colorAcento }, guardando && { opacity: 0.6 }]}
+          style={[s.btnGuardar, { backgroundColor: colorBase }, guardando && { opacity: 0.6 }]}
           onPress={() => guardar()}
           disabled={guardando}
         >
@@ -655,7 +708,9 @@ const s = StyleSheet.create({
   },
   colorBtnActivo: { transform: [{ scale: 1.2 }], elevation: 4 },
   colorCheck: { color: '#fff', fontSize: 18, fontWeight: '900' },
-  colorPreview: { borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 24 },
+  colorPreview: { borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 24, overflow: 'hidden' },
+  patronItem: { alignItems: 'center', gap: 4 },
+  patronNombre: { fontSize: 9, color: '#888', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   colorPreviewText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   btnGuardar: { borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   btnGuardarText: { color: '#fff', fontWeight: '800', fontSize: 15 },

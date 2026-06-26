@@ -4,6 +4,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
 
 const DEFAULT_COLOR  = '#1a6470'
+const PATRON_BASE: Record<string, string> = {
+  aurora: '#5c3d99', lava: '#c62828', ocean: '#01579b', forest: '#2e7d32',
+  sunset: '#e65100', galaxy: '#4a148c', rose: '#ad1457', arctic: '#0097a7',
+}
+function resolverColor(acento: string): string {
+  if (acento.startsWith('animated:')) return PATRON_BASE[acento.replace('animated:', '')] ?? DEFAULT_COLOR
+  return acento
+}
 const DARK_MODE_KEY  = '@valera_dark_mode'
 const FONT_CAP_KEY   = '@valera_font_scale_cap'
 const FONT_CAP_MULTIPLIER = 1.15
@@ -62,7 +70,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           .select('color_acento')
           .eq('id', session.user.id)
           .single()
-        if (data?.color_acento) setPrimaryColor(data.color_acento)
+        if (data?.color_acento) setPrimaryColor(resolverColor(data.color_acento))
       } else {
         setPrimaryColor(DEFAULT_COLOR)
       }

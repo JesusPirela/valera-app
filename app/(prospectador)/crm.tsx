@@ -447,6 +447,39 @@ export default function CRM() {
   const [importModal, setImportModal]   = useState(false)
   const [csvHeaders, setCsvHeaders]     = useState<string[]>([])
   const [csvData, setCsvData]           = useState<string[][]>([])
+  const [exportando, setExportando]     = useState(false)
+
+  async function exportarCSV() {
+    if (exportando || !clientes.length) return
+    setExportando(true)
+    try {
+      const cab = ['Nombre', 'Teléfono', 'Email', 'Empresa', 'Estado', 'Tipo Operación', 'Nivel Interés', 'Zona Búsqueda', 'Presupuesto', 'Próximo Contacto', 'Notas', 'Creado']
+      const filas = clientes.map(cl => [
+        cl.nombre, cl.telefono, cl.email ?? '', cl.empresa ?? '',
+        ESTADOS[cl.estado]?.label ?? cl.estado, cl.tipo_operacion ?? '',
+        cl.nivel_interes ?? '', cl.zona_busqueda ?? '', cl.presupuesto ?? '',
+        cl.proximo_contacto ? new Date(cl.proximo_contacto).toLocaleDateString('es-MX') : '',
+        (cl.notas ?? '').replace(/[\r\n]+/g, ' '),
+        new Date(cl.created_at).toLocaleDateString('es-MX'),
+      ])
+      const csv = '﻿' + [cab, ...filas].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+      if (Platform.OS === 'web') {
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `mis-clientes-${new Date().toISOString().split('T')[0]}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
+      } else {
+        Alert.alert('Exportar CSV', 'La descarga de CSV solo está disponible en la versión web.')
+      }
+    } catch (e: any) {
+      Alert.alert('Error', 'Error al exportar: ' + e.message)
+    } finally {
+      setExportando(false)
+    }
+  }
 
   async function abrirImport() {
     const procesar = (texto: string) => {
@@ -636,6 +669,12 @@ export default function CRM() {
           </TouchableOpacity>
           <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
             <Ionicons name="cloud-upload-outline" size={15} color="#1a6470" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={exportarCSV} disabled={exportando}>
+            {exportando
+              ? <ActivityIndicator size="small" color="#1a6470" />
+              : <Ionicons name="download-outline" size={15} color="#1a6470" />
+            }
           </TouchableOpacity>
           <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
             <Ionicons name="add" size={20} color="#fff" />
