@@ -368,42 +368,38 @@ export default function Tienda() {
             })}
           </View>
 
-          {/* Patrones Animados */}
-          <View style={s.patronesSection}>
-            <Text style={s.patronesTitulo}>✨ Patrones Animados</Text>
-            <Text style={s.patronesSub}>Personaliza tu perfil y encabezado con gradientes animados</Text>
-            <View style={s.patronesGrid}>
-              {PATRONES_ANIMADOS.map(patron => {
-                const desbloqueado = coloresDesbloqueados.includes(patron.id)
-                const cargando = comprandoPatron === patron.id
-                return (
-                  <View key={patron.id} style={s.patronCard}>
-                    <View style={s.patronPreview}>
-                      <AnimatedGradientView patron={patron} style={StyleSheet.absoluteFillObject} />
-                      {desbloqueado && (
-                        <View style={s.patronCheckWrap}>
-                          <Text style={s.patronCheck}>✓</Text>
-                        </View>
-                      )}
+          {/* Patrones Animados — solo muestra los no poseídos */}
+          {PATRONES_ANIMADOS.some(p => !coloresDesbloqueados.includes(p.id)) && (
+            <View style={s.patronesSection}>
+              <Text style={s.patronesTitulo}>✨ Patrones Animados</Text>
+              <Text style={s.patronesSub}>Personaliza tu perfil y encabezado con gradientes animados</Text>
+              <View style={s.patronesGrid}>
+                {PATRONES_ANIMADOS.filter(p => !coloresDesbloqueados.includes(p.id)).map(patron => {
+                  const cargando = comprandoPatron === patron.id
+                  return (
+                    <View key={patron.id} style={s.patronCard}>
+                      <View style={s.patronPreview}>
+                        <AnimatedGradientView patron={patron} style={StyleSheet.absoluteFillObject} />
+                      </View>
+                      <Text style={s.patronNombre}>{patron.nombre}</Text>
+                      <TouchableOpacity
+                        style={[s.patronBtn, coins < 300 && s.patronBtnNoCoin]}
+                        onPress={() => comprarPatron(patron.id)}
+                        disabled={cargando || coins < 300}
+                      >
+                        {cargando
+                          ? <ActivityIndicator size="small" color="#fff" />
+                          : <Text style={[s.patronBtnTxt, coins < 300 && { color: '#7a9ab5' }]}>
+                              {coins >= 300 ? '300 💰' : 'Sin saldo'}
+                            </Text>
+                        }
+                      </TouchableOpacity>
                     </View>
-                    <Text style={s.patronNombre}>{patron.nombre}</Text>
-                    <TouchableOpacity
-                      style={[s.patronBtn, desbloqueado && s.patronBtnDes, !desbloqueado && coins < 300 && s.patronBtnNoCoin]}
-                      onPress={() => comprarPatron(patron.id)}
-                      disabled={desbloqueado || cargando || coins < 300}
-                    >
-                      {cargando
-                        ? <ActivityIndicator size="small" color="#fff" />
-                        : <Text style={[s.patronBtnTxt, (desbloqueado || coins < 300) && { color: '#7a9ab5' }]}>
-                            {desbloqueado ? '✓ Obtenido' : coins >= 300 ? '300 💰' : 'Sin saldo'}
-                          </Text>
-                      }
-                    </TouchableOpacity>
-                  </View>
-                )
-              })}
+                  )
+                })}
+              </View>
             </View>
-          </View>
+          )}
 
           {/* Cómo ganar coins */}
           <View style={s.howCard}>

@@ -19,9 +19,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
-    // Deshabilitar Web Lock API para evitar deadlocks en web con PersistQueryClient
-    lock: Platform.OS === 'web'
-      ? (_name: string, _timeout: number, fn: () => Promise<unknown>) => fn()
-      : undefined,
+    // Bypass el mecanismo de lock en todos los entornos.
+    // En web evita deadlocks con PersistQueryClient.
+    // En React Native (monohilo) no hay concurrencia real, y el lock
+    // basado en AsyncStorage puede causar que el token refresh se quede
+    // colgado tras un background/foreground, generando SIGNED_OUT falsos.
+    lock: (_name: string, _timeout: number, fn: () => Promise<unknown>) => fn(),
   },
 })

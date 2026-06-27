@@ -30,6 +30,7 @@ import { conReintentoData, generarIdemKey } from '../../lib/redIntentos'
 
 const LOGO = require('../../assets/logo.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
+import { AccentBackground } from '../../lib/patrones'
 import { actualizarMisionesPorCategoria } from '../../lib/gamification'
 import { thumb } from '../../lib/img'
 import { useVistaComo } from '../../lib/VistaComo'
@@ -138,7 +139,7 @@ function agruparPorZona(propiedades: Propiedad[]): [string, Propiedad[]][] {
 export default function ProspectadorPropiedades() {
   const queryClient = useQueryClient()
   const isOnline = useNetworkStatus()
-  const { primaryColor, darkMode } = useTheme()
+  const { primaryColor, acentoId, darkMode } = useTheme()
   const c = useColors()
   const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 28) : 44
 
@@ -719,7 +720,7 @@ export default function ProspectadorPropiedades() {
       <View style={[styles.container, { backgroundColor: c.bg }]}>
 
         {/* Header unificado con búsqueda */}
-        <View style={[styles.header, { backgroundColor: primaryColor, paddingTop: isWeb ? 10 : statusBarHeight + 8, paddingBottom: 12 }]}>
+        <AccentBackground acentoId={acentoId} style={[styles.header, { paddingTop: isWeb ? 10 : statusBarHeight + 8, paddingBottom: 12 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
             {/* Logo + saludo en la misma fila */}
             <View style={[styles.headerTopRow, { marginBottom: 8 }]}>
@@ -749,7 +750,7 @@ export default function ProspectadorPropiedades() {
               />
             </View>
           </View>
-        </View>
+        </AccentBackground>
 
         {/* Contenido centrado en web */}
         <View style={isWeb ? styles.webBody : { flex: 1 }}>

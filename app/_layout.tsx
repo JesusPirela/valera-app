@@ -203,6 +203,11 @@ export default function RootLayout() {
       if (state === 'active') {
         supabase.auth.startAutoRefresh()
         iniciarSesion()
+        // Al volver del background verificar que la sesión no expiró.
+        // Si falta, refreshSession la renueva usando el refresh_token en storage.
+        supabase.auth.getSession().then(({ data }) => {
+          if (!data.session) supabase.auth.refreshSession().catch(() => {})
+        }).catch(() => {})
         const ahora = Date.now()
         if (ahora - ultimaRevisionUpdateRef.current > 10 * 60 * 1000) {
           ultimaRevisionUpdateRef.current = ahora
@@ -256,20 +261,28 @@ export default function RootLayout() {
         cerrarSesion()
         setSession(null)
         if (!esCambioDeCuenta) {
-          // Antes de ir al login intentar recuperar la sesión: el SIGNED_OUT puede
-          // venir de un fallo de refresh por red caída, no de un cierre real.
-          supabase.auth.getSession().then(({ data }) => {
-            if (data.session) {
-              // Había sesión guardada — el token se renovó correctamente
-              setSession(data.session)
-            } else {
-              queryClient.clear()
-              router.replace('/(auth)/login')
-            }
-          }).catch(() => {
+          // SIGNED_OUT puede ser falso positivo: token expirado en background,
+          // red caída durante el refresh, etc. Intentar recuperar antes de ir al login.
+          ;(async () => {
+            try {
+              // Forzar un nuevo access_token usando el refresh_token en storage.
+              const { data: rd } = await supabase.auth.refreshSession()
+              if (rd.session) {
+                setSession(rd.session)
+                guardarTokensSesion(rd.session).catch(() => {})
+                iniciarSesion(rd.session.user.id)
+                return
+              }
+            } catch {}
+            // Fallback: leer sesión directa del storage (ya está actualizada).
+            try {
+              const { data } = await supabase.auth.getSession()
+              if (data.session) { setSession(data.session); return }
+            } catch {}
+            // Sesión realmente inválida → login.
             queryClient.clear()
             router.replace('/(auth)/login')
-          })
+          })()
         }
       }
     })
