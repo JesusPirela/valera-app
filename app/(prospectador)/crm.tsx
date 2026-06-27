@@ -149,12 +149,56 @@ export default function CRM() {
     })
   }
 
-  // Botón "Enviar al chatbot" (solo Plus/Asesor/Supervisor). Restricciones
-  // pendientes de definir (operación = venta, presupuesto > $1.8M, tope de
-  // 10/mes) — por ahora solo el botón, sin la lógica de validación ni envío.
+  // Botón "Enviar al chatbot" (solo Plus/Asesor/Supervisor). Solo clientes de
+  // venta con presupuesto > $1.8M, tope de 10 por mes — validado en el form y
+  // de nuevo en el backend (agregar-cliente-chatbot).
   const [clienteChatbot, setClienteChatbot] = useState<Cliente | null>(null)
+  const [chatbotTelefono, setChatbotTelefono] = useState('')
+  const [chatbotPresupuesto, setChatbotPresupuesto] = useState('')
+  const [chatbotError, setChatbotError] = useState<string | null>(null)
+  const [chatbotEnviando, setChatbotEnviando] = useState(false)
   function abrirModalChatbot(item: Cliente) {
+    setChatbotTelefono(item.telefono ?? '')
+    setChatbotPresupuesto((item.presupuesto ?? '').replace(/\D/g, ''))
+    setChatbotError(null)
     setClienteChatbot(item)
+  }
+  function cerrarModalChatbot() {
+    if (chatbotEnviando) return
+    setClienteChatbot(null)
+  }
+  async function enviarClienteAChatbot() {
+    if (!clienteChatbot) return
+    setChatbotError(null)
+    const presupuestoNum = Number(chatbotPresupuesto)
+    if (!Number.isFinite(presupuestoNum) || presupuestoNum <= 1_800_000) {
+      setChatbotError('El presupuesto debe ser mayor a $1,800,000.')
+      return
+    }
+    setChatbotEnviando(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('agregar-cliente-chatbot', {
+        body: {
+          clienteId: clienteChatbot.id,
+          nombre: clienteChatbot.nombre,
+          telefono: chatbotTelefono,
+          tipoOperacion: clienteChatbot.tipo_operacion,
+          presupuesto: presupuestoNum,
+        },
+      })
+      if (error || data?.error) {
+        setChatbotError(data?.error || error?.message || 'No se pudo enviar al chatbot.')
+        return
+      }
+      setClienteChatbot(null)
+      const msg = `${clienteChatbot.nombre} fue enviado al chatbot.`
+      if (Platform.OS === 'web') window.alert(msg)
+      else Alert.alert('Listo', msg)
+    } catch (e) {
+      setChatbotError(e instanceof Error ? e.message : 'No se pudo enviar al chatbot.')
+    } finally {
+      setChatbotEnviando(false)
+    }
   }
   const [interesFilter, setInteresFilter] = useState<string | null>(null)
   const [zonaFilter, setZonaFilter]       = useState<string | null>(null)
@@ -1106,21 +1150,66 @@ export default function CRM() {
         )}
       </View>
 
-      {/* ── Enviar al chatbot (placeholder — falta la lógica de validación) ── */}
-      <Modal visible={!!clienteChatbot} transparent animationType="fade" onRequestClose={() => setClienteChatbot(null)}>
-        <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setClienteChatbot(null)}>
+      {/* ── Enviar al chatbot ── */}
+      <Modal visible={!!clienteChatbot} transparent animationType="fade" onRequestClose={cerrarModalChatbot}>
+        <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={cerrarModalChatbot}>
           <View style={[s.chatbotModalBox, { backgroundColor: c.card }]} onStartShouldSetResponder={() => true}>
             <Ionicons name="chatbubbles-outline" size={28} color="#7c3aed" style={{ marginBottom: 8 }} />
             <Text style={[s.chatbotModalTitle, { color: c.text }]}>Enviar al chatbot</Text>
             <Text style={[s.chatbotModalSub, { color: c.textMute }]}>
               {clienteChatbot?.nombre}
             </Text>
-            <Text style={[s.chatbotModalInfo, { color: c.textMute }]}>
-              Próximamente: solo podrá enviarse si la operación es de venta, el
-              presupuesto supera $1.8M y no se haya llegado al límite de 10
-              clientes este mes.
-            </Text>
-            <TouchableOpacity style={s.chatbotModalCerrar} onPress={() => setClienteChatbot(null)}>
+
+            {clienteChatbot?.tipo_operacion?.toLowerCase() !== 'venta' ? (
+              <Text style={[s.chatbotModalInfo, { color: c.textMute }]}>
+                Solo se pueden enviar al chatbot clientes cuya operación sea de
+                venta. Este cliente está marcado como{' '}
+                {clienteChatbot?.tipo_operacion || 'sin operación'}.
+              </Text>
+            ) : (
+              <>
+                <Text style={[s.chatbotModalInfo, { color: c.textMute, marginBottom: 8, textAlign: 'left' }]}>
+                  Solo clientes de venta con presupuesto mayor a $1,800,000.
+                  Confirma o corrige los datos antes de enviar.
+                </Text>
+
+                <Text style={[s.chatbotFieldLabel, { color: c.textMute }]}>Teléfono</Text>
+                <TextInput
+                  style={[s.chatbotInput, { color: c.text, borderColor: c.border }]}
+                  value={chatbotTelefono}
+                  onChangeText={setChatbotTelefono}
+                  placeholder="10 dígitos"
+                  placeholderTextColor={c.textMute}
+                  keyboardType="phone-pad"
+                />
+
+                <Text style={[s.chatbotFieldLabel, { color: c.textMute }]}>Presupuesto (MXN)</Text>
+                <TextInput
+                  style={[s.chatbotInput, { color: c.text, borderColor: c.border }]}
+                  value={chatbotPresupuesto}
+                  onChangeText={(t) => setChatbotPresupuesto(t.replace(/\D/g, ''))}
+                  placeholder="Ej. 2500000"
+                  placeholderTextColor={c.textMute}
+                  keyboardType="number-pad"
+                />
+
+                {chatbotError && (
+                  <Text style={s.chatbotErrorTxt}>{chatbotError}</Text>
+                )}
+
+                <TouchableOpacity
+                  style={[s.chatbotModalEnviar, chatbotEnviando && { opacity: 0.6 }]}
+                  onPress={enviarClienteAChatbot}
+                  disabled={chatbotEnviando}
+                >
+                  {chatbotEnviando
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={s.chatbotModalCerrarTxt}>Enviar al chatbot</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity style={s.chatbotModalCerrar} onPress={cerrarModalChatbot} disabled={chatbotEnviando}>
               <Text style={s.chatbotModalCerrarTxt}>Cerrar</Text>
             </TouchableOpacity>
           </View>
@@ -1427,8 +1516,18 @@ const s = StyleSheet.create({
   chatbotModalTitle: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
   chatbotModalSub: { fontSize: 14, fontWeight: '600', marginBottom: 12 },
   chatbotModalInfo: { fontSize: 13, textAlign: 'center', lineHeight: 19, marginBottom: 20 },
-  chatbotModalCerrar: {
+  chatbotFieldLabel: { fontSize: 12, fontWeight: '600', alignSelf: 'flex-start', marginBottom: 4 },
+  chatbotInput: {
+    width: '100%', borderWidth: 1, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, marginBottom: 10,
+  },
+  chatbotErrorTxt: { color: '#dc2626', fontSize: 12, marginBottom: 8, alignSelf: 'flex-start' },
+  chatbotModalEnviar: {
     backgroundColor: '#7c3aed', borderRadius: 10, paddingVertical: 11, paddingHorizontal: 32,
+    width: '100%', alignItems: 'center', marginBottom: 8,
+  },
+  chatbotModalCerrar: {
+    backgroundColor: '#94a3b8', borderRadius: 10, paddingVertical: 9, paddingHorizontal: 32,
   },
   chatbotModalCerrarTxt: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
