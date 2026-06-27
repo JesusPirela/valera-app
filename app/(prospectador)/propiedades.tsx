@@ -532,8 +532,10 @@ export default function ProspectadorPropiedades() {
       const bD = _estaDestacada(b) ? 1 : 0
       return bD - aD
     })
-  } else if (!ordenPrecio) {
-    // Usuarios no-admin: destacadas primero, resto en orden aleatorio por sesión
+  } else if (!ordenPrecio && !filtroNueva) {
+    // Usuarios no-admin: destacadas primero, resto en orden aleatorio por sesión.
+    // Si "Nuevas" está activo no se aplica: ese filtro ya ordenó por fecha
+    // más reciente arriba y no debe perderse ese orden.
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
       const aD = _estaDestacada(a) ? 1 : 0
       const bD = _estaDestacada(b) ? 1 : 0
