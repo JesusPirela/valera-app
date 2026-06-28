@@ -700,7 +700,10 @@ export default function DetallePropiedad() {
       }
 
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${propiedad.codigo ?? 'ficha'}</title><style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * {
+          box-sizing: border-box; margin: 0; padding: 0;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;
+        }
         body { font-family: Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; }
         .header { background: #1a6470; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
         .header-left { flex: 1; }
@@ -1238,6 +1241,11 @@ export default function DetallePropiedad() {
             try { await MediaLibrary.saveToLibraryAsync(uri); guardadas++ } catch { /* skip */ }
           }
         }
+        // Limpiar los temporales del cache: ya están en la galería, no hace
+        // falta conservarlos — si no se borran se acumulan con cada propiedad.
+        for (const uri of uris) {
+          FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {})
+        }
       }
 
       Alert.alert(
@@ -1319,10 +1327,16 @@ export default function DetallePropiedad() {
           const url = imagenes[i].url
           const ext = url.split('?')[0].split('.').pop()?.toLowerCase() ?? 'jpg'
           const extValida = ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext) ? ext : 'jpg'
-          const dest = `${FileSystem.documentDirectory}${propiedad.codigo ?? 'prop'}-${i + 1}.${extValida}`
+          // cacheDirectory (no documentDirectory): es un archivo temporal, ya
+          // una vez copiado a la galería no debe quedarse ocupando espacio
+          // permanente de la app — antes se acumulaban para siempre y con
+          // varias propiedades publicadas llenaban el almacenamiento del
+          // teléfono hasta dejarlo sin memoria.
+          const dest = `${FileSystem.cacheDirectory}${propiedad.codigo ?? 'prop'}-${i + 1}-${Date.now()}.${extValida}`
           const { uri, status: dlStatus } = await FileSystem.downloadAsync(url, dest)
           if (dlStatus !== 200) { errores.push(`img${i + 1}: HTTP ${dlStatus}`); continue }
           await MediaLibrary.createAssetAsync(uri)
+          FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {})
           guardadas++
         } catch (e: any) {
           errores.push(`img${i + 1}: ${e?.message ?? e}`)
