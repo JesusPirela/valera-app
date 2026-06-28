@@ -205,9 +205,12 @@ export default function RootLayout() {
         iniciarSesion()
         // Al volver del background verificar que la sesión no expiró.
         // Si falta, refreshSession la renueva usando el refresh_token en storage.
-        supabase.auth.getSession().then(({ data }) => {
-          if (!data.session) supabase.auth.refreshSession().catch(() => {})
-        }).catch(() => {})
+        ;(async () => {
+          try {
+            const { data } = await supabase.auth.getSession()
+            if (!data.session) await supabase.auth.refreshSession()
+          } catch { /* sin red: el SIGNED_OUT/getSession lo maneja después */ }
+        })()
         const ahora = Date.now()
         if (ahora - ultimaRevisionUpdateRef.current > 10 * 60 * 1000) {
           ultimaRevisionUpdateRef.current = ahora

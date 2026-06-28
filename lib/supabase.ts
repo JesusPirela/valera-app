@@ -24,6 +24,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     // En React Native (monohilo) no hay concurrencia real, y el lock
     // basado en AsyncStorage puede causar que el token refresh se quede
     // colgado tras un background/foreground, generando SIGNED_OUT falsos.
-    lock: (_name: string, _timeout: number, fn: () => Promise<unknown>) => fn(),
+    lock: <R>(_name: string, _timeout: number, fn: () => Promise<R>): Promise<R> => fn(),
   },
 })

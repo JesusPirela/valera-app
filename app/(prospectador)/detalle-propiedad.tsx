@@ -182,9 +182,12 @@ export default function DetallePropiedad() {
   const [lightboxVisible, setLightboxVisible] = useState(false)
   const [lightboxIndex, setLightboxIndex]     = useState(0)
   const [lightboxLoading, setLightboxLoading] = useState(false)
+  // URLs cuya versión optimizada (thumb/render) falló al cargar: se reintenta
+  // con la URL original sin transformar como respaldo.
+  const [thumbFallidas, setThumbFallidas] = useState<Set<string>>(new Set())
 
   const { vistaComo } = useVistaComo()
-  const { data: detalle, isLoading } = useQuery({
+  const { data: detalle, isLoading, isFetching } = useQuery({
     queryKey: vistaComo ? ['detalle-propiedad', id, vistaComo] : ['detalle-propiedad', id],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -1381,9 +1384,10 @@ export default function DetallePropiedad() {
                 onPress={() => { setLightboxIndex(i); setLightboxVisible(true) }}
               >
                 <Image
-                  source={{ uri: thumb(img.url, { width: 1080, quality: 72 }) }}
+                  source={{ uri: thumbFallidas.has(img.url) ? img.url : thumb(img.url, { width: 1080, quality: 72 }) }}
                   style={[styles.imagen, { width: SCREEN_WIDTH }]}
                   resizeMode="cover"
+                  onError={() => setThumbFallidas(prev => prev.has(img.url) ? prev : new Set(prev).add(img.url))}
                 />
               </TouchableOpacity>
             ))}
@@ -1398,6 +1402,12 @@ export default function DetallePropiedad() {
               ))}
             </View>
           )}
+        </View>
+      ) : isFetching ? (
+        // Caché sembrada sin fotos todavía + refetch en curso: mostrar carga,
+        // no "Sin imágenes" (evita el falso "sin fotos" en redes lentas).
+        <View style={[styles.sinImagen, { width: SCREEN_WIDTH }]}>
+          <ActivityIndicator size="large" color="#1a6470" />
         </View>
       ) : (
         <View style={[styles.sinImagen, { width: SCREEN_WIDTH }]}>

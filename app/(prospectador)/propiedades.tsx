@@ -296,11 +296,14 @@ export default function ProspectadorPropiedades() {
       queryClient.setQueryData(
         ['detalle-propiedad', p.id],
         (old: unknown) => {
-          // Si ya existe data con imágenes completas, no sobreescribir
+          // No pisar un detalle ya cacheado (tiene igual o más imágenes que la portada).
           const existing = old as any
-          if (existing?.propiedad?.propiedad_imagenes?.length > 0) return old
-          // Pre-popular sin imágenes para que el detalle las cargue siempre frescas
-          return { propiedad: { ...p, propiedad_imagenes: [] }, subidoPor: null, nombreUsuario: queryData.nombreUsuario }
+          if ((existing?.propiedad?.propiedad_imagenes?.length ?? 0) > 0) return old
+          // Sembrar con la PORTADA que el listado ya trae, para que el detalle
+          // muestre algo al instante. El detalle hace refetch (staleTime:0) y
+          // completa el resto de fotos; si ese refetch falla por mala red, el
+          // usuario sigue viendo la portada en vez de quedarse en "Sin imágenes".
+          return { propiedad: { ...p }, subidoPor: null, nombreUsuario: queryData.nombreUsuario, rol: queryData.rol }
         }
       )
     }
