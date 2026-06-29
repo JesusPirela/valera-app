@@ -1381,33 +1381,60 @@ export default function DetallePropiedad() {
       {/* Galería de imágenes */}
       {imagenes.length > 0 ? (
         <View>
-          <ScrollView
-            ref={scrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => {
-              const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH)
-              setImagenActual(index)
-            }}
-          >
-            {imagenes.map((img, i) => (
-              <TouchableOpacity
-                key={i}
-                activeOpacity={0.92}
-                onPress={() => { setLightboxIndex(i); setLightboxVisible(true) }}
-              >
-                <Image
-                  source={{ uri: thumbFallidas.has(img.url) ? img.url : thumb(img.url, { width: 1080, quality: 72 }) }}
-                  style={[styles.imagen, { width: SCREEN_WIDTH }]}
-                  resizeMode="cover"
-                  onError={() => setThumbFallidas(prev => prev.has(img.url) ? prev : new Set(prev).add(img.url))}
-                />
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          <View style={{ position: 'relative' }}>
+            <ScrollView
+              ref={scrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={(e) => {
+                // En web no hay "momentum"; onScroll mantiene el índice al día.
+                const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH)
+                if (index !== imagenActual) setImagenActual(index)
+              }}
+              scrollEventThrottle={16}
+              onMomentumScrollEnd={(e) => {
+                const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH)
+                setImagenActual(index)
+              }}
+            >
+              {imagenes.map((img, i) => (
+                <TouchableOpacity
+                  key={i}
+                  activeOpacity={0.92}
+                  onPress={() => { setLightboxIndex(i); setLightboxVisible(true) }}
+                >
+                  <Image
+                    source={{ uri: thumbFallidas.has(img.url) ? img.url : thumb(img.url, { width: 1080, quality: 72 }) }}
+                    style={[styles.imagen, { width: SCREEN_WIDTH }]}
+                    resizeMode="cover"
+                    onError={() => setThumbFallidas(prev => prev.has(img.url) ? prev : new Set(prev).add(img.url))}
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
-          {imagenes.length > 1 && (
+            {/* Flechas para navegar el carrusel (en web no se puede deslizar
+                con el mouse; sin esto solo se ve la primera foto). */}
+            {Platform.OS === 'web' && imagenes.length > 1 && imagenActual > 0 && (
+              <TouchableOpacity style={[styles.galFlecha, { left: 12 }]} onPress={() => irAImagen(imagenActual - 1)}>
+                <Text style={styles.galFlechaTxt}>‹</Text>
+              </TouchableOpacity>
+            )}
+            {Platform.OS === 'web' && imagenes.length > 1 && imagenActual < imagenes.length - 1 && (
+              <TouchableOpacity style={[styles.galFlecha, { right: 12 }]} onPress={() => irAImagen(imagenActual + 1)}>
+                <Text style={styles.galFlechaTxt}>›</Text>
+              </TouchableOpacity>
+            )}
+            {imagenes.length > 1 && (
+              <View style={styles.galContador}>
+                <Text style={styles.galContadorTxt}>{imagenActual + 1} / {imagenes.length}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Puntos solo cuando son pocos; con muchas fotos el contador basta. */}
+          {imagenes.length > 1 && imagenes.length <= 12 && (
             <View style={styles.paginador}>
               {imagenes.map((_, i) => (
                 <TouchableOpacity key={i} onPress={() => irAImagen(i)}>
@@ -2204,6 +2231,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sinImagenText: { color: '#aaa', fontSize: 14 },
+
+  galFlecha: {
+    position: 'absolute', top: 150,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 5,
+    // @ts-ignore — cursor solo aplica en web
+    cursor: 'pointer',
+  },
+  galFlechaTxt: { color: '#fff', fontSize: 28, fontWeight: '700', lineHeight: 30, marginTop: -3 },
+  galContador: {
+    position: 'absolute', bottom: 10, right: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12,
+    paddingHorizontal: 10, paddingVertical: 4, zIndex: 5,
+  },
+  galContadorTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
 
   paginador: {
     flexDirection: 'row',
