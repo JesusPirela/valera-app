@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { View } from 'react-native'
+import { View, TouchableOpacity } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 
 type Props = { lat: number; lng: number; titulo?: string; height?: number }
 
@@ -55,10 +56,30 @@ export default function PropMapa({ lat, lng, titulo, height = 300 }: Props) {
     }
   }, [lat, lng])
 
+  function recentrar() {
+    mapRef.current?.flyTo([lat, lng], 15, { duration: 0.6 })
+  }
+
   return (
-    <View
-      ref={containerRef}
-      style={{ width: '100%', height, borderRadius: 12, overflow: 'hidden', backgroundColor: '#dde8ee' } as any}
-    />
+    <View style={{ position: 'relative', width: '100%', height } as any}>
+      <View
+        ref={containerRef}
+        style={{ width: '100%', height, borderRadius: 12, overflow: 'hidden', backgroundColor: '#dde8ee' } as any}
+      />
+      {/* Botón para volver a centrar el mapa en la propiedad tras moverlo. */}
+      <TouchableOpacity
+        onPress={recentrar}
+        activeOpacity={0.85}
+        style={{
+          position: 'absolute', bottom: 12, right: 12,
+          width: 40, height: 40, borderRadius: 20,
+          backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.3)', cursor: 'pointer',
+        } as any}
+      >
+        <Ionicons name="locate" size={20} color="#1a6470" />
+      </TouchableOpacity>
+    </View>
   )
 }
