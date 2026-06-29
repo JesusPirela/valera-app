@@ -70,6 +70,22 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
   // Panel inferior con las propiedades de un grupo (en vez de dispersar los
   // pines): replica la UX de la app nativa ("N propiedades en esta ubicación").
   const [selectedCluster, setSelectedCluster] = useState<{ color: string; pins: SheetPin[] } | null>(null)
+  // Scroll horizontal del panel: en web el mouse no arrastra, así que se navega
+  // con flechas. Guardamos el ref, la posición y si el contenido desborda.
+  const sheetScrollRef = useRef<any>(null)
+  const sheetScrollX   = useRef(0)
+  const sheetViewW     = useRef(0)
+  const sheetContentW  = useRef(0)
+  const [sheetCanScroll, setSheetCanScroll] = useState(false)
+  function recalcSheetScroll() {
+    setSheetCanScroll(sheetContentW.current > sheetViewW.current + 8)
+  }
+
+  function scrollSheet(dir: 1 | -1) {
+    const step = 160 * 3 // ~3 tarjetas (150 ancho + 10 gap)
+    const next = Math.max(0, sheetScrollX.current + dir * step)
+    sheetScrollRef.current?.scrollTo({ x: next, animated: true })
+  }
   const cityRef          = useRef<string | null>(null)
   const onPressRef       = useRef(onZonaPress)
   const zonasRef         = useRef(zonas)
@@ -299,28 +315,52 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
               <Text style={webS.sheetClose}>✕</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10 }}>
-            {selectedCluster.pins.map(p => (
-              <TouchableOpacity
-                key={p.id}
-                style={webS.card}
-                onPress={() => { onPropiedadRef.current?.(p.id); setSelectedCluster(null) }}
-                activeOpacity={0.8}
-              >
-                {p.imagen
-                  ? <Image source={{ uri: p.imagen }} style={webS.cardImg} resizeMode="cover" />
-                  : <View style={[webS.cardImg, webS.cardImgPlaceholder]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
-                }
-                <View style={webS.cardInfo}>
-                  <Text style={webS.cardTitle} numberOfLines={2}>{p.titulo}</Text>
-                  <Text style={[webS.cardPrice, { color: selectedCluster.color }]}>
-                    {p.precio ? `$${p.precio.toLocaleString('es-MX')}` : 'A consultar'}
-                  </Text>
-                  {p.tipo ? <Text style={webS.cardTipo}>{p.tipo}</Text> : null}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          <View style={{ position: 'relative' }}>
+            <ScrollView
+              ref={sheetScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onScroll={(e) => { sheetScrollX.current = e.nativeEvent.contentOffset.x }}
+              onLayout={(e) => { sheetViewW.current = e.nativeEvent.layout.width; recalcSheetScroll() }}
+              onContentSizeChange={(w) => { sheetContentW.current = w; recalcSheetScroll() }}
+              contentContainerStyle={{ paddingHorizontal: 12, gap: 10 }}
+            >
+              {selectedCluster.pins.map(p => (
+                <TouchableOpacity
+                  key={p.id}
+                  style={webS.card}
+                  onPress={() => { onPropiedadRef.current?.(p.id); setSelectedCluster(null) }}
+                  activeOpacity={0.8}
+                >
+                  {p.imagen
+                    ? <Image source={{ uri: p.imagen }} style={webS.cardImg} resizeMode="cover" />
+                    : <View style={[webS.cardImg, webS.cardImgPlaceholder]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
+                  }
+                  <View style={webS.cardInfo}>
+                    <Text style={webS.cardTitle} numberOfLines={2}>{p.titulo}</Text>
+                    <Text style={[webS.cardPrice, { color: selectedCluster.color }]}>
+                      {p.precio ? `$${p.precio.toLocaleString('es-MX')}` : 'A consultar'}
+                    </Text>
+                    {p.tipo ? <Text style={webS.cardTipo}>{p.tipo}</Text> : null}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Flechas para recorrer las tarjetas (en web el mouse no arrastra
+                el scroll horizontal; sin esto no se llega a las de la derecha). */}
+            {sheetCanScroll && (
+              <>
+                <TouchableOpacity style={[webS.sheetArrow, { left: 4 }]} onPress={() => scrollSheet(-1)} activeOpacity={0.85}>
+                  <Text style={webS.sheetArrowTxt}>‹</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[webS.sheetArrow, { right: 4 }]} onPress={() => scrollSheet(1)} activeOpacity={0.85}>
+                  <Text style={webS.sheetArrowTxt}>›</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
       )}
     </View>
@@ -340,6 +380,16 @@ const webS = StyleSheet.create({
     paddingHorizontal: 16, marginBottom: 10,
   },
   sheetTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a2e' },
+  sheetArrow: {
+    position: 'absolute', top: 38,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 5,
+    // @ts-ignore — cursor solo aplica en web
+    cursor: 'pointer',
+  },
+  sheetArrowTxt: { color: '#fff', fontSize: 24, fontWeight: '700', lineHeight: 26, marginTop: -2 },
   sheetClose: { color: '#888', fontSize: 16, fontWeight: '700' },
   card: {
     width: 150, borderRadius: 10, backgroundColor: '#f7f9fa',
