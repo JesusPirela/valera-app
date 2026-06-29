@@ -30,15 +30,20 @@ export function generarIdemKey(): string {
 }
 
 export async function conReintento(
-  intentar: () => PromiseLike<{ error: unknown }>,
+  intentar: (signal: AbortSignal) => PromiseLike<{ error: unknown }>,
   opciones: { intentos?: number; timeoutMs?: number; backoffMs?: number } = {},
 ): Promise<boolean> {
   const { intentos = 3, timeoutMs = 9000, backoffMs = 700 } = opciones
   for (let i = 1; i <= intentos; i++) {
+    const controller = new AbortController()
     try {
-      const { error } = await conTimeout(intentar(), timeoutMs)
+      const { error } = await conTimeout(intentar(controller.signal), timeoutMs)
       if (!error) return true
-    } catch { /* timeout o caída de red: se reintenta abajo */ }
+    } catch {
+      // Timeout/caída: abortar el intento aún en vuelo para no acumular
+      // peticiones concurrentes que saturan una conexión lenta.
+      try { controller.abort() } catch {}
+    }
     if (i < intentos) await new Promise((r) => setTimeout(r, backoffMs * i))
   }
   return false
@@ -49,19 +54,25 @@ export async function conReintento(
 // Solo reintenta errores de red/timeout; errores de servidor (RLS, función, etc.)
 // fallan de inmediato y devuelven el mensaje real en errorMsg.
 export async function conReintentoData<T>(
-  intentar: () => PromiseLike<{ data: T | null; error: unknown }>,
+  intentar: (signal: AbortSignal) => PromiseLike<{ data: T | null; error: unknown }>,
   opciones: { intentos?: number; timeoutMs?: number; backoffMs?: number } = {},
 ): Promise<{ ok: boolean; data: T | null; errorMsg?: string }> {
   const { intentos = 3, timeoutMs = 9000, backoffMs = 700 } = opciones
   for (let i = 1; i <= intentos; i++) {
+    const controller = new AbortController()
     try {
-      const { data, error } = await conTimeout(intentar(), timeoutMs)
+      const { data, error } = await conTimeout(intentar(controller.signal), timeoutMs)
       if (!error) return { ok: true, data }
       // Error devuelto por el servidor (RLS, función inválida, etc.):
       // no tiene sentido reintentar, fallar de inmediato con el mensaje real.
       const errorMsg = (error as any)?.message ?? String(error)
       return { ok: false, data: null, errorMsg }
-    } catch { /* timeout o caída de red: se reintenta abajo */ }
+    } catch {
+      // Timeout/caída: abortar el intento aún en vuelo. Sin esto, en una
+      // conexión lenta se acumulan 2-3 peticiones concurrentes compitiendo
+      // por el poco ancho de banda y ninguna llega a completarse.
+      try { controller.abort() } catch {}
+    }
     if (i < intentos) await new Promise((r) => setTimeout(r, backoffMs * i))
   }
   return { ok: false, data: null }

@@ -391,9 +391,31 @@ export default function DetallePropiedad() {
     // mismo idem key nunca duplica el premio.
     const idemKey = generarIdemKey()
     const { ok, data, errorMsg } = await conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number; fecha_publicacion?: string }>(
-      () => supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: id, p_idem_key: idemKey }),
+      (signal) => supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: id, p_idem_key: idemKey }).abortSignal(signal),
       { timeoutMs: 18_000 },
     )
+
+    // Timeout sin respuesta: la escritura pudo llegar igual. Verificar antes de
+    // mostrar error — si ya quedó publicada, reflejarlo como éxito.
+    if (!ok && !errorMsg) {
+      try {
+        const { data: chk } = await conTimeout(
+          supabase.from('propiedad_publicacion')
+            .select('veces_publicada, fecha_publicacion')
+            .eq('propiedad_id', id).eq('user_id', user.id).maybeSingle(),
+          8000,
+        )
+        if (chk && (chk.veces_publicada ?? 0) > vecesPublicada) {
+          setPublicada(true)
+          setFechaPublicacion(chk.fecha_publicacion ?? new Date().toISOString())
+          setVecesPublicada(chk.veces_publicada!)
+          actualizarMisionesPorCategoria(user.id, 'propiedad').catch(() => {})
+          queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
+          setTogglingPublicacion(false)
+          return
+        }
+      } catch { /* la verificación también falló: seguir al manejo de error */ }
+    }
 
     if (!ok || !data?.ok) {
       const msg = data?.error === 'limite'

@@ -26,7 +26,7 @@ import { esPlusOMejor } from '../../lib/permisos'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
-import { conReintentoData, generarIdemKey } from '../../lib/redIntentos'
+import { conReintentoData, generarIdemKey, conTimeout } from '../../lib/redIntentos'
 
 const LOGO = require('../../assets/logo.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
@@ -339,9 +339,34 @@ export default function ProspectadorPropiedades() {
 
     const idemKey = generarIdemKey()
     const { ok, data, errorMsg } = await conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number }>(
-      () => supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: propiedadId, p_idem_key: idemKey }),
+      (signal) => supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: propiedadId, p_idem_key: idemKey }).abortSignal(signal),
       { timeoutMs: 18_000 },
     )
+
+    // Si todos los intentos expiraron (timeout sin respuesta), la escritura
+    // pudo haber llegado igual y solo perderse la respuesta. Verificar antes
+    // de marcar error: si ya quedó publicada, tratarlo como éxito.
+    if (!ok && !errorMsg) {
+      try {
+        const { data: chk } = await conTimeout(
+          supabase.from('propiedad_publicacion')
+            .select('veces_publicada')
+            .eq('propiedad_id', propiedadId).eq('user_id', userId).maybeSingle(),
+          8000,
+        )
+        if (chk && (chk.veces_publicada ?? 0) > vecesActual) {
+          queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old =>
+            old ? { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: chk.veces_publicada! } } : old)
+          queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
+          actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
+          const cleanup = new Set(togglingRef.current)
+          cleanup.delete(propiedadId)
+          togglingRef.current = cleanup
+          setToggling(cleanup)
+          return
+        }
+      } catch { /* la verificación también falló: seguir al manejo de error */ }
+    }
 
     if (!ok || !data?.ok) {
       // Rollback optimista y refetch para mostrar estado real del servidor.
@@ -997,10 +1022,13 @@ export default function ProspectadorPropiedades() {
         </View>{/* fin webBody */}
       </View>
 
-      {/* Botón de ayuda flotante */}
-      <TouchableOpacity style={styles.helpFab} onPress={() => setShowHelp(true)} activeOpacity={0.85}>
-        <Ionicons name="help" size={20} color="#fff" />
-      </TouchableOpacity>
+      {/* Botón de ayuda flotante — oculto en la vista de mapa para no tapar
+          las flechas del panel de propiedades por ubicación. */}
+      {!vistaZonas && (
+        <TouchableOpacity style={styles.helpFab} onPress={() => setShowHelp(true)} activeOpacity={0.85}>
+          <Ionicons name="help" size={20} color="#fff" />
+        </TouchableOpacity>
+      )}
 
       {/* Modal imagen completa */}
       <Modal visible={imagenModal != null} transparent animationType="fade" onRequestClose={() => setImagenModal(null)}>
