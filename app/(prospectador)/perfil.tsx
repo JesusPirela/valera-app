@@ -92,7 +92,11 @@ const AvatarGrid = memo(function AvatarGrid({
           >
             {desbloqueado && !gifsFallidos.has(e) ? (
               <Image
-                source={{ uri: gif }}
+                // Solo el avatar seleccionado corre el GIF animado; los demás
+                // muestran el PNG estático del MISMO emoji Noto. Evita decodificar
+                // 16 GIFs a la vez, que es lo que hace lento el perfil con todo
+                // desbloqueado. Mismo ícono, solo que quieto hasta elegirlo.
+                source={{ uri: seleccionado ? gif : gif.replace('512.gif', '512.png') }}
                 style={{ width: 38, height: 38 }}
                 resizeMode="contain"
                 onError={() => onGifError(e)}
@@ -543,7 +547,7 @@ export default function Perfil() {
                   }}
                   disabled={enCompra}
                 >
-                  <AnimatedGradientView patron={patron} style={StyleSheet.absoluteFillObject} />
+                  <AnimatedGradientView patron={patron} animate={seleccionado} style={StyleSheet.absoluteFillObject} />
                   {seleccionado && <Text style={s.colorCheck}>✓</Text>}
                   {enCompra && (
                     <View style={s.lockOverlay}>

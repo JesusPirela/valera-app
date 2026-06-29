@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet } from 'react-native'
 
 export type ZonaPin = {
   key: string
@@ -58,20 +58,7 @@ function naturalSpread(center: [number, number], count: number, R = 0.007): [num
   })
 }
 
-function uniformSpread(center: [number, number], count: number): [number, number][] {
-  if (count <= 1) return [center]
-  const PHI = (1 + Math.sqrt(5)) / 2
-  const R = 0.0015
-  const lngFactor = 1 / Math.cos(center[0] * Math.PI / 180)
-  return Array.from({ length: count }, (_, i) => {
-    const angle = 2 * Math.PI * PHI * i
-    const r = R * Math.sqrt((i + 1) / count)
-    return [
-      center[0] + Math.cos(angle) * r,
-      center[1] + Math.sin(angle) * r * lngFactor,
-    ] as [number, number]
-  })
-}
+type SheetPin = { id: string; titulo: string; precio: number | null; tipo: string | null; direccion: string; imagen?: string | null }
 
 export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props) {
   const containerRef     = useRef<any>(null)
@@ -80,6 +67,9 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
   const backCtrlRef      = useRef<any>(null)
   const expandedGroupRef = useRef<{ clusterMarker: any; indivMarkers: any[] }[]>([])
   const viewRef          = useRef<'mexico' | 'city' | 'subzona'>('mexico')
+  // Panel inferior con las propiedades de un grupo (en vez de dispersar los
+  // pines): replica la UX de la app nativa ("N propiedades en esta ubicación").
+  const [selectedCluster, setSelectedCluster] = useState<{ color: string; pins: SheetPin[] } | null>(null)
   const cityRef          = useRef<string | null>(null)
   const onPressRef       = useRef(onZonaPress)
   const zonasRef         = useRef(zonas)
@@ -141,23 +131,6 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
     return m
   }
 
-  function expandCluster(L: any, map: any, clusterMarker: any, group: { coords: [number, number]; p: any }[], color: string) {
-    try { clusterMarker.remove() } catch {}
-    const center = group[0].coords
-    const coords = uniformSpread(center, group.length)
-    const indivMarkers: any[] = []
-    group.forEach((item, i) => {
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
-        iconSize: [14, 14], iconAnchor: [7, 7],
-      })
-      const m = L.marker(coords[i], { icon }).addTo(map).bindPopup(propiedadPopup(L, item.p, color))
-      indivMarkers.push(m)
-    })
-    expandedGroupRef.current.push({ clusterMarker, indivMarkers })
-  }
-
   function renderGroupedPins(L: any, map: any, items: { coords: [number, number]; p: any }[], color: string) {
     const groups = new Map<string, { coords: [number, number]; p: any }[]>()
     items.forEach(item => {
@@ -180,7 +153,9 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
         markersRef.current.push(m)
         m.on('click', (e: any) => {
           L.DomEvent.stopPropagation(e)
-          expandCluster(L, map, m, group, color)
+          // En vez de dispersar los pines, mostrar el panel inferior con la
+          // lista de propiedades de esta ubicación (igual que en la app nativa).
+          setSelectedCluster({ color, pins: group.map(g => g.p as SheetPin) })
         })
       }
     })
@@ -266,6 +241,8 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
     mapRef.current = map
     L._currentMap = map
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map)
+    // Tocar el mapa (fuera de un cluster) cierra el panel inferior.
+    map.on('click', () => setSelectedCluster(null))
     renderCityPins(L, map, zonasRef.current)
   }
 
@@ -308,9 +285,71 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
   }, [zonas])
 
   return (
-    <View
-      ref={containerRef}
-      style={{ height: 'calc(100vh - 160px)' as any, width: '100%', borderRadius: 0, overflow: 'hidden', marginBottom: 0, backgroundColor: '#dde8ee' }}
-    />
+    <View style={{ position: 'relative', height: 'calc(100vh - 160px)' as any, width: '100%' }}>
+      <View
+        ref={containerRef}
+        style={{ height: '100%', width: '100%', overflow: 'hidden', backgroundColor: '#dde8ee' }}
+      />
+
+      {selectedCluster && (
+        <View style={webS.sheet}>
+          <View style={webS.sheetHeader}>
+            <Text style={webS.sheetTitle}>{selectedCluster.pins.length} propiedades en esta ubicación</Text>
+            <TouchableOpacity onPress={() => setSelectedCluster(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={webS.sheetClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10 }}>
+            {selectedCluster.pins.map(p => (
+              <TouchableOpacity
+                key={p.id}
+                style={webS.card}
+                onPress={() => { onPropiedadRef.current?.(p.id); setSelectedCluster(null) }}
+                activeOpacity={0.8}
+              >
+                {p.imagen
+                  ? <Image source={{ uri: p.imagen }} style={webS.cardImg} resizeMode="cover" />
+                  : <View style={[webS.cardImg, webS.cardImgPlaceholder]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
+                }
+                <View style={webS.cardInfo}>
+                  <Text style={webS.cardTitle} numberOfLines={2}>{p.titulo}</Text>
+                  <Text style={[webS.cardPrice, { color: selectedCluster.color }]}>
+                    {p.precio ? `$${p.precio.toLocaleString('es-MX')}` : 'A consultar'}
+                  </Text>
+                  {p.tipo ? <Text style={webS.cardTipo}>{p.tipo}</Text> : null}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
   )
 }
+
+const webS = StyleSheet.create({
+  sheet: {
+    position: 'absolute', bottom: 16, left: 0, right: 0, zIndex: 1000,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16, borderTopRightRadius: 16,
+    paddingTop: 12, paddingBottom: 16,
+    shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12,
+  },
+  sheetHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, marginBottom: 10,
+  },
+  sheetTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a2e' },
+  sheetClose: { color: '#888', fontSize: 16, fontWeight: '700' },
+  card: {
+    width: 150, borderRadius: 10, backgroundColor: '#f7f9fa',
+    overflow: 'hidden', borderWidth: 1, borderColor: '#e8eef0',
+    cursor: 'pointer' as any,
+  },
+  cardImg: { width: 150, height: 96 },
+  cardImgPlaceholder: { backgroundColor: '#e8f4f8', alignItems: 'center', justifyContent: 'center' },
+  cardInfo: { padding: 8 },
+  cardTitle: { fontSize: 11, fontWeight: '700', color: '#1a1a2e', marginBottom: 3 },
+  cardPrice: { fontSize: 12, fontWeight: '700', marginBottom: 2 },
+  cardTipo: { fontSize: 10, color: '#888' },
+})

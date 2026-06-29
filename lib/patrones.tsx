@@ -33,13 +33,19 @@ export function patronDeAcento(acento: string): PatronAnimado | null {
   return PATRONES_ANIMADOS.find(p => p.id === acento.replace('animated:', '')) ?? null
 }
 
-export function AnimatedGradientView({ patron, style, children }: {
+export function AnimatedGradientView({ patron, style, children, animate = true }: {
   patron: PatronAnimado
   style?: any
   children?: React.ReactNode
+  // Cuando es false NO corre el loop de animación: solo pinta el gradiente base
+  // (mismos colores, quieto). Sirve para grillas con muchos patrones a la vez
+  // —p. ej. el perfil con todo desbloqueado— donde animar todos a la vez
+  // satura el hilo de UI. El llamador anima solo el seleccionado.
+  animate?: boolean
 }) {
   const anim = useRef(new Animated.Value(0)).current
   useEffect(() => {
+    if (!animate) return
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(anim, { toValue: 1, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
@@ -48,7 +54,17 @@ export function AnimatedGradientView({ patron, style, children }: {
     )
     loop.start()
     return () => loop.stop()
-  }, [patron.id])
+  }, [patron.id, animate])
+
+  if (!animate) {
+    return (
+      <View style={[{ overflow: 'hidden' }, style]}>
+        <LinearGradient colors={patron.colores} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFillObject} />
+        {children}
+      </View>
+    )
+  }
+
   return (
     <View style={[{ overflow: 'hidden' }, style]}>
       <LinearGradient colors={patron.colores} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFillObject} />
