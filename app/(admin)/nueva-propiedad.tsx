@@ -164,6 +164,10 @@ export default function NuevaPropiedad() {
   const [zona, setZona] = useState<'queretaro' | 'monterrey' | 'puebla' | null>(null)
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
+  // Posibles propiedades duplicadas detectadas al intentar guardar.
+  const [duplicados, setDuplicados] = useState<
+    { id: string; codigo: string; titulo: string; precio: number | null; direccion: string | null; dist_m: number | null; creado_por: string | null }[] | null
+  >(null)
   const [geoQuery, setGeoQuery] = useState('')
   const [geoResults, setGeoResults] = useState<any[]>([])
   const [geoLoading, setGeoLoading] = useState(false)
@@ -607,7 +611,7 @@ export default function NuevaPropiedad() {
     return data.publicUrl
   }
 
-  async function handleGuardar() {
+  async function handleGuardar(ignorarDup = false) {
     if (!titulo.trim() || !direccion.trim()) {
       Alert.alert('Error', 'El título y la dirección son obligatorios.')
       return
@@ -616,6 +620,21 @@ export default function NuevaPropiedad() {
     if (precio && isNaN(precioNum!)) {
       Alert.alert('Error', 'El precio debe ser un número válido.')
       return
+    }
+
+    // Detector de duplicados: si ya existe una propiedad parecida/igual
+    // (misma zona + tipo + precio o recámaras), avisar antes de publicar.
+    if (!ignorarDup) {
+      try {
+        const { data: dups } = await supabase.rpc('detectar_duplicados_propiedad', {
+          p_lat: lat, p_lng: lng, p_precio: precioNum, p_tipo: tipo,
+          p_recamaras: recamaras, p_direccion: direccion.trim(),
+        })
+        if (dups && (dups as any[]).length > 0) {
+          setDuplicados(dups as any)
+          return
+        }
+      } catch { /* si la verificación falla, no bloquear el guardado */ }
     }
     const m2Num = m2 ? parseFloat(m2) : null
     if (m2 && isNaN(m2Num!)) {
@@ -1165,7 +1184,7 @@ export default function NuevaPropiedad() {
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleGuardar}
+          onPress={() => handleGuardar()}
           disabled={loading}
         >
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Guardar propiedad</Text>}
@@ -1190,9 +1209,60 @@ export default function NuevaPropiedad() {
         onCancelar={() => setCensurando(null)}
         onAplicar={(nuevaUri) => censurando && aplicarCensura(censurando, nuevaUri)}
       />
+
+      {/* Aviso de posibles duplicados antes de publicar */}
+      <Modal visible={duplicados !== null} transparent animationType="fade" onRequestClose={() => setDuplicados(null)}>
+        <View style={dupStyles.overlay}>
+          <View style={dupStyles.card}>
+            <Text style={dupStyles.titulo}>⚠️ Posible propiedad duplicada</Text>
+            <Text style={dupStyles.sub}>
+              Encontramos {duplicados?.length === 1 ? 'una propiedad parecida' : `${duplicados?.length} propiedades parecidas`} en la misma zona. Revisa que no sea la misma antes de publicar:
+            </Text>
+            <ScrollView style={{ maxHeight: 260 }}>
+              {(duplicados ?? []).map(d => (
+                <View key={d.id} style={dupStyles.item}>
+                  <Text style={dupStyles.itemCodigo}>{d.codigo}{d.dist_m != null ? `  ·  a ${d.dist_m} m` : ''}</Text>
+                  <Text style={dupStyles.itemTitulo} numberOfLines={2}>{d.titulo}</Text>
+                  <Text style={dupStyles.itemMeta}>
+                    {d.precio != null ? `$${d.precio.toLocaleString('es-MX')}` : 'Sin precio'}
+                    {d.creado_por ? `  ·  Subida por ${d.creado_por}` : ''}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={dupStyles.btnPrimary}
+              onPress={() => { setDuplicados(null) }}
+            >
+              <Text style={dupStyles.btnPrimaryTxt}>Revisar / Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={dupStyles.btnSecondary}
+              onPress={() => { setDuplicados(null); handleGuardar(true) }}
+            >
+              <Text style={dupStyles.btnSecondaryTxt}>Publicar de todos modos</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   )
 }
+
+const dupStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  card: { backgroundColor: '#fff', borderRadius: 18, padding: 22, width: '100%', maxWidth: 420 },
+  titulo: { fontSize: 18, fontWeight: '800', color: '#b71c1c', marginBottom: 6 },
+  sub: { fontSize: 13, color: '#555', lineHeight: 18, marginBottom: 14 },
+  item: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 10, marginBottom: 8, backgroundColor: '#fafafa' },
+  itemCodigo: { fontSize: 11, fontWeight: '800', color: '#b71c1c', marginBottom: 2 },
+  itemTitulo: { fontSize: 13, fontWeight: '700', color: '#1a1a2e', marginBottom: 2 },
+  itemMeta: { fontSize: 12, color: '#777' },
+  btnPrimary: { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginTop: 6 },
+  btnPrimaryTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  btnSecondary: { paddingVertical: 12, alignItems: 'center', marginTop: 4 },
+  btnSecondaryTxt: { color: '#999', fontSize: 13, fontWeight: '600' },
+})
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24 },
