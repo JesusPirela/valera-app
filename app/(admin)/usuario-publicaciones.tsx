@@ -7,6 +7,7 @@ import { useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { thumb } from '../../lib/img'
+import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar } from '../../lib/texto'
 
 const RED = '#c0392b'
@@ -142,7 +143,7 @@ export default function UsuarioPublicaciones() {
           return (
             <View style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
               {item.imagen
-                ? <Image source={{ uri: thumb(item.imagen, { width: 160, quality: 55 }) }} style={s.img} />
+                ? <ThumbImage url={item.imagen} opts={{ width: 160, quality: 55 }} style={s.img} />
                 : <View style={[s.img, s.imgPh]}><Text style={{ fontSize: 22 }}>🏠</Text></View>}
               <View style={{ flex: 1 }}>
                 <Text style={[s.codigo, { color: TEAL }]}>{item.codigo ?? '—'}</Text>

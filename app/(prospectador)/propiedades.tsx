@@ -33,6 +33,7 @@ import { useTheme, useColors } from '../../lib/ThemeContext'
 import { AccentBackground } from '../../lib/patrones'
 import { actualizarMisionesPorCategoria } from '../../lib/gamification'
 import { thumb } from '../../lib/img'
+import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar } from '../../lib/texto'
 import MiniMapa from '../../components/MiniMapa'
@@ -871,7 +872,7 @@ export default function ProspectadorPropiedades() {
               {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
             </Text>
           </TouchableOpacity>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <TouchableOpacity
               style={[styles.constructorasBtn, { borderColor: primaryColor }]}
               onPress={() => router.push('/(prospectador)/constructoras')}
@@ -887,8 +888,24 @@ export default function ProspectadorPropiedades() {
               <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : primaryColor} />
               <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
                 Ver zonas
-            </Text>
-          </TouchableOpacity>
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.zonasToggle, { borderColor: '#22a35e' }]}
+              onPress={() => router.push('/(prospectador)/mapa')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="location-outline" size={14} color="#22a35e" />
+              <Text style={[styles.zonasToggleText, { color: '#22a35e' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Mapa lonas</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.zonasToggle, { borderColor: '#7b5ea7' }]}
+              onPress={() => router.push('/(prospectador)/historial-publicaciones')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="time-outline" size={14} color="#7b5ea7" />
+              <Text style={[styles.zonasToggleText, { color: '#7b5ea7' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Historial</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -1090,7 +1107,7 @@ export default function ProspectadorPropiedades() {
       <Modal visible={imagenModal != null} transparent animationType="fade" onRequestClose={() => setImagenModal(null)}>
         <TouchableOpacity style={styles.imgModalOverlay} onPress={() => setImagenModal(null)} activeOpacity={1}>
           {imagenModal && (
-            <Image source={{ uri: imagenModal }} style={styles.imgModalImg} resizeMode="contain" />
+            <ThumbImage url={imagenModal} opts={{ width: 1200, quality: 85 }} style={styles.imgModalImg} resizeMode="contain" />
           )}
           <View style={styles.imgModalCerrar}>
             <Text style={styles.imgModalCerrarText}>✕</Text>

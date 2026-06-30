@@ -20,6 +20,7 @@ import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
 import { esPlusOMejor, esStaffSupervision } from '../../lib/permisos'
 import { thumb } from '../../lib/img'
+import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
@@ -2001,8 +2002,9 @@ export default function DetallePropiedad() {
             >
               {imagenes.map((img, i) => (
                 <TouchableOpacity key={i} onPress={() => setLightboxIndex(i)}>
-                  <Image
-                    source={{ uri: thumb(img.url, { width: 160, quality: 55 }) }}
+                  <ThumbImage
+                    url={img.url}
+                    opts={{ width: 160, quality: 55 }}
                     style={[styles.lbThumb, i === lightboxIndex && styles.lbThumbActive]}
                   />
                 </TouchableOpacity>
@@ -2057,7 +2059,7 @@ export default function DetallePropiedad() {
                       })
                     }}
                   >
-                    <Image source={{ uri: thumb(item.url, { width: 200, quality: 55 }) }} style={styles.miniaturaSeleccionImg} />
+                    <ThumbImage url={item.url} opts={{ width: 200, quality: 55 }} style={styles.miniaturaSeleccionImg} />
                     <View style={[styles.miniaturaCheck, elegida && styles.miniaturaCheckActivo]}>
                       {elegida && <Text style={styles.miniaturaCheckText}>✓</Text>}
                     </View>

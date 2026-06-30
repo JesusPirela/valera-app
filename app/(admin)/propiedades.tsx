@@ -18,6 +18,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
 import { thumb } from '../../lib/img'
+import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar } from '../../lib/texto'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
@@ -545,7 +546,7 @@ export default function AdminPropiedades() {
       >
         <View style={styles.imagenWrapper}>
           {primera?.url ? (
-            <Image source={{ uri: thumb(primera.url, { width: 640, quality: 65 }) }} style={styles.cardImagen} />
+            <ThumbImage url={primera.url} opts={{ width: 640, quality: 65 }} style={styles.cardImagen} />
           ) : (
             <View style={styles.cardImagenPlaceholder}>
               <Text style={styles.cardImagenPlaceholderText}>🏠</Text>

@@ -16,6 +16,7 @@ export type ZonaPin = {
     lat?: number | null
     lng?: number | null
     imagen?: string | null
+    pinColor?: string   // sobreescribe el color de zona para este pin específico
   }[]
 }
 
@@ -137,12 +138,13 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
   }
 
   function addIndivPin(L: any, map: any, coords: [number, number], p: any, color: string): any {
+    const c = p.pinColor ?? color
     const icon = L.divIcon({
       className: '',
-      html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
+      html: `<div style="background:${c};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer"></div>`,
       iconSize: [14, 14], iconAnchor: [7, 7],
     })
-    const m = L.marker(coords, { icon }).addTo(map).bindPopup(propiedadPopup(L, p, color))
+    const m = L.marker(coords, { icon }).addTo(map).bindPopup(propiedadPopup(L, p, c))
     markersRef.current.push(m)
     return m
   }

@@ -7,6 +7,7 @@ import { useFocusEffect, useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { thumb } from '../../lib/img'
+import { ThumbImage } from '../../components/ThumbImage'
 
 type Modelo = {
   id: string
@@ -96,14 +97,14 @@ export default function AdminConstructoras() {
     setLoadingContactos(false)
   }
 
-  // Agrupar por constructora, preservando orden de aparición
-  const grupos: { nombre: string; modelos: Modelo[] }[] = []
+  // Agrupar por constructora y ordenar por popularidad (más modelos primero)
+  const gruposMap = new Map<string, { nombre: string; modelos: Modelo[] }>()
   for (const m of modelos) {
     const nombre = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA
-    let g = grupos.find((x) => x.nombre === nombre)
-    if (!g) { g = { nombre, modelos: [] }; grupos.push(g) }
-    g.modelos.push(m)
+    if (!gruposMap.has(nombre)) gruposMap.set(nombre, { nombre, modelos: [] })
+    gruposMap.get(nombre)!.modelos.push(m)
   }
+  const grupos = Array.from(gruposMap.values()).sort((a, b) => b.modelos.length - a.modelos.length)
 
   function abrirNuevoContacto() {
     setEditando(null)
@@ -214,7 +215,7 @@ export default function AdminConstructoras() {
                           activeOpacity={0.85}
                         >
                           {img?.url ? (
-                            <Image source={{ uri: thumb(img.url, { width: 200, quality: 60 }) }} style={styles.modeloImg} />
+                            <ThumbImage url={img.url} opts={{ width: 200, quality: 60 }} style={styles.modeloImg} />
                           ) : (
                             <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
                           )}

@@ -7,6 +7,7 @@ import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { thumb } from '../../lib/img'
+import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
 
 type Modelo = {
@@ -84,20 +85,40 @@ export default function Constructoras() {
     setLoading(false)
   }
 
-  // Agrupar por constructora, preservando orden de aparición
-  const grupos: { nombre: string; modelos: Modelo[] }[] = []
+  // Agrupar por constructora y ordenar por popularidad (más modelos primero)
+  const gruposMap = new Map<string, { nombre: string; modelos: Modelo[] }>()
   for (const m of modelos) {
     const nombre = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA
-    let g = grupos.find((x) => x.nombre === nombre)
-    if (!g) { g = { nombre, modelos: [] }; grupos.push(g) }
-    g.modelos.push(m)
+    if (!gruposMap.has(nombre)) gruposMap.set(nombre, { nombre, modelos: [] })
+    gruposMap.get(nombre)!.modelos.push(m)
   }
+  const grupos = Array.from(gruposMap.values()).sort((a, b) => b.modelos.length - a.modelos.length)
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
       <View style={styles.intro}>
-        <Text style={[styles.introTitle, { color: c.text }]}>🏗️ Constructoras</Text>
-        <Text style={[styles.introSub, { color: c.textMute }]}>Explora los modelos disponibles por constructora.</Text>
+        <View style={styles.introRow}>
+          <View>
+            <Text style={[styles.introTitle, { color: c.text }]}>🏗️ Constructoras</Text>
+            <Text style={[styles.introSub, { color: c.textMute }]}>Explora los modelos disponibles por constructora.</Text>
+          </View>
+          <View style={styles.introActions}>
+            <TouchableOpacity
+              style={[styles.accionBtn, { borderColor: '#1a6470' }]}
+              onPress={() => router.push('/(prospectador)/zonas')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.accionBtnTxt, { color: '#1a6470' }]}>📍 Zonas</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.accionBtn, { borderColor: '#c9a84c' }]}
+              onPress={() => router.push('/(prospectador)/tabla-equipo')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.accionBtnTxt, { color: '#c9a84c' }]}>📊 Ver tabla</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       {loading ? (
@@ -135,7 +156,7 @@ export default function Constructoras() {
                       activeOpacity={0.85}
                     >
                       {img?.url ? (
-                        <Image source={{ uri: thumb(img.url, { width: 200, quality: 60 }) }} style={styles.modeloImg} />
+                        <ThumbImage url={img.url} opts={{ width: 200, quality: 60 }} style={styles.modeloImg} />
                       ) : (
                         <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
                       )}
@@ -161,8 +182,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
 
   intro: { marginBottom: 12 },
+  introRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
   introTitle: { fontSize: 22, fontWeight: '900' },
   introSub: { fontSize: 12, marginTop: 3 },
+  introActions: { gap: 6, alignItems: 'flex-end', paddingTop: 2 },
+  accionBtn: { borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  accionBtnTxt: { fontSize: 12, fontWeight: '800' },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 60, paddingHorizontal: 20 },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 21 },

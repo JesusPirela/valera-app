@@ -17,6 +17,7 @@ export type ZonaPin = {
     lat?: number | null
     lng?: number | null
     imagen?: string | null
+    pinColor?: string   // sobreescribe el color de zona para este pin específico
   }[]
 }
 
@@ -235,7 +236,7 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
               }}
             >
               {group.pins.length === 1
-                ? <View style={[nS.locationDot, { backgroundColor: group.color }]} />
+                ? <View style={[nS.locationDot, { backgroundColor: group.pins[0].pinColor ?? group.color }]} />
                 : <View style={[nS.propCluster, { backgroundColor: group.color }]}>
                     <Text style={nS.propClusterTxt}>{group.pins.length}</Text>
                   </View>

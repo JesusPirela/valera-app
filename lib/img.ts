@@ -11,7 +11,7 @@
 const OBJECT_SEG = '/storage/v1/object/public/'
 const RENDER_SEG = '/storage/v1/render/image/public/'
 
-type ThumbOpts = {
+export type ThumbOpts = {
   width?: number
   quality?: number
   // 'cover' (default) recorta para llenar; 'contain' encaja sin recortar.

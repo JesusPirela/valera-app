@@ -16,6 +16,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { thumb } from '../../lib/img'
+import { ThumbImage } from '../../components/ThumbImage'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import ToggleSwitch from '../../components/ToggleSwitch'
 
@@ -200,7 +201,7 @@ export default function Inventario() {
                       <View style={styles.cardTop}>
                         {img?.url ? (
                           <TouchableOpacity activeOpacity={0.85} onPress={() => abrirGaleria((p.propiedad_imagenes ?? []).slice().sort((a, b) => a.orden - b.orden).map(i => i.url))}>
-                            <Image source={{ uri: thumb(img.url, { width: 220, quality: 65 }) }} style={styles.cardImg} />
+                            <ThumbImage url={img.url} opts={{ width: 220, quality: 65 }} style={styles.cardImg} />
                             <View style={styles.cardImgZoom}><Text style={{ fontSize: 11 }}>🔍</Text></View>
                           </TouchableOpacity>
                         ) : (
@@ -299,7 +300,7 @@ export default function Inventario() {
             <Text style={styles.viewerCerrarTxt}>✕  Cerrar</Text>
           </TouchableOpacity>
           {verImagenes && verImagenes[imgIdx] && (
-            <Image source={{ uri: thumb(verImagenes[imgIdx], { width: 1280, quality: 80 }) }} style={styles.viewerImg} resizeMode="contain" />
+            <ThumbImage url={verImagenes[imgIdx]} opts={{ width: 1280, quality: 80 }} style={styles.viewerImg} resizeMode="contain" />
           )}
           {verImagenes && verImagenes.length > 1 && (
             <>

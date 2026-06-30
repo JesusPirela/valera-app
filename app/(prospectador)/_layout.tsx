@@ -337,7 +337,11 @@ export default function ProspectadorLayout() {
       />
       {/* Pantallas de detalle — ocultas del tab bar */}
       <Tabs.Screen name="detalle-propiedad"  options={{ href: null, title: 'Detalle', headerLeft: () => <HeaderBack to="/(prospectador)/propiedades" /> }} />
-      <Tabs.Screen name="constructoras"      options={{ href: null, title: 'Constructoras', headerLeft: () => <HeaderBack to="/(prospectador)/propiedades" /> }} />
+      <Tabs.Screen name="constructoras"          options={{ href: null, title: 'Constructoras',    headerLeft: () => <HeaderBack to="/(prospectador)/propiedades" /> }} />
+      <Tabs.Screen name="zonas"                 options={{ href: null, title: 'Zonas',            headerLeft: () => <HeaderBack to="/(prospectador)/constructoras" /> }} />
+      <Tabs.Screen name="tabla-equipo"          options={{ href: null, title: 'Tabla equipo',     headerLeft: () => <HeaderBack to="/(prospectador)/constructoras" /> }} />
+      <Tabs.Screen name="mapa"                  options={{ href: null, title: 'Mapa de lonas',    headerLeft: () => <HeaderBack to="/(prospectador)/propiedades" /> }} />
+      <Tabs.Screen name="historial-publicaciones" options={{ href: null, title: 'Historial publicaciones', headerLeft: () => <HeaderBack to="/(prospectador)/propiedades" /> }} />
       <Tabs.Screen name="cliente-form"       options={{ href: null, title: 'Cliente', headerLeft: () => <ClienteFormBack /> }} />
       <Tabs.Screen name="detalle-cliente"    options={{ href: null, title: 'Cliente', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
       <Tabs.Screen name="university-curso"   options={{ href: null, title: 'Curso', headerLeft: () => <HeaderBack to="/(prospectador)/university" /> }} />
