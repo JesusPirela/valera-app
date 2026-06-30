@@ -797,6 +797,35 @@ serve(async (req) => {
     imagenes = [...best.values()].map(v => v.url)
     } // end !imagenes.length block
 
+    // ── 10b. Fallback genérico: cualquier <img>/<source>, resolviendo rutas
+    // relativas a absolutas. Cubre sitios propios de desarrolladoras que no usan
+    // un CDN conocido (p. ej. procesadesarrollos.com.mx, con src="img/foto.webp").
+    if (imagenes.length < 3) {
+      const found: string[] = []
+      const addImg = (raw: string) => {
+        if (!raw) return
+        const v = raw.trim()
+        if (!v || v.startsWith('data:')) return
+        try {
+          const abs = new URL(v, url).href.split('?')[0]
+          if (/\.(jpe?g|png|webp)$/i.test(abs) && !found.includes(abs)) found.push(abs)
+        } catch { /* url inválida/relativa irresoluble */ }
+      }
+      // src / lazy-load attrs (toma la primera URL si viene un srcset)
+      for (const m of html.matchAll(/<(?:img|source)[^>]+(?:src|data-src|data-original|data-lazy|data-srcset)=["']([^"']+)["']/gi)) {
+        addImg(m[1].split(',')[0].trim().split(/\s+/)[0])
+      }
+      for (const m of html.matchAll(/srcset=["']([^"']+)["']/gi)) {
+        addImg(m[1].split(',')[0].trim().split(/\s+/)[0])
+      }
+      // Descarta logos, íconos y adornos; conserva fotos.
+      const junkGen = /(logo|icon|favicon|avatar|sprite|placeholder|banner|header|footer|whatsapp|bg[-_]|background)/i
+      const limpiadosGen = found.filter(u => !junkGen.test(u))
+      if (limpiadosGen.length) {
+        imagenes = [...new Set([...imagenes, ...limpiadosGen])].slice(0, 40)
+      }
+    }
+
     // ── 11. Fallbacks finales para tipo / operación / imágenes / zona ─────────
     if (!tipo) {
       tipo = mapTipo(titulo + ' ' + getMeta(html, 'og:title'))
