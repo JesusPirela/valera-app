@@ -65,6 +65,7 @@ const NAV_ITEMS = [
   { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2', grupo: 'Propiedades' },
   { label: 'Constructoras', icon: '🏗️', route: '/(admin)/constructoras', color: '#455A64', grupo: 'Propiedades' },
   { label: 'Bloques', icon: '🧩', route: '/(admin)/bloques', color: '#5e35b1', grupo: 'Propiedades' },
+  { label: 'Colores ficha', icon: '🎨', route: '/(admin)/colores-ficha', color: '#6A1B9A', grupo: 'Propiedades' },
   { label: 'CRM', icon: '📒', route: '/(admin)/crm', color: '#D84315', grupo: 'Gestión' },
   { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32', grupo: 'Gestión' },
   { label: 'Proyectos', icon: '💼', route: '/(admin)/proyectos', color: '#c9a84c', grupo: 'Gestión' },
@@ -211,6 +212,7 @@ export default function AdminPropiedades() {
         '/(admin)/gestion-cofres',
         '/(admin)/prospectadores',
         '/(admin)/bloques',
+        '/(admin)/colores-ficha',
         '/(admin)/cuenta',
       ].includes(item.route))
     : NAV_ITEMS

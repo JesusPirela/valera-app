@@ -62,7 +62,7 @@ type Propiedad = {
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
-type SubidoPor = { nombre: string; telefono: string | null }
+type SubidoPor = { nombre: string; telefono: string | null; colorFicha: string | null }
 
 type SimilarProp = {
   id: string; codigo: string; titulo: string; precio: number | null
@@ -240,9 +240,9 @@ export default function DetallePropiedad() {
       // Usar siempre el perfil del admin que creó la propiedad para coordinar citas
       if (dataNormalizada.created_by) {
         const { data: perfil } = await supabase
-          .from('profiles').select('nombre, telefono').eq('id', dataNormalizada.created_by).maybeSingle()
+          .from('profiles').select('nombre, telefono, color_ficha').eq('id', dataNormalizada.created_by).maybeSingle()
         if (perfil) {
-          subidoPor = { nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null }
+          subidoPor = { nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null, colorFicha: (perfil as any).color_ficha ?? null }
         }
       }
 
@@ -672,6 +672,11 @@ export default function DetallePropiedad() {
 
     setGenerandoPDF(true)
     try {
+      // Color de la ficha según quién subió la propiedad (created_by).
+      // Configurable por admin; por defecto el teal de Valera.
+      const colorFicha = subidoPor?.colorFicha || '#1a6470'
+      const colorFichaMap = colorFicha.replace('#', '0x')
+
       const esc = (s: string | null | undefined) =>
         (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
@@ -733,7 +738,7 @@ export default function DetallePropiedad() {
       if (propiedad.lat && propiedad.lng) {
         const lat = propiedad.lat
         const lng = propiedad.lng
-        const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=740x340&scale=2&markers=color:0x1a6470%7C${lat},${lng}&key=${GMAPS_KEY}`
+        const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=740x340&scale=2&markers=color:${colorFichaMap}%7C${lat},${lng}&key=${GMAPS_KEY}`
         const mapSrc = await imagenABase64(staticUrl)
         mapaHTML = `
           <div class="seccion-grupo">
@@ -751,7 +756,7 @@ export default function DetallePropiedad() {
           -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;
         }
         body { font-family: Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; }
-        .header { background: #1a6470; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
+        .header { background: ${colorFicha}; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
         .header-left { flex: 1; }
         .header-logo { height: 130px; max-width: 280px; object-fit: contain; flex-shrink: 0; margin-left: 16px; }
         .codigo { font-size: 13px; color: #c9a84c; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
@@ -772,12 +777,12 @@ export default function DetallePropiedad() {
         .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1.2px; text-transform: uppercase; margin: 20px 0 10px; }
         .cars { display: block; }
         .cars::after { content: ""; display: table; clear: both; }
-        .car-val { display: block; font-size: 20px; font-weight: 800; color: #1a6470; }
+        .car-val { display: block; font-size: 20px; font-weight: 800; color: ${colorFicha}; }
         .car-lbl { display: block; font-size: 11px; color: #888; margin-top: 2px; }
         .desc { font-size: 13px; line-height: 1.7; color: #444; white-space: pre-wrap; }
         .mapa-box { border: 1.5px solid #e0e8ea; border-radius: 10px; overflow: hidden; margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
         .mapa-img { width: 100%; height: 340px; object-fit: cover; display: block; }
-        .mapa-dir { background: #f0f5f5; padding: 10px 14px; font-size: 12px; color: #1a6470; font-weight: 600; }
+        .mapa-dir { background: #f0f5f5; padding: 10px 14px; font-size: 12px; color: ${colorFicha}; font-weight: 600; }
         .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; break-inside: avoid; page-break-inside: avoid; }
         .galeria-grupo { break-inside: avoid; page-break-inside: avoid; }
         .seccion-grupo { break-inside: avoid; page-break-inside: avoid; }
