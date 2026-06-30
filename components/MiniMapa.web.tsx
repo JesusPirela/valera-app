@@ -16,7 +16,16 @@ export type ZonaPin = {
     lat?: number | null
     lng?: number | null
     imagen?: string | null
-    pinColor?: string   // sobreescribe el color de zona para este pin específico
+    pinColor?: string
+    codigo?: string | null
+    inventario_seccion?: string | null
+    inv_asesor_contactado?: boolean
+    inv_asesor_respondio?: boolean
+    inv_autorizado_publicar?: boolean
+    inv_asesor_no_contesto?: boolean
+    inv_apartada?: boolean
+    inv_no_autorizada?: boolean
+    inv_notas?: string | null
   }[]
 }
 
@@ -116,21 +125,48 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
     return `<div style="background:${color};color:#fff;border-radius:50%;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${fs}px;box-shadow:0 3px 12px rgba(0,0,0,0.35);border:3px solid #fff;cursor:pointer">${count}</div>`
   }
 
-  function propiedadPopup(L: any, p: { id: string; titulo: string; tipo: string | null; precio: number | null; direccion: string; imagen?: string | null }, color: string) {
+  function propiedadPopup(L: any, p: {
+    id: string; titulo: string; tipo: string | null; precio: number | null; direccion: string; imagen?: string | null
+    codigo?: string | null; inventario_seccion?: string | null
+    inv_asesor_contactado?: boolean; inv_asesor_respondio?: boolean; inv_autorizado_publicar?: boolean
+    inv_asesor_no_contesto?: boolean; inv_apartada?: boolean; inv_no_autorizada?: boolean; inv_notas?: string | null
+  }, color: string) {
     const tipoLabel: Record<string, string> = { casa: '🏠 Casa', departamento: '🏢 Depto', local: '🏪 Local', terreno: '🏗 Terreno' }
     const precio = p.precio ? `$${p.precio.toLocaleString('es-MX')} MXN` : 'Precio a consultar'
     const imagenHTML = p.imagen
       ? `<div style="width:100%;height:110px;border-radius:8px;overflow:hidden;margin-bottom:6px"><img src="${p.imagen}" style="width:100%;height:100%;object-fit:cover;display:block" /></div>`
       : ''
-    return L.popup({ maxWidth: 220 }).setContent(
+    const codigoHTML = p.codigo
+      ? `<span style="background:${color};color:#fff;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-right:6px">${p.codigo}</span>`
+      : ''
+    const seccionHTML = p.inventario_seccion
+      ? `<span style="font-size:10px;color:#888">${p.inventario_seccion}</span>`
+      : ''
+    const badge = (ok: boolean | undefined, label: string) =>
+      ok === undefined ? '' :
+      `<span style="background:${ok ? '#e8f5e9' : '#fce4ec'};color:${ok ? '#2e7d32' : '#c62828'};border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;white-space:nowrap">${ok ? '✓' : '✗'} ${label}</span>`
+    const estadosHTML = [
+      badge(p.inv_asesor_contactado, 'Contactado'),
+      badge(p.inv_asesor_respondio, 'Respondió'),
+      badge(p.inv_autorizado_publicar, 'Autorizado'),
+      p.inv_apartada ? `<span style="background:#fff3e0;color:#e65100;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700">🔒 Apartada</span>` : '',
+      p.inv_no_autorizada ? `<span style="background:#fce4ec;color:#c62828;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700">✗ No autorizada</span>` : '',
+    ].filter(Boolean).join(' ')
+    const notasHTML = p.inv_notas
+      ? `<div style="font-size:11px;color:#555;background:#f5f5f5;border-radius:6px;padding:5px 8px;margin-top:6px;line-height:1.4">${p.inv_notas}</div>`
+      : ''
+    return L.popup({ maxWidth: 240 }).setContent(
       `<div style="font-family:sans-serif;padding:4px">
         ${imagenHTML}
-        <div style="font-weight:700;font-size:13px;color:#1a1a1a;margin-bottom:4px;line-height:1.3">${p.titulo}</div>
+        <div style="margin-bottom:5px">${codigoHTML}${seccionHTML}</div>
+        <div style="font-weight:700;font-size:13px;color:#1a1a1a;margin-bottom:3px;line-height:1.3">${p.titulo}</div>
         <div style="font-size:12px;color:#555;margin-bottom:2px">${tipoLabel[p.tipo ?? ''] ?? ''}</div>
         <div style="font-size:13px;font-weight:600;color:${color};margin-bottom:6px">${precio}</div>
-        <div style="font-size:11px;color:#888;margin-bottom:8px">📍 ${p.direccion}</div>
+        <div style="font-size:11px;color:#888;margin-bottom:6px">📍 ${p.direccion}</div>
+        ${estadosHTML ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${estadosHTML}</div>` : ''}
+        ${notasHTML}
         <button onclick="window.__mapaVerPropiedad&&window.__mapaVerPropiedad('${p.id}')"
-          style="background:${color};color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;width:100%">
+          style="background:${color};color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;width:100%;margin-top:8px">
           Ver propiedad →
         </button>
       </div>`

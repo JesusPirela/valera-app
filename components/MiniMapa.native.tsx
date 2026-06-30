@@ -17,7 +17,16 @@ export type ZonaPin = {
     lat?: number | null
     lng?: number | null
     imagen?: string | null
-    pinColor?: string   // sobreescribe el color de zona para este pin específico
+    pinColor?: string
+    codigo?: string | null
+    inventario_seccion?: string | null
+    inv_asesor_contactado?: boolean
+    inv_asesor_respondio?: boolean
+    inv_autorizado_publicar?: boolean
+    inv_asesor_no_contesto?: boolean
+    inv_apartada?: boolean
+    inv_no_autorizada?: boolean
+    inv_notas?: string | null
   }[]
 }
 
@@ -82,7 +91,13 @@ type Props = {
   onPropiedadPress?: (id: string) => void
 }
 
-type PinData = { id: string; titulo: string; precio: number | null; tipo: string | null; direccion: string; imagen?: string | null; lat: number; lng: number; color: string }
+type PinData = {
+  id: string; titulo: string; precio: number | null; tipo: string | null; direccion: string
+  imagen?: string | null; lat: number; lng: number; color: string; pinColor?: string
+  codigo?: string | null; inventario_seccion?: string | null
+  inv_asesor_contactado?: boolean; inv_asesor_respondio?: boolean; inv_autorizado_publicar?: boolean
+  inv_asesor_no_contesto?: boolean; inv_apartada?: boolean; inv_no_autorizada?: boolean; inv_notas?: string | null
+}
 type PinGroup = { key: string; lat: number; lng: number; color: string; pins: PinData[] }
 
 const PINS_VISIBLE_THRESHOLD = 0.12
@@ -159,7 +174,7 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
           }
           return true
         })
-        .map(p => ({ ...p, lat: p.lat!, lng: p.lng!, color: zonaActual.color }))
+        .map(p => ({ ...p, lat: p.lat!, lng: p.lng!, color: p.pinColor ?? zonaActual.color }))
     : []
 
   const totalConCoords = zonaActual
@@ -292,13 +307,35 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
               </View>
             )}
             <View style={nS.previewInfo}>
+              {selectedPin.codigo && (
+                <View style={[nS.invBadge, { backgroundColor: selectedPin.color }]}>
+                  <Text style={nS.invBadgeTxt}>{selectedPin.codigo}</Text>
+                </View>
+              )}
               <Text style={nS.previewTitulo} numberOfLines={2}>{selectedPin.titulo}</Text>
               <Text style={nS.previewPrecio}>
                 {selectedPin.precio
                   ? `$${selectedPin.precio.toLocaleString('es-MX')} MXN`
                   : 'Precio a consultar'}
               </Text>
-              {selectedPin.tipo && <Text style={nS.previewTipo}>{selectedPin.tipo}</Text>}
+              <View style={nS.estadosRow}>
+                {selectedPin.inv_asesor_contactado !== undefined && (
+                  <Text style={[nS.estadoChip, selectedPin.inv_asesor_contactado ? nS.estadoOk : nS.estadoNo]}>
+                    {selectedPin.inv_asesor_contactado ? '✓ Contactado' : '✗ Sin contacto'}
+                  </Text>
+                )}
+                {selectedPin.inv_autorizado_publicar !== undefined && (
+                  <Text style={[nS.estadoChip, selectedPin.inv_autorizado_publicar ? nS.estadoOk : nS.estadoNo]}>
+                    {selectedPin.inv_autorizado_publicar ? '✓ Autorizado' : '✗ Sin autorizar'}
+                  </Text>
+                )}
+                {selectedPin.inv_apartada && (
+                  <Text style={[nS.estadoChip, nS.estadoWarn]}>🔒 Apartada</Text>
+                )}
+              </View>
+              {selectedPin.inv_notas ? (
+                <Text style={nS.previewNotas} numberOfLines={2}>{selectedPin.inv_notas}</Text>
+              ) : null}
               <Text style={nS.previewVer}>Ver propiedad →</Text>
             </View>
             <TouchableOpacity style={nS.previewClose} onPress={() => setSelectedPin(null)}>
@@ -319,7 +356,7 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
               {selectedCluster.pins.map(p => (
                 <TouchableOpacity
                   key={p.id}
-                  style={nS.clusterItem}
+                  style={[nS.clusterItem, { borderTopWidth: 3, borderTopColor: p.color }]}
                   onPress={() => { onPropiedadPress?.(p.id); setSelectedCluster(null) }}
                   activeOpacity={0.8}
                 >
@@ -328,11 +365,24 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
                     : <View style={[nS.clusterItemImg, nS.previewImgPlaceholder]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
                   }
                   <View style={nS.clusterItemInfo}>
+                    {p.codigo && <Text style={[nS.clusterItemCodigo, { color: p.color }]}>{p.codigo}</Text>}
                     <Text style={nS.clusterItemTitulo} numberOfLines={2}>{p.titulo}</Text>
                     <Text style={nS.clusterItemPrecio}>
                       {p.precio ? `$${p.precio.toLocaleString('es-MX')}` : 'A consultar'}
                     </Text>
-                    {p.tipo && <Text style={nS.clusterItemTipo}>{p.tipo}</Text>}
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 3 }}>
+                      {p.inv_asesor_contactado !== undefined && (
+                        <Text style={[nS.estadoChip, p.inv_asesor_contactado ? nS.estadoOk : nS.estadoNo]}>
+                          {p.inv_asesor_contactado ? '✓ Cont.' : '✗ Sin cont.'}
+                        </Text>
+                      )}
+                      {p.inv_autorizado_publicar !== undefined && (
+                        <Text style={[nS.estadoChip, p.inv_autorizado_publicar ? nS.estadoOk : nS.estadoNo]}>
+                          {p.inv_autorizado_publicar ? '✓ Aut.' : '✗ Sin aut.'}
+                        </Text>
+                      )}
+                      {p.inv_apartada && <Text style={[nS.estadoChip, nS.estadoWarn]}>🔒</Text>}
+                    </View>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -391,6 +441,7 @@ const nS = StyleSheet.create({
   },
   clusterItemImg: { width: 140, height: 90 },
   clusterItemInfo: { padding: 8 },
+  clusterItemCodigo: { fontSize: 9, fontWeight: '800', marginBottom: 2 },
   clusterItemTitulo: { fontSize: 11, fontWeight: '700', color: '#1a1a2e', marginBottom: 3 },
   clusterItemPrecio: { fontSize: 12, fontWeight: '700', color: '#1a6470', marginBottom: 2 },
   clusterItemTipo: { fontSize: 10, color: '#888' },
@@ -410,8 +461,16 @@ const nS = StyleSheet.create({
   previewInfo: {
     flex: 1, paddingHorizontal: 12, paddingVertical: 10,
   },
+  invBadge: { alignSelf: 'flex-start', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginBottom: 4 },
+  invBadgeTxt: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  estadosRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 4 },
+  estadoChip: { fontSize: 9, fontWeight: '700', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
+  estadoOk: { backgroundColor: '#e8f5e9', color: '#2e7d32' },
+  estadoNo: { backgroundColor: '#fce4ec', color: '#c62828' },
+  estadoWarn: { backgroundColor: '#fff3e0', color: '#e65100' },
+  previewNotas: { fontSize: 10, color: '#666', fontStyle: 'italic', marginBottom: 3, lineHeight: 13 },
   previewTitulo: { fontSize: 13, fontWeight: '700', color: '#1a1a2e', marginBottom: 3 },
-  previewPrecio: { fontSize: 13, fontWeight: '700', color: '#1a6470', marginBottom: 2 },
+  previewPrecio: { fontSize: 13, fontWeight: '700', color: '#1a6470', marginBottom: 4 },
   previewTipo: { fontSize: 11, color: '#888', marginBottom: 4 },
   previewVer: { fontSize: 12, color: '#1a6470', fontWeight: '600', textDecorationLine: 'underline' },
   previewClose: {

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
@@ -7,7 +7,7 @@ import { thumb } from '../../lib/img'
 import MiniMapa from '../../components/MiniMapa'
 import type { ZonaPin } from '../../components/MiniMapa'
 
-type PropMapa = {
+type InvMapa = {
   id: string
   codigo: string | null
   titulo: string
@@ -18,14 +18,22 @@ type PropMapa = {
   lat: number | null
   lng: number | null
   lona_contactada: boolean
+  inventario_seccion: string | null
+  inv_asesor_contactado: boolean
+  inv_asesor_respondio: boolean
+  inv_autorizado_publicar: boolean
+  inv_asesor_no_contesto: boolean
+  inv_apartada: boolean
+  inv_no_autorizada: boolean
+  inv_notas: string | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
 type FiltroLona = 'todas' | 'contactadas' | 'no_contactadas'
 
 const TEAL  = '#1a6470'
-const VERDE = '#22a35e'  // lonas contactadas
-const ROJO  = '#e53935'  // lonas no contactadas
+const VERDE = '#22a35e'
+const ROJO  = '#e53935'
 
 const ZONAS_CONFIG = [
   { key: 'queretaro', label: 'Querétaro', coords: [20.5888, -100.3899] as [number, number], color: TEAL },
@@ -35,7 +43,7 @@ const ZONAS_CONFIG = [
 
 export default function Mapa() {
   const c = useColors()
-  const [propiedades, setPropiedades] = useState<PropMapa[]>([])
+  const [propiedades, setPropiedades] = useState<InvMapa[]>([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState<FiltroLona>('todas')
 
@@ -45,13 +53,18 @@ export default function Mapa() {
     setLoading(true)
     const { data } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, tipo, direccion, zona, lat, lng, lona_contactada, propiedad_imagenes(url, orden)')
-      .eq('estado', 'disponible')
-      .eq('es_inventario', false)
+      .select(`
+        id, codigo, titulo, precio, tipo, direccion, zona, lat, lng,
+        lona_contactada, inventario_seccion,
+        inv_asesor_contactado, inv_asesor_respondio, inv_autorizado_publicar,
+        inv_asesor_no_contesto, inv_apartada, inv_no_autorizada, inv_notas,
+        propiedad_imagenes(url, orden)
+      `)
+      .eq('es_inventario', true)
       .not('lat', 'is', null)
       .not('lng', 'is', null)
 
-    setPropiedades((data ?? []) as PropMapa[])
+    setPropiedades((data ?? []) as InvMapa[])
     setLoading(false)
   }
 
@@ -63,7 +76,6 @@ export default function Mapa() {
 
   const zonasParaMapa: ZonaPin[] = ZONAS_CONFIG.map(z => {
     const propsZona = propsFiltradas.filter(p => p.zona === z.key)
-    // Color del pin depende del filtro y de lona_contactada
     return {
       key: z.key,
       label: z.label,
@@ -82,16 +94,23 @@ export default function Mapa() {
           [...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]?.url,
           { width: 320, quality: 60 }
         ) ?? null,
-        // pinColor solo cuando se muestra "todas" para distinguir visualmente
-        pinColor: filtro === 'todas'
-          ? (p.lona_contactada ? VERDE : ROJO)
-          : undefined,
+        pinColor: filtro === 'todas' ? (p.lona_contactada ? VERDE : ROJO) : undefined,
+        codigo: p.codigo,
+        inventario_seccion: p.inventario_seccion,
+        inv_asesor_contactado: p.inv_asesor_contactado,
+        inv_asesor_respondio: p.inv_asesor_respondio,
+        inv_autorizado_publicar: p.inv_autorizado_publicar,
+        inv_asesor_no_contesto: p.inv_asesor_no_contesto,
+        inv_apartada: p.inv_apartada,
+        inv_no_autorizada: p.inv_no_autorizada,
+        inv_notas: p.inv_notas,
       })),
     }
   }).filter(z => z.count > 0)
 
-  // Propiedades sin zona asignada
   const sinZona = propsFiltradas.filter(p => !p.zona)
+  const totalContactadas = propsFiltradas.filter(p => p.lona_contactada).length
+  const totalNoContactadas = propsFiltradas.filter(p => !p.lona_contactada).length
 
   return (
     <View style={[s.container, { backgroundColor: c.bg }]}>
@@ -130,7 +149,7 @@ export default function Mapa() {
           </View>
           <View style={[s.leyendaSep, { backgroundColor: c.border }]} />
           <Text style={[s.leyendaTotal, { color: c.textMute }]}>
-            {propsFiltradas.filter(p => p.lona_contactada).length}✓ / {propsFiltradas.filter(p => !p.lona_contactada).length}✗
+            {totalContactadas}✓ / {totalNoContactadas}✗
           </Text>
         </View>
       )}
@@ -148,7 +167,7 @@ export default function Mapa() {
               ? 'No hay lonas contactadas con ubicación.'
               : filtro === 'no_contactadas'
               ? 'No hay lonas sin contactar con ubicación.'
-              : 'No hay propiedades con ubicación registrada.'}
+              : 'No hay propiedades de inventario con ubicación registrada.'}
           </Text>
         </View>
       ) : zonasParaMapa.length === 0 && sinZona.length > 0 ? (
