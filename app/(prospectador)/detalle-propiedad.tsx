@@ -64,6 +64,13 @@ type Propiedad = {
 
 type SubidoPor = { nombre: string; telefono: string | null }
 
+type SimilarProp = {
+  id: string; codigo: string; titulo: string; precio: number | null
+  operacion: string | null; tipo: string | null
+  recamaras: number | null; banos: number | null; m2: number | null
+  direccion: string | null; imagen: string | null
+}
+
 type ClienteCRM = {
   id: string
   nombre: string
@@ -185,6 +192,9 @@ export default function DetallePropiedad() {
   // URLs cuya versión optimizada (thumb/render) falló al cargar: se reintenta
   // con la URL original sin transformar como respaldo.
   const [thumbFallidas, setThumbFallidas] = useState<Set<string>>(new Set())
+  // Carrusel de "Opciones similares" (flechas en web).
+  const similaresRef = useRef<ScrollView>(null)
+  const similaresX = useRef(0)
 
   const { vistaComo } = useVistaComo()
   const { data: detalle, isLoading, isFetching } = useQuery({
@@ -275,6 +285,20 @@ export default function DetallePropiedad() {
     },
     enabled: !!id && esStaff,
     staleTime: 1000 * 30,
+  })
+
+  // Opciones similares: misma zona (proximidad), precio y características.
+  const { data: similares } = useQuery({
+    queryKey: ['similares', id, esPlusOMejor(rol)],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('propiedades_similares', {
+        p_id: id, p_incluir_exclusivas: esPlusOMejor(rol), p_limit: 10,
+      })
+      if (error) return [] as SimilarProp[]
+      return (data ?? []) as SimilarProp[]
+    },
+    enabled: !!id && !!propiedad,
+    staleTime: 1000 * 60 * 5,
   })
 
   // Sin permiso para ver esta propiedad (inmobiliaria exclusiva) → volver al listado
@@ -1835,6 +1859,66 @@ export default function DetallePropiedad() {
         </TouchableOpacity>
 
 
+        {/* ── Opciones similares (misma zona, precio y características) ── */}
+        {similares && similares.length > 0 && (
+          <View style={styles.similaresSection}>
+            <Text style={styles.similaresTitulo}>Opciones similares</Text>
+            <Text style={styles.similaresSub}>En la misma zona y rango de precio</Text>
+            <View style={{ position: 'relative' }}>
+              <ScrollView
+                ref={similaresRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onScroll={(e) => { similaresX.current = e.nativeEvent.contentOffset.x }}
+                contentContainerStyle={{ gap: 10, paddingRight: 12 }}
+              >
+                {similares.map(sp => (
+                  <TouchableOpacity
+                    key={sp.id}
+                    style={styles.simCard}
+                    activeOpacity={0.85}
+                    onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${sp.id}` as any)}
+                  >
+                    {sp.imagen
+                      ? <Image source={{ uri: thumb(sp.imagen, { width: 380, quality: 62 }) }} style={styles.simImg} resizeMode="cover" />
+                      : <View style={[styles.simImg, styles.simImgPlaceholder]}><Text style={{ fontSize: 26 }}>🏠</Text></View>
+                    }
+                    <View style={styles.simInfo}>
+                      <Text style={styles.simTitulo} numberOfLines={2}>{sp.titulo}</Text>
+                      <Text style={styles.simPrecio}>{formatPrecio(sp.precio)}</Text>
+                      <Text style={styles.simSpecs} numberOfLines={1}>
+                        {[
+                          sp.recamaras != null ? `${sp.recamaras} rec` : null,
+                          sp.banos != null ? `${sp.banos} baños` : null,
+                          sp.m2 != null ? `${sp.m2} m²` : null,
+                        ].filter(Boolean).join('  ·  ') || (sp.tipo ? capitalize(sp.tipo) : '')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {Platform.OS === 'web' && similares.length > 2 && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.simArrow, { left: 2 }]}
+                    onPress={() => similaresRef.current?.scrollTo({ x: Math.max(0, similaresX.current - 600), animated: true })}
+                  >
+                    <Text style={styles.simArrowTxt}>‹</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.simArrow, { right: 2 }]}
+                    onPress={() => similaresRef.current?.scrollTo({ x: similaresX.current + 600, animated: true })}
+                  >
+                    <Text style={styles.simArrowTxt}>›</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* Botón volver */}
         <TouchableOpacity
           style={styles.volverBtn}
@@ -2246,6 +2330,30 @@ const styles = StyleSheet.create({
   errorText: { color: '#aaa', fontSize: 15 },
 
   imagen: { height: 340, backgroundColor: '#d0d0d0' },
+
+  // Opciones similares
+  similaresSection: { marginTop: 26, marginBottom: 6 },
+  similaresTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 2 },
+  similaresSub: { fontSize: 12, color: '#8aa0ab', marginBottom: 12 },
+  simCard: {
+    width: 190, borderRadius: 12, backgroundColor: '#fff',
+    borderWidth: 1, borderColor: '#e8eef0', overflow: 'hidden',
+  },
+  simImg: { width: 190, height: 120 },
+  simImgPlaceholder: { backgroundColor: '#e8f4f8', alignItems: 'center', justifyContent: 'center' },
+  simInfo: { padding: 10 },
+  simTitulo: { fontSize: 12, fontWeight: '700', color: '#1a1a2e', marginBottom: 4, minHeight: 32 },
+  simPrecio: { fontSize: 14, fontWeight: '800', color: '#1a6470', marginBottom: 3 },
+  simSpecs: { fontSize: 11, color: '#8aa0ab' },
+  simArrow: {
+    position: 'absolute', top: 42,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center', zIndex: 5,
+    // @ts-ignore — cursor solo aplica en web
+    cursor: 'pointer',
+  },
+  simArrowTxt: { color: '#fff', fontSize: 24, fontWeight: '700', lineHeight: 26, marginTop: -2 },
   sinImagen: {
     height: 180,
     backgroundColor: '#e0e0e0',
