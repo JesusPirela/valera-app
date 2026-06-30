@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo, createElement } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo, memo, createElement } from 'react'
 import {
   View,
   Text,
@@ -135,6 +135,130 @@ function agruparPorZona(propiedades: Propiedad[]): [string, Propiedad[]][] {
   if (sinZona.length > 0) result.push(['Otras', sinZona])
   return result
 }
+
+// Tarjeta de propiedad memoizada: solo se re-renderiza si cambian SUS datos
+// (veces publicada, estado de toggle, etc.), no en cada tecla de búsqueda.
+const PropiedadCard = memo(function PropiedadCard({
+  item, width, veces, isToggling, destacada, esAdmin, primaryColor,
+  cardBg, cardBorder, isOnline, onOpen, onShare, onPublish, onZoom,
+}: {
+  item: Propiedad; width?: number; veces: number; isToggling: boolean
+  destacada: boolean; esAdmin: boolean; primaryColor: string
+  cardBg: string; cardBorder: string; isOnline: boolean
+  onOpen: (id: string) => void; onShare: (codigo: string) => void
+  onPublish: (id: string) => void; onZoom: (url: string | null) => void
+}) {
+  const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+  const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.estacionamientos != null
+  return (
+    <TouchableOpacity
+      style={[
+        styles.card,
+        { backgroundColor: cardBg, borderColor: cardBorder },
+        item.exclusiva && styles.cardExclusiva,
+        destacada && styles.cardDestacada,
+        width != null && { width },
+      ]}
+      activeOpacity={0.85}
+      onPress={() => onOpen(item.id)}
+    >
+      {primera?.url && (
+        <View style={styles.cardImagenWrap}>
+          <Image
+            source={{ uri: thumb(primera.url, { width: 640, quality: 65 }) }}
+            style={styles.cardImagen}
+            resizeMode="contain"
+          />
+          <TouchableOpacity
+            style={styles.lupitaBtn}
+            onPress={(e) => { e.stopPropagation(); onZoom(thumb(primera.url, { width: 1200, quality: 85 }) ?? null) }}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Text style={styles.lupitaText}>🔍</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {item.exclusiva && (
+        <View style={styles.exclusivaBanner}>
+          <Text style={styles.exclusivaBannerText}>★ Propiedad exclusiva</Text>
+        </View>
+      )}
+      {destacada && (
+        <View style={styles.destacadaBanner}>
+          <Text style={styles.destacadaBannerText}>
+            ★ Propiedad destacada
+            {esAdmin && item.destacada_hasta
+              ? `  ·  hasta el ${new Date(item.destacada_hasta).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`
+              : ''}
+          </Text>
+        </View>
+      )}
+      <View style={styles.cardBody}>
+        {esAdmin && destacada && item.destacada_mensaje ? (
+          <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
+        ) : null}
+        <View style={styles.cardHeaderRow}>
+          <Text style={[styles.codigo, { backgroundColor: primaryColor }]}>{item.codigo ?? '—'}</Text>
+          {item.tipo && (
+            <Text style={styles.tipoBadge}>
+              {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
+              {item.operacion ? ` · ${item.operacion}` : ''}
+            </Text>
+          )}
+        </View>
+        {item.es_constructora && (
+          <Text style={styles.constructoraBadge}>
+            🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
+          </Text>
+        )}
+        <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
+        <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
+        {item.descripcion ? (
+          <Text style={styles.cardDescripcion} numberOfLines={2}>{item.descripcion}</Text>
+        ) : null}
+        {tieneMeta && (
+          <View style={styles.metaRow}>
+            {item.recamaras != null && <Text style={styles.metaItem}>Rec {item.recamaras}</Text>}
+            {item.banos != null && <Text style={styles.metaItem}>Ba {item.banos}</Text>}
+            {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>{item.medios_banos} 1/2 Ba</Text>}
+            {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m² const.</Text>}
+            {item.m2_terreno != null && <Text style={styles.metaItem}>{item.m2_terreno}m² terr.</Text>}
+            {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
+          </View>
+        )}
+        <View style={styles.cardFooter}>
+          <Text style={[styles.precio, { color: primaryColor }]}>{formatPrecio(item.precio)}</Text>
+          <TouchableOpacity
+            style={styles.shareBtn}
+            onPress={(e) => { e.stopPropagation(); onShare(item.codigo) }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.shareBtnText}>🔗 Copiar ficha</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.publicadaBtn,
+              { borderColor: primaryColor },
+              veces > 0 && { backgroundColor: primaryColor, borderColor: primaryColor },
+              (isToggling || !isOnline || veces >= 10) && styles.publicadaBtnDisabled,
+            ]}
+            onPress={(e) => { e.stopPropagation(); if (isOnline) onPublish(item.id) }}
+            disabled={isToggling || !isOnline || veces >= 10}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {isToggling ? (
+              <ActivityIndicator size="small" color={veces > 0 ? '#fff' : primaryColor} />
+            ) : (
+              <Text style={[styles.publicadaBtnText, { color: veces > 0 ? '#fff' : primaryColor }]}>
+                {veces === 0 ? 'Publicar' : veces >= 10 ? '10/10 ✅' : `${veces}/10`}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </TouchableOpacity>
+  )
+})
 
 export default function ProspectadorPropiedades() {
   const queryClient = useQueryClient()
@@ -631,120 +755,34 @@ export default function ProspectadorPropiedades() {
     setFechaHastaCustom('')
   }
 
-  function renderPropiedad(item: Propiedad, width?: number) {
-    const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-    const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.estacionamientos != null
-    const veces = publicaciones[item.id] ?? 0
-    return (
-      <TouchableOpacity
-        key={item.id}
-        style={[
-          styles.card,
-          { backgroundColor: c.card, borderColor: c.border },
-          item.exclusiva && styles.cardExclusiva,
-          _estaDestacada(item) && styles.cardDestacada,
-          width != null && { width },
-        ]}
-        activeOpacity={0.85}
-        onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.id}`)}
-      >
-        {primera?.url && (
-          <View style={styles.cardImagenWrap}>
-            <Image
-              source={{ uri: thumb(primera.url, { width: 640, quality: 65 }) }}
-              style={styles.cardImagen}
-              resizeMode="contain"
-            />
-            <TouchableOpacity
-              style={styles.lupitaBtn}
-              onPress={(e) => { e.stopPropagation(); setImagenModal(thumb(primera.url, { width: 1200, quality: 85 }) ?? null) }}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Text style={styles.lupitaText}>🔍</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        {item.exclusiva && (
-          <View style={styles.exclusivaBanner}>
-            <Text style={styles.exclusivaBannerText}>★ Propiedad exclusiva</Text>
-          </View>
-        )}
-        {_estaDestacada(item) && (
-          <View style={styles.destacadaBanner}>
-            <Text style={styles.destacadaBannerText}>
-              ★ Propiedad destacada
-              {esAdmin && item.destacada_hasta
-                ? `  ·  hasta el ${new Date(item.destacada_hasta).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`
-                : ''}
-            </Text>
-          </View>
-        )}
-        <View style={styles.cardBody}>
-          {esAdmin && _estaDestacada(item) && item.destacada_mensaje ? (
-            <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
-          ) : null}
-          <View style={styles.cardHeaderRow}>
-            <Text style={[styles.codigo, { backgroundColor: primaryColor }]}>{item.codigo ?? '—'}</Text>
-            {item.tipo && (
-              <Text style={styles.tipoBadge}>
-                {item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1)}
-                {item.operacion ? ` · ${item.operacion}` : ''}
-              </Text>
-            )}
-          </View>
-          {item.es_constructora && (
-            <Text style={styles.constructoraBadge}>
-              🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
-            </Text>
-          )}
-          <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
-          <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
-          {item.descripcion ? (
-            <Text style={styles.cardDescripcion} numberOfLines={2}>{item.descripcion}</Text>
-          ) : null}
-          {tieneMeta && (
-            <View style={styles.metaRow}>
-              {item.recamaras != null && <Text style={styles.metaItem}>Rec {item.recamaras}</Text>}
-              {item.banos != null && <Text style={styles.metaItem}>Ba {item.banos}</Text>}
-              {item.medios_banos != null && item.medios_banos > 0 && <Text style={styles.metaItem}>{item.medios_banos} 1/2 Ba</Text>}
-              {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m² const.</Text>}
-              {item.m2_terreno != null && <Text style={styles.metaItem}>{item.m2_terreno}m² terr.</Text>}
-              {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
-            </View>
-          )}
-          <View style={styles.cardFooter}>
-            <Text style={[styles.precio, { color: primaryColor }]}>{formatPrecio(item.precio)}</Text>
-            <TouchableOpacity
-              style={styles.shareBtn}
-              onPress={(e) => { e.stopPropagation(); compartirLink(item.codigo) }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.shareBtnText}>🔗 Copiar ficha</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.publicadaBtn,
-                { borderColor: primaryColor },
-                veces > 0 && { backgroundColor: primaryColor, borderColor: primaryColor },
-                (toggling.has(item.id) || !isOnline || veces >= 10) && styles.publicadaBtnDisabled,
-              ]}
-              onPress={(e) => { e.stopPropagation(); if (isOnline) publicarPropiedad(item.id) }}
-              disabled={toggling.has(item.id) || !isOnline || veces >= 10}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {toggling.has(item.id) ? (
-                <ActivityIndicator size="small" color={veces > 0 ? '#fff' : primaryColor} />
-              ) : (
-                <Text style={[styles.publicadaBtnText, { color: veces > 0 ? '#fff' : primaryColor }]}>
-                  {veces === 0 ? 'Publicar' : veces >= 10 ? '10/10 ✅' : `${veces}/10`}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </TouchableOpacity>
-    )
-  }
+  // Callbacks estables: evitan que PropiedadCard (memo) se re-renderice al
+  // teclear/filtrar. Los refs apuntan siempre a la última versión de la lógica.
+  const publicarRef = useRef(publicarPropiedad); publicarRef.current = publicarPropiedad
+  const compartirRef = useRef(compartirLink); compartirRef.current = compartirLink
+  const onOpenCard = useCallback((id: string) => router.push(`/(prospectador)/detalle-propiedad?id=${id}`), [])
+  const onShareCard = useCallback((codigo: string) => compartirRef.current(codigo), [])
+  const onPublishCard = useCallback((id: string) => publicarRef.current(id), [])
+  const onZoomCard = useCallback((url: string | null) => setImagenModal(url), [])
+
+  const renderCard = (item: Propiedad, width?: number) => (
+    <PropiedadCard
+      key={item.id}
+      item={item}
+      width={width}
+      veces={publicaciones[item.id] ?? 0}
+      isToggling={toggling.has(item.id)}
+      destacada={!!_estaDestacada(item)}
+      esAdmin={esAdmin}
+      primaryColor={primaryColor}
+      cardBg={c.card}
+      cardBorder={c.border}
+      isOnline={isOnline}
+      onOpen={onOpenCard}
+      onShare={onShareCard}
+      onPublish={onPublishCard}
+      onZoom={onZoomCard}
+    />
+  )
 
   const nombreCorto = queryData?.nombreUsuario?.split(' ')[0] ?? null
   const { width: screenWidth, height: windowHeight } = useWindowDimensions()
@@ -835,12 +873,12 @@ export default function ProspectadorPropiedades() {
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
-              style={[styles.constructorasBtn, { backgroundColor: primaryColor }]}
+              style={[styles.constructorasBtn, { borderColor: primaryColor }]}
               onPress={() => router.push('/(prospectador)/constructoras')}
               activeOpacity={0.85}
             >
               <Text style={styles.constructorasIcon}>🏗️</Text>
-              <Text style={styles.constructorasTxt} numberOfLines={1} maxFontSizeMultiplier={1.2}>Constructoras</Text>
+              <Text style={[styles.constructorasTxt, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Constructoras</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.zonasToggle, { borderColor: primaryColor }, vistaZonas && { backgroundColor: primaryColor }]}
@@ -1012,7 +1050,7 @@ export default function ProspectadorPropiedades() {
             }}
           >
             <View style={styles.webGrid}>
-              {propiedadesFiltradas.slice(0, visibleCount).map(item => renderPropiedad(item, cardWidth))}
+              {propiedadesFiltradas.slice(0, visibleCount).map(item => renderCard(item, cardWidth))}
             </View>
             {visibleCount < propiedadesFiltradas.length && (
               <View style={{ paddingVertical: 24, alignItems: 'center' }}>
@@ -1028,7 +1066,7 @@ export default function ProspectadorPropiedades() {
             data={propiedadesFiltradas}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 16 }}
-            renderItem={({ item }) => renderPropiedad(item)}
+            renderItem={({ item }) => renderCard(item)}
             extraData={publicaciones}
             removeClippedSubviews
             initialNumToRender={6}
@@ -1177,12 +1215,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+    borderWidth: 1.5,
     borderRadius: 16,
     paddingVertical: 5,
     paddingHorizontal: 12,
   },
   constructorasIcon: { fontSize: 14 },
-  constructorasTxt: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  constructorasTxt: { fontSize: 13, fontWeight: '700' },
   quickFiltersRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,

@@ -581,9 +581,17 @@ export default function Perfil() {
           }
         </TouchableOpacity>
 
+        {/* Mis Publicaciones */}
+        <TouchableOpacity
+          style={[s.btnActividad, { backgroundColor: colorBase + '18', borderColor: colorBase }]}
+          onPress={() => router.push('/(prospectador)/mi-publicaciones' as any)}
+        >
+          <Text style={[s.btnActividadText, { color: colorBase }]}>📤 Mis publicaciones — historial de propiedades publicadas</Text>
+        </TouchableOpacity>
+
         {/* Mi Actividad */}
         <TouchableOpacity
-          style={s.btnActividad}
+          style={[s.btnActividad, { marginTop: 10 }]}
           onPress={() => router.push('/(prospectador)/mi-actividad' as any)}
         >
           <Text style={s.btnActividadText}>📊 Mi actividad — gráficas de conexión</Text>
