@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, createElement } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo, createElement } from 'react'
 import {
   View,
   Text,
@@ -162,6 +162,7 @@ export default function ProspectadorPropiedades() {
   const [vistaZonas, setVistaZonas] = useState(false)
   // Orden aleatorio estable por sesión para usuarios no-admin
   const shuffleMapRef = useRef<Map<string, number>>(new Map())
+  const [shuffleTick, setShuffleTick] = useState(0)
   const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
   // Web: renderizado incremental para no montar 1000+ tarjetas/imágenes de golpe
   const PAGE_WEB = 24
@@ -287,6 +288,9 @@ export default function ProspectadorPropiedades() {
       const map = new Map<string, number>()
       queryData.propiedades.forEach(p => map.set(p.id, Math.random()))
       shuffleMapRef.current = map
+      // Bump para que el orden aleatorio se aplique en el memo (el ref no
+      // dispara re-render por sí solo).
+      setShuffleTick(t => t + 1)
     }
   }, [queryData?.propiedades])
 
@@ -476,6 +480,11 @@ export default function ProspectadorPropiedades() {
     (filtroFechaPreset || fechaDesdeCustom || fechaHastaCustom) ? 'fecha' : null,
   ].filter(Boolean).length
 
+  const _ahora = Date.now()
+  const _estaDestacada = (p: Propiedad) =>
+    p.destacada && !p.exclusiva && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > _ahora)
+
+  const propiedadesFiltradas = useMemo(() => {
   let propiedadesFiltradas = propiedades
 
   if (busqueda.trim()) {
@@ -550,10 +559,6 @@ export default function ProspectadorPropiedades() {
     )
   }
 
-  const _ahora = Date.now()
-  const _estaDestacada = (p: Propiedad) =>
-    p.destacada && !p.exclusiva && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > _ahora)
-
   if (esAdmin) {
     // Admins: destacadas primero, luego orden original (fecha desc del servidor)
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
@@ -572,6 +577,15 @@ export default function ProspectadorPropiedades() {
       return (shuffleMapRef.current.get(a.id) ?? 0) - (shuffleMapRef.current.get(b.id) ?? 0)
     })
   }
+
+  return propiedadesFiltradas
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    propiedades, busqueda, filtroPublicadas, publicaciones, filtroNueva,
+    filtroExclusiva, filtroOperacion, filtroTipo, precioMinNum, precioMaxNum,
+    filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
+    shuffleTick,
+  ])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
   useEffect(() => { setVisibleCount(PAGE_WEB) }, [
@@ -1016,6 +1030,10 @@ export default function ProspectadorPropiedades() {
             contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 16 }}
             renderItem={({ item }) => renderPropiedad(item)}
             extraData={publicaciones}
+            removeClippedSubviews
+            initialNumToRender={6}
+            maxToRenderPerBatch={8}
+            windowSize={11}
           />
         )}
 

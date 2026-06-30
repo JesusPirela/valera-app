@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   View,
   Text,
@@ -220,6 +220,7 @@ export default function AdminPropiedades() {
   const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, ordenPublicaciones, busquedaContacto].filter(Boolean).length
 
   const inventarioCount = propiedades.filter((p) => p.es_inventario).length
+  const { propiedadesFiltradas, propiedadesParaSugerenciasContacto } = useMemo(() => {
   let propiedadesFiltradas = propiedades.filter((p) => !p.es_inventario)
   if (busqueda.trim()) {
     const q = normalizar(busqueda.trim())
@@ -270,6 +271,10 @@ export default function AdminPropiedades() {
     const bD = estaDestacada(b) ? 1 : 0
     return bD - aD
   })
+
+  return { propiedadesFiltradas, propiedadesParaSugerenciasContacto }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propiedades, busqueda, filtroOperacion, filtroEstado, filtroTipo, busquedaContacto, ordenPrecio, ordenPublicaciones, publicacionesMap])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
   useEffect(() => { setVisibleCount(PAGE_WEB) }, [
@@ -439,9 +444,9 @@ export default function AdminPropiedades() {
         <View style={[styles.filtrosPanel, { backgroundColor: c.card, borderColor: c.border }]}>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Operación</Text>
           <ScrollView ref={scrollOperacionRef} horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-            <FiltroChip label="Todas" active={filtroOperacion === null} onPress={() => setFiltroOperacion(null)} textSubColor={c.textSub}  textSubColor={c.textSub}/>
-            <FiltroChip label="Venta" active={filtroOperacion === 'venta'} onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')} textSubColor={c.textSub}  textSubColor={c.textSub}/>
-            <FiltroChip label="Renta" active={filtroOperacion === 'renta'} onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')} textSubColor={c.textSub}  textSubColor={c.textSub}/>
+            <FiltroChip label="Todas" active={filtroOperacion === null} onPress={() => setFiltroOperacion(null)} textSubColor={c.textSub}/>
+            <FiltroChip label="Venta" active={filtroOperacion === 'venta'} onPress={() => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta')} textSubColor={c.textSub}/>
+            <FiltroChip label="Renta" active={filtroOperacion === 'renta'} onPress={() => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta')} textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Estado</Text>
           <ScrollView ref={scrollEstadoRef} horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
@@ -688,6 +693,10 @@ export default function AdminPropiedades() {
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ paddingBottom: 24 }}
               renderItem={({ item }) => renderCardContent(item)}
+              removeClippedSubviews
+              initialNumToRender={6}
+              maxToRenderPerBatch={8}
+              windowSize={11}
             />
           )}
         </View>
