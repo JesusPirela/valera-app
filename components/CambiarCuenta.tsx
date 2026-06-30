@@ -49,10 +49,19 @@ export default function CambiarCuenta() {
   if (!listo) return null
 
   async function irAHome(role: string | null | undefined) {
+    // Limpiar la caché en disco SIN bloquear la navegación: si AsyncStorage
+    // tarda (contención con la escritura de la sesión nueva), navegamos igual.
+    // Antes, si esto se colgaba, el botón se quedaba "cargando" para siempre y
+    // la cuenta solo cambiaba al reabrir la app.
     try {
-      const keys = await AsyncStorage.getAllKeys()
-      const cacheKeys = keys.filter(k => k.startsWith('VALERA_CACHE'))
-      if (cacheKeys.length) await AsyncStorage.multiRemove(cacheKeys)
+      await Promise.race([
+        (async () => {
+          const keys = await AsyncStorage.getAllKeys()
+          const cacheKeys = keys.filter(k => k.startsWith('VALERA_CACHE'))
+          if (cacheKeys.length) await AsyncStorage.multiRemove(cacheKeys)
+        })(),
+        new Promise<void>(res => setTimeout(res, 1500)),
+      ])
     } catch {}
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       window.location.replace('/')

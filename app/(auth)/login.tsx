@@ -16,6 +16,7 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { actualizarNombreRole } from '../../lib/cuentas'
+import { conTimeout } from '../../lib/redIntentos'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const LOGO = require('../../assets/logo.png')
 
@@ -34,34 +35,50 @@ export default function LoginScreen() {
 
     setLoading(true)
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      // Timeout para que el botón nunca se quede girando indefinidamente si la
+      // red (o el lock de auth) se cuelga.
+      const { data, error } = await conTimeout(
+        supabase.auth.signInWithPassword({ email: email.trim(), password }),
+        15_000,
+      )
 
       if (error) {
         if (Platform.OS === 'web') window.alert(error.message)
         else Alert.alert('Error al iniciar sesión', error.message)
         return
       }
+      if (!data?.session || !data.user) {
+        const msg = 'No se pudo iniciar sesión. Intenta de nuevo.'
+        if (Platform.OS === 'web') window.alert(msg); else Alert.alert('Error', msg)
+        return
+      }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, nombre')
-        .eq('id', data.user.id)
-        .single()
+      const uid = data.user.id
+      // Rol: la sesión YA está establecida. Si la consulta de perfil falla o
+      // tarda, no bloqueamos el ingreso: usamos el rol de user_metadata o, en
+      // último caso, entramos como prospectador. Antes, un .single() que fallara
+      // (perfil faltante, RLS, o cuelgue) dejaba al usuario atorado en el login
+      // aunque ya estuviera autenticado.
+      let role: string | null = (data.user.user_metadata as any)?.role ?? null
+      let nombre: string | null = null
+      try {
+        const { data: profile } = await conTimeout(
+          supabase.from('profiles').select('role, nombre').eq('id', uid).maybeSingle(),
+          8_000,
+        )
+        if (profile) { role = profile.role ?? role; nombre = profile.nombre ?? null }
+      } catch { /* usar role de metadata / default */ }
 
-      supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', data.user.id).then(() => {}, () => {})
+      supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', uid).then(() => {}, () => {})
+      actualizarNombreRole(uid, { nombre, role }).catch(() => {})
 
-      // Actualizar nombre/rol en la entrada ya guardada de esta cuenta.
-      // Los tokens los guarda _layout.tsx en el handler de SIGNED_IN.
-      actualizarNombreRole(data.user.id, { nombre: profile?.nombre ?? null, role: profile?.role ?? null }).catch(() => {})
-
-      if (profile?.role === 'admin' || profile?.role === 'supervisor') {
+      if (role === 'admin' || role === 'supervisor') {
         router.replace('/(admin)/propiedades')
       } else {
-        try {
-          await supabase.rpc('notificar_admins_login_prospectador', {
-            p_prospectador_nombre: profile?.nombre ?? 'Un prospectador',
-          })
-        } catch {}
+        // Fire-and-forget: no debe bloquear la navegación.
+        supabase.rpc('notificar_admins_login_prospectador', {
+          p_prospectador_nombre: nombre ?? 'Un prospectador',
+        }).then(() => {}, () => {})
         router.replace('/(prospectador)/propiedades')
       }
     } catch {
