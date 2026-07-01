@@ -37,7 +37,7 @@ DECLARE
   v_role TEXT;
   v_uid  UUID := auth.uid();
 BEGIN
-  SELECT role INTO v_role FROM public.profiles WHERE id = v_uid;
+  SELECT role INTO v_role FROM public.profiles WHERE profiles.id = v_uid;
 
   -- Admin/supervisor/asesor pueden ver todo el equipo
   IF v_role IN ('admin', 'supervisor', 'asesor') THEN
