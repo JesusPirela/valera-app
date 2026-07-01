@@ -219,11 +219,11 @@ export default function CRM() {
   const isWeb = Platform.OS === 'web'
 
   const { data: clientes = [], isLoading, refetch } = useQuery<Cliente[]>({
-    // Sufijo 'v2': invalida cualquier caché persistido en disco de antes del
-    // 23/jun/2026, cuando supervisor/asesor todavía veían los clientes de
-    // todo el equipo. Sin esto, un asesor podría ver por un instante (o más,
-    // si está offline) datos cacheados de antes de restringir la RLS.
-    queryKey: ['clientes', soloMios ? 'mios' : 'all', 'v2'],
+    // Sufijo de versión: invalida el caché persistido en disco. Se subió a 'v3'
+    // (30/jun/2026) porque algunos usuarios quedaron con una lista VACÍA cacheada
+    // que no se reemplazaba, viendo su CRM en blanco pese a tener sus clientes
+    // intactos en el servidor. Cambiar la clave fuerza una recarga fresca.
+    queryKey: ['clientes', soloMios ? 'mios' : 'all', 'v3'],
     queryFn: async () => {
       let q = supabase
         .from('clientes')
