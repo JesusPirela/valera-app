@@ -598,17 +598,28 @@ export default function NuevaPropiedad() {
   async function subirImagen(uri: string, propiedadId: string, orden: number): Promise<string> {
     if (/^https?:\/\//.test(uri)) return uri
 
-    const response = await fetch(uri)
-    const blob = await response.blob()
-    const mimeType = blob.type || 'image/jpeg'
-    const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'jpg'
-    const filePath = `${propiedadId}/${orden}.${ext}`
-    const { error } = await supabase.storage
-      .from('propiedades')
-      .upload(filePath, blob, { contentType: mimeType, upsert: true })
-    if (error) throw error
-    const { data } = supabase.storage.from('propiedades').getPublicUrl(filePath)
-    return data.publicUrl
+    // Reintenta la descarga local + subida a Storage: en web una caída de red
+    // momentánea lanza "Failed to fetch" y tumbaba todo el guardado.
+    let ultimoError: any = null
+    for (let intento = 1; intento <= 3; intento++) {
+      try {
+        const response = await fetch(uri)
+        const blob = await response.blob()
+        const mimeType = blob.type || 'image/jpeg'
+        const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'jpg'
+        const filePath = `${propiedadId}/${orden}.${ext}`
+        const { error } = await supabase.storage
+          .from('propiedades')
+          .upload(filePath, blob, { contentType: mimeType, upsert: true })
+        if (error) throw error
+        const { data } = supabase.storage.from('propiedades').getPublicUrl(filePath)
+        return data.publicUrl
+      } catch (e) {
+        ultimoError = e
+        if (intento < 3) await new Promise(r => setTimeout(r, 900 * intento))
+      }
+    }
+    throw ultimoError
   }
 
   async function handleGuardar(ignorarDup = false) {
@@ -705,15 +716,24 @@ export default function NuevaPropiedad() {
 
       console.log('[nueva-propiedad] insertando con asesor_id:', asesorId)
 
-      // Inserta reintentando si el código ya está ocupado (carrera o hueco).
+      // Inserta reintentando si el código ya está ocupado (carrera o hueco),
+      // y también reintenta ante caídas de red ("Failed to fetch").
       let errorPropiedad: any = null
+      let netRetries = 0
       for (let intento = 0; intento < 25; intento++) {
         const codigo = `VR-${String(siguienteNum).padStart(3, '0')}`
-        const { error } = await supabase.from('propiedades').insert({ ...datosPropiedad, codigo })
-        if (!error) { errorPropiedad = null; break }
-        errorPropiedad = error
-        if (error.code === '23505') { siguienteNum++; continue } // código ocupado → siguiente
-        break
+        try {
+          const { error } = await supabase.from('propiedades').insert({ ...datosPropiedad, codigo })
+          if (!error) { errorPropiedad = null; break }
+          errorPropiedad = error
+          if (error.code === '23505') { siguienteNum++; continue } // código ocupado → siguiente
+          break
+        } catch (e: any) {
+          // Rechazo por red (ej. "Failed to fetch"): reintentar unas veces.
+          errorPropiedad = e
+          if (netRetries++ < 3) { await new Promise(r => setTimeout(r, 1000 * netRetries)); continue }
+          break
+        }
       }
 
       console.log('[nueva-propiedad] resultado insert — error:', errorPropiedad)
@@ -744,8 +764,13 @@ export default function NuevaPropiedad() {
       setTimeout(() => { router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades') }, 1500)
     } catch (err: any) {
       console.error('[nueva-propiedad] error completo:', err)
-      if (Platform.OS === 'web') window.alert(`Error al guardar: ${err.message}`)
-      else Alert.alert('Error al guardar', err.message || 'No se pudo guardar la propiedad.')
+      const raw = err?.message || ''
+      // "Failed to fetch" = caída de red del navegador: mensaje claro.
+      const msg = /failed to fetch|network|fetch/i.test(raw)
+        ? 'Error de conexión al guardar. Revisa tu internet e intenta de nuevo — si ya se había creado, apareceré en la lista.'
+        : `Error al guardar: ${raw || 'No se pudo guardar la propiedad.'}`
+      if (Platform.OS === 'web') window.alert(msg)
+      else Alert.alert('Error al guardar', msg)
     } finally {
       setLoading(false)
     }
