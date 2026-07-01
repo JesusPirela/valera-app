@@ -202,6 +202,15 @@ export default function TablaEquipo() {
             {grupos.length} {grupos.length === 1 ? 'desarrollo' : 'desarrollos'} · {totalModelos} modelos
             {busqueda.trim() ? ` (filtrado)` : ''}
           </Text>
+          {/* DEBUG TEMPORAL — borrar después */}
+          <View style={{ marginHorizontal: 14, marginBottom: 8, padding: 8, backgroundColor: '#1a1a2e', borderRadius: 8 }}>
+            <Text style={{ color: '#aef', fontSize: 10, fontFamily: 'monospace' }}>
+              Headers ({data.headers.length}): {data.headers.join(' | ')}
+            </Text>
+            <Text style={{ color: '#fea', fontSize: 10, fontFamily: 'monospace', marginTop: 4 }}>
+              Row[0] ({data.rows[0]?.length}): {data.rows[0]?.join(' | ')}
+            </Text>
+          </View>
           <SectionList
             sections={grupos}
             keyExtractor={(item, i) => `${item[0]}_${i}`}
