@@ -9,6 +9,7 @@ import { useColors } from '../../lib/ThemeContext'
 import { thumb } from '../../lib/img'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
+import { normalizar } from '../../lib/texto'
 
 type Modelo = {
   id: string
@@ -22,6 +23,31 @@ type Modelo = {
 }
 
 const SIN_CONSTRUCTORA = 'Sin constructora'
+
+// ─── Constructoras reconocidas en el mercado (investigación QRO/MTY/PUE) ─────
+// Casas Riscos: 15+ condominios, 3000+ casas en QRO (Intercity, Zaru, Mirador…)
+// Atlas Desarrollos: desarrolladora de BELENA Residencial en Zibatá
+// Grupo CAISA: EMMA, AMAIA, Alegra Towers en Zibatá/Juriquilla
+// Xanadú Residencial: Xanadu Zibatá, reconocida dentro de Zibatá
+// PDR: PDR Casa Zibatá + PDR Apodaca, activa en QRO y MTY
+// Mykonos: desarrollo icónico en Juriquilla
+// IMARHI: developer local activo con varios modelos en QRO
+// Investti: una de las 3 grandes de QRO junto a Atlas y Supraterra
+const POPULARES_KW = [
+  'riscos', 'intercity',
+  'belena', 'atlas',
+  'caisa', 'emma', 'amaia', 'alegra',
+  'xanadu', 'xanadú',
+  'pdr',
+  'mykonos',
+  'imarhi',
+  'investti',
+]
+
+function esPopularMercado(nombre: string): boolean {
+  const n = normalizar(nombre)
+  return POPULARES_KW.some(kw => n.includes(kw))
+}
 
 function formatPrecio(precio: number | null) {
   if (precio == null) return 'Precio a consultar'
@@ -85,14 +111,20 @@ export default function Constructoras() {
     setLoading(false)
   }
 
-  // Agrupar por constructora y ordenar por popularidad (más modelos primero)
+  // Agrupar por constructora
   const gruposMap = new Map<string, { nombre: string; modelos: Modelo[] }>()
   for (const m of modelos) {
     const nombre = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA
     if (!gruposMap.has(nombre)) gruposMap.set(nombre, { nombre, modelos: [] })
     gruposMap.get(nombre)!.modelos.push(m)
   }
-  const grupos = Array.from(gruposMap.values()).sort((a, b) => b.modelos.length - a.modelos.length)
+  // Orden: populares primero (por modelos desc), luego el resto (por modelos desc)
+  const grupos = Array.from(gruposMap.values()).sort((a, b) => {
+    const aPop = esPopularMercado(a.nombre) ? 1 : 0
+    const bPop = esPopularMercado(b.nombre) ? 1 : 0
+    if (aPop !== bPop) return bPop - aPop
+    return b.modelos.length - a.modelos.length
+  })
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
@@ -125,28 +157,39 @@ export default function Constructoras() {
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
           {grupos.map((g, idx) => {
             const abierta = abiertas[g.nombre] ?? false
-            const popularidad = idx === 0 ? { badge: '🏆', color: '#c9a84c', borderColor: '#c9a84c' }
-              : idx === 1 ? { badge: '🥈', color: '#8fa3aa', borderColor: '#8fa3aa' }
-              : idx === 2 ? { badge: '🥉', color: '#c07b4f', borderColor: '#c07b4f' }
+            const popular = esPopularMercado(g.nombre)
+            // Top 3 del listado completo (ya ordenado popular-first) reciben medalla
+            const medalla = idx === 0 ? { emoji: '🏆', color: '#c9a84c' }
+              : idx === 1 ? { emoji: '🥈', color: '#8fa3aa' }
+              : idx === 2 ? { emoji: '🥉', color: '#c07b4f' }
               : null
+            const borderColor = medalla?.color ?? (popular ? '#e65100' : c.border)
             return (
               <View key={g.nombre} style={styles.grupo}>
                 <TouchableOpacity
                   style={[
                     styles.grupoHeader,
-                    { backgroundColor: c.card, borderColor: popularidad?.borderColor ?? c.border },
-                    popularidad && { borderWidth: 1.8 },
+                    { backgroundColor: popular ? c.card : c.card, borderColor },
+                    (popular || medalla) && { borderWidth: 1.8 },
+                    popular && { backgroundColor: '#e6510008' },
                   ]}
                   onPress={() => setAbiertas((s) => ({ ...s, [g.nombre]: !abierta }))}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.grupoTitulo, { color: c.text }]}>{abierta ? '▼' : '▶'}  {g.nombre}</Text>
-                  {popularidad && (
-                    <Text style={[styles.popularBadge, { backgroundColor: popularidad.color + '22', color: popularidad.color }]}>
-                      {popularidad.badge} Top
+                  {popular && (
+                    <Text style={[styles.popularBadge, { backgroundColor: '#e6510018', color: '#e65100' }]}>
+                      🔥 Popular
                     </Text>
                   )}
-                  <Text style={[styles.grupoMeta, { color: popularidad?.color ?? '#1a6470' }]}>{g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}</Text>
+                  {medalla && (
+                    <Text style={[styles.medalBadge, { backgroundColor: medalla.color + '22', color: medalla.color }]}>
+                      {medalla.emoji}
+                    </Text>
+                  )}
+                  <Text style={[styles.grupoMeta, { color: medalla?.color ?? (popular ? '#e65100' : '#1a6470') }]}>
+                    {g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}
+                  </Text>
                 </TouchableOpacity>
 
                 {abierta && g.modelos.map((m) => {
@@ -206,6 +249,7 @@ const styles = StyleSheet.create({
   grupoTitulo: { flex: 1, fontSize: 15, fontWeight: '800' },
   grupoMeta: { fontSize: 12, fontWeight: '700' },
   popularBadge: { fontSize: 11, fontWeight: '800', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, marginRight: 4 },
+  medalBadge: { fontSize: 14, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginRight: 2 },
 
   modeloCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
