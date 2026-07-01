@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
-import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar } from '../../lib/texto'
 
@@ -17,8 +16,6 @@ type Propiedad = {
   zona: string | null
   nombre_constructora: string | null
   exclusiva: boolean | null
-  inmobiliarias: { exclusiva: boolean } | null
-  propiedad_imagenes: { url: string; orden: number }[]
 }
 
 const ZONAS_CONFIG = [
@@ -141,25 +138,23 @@ export default function Zonas() {
     rolActual = vistaComo ?? rolActual
     setRol(rolActual)
 
-    // Dos consultas paralelas en rangos para superar el límite de 1000 filas de PostgREST
-    const SELECT = 'id, codigo, titulo, precio, tipo, direccion, zona, nombre_constructora, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, orden)'
+    // Solo campos esenciales para agrupar — sin joins pesados de imágenes/inmobiliarias
+    const SELECT = 'id, codigo, titulo, precio, tipo, direccion, zona, nombre_constructora, exclusiva'
     const BASE = supabase.from('propiedades').select(SELECT)
       .eq('es_inventario', false)
       .not('zona', 'is', null)
       .order('precio', { ascending: true, nullsFirst: false })
 
+    // Dos rangos en paralelo para superar el límite de 1000 filas de PostgREST
     const [r1, r2] = await Promise.all([
       BASE.range(0, 999),
       BASE.range(1000, 1999),
     ])
 
-    let lista = [...(r1.data ?? []), ...(r2.data ?? [])].map((p: any) => ({
-      ...p,
-      inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
-    })) as Propiedad[]
+    let lista = [...(r1.data ?? []), ...(r2.data ?? [])] as Propiedad[]
 
     if (rolActual !== 'prospectador_plus' && rolActual !== 'admin' && rolActual !== 'supervisor' && rolActual !== 'asesor') {
-      lista = lista.filter(p => !p.exclusiva && !p.inmobiliarias?.exclusiva)
+      lista = lista.filter(p => !p.exclusiva)
     }
 
     setPropiedades(lista)
@@ -234,9 +229,7 @@ export default function Zonas() {
                         <Text style={[s.subzonaChevron, { color: c.textMute }]}>{subAbierta ? '▼' : '▶'}</Text>
                       </TouchableOpacity>
 
-                      {subAbierta && props.map(p => {
-                        const img = [...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-                        return (
+                      {subAbierta && props.map(p => (
                           <TouchableOpacity
                             key={p.id}
                             style={[s.propCard, { backgroundColor: c.card, borderColor: c.border }]}
@@ -246,11 +239,9 @@ export default function Zonas() {
                             }
                             activeOpacity={0.85}
                           >
-                            {img?.url ? (
-                              <ThumbImage url={img.url} opts={{ width: 160, quality: 60 }} style={s.propImg} />
-                            ) : (
-                              <View style={[s.propImg, s.propImgPh]}><Text style={{ fontSize: 20 }}>🏠</Text></View>
-                            )}
+                            <View style={[s.propIconBox, { backgroundColor: zConf.color + '18' }]}>
+                              <Text style={{ fontSize: 18 }}>🏠</Text>
+                            </View>
                             <View style={{ flex: 1 }}>
                               {p.nombre_constructora && (
                                 <Text style={[s.propConstr, { color: zConf.color }]} numberOfLines={1}>
@@ -263,8 +254,7 @@ export default function Zonas() {
                             </View>
                             <Text style={[s.propChevron, { color: zConf.color }]}>›</Text>
                           </TouchableOpacity>
-                        )
-                      })}
+                      ))}
                     </View>
                   )
                 })}
@@ -310,8 +300,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 10,
     borderRadius: 10, borderWidth: 1, padding: 10, marginBottom: 6, marginLeft: 4,
   },
-  propImg: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#e8f0f0' },
-  propImgPh: { alignItems: 'center', justifyContent: 'center' },
+  propIconBox: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   propConstr: { fontSize: 10, fontWeight: '700', marginBottom: 1 },
   propTitulo: { fontSize: 13, fontWeight: '700', lineHeight: 17, marginBottom: 2 },
   propPrecio: { fontSize: 13, fontWeight: '800' },
