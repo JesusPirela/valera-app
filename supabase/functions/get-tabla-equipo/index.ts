@@ -134,7 +134,7 @@ serve(async (req) => {
       .map(r => headers.map((_, i) => (r[i] ?? '').replace(/^"|"$/g, '').trim()))
 
     const result = normalizeGroups(headers, rows)
-    return json(result)
+    return json({ ...result, _debug: { rawHeaders: headers, rawRow0: rows[0] } })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return json({ error: msg }, 500)

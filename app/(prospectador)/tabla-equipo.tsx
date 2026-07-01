@@ -8,6 +8,7 @@ import { normalizar } from '../../lib/texto'
 type TablaData = {
   headers: string[]
   rows: string[][]
+  _debug?: { rawHeaders: string[]; rawRow0: string[] }
 }
 
 type Grupo = {
@@ -209,6 +210,12 @@ export default function TablaEquipo() {
             </Text>
             <Text style={{ color: '#fea', fontSize: 10, fontFamily: 'monospace', marginTop: 4 }}>
               Row[0] ({data.rows[0]?.length}): {data.rows[0]?.join(' | ')}
+            </Text>
+            <Text style={{ color: '#afa', fontSize: 10, fontFamily: 'monospace', marginTop: 4 }}>
+              RAW headers ({data._debug?.rawHeaders.length}): {data._debug?.rawHeaders.slice(0,8).join(' | ')}
+            </Text>
+            <Text style={{ color: '#fca', fontSize: 10, fontFamily: 'monospace', marginTop: 4 }}>
+              RAW row[0] ({data._debug?.rawRow0?.length}): {data._debug?.rawRow0?.slice(0,8).join(' | ')}
             </Text>
           </View>
           <SectionList
