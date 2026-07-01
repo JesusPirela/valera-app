@@ -797,6 +797,32 @@ serve(async (req) => {
     imagenes = [...best.values()].map(v => v.url)
     } // end !imagenes.length block
 
+    // ── 10a-wix. Wix (static.wixstatic.com): fotos reales, sin íconos ni logos ─
+    // Los sitios Wix sirven muchísimas variantes de static.wixstatic.com: íconos de
+    // amenidades, logos, redes sociales y miniaturas borrosas. Filtramos a fotos de
+    // contenido: media-id con hash largo (descarta íconos con nombre tipo
+    // "football.png"/"facebook.png") que además aparezcan grandes (≥200px) o como
+    // placeholder borroso de galería (blur_ = foto real que Wix carga en diferido).
+    // Se reconstruye la URL original (sin el transform /v1/fill/…) para máxima calidad.
+    if (imagenes.length < 3 && /static\.wixstatic\.com\/media\//i.test(html)) {
+      const info = new Map<string, { w: number; blur: boolean }>()
+      for (const m of html.matchAll(/https:\/\/static\.wixstatic\.com\/media\/[^"'\s)]+/gi)) {
+        const u = m[0]
+        const idm = u.match(/\/media\/([0-9a-f]{6,}_[0-9a-f]{16,}(?:~mv2)?\.(?:jpe?g|png|webp))/i)
+        if (!idm) continue
+        const id = idm[1]
+        const wm = u.match(/[,/]w_(\d+)/)
+        const w = wm ? parseInt(wm[1], 10) : 9999
+        const blur = /[,/]blur_/.test(u)
+        const cur = info.get(id) ?? { w: 0, blur: false }
+        info.set(id, { w: Math.max(cur.w, w), blur: cur.blur || blur })
+      }
+      const wix = [...info.entries()]
+        .filter(([, v]) => v.w >= 200 || v.blur)
+        .map(([id]) => `https://static.wixstatic.com/media/${id}`)
+      if (wix.length) imagenes = [...new Set([...imagenes, ...wix])].slice(0, 40)
+    }
+
     // ── 10b. Fallback genérico: cualquier <img>/<source>, resolviendo rutas
     // relativas a absolutas. Cubre sitios propios de desarrolladoras que no usan
     // un CDN conocido (p. ej. procesadesarrollos.com.mx, con src="img/foto.webp").
