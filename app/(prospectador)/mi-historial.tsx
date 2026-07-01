@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { calcularNivel, tituloPorNivel } from '../../lib/gamification'
 
@@ -30,8 +30,8 @@ const MID  = '#1e3448'
 const GOLD = '#c9a84c'
 const TEAL = '#1a6470'
 
-function StatRow({ icono, label, valor, sub }: { icono: string; label: string; valor: string | number; sub?: string }) {
-  return (
+function StatRow({ icono, label, valor, sub, onPress }: { icono: string; label: string; valor: string | number; sub?: string; onPress?: () => void }) {
+  const contenido = (
     <View style={s.statRow}>
       <Text style={s.statIcn}>{icono}</Text>
       <View style={{ flex: 1 }}>
@@ -39,8 +39,12 @@ function StatRow({ icono, label, valor, sub }: { icono: string; label: string; v
         {sub ? <Text style={s.statSub}>{sub}</Text> : null}
       </View>
       <Text style={s.statVal}>{valor}</Text>
+      {onPress ? <Text style={s.statChevron}>›</Text> : null}
     </View>
   )
+  return onPress
+    ? <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{contenido}</TouchableOpacity>
+    : contenido
 }
 
 function SeccionCard({ titulo, children }: { titulo: string; children: React.ReactNode }) {
@@ -151,9 +155,11 @@ export default function MiHistorial() {
       {/* Producción */}
       <SeccionCard titulo="📦 Producción total">
         <StatRow icono="🏠" label="Propiedades publicadas"
-          valor={data.total_propiedades.toLocaleString()} />
+          valor={data.total_propiedades.toLocaleString()}
+          onPress={() => router.push('/(prospectador)/mi-publicaciones' as any)} />
         <StatRow icono="📤" label="Publicaciones totales"
-          valor={data.total_publicaciones.toLocaleString()} />
+          valor={data.total_publicaciones.toLocaleString()}
+          onPress={() => router.push('/(prospectador)/mi-publicaciones' as any)} />
         <StatRow icono="👤" label="Clientes agregados"      valor={data.total_clientes.toLocaleString()} />
         <StatRow icono="🤝" label="Ventas cerradas"         valor={data.total_ventas.toLocaleString()} />
         <StatRow icono="✅" label="Seguimientos completados" valor={data.total_seguimientos.toLocaleString()} />
@@ -217,4 +223,5 @@ const s = StyleSheet.create({
   statLbl: { fontSize: 13, color: '#c0d0dc', fontWeight: '500' },
   statSub: { fontSize: 10, color: '#556a7a', marginTop: 1 },
   statVal: { fontSize: 15, fontWeight: '800', color: GOLD },
+  statChevron: { fontSize: 20, fontWeight: '700', color: GOLD, marginLeft: 8, marginTop: -2 },
 })
