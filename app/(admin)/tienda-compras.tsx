@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Alert, Platform, Image,
 } from 'react-native'
+import { PATRONES_ANIMADOS, AnimatedGradientView } from '../../lib/patrones'
 
 const AVATARES_PREMIUM = [
   { emoji: '🔥', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/512.gif' },
@@ -22,11 +23,8 @@ const AVATARES_PREMIUM = [
   { emoji: '🦁', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f981/512.gif' },
   { emoji: '🐺', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f43a/512.gif' },
 ]
-const COLORES_PREMIUM = [
-  '#c2185b','#e64a19','#00838f','#558b2f',
-  '#283593','#ff6f00','#006064','#4a148c',
-  '#37474f','#1b5e20','#880e4f','#bf360c',
-]
+// Colores premium = patrones animados (lo que el perfil realmente muestra).
+// Antes eran hex sueltos que se guardaban pero NO se veían en el perfil.
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
@@ -385,21 +383,22 @@ export default function TiendaCompras() {
                 {/* Picker de color premium */}
                 {seleccionada.item_tipo === 'pack_color' && (
                   <View style={s.seccion}>
-                    <Text style={[s.seccionTitle, { color: c.text }]}>🎨 Elige el color a desbloquear *</Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
-                      {COLORES_PREMIUM.map(color => (
+                    <Text style={[s.seccionTitle, { color: c.text }]}>🎨 Elige el patrón animado a desbloquear *</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 }}>
+                      {PATRONES_ANIMADOS.map(patron => (
                         <TouchableOpacity
-                          key={color}
-                          onPress={() => setValorItem(color)}
-                          style={{
-                            width: 44, height: 44, borderRadius: 22,
-                            backgroundColor: color,
-                            borderWidth: valorItem === color ? 4 : 1.5,
-                            borderColor: valorItem === color ? '#c9a84c' : '#ccc',
-                            alignItems: 'center', justifyContent: 'center',
-                          }}
+                          key={patron.id}
+                          onPress={() => setValorItem(patron.id)}
+                          style={{ alignItems: 'center', gap: 3, width: 56 }}
                         >
-                          {valorItem === color && <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>✓</Text>}
+                          <View style={{
+                            width: 48, height: 48, borderRadius: 24, overflow: 'hidden',
+                            borderWidth: valorItem === patron.id ? 4 : 1.5,
+                            borderColor: valorItem === patron.id ? '#c9a84c' : '#ccc',
+                          }}>
+                            <AnimatedGradientView patron={patron} animate={false} style={{ flex: 1 }} />
+                          </View>
+                          <Text style={{ fontSize: 9, color: c.textSub, textAlign: 'center' }} numberOfLines={1}>{patron.nombre}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
