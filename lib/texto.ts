@@ -6,6 +6,6 @@ export function normalizar(texto: string | null | undefined): string {
   if (!texto) return ''
   return texto
     .toLowerCase()
-    .normalize('NFD')                  // separa letra y acento (é -> e + diacrítico)
-    .replace(/[̀-ͯ]/g, '')   // elimina los diacríticos combinantes
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
 }

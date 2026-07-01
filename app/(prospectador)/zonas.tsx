@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
+import { normalizar } from '../../lib/texto'
 
 type Propiedad = {
   id: string
@@ -85,16 +86,32 @@ const SUBZONAS: Record<string, { label: string; keywords: string[] }[]> = {
   ],
 }
 
-function detectarSubzona(direccion: string, zona: string): string {
-  const dir = (direccion ?? '').toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents for matching
-  for (const sz of (SUBZONAS[zona] ?? [])) {
-    if (sz.keywords.some(kw => {
-      const kwn = kw.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-      return dir.includes(kwn)
-    })) return sz.label
+// Prefijos que indican el comienzo del nombre de un fraccionamiento/colonia
+const RE_FRACC = /(?:fraccionamiento|fracc\.?|colonia|col\.?|residencial|privadas?\s+de|hacienda|conjunto\s+habitacional|ex[\s-]hacienda|parque\s+industrial|villa(?:s)?)\s+(.+)/i
+
+function extraerNombreFracc(direccion: string): string | null {
+  // Buscar en cada segmento separado por coma
+  const segmentos = (direccion ?? '').split(',')
+  for (const seg of segmentos) {
+    const m = seg.trim().match(RE_FRACC)
+    if (m?.[1]) {
+      const nombre = m[1].trim().split(/,/)[0].trim()
+      if (nombre.length > 2 && nombre.length < 55) return nombre
+    }
   }
-  return 'Otras'
+  // Si no hay prefijo, usar el primer segmento si es razonablemente corto
+  const primero = segmentos[0]?.trim()
+  if (primero && primero.length > 2 && primero.length < 45) return primero
+  return null
+}
+
+function detectarSubzona(direccion: string, zona: string): string {
+  const dir = normalizar(direccion)
+  for (const sz of (SUBZONAS[zona] ?? [])) {
+    if (sz.keywords.some(kw => dir.includes(normalizar(kw)))) return sz.label
+  }
+  // No está en la lista → extraer nombre real de la dirección
+  return extraerNombreFracc(direccion) ?? 'Sin clasificar'
 }
 
 function formatPrecio(precio: number | null) {
@@ -181,10 +198,10 @@ export default function Zonas() {
             const totalZona = Object.values(subzonaData).reduce((a, b) => a + b.length, 0)
             const zonaAbierta = zonasAbiertas[zConf.key] ?? false
 
-            // Ordenar subzonas: primero "Otras" al final, resto por cantidad desc
+            // Ordenar subzonas: "Sin clasificar" al final, resto por cantidad desc
             const subzonas = Object.entries(subzonaData).sort((a, b) => {
-              if (a[0] === 'Otras') return 1
-              if (b[0] === 'Otras') return -1
+              if (a[0] === 'Sin clasificar') return 1
+              if (b[0] === 'Sin clasificar') return -1
               return b[1].length - a[1].length
             })
 
