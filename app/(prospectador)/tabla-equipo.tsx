@@ -17,8 +17,22 @@ type Grupo = {
 
 const TEAL = '#1a6470'
 
-function esPrecio(val: string) {
-  return /^\$[\d,]+/.test(val.trim()) || /^\d{1,3}(,\d{3})+$/.test(val.trim())
+function esPrecio(val: string, label = '') {
+  if (normalizar(label).includes('precio')) return true
+  const v = val.trim()
+  return (
+    /^\$[\d,.]+/.test(v) ||           // $1,500,000 o $1.500.000
+    /^\d{1,3}(,\d{3})+$/.test(v) ||   // 1,500,000
+    /^\d{6,}$/.test(v)                 // 1500000 (número plano ≥6 dígitos)
+  )
+}
+
+function formatearPrecio(val: string): string {
+  const digits = val.replace(/[^\d]/g, '')
+  if (!digits || digits.length < 4) return val
+  const num = parseInt(digits, 10)
+  if (isNaN(num)) return val
+  return `$${num.toLocaleString('es-MX')}`
 }
 
 export default function TablaEquipo() {
@@ -98,7 +112,7 @@ export default function TablaEquipo() {
     const campos = headers.slice(1).map((h, i) => ({ label: h, value: item[i + 1] ?? '' }))
       .filter(x => x.value.trim() && x.value !== '—' && x.value !== '-')
 
-    const precioEntry = campos.find(x => esPrecio(x.value))
+    const precioEntry = campos.find(x => esPrecio(x.value, x.label))
     const otrosCampos = campos.filter(x => x !== precioEntry)
     const esUltimo = index === section.data.length - 1
 
@@ -115,7 +129,7 @@ export default function TablaEquipo() {
               <Text style={[s.modeloIdxTxt, { color: TEAL }]}>{index + 1}</Text>
             </View>
             {precioEntry && (
-              <Text style={s.modeloPrecio}>{precioEntry.value}</Text>
+              <Text style={s.modeloPrecio}>{formatearPrecio(precioEntry.value)}</Text>
             )}
           </View>
           {otrosCampos.length > 0 && (
