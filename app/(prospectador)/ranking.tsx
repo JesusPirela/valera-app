@@ -153,11 +153,10 @@ export default function Ranking() {
         <TouchableOpacity style={mp.overlay} activeOpacity={1} onPress={() => setSel(null)}>
           {sel && (
             <View style={mp.card}>
-              <AccentBackground acentoId={sel.color_acento || '#1a6470'} style={mp.header}>
-                <View style={mp.avWrap}>
-                  <AvatarBig avatarUrl={sel.avatar_url} nombre={sel.nombre} />
-                </View>
-              </AccentBackground>
+              <AccentBackground acentoId={sel.color_acento || '#1a6470'} style={mp.headerBand} />
+              <View style={mp.avWrap}>
+                <AvatarBig avatarUrl={sel.avatar_url} nombre={sel.nombre} />
+              </View>
               <Text style={mp.nombre} numberOfLines={2}>{sel.nombre}</Text>
               <Text style={mp.titulo}>{tituloPorNivel(calcularNivel(sel.xp))}</Text>
               <View style={mp.stats}>
@@ -179,22 +178,24 @@ export default function Ranking() {
 const mp = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 32 },
   card: {
-    width: '100%', maxWidth: 320, backgroundColor: '#122030',
+    width: '100%', maxWidth: 300, backgroundColor: '#122030',
     borderRadius: 20, overflow: 'hidden', alignItems: 'center', paddingBottom: 20,
     borderWidth: 1, borderColor: '#1e3448',
   },
-  header: { width: '100%', height: 96, alignItems: 'center', justifyContent: 'center' },
+  headerBand: { width: '100%', height: 70 },
+  // Avatar cruzando el borde del header (fuera del AccentBackground para que no
+  // lo recorte el overflow:hidden del gradiente).
   avWrap: {
-    width: 88, height: 88, borderRadius: 44, marginTop: 44,
-    backgroundColor: '#0d1b2a', borderWidth: 3, borderColor: '#fff',
+    width: 84, height: 84, borderRadius: 42, marginTop: -44,
+    backgroundColor: '#0d1b2a', borderWidth: 4, borderColor: '#122030',
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  avImg: { width: 88, height: 88 },
-  avGif: { width: 62, height: 62 },
-  avEmoji: { fontSize: 46 },
-  nombre: { fontSize: 19, fontWeight: '900', color: '#fff', marginTop: 50, textAlign: 'center', paddingHorizontal: 16 },
-  titulo: { fontSize: 13, fontWeight: '700', color: '#c9a84c', marginTop: 4 },
-  stats: { flexDirection: 'row', alignItems: 'center', marginTop: 18, paddingHorizontal: 10 },
+  avImg: { width: 84, height: 84 },
+  avGif: { width: 58, height: 58 },
+  avEmoji: { fontSize: 44, lineHeight: 52 },
+  nombre: { fontSize: 18, fontWeight: '900', color: '#fff', marginTop: 12, textAlign: 'center', paddingHorizontal: 16 },
+  titulo: { fontSize: 13, fontWeight: '700', color: '#c9a84c', marginTop: 3 },
+  stats: { flexDirection: 'row', alignItems: 'center', marginTop: 16, paddingHorizontal: 10 },
   stat: { alignItems: 'center', paddingHorizontal: 14, minWidth: 64 },
   statNum: { fontSize: 16, fontWeight: '900', color: '#fff' },
   statLbl: { fontSize: 11, color: '#7a9ab5', marginTop: 2 },

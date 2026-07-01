@@ -410,7 +410,9 @@ export default function CRM() {
   async function guardarCelda(id: string, col: string, value: string | null) {
     const campo = COL_FIELD[col]
     if (!campo) return
-    const estadoPrevio = clientes.find(cl => cl.id === id)?.estado
+    const clientePrev = clientes.find(cl => cl.id === id)
+    const estadoPrevio = clientePrev?.estado
+    const proximoPrevio = clientePrev?.proximo_contacto ?? null
     setSavingCell(true)
     // Actualización optimista inmediata en la cache activa (v3).
     queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v3'], (old) =>
@@ -458,6 +460,18 @@ export default function CRM() {
         if (value === 'compro' && userRole !== 'admin') {
           const msg = '✅ Solicitud de apartado enviada. El equipo lo revisará y confirmará pronto.'
           Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Solicitud enviada', msg)
+        }
+      }
+      // Seguimiento hecho: si reprogramó el PRÓXIMO CONTACTO de un cliente cuyo
+      // seguimiento ya estaba VENCIDO/para hoy, cuenta como seguimiento completado
+      // (misión). Solo cuando el previo estaba vencido → no se puede farmear
+      // reagendando a futuro varias veces (una vez a futuro, ya no está vencido).
+      if (campo === 'proximo_contacto' && value && proximoPrevio) {
+        const previoVencido = new Date(proximoPrevio).getTime() <= Date.now()
+        const cambio = new Date(value).getTime() !== new Date(proximoPrevio).getTime()
+        if (previoVencido && cambio) {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) registrarAccion(user.id, 'completar_seguimiento').catch(() => {})
         }
       }
       queryClient.invalidateQueries({ queryKey: ['clientes'] })
