@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, TextInput } from 'react-native'
+import { useState, useCallback, useMemo } from 'react'
+import { View, Text, StyleSheet, SectionList, ActivityIndicator, TouchableOpacity, TextInput } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
@@ -10,9 +10,13 @@ type TablaData = {
   rows: string[][]
 }
 
+type Grupo = {
+  title: string
+  data: string[][]
+}
+
 const TEAL = '#1a6470'
 
-// Intenta identificar qué columna contiene el precio (empieza con $ o tiene números grandes)
 function esPrecio(val: string) {
   return /^\$[\d,]+/.test(val.trim()) || /^\d{1,3}(,\d{3})+$/.test(val.trim())
 }
@@ -23,6 +27,7 @@ export default function TablaEquipo() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
+  const [colapsados, setColapsados] = useState<Record<string, boolean>>({})
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
@@ -40,45 +45,82 @@ export default function TablaEquipo() {
     setLoading(false)
   }
 
-  const filasFiltradas = data
-    ? data.rows.filter(row =>
-        !busqueda.trim() ||
-        row.some(cell => normalizar(cell).includes(normalizar(busqueda)))
-      )
-    : []
+  // Agrupar filas por el primer campo (nombre del desarrollo)
+  const grupos: Grupo[] = useMemo(() => {
+    if (!data) return []
+    const q = normalizar(busqueda)
+    const map = new Map<string, string[][]>()
+    for (const row of data.rows) {
+      const nombre = row[0]?.trim() || '—'
+      // Para búsqueda: incluir el grupo si el nombre del desarrollo OR algún campo del modelo coincide
+      if (q && !row.some(cell => normalizar(cell).includes(q))) continue
+      if (!map.has(nombre)) map.set(nombre, [])
+      map.get(nombre)!.push(row)
+    }
+    return Array.from(map.entries()).map(([title, rows]) => ({ title, data: rows }))
+  }, [data, busqueda])
 
-  function renderCard({ item, index }: { item: string[]; index: number }) {
+  const totalModelos = grupos.reduce((s, g) => s + g.data.length, 0)
+
+  function toggleGrupo(titulo: string) {
+    setColapsados(v => ({ ...v, [titulo]: !v[titulo] }))
+  }
+
+  function renderSectionHeader({ section }: { section: Grupo }) {
+    const count = section.data.length
+    const colapsado = colapsados[section.title] ?? false
+    return (
+      <TouchableOpacity
+        style={[s.grupoHeader, { backgroundColor: TEAL + 'cc', borderColor: TEAL }]}
+        onPress={() => toggleGrupo(section.title)}
+        activeOpacity={0.8}
+      >
+        <Text style={s.grupoTitulo} numberOfLines={1}>{section.title}</Text>
+        <Text style={s.grupoCount}>{count} {count === 1 ? 'modelo' : 'modelos'}</Text>
+        <Text style={s.grupoChevron}>{colapsado ? '▶' : '▼'}</Text>
+      </TouchableOpacity>
+    )
+  }
+
+  function renderItem({ item, index, section }: { item: string[]; index: number; section: Grupo }) {
+    if (colapsados[section.title]) return null
+
     const headers = data?.headers ?? []
-    // Primer campo no vacío como título principal
-    const titulo = item[0] ?? ''
-    const resto = headers.slice(1).map((h, i) => ({ label: h, value: item[i + 1] ?? '' }))
+    // Columnas 1+ son los atributos del modelo
+    const campos = headers.slice(1).map((h, i) => ({ label: h, value: item[i + 1] ?? '' }))
       .filter(x => x.value.trim() && x.value !== '—' && x.value !== '-')
 
-    // Detectar precio para resaltarlo
-    const precioEntry = resto.find(x => esPrecio(x.value))
-    const otrosCampos = resto.filter(x => x !== precioEntry)
+    const precioEntry = campos.find(x => esPrecio(x.value))
+    const otrosCampos = campos.filter(x => x !== precioEntry)
+    const esUltimo = index === section.data.length - 1
 
     return (
-      <View style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
-        <View style={s.cardTop}>
-          <View style={[s.indexBadge, { backgroundColor: TEAL }]}>
-            <Text style={s.indexTxt}>{index + 1}</Text>
+      <View style={[
+        s.modeloCard,
+        { backgroundColor: c.card, borderColor: c.border },
+        esUltimo && s.modeloCardUltimo,
+      ]}>
+        <View style={[s.modeloBar, { backgroundColor: TEAL }]} />
+        <View style={{ flex: 1 }}>
+          <View style={s.modeloTop}>
+            <View style={[s.modeloIdx, { backgroundColor: TEAL + '22' }]}>
+              <Text style={[s.modeloIdxTxt, { color: TEAL }]}>{index + 1}</Text>
+            </View>
+            {precioEntry && (
+              <Text style={s.modeloPrecio}>{precioEntry.value}</Text>
+            )}
           </View>
-          <Text style={[s.cardTitulo, { color: c.text }]} numberOfLines={2}>{titulo || '—'}</Text>
-          {precioEntry && (
-            <Text style={s.precio}>{precioEntry.value}</Text>
+          {otrosCampos.length > 0 && (
+            <View style={s.camposWrap}>
+              {otrosCampos.map((campo, i) => (
+                <View key={i} style={[s.campo, { borderColor: c.border }]}>
+                  <Text style={[s.campoLabel, { color: c.textMute }]}>{campo.label}</Text>
+                  <Text style={[s.campoVal, { color: c.text }]} numberOfLines={2}>{campo.value}</Text>
+                </View>
+              ))}
+            </View>
           )}
         </View>
-        {otrosCampos.length > 0 && (
-          <View style={s.camposWrap}>
-            {otrosCampos.map((campo, i) => (
-              <View key={i} style={[s.campo, { borderColor: c.border }]}>
-                <Text style={[s.campoLabel, { color: c.textMute }]}>{campo.label}</Text>
-                <Text style={[s.campoVal, { color: c.text }]} numberOfLines={2}>{campo.value}</Text>
-              </View>
-            ))}
-          </View>
-        )}
       </View>
     )
   }
@@ -117,24 +159,31 @@ export default function TablaEquipo() {
             <Text style={s.searchIcon}>🔍</Text>
             <TextInput
               style={[s.searchInput, { color: c.text }]}
-              placeholder="Buscar en la tabla…"
+              placeholder="Buscar desarrollo o modelo…"
               placeholderTextColor={c.textMute}
               value={busqueda}
               onChangeText={setBusqueda}
               autoCapitalize="none"
               autoCorrect={false}
             />
+            {busqueda.length > 0 && (
+              <TouchableOpacity onPress={() => setBusqueda('')}>
+                <Text style={[{ fontSize: 15, color: c.textMute, paddingHorizontal: 4 }]}>✕</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <Text style={[s.meta, { color: c.textMute }]}>
-            {filasFiltradas.length} registro{filasFiltradas.length !== 1 ? 's' : ''}
-            {busqueda.trim() ? ` (filtrado de ${data.rows.length})` : ''}
+            {grupos.length} {grupos.length === 1 ? 'desarrollo' : 'desarrollos'} · {totalModelos} modelos
+            {busqueda.trim() ? ` (filtrado)` : ''}
           </Text>
-          <FlatList
-            data={filasFiltradas}
-            keyExtractor={(_, i) => String(i)}
-            renderItem={renderCard}
-            contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 32 }}
+          <SectionList
+            sections={grupos}
+            keyExtractor={(item, i) => `${item[0]}_${i}`}
+            renderSectionHeader={renderSectionHeader}
+            renderItem={renderItem}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 32 }}
             showsVerticalScrollIndicator={false}
+            stickySectionHeadersEnabled={false}
           />
         </>
       )}
@@ -162,27 +211,36 @@ const s = StyleSheet.create({
 
   meta: { fontSize: 11, paddingHorizontal: 16, paddingBottom: 6 },
 
-  card: {
-    borderRadius: 12, borderWidth: 1,
-    marginBottom: 10, padding: 12,
+  // Header del grupo (desarrollo)
+  grupoHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 10,
+    marginTop: 12, marginBottom: 2,
   },
-  cardTop: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8,
+  grupoTitulo: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '900' },
+  grupoCount: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '700', marginRight: 8 },
+  grupoChevron: { color: '#fff', fontSize: 14 },
+
+  // Tarjeta de modelo (hijo del grupo)
+  modeloCard: {
+    flexDirection: 'row',
+    borderWidth: 1, borderTopWidth: 0,
+    marginBottom: 0, padding: 10,
+    borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
   },
-  indexBadge: {
-    width: 26, height: 26, borderRadius: 13,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  modeloCardUltimo: {
+    borderBottomLeftRadius: 10, borderBottomRightRadius: 10,
+    marginBottom: 4,
   },
-  indexTxt: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  cardTitulo: { flex: 1, fontSize: 15, fontWeight: '800', lineHeight: 20 },
-  precio: { fontSize: 14, fontWeight: '900', color: TEAL, flexShrink: 0 },
+  modeloBar: { width: 3, borderRadius: 2, marginRight: 10, alignSelf: 'stretch' },
+  modeloTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  modeloIdx: { width: 22, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  modeloIdxTxt: { fontSize: 10, fontWeight: '800' },
+  modeloPrecio: { fontSize: 14, fontWeight: '900', color: TEAL },
 
   camposWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  campo: {
-    borderWidth: 1, borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 5,
-    minWidth: 100,
-  },
+  campo: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5, minWidth: 90 },
   campoLabel: { fontSize: 10, fontWeight: '700', marginBottom: 2, textTransform: 'uppercase' },
   campoVal: { fontSize: 13, fontWeight: '600' },
 
