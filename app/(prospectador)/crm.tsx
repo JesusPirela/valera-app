@@ -120,7 +120,7 @@ export default function CRM() {
   const c = useColors()
   const { darkMode } = useTheme()
   const queryClient = useQueryClient()
-  const { isOnline, refreshPending } = useOfflineSync()
+  const { isOnline, refreshPending, syncNow, pendingCount, isSyncing } = useOfflineSync()
   const [userRole, setUserRole]           = useState<string | null>(null)
   const [busqueda, setBusqueda]           = useState('')
   const [estadoFiltro, setEstadoFiltro]   = useState<string | null>(null)
@@ -652,6 +652,25 @@ export default function CRM() {
               {savedToast === 'ok' ? '✓ Guardado' : '⏳ Guardado — se sincronizará al reconectar'}
             </Text>
           </View>
+        )}
+
+        {/* Botón flotante "Guardar": aparece SOLO cuando hay cambios sin
+            sincronizar (guardados en cola porque falló el envío o no había
+            red), y desaparece en cuanto todo queda guardado en el servidor. */}
+        {pendingCount > 0 && (
+          <TouchableOpacity
+            style={s.saveFab}
+            activeOpacity={0.85}
+            disabled={isSyncing}
+            onPress={async () => { await syncNow(); await refetch() }}
+          >
+            {isSyncing
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Ionicons name="save" size={18} color="#fff" />}
+            <Text style={s.saveFabTxt}>
+              {isSyncing ? 'Guardando…' : `Guardar${pendingCount > 1 ? ` (${pendingCount})` : ''}`}
+            </Text>
+          </TouchableOpacity>
         )}
 
         {/* ── KPI strip (todos clickeables) ── */}
@@ -1388,6 +1407,16 @@ const s = StyleSheet.create({
   savedToastOk: { backgroundColor: '#1a6470' },
   savedToastPend: { backgroundColor: '#b9770a' },
   savedToastTxt: { color: '#fff', fontWeight: '700', fontSize: 13, textAlign: 'center' },
+  saveFab: {
+    position: 'absolute', bottom: 24, right: 20, zIndex: 1000,
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    backgroundColor: '#e67e22', borderRadius: 26,
+    paddingHorizontal: 18, paddingVertical: 13,
+    shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 9,
+    // @ts-ignore — cursor solo aplica en web
+    cursor: 'pointer',
+  },
+  saveFabTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
 
   addBtn: {
     width: 42, height: 42, backgroundColor: '#1a6470',
