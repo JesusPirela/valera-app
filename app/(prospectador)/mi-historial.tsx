@@ -24,6 +24,13 @@ type Historial = {
   coins_gastados: number
 }
 
+type XpTx = {
+  id: string
+  cantidad: number
+  concepto: string
+  created_at: string
+}
+
 const DARK = '#0d1b2a'
 const CARD = '#111f2e'
 const MID  = '#1e3448'
@@ -69,7 +76,8 @@ function diasDesde(iso: string) {
 }
 
 export default function MiHistorial() {
-  const [data, setData]     = useState<Historial | null>(null)
+  const [data, setData]       = useState<Historial | null>(null)
+  const [xpTxs, setXpTxs]    = useState<XpTx[]>([])
   const [loading, setLoading] = useState(true)
   const yaCargoRef = useRef(false)
 
@@ -80,7 +88,7 @@ export default function MiHistorial() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 
-    const [perfil, stats, minConexion, txs, propiedades, publicaciones, clientes, seguimientos, interacciones, cursos] = await Promise.all([
+    const [perfil, stats, minConexion, txs, propiedades, publicaciones, clientes, seguimientos, interacciones, cursos, xpTxsRes] = await Promise.all([
       supabase.from('profiles').select('nombre, created_at').eq('id', user.id).maybeSingle(),
       supabase.from('user_stats').select('xp, valera_coins, streak_dias, total_ventas').eq('id', user.id).maybeSingle(),
       // Total de minutos conectado con intervalos fusionados (mismo cálculo que el resto de la app)
@@ -94,6 +102,8 @@ export default function MiHistorial() {
       supabase.from('recordatorios').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('completado', true),
       supabase.from('interacciones').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
       supabase.from('vu_certificados').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+      // Últimas 30 transacciones de XP
+      supabase.from('xp_transactions').select('id, cantidad, concepto, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30),
     ])
 
     const coinsG = (txs.data ?? []).filter((t: any) => t.cantidad > 0).reduce((a: number, t: any) => a + t.cantidad, 0)
@@ -116,6 +126,7 @@ export default function MiHistorial() {
       coins_ganados:       coinsG,
       coins_gastados:      coinsE,
     })
+    setXpTxs((xpTxsRes.data ?? []) as XpTx[])
     yaCargoRef.current = true
     setLoading(false)
   }
@@ -178,6 +189,26 @@ export default function MiHistorial() {
       <SeccionCard titulo="⭐ Crecimiento">
         <StatRow icono="✨" label="XP total acumulado"   valor={data.xp.toLocaleString()} />
         <StatRow icono="🎓" label="Cursos completados"   valor={data.total_cursos.toLocaleString()} />
+        {xpTxs.length > 0 && (
+          <View style={s.xpLogWrap}>
+            <Text style={s.xpLogTitulo}>Historial de XP</Text>
+            {xpTxs.map(tx => (
+              <View key={tx.id} style={s.xpLogRow}>
+                <View style={s.xpLogBadge}>
+                  <Text style={s.xpLogBadgeTxt}>+{tx.cantidad} XP</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.xpLogConcepto}>{tx.concepto}</Text>
+                  <Text style={s.xpLogFecha}>
+                    {new Date(tx.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                    {' · '}
+                    {new Date(tx.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </SeccionCard>
 
       {/* Valera Coins */}
@@ -224,4 +255,12 @@ const s = StyleSheet.create({
   statSub: { fontSize: 10, color: '#556a7a', marginTop: 1 },
   statVal: { fontSize: 15, fontWeight: '800', color: GOLD },
   statChevron: { fontSize: 20, fontWeight: '700', color: GOLD, marginLeft: 8, marginTop: -2 },
+
+  xpLogWrap:    { marginTop: 14, borderTopWidth: 1, borderTopColor: MID, paddingTop: 12 },
+  xpLogTitulo:  { fontSize: 11, fontWeight: '800', color: GOLD, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  xpLogRow:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: MID },
+  xpLogBadge:   { backgroundColor: GOLD + '22', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, minWidth: 62, alignItems: 'center' },
+  xpLogBadgeTxt:{ fontSize: 12, fontWeight: '900', color: GOLD },
+  xpLogConcepto:{ fontSize: 12, color: '#c0d0dc', fontWeight: '600' },
+  xpLogFecha:   { fontSize: 10, color: '#556a7a', marginTop: 1 },
 })

@@ -21,6 +21,7 @@ type Resumen = {
   certificados: number
   ultima_conexion: string | null
   alta: string | null
+  xp_total: number | null
 }
 
 type Evento = {
@@ -34,6 +35,7 @@ type Evento = {
 // Agrupaciones de filtro → qué tipos incluye cada una
 const FILTROS: { key: string; label: string; tipos: string[] | null }[] = [
   { key: 'todo', label: 'Todo', tipos: null },
+  { key: 'xp', label: '✨ XP', tipos: ['xp'] },
   { key: 'publicacion', label: '📤 Publicaciones', tipos: ['publicacion'] },
   { key: 'cliente', label: '👤 Clientes', tipos: ['cliente'] },
   { key: 'seguimiento', label: '✅ Seguimientos', tipos: ['seguimiento', 'recordatorio'] },
@@ -127,6 +129,7 @@ export default function UsuarioHistorial() {
       {resumen && (
         <>
           <View style={s.statsGrid}>
+            <StatCard label="XP total" valor={(resumen.xp_total ?? 0).toLocaleString() + ' XP'} color="#c9a84c" />
             <StatCard label="Tiempo conectado" valor={formatMinutos(resumen.minutos_total)} color="#2e7d32" />
             <StatCard label="Publicaciones" valor={String(resumen.publicaciones)} color={PURPLE} />
             <StatCard label="Clientes" valor={String(resumen.clientes)} color="#1976D2" />
@@ -134,7 +137,6 @@ export default function UsuarioHistorial() {
             <StatCard label="Vistas de ficha" valor={String(resumen.vistas)} color="#00838F" />
             <StatCard label="Descargas" valor={String(resumen.descargas)} color="#D84315" />
             <StatCard label="Certificados" valor={String(resumen.certificados)} color="#7B1FA2" />
-            <StatCard label="Seguim. pend." valor={String(resumen.seguimientos_pendientes)} color="#888" />
           </View>
           <View style={[s.metaBox, { backgroundColor: c.card, borderColor: c.border }]}>
             <Text style={[s.metaTxt, { color: c.textMute }]}>
@@ -179,16 +181,19 @@ export default function UsuarioHistorial() {
         keyExtractor={(_, i) => String(i)}
         ListHeaderComponent={header}
         contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 16 }}
-        renderItem={({ item }) => (
-          <View style={[s.evento, { borderBottomColor: c.border }]}>
-            <Text style={s.eventoIcono}>{item.icono}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.eventoTitulo, { color: c.text }]}>{item.titulo}</Text>
-              {item.detalle ? <Text style={[s.eventoDetalle, { color: c.textMute }]} numberOfLines={2}>{item.detalle}</Text> : null}
+        renderItem={({ item }) => {
+          const esXp = item.tipo === 'xp'
+          return (
+            <View style={[s.evento, { borderBottomColor: c.border }, esXp && s.eventoXp]}>
+              <Text style={s.eventoIcono}>{item.icono}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.eventoTitulo, { color: esXp ? '#c9a84c' : c.text }]}>{item.titulo}</Text>
+                {item.detalle ? <Text style={[s.eventoDetalle, { color: c.textMute }]} numberOfLines={2}>{item.detalle}</Text> : null}
+              </View>
+              <Text style={[s.eventoFecha, { color: c.textMute }]}>{fechaCompleta(item.fecha)}</Text>
             </View>
-            <Text style={[s.eventoFecha, { color: c.textMute }]}>{fechaCompleta(item.fecha)}</Text>
-          </View>
-        )}
+          )
+        }}
         ListEmptyComponent={
           <Text style={[s.vacio, { color: c.textMute }]}>Sin actividad registrada para este filtro.</Text>
         }
@@ -229,7 +234,8 @@ const s = StyleSheet.create({
   chip: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 6 },
   chipTxt: { fontSize: 12, fontWeight: '600' },
 
-  evento: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, borderBottomWidth: 1 },
+  evento:    { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, borderBottomWidth: 1 },
+  eventoXp:  { backgroundColor: '#c9a84c08' },
   eventoIcono: { fontSize: 20, width: 26, textAlign: 'center' },
   eventoTitulo: { fontSize: 14, fontWeight: '700' },
   eventoDetalle: { fontSize: 12, marginTop: 1 },

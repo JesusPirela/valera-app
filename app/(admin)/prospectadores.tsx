@@ -34,10 +34,10 @@ type Prospectador = {
   app_platform: string | null
 }
 
-const PLATAFORMA_LABEL: Record<string, string> = {
-  ios:     'iOS',
-  android: 'Android',
-  web:     'Web',
+const PLATAFORMA_BADGE: Record<string, { label: string; bg: string; color: string }> = {
+  ios:     { label: 'iOS',     bg: '#f0f0f5', color: '#3c3c8e' },
+  android: { label: 'Android', bg: '#e8f5e9', color: '#2e7d32' },
+  web:     { label: 'Web',     bg: '#e3f2fd', color: '#1565c0' },
 }
 
 type Credenciales = {
@@ -101,14 +101,27 @@ const ROLES_SELECTOR_CAMBIO: { value: RolUsuario; label: string }[] = [
   { value: 'asesor', label: 'Asesor' },
 ]
 
-function tiempoRelativo(fechaISO: string): string {
+function tiempoConcreto(fechaISO: string): string {
   const ahora = new Date()
   const fecha = new Date(fechaISO)
-  const diffDias = Math.floor((ahora.getTime() - fecha.getTime()) / 86400000)
-  if (diffDias === 0) return 'Hoy'
-  if (diffDias === 1) return 'Ayer'
-  if (diffDias < 30) return `Hace ${diffDias} días`
-  return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
+  const diffMs  = ahora.getTime() - fecha.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const hora    = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+  if (diffMin < 1)  return 'ahora mismo'
+  if (diffMin < 60) return `hace ${diffMin} min`
+  const diffDias = Math.floor(diffMs / 86400000)
+  if (diffDias === 0) return `Hoy ${hora}`
+  if (diffDias === 1) return `Ayer ${hora}`
+  if (diffDias < 7)   return fecha.toLocaleDateString('es-MX', { weekday: 'short' }) + ` ${hora}`
+  return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) + ` · ${hora}`
+}
+
+function estadoConexion(lastSeen: string | null): { color: string; texto: string; bg: string } {
+  if (!lastSeen) return { color: '#aaa', texto: 'Sin conexión', bg: '#f5f5f5' }
+  const diffMin = Math.floor((Date.now() - new Date(lastSeen).getTime()) / 60000)
+  if (diffMin < 10)  return { color: '#2e7d32', texto: 'En línea',  bg: '#e8f5e9' }
+  if (diffMin < 60)  return { color: '#e65100', texto: 'Hace poco', bg: '#fff3e0' }
+  return { color: '#78909c', texto: 'Desconectado', bg: '#f5f5f5' }
 }
 
 function generarPassword(): string {
@@ -404,17 +417,42 @@ export default function Prospectadores() {
                   <Text style={styles.cardIconText}>{(item.nombre || item.email)[0].toUpperCase()}</Text>
                 </View>
                 <View style={styles.cardInfo}>
-                  <Text style={[styles.cardNombre, { color: c.text }]}>{item.nombre || item.email}</Text>
+                  {/* Nombre + indicador online */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Text style={[styles.cardNombre, { color: c.text }]}>{item.nombre || item.email}</Text>
+                    {(() => {
+                      const est = estadoConexion(item.last_seen)
+                      return (
+                        <View style={[styles.onlinePill, { backgroundColor: est.bg }]}>
+                          <View style={[styles.onlineDot, { backgroundColor: est.color }]} />
+                          <Text style={[styles.onlineTxt, { color: est.color }]}>{est.texto}</Text>
+                        </View>
+                      )
+                    })()}
+                  </View>
                   {item.nombre ? <Text style={[styles.cardEmail, { color: c.textMute }]}>{item.email}</Text> : null}
-                  <Text style={[styles.cardFecha, { color: c.textMute }]}>Alta: {tiempoRelativo(item.created_at)}</Text>
-                  <Text style={[styles.cardFecha, { color: item.last_seen ? '#1a6470' : '#bbb' }]}>
-                    {item.last_seen ? `Última conexión: ${tiempoRelativo(item.last_seen)}` : 'Sin conexión registrada'}
+
+                  {/* Última conexión precisa */}
+                  <Text style={[styles.cardFecha, { color: c.textMute }]}>
+                    {item.last_seen
+                      ? `Últ. conexión: ${tiempoConcreto(item.last_seen)}`
+                      : 'Sin conexión registrada'}
                   </Text>
-                  {item.app_version ? (
-                    <Text style={[styles.cardFecha, { color: c.textMute }]}>
-                      📱 {PLATAFORMA_LABEL[item.app_platform ?? ''] ?? item.app_platform ?? '?'} · v{item.app_version}
-                    </Text>
-                  ) : null}
+
+                  {/* Plataforma + versión */}
+                  {item.app_platform ? (() => {
+                    const badge = PLATAFORMA_BADGE[item.app_platform] ?? { label: item.app_platform, bg: '#eee', color: '#555' }
+                    return (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                        <View style={[styles.plataformaBadge, { backgroundColor: badge.bg }]}>
+                          <Text style={[styles.plataformaTxt, { color: badge.color }]}>{badge.label}</Text>
+                        </View>
+                        {item.app_version
+                          ? <Text style={[styles.cardFecha, { color: c.textMute }]}>v{item.app_version}</Text>
+                          : null}
+                      </View>
+                    )
+                  })() : null}
                 </View>
                 <TouchableOpacity
                   style={[styles.rolBadge, ROL_BADGE[item.role] ?? ROL_BADGE.prospectador]}
@@ -837,6 +875,18 @@ const styles = StyleSheet.create({
   cardNombre: { fontSize: 15, fontWeight: '700' },
   cardEmail:  { fontSize: 11, marginTop: 1 },
   cardFecha:  { fontSize: 11, marginTop: 2 },
+
+  onlinePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2,
+  },
+  onlineDot: { width: 6, height: 6, borderRadius: 3 },
+  onlineTxt: { fontSize: 10, fontWeight: '700' },
+
+  plataformaBadge: {
+    borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2,
+  },
+  plataformaTxt: { fontSize: 10, fontWeight: '700' },
 
   rolBadge: {
     borderRadius: 6,
