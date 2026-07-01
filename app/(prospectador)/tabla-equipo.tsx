@@ -108,12 +108,10 @@ export default function TablaEquipo() {
     if (colapsados[section.title]) return null
 
     const headers = data?.headers ?? []
-    // Columnas 1+ son los atributos del modelo
+    // Columnas 1+ son los atributos del modelo — mostrar TODOS los no vacíos
     const campos = headers.slice(1).map((h, i) => ({ label: h, value: item[i + 1] ?? '' }))
       .filter(x => x.value.trim() && x.value !== '—' && x.value !== '-')
 
-    const precioEntry = campos.find(x => esPrecio(x.value, x.label))
-    const otrosCampos = campos.filter(x => x !== precioEntry)
     const esUltimo = index === section.data.length - 1
 
     return (
@@ -128,18 +126,24 @@ export default function TablaEquipo() {
             <View style={[s.modeloIdx, { backgroundColor: TEAL + '22' }]}>
               <Text style={[s.modeloIdxTxt, { color: TEAL }]}>{index + 1}</Text>
             </View>
-            {precioEntry && (
-              <Text style={s.modeloPrecio}>{formatearPrecio(precioEntry.value)}</Text>
-            )}
           </View>
-          {otrosCampos.length > 0 && (
+          {campos.length > 0 && (
             <View style={s.camposWrap}>
-              {otrosCampos.map((campo, i) => (
-                <View key={i} style={[s.campo, { borderColor: c.border }]}>
-                  <Text style={[s.campoLabel, { color: c.textMute }]}>{campo.label}</Text>
-                  <Text style={[s.campoVal, { color: c.text }]} numberOfLines={2}>{campo.value}</Text>
-                </View>
-              ))}
+              {campos.map((campo, i) => {
+                const esPrecioCol = esPrecio(campo.value, campo.label)
+                return (
+                  <View key={i} style={[
+                    s.campo,
+                    { borderColor: esPrecioCol ? TEAL : c.border },
+                    esPrecioCol && { backgroundColor: TEAL + '12' },
+                  ]}>
+                    <Text style={[s.campoLabel, { color: esPrecioCol ? TEAL : c.textMute }]}>{campo.label}</Text>
+                    <Text style={[s.campoVal, { color: esPrecioCol ? TEAL : c.text, fontWeight: esPrecioCol ? '900' : '600' }]} numberOfLines={2}>
+                      {esPrecioCol ? formatearPrecio(campo.value) : campo.value}
+                    </Text>
+                  </View>
+                )
+              })}
             </View>
           )}
         </View>
