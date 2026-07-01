@@ -49,10 +49,18 @@ export default function TablaEquipo() {
   const grupos: Grupo[] = useMemo(() => {
     if (!data) return []
     const q = normalizar(busqueda)
+
+    // Fill-forward: celdas combinadas en Sheets exportan vacío para las filas siguientes
+    let lastDesarrollo = ''
+    const filledRows = data.rows.map(row => {
+      const d = row[0]?.trim()
+      if (d) lastDesarrollo = d
+      return lastDesarrollo ? [lastDesarrollo, ...row.slice(1)] : row
+    })
+
     const map = new Map<string, string[][]>()
-    for (const row of data.rows) {
-      const nombre = row[0]?.trim() || '—'
-      // Para búsqueda: incluir el grupo si el nombre del desarrollo OR algún campo del modelo coincide
+    for (const row of filledRows) {
+      const nombre = row[0]?.trim() || 'Sin nombre'
       if (q && !row.some(cell => normalizar(cell).includes(q))) continue
       if (!map.has(nombre)) map.set(nombre, [])
       map.get(nombre)!.push(row)
