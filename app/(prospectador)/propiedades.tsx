@@ -909,6 +909,14 @@ export default function ProspectadorPropiedades() {
               <Ionicons name="time-outline" size={14} color="#7b5ea7" />
               <Text style={[styles.zonasToggleText, { color: '#7b5ea7' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Historial</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.zonasToggle, { borderColor: '#1976D2' }]}
+              onPress={() => router.push('/(prospectador)/zonas')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="locate-outline" size={14} color="#1976D2" />
+              <Text style={[styles.zonasToggleText, { color: '#1976D2' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Zonas</Text>
+            </TouchableOpacity>
           </View>
         </View>
 

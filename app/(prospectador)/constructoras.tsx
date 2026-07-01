@@ -104,13 +104,6 @@ export default function Constructoras() {
           </View>
           <View style={styles.introActions}>
             <TouchableOpacity
-              style={[styles.accionBtn, { borderColor: '#1a6470' }]}
-              onPress={() => router.push('/(prospectador)/zonas')}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.accionBtnTxt, { color: '#1a6470' }]}>📍 Zonas</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
               style={[styles.accionBtn, { borderColor: '#c9a84c' }]}
               onPress={() => router.push('/(prospectador)/tabla-equipo')}
               activeOpacity={0.8}
@@ -130,17 +123,30 @@ export default function Constructoras() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-          {grupos.map((g) => {
+          {grupos.map((g, idx) => {
             const abierta = abiertas[g.nombre] ?? false
+            const popularidad = idx === 0 ? { badge: '🏆', color: '#c9a84c', borderColor: '#c9a84c' }
+              : idx === 1 ? { badge: '🥈', color: '#8fa3aa', borderColor: '#8fa3aa' }
+              : idx === 2 ? { badge: '🥉', color: '#c07b4f', borderColor: '#c07b4f' }
+              : null
             return (
               <View key={g.nombre} style={styles.grupo}>
                 <TouchableOpacity
-                  style={[styles.grupoHeader, { backgroundColor: c.card, borderColor: c.border }]}
+                  style={[
+                    styles.grupoHeader,
+                    { backgroundColor: c.card, borderColor: popularidad?.borderColor ?? c.border },
+                    popularidad && { borderWidth: 1.8 },
+                  ]}
                   onPress={() => setAbiertas((s) => ({ ...s, [g.nombre]: !abierta }))}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.grupoTitulo, { color: c.text }]}>{abierta ? '▼' : '▶'}  {g.nombre}</Text>
-                  <Text style={styles.grupoMeta}>{g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}</Text>
+                  {popularidad && (
+                    <Text style={[styles.popularBadge, { backgroundColor: popularidad.color + '22', color: popularidad.color }]}>
+                      {popularidad.badge} Top
+                    </Text>
+                  )}
+                  <Text style={[styles.grupoMeta, { color: popularidad?.color ?? '#1a6470' }]}>{g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}</Text>
                 </TouchableOpacity>
 
                 {abierta && g.modelos.map((m) => {
@@ -197,8 +203,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
   },
-  grupoTitulo: { fontSize: 15, fontWeight: '800' },
-  grupoMeta: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
+  grupoTitulo: { flex: 1, fontSize: 15, fontWeight: '800' },
+  grupoMeta: { fontSize: 12, fontWeight: '700' },
+  popularBadge: { fontSize: 11, fontWeight: '800', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, marginRight: 4 },
 
   modeloCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
