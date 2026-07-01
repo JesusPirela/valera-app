@@ -62,13 +62,11 @@ export default function MisPublicaciones() {
     const cover = prop?.propiedad_imagenes?.length
       ? [...prop.propiedad_imagenes].sort((a, b) => a.orden - b.orden)[0]?.url
       : null
-    const disponible = prop != null
     return (
       <TouchableOpacity
         style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}
-        activeOpacity={disponible ? 0.85 : 1}
-        disabled={!disponible}
-        onPress={() => disponible && router.push(`/(prospectador)/detalle-propiedad?id=${item.propiedad_id}` as any)}
+        activeOpacity={0.85}
+        onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.propiedad_id}` as any)}
       >
         {cover
           ? <Image source={{ uri: thumb(cover, { width: 200, quality: 60 }) }} style={s.img} resizeMode="cover" />
@@ -88,6 +86,7 @@ export default function MisPublicaciones() {
               <Text style={[s.fecha, { color: c.textSub }]}>Última: {formatFecha(item.fecha_publicacion)}</Text>
             )}
           </View>
+          <Text style={s.verHint}>Ver propiedad ›</Text>
         </View>
       </TouchableOpacity>
     )
@@ -166,6 +165,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 3,
   },
   fecha: { fontSize: 11 },
+  verHint: { fontSize: 11, fontWeight: '700', color: '#1a6470', marginTop: 6 },
   vacioTitulo: { fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 6 },
   vacioTxt: { fontSize: 13, textAlign: 'center', lineHeight: 19 },
 })
