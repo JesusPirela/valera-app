@@ -17,6 +17,7 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
 import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueClienteUpdate } from '../../lib/offline-queue'
+import { conTimeout } from '../../lib/redIntentos'
 import { puedeEnviarClienteAChatbot } from '../../lib/permisos'
 
 type Cliente = {
@@ -211,6 +212,9 @@ export default function CRM() {
   const [editCell, setEditCell] = useState<{ id: string; col: string } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [savingCell, setSavingCell] = useState(false)
+  // Confirmación visible tras guardar una celda: 'ok' (guardado) o 'pendiente'
+  // (no llegó al servidor, quedó en cola y se reintenta solo).
+  const [savedToast, setSavedToast] = useState<'ok' | 'pendiente' | null>(null)
   const [cellPicker, setCellPicker] = useState<{
     id: string; col: string; label: string
     options: { value: string | null; label: string; color?: string }[]
@@ -398,32 +402,53 @@ export default function CRM() {
     notas: 'notas', zona: 'zona_busqueda', presupuesto: 'presupuesto',
   }
 
+  function mostrarGuardado(t: 'ok' | 'pendiente') {
+    setSavedToast(t)
+    setTimeout(() => setSavedToast(null), 2500)
+  }
+
   async function guardarCelda(id: string, col: string, value: string | null) {
     const campo = COL_FIELD[col]
     if (!campo) return
     const estadoPrevio = clientes.find(cl => cl.id === id)?.estado
     setSavingCell(true)
-    // Actualización optimista inmediata en cache
-    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v2'], (old) =>
+    // Actualización optimista inmediata en la cache activa (v3).
+    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v3'], (old) =>
       (old ?? []).map(cl => cl.id === id ? { ...cl, [campo]: value } as Cliente : cl)
     )
 
-    if (!isOnline) {
-      // Sin conexión: encolar y salir; el banner mostrará el pendiente
+    const encolar = async () => {
       await enqueueClienteUpdate(id, { [campo]: value })
       await refreshPending()
-      setSavingCell(false)
-      setEditCell(null)
+    }
+
+    if (!isOnline) {
+      await encolar()
+      setSavingCell(false); setEditCell(null)
+      mostrarGuardado('pendiente')
       return
     }
 
-    const { error } = await supabase.from('clientes').update({ [campo]: value }).eq('id', id)
-    if (error) {
-      const m = `No se pudo guardar: ${error.message}`
-      Platform.OS === 'web' ? window.alert(m) : Alert.alert('Error', m)
-      await refetch() // revierte al estado real si falla
-    } else {
-      // Valera Coins al cambiar de etapa a cita agendada / venta cerrada
+    // Escritura con timeout + 1 reintento. Sin timeout, en la app nativa el
+    // lock de sesión puede colgar el update indefinidamente y el cambio se
+    // perdía en silencio (se veía guardado por el optimista pero al recargar
+    // revertía). Si aun así no llega, se ENCOLA para reintentarlo solo —
+    // nunca se pierde.
+    let ok = false
+    let errServidor = ''
+    for (let intento = 1; intento <= 2; intento++) {
+      try {
+        const { error } = await conTimeout(
+          supabase.from('clientes').update({ [campo]: value }).eq('id', id),
+          12_000,
+        )
+        if (!error) { ok = true; break }
+        errServidor = error.message  // error real del servidor: no reintentar
+        break
+      } catch { /* timeout / caída de red: reintentar una vez */ }
+    }
+
+    if (ok) {
       if (campo === 'estado' && value !== estadoPrevio) {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
@@ -436,9 +461,18 @@ export default function CRM() {
         }
       }
       queryClient.invalidateQueries({ queryKey: ['clientes'] })
+      mostrarGuardado('ok')
+    } else if (errServidor) {
+      // Error real del servidor (validación/permisos): avisar y revertir.
+      const m = `No se pudo guardar: ${errServidor}`
+      Platform.OS === 'web' ? window.alert(m) : Alert.alert('Error', m)
+      await refetch()
+    } else {
+      // Timeout / red inestable: no perder el cambio → dejarlo en cola.
+      await encolar()
+      mostrarGuardado('pendiente')
     }
-    setSavingCell(false)
-    setEditCell(null)
+    setSavingCell(false); setEditCell(null)
   }
 
   function abrirEdicion(item: Cliente, col: string) {
@@ -612,6 +646,13 @@ export default function CRM() {
     <>
       <OfflineBanner />
       <View style={[s.container, { backgroundColor: c.bg }]}>
+        {savedToast && (
+          <View style={[s.savedToast, savedToast === 'ok' ? s.savedToastOk : s.savedToastPend]} pointerEvents="none">
+            <Text style={s.savedToastTxt}>
+              {savedToast === 'ok' ? '✓ Guardado' : '⏳ Guardado — se sincronizará al reconectar'}
+            </Text>
+          </View>
+        )}
 
         {/* ── KPI strip (todos clickeables) ── */}
         <View style={[s.kpiStrip, { backgroundColor: c.card, borderBottomColor: c.border }]}>
@@ -1338,6 +1379,15 @@ export default function CRM() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f1f5f9' },
+  savedToast: {
+    position: 'absolute', bottom: 28, alignSelf: 'center', zIndex: 999,
+    paddingHorizontal: 18, paddingVertical: 10, borderRadius: 24,
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 8,
+    maxWidth: '90%',
+  },
+  savedToastOk: { backgroundColor: '#1a6470' },
+  savedToastPend: { backgroundColor: '#b9770a' },
+  savedToastTxt: { color: '#fff', fontWeight: '700', fontSize: 13, textAlign: 'center' },
 
   addBtn: {
     width: 42, height: 42, backgroundColor: '#1a6470',
