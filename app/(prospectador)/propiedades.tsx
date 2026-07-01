@@ -442,6 +442,7 @@ export default function ProspectadorPropiedades() {
   const publicaciones = pubData?.publicacionesMap ?? {}
   const publicacionFechas = pubData?.publicacionFechasMap ?? {}
   const esAdmin = queryData?.rol === 'admin'
+  const esAsesorOMas = ['asesor', 'supervisor', 'admin'].includes(queryData?.rol ?? '')
 
   async function publicarPropiedad(propiedadId: string) {
     if (togglingRef.current.has(propiedadId)) return
@@ -890,14 +891,16 @@ export default function ProspectadorPropiedades() {
                 Ver zonas
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.zonasToggle, { borderColor: '#22a35e' }]}
-              onPress={() => router.push('/(prospectador)/mapa')}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="location-outline" size={14} color="#22a35e" />
-              <Text style={[styles.zonasToggleText, { color: '#22a35e' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Mapa lonas</Text>
-            </TouchableOpacity>
+            {esAsesorOMas && (
+              <TouchableOpacity
+                style={[styles.zonasToggle, { borderColor: '#22a35e' }]}
+                onPress={() => router.push('/(prospectador)/mapa')}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="location-outline" size={14} color="#22a35e" />
+                <Text style={[styles.zonasToggleText, { color: '#22a35e' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Mapa lonas</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[styles.zonasToggle, { borderColor: '#7b5ea7' }]}
               onPress={() => router.push('/(prospectador)/historial-publicaciones')}

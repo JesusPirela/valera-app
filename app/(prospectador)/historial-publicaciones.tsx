@@ -39,10 +39,12 @@ export default function HistorialPublicaciones() {
   const [offset, setOffset] = useState(0)
   const [busqueda, setBusqueda] = useState('')
   const [esStaff, setEsStaff] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useFocusEffect(useCallback(() => {
     setOffset(0)
     setEntradas([])
+    setError(null)
     cargar(0, true)
   }, []))
 
@@ -67,7 +69,7 @@ export default function HistorialPublicaciones() {
     })
 
     if (error) {
-      console.error('historial-publicaciones:', error.message)
+      setError(error.message)
       setLoading(false)
       setCargandoMas(false)
       return
@@ -140,6 +142,18 @@ export default function HistorialPublicaciones() {
         <View style={s.center}>
           <ActivityIndicator size="large" color={TEAL} />
         </View>
+      ) : error ? (
+        <View style={s.center}>
+          <Text style={{ fontSize: 36, marginBottom: 10 }}>⚠️</Text>
+          <Text style={[s.emptyTxt, { color: c.text, fontWeight: '700', marginBottom: 6 }]}>Error al cargar</Text>
+          <Text style={[s.emptyTxt, { color: c.textMute, fontSize: 12 }]}>{error}</Text>
+          <TouchableOpacity
+            style={[s.retryBtn, { backgroundColor: TEAL, marginTop: 16 }]}
+            onPress={() => { setError(null); cargar(0, true) }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Reintentar</Text>
+          </TouchableOpacity>
+        </View>
       ) : filtradas.length === 0 ? (
         <View style={s.center}>
           <Text style={{ fontSize: 40, marginBottom: 10 }}>📭</Text>
@@ -184,6 +198,7 @@ const s = StyleSheet.create({
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyTxt: { fontSize: 14, textAlign: 'center' },
+  retryBtn: { borderRadius: 10, paddingHorizontal: 24, paddingVertical: 10 },
 
   total: { fontSize: 11, marginBottom: 8, marginTop: 4 },
 
