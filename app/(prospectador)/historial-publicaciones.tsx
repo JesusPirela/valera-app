@@ -1,12 +1,13 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator,
-  TouchableOpacity, TextInput,
+  TouchableOpacity, TextInput, Image,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { normalizar } from '../../lib/texto'
+import { thumb } from '../../lib/img'
 
 type Entrada = {
   id: string
@@ -40,13 +41,31 @@ export default function HistorialPublicaciones() {
   const [busqueda, setBusqueda] = useState('')
   const [esStaff, setEsStaff] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Portada (primera imagen) por propiedad_id, cargada aparte de la RPC.
+  const [covers, setCovers] = useState<Record<string, string>>({})
 
   useFocusEffect(useCallback(() => {
     setOffset(0)
     setEntradas([])
+    setCovers({})
     setError(null)
     cargar(0, true)
   }, []))
+
+  async function cargarPortadas(ids: string[]) {
+    const nuevos = [...new Set(ids)].filter(Boolean)
+    if (!nuevos.length) return
+    const { data } = await supabase
+      .from('propiedad_imagenes')
+      .select('propiedad_id, url, orden')
+      .in('propiedad_id', nuevos)
+      .order('orden', { ascending: true })
+    const map: Record<string, string> = {}
+    for (const r of (data ?? []) as any[]) {
+      if (!map[r.propiedad_id]) map[r.propiedad_id] = r.url  // primera (orden más bajo) = portada
+    }
+    setCovers(prev => ({ ...prev, ...map }))
+  }
 
   async function cargar(off: number, reset = false) {
     if (off === 0) setLoading(true)
@@ -84,6 +103,7 @@ export default function HistorialPublicaciones() {
     setOffset(off + lista.length)
     setLoading(false)
     setCargandoMas(false)
+    cargarPortadas(lista.map(e => e.propiedad_id)).catch(() => {})
   }
 
   const filtradas = entradas.filter(e => {
@@ -97,12 +117,18 @@ export default function HistorialPublicaciones() {
     )
   })
 
-  function renderItem({ item, index }: { item: Entrada; index: number }) {
+  function renderItem({ item }: { item: Entrada; index: number }) {
+    const cover = covers[item.propiedad_id]
     return (
-      <View style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
-        <View style={[s.indexBadge, { backgroundColor: TEAL + '18' }]}>
-          <Text style={[s.indexNum, { color: TEAL }]}>{offset - entradas.length + index + 1}</Text>
-        </View>
+      <TouchableOpacity
+        style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}
+        activeOpacity={0.85}
+        onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.propiedad_id}` as any)}
+      >
+        {cover
+          ? <Image source={{ uri: thumb(cover, { width: 160, quality: 60 }) }} style={s.img} resizeMode="cover" />
+          : <View style={[s.img, s.imgPlaceholder]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
+        }
         <View style={{ flex: 1 }}>
           <View style={s.cardTop}>
             <Text style={[s.codigo, { backgroundColor: TEAL, color: '#fff' }]}>{item.codigo ?? '—'}</Text>
@@ -114,8 +140,9 @@ export default function HistorialPublicaciones() {
               👤 {item.nombre_usuario ?? item.email_usuario ?? 'Usuario desconocido'}
             </Text>
           )}
+          <Text style={s.verHint}>Ver propiedad ›</Text>
         </View>
-      </View>
+      </TouchableOpacity>
     )
   }
 
@@ -206,8 +233,9 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start', gap: 10,
     borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8,
   },
-  indexBadge: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  indexNum: { fontSize: 11, fontWeight: '800' },
+  img: { width: 72, height: 72, borderRadius: 8 },
+  imgPlaceholder: { backgroundColor: '#e8f4f8', alignItems: 'center', justifyContent: 'center' },
+  verHint: { fontSize: 11, fontWeight: '700', color: TEAL, marginTop: 6 },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   codigo: { fontSize: 11, fontWeight: '800', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 5 },
   fecha: { fontSize: 11 },
