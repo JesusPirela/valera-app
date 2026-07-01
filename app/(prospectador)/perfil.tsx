@@ -20,7 +20,9 @@ const COLORES_LIBRES = [
   '#2d6a4f', '#4a4a4a', '#5c3d99', '#c45c1a',
 ]
 
-const AVATARES_LIBRES  = ['👤','🏠','⭐','🦁','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
+// Nota: no repetir aquí emojis que existan como avatar ANIMADO (🦁, 🐺…), para
+// que no aparezca el mismo ícono en "prediseñados" y en "animados".
+const AVATARES_LIBRES  = ['👤','🏠','⭐','🐻','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
 
 const NOTO = (hex: string) => `https://fonts.gstatic.com/s/e/notoemoji/latest/${hex}/512.gif`
 
