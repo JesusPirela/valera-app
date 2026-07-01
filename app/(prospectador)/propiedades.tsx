@@ -888,7 +888,7 @@ export default function ProspectadorPropiedades() {
             >
               <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : primaryColor} />
               <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                Ver zonas
+                Mapa
               </Text>
             </TouchableOpacity>
             {esAsesorOMas && (

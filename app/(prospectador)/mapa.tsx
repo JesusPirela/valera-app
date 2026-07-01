@@ -41,6 +41,21 @@ const ZONAS_CONFIG = [
   { key: 'puebla',    label: 'Puebla',    coords: [19.0414, -98.2063]  as [number, number], color: TEAL },
 ]
 
+// Cuando zona=null, inferir por proximidad de coordenadas
+function inferirZona(lat: number, lng: number): string {
+  const CENTROS = [
+    { key: 'queretaro', lat: 20.5888, lng: -100.3899 },
+    { key: 'monterrey', lat: 25.6866, lng: -100.3161 },
+    { key: 'puebla',    lat: 19.0414, lng: -98.2063  },
+  ]
+  let best = 'queretaro', minD = Infinity
+  for (const c of CENTROS) {
+    const d = (lat - c.lat) ** 2 + (lng - c.lng) ** 2
+    if (d < minD) { minD = d; best = c.key }
+  }
+  return best
+}
+
 export default function Mapa() {
   const c = useColors()
   const [propiedades, setPropiedades] = useState<InvMapa[]>([])
@@ -75,7 +90,9 @@ export default function Mapa() {
   })
 
   const zonasParaMapa: ZonaPin[] = ZONAS_CONFIG.map(z => {
-    const propsZona = propsFiltradas.filter(p => p.zona === z.key)
+    const propsZona = propsFiltradas.filter(p =>
+      (p.zona ?? inferirZona(p.lat!, p.lng!)) === z.key
+    )
     return {
       key: z.key,
       label: z.label,
@@ -108,7 +125,8 @@ export default function Mapa() {
     }
   }).filter(z => z.count > 0)
 
-  const sinZona = propsFiltradas.filter(p => !p.zona)
+  // Con inferirZona, todas las propiedades con lat/lng tienen zona asignada
+  const sinZona: typeof propsFiltradas = []
   const totalContactadas = propsFiltradas.filter(p => p.lona_contactada).length
   const totalNoContactadas = propsFiltradas.filter(p => !p.lona_contactada).length
 

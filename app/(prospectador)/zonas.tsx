@@ -26,48 +26,73 @@ const ZONAS_CONFIG = [
   { key: 'puebla',    label: 'Puebla',    color: '#2E7D32', emoji: '🌿' },
 ]
 
-// Colonias / subzonas por ciudad — orden importa: más específico primero
+// Fraccionamientos/colonias por ciudad — ORDEN IMPORTA: más específico primero
 const SUBZONAS: Record<string, { label: string; keywords: string[] }[]> = {
   queretaro: [
-    { label: 'Juriquilla',       keywords: ['juriquilla'] },
-    { label: 'Zibatá',           keywords: ['zibatá', 'zibata'] },
-    { label: 'El Refugio',       keywords: ['el refugio', 'refugio'] },
-    { label: 'Interlomas',       keywords: ['interlomas'] },
-    { label: 'Corregidora',      keywords: ['corregidora'] },
-    { label: 'El Marqués',       keywords: ['marqués', 'marques', 'el marqués', 'el marques'] },
-    { label: 'Candiles',         keywords: ['candiles'] },
-    { label: 'Cumbres',          keywords: ['cumbres'] },
-    { label: 'Santa Fe',         keywords: ['santa fe'] },
-    { label: 'Pedregal',         keywords: ['pedregal'] },
-    { label: 'Milenio',          keywords: ['milenio'] },
-    { label: 'Constituyentes',   keywords: ['constituyentes'] },
-    { label: 'Centro Sur',       keywords: ['centro sur'] },
-    { label: 'San Juan del Río', keywords: ['san juan del río', 'san juan del rio', 'san juan'] },
-    { label: 'Tequisquiapan',    keywords: ['tequisquiapan', 'tequis'] },
-    { label: 'Centro',           keywords: ['centro histórico', 'centro historico', 'centro'] },
+    // Juriquilla y alrededores
+    { label: 'Juriquilla',              keywords: ['juriquilla', 'real de juriquilla', 'lomas de juriquilla', 'villas juriquilla', 'privadas juriquilla'] },
+    { label: 'Zibatá',                  keywords: ['zibatá', 'zibata', 'zibata norte'] },
+    // El Marqués — fraccionamientos específicos (antes del genérico)
+    { label: 'El Mirador',              keywords: ['el mirador', 'fraccionamiento el mirador', 'fracc. el mirador'] },
+    { label: 'Real Solare',             keywords: ['real solare', 'solare'] },
+    { label: 'Rincones del Marqués',    keywords: ['rincones del marqués', 'rincones del marques', 'rincones del marqués'] },
+    { label: 'Zakia',                   keywords: ['zakia'] },
+    { label: 'Cañadas del Lago',        keywords: ['cañadas del lago', 'cañadas de lago'] },
+    { label: 'El Paraíso',              keywords: ['el paraíso', 'el paraiso', 'paraíso residencial', 'paraiso residencial'] },
+    { label: 'La Cañada',               keywords: ['la cañada', 'fracc. la cañada', 'fraccionamiento la cañada'] },
+    { label: 'El Campanario',           keywords: ['el campanario', 'campanario'] },
+    { label: 'Hacienda Galindo',        keywords: ['hacienda galindo', 'galindo'] },
+    { label: 'El Rosal',                keywords: ['el rosal', 'fracc. el rosal'] },
+    { label: 'Privanzas',               keywords: ['privanzas'] },
+    { label: 'Puerta Real',             keywords: ['puerta real'] },
+    { label: 'Villas del Mesón',        keywords: ['villas del mesón', 'villas del meson'] },
+    // Resto de colonias y fraccionamientos de Querétaro
+    { label: 'El Refugio',              keywords: ['el refugio', 'refugio'] },
+    { label: 'Interlomas',              keywords: ['interlomas'] },
+    { label: 'Corregidora',             keywords: ['el pueblito', 'corregidora', 'loma dorada'] },
+    { label: 'Candiles',                keywords: ['candiles', 'fracc. candiles'] },
+    { label: 'Cumbres',                 keywords: ['cumbres', 'cumbres del lago'] },
+    { label: 'Santa Fe',                keywords: ['santa fe'] },
+    { label: 'Pedregal',                keywords: ['pedregal'] },
+    { label: 'Milenio',                 keywords: ['milenio'] },
+    { label: 'Constituyentes',          keywords: ['constituyentes'] },
+    { label: 'Centro Sur',              keywords: ['centro sur'] },
+    { label: 'Punta Juriquilla',        keywords: ['punta juriquilla'] },
+    { label: 'El Salitre',              keywords: ['el salitre', 'salitre'] },
+    { label: 'Jurica',                  keywords: ['jurica'] },
+    { label: 'El Marqués',              keywords: ['el marqués', 'el marques', 'marqués', 'marques'] }, // fallback genérico
+    { label: 'San Juan del Río',        keywords: ['san juan del río', 'san juan del rio', 'san juan'] },
+    { label: 'Tequisquiapan',           keywords: ['tequisquiapan', 'tequis'] },
+    { label: 'Centro',                  keywords: ['centro histórico', 'centro historico', 'centro'] },
   ],
   monterrey: [
-    { label: 'San Pedro G.G.',   keywords: ['san pedro', 'garza garcia', 'garza garcía'] },
-    { label: 'Santa Catarina',   keywords: ['santa catarina'] },
-    { label: 'Guadalupe',        keywords: ['guadalupe'] },
-    { label: 'Apodaca',          keywords: ['apodaca'] },
-    { label: 'San Nicolás',      keywords: ['san nicolás', 'san nicolas'] },
-    { label: 'Escobedo',         keywords: ['escobedo'] },
-    { label: 'Centro MTY',       keywords: ['centro'] },
+    { label: 'San Pedro G.G.',          keywords: ['san pedro', 'garza garcia', 'garza garcía', 'valle oriente', 'del valle'] },
+    { label: 'Carretera Nacional',      keywords: ['carretera nacional', 'lomas de valle verde', 'sierra madre'] },
+    { label: 'Santa Catarina',          keywords: ['santa catarina'] },
+    { label: 'Guadalupe',               keywords: ['guadalupe'] },
+    { label: 'Apodaca',                 keywords: ['apodaca', 'cumbres de apodaca'] },
+    { label: 'San Nicolás',             keywords: ['san nicolás', 'san nicolas'] },
+    { label: 'Escobedo',                keywords: ['escobedo'] },
+    { label: 'Centro MTY',              keywords: ['centro', 'monterrey centro'] },
   ],
   puebla: [
-    { label: 'Cholula',          keywords: ['cholula', 'san andrés', 'san andres'] },
-    { label: 'Angelópolis',      keywords: ['angelópolis', 'angelopolis'] },
-    { label: 'Atlixco',          keywords: ['atlixco'] },
-    { label: 'Tehuacán',         keywords: ['tehuacán', 'tehuacan'] },
-    { label: 'Centro Puebla',    keywords: ['centro'] },
+    { label: 'Cholula',                 keywords: ['cholula', 'san andrés', 'san andres', 'santa clara', 'ex-hacienda'] },
+    { label: 'Angelópolis',             keywords: ['angelópolis', 'angelopolis', 'lomas de angelópolis', 'lomas de angelopolis'] },
+    { label: 'Atlixco',                 keywords: ['atlixco'] },
+    { label: 'Tehuacán',                keywords: ['tehuacán', 'tehuacan'] },
+    { label: 'Reserva Territorial',     keywords: ['reserva territorial', 'atlixcáyotl', 'atlixcayotl'] },
+    { label: 'Centro Puebla',           keywords: ['centro histórico puebla', 'centro puebla', 'centro'] },
   ],
 }
 
 function detectarSubzona(direccion: string, zona: string): string {
   const dir = (direccion ?? '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents for matching
   for (const sz of (SUBZONAS[zona] ?? [])) {
-    if (sz.keywords.some(kw => dir.includes(kw))) return sz.label
+    if (sz.keywords.some(kw => {
+      const kwn = kw.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      return dir.includes(kwn)
+    })) return sz.label
   }
   return 'Otras'
 }
@@ -99,15 +124,19 @@ export default function Zonas() {
     rolActual = vistaComo ?? rolActual
     setRol(rolActual)
 
-    const { data } = await supabase
-      .from('propiedades')
-      .select('id, codigo, titulo, precio, tipo, direccion, zona, nombre_constructora, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, orden)')
-      .eq('es_constructora', true)
+    // Dos consultas paralelas en rangos para superar el límite de 1000 filas de PostgREST
+    const SELECT = 'id, codigo, titulo, precio, tipo, direccion, zona, nombre_constructora, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, orden)'
+    const BASE = supabase.from('propiedades').select(SELECT)
       .eq('es_inventario', false)
       .not('zona', 'is', null)
       .order('precio', { ascending: true, nullsFirst: false })
 
-    let lista = ((data ?? []) as any[]).map((p: any) => ({
+    const [r1, r2] = await Promise.all([
+      BASE.range(0, 999),
+      BASE.range(1000, 1999),
+    ])
+
+    let lista = [...(r1.data ?? []), ...(r2.data ?? [])].map((p: any) => ({
       ...p,
       inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
     })) as Propiedad[]
@@ -124,6 +153,7 @@ export default function Zonas() {
   const arbol: Record<string, Record<string, Propiedad[]>> = {}
   for (const p of propiedades) {
     const zona = p.zona ?? 'sin_zona'
+    if (zona === 'sin_zona') continue
     const sub = detectarSubzona(p.direccion, zona)
     if (!arbol[zona]) arbol[zona] = {}
     if (!arbol[zona][sub]) arbol[zona][sub] = []
@@ -134,7 +164,7 @@ export default function Zonas() {
     <View style={[s.container, { backgroundColor: c.bg }]}>
       <View style={s.intro}>
         <Text style={[s.introTitle, { color: c.text }]}>📍 Zonas</Text>
-        <Text style={[s.introSub, { color: c.textMute }]}>Explora las propiedades por colonia y ciudad.</Text>
+        <Text style={[s.introSub, { color: c.textMute }]}>Explora propiedades por colonia y fraccionamiento.</Text>
       </View>
 
       {loading ? (
@@ -151,8 +181,12 @@ export default function Zonas() {
             const totalZona = Object.values(subzonaData).reduce((a, b) => a + b.length, 0)
             const zonaAbierta = zonasAbiertas[zConf.key] ?? false
 
-            // Ordenar subzonas por cantidad de propiedades desc
-            const subzonas = Object.entries(subzonaData).sort((a, b) => b[1].length - a[1].length)
+            // Ordenar subzonas: primero "Otras" al final, resto por cantidad desc
+            const subzonas = Object.entries(subzonaData).sort((a, b) => {
+              if (a[0] === 'Otras') return 1
+              if (b[0] === 'Otras') return -1
+              return b[1].length - a[1].length
+            })
 
             return (
               <View key={zConf.key} style={s.zonaWrap}>
