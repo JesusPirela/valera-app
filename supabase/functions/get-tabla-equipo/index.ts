@@ -52,10 +52,13 @@ function normalizeGroups(headers: string[], rows: string[][]): { headers: string
 
   if (groupSize < 2) return { headers, rows } // Sin patrón repetido
 
-  // Columnas del primer grupo (sin separadores)
+  // Columnas del primer grupo: incluye headers vacíos (pueden tener datos como precio)
+  // Solo excluye separadores explícitos (—, -, --)
   const templateCols: { name: string; localIdx: number }[] = []
   for (let i = 0; i < groupSize; i++) {
-    if (!isSeparator(headers[i])) templateCols.push({ name: headers[i].trim(), localIdx: i })
+    const h = headers[i].trim()
+    if (h === '—' || h === '-' || h === '--') continue
+    templateCols.push({ name: h || `col_${i}`, localIdx: i })
   }
 
   const numGroups = Math.ceil(headers.length / groupSize)
@@ -134,7 +137,7 @@ serve(async (req) => {
       .map(r => headers.map((_, i) => (r[i] ?? '').replace(/^"|"$/g, '').trim()))
 
     const result = normalizeGroups(headers, rows)
-    return json({ ...result, _debug: { rawHeaders: headers, rawRow0: rows[0] } })
+    return json(result)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return json({ error: msg }, 500)

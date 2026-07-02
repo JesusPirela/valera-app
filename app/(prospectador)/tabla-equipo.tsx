@@ -8,7 +8,6 @@ import { normalizar } from '../../lib/texto'
 type TablaData = {
   headers: string[]
   rows: string[][]
-  _debug?: { rawHeaders: string[]; rawRow0: string[] }
 }
 
 type Grupo = {
@@ -203,21 +202,6 @@ export default function TablaEquipo() {
             {grupos.length} {grupos.length === 1 ? 'desarrollo' : 'desarrollos'} · {totalModelos} modelos
             {busqueda.trim() ? ` (filtrado)` : ''}
           </Text>
-          {/* DEBUG TEMPORAL — borrar después */}
-          <View style={{ marginHorizontal: 14, marginBottom: 8, padding: 8, backgroundColor: '#1a1a2e', borderRadius: 8 }}>
-            <Text style={{ color: '#aef', fontSize: 10, fontFamily: 'monospace' }}>
-              Headers ({data.headers.length}): {data.headers.join(' | ')}
-            </Text>
-            <Text style={{ color: '#fea', fontSize: 10, fontFamily: 'monospace', marginTop: 4 }}>
-              Row[0] ({data.rows[0]?.length}): {data.rows[0]?.join(' | ')}
-            </Text>
-            <Text style={{ color: '#afa', fontSize: 10, fontFamily: 'monospace', marginTop: 4 }}>
-              RAW headers ({data._debug?.rawHeaders.length}): {data._debug?.rawHeaders.slice(0,8).join(' | ')}
-            </Text>
-            <Text style={{ color: '#fca', fontSize: 10, fontFamily: 'monospace', marginTop: 4 }}>
-              RAW row[0] ({data._debug?.rawRow0?.length}): {data._debug?.rawRow0?.slice(0,8).join(' | ')}
-            </Text>
-          </View>
           <SectionList
             sections={grupos}
             keyExtractor={(item, i) => `${item[0]}_${i}`}
