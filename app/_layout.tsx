@@ -7,7 +7,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { queryClient, persister } from '../lib/queryClient'
 import { ThemeProvider, useColors } from '../lib/ThemeContext'
 import { VistaComoProvider, VISTA_COMO_KEY } from '../lib/VistaComo'
-import { actualizarNombreRole, guardarTokensSesion, accountSwitch } from '../lib/cuentas'
+import { actualizarNombreRole, guardarTokensSesion, accountSwitch, userSignOut } from '../lib/cuentas'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
@@ -184,6 +184,40 @@ export default function RootLayout() {
       await supabase.from('user_sessions').update({ fin: new Date().toISOString() }).eq('id', id)
     }
 
+    // Recupera la sesión tras un SIGNED_OUT NO solicitado por el usuario (falso
+    // positivo típico de Android: el refresh del token falla en background o por
+    // red intermitente). Reintenta con backoff y NUNCA navega al login: si el
+    // usuario no cerró sesión, no debe perderla. autoRefresh y el próximo
+    // foreground siguen reintentando aunque estos intentos fallen.
+    let recuperando = false
+    async function recuperarSesion(intento = 0) {
+      if (recuperando) return
+      recuperando = true
+      let recuperada = false
+      try {
+        try {
+          const { data: rd } = await supabase.auth.refreshSession()
+          if (rd.session) {
+            setSession(rd.session)
+            guardarTokensSesion(rd.session).catch(() => {})
+            iniciarSesion(rd.session.user.id)
+            recuperada = true
+          }
+        } catch { /* sin red / token temporalmente inválido: se reintenta */ }
+        if (!recuperada) {
+          try {
+            const { data } = await supabase.auth.getSession()
+            if (data.session) { setSession(data.session); recuperada = true }
+          } catch { /* ignorar */ }
+        }
+      } finally {
+        recuperando = false
+      }
+      if (!recuperada && intento < 6) {
+        setTimeout(() => recuperarSesion(intento + 1), Math.min(30000, 3000 * (intento + 1)))
+      }
+    }
+
     let removeWebListeners: (() => void) | null = null
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const onVisibility = () => {
@@ -260,32 +294,21 @@ export default function RootLayout() {
         // no sirve y cualquier cambio de cuenta que use el viejo fallará.
         if (session) guardarTokensSesion(session).catch(() => {})
       } else if (event === 'SIGNED_OUT') {
-        const esCambioDeCuenta = accountSwitch.pending
         cerrarSesion()
-        setSession(null)
-        if (!esCambioDeCuenta) {
-          // SIGNED_OUT puede ser falso positivo: token expirado en background,
-          // red caída durante el refresh, etc. Intentar recuperar antes de ir al login.
-          ;(async () => {
-            try {
-              // Forzar un nuevo access_token usando el refresh_token en storage.
-              const { data: rd } = await supabase.auth.refreshSession()
-              if (rd.session) {
-                setSession(rd.session)
-                guardarTokensSesion(rd.session).catch(() => {})
-                iniciarSesion(rd.session.user.id)
-                return
-              }
-            } catch {}
-            // Fallback: leer sesión directa del storage (ya está actualizada).
-            try {
-              const { data } = await supabase.auth.getSession()
-              if (data.session) { setSession(data.session); return }
-            } catch {}
-            // Sesión realmente inválida → login.
-            queryClient.clear()
-            router.replace('/(auth)/login')
-          })()
+        if (accountSwitch.pending) {
+          // Cambio de cuenta: CambiarCuenta.tsx gestiona el signIn del nuevo
+          // usuario. Solo limpiamos el estado, sin navegar ni recuperar.
+          setSession(null)
+        } else if (userSignOut.pending) {
+          // Cierre de sesión DELIBERADO del usuario (tocó "Cerrar sesión") → login.
+          setSession(null)
+          queryClient.clear()
+          router.replace('/(auth)/login')
+        } else {
+          // SIGNED_OUT NO solicitado (falso positivo de Android: token expirado en
+          // background, red caída durante el refresh…). No sacar al usuario: se
+          // conserva la sesión visible y se intenta recuperar en segundo plano.
+          recuperarSesion()
         }
       }
     })

@@ -6,6 +6,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
+import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import {
   PATRONES_ANIMADOS, baseColorDeAcento, AnimatedGradientView, AccentBackground,
@@ -613,7 +614,7 @@ export default function Perfil() {
         {/* Cerrar sesión */}
         <TouchableOpacity
           style={s.btnSalir}
-          onPress={() => supabase.auth.signOut()}
+          onPress={() => cerrarSesionUsuario()}
         >
           <Text style={s.btnSalirText}>Cerrar sesión</Text>
         </TouchableOpacity>

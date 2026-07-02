@@ -9,6 +9,24 @@ const KEY_PASS = '@valera_account_passwords'
 // de cómo el bundler (Metro/Babel) maneje los live bindings de ES modules.
 export const accountSwitch = { pending: false }
 
+// Marca que el SIGNED_OUT en curso fue provocado DELIBERADAMENTE por el usuario
+// (tocó "Cerrar sesión"). Solo en ese caso se debe navegar al login; cualquier
+// otro SIGNED_OUT (token expirado en background, red caída durante el refresh en
+// Android, etc.) es un falso positivo y debe recuperarse sin sacar al usuario.
+export const userSignOut = { pending: false }
+
+// Cierre de sesión iniciado por el usuario. Marca la intención antes de signOut()
+// para que el handler global sepa que este SIGNED_OUT sí debe ir al login.
+export async function cerrarSesionUsuario() {
+  userSignOut.pending = true
+  try {
+    await supabase.auth.signOut()
+  } finally {
+    // Red de seguridad: si por lo que sea no llega el evento, limpiar la marca.
+    setTimeout(() => { userSignOut.pending = false }, 4000)
+  }
+}
+
 export type CuentaGuardada = {
   user_id: string
   email: string

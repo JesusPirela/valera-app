@@ -3,6 +3,7 @@ import { Image, Text, TouchableOpacity, View, StyleSheet } from 'react-native'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { Stack, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme } from '../../lib/ThemeContext'
 import HeaderBack from '../../components/HeaderBack'
 
@@ -77,7 +78,7 @@ export default function AdminLayout() {
               trackColor={{ false: '#2a475e', true: '#c9a84c' }}
               thumbColor="#fff"
             />
-            <TouchableOpacity onPress={() => supabase.auth.signOut()}>
+            <TouchableOpacity onPress={() => cerrarSesionUsuario()}>
               <Text style={styles.salirText}>Salir</Text>
             </TouchableOpacity>
           </View>
