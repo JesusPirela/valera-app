@@ -795,6 +795,195 @@ export default function ProspectadorPropiedades() {
   const contentWidth = screenWidth - 64
   const cardWidth = isWeb ? (contentWidth - CARD_GAP * (numCols - 1)) / numCols : undefined
 
+  const filtrosHeader = (
+    <View>
+      <View style={[styles.quickFiltersRow, { backgroundColor: darkMode ? '#0f1e2d' : '#eef2f4' }]}>
+        {([
+          { key: 'venta',      label: 'Venta',      icon: 'home'      as const, activo: filtroOperacion === 'venta', onPress: () => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta') },
+          { key: 'renta',      label: 'Renta',      icon: 'key'       as const, activo: filtroOperacion === 'renta', onPress: () => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta') },
+          { key: 'nuevas',     label: 'Nuevas',     icon: 'sparkles'  as const, activo: filtroNueva,                 onPress: () => setFiltroNueva(v => !v) },
+          { key: 'exclusivas', label: 'Exclusivas', icon: 'star'      as const, activo: filtroExclusiva,             onPress: () => setFiltroExclusiva(v => !v) },
+        ]).map(btn => (
+          <TouchableOpacity
+            key={btn.key}
+            style={[
+              styles.quickFilterBtn,
+              { borderColor: primaryColor, backgroundColor: btn.activo ? primaryColor : (darkMode ? 'rgba(255,255,255,0.07)' : '#fff') },
+            ]}
+            onPress={btn.onPress}
+          >
+            <Ionicons name={btn.icon} size={14} color={btn.activo ? '#fff' : primaryColor} />
+            <Text
+              style={[styles.quickFilterText, { color: btn.activo ? '#fff' : primaryColor }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              maxFontSizeMultiplier={1.2}
+            >
+              {btn.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.controlsRow}>
+        <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
+          <Text style={[styles.filtrosToggleText, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+            {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
+          </Text>
+        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <TouchableOpacity
+            style={[styles.constructorasBtn, { borderColor: primaryColor }]}
+            onPress={() => router.push('/(prospectador)/constructoras')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.constructorasIcon}>🏗️</Text>
+            <Text style={[styles.constructorasTxt, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Constructoras</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.zonasToggle, { borderColor: primaryColor }, vistaZonas && { backgroundColor: primaryColor }]}
+            onPress={() => setVistaZonas(v => !v)}
+          >
+            <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : primaryColor} />
+            <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+              Mapa
+            </Text>
+          </TouchableOpacity>
+          {esAsesorOMas && (
+            <TouchableOpacity
+              style={[styles.zonasToggle, { borderColor: '#22a35e' }]}
+              onPress={() => router.push('/(prospectador)/mapa')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="location-outline" size={14} color="#22a35e" />
+              <Text style={[styles.zonasToggleText, { color: '#22a35e' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Mapa lonas</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.zonasToggle, { borderColor: '#7b5ea7' }]}
+            onPress={() => router.push('/(prospectador)/historial-publicaciones')}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="time-outline" size={14} color="#7b5ea7" />
+            <Text style={[styles.zonasToggleText, { color: '#7b5ea7' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Historial</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.zonasToggle, { borderColor: '#1976D2' }]}
+            onPress={() => router.push('/(prospectador)/zonas')}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="locate-outline" size={14} color="#1976D2" />
+            <Text style={[styles.zonasToggleText, { color: '#1976D2' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Zonas</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      {mostrarFiltros && (
+        <FiltrosPanelWrapper
+          style={isWeb ? styles.filtrosPanel : [styles.filtrosPanel, { maxHeight: windowHeight * 0.55 }]}
+          {...(isWeb ? {} : { nestedScrollEnabled: true, showsVerticalScrollIndicator: true })}
+        >
+          <Text style={styles.filtroLabel}>Tipo</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)} color={primaryColor} />
+            <FiltroChip label="Casa" active={filtroTipo === 'casa'} onPress={() => setFiltroTipo(filtroTipo === 'casa' ? null : 'casa')} color={primaryColor} />
+            <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')} color={primaryColor} />
+            <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')} color={primaryColor} />
+            <FiltroChip label="Terreno" active={filtroTipo === 'terreno'} onPress={() => setFiltroTipo(filtroTipo === 'terreno' ? null : 'terreno')} color={primaryColor} />
+          </ScrollView>
+          <Text style={styles.filtroLabel}>Precio — ordenar</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)} color={primaryColor} />
+            <FiltroChip label="Menor precio" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} color={primaryColor} />
+            <FiltroChip label="Mayor precio" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} color={primaryColor} />
+          </ScrollView>
+          <Text style={styles.filtroLabel}>Rango de precio (MXN)</Text>
+          <View style={styles.precioRangoRow}>
+            <View style={styles.precioRangoInput}>
+              <Text style={styles.precioRangoLabel}>Mínimo</Text>
+              <TextInput
+                style={[styles.precioInput, { borderColor: primaryColor + '44' }]}
+                placeholder="Ej. 500,000"
+                placeholderTextColor="#bbb"
+                value={precioMin}
+                onChangeText={(t) => setPrecioMin(formatearInputPrecio(t))}
+                keyboardType="numeric"
+                maxLength={12}
+              />
+            </View>
+            <Text style={styles.precioRangoSep}>—</Text>
+            <View style={styles.precioRangoInput}>
+              <Text style={styles.precioRangoLabel}>Máximo</Text>
+              <TextInput
+                style={[styles.precioInput, { borderColor: primaryColor + '44' }]}
+                placeholder="Ej. 3,000,000"
+                placeholderTextColor="#bbb"
+                value={precioMax}
+                onChangeText={(t) => setPrecioMax(formatearInputPrecio(t))}
+                keyboardType="numeric"
+                maxLength={12}
+              />
+            </View>
+          </View>
+          <Text style={styles.filtroLabel}>Mis propiedades</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="Todas" active={filtroPublicadas === null} onPress={() => setFiltroPublicadas(null)} color={primaryColor} />
+            <FiltroChip label="Publicadas" active={filtroPublicadas === 'publicadas'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'publicadas' ? null : 'publicadas')} color={primaryColor} />
+            <FiltroChip label="Sin publicar" active={filtroPublicadas === 'sin_publicar'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar')} color={primaryColor} />
+          </ScrollView>
+          <Text style={styles.filtroLabel}>Fecha de publicación</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip
+              label="Todo"
+              active={!filtroFechaPreset && !fechaDesdeCustom && !fechaHastaCustom}
+              onPress={() => { setFiltroFechaPreset(null); setFechaDesdeCustom(''); setFechaHastaCustom('') }}
+              color={primaryColor}
+            />
+            {([7, 30, 90, 180] as const).map(d => (
+              <FiltroChip
+                key={d}
+                label={d === 7 ? 'Esta semana' : d === 30 ? 'Hace ~1 mes' : d === 90 ? 'Hace ~3 meses' : 'Hace ~6 meses'}
+                active={filtroFechaPreset === d}
+                onPress={() => { setFiltroFechaPreset(filtroFechaPreset === d ? null : d); setFechaDesdeCustom(''); setFechaHastaCustom('') }}
+                color={primaryColor}
+              />
+            ))}
+          </ScrollView>
+          {isWeb && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <Text style={styles.precioRangoLabel}>Desde</Text>
+              {createElement('input', {
+                type: 'date',
+                value: fechaDesdeCustom,
+                onChange: (e: any) => { setFechaDesdeCustom(e.target.value); setFiltroFechaPreset(null) },
+                style: { flex: 1, minWidth: 130, padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, color: '#333', fontFamily: 'inherit' }
+              })}
+              <Text style={styles.precioRangoSep}>—</Text>
+              <Text style={styles.precioRangoLabel}>Hasta</Text>
+              {createElement('input', {
+                type: 'date',
+                value: fechaHastaCustom,
+                onChange: (e: any) => { setFechaHastaCustom(e.target.value); setFiltroFechaPreset(null) },
+                style: { flex: 1, minWidth: 130, padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, color: '#333', fontFamily: 'inherit' }
+              })}
+            </View>
+          )}
+          <View style={styles.filtrosBtnRow}>
+            {filtrosActivos > 0 && (
+              <TouchableOpacity style={styles.limpiarBtn} onPress={limpiarFiltros}>
+                <Text style={styles.limpiarText}>Limpiar</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.aplicarBtn, { backgroundColor: primaryColor }]}
+              onPress={() => setMostrarFiltros(false)}
+            >
+              <Text style={styles.aplicarBtnText}>Aplicar filtros</Text>
+            </TouchableOpacity>
+          </View>
+        </FiltrosPanelWrapper>
+      )}
+    </View>
+  )
+
   return (
     <View style={{ flex: 1, backgroundColor: primaryColor }}>
       <OfflineBanner />
@@ -837,199 +1026,9 @@ export default function ProspectadorPropiedades() {
         {/* Contenido centrado en web */}
         <View style={isWeb ? styles.webBody : { flex: 1 }}>
 
-        {/* Botones rápidos Venta / Renta / Nuevas */}
-        <View style={[styles.quickFiltersRow, { backgroundColor: darkMode ? '#0f1e2d' : '#eef2f4' }]}>
-          {([
-            { key: 'venta',      label: 'Venta',      icon: 'home'      as const, activo: filtroOperacion === 'venta', onPress: () => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta') },
-            { key: 'renta',      label: 'Renta',      icon: 'key'       as const, activo: filtroOperacion === 'renta', onPress: () => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta') },
-            { key: 'nuevas',     label: 'Nuevas',     icon: 'sparkles'  as const, activo: filtroNueva,                 onPress: () => setFiltroNueva(v => !v) },
-            { key: 'exclusivas', label: 'Exclusivas', icon: 'star'      as const, activo: filtroExclusiva,             onPress: () => setFiltroExclusiva(v => !v) },
-          ]).map(btn => (
-            <TouchableOpacity
-              key={btn.key}
-              style={[
-                styles.quickFilterBtn,
-                { borderColor: primaryColor, backgroundColor: btn.activo ? primaryColor : (darkMode ? 'rgba(255,255,255,0.07)' : '#fff') },
-              ]}
-              onPress={btn.onPress}
-            >
-              <Ionicons name={btn.icon} size={14} color={btn.activo ? '#fff' : primaryColor} />
-              <Text
-                style={[styles.quickFilterText, { color: btn.activo ? '#fff' : primaryColor }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                maxFontSizeMultiplier={1.2}
-              >
-                {btn.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Fila de controles: Filtros + Constructoras + Ver zonas */}
-        <View style={styles.controlsRow}>
-          <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
-            <Text style={[styles.filtrosToggleText, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-              {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
-            </Text>
-          </TouchableOpacity>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <TouchableOpacity
-              style={[styles.constructorasBtn, { borderColor: primaryColor }]}
-              onPress={() => router.push('/(prospectador)/constructoras')}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.constructorasIcon}>🏗️</Text>
-              <Text style={[styles.constructorasTxt, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Constructoras</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.zonasToggle, { borderColor: primaryColor }, vistaZonas && { backgroundColor: primaryColor }]}
-              onPress={() => setVistaZonas(v => !v)}
-            >
-              <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : primaryColor} />
-              <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                Mapa
-              </Text>
-            </TouchableOpacity>
-            {esAsesorOMas && (
-              <TouchableOpacity
-                style={[styles.zonasToggle, { borderColor: '#22a35e' }]}
-                onPress={() => router.push('/(prospectador)/mapa')}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="location-outline" size={14} color="#22a35e" />
-                <Text style={[styles.zonasToggleText, { color: '#22a35e' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Mapa lonas</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[styles.zonasToggle, { borderColor: '#7b5ea7' }]}
-              onPress={() => router.push('/(prospectador)/historial-publicaciones')}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="time-outline" size={14} color="#7b5ea7" />
-              <Text style={[styles.zonasToggleText, { color: '#7b5ea7' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Historial</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.zonasToggle, { borderColor: '#1976D2' }]}
-              onPress={() => router.push('/(prospectador)/zonas')}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="locate-outline" size={14} color="#1976D2" />
-              <Text style={[styles.zonasToggleText, { color: '#1976D2' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Zonas</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {mostrarFiltros && (
-          <FiltrosPanelWrapper
-            style={isWeb ? styles.filtrosPanel : [styles.filtrosPanel, { maxHeight: windowHeight * 0.55 }]}
-            {...(isWeb ? {} : { nestedScrollEnabled: true, showsVerticalScrollIndicator: true })}
-          >
-            <Text style={styles.filtroLabel}>Tipo</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              <FiltroChip label="Todos" active={filtroTipo === null} onPress={() => setFiltroTipo(null)} color={primaryColor} />
-              <FiltroChip label="Casa" active={filtroTipo === 'casa'} onPress={() => setFiltroTipo(filtroTipo === 'casa' ? null : 'casa')} color={primaryColor} />
-              <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')} color={primaryColor} />
-              <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')} color={primaryColor} />
-              <FiltroChip label="Terreno" active={filtroTipo === 'terreno'} onPress={() => setFiltroTipo(filtroTipo === 'terreno' ? null : 'terreno')} color={primaryColor} />
-            </ScrollView>
-
-            <Text style={styles.filtroLabel}>Precio — ordenar</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              <FiltroChip label="Sin orden" active={ordenPrecio === null} onPress={() => setOrdenPrecio(null)} color={primaryColor} />
-              <FiltroChip label="Menor precio" active={ordenPrecio === 'asc'} onPress={() => setOrdenPrecio(ordenPrecio === 'asc' ? null : 'asc')} color={primaryColor} />
-              <FiltroChip label="Mayor precio" active={ordenPrecio === 'desc'} onPress={() => setOrdenPrecio(ordenPrecio === 'desc' ? null : 'desc')} color={primaryColor} />
-            </ScrollView>
-
-            <Text style={styles.filtroLabel}>Rango de precio (MXN)</Text>
-            <View style={styles.precioRangoRow}>
-              <View style={styles.precioRangoInput}>
-                <Text style={styles.precioRangoLabel}>Mínimo</Text>
-                <TextInput
-                  style={[styles.precioInput, { borderColor: primaryColor + '44' }]}
-                  placeholder="Ej. 500,000"
-                  placeholderTextColor="#bbb"
-                  value={precioMin}
-                  onChangeText={(t) => setPrecioMin(formatearInputPrecio(t))}
-                  keyboardType="numeric"
-                  maxLength={12}
-                />
-              </View>
-              <Text style={styles.precioRangoSep}>—</Text>
-              <View style={styles.precioRangoInput}>
-                <Text style={styles.precioRangoLabel}>Máximo</Text>
-                <TextInput
-                  style={[styles.precioInput, { borderColor: primaryColor + '44' }]}
-                  placeholder="Ej. 3,000,000"
-                  placeholderTextColor="#bbb"
-                  value={precioMax}
-                  onChangeText={(t) => setPrecioMax(formatearInputPrecio(t))}
-                  keyboardType="numeric"
-                  maxLength={12}
-                />
-              </View>
-            </View>
-
-            <Text style={styles.filtroLabel}>Mis propiedades</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              <FiltroChip label="Todas" active={filtroPublicadas === null} onPress={() => setFiltroPublicadas(null)} color={primaryColor} />
-              <FiltroChip label="Publicadas" active={filtroPublicadas === 'publicadas'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'publicadas' ? null : 'publicadas')} color={primaryColor} />
-              <FiltroChip label="Sin publicar" active={filtroPublicadas === 'sin_publicar'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar')} color={primaryColor} />
-            </ScrollView>
-
-            <Text style={styles.filtroLabel}>Fecha de publicación</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              <FiltroChip
-                label="Todo"
-                active={!filtroFechaPreset && !fechaDesdeCustom && !fechaHastaCustom}
-                onPress={() => { setFiltroFechaPreset(null); setFechaDesdeCustom(''); setFechaHastaCustom('') }}
-                color={primaryColor}
-              />
-              {([7, 30, 90, 180] as const).map(d => (
-                <FiltroChip
-                  key={d}
-                  label={d === 7 ? 'Esta semana' : d === 30 ? 'Hace ~1 mes' : d === 90 ? 'Hace ~3 meses' : 'Hace ~6 meses'}
-                  active={filtroFechaPreset === d}
-                  onPress={() => { setFiltroFechaPreset(filtroFechaPreset === d ? null : d); setFechaDesdeCustom(''); setFechaHastaCustom('') }}
-                  color={primaryColor}
-                />
-              ))}
-            </ScrollView>
-            {isWeb && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                <Text style={styles.precioRangoLabel}>Desde</Text>
-                {createElement('input', {
-                  type: 'date',
-                  value: fechaDesdeCustom,
-                  onChange: (e: any) => { setFechaDesdeCustom(e.target.value); setFiltroFechaPreset(null) },
-                  style: { flex: 1, minWidth: 130, padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, color: '#333', fontFamily: 'inherit' }
-                })}
-                <Text style={styles.precioRangoSep}>—</Text>
-                <Text style={styles.precioRangoLabel}>Hasta</Text>
-                {createElement('input', {
-                  type: 'date',
-                  value: fechaHastaCustom,
-                  onChange: (e: any) => { setFechaHastaCustom(e.target.value); setFiltroFechaPreset(null) },
-                  style: { flex: 1, minWidth: 130, padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, color: '#333', fontFamily: 'inherit' }
-                })}
-              </View>
-            )}
-
-            <View style={styles.filtrosBtnRow}>
-              {filtrosActivos > 0 && (
-                <TouchableOpacity style={styles.limpiarBtn} onPress={limpiarFiltros}>
-                  <Text style={styles.limpiarText}>Limpiar</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.aplicarBtn, { backgroundColor: primaryColor }]}
-                onPress={() => setMostrarFiltros(false)}
-              >
-                <Text style={styles.aplicarBtnText}>Aplicar filtros</Text>
-              </TouchableOpacity>
-            </View>
-          </FiltrosPanelWrapper>
-        )}
+        {/* Filtros visibles encima del estado de carga / vacío / mapa;
+            en la lista normal van dentro de ListHeaderComponent para que scrolleen */}
+        {(isLoading || vistaZonas || propiedadesFiltradas.length === 0) && filtrosHeader}
 
         {isLoading ? (
           <ActivityIndicator size="large" color={primaryColor} style={{ marginTop: 40 }} />
@@ -1077,6 +1076,7 @@ export default function ProspectadorPropiedades() {
               }
             }}
           >
+            {filtrosHeader}
             <View style={styles.webGrid}>
               {propiedadesFiltradas.slice(0, visibleCount).map(item => renderCard(item, cardWidth))}
             </View>
@@ -1100,6 +1100,7 @@ export default function ProspectadorPropiedades() {
             initialNumToRender={6}
             maxToRenderPerBatch={8}
             windowSize={11}
+            ListHeaderComponent={filtrosHeader}
           />
         )}
 
