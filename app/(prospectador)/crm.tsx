@@ -19,6 +19,8 @@ import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueClienteUpdate } from '../../lib/offline-queue'
 import { conTimeout } from '../../lib/redIntentos'
 import { puedeEnviarClienteAChatbot } from '../../lib/permisos'
+import { ZonasInteresField } from '../../components/ZonasInteresField'
+import { parseZonasGuardadas } from '../../lib/zonas-interes'
 
 type Cliente = {
   id: string
@@ -118,7 +120,7 @@ export default function CRM() {
   const { mios } = useLocalSearchParams<{ mios?: string }>()
   const soloMios = mios === '1'
   const c = useColors()
-  const { darkMode } = useTheme()
+  const { darkMode, primaryColor } = useTheme()
   const queryClient = useQueryClient()
   const { isOnline, refreshPending, syncNow, pendingCount, isSyncing } = useOfflineSync()
   const [userRole, setUserRole]           = useState<string | null>(null)
@@ -219,6 +221,9 @@ export default function CRM() {
     id: string; col: string; label: string
     options: { value: string | null; label: string; color?: string }[]
   } | null>(null)
+  // Selector de Zonas de interés (multi-selección + "Otra"). `draft` es el valor
+  // en edición hasta que se guarda.
+  const [zonaPicker, setZonaPicker] = useState<{ id: string; draft: string } | null>(null)
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
 
@@ -289,7 +294,11 @@ export default function CRM() {
   if (filtroVencidos) filtrados = filtrados.filter(c => (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora) < new Date()))
   if (opFiltro)     filtrados = filtrados.filter(c => c.tipo_operacion === opFiltro)
   if (interesFilter) filtrados = filtrados.filter(c => c.nivel_interes === interesFilter)
-  if (zonaFilter)   filtrados = filtrados.filter(c => c.zona_busqueda === zonaFilter)
+  if (zonaFilter)   filtrados = filtrados.filter(c => {
+    // Un cliente puede tener varias zonas (coma-separadas): filtra por "contiene".
+    const { zonas, otra } = parseZonasGuardadas(c.zona_busqueda)
+    return zonas.includes(zonaFilter) || (otra !== '' && zonaFilter === '__otra__')
+  })
 
   if (sortBy === 'nombre') {
     filtrados = [...filtrados].sort((a, b) => a.nombre.localeCompare(b.nombre))
@@ -381,14 +390,21 @@ export default function CRM() {
         ],
       })
     } else if (colId === 'zona') {
-      const zonasUnicas = [...new Set(
-        clientes.map(cl => cl.zona_busqueda).filter(Boolean)
-      )].sort() as string[]
+      // Zonas canónicas presentes en la cartera (según el catálogo), + "Otra".
+      const presentes = new Set<string>()
+      let hayOtra = false
+      for (const cl of clientes) {
+        const { zonas, otra } = parseZonasGuardadas(cl.zona_busqueda)
+        zonas.forEach(z => presentes.add(z))
+        if (otra) hayOtra = true
+      }
+      const zonasUnicas = [...presentes].sort()
       setExcelFilterModal({
         col: 'zona', label: 'Filtrar por Zona',
         options: [
           { value: null, label: 'Todas las zonas' },
           ...zonasUnicas.map(z => ({ value: z, label: z })),
+          ...(hayOtra ? [{ value: '__otra__', label: 'Otra (texto libre)' }] : []),
         ],
       })
     }
@@ -515,14 +531,16 @@ export default function CRM() {
           { value: 'bajo', label: '❄️ Bajo' },
         ],
       })
+    } else if (col === 'zona') {
+      // Zonas de interés → selector multi-selección + "Otra"
+      setZonaPicker({ id: item.id, draft: item.zona_busqueda ?? '' })
     } else {
-      // nombre, telefono, fecha, notas, zona, presupuesto → edición de texto inline
+      // nombre, telefono, fecha, notas, presupuesto → edición de texto inline
       const inicial = col === 'fecha'
         ? (item.proximo_contacto ? item.proximo_contacto.slice(0, 10) : '')
         : col === 'nombre' ? item.nombre
         : col === 'telefono' ? item.telefono
         : col === 'notas' ? (item.notas ?? '')
-        : col === 'zona' ? (item.zona_busqueda ?? '')
         : col === 'presupuesto' ? (item.presupuesto ?? '') : ''
       setEditValue(inicial)
       setEditCell({ id: item.id, col })
@@ -1399,6 +1417,45 @@ export default function CRM() {
         </TouchableOpacity>
       </Modal>
 
+      {/* ── Selector de Zonas de interés (multi-selección + "Otra") ── */}
+      <Modal visible={zonaPicker !== null} transparent animationType="slide" onRequestClose={() => setZonaPicker(null)}>
+        <View style={s.modalBg}>
+          <View style={[s.sortSheet, { backgroundColor: c.card }]}>
+            <View style={[s.sortHandle, { backgroundColor: c.border }]} />
+            <Text style={[s.sortTitle, { color: c.text }]}>Zonas de interés</Text>
+            <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
+              {zonaPicker && (
+                <ZonasInteresField
+                  value={zonaPicker.draft}
+                  onChange={(next) => setZonaPicker(zp => zp ? { ...zp, draft: next } : zp)}
+                />
+              )}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+              <TouchableOpacity
+                style={[s.zonaBtn, { borderColor: c.border }]}
+                onPress={() => setZonaPicker(null)}
+                disabled={savingCell}
+              >
+                <Text style={[s.zonaBtnTxt, { color: c.textSub }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.zonaBtn, { backgroundColor: primaryColor, borderColor: primaryColor }]}
+                onPress={() => {
+                  if (!zonaPicker) return
+                  const p = zonaPicker
+                  setZonaPicker(null)
+                  guardarCelda(p.id, 'zona', p.draft.trim() || null)
+                }}
+                disabled={savingCell}
+              >
+                <Text style={[s.zonaBtnTxt, { color: '#fff' }]}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <ImportCSVModal
         visible={importModal}
         csvHeaders={csvHeaders}
@@ -1635,6 +1692,8 @@ const s = StyleSheet.create({
     alignSelf: 'center', marginBottom: 20,
   },
   sortTitle:   { fontSize: 17, fontWeight: '800', color: '#0f172a', marginBottom: 16 },
+  zonaBtn:     { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
+  zonaBtnTxt:  { fontSize: 15, fontWeight: '700' },
   sortOpt:     {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',

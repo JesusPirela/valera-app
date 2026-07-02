@@ -11,6 +11,7 @@ import { registrarAccion } from '../../lib/gamification'
 import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueClienteUpdate, enqueueClienteCreate, genUUID } from '../../lib/offline-queue'
 import { useQueryClient } from '@tanstack/react-query'
+import { ZonasInteresField } from '../../components/ZonasInteresField'
 
 function mostrarError(titulo: string, msg: string) {
   if (Platform.OS === 'web') window.alert(`${titulo}: ${msg}`)
@@ -500,8 +501,7 @@ export default function ClienteForm() {
 
           <Text style={styles.sectionTitle}>Búsqueda</Text>
           <Text style={styles.fieldLabel}>Zona de interés *</Text>
-          <TextInput style={styles.input} value={zonaBusqueda} onChangeText={setZonaBusqueda}
-            placeholder="Ej: Centro, Juriquilla, Cumbres..." autoCapitalize="words" />
+          <ZonasInteresField value={zonaBusqueda} onChange={setZonaBusqueda} />
 
           <Text style={styles.sectionTitle}>Presupuesto</Text>
           <Text style={styles.fieldLabel}>Tipo de crédito</Text>
@@ -578,8 +578,7 @@ export default function ClienteForm() {
             placeholder="Ej: $8,000 / mes" />
 
           <Text style={styles.fieldLabel}>Zonas de interés *</Text>
-          <TextInput style={styles.input} value={zonasInteres} onChangeText={setZonasInteres}
-            placeholder="Ej: Juriquilla, Cumbres, Centro..." autoCapitalize="words" />
+          <ZonasInteresField value={zonasInteres} onChange={setZonasInteres} />
 
           <Text style={styles.fieldLabel}>¿Tiene problemas con los requisitos de la póliza?</Text>
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 18 }}>
