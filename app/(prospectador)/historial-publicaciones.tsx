@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator,
-  TouchableOpacity, TextInput, Image,
+  TouchableOpacity, TextInput,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { normalizar } from '../../lib/texto'
-import { thumb } from '../../lib/img'
+import { ThumbImage } from '../../components/ThumbImage'
 
 type Entrada = {
   id: string
@@ -126,7 +126,7 @@ export default function HistorialPublicaciones() {
         onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.propiedad_id}` as any)}
       >
         {cover
-          ? <Image source={{ uri: thumb(cover, { width: 160, quality: 60 }) }} style={s.img} resizeMode="cover" />
+          ? <ThumbImage url={cover} opts={{ width: 160, quality: 60 }} style={s.img} resizeMode="cover" />
           : <View style={[s.img, s.imgPlaceholder]}><Text style={{ fontSize: 22 }}>🏠</Text></View>
         }
         <View style={{ flex: 1 }}>

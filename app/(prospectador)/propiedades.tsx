@@ -165,8 +165,9 @@ const PropiedadCard = memo(function PropiedadCard({
     >
       {primera?.url && (
         <View style={styles.cardImagenWrap}>
-          <Image
-            source={{ uri: thumb(primera.url, { width: 640, quality: 65 }) }}
+          <ThumbImage
+            url={primera.url}
+            opts={{ width: 640, quality: 65 }}
             style={styles.cardImagen}
             resizeMode="contain"
           />

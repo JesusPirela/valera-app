@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import {
-  View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
 } from 'react-native'
 import { router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
-import { thumb } from '../../lib/img'
+import { ThumbImage } from '../../components/ThumbImage'
 
 type Pub = {
   propiedad_id: string
@@ -69,7 +69,7 @@ export default function MisPublicaciones() {
         onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.propiedad_id}` as any)}
       >
         {cover
-          ? <Image source={{ uri: thumb(cover, { width: 200, quality: 60 }) }} style={s.img} resizeMode="cover" />
+          ? <ThumbImage url={cover} opts={{ width: 200, quality: 60 }} style={s.img} resizeMode="cover" />
           : <View style={[s.img, s.imgPlaceholder]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
         }
         <View style={s.info}>
