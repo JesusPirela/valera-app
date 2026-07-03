@@ -46,8 +46,13 @@ export default function Bloques() {
   const [notasGuardando, setNotasGuardando] = useState<Set<string>>(new Set())
   const [contestoGuardando, setContesoGuardando] = useState<Set<string>>(new Set())
   const yaCargoRef = useRef(false)
+  // Periodo actual en un ref: el useFocusEffect tiene deps [] y su closure
+  // capturaría el periodo INICIAL (Hoy) para siempre, recargando "Hoy" al
+  // re-enfocar aunque la pastilla seleccionada fuera Semana/Mes (desincronizaba
+  // números vs. selección). El ref siempre tiene el valor vigente.
+  const periodoRef = useRef<Periodo>(1)
 
-  useFocusEffect(useCallback(() => { cargar(periodo, yaCargoRef.current) }, []))
+  useFocusEffect(useCallback(() => { cargar(periodoRef.current, yaCargoRef.current) }, []))
 
   async function cargar(p: Periodo, silencioso = false) {
     if (!silencioso) setLoading(true)
@@ -56,6 +61,9 @@ export default function Bloques() {
       supabase.rpc('get_bloques_resumen', { p_dias: p }),
       supabase.from('profiles').select('id, notas_bloque, contesto_fecha, contesto_ok').neq('role', 'admin'),
     ])
+    // Si el usuario cambió de periodo mientras esta carga estaba en vuelo,
+    // descartar la respuesta vieja (evita que una respuesta lenta pise a la nueva).
+    if (periodoRef.current !== p) return
     setBloques((blqRes.data ?? []) as Bloque[])
     const perfilMap: Record<string, { notas_bloque: string | null; contesto_fecha: string | null; contesto_ok: boolean }> = {}
     for (const p of (perfilRes.data ?? []) as any[]) {
@@ -79,6 +87,8 @@ export default function Bloques() {
   }
 
   async function cambiarPeriodo(p: Periodo) {
+    if (p === periodoRef.current) return
+    periodoRef.current = p
     setPeriodo(p)
     await cargar(p, true)
   }
@@ -87,7 +97,7 @@ export default function Bloques() {
     setAsignando(userId)
     setUsuarios((prev) => prev.map((u) => u.user_id === userId ? { ...u, bloque_id: bloqueId } : u))
     const { error } = await supabase.rpc('asignar_bloque', { p_user_id: userId, p_bloque_id: bloqueId })
-    if (error) await cargar(periodo, true)
+    if (error) await cargar(periodoRef.current, true)
     setAsignando(null)
   }
 
