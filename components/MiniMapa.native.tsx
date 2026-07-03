@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, Image, TextInput, ScrollView, Platform } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Image, ScrollView, Platform } from 'react-native'
 import MapView, { Marker } from 'react-native-maps'
 
 export type ZonaPin = {
@@ -107,12 +107,11 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
   const nativeMapRef = useRef<InstanceType<typeof MapView>>(null)
   const [selectedZona, setSelectedZona] = useState<string | null>(null)
   const [latDelta, setLatDelta] = useState(18)
-  const [searchText, setSearchText] = useState('')
   const [pinsReady, setPinsReady] = useState(false)
   const [selectedPin, setSelectedPin] = useState<PinData | null>(null)
   const [selectedCluster, setSelectedCluster] = useState<PinGroup | null>(null)
 
-  const pinsCurrentlyVisible = latDelta < PINS_VISIBLE_THRESHOLD || searchText.trim().length > 0
+  const pinsCurrentlyVisible = latDelta < PINS_VISIBLE_THRESHOLD
 
   useEffect(() => {
     if (pinsCurrentlyVisible) {
@@ -122,58 +121,14 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
     } else {
       setPinsReady(false)
     }
-  }, [pinsCurrentlyVisible, selectedZona, searchText])
-
-  useEffect(() => {
-    if (!selectedZona || !searchText.trim()) return
-    const term = searchText.toLowerCase().trim()
-    const timer = setTimeout(() => {
-      const subzonas = SUBZONAS[selectedZona] ?? []
-      const sub = subzonas.find(s =>
-        s.label.toLowerCase().includes(term) ||
-        (s.keywords ?? []).some(k => k.includes(term))
-      )
-      if (sub) {
-        nativeMapRef.current?.animateToRegion(
-          { latitude: sub.coords[0], longitude: sub.coords[1], latitudeDelta: 0.04, longitudeDelta: 0.04 },
-          500
-        )
-        return
-      }
-      const zona = zonas.find(z => z.key === selectedZona)
-      const matched = (zona?.propiedades ?? []).filter(p =>
-        p.lat != null && p.lng != null && (
-          (p.direccion ?? '').toLowerCase().includes(term) ||
-          (p.titulo ?? '').toLowerCase().includes(term)
-        )
-      )
-      if (matched.length > 0) {
-        const avgLat = matched.reduce((s, p) => s + p.lat!, 0) / matched.length
-        const avgLng = matched.reduce((s, p) => s + p.lng!, 0) / matched.length
-        nativeMapRef.current?.animateToRegion(
-          { latitude: avgLat, longitude: avgLng, latitudeDelta: 0.04, longitudeDelta: 0.04 },
-          500
-        )
-      }
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [searchText, selectedZona])
+  }, [pinsCurrentlyVisible, selectedZona])
 
   const zonaActual = selectedZona ? zonas.find(z => z.key === selectedZona) : null
-  const pinsVisible = latDelta < PINS_VISIBLE_THRESHOLD || searchText.trim().length > 0
-
-  const term = searchText.toLowerCase().trim()
+  const pinsVisible = latDelta < PINS_VISIBLE_THRESHOLD
 
   const pinsEnMapa = zonaActual
     ? (zonaActual.propiedades ?? [])
-        .filter(p => {
-          if (p.lat == null || p.lng == null) return false
-          if (term) {
-            return (p.direccion ?? '').toLowerCase().includes(term) ||
-                   (p.titulo ?? '').toLowerCase().includes(term)
-          }
-          return true
-        })
+        .filter(p => p.lat != null && p.lng != null)
         .map(p => ({ ...p, lat: p.lat!, lng: p.lng!, color: p.pinColor ?? zonaActual.color }))
     : []
 
@@ -200,7 +155,6 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
   const handleBackToMexico = () => {
     setSelectedZona(null)
     setSelectedPin(null)
-    setSearchText('')
     onZonaPress('')
     nativeMapRef.current?.animateToRegion(MEXICO_REGION, 600)
   }
@@ -263,27 +217,10 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
 
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
         {selectedZona && (
-          <View style={nS.searchBar}>
-            <TouchableOpacity onPress={handleBackToMexico} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={nS.searchBackBtn}>
-              <Text style={nS.searchBackTxt}>←</Text>
+          <View style={nS.backBtnWrap}>
+            <TouchableOpacity onPress={handleBackToMexico} style={nS.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={nS.backBtnTxt}>← Regresar</Text>
             </TouchableOpacity>
-            <TextInput
-              style={nS.searchInput}
-              placeholder="Buscar colonia o dirección..."
-              placeholderTextColor="#999"
-              value={searchText}
-              onChangeText={setSearchText}
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-              autoCorrect={false}
-            />
-            {searchText.length > 0 ? (
-              <TouchableOpacity onPress={() => setSearchText('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={nS.searchClear}>✕</Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={nS.searchIcon}>🔍</Text>
-            )}
           </View>
         )}
 
@@ -477,20 +414,15 @@ const nS = StyleSheet.create({
     position: 'absolute', top: 8, right: 10,
     padding: 4,
   },
-  searchBar: {
-    position: 'absolute', top: 12, left: 12, right: 12, zIndex: 10,
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', borderRadius: 12,
-    paddingHorizontal: 10, paddingVertical: 8,
+  backBtnWrap: {
+    position: 'absolute', top: 12, left: 12, zIndex: 10,
+  },
+  backBtn: {
+    backgroundColor: '#fff', borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 8,
     shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 6,
   },
-  searchBackBtn: { paddingHorizontal: 6, paddingVertical: 2, marginRight: 4 },
-  searchBackTxt: { fontSize: 20, color: '#1a6470', fontWeight: '700', lineHeight: 22 },
-  searchIcon: { fontSize: 15, marginLeft: 4 },
-  searchInput: {
-    flex: 1, fontSize: 14, color: '#1a1a2e', paddingVertical: 0,
-  },
-  searchClear: { fontSize: 14, color: '#aaa', marginLeft: 6 },
+  backBtnTxt: { fontSize: 14, color: '#1a6470', fontWeight: '700' },
   zoomHint: {
     position: 'absolute', bottom: 16, left: 16, right: 16, zIndex: 10,
     backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8,

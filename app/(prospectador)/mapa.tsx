@@ -41,6 +41,14 @@ const ZONAS_CONFIG = [
   { key: 'puebla',    label: 'Puebla',    coords: [19.0414, -98.2063]  as [number, number], color: TEAL },
 ]
 
+// Detecta lat/lng invertidos (Colombia/México: lat~14-34, lng~-120-86) y filtra inválidos
+function corregirCoordenadas(lat: number, lng: number): { lat: number; lng: number } | null {
+  let la = lat, lo = lng
+  if (la < -86 && la > -120 && lo > 14 && lo < 34) { [la, lo] = [lo, la] }
+  if (la < 12 || la > 35 || lo < -120 || lo > -84) return null
+  return { lat: la, lng: lo }
+}
+
 // Cuando zona=null, inferir por proximidad de coordenadas
 function inferirZona(lat: number, lng: number): string {
   const CENTROS = [
@@ -90,23 +98,24 @@ export default function Mapa() {
   })
 
   const zonasParaMapa: ZonaPin[] = ZONAS_CONFIG.map(z => {
-    const propsZona = propsFiltradas.filter(p =>
-      (p.zona ?? inferirZona(p.lat!, p.lng!)) === z.key
-    )
+    const propsZona = propsFiltradas
+      .map(p => ({ p, coords: corregirCoordenadas(p.lat!, p.lng!) }))
+      .filter(({ coords }) => coords != null)
+      .filter(({ p, coords }) => (p.zona ?? inferirZona(coords!.lat, coords!.lng)) === z.key)
     return {
       key: z.key,
       label: z.label,
       coords: z.coords,
       color: filtro === 'contactadas' ? VERDE : filtro === 'no_contactadas' ? ROJO : z.color,
       count: propsZona.length,
-      propiedades: propsZona.map(p => ({
+      propiedades: propsZona.map(({ p, coords }) => ({
         id: p.id,
         titulo: p.titulo,
         precio: p.precio,
         tipo: p.tipo,
         direccion: p.direccion,
-        lat: p.lat,
-        lng: p.lng,
+        lat: coords!.lat,
+        lng: coords!.lng,
         imagen: thumb(
           [...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]?.url,
           { width: 320, quality: 60 }

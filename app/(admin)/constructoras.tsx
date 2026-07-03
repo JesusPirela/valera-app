@@ -15,9 +15,23 @@ type Modelo = {
   titulo: string
   precio: number | null
   nombre_constructora: string | null
+  zona: string | null
   exclusiva: boolean | null
   inmobiliarias: { exclusiva: boolean } | null
   propiedad_imagenes: { url: string; orden: number }[]
+}
+
+const ZONA_ORDER: Array<string | null> = ['queretaro', 'monterrey', 'puebla', null]
+const ZONA_LABELS: Record<string, string> = {
+  queretaro: '📍 Querétaro',
+  monterrey: '📍 Monterrey',
+  puebla: '📍 Puebla',
+}
+
+type ZonaGrupo = {
+  key: string | null
+  label: string
+  grupos: { nombre: string; modelos: Modelo[] }[]
 }
 
 type Contacto = {
@@ -75,7 +89,7 @@ export default function AdminConstructoras() {
     setLoadingCatalogo(true)
     const { data } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, nombre_constructora, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, nombre_constructora, zona, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, orden)')
       .eq('es_constructora', true)
       .eq('es_inventario', false)
       .order('nombre_constructora', { ascending: true, nullsFirst: false })
@@ -97,14 +111,23 @@ export default function AdminConstructoras() {
     setLoadingContactos(false)
   }
 
-  // Agrupar por constructora y ordenar por popularidad (más modelos primero)
-  const gruposMap = new Map<string, { nombre: string; modelos: Modelo[] }>()
-  for (const m of modelos) {
-    const nombre = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA
-    if (!gruposMap.has(nombre)) gruposMap.set(nombre, { nombre, modelos: [] })
-    gruposMap.get(nombre)!.modelos.push(m)
-  }
-  const grupos = Array.from(gruposMap.values()).sort((a, b) => b.modelos.length - a.modelos.length)
+  // Agrupar primero por zona, luego por constructora dentro de cada zona
+  const zonaGrupos: ZonaGrupo[] = ZONA_ORDER
+    .map(zona => {
+      const modelosZona = modelos.filter(m => (m.zona ?? null) === zona)
+      if (modelosZona.length === 0) return null
+      const constMap = new Map<string, Modelo[]>()
+      for (const m of modelosZona) {
+        const nombre = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA
+        if (!constMap.has(nombre)) constMap.set(nombre, [])
+        constMap.get(nombre)!.push(m)
+      }
+      const gruposZona = Array.from(constMap.entries())
+        .map(([nombre, mods]) => ({ nombre, modelos: mods }))
+        .sort((a, b) => b.modelos.length - a.modelos.length)
+      return { key: zona, label: zona ? (ZONA_LABELS[zona] ?? zona) : '📍 Sin zona', grupos: gruposZona }
+    })
+    .filter((z): z is ZonaGrupo => z != null)
 
   function abrirNuevoContacto() {
     setEditando(null)
@@ -185,52 +208,58 @@ export default function AdminConstructoras() {
 
           {loadingCatalogo ? (
             <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
-          ) : grupos.length === 0 ? (
+          ) : zonaGrupos.length === 0 ? (
             <View style={styles.empty}>
               <Text style={{ fontSize: 46, marginBottom: 10 }}>🏗️</Text>
               <Text style={[styles.emptyText, { color: c.textMute }]}>No hay propiedades de constructora aún.</Text>
             </View>
           ) : (
             <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-              {grupos.map((g) => {
-                const abierta = abiertas[g.nombre] ?? false
-                return (
-                  <View key={g.nombre} style={styles.grupo}>
-                    <TouchableOpacity
-                      style={[styles.grupoHeader, { backgroundColor: c.card, borderColor: c.border }]}
-                      onPress={() => setAbiertas((s) => ({ ...s, [g.nombre]: !abierta }))}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.grupoTitulo, { color: c.text }]}>{abierta ? '▼' : '▶'}  {g.nombre}</Text>
-                      <Text style={styles.grupoMeta}>{g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}</Text>
-                    </TouchableOpacity>
-
-                    {abierta && g.modelos.map((m) => {
-                      const img = [...(m.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-                      return (
+              {zonaGrupos.map(zg => (
+                <View key={zg.key ?? '_sin_zona'}>
+                  <Text style={[styles.zonaSectionHeader, { color: c.textMute, borderBottomColor: c.border }]}>{zg.label}</Text>
+                  {zg.grupos.map((g) => {
+                    const aKey = `${zg.key ?? 'sin'}_${g.nombre}`
+                    const abierta = abiertas[aKey] ?? false
+                    return (
+                      <View key={aKey} style={styles.grupo}>
                         <TouchableOpacity
-                          key={m.id}
-                          style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border }]}
-                          onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })}
-                          activeOpacity={0.85}
+                          style={[styles.grupoHeader, { backgroundColor: c.card, borderColor: c.border }]}
+                          onPress={() => setAbiertas((s) => ({ ...s, [aKey]: !abierta }))}
+                          activeOpacity={0.8}
                         >
-                          {img?.url ? (
-                            <ThumbImage url={img.url} opts={{ width: 200, quality: 60 }} style={styles.modeloImg} />
-                          ) : (
-                            <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
-                          )}
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
-                            <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
-                            {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
-                          </View>
-                          <Text style={styles.modeloChevron}>›</Text>
+                          <Text style={[styles.grupoTitulo, { color: c.text }]}>{abierta ? '▼' : '▶'}  {g.nombre}</Text>
+                          <Text style={styles.grupoMeta}>{g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}</Text>
                         </TouchableOpacity>
-                      )
-                    })}
-                  </View>
-                )
-              })}
+
+                        {abierta && g.modelos.map((m) => {
+                          const img = [...(m.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+                          return (
+                            <TouchableOpacity
+                              key={m.id}
+                              style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border }]}
+                              onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })}
+                              activeOpacity={0.85}
+                            >
+                              {img?.url ? (
+                                <ThumbImage url={img.url} opts={{ width: 200, quality: 60 }} style={styles.modeloImg} />
+                              ) : (
+                                <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
+                              )}
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
+                                <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
+                                {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
+                              </View>
+                              <Text style={styles.modeloChevron}>›</Text>
+                            </TouchableOpacity>
+                          )
+                        })}
+                      </View>
+                    )
+                  })}
+                </View>
+              ))}
             </ScrollView>
           )}
         </>
@@ -344,6 +373,12 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 21 },
   btnAdd: { backgroundColor: '#c9a84c', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12 },
   btnAddText: { color: '#000', fontWeight: '700' },
+
+  zonaSectionHeader: {
+    fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8,
+    paddingVertical: 8, marginTop: 6, marginBottom: 4,
+    borderBottomWidth: 1,
+  },
 
   grupo: { marginBottom: 14 },
   grupoHeader: {

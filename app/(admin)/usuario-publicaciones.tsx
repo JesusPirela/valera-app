@@ -95,10 +95,28 @@ export default function UsuarioPublicaciones() {
       })
     : pubs
 
+  const maxVeces = pubs.length > 0 ? Math.max(...pubs.map(p => p.veces)) : 1
+  const pubsOrdenadas = [...pubs].sort((a, b) => b.veces - a.veces).slice(0, 20)
+
   const header = (
     <View>
       <Text style={[s.title, { color: c.text }]}>📤 Publicaciones</Text>
       <Text style={[s.sub, { color: c.textMute }]}>{nombre} · {pubs.length} {pubs.length === 1 ? 'publicación' : 'publicaciones'}</Text>
+
+      {pubs.length > 1 && (
+        <View style={[s.chartCard, { backgroundColor: c.card, borderColor: c.border }]}>
+          <Text style={[s.chartTitle, { color: c.textMute }]}>Publicaciones por propiedad</Text>
+          {pubsOrdenadas.map(item => (
+            <View key={item.propiedad_id} style={s.chartRow}>
+              <Text style={[s.chartLabel, { color: c.text }]} numberOfLines={1}>{item.codigo ?? '—'}</Text>
+              <View style={s.chartTrack}>
+                <View style={[s.chartBar, { width: `${Math.round((item.veces / maxVeces) * 100)}%` as any }]} />
+              </View>
+              <Text style={[s.chartVal, { color: c.textMute }]}>{item.veces}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={[s.searchRow, { backgroundColor: c.card, borderColor: c.inputBorder }]}>
         <Text style={{ fontSize: 15, marginRight: 8 }}>🔍</Text>
@@ -204,4 +222,14 @@ const s = StyleSheet.create({
   despubBtnTxt: { color: RED, fontSize: 12, fontWeight: '700' },
 
   vacio: { fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 40 },
+
+  chartCard: {
+    borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12,
+  },
+  chartTitle: { fontSize: 11, fontWeight: '700', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  chartRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 7 },
+  chartLabel: { width: 68, fontSize: 11, fontWeight: '700', marginRight: 8 },
+  chartTrack: { flex: 1, height: 10, backgroundColor: '#e8f4f8', borderRadius: 5, overflow: 'hidden' },
+  chartBar: { height: 10, backgroundColor: TEAL, borderRadius: 5 },
+  chartVal: { width: 28, fontSize: 11, fontWeight: '700', textAlign: 'right', marginLeft: 6 },
 })

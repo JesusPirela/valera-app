@@ -17,9 +17,23 @@ type Modelo = {
   titulo: string
   precio: number | null
   nombre_constructora: string | null
+  zona: string | null
   exclusiva: boolean | null
   inmobiliarias: { exclusiva: boolean } | null
   propiedad_imagenes: { url: string; orden: number }[]
+}
+
+const ZONA_ORDER: Array<string | null> = ['queretaro', 'monterrey', 'puebla', null]
+const ZONA_LABELS: Record<string, string> = {
+  queretaro: '📍 Querétaro',
+  monterrey: '📍 Monterrey',
+  puebla: '📍 Puebla',
+}
+
+type ZonaGrupo = {
+  key: string | null
+  label: string
+  grupos: { nombre: string; modelos: Modelo[] }[]
 }
 
 const SIN_CONSTRUCTORA = 'Sin constructora'
@@ -42,6 +56,20 @@ const POPULARES_KW = [
   'mykonos',
   'imarhi',
   'investti',
+  'valencia',
+  'solare',
+  'santaluz',
+  'alleza',
+  'castello',
+  'mezquite',
+  'himalaya',
+  'privalia',
+  'varella',
+  'tekno',
+  'gran valle',
+  'aurea', 'iolita',
+  'ciudad marques',
+  'fuerte santiago',
 ]
 
 function esPopularMercado(nombre: string): boolean {
@@ -67,7 +95,7 @@ export default function Constructoras() {
   async function consultarModelos() {
     return supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, nombre_constructora, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, nombre_constructora, zona, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, orden)')
       .eq('es_constructora', true)
       .eq('es_inventario', false)
       .order('nombre_constructora', { ascending: true, nullsFirst: false })
@@ -111,20 +139,28 @@ export default function Constructoras() {
     setLoading(false)
   }
 
-  // Agrupar por constructora
-  const gruposMap = new Map<string, { nombre: string; modelos: Modelo[] }>()
-  for (const m of modelos) {
-    const nombre = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA
-    if (!gruposMap.has(nombre)) gruposMap.set(nombre, { nombre, modelos: [] })
-    gruposMap.get(nombre)!.modelos.push(m)
-  }
-  // Orden: populares primero (por modelos desc), luego el resto (por modelos desc)
-  const grupos = Array.from(gruposMap.values()).sort((a, b) => {
-    const aPop = esPopularMercado(a.nombre) ? 1 : 0
-    const bPop = esPopularMercado(b.nombre) ? 1 : 0
-    if (aPop !== bPop) return bPop - aPop
-    return b.modelos.length - a.modelos.length
-  })
+  // Agrupar primero por zona, luego por constructora dentro de cada zona
+  const zonaGrupos: ZonaGrupo[] = ZONA_ORDER
+    .map(zona => {
+      const modelosZona = modelos.filter(m => (m.zona ?? null) === zona)
+      if (modelosZona.length === 0) return null
+      const constMap = new Map<string, Modelo[]>()
+      for (const m of modelosZona) {
+        const nombre = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA
+        if (!constMap.has(nombre)) constMap.set(nombre, [])
+        constMap.get(nombre)!.push(m)
+      }
+      const gruposZona = Array.from(constMap.entries())
+        .map(([nombre, mods]) => ({ nombre, modelos: mods }))
+        .sort((a, b) => {
+          const aPop = esPopularMercado(a.nombre) ? 1 : 0
+          const bPop = esPopularMercado(b.nombre) ? 1 : 0
+          if (aPop !== bPop) return bPop - aPop
+          return b.modelos.length - a.modelos.length
+        })
+      return { key: zona, label: zona ? (ZONA_LABELS[zona] ?? zona) : '📍 Sin zona', grupos: gruposZona }
+    })
+    .filter((z): z is ZonaGrupo => z != null)
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
@@ -148,79 +184,74 @@ export default function Constructoras() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
-      ) : grupos.length === 0 ? (
+      ) : zonaGrupos.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ fontSize: 46, marginBottom: 10 }}>🏗️</Text>
           <Text style={[styles.emptyText, { color: c.textMute }]}>No hay propiedades de constructora aún.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-          {grupos.map((g, idx) => {
-            const abierta = abiertas[g.nombre] ?? false
-            const popular = esPopularMercado(g.nombre)
-            // Top 3 del listado completo (ya ordenado popular-first) reciben medalla
-            const medalla = idx === 0 ? { emoji: '🏆', color: '#c9a84c' }
-              : idx === 1 ? { emoji: '🥈', color: '#8fa3aa' }
-              : idx === 2 ? { emoji: '🥉', color: '#c07b4f' }
-              : null
-            const borderColor = medalla?.color ?? (popular ? '#e65100' : c.border)
-            return (
-              <View key={g.nombre} style={styles.grupo}>
-                <TouchableOpacity
-                  style={[
-                    styles.grupoHeader,
-                    { backgroundColor: popular ? c.card : c.card, borderColor },
-                    (popular || medalla) && { borderWidth: 1.8 },
-                    popular && { backgroundColor: '#e6510008' },
-                  ]}
-                  onPress={() => setAbiertas((s) => ({ ...s, [g.nombre]: !abierta }))}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.grupoTitulo, { color: c.text }]}>{abierta ? '▼' : '▶'}  {g.nombre}</Text>
-                  {popular && (
-                    <Text style={[styles.popularBadge, { backgroundColor: '#e6510018', color: '#e65100' }]}>
-                      🔥 Popular
-                    </Text>
-                  )}
-                  {medalla && (
-                    <Text style={[styles.medalBadge, { backgroundColor: medalla.color + '22', color: medalla.color }]}>
-                      {medalla.emoji}
-                    </Text>
-                  )}
-                  <Text style={[styles.grupoMeta, { color: medalla?.color ?? (popular ? '#e65100' : '#1a6470') }]}>
-                    {g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}
-                  </Text>
-                </TouchableOpacity>
-
-                {abierta && g.modelos.map((m) => {
-                  const img = [...(m.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
-                  return (
+          {zonaGrupos.map(zg => (
+            <View key={zg.key ?? '_sin_zona'}>
+              <Text style={[styles.zonaSectionHeader, { color: c.textMute, borderBottomColor: c.border }]}>{zg.label}</Text>
+              {zg.grupos.map((g) => {
+                const aKey = `${zg.key ?? 'sin'}_${g.nombre}`
+                const abierta = abiertas[aKey] ?? false
+                const popular = esPopularMercado(g.nombre)
+                const borderColor = popular ? '#e65100' : c.border
+                return (
+                  <View key={aKey} style={styles.grupo}>
                     <TouchableOpacity
-                      key={m.id}
-                      style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border }]}
-                      onPress={() => (rol === 'admin' || rol === 'supervisor')
-                        ? router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })
-                        : router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })
-                      }
-                      activeOpacity={0.85}
+                      style={[
+                        styles.grupoHeader,
+                        { backgroundColor: c.card, borderColor },
+                        popular && { borderWidth: 1.8, backgroundColor: '#e6510008' },
+                      ]}
+                      onPress={() => setAbiertas((s) => ({ ...s, [aKey]: !abierta }))}
+                      activeOpacity={0.8}
                     >
-                      {img?.url ? (
-                        <ThumbImage url={img.url} opts={{ width: 200, quality: 60 }} style={styles.modeloImg} />
-                      ) : (
-                        <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
+                      <Text style={[styles.grupoTitulo, { color: c.text }]}>{abierta ? '▼' : '▶'}  {g.nombre}</Text>
+                      {popular && (
+                        <Text style={[styles.popularBadge, { backgroundColor: '#e6510018', color: '#e65100' }]}>
+                          🔥 Popular
+                        </Text>
                       )}
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
-                        <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
-                        {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
-                      </View>
-                      <Text style={styles.modeloChevron}>›</Text>
+                      <Text style={[styles.grupoMeta, { color: popular ? '#e65100' : '#1a6470' }]}>
+                        {g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}
+                      </Text>
                     </TouchableOpacity>
-                  )
-                })}
-              </View>
-            )
-          })}
+
+                    {abierta && g.modelos.map((m) => {
+                      const img = [...(m.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+                      return (
+                        <TouchableOpacity
+                          key={m.id}
+                          style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border }]}
+                          onPress={() => (rol === 'admin' || rol === 'supervisor')
+                            ? router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })
+                            : router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })
+                          }
+                          activeOpacity={0.85}
+                        >
+                          {img?.url ? (
+                            <ThumbImage url={img.url} opts={{ width: 200, quality: 60 }} style={styles.modeloImg} />
+                          ) : (
+                            <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
+                          )}
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
+                            <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
+                            {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
+                          </View>
+                          <Text style={styles.modeloChevron}>›</Text>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+                )
+              })}
+            </View>
+          ))}
         </ScrollView>
       )}
     </View>
@@ -240,6 +271,12 @@ const styles = StyleSheet.create({
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 60, paddingHorizontal: 20 },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 21 },
+
+  zonaSectionHeader: {
+    fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8,
+    paddingVertical: 8, marginTop: 6, marginBottom: 4,
+    borderBottomWidth: 1,
+  },
 
   grupo: { marginBottom: 14 },
   grupoHeader: {

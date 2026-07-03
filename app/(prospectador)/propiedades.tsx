@@ -873,12 +873,11 @@ export default function ProspectadorPropiedades() {
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            style={[styles.zonasToggle, { borderColor: '#7b5ea7' }]}
+            style={[styles.zonasToggle, { borderColor: '#7b5ea7', paddingHorizontal: 9 }]}
             onPress={() => router.push('/(prospectador)/historial-publicaciones')}
             activeOpacity={0.85}
           >
-            <Ionicons name="time-outline" size={14} color="#7b5ea7" />
-            <Text style={[styles.zonasToggleText, { color: '#7b5ea7' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Historial</Text>
+            <Ionicons name="time-outline" size={16} color="#7b5ea7" />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.zonasToggle, { borderColor: '#1976D2' }]}
