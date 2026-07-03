@@ -468,66 +468,79 @@ export default function ProspectadorPropiedades() {
       return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual + 1 } }
     })
 
-    const idemKey = generarIdemKey()
-    const { ok, data, errorMsg } = await conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number }>(
-      (signal) => supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: propiedadId, p_idem_key: idemKey }).abortSignal(signal),
-      { timeoutMs: 18_000 },
-    )
+    // TODO el cuerpo va en try/finally: pase lo que pase, el spinner de "cargando"
+    // SIEMPRE se limpia. Antes, si algo lanzaba entre marcar toggling y la limpieza,
+    // el botón quedaba cargando para siempre (y el guard togglingRef lo dejaba muerto
+    // el resto de la sesión).
+    try {
+      const idemKey = generarIdemKey()
+      // Mismo idem key en todos los intentos → reintentar nunca duplica el conteo.
+      const llamar = () => conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number }>(
+        (signal) => supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: propiedadId, p_idem_key: idemKey }).abortSignal(signal),
+        { intentos: 2, timeoutMs: 12_000 },
+      )
 
-    // Si todos los intentos expiraron (timeout sin respuesta), la escritura
-    // pudo haber llegado igual y solo perderse la respuesta. Verificar antes
-    // de marcar error: si ya quedó publicada, tratarlo como éxito.
-    if (!ok && !errorMsg) {
-      try {
-        const { data: chk } = await conTimeout(
-          supabase.from('propiedad_publicacion')
-            .select('veces_publicada')
-            .eq('propiedad_id', propiedadId).eq('user_id', userId).maybeSingle(),
-          8000,
-        )
-        if (chk && (chk.veces_publicada ?? 0) > vecesActual) {
-          queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old =>
-            old ? { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: chk.veces_publicada! } } : old)
-          queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
-          actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
-          const cleanup = new Set(togglingRef.current)
-          cleanup.delete(propiedadId)
-          togglingRef.current = cleanup
-          setToggling(cleanup)
-          return
-        }
-      } catch { /* la verificación también falló: seguir al manejo de error */ }
+      let { ok, data, errorMsg } = await llamar()
+
+      // Token expirado / sesión vieja (típico al volver del background en Android):
+      // el servidor responde error de auth y no vale reintentar tal cual. Refrescar
+      // la sesión una vez y reintentar (idempotente por el idem key).
+      if (!ok && errorMsg && /jwt|token|expir|unauthor|not authenticated|no autenticado|401|403/i.test(errorMsg)) {
+        try { await supabase.auth.refreshSession() } catch { /* seguimos: el reintento decide */ }
+        ;({ ok, data, errorMsg } = await llamar())
+      }
+
+      // Si todos los intentos expiraron (timeout sin respuesta), la escritura
+      // pudo haber llegado igual y solo perderse la respuesta. Verificar antes
+      // de marcar error: si ya quedó publicada, tratarlo como éxito.
+      if (!ok && !errorMsg) {
+        try {
+          const { data: chk } = await conTimeout(
+            supabase.from('propiedad_publicacion')
+              .select('veces_publicada')
+              .eq('propiedad_id', propiedadId).eq('user_id', userId).maybeSingle(),
+            8000,
+          )
+          if (chk && (chk.veces_publicada ?? 0) > vecesActual) {
+            queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old =>
+              old ? { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: chk.veces_publicada! } } : old)
+            queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
+            actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
+            return
+          }
+        } catch { /* la verificación también falló: seguir al manejo de error */ }
+      }
+
+      if (!ok || !data?.ok) {
+        // Rollback optimista y refetch para mostrar estado real del servidor.
+        queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => {
+          if (!old) return old
+          return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual } }
+        })
+        queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
+        const msg = data?.error === 'limite'
+          ? 'Esta propiedad alcanzó el límite de 10 publicaciones.'
+          : errorMsg
+          ? `No se pudo publicar: ${errorMsg}`
+          : 'No se pudo registrar la publicación. Revisa tu conexión e intenta de nuevo en unos segundos.'
+        if (Platform.OS === 'web') window.alert(msg)
+        else Alert.alert('No se pudo publicar', msg)
+      } else {
+        const vecesReal = data.veces_publicada ?? vecesActual + 1
+        queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => {
+          if (!old) return old
+          return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesReal } }
+        })
+        // Invalida para confirmar el conteo real desde el servidor en background.
+        queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
+        actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
+      }
+    } finally {
+      const finalTogglingSet = new Set(togglingRef.current)
+      finalTogglingSet.delete(propiedadId)
+      togglingRef.current = finalTogglingSet
+      setToggling(finalTogglingSet)
     }
-
-    if (!ok || !data?.ok) {
-      // Rollback optimista y refetch para mostrar estado real del servidor.
-      queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => {
-        if (!old) return old
-        return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual } }
-      })
-      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
-      const msg = data?.error === 'limite'
-        ? 'Esta propiedad alcanzó el límite de 10 publicaciones.'
-        : errorMsg
-        ? `No se pudo publicar: ${errorMsg}`
-        : 'No se pudo registrar la publicación. El servidor tardó demasiado — intenta de nuevo en unos segundos.'
-      if (Platform.OS === 'web') window.alert(msg)
-      else Alert.alert('No se pudo publicar', msg)
-    } else {
-      const vecesReal = data.veces_publicada ?? vecesActual + 1
-      queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => {
-        if (!old) return old
-        return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesReal } }
-      })
-      // Invalida para confirmar el conteo real desde el servidor en background.
-      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
-      actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
-    }
-
-    const finalTogglingSet = new Set(togglingRef.current)
-    finalTogglingSet.delete(propiedadId)
-    togglingRef.current = finalTogglingSet
-    setToggling(finalTogglingSet)
   }
 
   async function compartirLink(codigo: string) {
