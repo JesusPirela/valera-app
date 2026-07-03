@@ -11,7 +11,7 @@ type Admin = { id: string; nombre: string | null; color_ficha: string | null }
 
 // Paleta de colores sugeridos para la ficha PDF.
 const PRESETS = [
-  '#1a6470', '#c62828', '#1565c0', '#2e7d32',
+  '#1a6470', '#8e1b1b', '#1565c0', '#2e7d32',
   '#6a1b9a', '#e65100', '#ad1457', '#455a64',
 ]
 
