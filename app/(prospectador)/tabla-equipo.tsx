@@ -13,6 +13,14 @@ type TablaData = {
 type Grupo = {
   title: string
   data: string[][]
+  isZoneHeader?: boolean
+}
+
+const ZONA_ORDER: Array<string | null> = ['queretaro', 'monterrey', 'puebla', null]
+const ZONA_LABELS: Record<string, string> = {
+  queretaro: '📍 Querétaro',
+  monterrey: '📍 Monterrey',
+  puebla: '📍 Puebla',
 }
 
 const TEAL = '#1a6470'
@@ -42,8 +50,25 @@ export default function TablaEquipo() {
   const [error, setError] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [colapsados, setColapsados] = useState<Record<string, boolean>>({})
+  const [zonaMap, setZonaMap] = useState<Map<string, string>>(new Map())
 
-  useFocusEffect(useCallback(() => { cargar() }, []))
+  useFocusEffect(useCallback(() => { cargar(); cargarZonaMap() }, []))
+
+  async function cargarZonaMap() {
+    const { data } = await supabase
+      .from('propiedades')
+      .select('nombre_constructora, zona')
+      .not('zona', 'is', null)
+      .eq('es_constructora', true)
+      .eq('es_inventario', false)
+    const map = new Map<string, string>()
+    for (const p of (data ?? [])) {
+      if (p.nombre_constructora && p.zona) {
+        map.set(normalizar(p.nombre_constructora), p.zona as string)
+      }
+    }
+    setZonaMap(map)
+  }
 
   async function cargar() {
     setLoading(true)
@@ -59,7 +84,15 @@ export default function TablaEquipo() {
     setLoading(false)
   }
 
-  // Agrupar filas por el primer campo (nombre del desarrollo)
+  function inferZona(nombreDesarrollo: string): string | null {
+    const n = normalizar(nombreDesarrollo)
+    for (const [key, zona] of zonaMap) {
+      if (n.includes(key) || key.includes(n)) return zona
+    }
+    return null
+  }
+
+  // Agrupar filas por zona → desarrollo
   const grupos: Grupo[] = useMemo(() => {
     if (!data) return []
     const q = normalizar(busqueda)
@@ -79,16 +112,40 @@ export default function TablaEquipo() {
       if (!map.has(nombre)) map.set(nombre, [])
       map.get(nombre)!.push(row)
     }
-    return Array.from(map.entries()).map(([title, rows]) => ({ title, data: rows }))
-  }, [data, busqueda])
 
-  const totalModelos = grupos.reduce((s, g) => s + g.data.length, 0)
+    const gruposList = Array.from(map.entries()).map(([title, rows]) => ({
+      title, data: rows, zona: inferZona(title),
+    }))
+
+    const result: Grupo[] = []
+    for (const zona of ZONA_ORDER) {
+      const zGrupos = gruposList.filter(g => (g.zona ?? null) === zona)
+      if (zGrupos.length === 0) continue
+      result.push({
+        title: zona ? (ZONA_LABELS[zona] ?? zona) : '📍 Sin zona',
+        data: [],
+        isZoneHeader: true,
+      })
+      result.push(...zGrupos)
+    }
+    return result
+  }, [data, busqueda, zonaMap])
+
+  const gruposReales = grupos.filter(g => !g.isZoneHeader)
+  const totalModelos = gruposReales.reduce((s, g) => s + g.data.length, 0)
 
   function toggleGrupo(titulo: string) {
     setColapsados(v => ({ ...v, [titulo]: !v[titulo] }))
   }
 
   function renderSectionHeader({ section }: { section: Grupo }) {
+    if (section.isZoneHeader) {
+      return (
+        <View style={s.zonaSectionHeader}>
+          <Text style={[s.zonaSectionHeaderTxt, { color: c.textMute, borderBottomColor: c.border }]}>{section.title}</Text>
+        </View>
+      )
+    }
     const count = section.data.length
     const colapsado = colapsados[section.title] ?? false
     return (
@@ -199,7 +256,7 @@ export default function TablaEquipo() {
             )}
           </View>
           <Text style={[s.meta, { color: c.textMute }]}>
-            {grupos.length} {grupos.length === 1 ? 'desarrollo' : 'desarrollos'} · {totalModelos} modelos
+            {gruposReales.length} {gruposReales.length === 1 ? 'desarrollo' : 'desarrollos'} · {totalModelos} modelos
             {busqueda.trim() ? ` (filtrado)` : ''}
           </Text>
           <SectionList
@@ -236,6 +293,14 @@ const s = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14 },
 
   meta: { fontSize: 11, paddingHorizontal: 16, paddingBottom: 6 },
+
+  zonaSectionHeader: {
+    paddingHorizontal: 12, paddingTop: 14, paddingBottom: 2,
+  },
+  zonaSectionHeaderTxt: {
+    fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8,
+    paddingBottom: 6, borderBottomWidth: 1,
+  },
 
   // Header del grupo (desarrollo)
   grupoHeader: {
