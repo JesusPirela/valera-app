@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Animated,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { calcularNivel, infoNivel, tituloPorNivel, sincronizarMisionesBase } from '../../lib/gamification'
@@ -121,74 +122,60 @@ function buildLista(
 }
 
 export default function Misiones() {
-  const [userId, setUserId] = useState<string | null>(null)
-  const [stats, setStats]   = useState<UserStats | null>(null)
-  const [misiones, setMisiones] = useState<MisionConProgreso[]>([])
-  const [loading, setLoading]   = useState(true)
+  const queryClient = useQueryClient()
   const [tabBase, setTabBase]   = useState<string>('propiedad')
   const [sincronizando, setSincronizando] = useState(false)
-  const userIdRef = useRef<string | null>(null)
   const sincronizandoRef = useRef(false)
 
-  useFocusEffect(useCallback(() => { cargar() }, []))
+  // React Query: misiones y stats cacheados (aparecen al instante al enfocar,
+  // antes recargaba con spinner en cada visita). El realtime de user_misiones /
+  // user_stats invalida el cache para refrescar el progreso en vivo.
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['misiones'],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
+      if (!user) return null
+      const hoy = getHoyMX()
+      const [statsRes, misionesRes, progresoRes, conteosMap] = await Promise.all([
+        supabase.from('user_stats').select('xp, valera_coins, streak_dias, total_propiedades, total_clientes, total_cursos, total_seguimientos, total_ventas').eq('id', user.id).maybeSingle(),
+        supabase.from('misiones').select('id, tipo, categoria, titulo, descripcion, meta, recompensa_xp, recompensa_coins, orden, icono').eq('activa', true).order('orden'),
+        supabase.from('user_misiones').select('mision_id, progreso, completada, fecha_reset').eq('user_id', user.id),
+        getConteosDiarios(user.id),
+      ])
+      return {
+        userId: user.id,
+        stats: (statsRes.data as UserStats | null) ?? null,
+        misiones: buildLista(misionesRes.data ?? [], progresoRes.data ?? [], conteosMap, hoy),
+      }
+    },
+    staleTime: 1000 * 30,
+    networkMode: 'offlineFirst',
+  })
+  const userId = data?.userId ?? null
+  const stats = data?.stats ?? null
+  const misiones = data?.misiones ?? []
 
-  // Escuchar cambios en tiempo real de user_misiones y user_stats
+  // Refresco en segundo plano al enfocar (el cache se muestra al instante).
+  useFocusEffect(useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['misiones'] })
+  }, [queryClient]))
+
+  // Realtime: cambios en las misiones/stats del usuario refrescan el cache en vivo.
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null
-
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user
       if (!user) return
-      userIdRef.current = user.id
-
+      const refrescar = () => { if (!sincronizandoRef.current) queryClient.invalidateQueries({ queryKey: ['misiones'] }) }
       channel = supabase
         .channel('misiones-live')
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'user_misiones', filter: `user_id=eq.${user.id}` },
-          () => { cargarSilencioso(user.id) }
-        )
-        .on('postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'user_stats', filter: `id=eq.${user.id}` },
-          () => { cargarSilencioso(user.id) }
-        )
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'user_misiones', filter: `user_id=eq.${user.id}` }, refrescar)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_stats', filter: `id=eq.${user.id}` }, refrescar)
         .subscribe()
     })
-
     return () => { if (channel) supabase.removeChannel(channel) }
-  }, [])
-
-  async function cargarSilencioso(uid: string) {
-    if (sincronizandoRef.current) return
-    const hoy = getHoyMX()
-    const [statsRes, misionesRes, progresoRes, conteosMap] = await Promise.all([
-      supabase.from('user_stats').select('xp, valera_coins, streak_dias, total_propiedades, total_clientes, total_cursos, total_seguimientos, total_ventas').eq('id', uid).maybeSingle(),
-      supabase.from('misiones').select('id, tipo, categoria, titulo, descripcion, meta, recompensa_xp, recompensa_coins, orden, icono').eq('activa', true).order('orden'),
-      supabase.from('user_misiones').select('mision_id, progreso, completada, fecha_reset').eq('user_id', uid),
-      getConteosDiarios(uid),
-    ])
-    if (statsRes.data) setStats(statsRes.data as UserStats)
-    setMisiones(buildLista(misionesRes.data ?? [], progresoRes.data ?? [], conteosMap, hoy))
-  }
-
-  async function cargar() {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    setUserId(user.id)
-
-    const [statsRes, misionesRes, progresoRes] = await Promise.all([
-      supabase.from('user_stats').select('xp, valera_coins, streak_dias, total_propiedades, total_clientes, total_cursos, total_seguimientos, total_ventas').eq('id', user.id).maybeSingle(),
-      supabase.from('misiones').select('id, tipo, categoria, titulo, descripcion, meta, recompensa_xp, recompensa_coins, orden, icono').eq('activa', true).order('orden'),
-      supabase.from('user_misiones').select('mision_id, progreso, completada, fecha_reset').eq('user_id', user.id),
-    ])
-
-    const s = statsRes.data as UserStats | null
-    setStats(s)
-
-    const hoy = getHoyMX()
-    const conteosMap = await getConteosDiarios(user.id)
-    setMisiones(buildLista(misionesRes.data ?? [], progresoRes.data ?? [], conteosMap, hoy))
-    setLoading(false)
-  }
+  }, [queryClient])
 
   const diarias = misiones.filter(m => m.tipo === 'diaria')
   const base    = misiones.filter(m => m.tipo === 'base')
@@ -227,7 +214,7 @@ export default function Misiones() {
                 sincronizandoRef.current = true
                 await sincronizarMisionesBase(userId).catch(() => {})
                 sincronizandoRef.current = false
-                await cargar()
+                await queryClient.invalidateQueries({ queryKey: ['misiones'] })
                 setSincronizando(false)
               }}
             >

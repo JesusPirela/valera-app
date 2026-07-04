@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, Platform,
@@ -77,11 +77,15 @@ export default function Tienda() {
   const [cofresAbiertos, setCofresAbiertos]   = useState(0)
   const [cofresNivelTotal, setCofresNivelTotal] = useState(0)
   const [nivelCofresGanados, setNivelCofresGanados] = useState<{ nivel: number; cantidad: number } | null>(null)
+  // Tras la primera carga, las recargas (re-enfoque, tras comprar) son silenciosas:
+  // los datos ya visibles permanecen y se refrescan en segundo plano, sin el
+  // spinner de pantalla completa que aparecía en cada visita.
+  const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
     setUserId(user.id)
@@ -120,6 +124,7 @@ export default function Tienda() {
     }
 
     setLoading(false)
+    yaCargoRef.current = true
 
     // Reclamar TODOS los cofres por nivel a los que se tiene derecho (idempotente).
     // Recupera los de quienes subieron antes del cambio o por error no los tienen.
