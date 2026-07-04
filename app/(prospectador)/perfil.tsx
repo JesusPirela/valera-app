@@ -171,10 +171,13 @@ export default function Perfil() {
   }, [])
 
 
+  // Primera carga con spinner; re-enfoques posteriores refrescan en silencio
+  // (los datos del perfil ya visibles permanecen, sin spinner en cada visita).
+  const yaCargoRef = useRef(false)
   useFocusEffect(useCallback(() => { cargar() }, []))
 
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
     setUserId(user.id)
@@ -199,6 +202,7 @@ export default function Perfil() {
         setAvatarUrl(data.avatar_url ?? null)
       }
     }
+    yaCargoRef.current = true
     setLoading(false)
   }
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, Alert, useWindowDimensions,
@@ -48,8 +48,9 @@ export default function TareasScreen() {
     cargar()
   }, []))
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 
@@ -64,6 +65,7 @@ export default function TareasScreen() {
 
     const validas = ((data ?? []) as any[]).filter((a: any) => a.tarea?.activa !== false)
     setAsignaciones(validas)
+    yaCargoRef.current = true
     setLoading(false)
   }
 

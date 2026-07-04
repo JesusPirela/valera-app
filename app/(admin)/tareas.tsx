@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Modal, Alert, Platform, useWindowDimensions,
@@ -164,8 +164,9 @@ export default function AdminTareas() {
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
 
     // 1. Tareas con asignaciones (sin join a profiles)
     const { data: tareasData } = await supabase
@@ -178,7 +179,7 @@ export default function AdminTareas() {
       .eq('activa', true)
       .order('created_at', { ascending: false })
 
-    if (!tareasData || tareasData.length === 0) { setTareas([]); setLoading(false); return }
+    if (!tareasData || tareasData.length === 0) { setTareas([]); yaCargoRef.current = true; setLoading(false); return }
 
     // 2. Perfiles de todos los user_ids mencionados
     const allIds = [...new Set(
@@ -204,6 +205,7 @@ export default function AdminTareas() {
     }))
 
     setTareas(merged)
+    yaCargoRef.current = true
     setLoading(false)
   }
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -183,10 +183,12 @@ export default function Prospectadores() {
   const [crmModal, setCrmModal]   = useState<CrmMetricas | null>(null)
   const [loadingCrm, setLoadingCrm] = useState(false)
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
     const { data, error } = await supabase.rpc('get_prospectadores')
     if (!error) setLista(data ?? [])
+    yaCargoRef.current = true
     setLoading(false)
   }
 

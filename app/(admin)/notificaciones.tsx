@@ -205,8 +205,9 @@ export default function AdminNotificaciones() {
   const [loading, setLoading] = useState(true)
   const [marcandoTodas, setMarcandoTodas] = useState(false)
 
+  const yaCargoRef = useRef(false)
   async function cargarNotificaciones() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 
@@ -218,6 +219,7 @@ export default function AdminNotificaciones() {
 
     if (error) Alert.alert('Error', 'No se pudieron cargar las notificaciones.')
     else setNotificaciones(ordenarPorPrioridad(data ?? []))
+    yaCargoRef.current = true
     setLoading(false)
   }
 
