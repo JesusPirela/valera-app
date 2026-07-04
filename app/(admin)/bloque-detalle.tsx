@@ -10,7 +10,7 @@ import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 const hoyISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 
 // ── Types ───────────────────────────────────────────────────────────────────
-type Periodo = '24h' | '7dias' | '30dias'
+type Periodo = '24h' | 'ayer' | '7dias' | '30dias'
 
 type UsuarioMetricas = {
   id: string
@@ -37,6 +37,7 @@ const TEAL = '#1a6470'
 
 const PERIODOS: { key: Periodo; label: string; sub: string }[] = [
   { key: '24h',    label: 'Hoy',    sub: 'Desde 12:00 am' },
+  { key: 'ayer',   label: 'Ayer',   sub: 'Día anterior'   },
   { key: '7dias',  label: '7 días', sub: 'Última semana'  },
   { key: '30dias', label: '30 días',sub: 'Último mes'     },
 ]
@@ -47,6 +48,11 @@ function getRango(p: Periodo): { inicio: Date; fin: Date } {
   if (p === '24h') {
     const i = new Date(now); i.setHours(0, 0, 0, 0)
     const f = new Date(now); f.setHours(23, 59, 59, 999)
+    return { inicio: i, fin: f }
+  }
+  if (p === 'ayer') {
+    const i = new Date(now); i.setDate(i.getDate() - 1); i.setHours(0, 0, 0, 0)
+    const f = new Date(now); f.setDate(f.getDate() - 1); f.setHours(23, 59, 59, 999)
     return { inicio: i, fin: f }
   }
   const i = new Date(now)
@@ -63,13 +69,14 @@ function formatMinutos(m: number) {
 function formatAcceso(iso: string | null, periodo: Periodo) {
   if (!iso) return '—'
   const d = new Date(iso)
-  if (periodo === '24h') return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+  // Periodos de un solo día → solo la hora; rangos multi-día → fecha + hora.
+  if (periodo === '24h' || periodo === 'ayer') return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
   return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 function formatRangoLabel(p: Periodo, inicio: Date, fin: Date) {
   const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }
-  const pref = p === '24h' ? 'Últimas 24 horas' : p === '7dias' ? 'Últimos 7 días' : 'Últimos 30 días'
+  const pref = p === '24h' ? 'Hoy' : p === 'ayer' ? 'Ayer' : p === '7dias' ? 'Últimos 7 días' : 'Últimos 30 días'
   return `${pref} · ${inicio.toLocaleDateString('es-MX', opts)} – ${fin.toLocaleDateString('es-MX', opts)}`
 }
 
@@ -314,10 +321,20 @@ export default function BloqueDetalle() {
   const [notasGuardando, setNotasGuardando] = useState<Set<string>>(new Set())
   const [contestoGuardando, setContesoGuardando] = useState<Set<string>>(new Set())
   const yaCargoRef = useRef(false)
+  const periodoPedidoRef = useRef<Periodo>('24h')
 
   useFocusEffect(useCallback(() => { setPeriodo('24h'); cargar('24h') }, []))
 
+  // Cambiar de periodo DEBE recargar: antes el tab solo hacía setPeriodo y los
+  // datos se quedaban en "Hoy" (7/30 días no cambiaban nada).
+  function cambiarPeriodo(p: Periodo) {
+    if (p === periodo) return
+    setPeriodo(p)
+    cargar(p)
+  }
+
   async function cargar(p: Periodo) {
+    periodoPedidoRef.current = p
     if (!yaCargoRef.current) setLoading(true)
     const { inicio, fin } = getRango(p)
     const [miembrosRes, prodRes, diariosRes] = await Promise.all([
@@ -325,6 +342,8 @@ export default function BloqueDetalle() {
       supabase.rpc('get_productividad_equipo', { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
       supabase.from('bloque_diario').select('user_id, contesto, nota').eq('fecha', hoyISO()),
     ])
+    // Llegó una petición de otro periodo mientras cargaba: descartar esta.
+    if (periodoPedidoRef.current !== p) return
     const bloqueIds = new Set((miembrosRes.data ?? []).map((m: any) => m.id as string))
     const diariosHoy: Record<string, { contesto: boolean | null; nota: string | null }> = {}
     for (const d of (diariosRes.data ?? []) as any[]) {
@@ -392,7 +411,7 @@ export default function BloqueDetalle() {
         {PERIODOS.map((p) => {
           const activo = periodo === p.key
           return (
-            <TouchableOpacity key={p.key} style={[s.tab, activo && s.tabActivo]} onPress={() => { if (!activo) setPeriodo(p.key) }} activeOpacity={0.75}>
+            <TouchableOpacity key={p.key} style={[s.tab, activo && s.tabActivo]} onPress={() => cambiarPeriodo(p.key)} activeOpacity={0.75}>
               <Text style={[s.tabLabel, activo && s.tabLabelActivo]}>{p.label}</Text>
               <Text style={[s.tabSub, activo && s.tabSubActivo]}>{p.sub}</Text>
             </TouchableOpacity>
