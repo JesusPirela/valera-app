@@ -1,9 +1,10 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Image, Modal, Platform,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
@@ -55,76 +56,85 @@ function VideoEmbed({ url }: { url: string }) {
 
 export default function University() {
   const c = useColors()
-  const [cursos, setCursos] = useState<CursoCard[]>([])
-  const [totalPuntos, setTotalPuntos] = useState(0)
-  const [nombreUsuario, setNombreUsuario] = useState('')
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [showIntro, setShowIntro] = useState(false)
-  const [introUrl, setIntroUrl] = useState('')
-  const [introTitulo, setIntroTitulo] = useState('Bienvenido a Valera University')
 
-  useFocusEffect(useCallback(() => { cargar() }, []))
+  // React Query (stale-while-revalidate): muestra los cursos cacheados al
+  // instante y refresca en segundo plano al enfocar, así el progreso de lecciones
+  // (que cambia en otra pantalla) se refleja sin spinner ni recarga en blanco.
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['university'],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
+      if (!user) return null
 
-  async function cargar() {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
+      const [
+        { data: perfil },
+        { data: cursosData },
+        { data: progresoData },
+        { data: certData },
+        { data: puntosData },
+        { data: configData },
+      ] = await Promise.all([
+        supabase.from('profiles').select('nombre').eq('id', user.id).single(),
+        supabase.from('vu_cursos').select('id, titulo, descripcion_corta, imagen_url, nivel, categoria, instructor, duracion_texto, es_certificacion, vu_lecciones(id)').eq('publicado', true).order('orden'),
+        supabase.from('vu_progreso').select('leccion_id, curso_id').eq('user_id', user.id),
+        supabase.from('vu_certificados').select('curso_id').eq('user_id', user.id),
+        supabase.from('vu_puntos').select('puntos').eq('user_id', user.id),
+        supabase.from('vu_config').select('clave, valor').in('clave', ['intro_video_url', 'intro_video_titulo']),
+      ])
 
-    const [
-      { data: perfil },
-      { data: cursosData },
-      { data: progresoData },
-      { data: certData },
-      { data: puntosData },
-      { data: configData },
-    ] = await Promise.all([
-      supabase.from('profiles').select('nombre').eq('id', user.id).single(),
-      supabase.from('vu_cursos').select('id, titulo, descripcion_corta, imagen_url, nivel, categoria, instructor, duracion_texto, es_certificacion, vu_lecciones(id)').eq('publicado', true).order('orden'),
-      supabase.from('vu_progreso').select('leccion_id, curso_id').eq('user_id', user.id),
-      supabase.from('vu_certificados').select('curso_id').eq('user_id', user.id),
-      supabase.from('vu_puntos').select('puntos').eq('user_id', user.id),
-      supabase.from('vu_config').select('clave, valor').in('clave', ['intro_video_url', 'intro_video_titulo']),
-    ])
+      const cfg = Object.fromEntries((configData ?? []).map((r: any) => [r.clave, r.valor]))
+      const completadasPorCurso = new Map<string, number>()
+      for (const p of progresoData ?? []) {
+        completadasPorCurso.set(p.curso_id, (completadasPorCurso.get(p.curso_id) ?? 0) + 1)
+      }
+      const certSet = new Set((certData ?? []).map((x: any) => x.curso_id))
+      const cursos: CursoCard[] = (cursosData ?? []).map((c: any) => ({
+        id: c.id,
+        titulo: c.titulo,
+        descripcion_corta: c.descripcion_corta,
+        imagen_url: c.imagen_url,
+        nivel: c.nivel ?? 'basico',
+        categoria: c.categoria ?? 'general',
+        instructor: c.instructor ?? 'Valera University',
+        duracion_texto: c.duracion_texto,
+        totalLecciones: (c.vu_lecciones ?? []).length,
+        completadas: completadasPorCurso.get(c.id) ?? 0,
+        tieneCertificado: certSet.has(c.id),
+        es_certificacion: c.es_certificacion ?? false,
+      }))
+      return {
+        nombreUsuario: perfil?.nombre ?? 'Prospectador',
+        totalPuntos: (puntosData ?? []).reduce((sum: number, r: any) => sum + (r.puntos ?? 0), 0),
+        cursos,
+        introUrl: cfg['intro_video_url'] ?? '',
+        introTitulo: cfg['intro_video_titulo'] ?? 'Bienvenido a Valera University',
+      }
+    },
+    staleTime: 1000 * 60,
+    networkMode: 'offlineFirst',
+  })
 
-    setNombreUsuario(perfil?.nombre ?? 'Prospectador')
+  const cursos = data?.cursos ?? []
+  const totalPuntos = data?.totalPuntos ?? 0
+  const nombreUsuario = data?.nombreUsuario ?? ''
+  const introUrl = data?.introUrl ?? ''
+  const introTitulo = data?.introTitulo ?? 'Bienvenido a Valera University'
 
-    // Config de intro
-    const cfg = Object.fromEntries((configData ?? []).map((r: any) => [r.clave, r.valor]))
-    const videoUrl = cfg['intro_video_url'] ?? ''
-    const videoTitulo = cfg['intro_video_titulo'] ?? 'Bienvenido a Valera University'
-    setIntroUrl(videoUrl)
-    setIntroTitulo(videoTitulo)
+  // Refresco en segundo plano al enfocar (el cache se muestra al instante).
+  useFocusEffect(useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['university'] })
+  }, [queryClient]))
 
-    // Mostrar intro si hay video y no se ha visto
-    if (videoUrl) {
-      const visto = await AsyncStorage.getItem(INTRO_KEY)
-      if (!visto) setShowIntro(true)
-    }
-
-    const completadasPorCurso = new Map<string, number>()
-    for (const p of progresoData ?? []) {
-      completadasPorCurso.set(p.curso_id, (completadasPorCurso.get(p.curso_id) ?? 0) + 1)
-    }
-    const certSet = new Set((certData ?? []).map((c: any) => c.curso_id))
-    const pts = (puntosData ?? []).reduce((sum: number, r: any) => sum + (r.puntos ?? 0), 0)
-    setTotalPuntos(pts)
-
-    setCursos((cursosData ?? []).map((c: any) => ({
-      id: c.id,
-      titulo: c.titulo,
-      descripcion_corta: c.descripcion_corta,
-      imagen_url: c.imagen_url,
-      nivel: c.nivel ?? 'basico',
-      categoria: c.categoria ?? 'general',
-      instructor: c.instructor ?? 'Valera University',
-      duracion_texto: c.duracion_texto,
-      totalLecciones: (c.vu_lecciones ?? []).length,
-      completadas: completadasPorCurso.get(c.id) ?? 0,
-      tieneCertificado: certSet.has(c.id),
-      es_certificacion: c.es_certificacion ?? false,
-    })))
-    setLoading(false)
-  }
+  // Intro: mostrar una vez si hay video de intro y el usuario no lo ha visto.
+  useEffect(() => {
+    if (!introUrl) return
+    let cancel = false
+    AsyncStorage.getItem(INTRO_KEY).then((visto) => { if (!cancel && !visto) setShowIntro(true) })
+    return () => { cancel = true }
+  }, [introUrl])
 
   async function cerrarIntro() {
     await AsyncStorage.setItem(INTRO_KEY, '1')
