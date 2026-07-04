@@ -246,12 +246,35 @@ function esDesafioBot(html: string): boolean {
 async function fetchViaUnblocker(url: string): Promise<string | null> {
   const key = (globalThis as any).Deno?.env?.get?.('SCRAPER_API_KEY')
   if (!key) return null
-  const api = `https://api.scraperapi.com/?api_key=${key}&url=${encodeURIComponent(url)}&render=true&country_code=mx&premium=true`
+  // Se usa la API ASÍNCRONA de ScraperAPI: el endpoint síncrono con render en el
+  // plan free es intermitente (Cloudflare bloquea la IP de datacenter y devuelve
+  // 500), pero el async reintenta/rota internamente hasta lograrlo. Se envía el
+  // job con render (ejecuta el reto de Cloudflare) e IP de México, y se sondea el
+  // resultado hasta ~130s (dentro del límite de la función).
   try {
-    const res = await fetch(api)
-    if (res.ok) {
-      const t = await res.text()
-      if (t && t.length > 500 && !esDesafioBot(t)) return t
+    const sub = await fetch('https://async.scraperapi.com/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: key, url, apiParams: { render: true, country_code: 'mx' } }),
+    })
+    if (!sub.ok) return null
+    const job = await sub.json()
+    const statusUrl = job?.statusUrl
+    if (!statusUrl) return null
+    const deadline = Date.now() + 130_000
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 6000))
+      let sj: any
+      try {
+        const st = await fetch(statusUrl)
+        if (!st.ok) continue
+        sj = await st.json()
+      } catch (_) { continue }
+      if (sj?.status === 'finished') {
+        const body = sj?.response?.body
+        return (body && body.length > 500 && !esDesafioBot(body)) ? body : null
+      }
+      if (sj?.status === 'failed') return null
     }
   } catch (_) { /* el unblocker falló o agotó cuota */ }
   return null
@@ -586,6 +609,21 @@ serve(async (req) => {
       }
     }
 
+    // ── 0e. inmuebles24: tipo/operación desde el slug de la URL ─────────────────
+    // El título contiene el nombre de la colonia (p. ej. "Villas La Joya"), y
+    // "villa" haría que mapTipo lo clasifique como casa. El slug es autoritativo:
+    // "…-departamento-en-venta-villas-la-joya-<id>".
+    if (/inmuebles24\.com/i.test(url)) {
+      const sm = url.match(/\/clasificado\/([^/?#]+)/i)
+      if (sm) {
+        const words = sm[1].replace(/-/g, ' ')
+        const tm = words.match(/\b(departamento|depto|casa|terreno|lote|local|oficina|bodega|nave|penthouse|loft|villa)\b/i)
+        if (tm && !tipo) tipo = mapTipo(tm[1])
+        const om = words.match(/\ben\s+(venta|renta|preventa|alquiler)\b/i)
+        if (om && !operacion) operacion = mapOp(om[1])
+      }
+    }
+
     // ── 1. EasyBroker: JSON embebido HTML-encoded ─────────────────────────────
     // Patrón: {"Property ID":"EB-XXXX","Bedrooms":N,...}
     const ebMatch = html.match(/\{[^{}]*&quot;Property ID&quot;[^{}]*\}/)
@@ -692,7 +730,7 @@ serve(async (req) => {
             || (html.match(/<title>([^<]+)<\/title>/)?.[1] ?? '')
     }
     titulo = decodeEntities(titulo)
-      .replace(/\s*[-|–·]\s*(easy\s*broker|easybroker|gm\s*agencia|gm\s*inmobiliaria|lamudi|inmobay|reval).*/i, '')
+      .replace(/\s*[-|–·]\s*(easy\s*broker|easybroker|gm\s*agencia|gm\s*inmobiliaria|lamudi|inmobay|reval|inmuebles\s*24|inmuebles24).*/i, '')
       // Quita precios incrustados en el título (Inmobay: "Departamento en Venta MXN 4,200,000.00 ...")
       .replace(/\s*(?:MXN|MX\$|USD|\$)\s*[\d][\d,]*(?:\.\d+)?/i, '')
       .replace(/\s+ubicad[oa]\s+en\s+.*/i, '')
@@ -800,8 +838,6 @@ serve(async (req) => {
       /https?:\/\/[^\s"'<>?]*inmobay\.com\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi, // inmobay (cualquier ruta)
       /https?:\/\/[^\s"'<>?]+\/wp-content\/uploads\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,        // WordPress (gminmobiliaria)
       /https?:\/\/[^\s"'<>?]+\.(?:cloudfront\.net|amazonaws\.com)\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
-      // inmuebles24 / Navent (zonaprop, etc.): CDN de fotos de los avisos.
-      /https?:\/\/[^\s"'<>?]*(?:naventcdn|zonapropcdn|staticontent|inmuebles24)\.com\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
       // Lamudi: URLs base64 SIN extensión (img.lamudi.com.mx/<token>)
       /https?:\/\/img\.lamudi\.com\.mx\/[^\s"'<>)]+/gi,
     ]
@@ -838,6 +874,28 @@ serve(async (req) => {
     }
     imagenes = [...best.values()].map(v => v.url)
     } // end !imagenes.length block
+
+    // ── 10a-navent. inmuebles24 / Navent: fotos del aviso en máxima resolución ─
+    // Las fotos viven en img*.naventcdn.com/avisos/<carpeta>/<tamaño>/<id>.jpg.
+    // La página trae la galería del aviso + miniaturas de "propiedades similares"
+    // (otras carpetas). Se agrupa por carpeta y se toma la que MÁS fotos tiene
+    // (la propiedad), reconstruyendo cada foto en 1200x1200 (la variante grande).
+    if (imagenes.length < 3 && /naventcdn\.com\/avisos\//i.test(html)) {
+      const porCarpeta = new Map<string, Set<string>>()
+      for (const m of html.matchAll(/(https?:\/\/[a-z0-9.]*naventcdn\.com\/avisos\/[\d/]+?)\/\d+x\d+\/(\d+)\.(?:jpe?g|png|webp)/gi)) {
+        const carpeta = m[1]
+        if (!porCarpeta.has(carpeta)) porCarpeta.set(carpeta, new Set())
+        porCarpeta.get(carpeta)!.add(m[2])
+      }
+      let mejor = ''
+      let max = 0
+      for (const [carpeta, ids] of porCarpeta) {
+        if (ids.size > max) { max = ids.size; mejor = carpeta }
+      }
+      if (mejor && max >= 1) {
+        imagenes = [...porCarpeta.get(mejor)!].map(id => `${mejor}/1200x1200/${id}.jpg`).slice(0, 40)
+      }
+    }
 
     // ── 10a-wix. Wix (static.wixstatic.com): fotos reales, sin íconos ni logos ─
     // Los sitios Wix sirven muchísimas variantes de static.wixstatic.com: íconos de
