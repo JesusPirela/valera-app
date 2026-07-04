@@ -251,7 +251,16 @@ export default function CRM() {
     staleTime: 1000 * 60 * 5,
   })
 
-  useFocusEffect(useCallback(() => { refetch() }, [refetch]))
+  // Refrescar al enfocar SOLO si el cache ya está viejo (respeta staleTime).
+  // Antes hacía refetch() en cada visita: como expo-router mantiene el tab
+  // montado, recargaba el CRM del servidor cada vez que volvías, sintiéndose
+  // lento sin necesidad. Ahora la lista cacheada aparece al instante y solo se
+  // vuelve a pedir si pasaron >5 min.
+  useFocusEffect(useCallback(() => {
+    const st = queryClient.getQueryState(['clientes', soloMios ? 'mios' : 'all', 'v3'])
+    const viejo = !st?.dataUpdatedAt || (Date.now() - st.dataUpdatedAt) > 1000 * 60 * 5
+    if (viejo) refetch()
+  }, [refetch, soloMios, queryClient]))
 
   useEffect(() => {
     if (!clientes.length) return
