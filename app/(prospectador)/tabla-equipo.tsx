@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { View, Text, StyleSheet, SectionList, ActivityIndicator, TouchableOpacity, TextInput } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -70,8 +70,10 @@ export default function TablaEquipo() {
     setZonaMap(map)
   }
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     setError(null)
     try {
       const { data: result, error: fnErr } = await supabase.functions.invoke('get-tabla-equipo')

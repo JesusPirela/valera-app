@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Platform, Alert,
@@ -228,9 +228,11 @@ export default function UniversityCurso() {
 
   useFocusEffect(useCallback(() => { cargar() }, [cursoId]))
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
     if (!cursoId) return
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 

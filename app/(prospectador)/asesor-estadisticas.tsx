@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native'
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -15,8 +15,10 @@ export default function AsesorEstadisticas() {
   const [metricas, setMetricas] = useState<CrmMetricas | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const yaCargoRef = useRef(false)
   async function cargar(m: Modo) {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     const { data: { user } } = await supabase.auth.getUser()
     const resultado = await calcularCrmMetricas(
       m === 'propio' ? (user?.id ?? null) : null,

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator,
   TouchableOpacity, TextInput,
@@ -43,6 +43,8 @@ export default function HistorialPublicaciones() {
   const [error, setError] = useState<string | null>(null)
   // Portada (primera imagen) por propiedad_id, cargada aparte de la RPC.
   const [covers, setCovers] = useState<Record<string, string>>({})
+  // Tras la primera carga, los re-enfoques refrescan la 1ª página en silencio.
+  const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => {
     setOffset(0)
@@ -68,8 +70,9 @@ export default function HistorialPublicaciones() {
   }
 
   async function cargar(off: number, reset = false) {
-    if (off === 0) setLoading(true)
-    else setCargandoMas(true)
+    if (off === 0 && !yaCargoRef.current) setLoading(true)
+    else if (off > 0) setCargandoMas(true)
+    if (off === 0) yaCargoRef.current = true
 
     const { data: { session } } = await supabase.auth.getSession()
     const userId = session?.user?.id
