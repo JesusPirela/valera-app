@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Platform, Alert,
@@ -61,8 +61,10 @@ export default function AdminEntregas() {
 
   useFocusEffect(useCallback(() => { cargar() }, [filtroEstado]))
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     try {
       // Fetch entregas with related tareas/lecciones/cursos
       // profiles join is done separately because user_id FK points to auth.users, not public.profiles

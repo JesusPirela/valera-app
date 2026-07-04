@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Platform, Alert, Modal,
@@ -42,8 +42,10 @@ export default function AdminInmobiliarias() {
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     const { data } = await supabase
       .from('inmobiliarias')
       .select('*')

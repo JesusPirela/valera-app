@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, Platform, TextInput,
@@ -50,8 +50,10 @@ export default function CampaignLeads() {
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     const [leadsRes, usersRes] = await Promise.all([
       supabase.from('campaign_leads')
         .select('id, nombre, telefono, presupuesto, zona_busqueda, fuente_lead, fecha_lead, estado, responsable_id')

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, Switch, Platform, TextInput,
@@ -50,8 +50,10 @@ export default function AdminUniversity() {
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     const [{ data: statsData }, { data: cursosData }, { data: configData }] = await Promise.all([
       supabase.rpc('get_vu_stats_admin'),
       supabase.from('vu_cursos').select('id, titulo, nivel, publicado, categoria, vu_lecciones(id), vu_certificados(id)').order('orden'),

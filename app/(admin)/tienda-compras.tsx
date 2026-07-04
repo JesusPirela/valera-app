@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Alert, Platform, Image,
@@ -93,8 +93,10 @@ export default function TiendaCompras() {
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     const { data, error } = await supabase.rpc('get_compras_tienda')
     if (error) {
       alerta('Error al cargar compras: ' + error.message)

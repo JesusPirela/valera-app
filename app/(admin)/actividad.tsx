@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -55,8 +55,10 @@ export default function ActividadAdmin() {
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState<FiltroTipo>('todos')
 
+  const yaCargoRef = useRef(false)
   async function cargarActividad() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     const { data, error } = await supabase.rpc('get_actividad_prospectadores')
     if (error) {
       Alert.alert('Error', 'No se pudo cargar la actividad.')

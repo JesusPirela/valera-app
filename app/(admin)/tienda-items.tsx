@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Modal, Platform,
@@ -81,8 +81,10 @@ export default function TiendaItems() {
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     const [itemsRes, cfgRes] = await Promise.all([
       supabase.from('store_items').select('id, nombre, descripcion, costo_coins, tipo, disponible, stock, icono, orden').order('orden'),
       supabase.from('app_config').select('value').eq('key', 'ruleta_config').maybeSingle(),

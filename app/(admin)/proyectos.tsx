@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Modal, Platform, Image,
@@ -127,8 +127,10 @@ export default function Proyectos() {
 
   useFocusEffect(useCallback(() => { cargar() }, []))
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     const [projRes, perfRes] = await Promise.all([
       supabase.from('proyectos').select('*').order('updated_at', { ascending: false }),
       supabase.from('profiles').select('id, nombre').eq('role', 'admin').order('nombre'),
