@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, Image,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { calcularNivel, tituloPorNivel } from '../../lib/gamification'
 import { AccentBackground } from '../../lib/patrones'
@@ -57,22 +58,31 @@ const av = StyleSheet.create({
 const MEDAL = ['🥇', '🥈', '🥉']
 
 export default function Ranking() {
-  const [userId, setUserId]   = useState<string | null>(null)
-  const [entries, setEntries] = useState<RankEntry[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [sel, setSel] = useState<RankEntry | null>(null)
 
-  useFocusEffect(useCallback(() => { cargar() }, []))
+  // React Query: el ranking cacheado aparece al instante al volver a la pantalla;
+  // solo se vuelve a pedir en segundo plano si pasaron >2 min (antes recargaba
+  // desde cero en cada foco). getSession() es local (no red) para el userId.
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['ranking'],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const { data: rows } = await supabase.rpc('get_ranking')
+      return { userId: session?.user?.id ?? null, entries: (rows ?? []) as RankEntry[] }
+    },
+    staleTime: 1000 * 60 * 2,
+    networkMode: 'offlineFirst',
+  })
+  const userId = data?.userId ?? null
+  const entries = data?.entries ?? []
 
-  async function cargar() {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) setUserId(user.id)
-
-    const { data } = await supabase.rpc('get_ranking')
-    setEntries((data ?? []) as RankEntry[])
-    setLoading(false)
-  }
+  useFocusEffect(useCallback(() => {
+    const st = queryClient.getQueryState(['ranking'])
+    if (!st?.dataUpdatedAt || Date.now() - st.dataUpdatedAt > 1000 * 60 * 2) {
+      queryClient.invalidateQueries({ queryKey: ['ranking'] })
+    }
+  }, [queryClient]))
 
   const miEntry = entries.find(e => e.id === userId)
 

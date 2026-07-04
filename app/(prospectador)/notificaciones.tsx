@@ -6,13 +6,13 @@ import {
   FlatList,
   ActivityIndicator,
   TouchableOpacity,
-  Alert,
   Animated,
   PanResponder,
   Platform,
   Dimensions,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useColors, useTheme } from '../../lib/ThemeContext'
 
@@ -248,30 +248,39 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
 
 export default function Notificaciones() {
   const c = useColors()
-  const [notificaciones, setNotificaciones] = useState<Notificacion[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [marcandoTodas, setMarcandoTodas] = useState(false)
 
-  async function cargarNotificaciones() {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
+  // React Query: la lista cacheada aparece al instante al volver; solo se
+  // refresca en segundo plano si pasó >1 min. Antes recargaba desde cero en
+  // cada foco. Las mutaciones actualizan el cache de forma optimista.
+  const { data: notificaciones = [], isLoading: loading } = useQuery({
+    queryKey: ['notificaciones'],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const uid = session?.user?.id
+      if (!uid) return [] as Notificacion[]
+      const { data, error } = await supabase
+        .from('notificaciones')
+        .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, chatbot_lead_id, tipo')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return ordenarPorPrioridad(data ?? [])
+    },
+    staleTime: 1000 * 60,
+    networkMode: 'offlineFirst',
+  })
 
-    const { data, error } = await supabase
-      .from('notificaciones')
-      .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, chatbot_lead_id, tipo')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      Alert.alert('Error', 'No se pudieron cargar las notificaciones.')
-    } else {
-      setNotificaciones(ordenarPorPrioridad(data ?? []))
+  useFocusEffect(useCallback(() => {
+    const st = queryClient.getQueryState(['notificaciones'])
+    if (!st?.dataUpdatedAt || Date.now() - st.dataUpdatedAt > 1000 * 60) {
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] })
     }
-    setLoading(false)
-  }
+  }, [queryClient]))
 
-  useFocusEffect(useCallback(() => { cargarNotificaciones() }, []))
+  const setNotis = (updater: (prev: Notificacion[]) => Notificacion[]) =>
+    queryClient.setQueryData<Notificacion[]>(['notificaciones'], (old) => updater(old ?? []))
 
   async function marcarLeida(id: string) {
     const { error } = await supabase
@@ -279,11 +288,7 @@ export default function Notificaciones() {
       .update({ leida: true })
       .eq('id', id)
 
-    if (!error) {
-      setNotificaciones((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, leida: true } : n))
-      )
-    }
+    if (!error) setNotis((prev) => prev.map((n) => (n.id === id ? { ...n, leida: true } : n)))
   }
 
   async function marcarTodasLeidas() {
@@ -291,23 +296,22 @@ export default function Notificaciones() {
     if (noLeidas.length === 0) return
 
     setMarcandoTodas(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setMarcandoTodas(false); return }
+    const { data: { session } } = await supabase.auth.getSession()
+    const uid = session?.user?.id
+    if (!uid) { setMarcandoTodas(false); return }
 
     const { error } = await supabase
       .from('notificaciones')
       .update({ leida: true })
-      .eq('user_id', user.id)
+      .eq('user_id', uid)
       .eq('leida', false)
 
-    if (!error) {
-      setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })))
-    }
+    if (!error) setNotis((prev) => prev.map((n) => ({ ...n, leida: true })))
     setMarcandoTodas(false)
   }
 
   async function eliminarNotificacion(id: string) {
-    setNotificaciones((prev) => prev.filter((n) => n.id !== id))
+    setNotis((prev) => prev.filter((n) => n.id !== id))
     await supabase.from('notificaciones').delete().eq('id', id)
   }
 
