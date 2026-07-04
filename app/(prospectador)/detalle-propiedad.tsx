@@ -20,7 +20,6 @@ import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
 import { esPlusOMejor, esStaffSupervision } from '../../lib/permisos'
 import { thumb } from '../../lib/img'
-import { descargarFotosZipWeb } from '../../lib/zip'
 import { enqueuePublicacion } from '../../lib/offline-queue'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
@@ -1302,10 +1301,33 @@ export default function DetallePropiedad() {
         window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
         try { await navigator.clipboard.writeText(texto) } catch { /* ignorar */ }
 
-        // Fotos en UN solo ZIP (carpeta = código): las descargas múltiples las
-        // bloquea el navegador y solo llegaba la primera foto.
-        if (imagenes.length > 0) {
-          await descargarFotosZipWeb(imagenes.map(img => img.url), propiedad.codigo ?? propiedad.id)
+        // Descargas individuales nombradas con el ID de la casa.
+        const idCasa = (propiedad.codigo ?? propiedad.id).replace(/[^a-zA-Z0-9._-]/g, '_')
+        for (let i = 0; i < imagenes.length; i++) {
+          try {
+            const resp = await fetch(imagenes[i].url)
+            const blob = await resp.blob()
+            const objectUrl = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = objectUrl
+            a.download = `${idCasa}-foto-${i + 1}.jpg`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+          } catch {
+            const a = document.createElement('a')
+            a.href = imagenes[i].url
+            a.download = `${idCasa}-foto-${i + 1}.jpg`
+            a.target = '_blank'
+            a.rel = 'noopener'
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+          }
+          if (i < imagenes.length - 1) {
+            await new Promise<void>(r => setTimeout(r, 500))
+          }
         }
         setCompartiendoFotos(false)
         return
@@ -1374,18 +1396,42 @@ export default function DetallePropiedad() {
 
     if (Platform.OS === 'web') {
       try {
-        // UN solo ZIP con carpeta = código de la propiedad. Antes se hacía un
-        // click de descarga POR foto y el navegador bloqueaba las descargas
-        // múltiples (al usuario solo le llegaba la primera). El ZIP es una sola
-        // descarga (nunca se bloquea) y al abrirlo crea la carpeta con el ID.
-        const incluidas = await descargarFotosZipWeb(
-          imagenes.map(img => img.url),
-          propiedad.codigo ?? propiedad.id,
-        )
-        if (incluidas === 0) {
-          window.alert('No se pudieron descargar las fotos. Revisa tu conexión e intenta de nuevo.')
-        } else if (incluidas < imagenes.length) {
-          window.alert(`Se descargó un ZIP con ${incluidas} de ${imagenes.length} fotos (algunas no se pudieron obtener). Ábrelo para ver la carpeta ${propiedad.codigo ?? ''}.`)
+        // Descargas individuales, cada archivo nombrado con el ID de la casa
+        // (VAL-123-foto-1.jpg…). El navegador pide permiso para descargas
+        // múltiples la primera vez — avisar para que el usuario lo acepte,
+        // si no solo le llega la primera foto.
+        const idCasa = (propiedad.codigo ?? propiedad.id).replace(/[^a-zA-Z0-9._-]/g, '_')
+        if (imagenes.length > 1) {
+          window.alert(`Se descargarán ${imagenes.length} fotos. Si tu navegador pregunta "¿Descargar varios archivos?", dale PERMITIR — de lo contrario solo llegará la primera.`)
+        }
+        for (let i = 0; i < imagenes.length; i++) {
+          try {
+            const resp = await fetch(imagenes[i].url)
+            const blob = await resp.blob()
+            const objectUrl = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = objectUrl
+            a.download = `${idCasa}-foto-${i + 1}.jpg`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            // Defer revoke — el navegador necesita tiempo para leer el blob antes de que se libere
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+          } catch {
+            // CORS bloqueó fetch — abrir directamente la URL
+            const a = document.createElement('a')
+            a.href = imagenes[i].url
+            a.download = `${idCasa}-foto-${i + 1}.jpg`
+            a.target = '_blank'
+            a.rel = 'noopener'
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+          }
+          // Pausa entre descargas para que el navegador no bloquee las múltiples descargas
+          if (i < imagenes.length - 1) {
+            await new Promise<void>(r => setTimeout(r, 500))
+          }
         }
       } finally {
         setDescargando(false)
