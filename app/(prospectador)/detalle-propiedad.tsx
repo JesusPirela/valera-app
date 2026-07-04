@@ -1009,13 +1009,24 @@ export default function DetallePropiedad() {
       } else {
         const Print = await import('expo-print')
         const ShareLib = await import('expo-sharing')
-        const { uri } = await Print.printToFileAsync({ html, width: 595 })
+        // Escribir el HTML a archivo temporal para evitar el límite del bridge
+        // de React Native al pasar strings muy grandes (base64 de muchas fotos).
+        // Con uri= el WKWebView espera didFinishNavigation antes de capturar.
+        const htmlFileUri = `${FileSystem.cacheDirectory}ficha_print_tmp.html`
+        await FileSystem.writeAsStringAsync(htmlFileUri, html, { encoding: FileSystem.EncodingType.UTF8 })
+        let pdfUri: string
+        try {
+          const result = await Print.printToFileAsync({ uri: htmlFileUri, width: 595 })
+          pdfUri = result.uri
+        } finally {
+          FileSystem.deleteAsync(htmlFileUri, { idempotent: true }).catch(() => {})
+        }
         const isAvailable = await ShareLib.isAvailableAsync()
         if (!isAvailable) {
           Alert.alert('Error', 'Compartir no está disponible en este dispositivo.')
           return
         }
-        await ShareLib.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: propiedad.codigo ?? 'ficha' })
+        await ShareLib.shareAsync(pdfUri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: propiedad.codigo ?? 'ficha' })
       }
     } catch (e: any) {
       if (Platform.OS === 'web') {
