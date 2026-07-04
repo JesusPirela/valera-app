@@ -231,28 +231,68 @@ try {
   extraCaClient = (Deno as any).createHttpClient({ caCerts: EXTRA_CA_CERTS })
 } catch { extraCaClient = undefined }
 
-// Descarga el HTML. Algunos portales (p.ej. Inmobay) sirven una cadena de
-// certificados incompleta que el runtime de Deno rechaza ("UnknownIssuer"),
-// o bloquean por IP/bot. En esos casos se reintenta vía un proxy de lectura
-// que descarga el contenido del lado del servidor y lo devuelve crudo.
+// Detecta la página-desafío de Cloudflare / anti-bot (NO es el contenido real).
+// Portales como inmuebles24 devuelven un "Just a moment…" con un reto de JS que
+// los proxies simples no resuelven; hay que reconocerlo para no extraer basura.
+function esDesafioBot(html: string): boolean {
+  const h = html.slice(0, 4000).toLowerCase()
+  return /just a moment|attention required|cf-browser-verification|challenge-platform|_cf_chl|cf_chl_opt|verifying you are human|performing security verification|enable javascript and cookies|datadome|px-captcha/.test(h)
+}
+
+// Unblocker con renderizado (ScraperAPI). Solo se usa si está configurada la
+// variable SCRAPER_API_KEY (secreto de la función). Es la única forma de pasar
+// el Cloudflare de inmuebles24 y similares desde el servidor. `render=true`
+// ejecuta el JS del reto; `premium`/`country_code=mx` usa IPs residenciales MX.
+async function fetchViaUnblocker(url: string): Promise<string | null> {
+  const key = (globalThis as any).Deno?.env?.get?.('SCRAPER_API_KEY')
+  if (!key) return null
+  const api = `https://api.scraperapi.com/?api_key=${key}&url=${encodeURIComponent(url)}&render=true&country_code=mx&premium=true`
+  try {
+    const res = await fetch(api)
+    if (res.ok) {
+      const t = await res.text()
+      if (t && t.length > 500 && !esDesafioBot(t)) return t
+    }
+  } catch (_) { /* el unblocker falló o agotó cuota */ }
+  return null
+}
+
+// Descarga el HTML. Estrategia en capas:
+//  1) fetch directo (con CA extra para portales con cadena TLS incompleta).
+//  2) proxy de lectura simple (allorigins) para sitios sin anti-bot fuerte.
+//  3) unblocker con render (ScraperAPI) para Cloudflare/anti-bot — requiere key.
+// En cada capa se descarta la página-desafío para no pasar contenido falso.
 async function fetchHtml(url: string): Promise<string> {
+  let huboDesafio = false
   try {
     const opts: any = { headers: BROWSER_HEADERS }
     if (extraCaClient) opts.client = extraCaClient
     const res = await fetch(url, opts)
-    if (res.ok) return await res.text()
-    // 403/429/5xx: intentar proxy antes de rendirse.
+    if (res.ok) {
+      const t = await res.text()
+      if (!esDesafioBot(t)) return t
+      huboDesafio = true
+    }
   } catch (_) {
-    // Error de red/TLS: caer al proxy.
+    // Error de red/TLS: caer a las siguientes capas.
   }
   try {
     const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
     const res2 = await fetch(proxy, { headers: BROWSER_HEADERS })
     if (res2.ok) {
       const t = await res2.text()
-      if (t && t.length > 200) return t
+      if (t && t.length > 200 && !esDesafioBot(t)) return t
+      if (esDesafioBot(t)) huboDesafio = true
     }
   } catch (_) { /* el proxy también falló */ }
+
+  // Última capa: unblocker con render (inmuebles24 y otros con Cloudflare).
+  const viaApi = await fetchViaUnblocker(url)
+  if (viaApi) return viaApi
+
+  if (huboDesafio) {
+    throw new Error('Este portal bloquea accesos automáticos con Cloudflare (anti-bot). Para importarlo hay que configurar un servicio unblocker (SCRAPER_API_KEY) en la función; mientras tanto, copia la ficha y pégala manualmente.')
+  }
   throw new Error('No se pudo acceder a la página. El sitio puede estar bloqueando accesos automáticos o tener un certificado de seguridad incompleto. Copia la ficha y pégala manualmente en el campo de descripción.')
 }
 
@@ -760,6 +800,8 @@ serve(async (req) => {
       /https?:\/\/[^\s"'<>?]*inmobay\.com\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi, // inmobay (cualquier ruta)
       /https?:\/\/[^\s"'<>?]+\/wp-content\/uploads\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,        // WordPress (gminmobiliaria)
       /https?:\/\/[^\s"'<>?]+\.(?:cloudfront\.net|amazonaws\.com)\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
+      // inmuebles24 / Navent (zonaprop, etc.): CDN de fotos de los avisos.
+      /https?:\/\/[^\s"'<>?]*(?:naventcdn|zonapropcdn|staticontent|inmuebles24)\.com\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
       // Lamudi: URLs base64 SIN extensión (img.lamudi.com.mx/<token>)
       /https?:\/\/img\.lamudi\.com\.mx\/[^\s"'<>)]+/gi,
     ]
