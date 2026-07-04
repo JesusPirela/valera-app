@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
   ActivityIndicator, TouchableOpacity, Modal, Alert, Platform, Linking,
@@ -113,8 +113,10 @@ export default function AdminDetalleCliente() {
   const [cierreNotas, setCierreNotas] = useState('')
   const [guardandoCierre, setGuardandoCierre] = useState(false)
 
+  const yaCargoRef = useRef(false)
   async function cargar() {
-    setLoading(true)
+    if (!yaCargoRef.current) setLoading(true)
+    yaCargoRef.current = true
     const [{ data: cData }, { data: i }, { data: r }] = await Promise.all([
       supabase.from('clientes').select('*').eq('id', id).single(),
       supabase.from('interacciones').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
