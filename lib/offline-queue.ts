@@ -5,9 +5,11 @@ const QUEUE_KEY = 'VALERA_OFFLINE_QUEUE_v1'
 
 export type QueueOp = {
   id: string
-  type: 'update_client' | 'create_client'
+  type: 'update_client' | 'create_client' | 'publish_property'
   ts: number
-  clienteId: string          // para update: id real; para create: UUID generado localmente
+  clienteId?: string         // para update: id real; para create: UUID generado localmente
+  propiedadId?: string       // para publish_property
+  idemKey?: string           // para publish_property: MISMO key en cada reintento → nunca duplica
   payload: Record<string, any>
 }
 
@@ -63,6 +65,17 @@ export async function enqueueClienteCreate(
   await saveQueue([...queue, op])
 }
 
+// Encola una publicación de propiedad que no pudo llegar al servidor (offline o
+// red inestable). Guarda el idem_key ORIGINAL de la pulsación: la RPC
+// publicar_propiedad_atomico es idempotente por ese key, así que reintentar desde
+// la cola nunca duplica el conteo aunque la primera llamada sí hubiera llegado.
+export async function enqueuePublicacion(propiedadId: string, idemKey: string): Promise<void> {
+  const queue = await getQueue()
+  if (queue.some(q => q.type === 'publish_property' && q.idemKey === idemKey)) return
+  const op: QueueOp = { id: genUUID(), type: 'publish_property', ts: Date.now(), propiedadId, idemKey, payload: {} }
+  await saveQueue([...queue, op])
+}
+
 export async function getPendingCount(): Promise<number> {
   return (await getQueue()).length
 }
@@ -83,13 +96,21 @@ export async function flushQueue(): Promise<{ success: number; failed: number }>
         const { error } = await supabase
           .from('clientes')
           .update(op.payload)
-          .eq('id', op.clienteId)
+          .eq('id', op.clienteId!)
         if (error) throw error
       } else if (op.type === 'create_client') {
         const { error } = await supabase
           .from('clientes')
           .insert(op.payload)
         if (error) throw error
+      } else if (op.type === 'publish_property') {
+        const { data, error } = await supabase.rpc('publicar_propiedad_atomico', {
+          p_propiedad_id: op.propiedadId,
+          p_idem_key: op.idemKey,
+        })
+        if (error) throw error
+        // "limite" también cuenta como resuelta: reintentar jamás va a funcionar.
+        if (data && data.ok === false && data.error !== 'limite') throw new Error(String(data.error))
       }
       success++
     } catch {

@@ -27,6 +27,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { conReintentoData, generarIdemKey, conTimeout } from '../../lib/redIntentos'
+import { enqueuePublicacion } from '../../lib/offline-queue'
 
 const LOGO = require('../../assets/logo.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
@@ -242,10 +243,12 @@ const PropiedadCard = memo(function PropiedadCard({
               styles.publicadaBtn,
               { borderColor: primaryColor },
               veces > 0 && { backgroundColor: primaryColor, borderColor: primaryColor },
-              (isToggling || !isOnline || veces >= 10) && styles.publicadaBtnDisabled,
+              (isToggling || veces >= 10) && styles.publicadaBtnDisabled,
             ]}
-            onPress={(e) => { e.stopPropagation(); if (isOnline) onPublish(item.id) }}
-            disabled={isToggling || !isOnline || veces >= 10}
+            // Offline el botón SIGUE activo: la publicación se encola y se envía
+            // sola al reconectar (antes quedaba deshabilitado/mudo sin conexión).
+            onPress={(e) => { e.stopPropagation(); onPublish(item.id) }}
+            disabled={isToggling || veces >= 10}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             {isToggling ? (
@@ -445,6 +448,22 @@ export default function ProspectadorPropiedades() {
   const esAdmin = queryData?.rol === 'admin'
   const esAsesorOMas = ['asesor', 'supervisor', 'admin'].includes(queryData?.rol ?? '')
 
+  // ── Publicar (reescrito desde cero) ─────────────────────────────────────────
+  // Diseño: la publicación NUNCA se pierde y el botón NUNCA queda colgado.
+  //  · La RPC es idempotente por idem_key → reintentar jamás duplica el conteo.
+  //  · Sesión se verifica/refresca ANTES de llamar (raíz de los errores en
+  //    Android al volver del background: token expirado colgaba el refresh
+  //    interno de supabase-js a mitad de la llamada).
+  //  · Si la red falla de todas formas, la publicación SE ENCOLA y se envía
+  //    sola al reconectar (mismo mecanismo que el guardado del CRM). El único
+  //    error visible que queda es el de negocio (límite 10/10).
+  //  · try/finally: el spinner siempre se limpia.
+
+  function avisar(titulo: string, msg: string) {
+    if (Platform.OS === 'web') window.alert(`${titulo}: ${msg}`)
+    else Alert.alert(titulo, msg)
+  }
+
   async function publicarPropiedad(propiedadId: string) {
     if (togglingRef.current.has(propiedadId)) return
     const userId = queryData?.userId
@@ -452,47 +471,61 @@ export default function ProspectadorPropiedades() {
 
     const vecesActual = publicaciones[propiedadId] ?? 0
     if (vecesActual >= 10) {
-      if (Platform.OS === 'web') window.alert('Esta propiedad alcanzó el límite de 10 publicaciones.')
-      else Alert.alert('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
+      avisar('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
       return
     }
 
+    // Spinner + optimista (+1 visible de inmediato)
     const newTogglingSet = new Set(togglingRef.current)
     newTogglingSet.add(propiedadId)
     togglingRef.current = newTogglingSet
     setToggling(newTogglingSet)
+    const setVeces = (n: number) => {
+      queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old =>
+        old ? { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: n } } : old)
+    }
+    setVeces(vecesActual + 1)
 
-    // Optimista sobre el query separado (gcTime=0 → no persiste al disco).
-    queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => {
-      if (!old) return old
-      return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual + 1 } }
-    })
+    const idemKey = generarIdemKey()
+    const exito = (vecesReal: number) => {
+      setVeces(vecesReal)
+      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
+      actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
+    }
+    const encolar = async () => {
+      await enqueuePublicacion(propiedadId, idemKey).catch(() => {})
+      avisar('Publicación pendiente', 'La conexión está inestable. Tu publicación quedó guardada y se registrará sola en cuanto haya señal — no necesitas volver a intentar.')
+    }
 
-    // TODO el cuerpo va en try/finally: pase lo que pase, el spinner de "cargando"
-    // SIEMPRE se limpia. Antes, si algo lanzaba entre marcar toggling y la limpieza,
-    // el botón quedaba cargando para siempre (y el guard togglingRef lo dejaba muerto
-    // el resto de la sesión).
     try {
-      const idemKey = generarIdemKey()
-      // Mismo idem key en todos los intentos → reintentar nunca duplica el conteo.
+      // 0) Sin red conocida → encolar directo, sin intentos que tardan.
+      if (!isOnline) { await encolar(); return }
+
+      // 1) Sesión fresca ANTES de llamar. Si el access token expiró en el
+      //    background, la RPC colgaría mientras supabase-js intenta refrescar
+      //    por dentro; aquí lo hacemos nosotros, acotado con timeout.
+      try {
+        const { data: { session } } = await conTimeout(supabase.auth.getSession(), 5000)
+        const expMs = (session?.expires_at ?? 0) * 1000
+        if (!session || expMs - Date.now() < 60_000) {
+          await conTimeout(supabase.auth.refreshSession(), 8000).catch(() => {})
+        }
+      } catch { /* no bloquear: la RPC decide */ }
+
+      // 2) RPC idempotente (mismo idemKey en todos los intentos), 2 × 12s.
       const llamar = () => conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number }>(
         (signal) => supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: propiedadId, p_idem_key: idemKey }).abortSignal(signal),
         { intentos: 2, timeoutMs: 12_000 },
       )
-
       let { ok, data, errorMsg } = await llamar()
 
-      // Token expirado / sesión vieja (típico al volver del background en Android):
-      // el servidor responde error de auth y no vale reintentar tal cual. Refrescar
-      // la sesión una vez y reintentar (idempotente por el idem key).
+      // 3) Error de auth pese a todo → refrescar y reintentar UNA vez.
       if (!ok && errorMsg && /jwt|token|expir|unauthor|not authenticated|no autenticado|401|403/i.test(errorMsg)) {
-        try { await supabase.auth.refreshSession() } catch { /* seguimos: el reintento decide */ }
+        try { await conTimeout(supabase.auth.refreshSession(), 8000) } catch { /* el reintento decide */ }
         ;({ ok, data, errorMsg } = await llamar())
       }
 
-      // Si todos los intentos expiraron (timeout sin respuesta), la escritura
-      // pudo haber llegado igual y solo perderse la respuesta. Verificar antes
-      // de marcar error: si ya quedó publicada, tratarlo como éxito.
+      // 4) Timeout sin respuesta: la escritura pudo llegar igual. Verificar.
       if (!ok && !errorMsg) {
         try {
           const { data: chk } = await conTimeout(
@@ -501,39 +534,26 @@ export default function ProspectadorPropiedades() {
               .eq('propiedad_id', propiedadId).eq('user_id', userId).maybeSingle(),
             8000,
           )
-          if (chk && (chk.veces_publicada ?? 0) > vecesActual) {
-            queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old =>
-              old ? { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: chk.veces_publicada! } } : old)
-            queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
-            actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
-            return
-          }
-        } catch { /* la verificación también falló: seguir al manejo de error */ }
+          if (chk && (chk.veces_publicada ?? 0) > vecesActual) { exito(chk.veces_publicada!); return }
+        } catch { /* la verificación también falló: sigue el flujo */ }
       }
 
-      if (!ok || !data?.ok) {
-        // Rollback optimista y refetch para mostrar estado real del servidor.
-        queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => {
-          if (!old) return old
-          return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesActual } }
-        })
+      // 5) Resolución final.
+      if (ok && data?.ok) {
+        exito(data.veces_publicada ?? vecesActual + 1)
+      } else if (data?.error === 'limite') {
+        setVeces(vecesActual)
         queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
-        const msg = data?.error === 'limite'
-          ? 'Esta propiedad alcanzó el límite de 10 publicaciones.'
-          : errorMsg
-          ? `No se pudo publicar: ${errorMsg}`
-          : 'No se pudo registrar la publicación. Revisa tu conexión e intenta de nuevo en unos segundos.'
-        if (Platform.OS === 'web') window.alert(msg)
-        else Alert.alert('No se pudo publicar', msg)
+        avisar('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
+      } else if (ok && data && data.ok === false) {
+        // Error de negocio del servidor distinto de límite: reintentar no ayuda.
+        setVeces(vecesActual)
+        queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
+        avisar('No se pudo publicar', String(data.error ?? 'Error del servidor'))
       } else {
-        const vecesReal = data.veces_publicada ?? vecesActual + 1
-        queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => {
-          if (!old) return old
-          return { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: vecesReal } }
-        })
-        // Invalida para confirmar el conteo real desde el servidor en background.
-        queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
-        actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
+        // Red/timeout/error transitorio → ENCOLAR. Se mantiene el +1 optimista
+        // y la cola lo hace real al reconectar (idempotente, sin duplicar).
+        await encolar()
       }
     } finally {
       const finalTogglingSet = new Set(togglingRef.current)

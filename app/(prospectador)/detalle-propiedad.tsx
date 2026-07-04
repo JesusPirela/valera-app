@@ -20,6 +20,8 @@ import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
 import { esPlusOMejor, esStaffSupervision } from '../../lib/permisos'
 import { thumb } from '../../lib/img'
+import { descargarFotosZipWeb } from '../../lib/zip'
+import { enqueuePublicacion } from '../../lib/offline-queue'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
 import * as MediaLibrary from 'expo-media-library'
@@ -398,7 +400,9 @@ export default function DetallePropiedad() {
   }
 
   async function togglePublicacion() {
-    const { data: { user } } = await supabase.auth.getUser()
+    // getSession() es local (no cuelga sin red); getUser() hace un round-trip.
+    const { data: { session } } = await supabase.auth.getSession()
+    const user = session?.user
     if (!user) return
 
     if (vecesPublicada >= 10) {
@@ -409,93 +413,124 @@ export default function DetallePropiedad() {
 
     setTogglingPublicacion(true)
 
-    // RPC atómico (bloquea la fila en servidor): el conteo "x/10" y el premio
-    // de coins/XP se aplican juntos en una sola transacción, así que no
-    // pueden desincronizarse si la misma cuenta publica desde la app y la
-    // web casi al mismo tiempo, y un reintento por mala conexión con el
-    // mismo idem key nunca duplica el premio.
+    // Mismo diseño robusto que el botón del listado: la publicación NUNCA se
+    // pierde (si la red falla se ENCOLA con el mismo idem key y se envía sola
+    // al reconectar — la RPC es idempotente, no puede duplicar) y el spinner
+    // SIEMPRE se limpia (try/finally).
     const idemKey = generarIdemKey()
-    const { ok, data, errorMsg } = await conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number; fecha_publicacion?: string }>(
-      (signal) => supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: id, p_idem_key: idemKey }).abortSignal(signal),
-      { timeoutMs: 18_000 },
-    )
+    const exito = (veces: number, fecha?: string | null) => {
+      setPublicada(true)
+      setFechaPublicacion(fecha ?? new Date().toISOString())
+      setVecesPublicada(veces)
+      actualizarMisionesPorCategoria(user.id, 'propiedad').catch(() => {})
+      actualizarProgresoTareasPublicar(user.id)
+      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
+    }
+    const encolar = async () => {
+      await enqueuePublicacion(id as string, idemKey).catch(() => {})
+      // Optimista: se refleja ya; la cola lo hace real al reconectar.
+      setPublicada(true)
+      setVecesPublicada(vecesPublicada + 1)
+      const msg = 'La conexión está inestable. Tu publicación quedó guardada y se registrará sola en cuanto haya señal — no necesitas volver a intentar.'
+      if (Platform.OS === 'web') window.alert(`Publicación pendiente: ${msg}`)
+      else Alert.alert('Publicación pendiente', msg)
+    }
 
-    // Timeout sin respuesta: la escritura pudo llegar igual. Verificar antes de
-    // mostrar error — si ya quedó publicada, reflejarlo como éxito.
-    if (!ok && !errorMsg) {
+    try {
+      // Sesión fresca ANTES de llamar (token expirado tras background en
+      // Android colgaba el refresh interno de supabase-js a mitad de la RPC).
       try {
-        const { data: chk } = await conTimeout(
-          supabase.from('propiedad_publicacion')
-            .select('veces_publicada, fecha_publicacion')
-            .eq('propiedad_id', id).eq('user_id', user.id).maybeSingle(),
-          8000,
-        )
-        if (chk && (chk.veces_publicada ?? 0) > vecesPublicada) {
-          setPublicada(true)
-          setFechaPublicacion(chk.fecha_publicacion ?? new Date().toISOString())
-          setVecesPublicada(chk.veces_publicada!)
-          actualizarMisionesPorCategoria(user.id, 'propiedad').catch(() => {})
-          queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
-          setTogglingPublicacion(false)
-          return
+        const expMs = (session.expires_at ?? 0) * 1000
+        if (expMs - Date.now() < 60_000) {
+          await conTimeout(supabase.auth.refreshSession(), 8000).catch(() => {})
         }
-      } catch { /* la verificación también falló: seguir al manejo de error */ }
-    }
+      } catch { /* no bloquear */ }
 
-    if (!ok || !data?.ok) {
-      const msg = data?.error === 'limite'
-        ? 'Esta propiedad alcanzó el límite de 10 publicaciones.'
-        : errorMsg
-        ? `No se pudo publicar: ${errorMsg}`
-        : 'No se pudo registrar la publicación. El servidor tardó demasiado — intenta de nuevo en unos segundos.'
-      if (Platform.OS === 'web') window.alert(msg)
-      else Alert.alert('No se pudo publicar', msg)
-      setTogglingPublicacion(false)
+      const llamar = () => conReintentoData<{ ok: boolean; error?: string; veces_publicada?: number; fecha_publicacion?: string }>(
+        (signal) => supabase.rpc('publicar_propiedad_atomico', { p_propiedad_id: id, p_idem_key: idemKey }).abortSignal(signal),
+        { intentos: 2, timeoutMs: 12_000 },
+      )
+      let { ok, data, errorMsg } = await llamar()
+
+      // Error de auth → refrescar sesión y reintentar UNA vez (idempotente).
+      if (!ok && errorMsg && /jwt|token|expir|unauthor|not authenticated|no autenticado|401|403/i.test(errorMsg)) {
+        try { await conTimeout(supabase.auth.refreshSession(), 8000) } catch { /* el reintento decide */ }
+        ;({ ok, data, errorMsg } = await llamar())
+      }
+
+      // Timeout sin respuesta: la escritura pudo llegar igual. Verificar.
+      if (!ok && !errorMsg) {
+        try {
+          const { data: chk } = await conTimeout(
+            supabase.from('propiedad_publicacion')
+              .select('veces_publicada, fecha_publicacion')
+              .eq('propiedad_id', id).eq('user_id', user.id).maybeSingle(),
+            8000,
+          )
+          if (chk && (chk.veces_publicada ?? 0) > vecesPublicada) {
+            exito(chk.veces_publicada!, chk.fecha_publicacion)
+            return
+          }
+        } catch { /* la verificación también falló: sigue el flujo */ }
+      }
+
+      if (ok && data?.ok) {
+        exito(data.veces_publicada ?? vecesPublicada + 1, data.fecha_publicacion)
+        return
+      }
+      if (data?.error === 'limite') {
+        const msg = 'Esta propiedad alcanzó el límite de 10 publicaciones.'
+        if (Platform.OS === 'web') window.alert(msg)
+        else Alert.alert('Límite alcanzado', msg)
+        return
+      }
+      if (ok && data && data.ok === false) {
+        // Error de negocio del servidor: reintentar no ayuda.
+        const msg = `No se pudo publicar: ${data.error ?? 'error del servidor'}`
+        if (Platform.OS === 'web') window.alert(msg)
+        else Alert.alert('No se pudo publicar', msg)
+        return
+      }
+      // Red/timeout/error transitorio → encolar (nunca se pierde).
+      await encolar()
       return
+    } finally {
+      setTogglingPublicacion(false)
     }
+  }
 
-    const nuevasVeces = data.veces_publicada ?? vecesPublicada + 1
-    const ahora = data.fecha_publicacion ?? new Date().toISOString()
+  // Actualiza el progreso de tareas "publicar_propiedades" tras una publicación
+  // exitosa. En segundo plano y a prueba de fallos: nunca bloquea el botón.
+  async function actualizarProgresoTareasPublicar(userId: string) {
+    try {
+      const { count } = await supabase
+        .from('propiedad_publicacion')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gt('veces_publicada', 0)
 
-    setPublicada(true)
-    setFechaPublicacion(ahora)
-    setVecesPublicada(nuevasVeces)
+      const totalPublicadas = count ?? 0
 
-    actualizarMisionesPorCategoria(user.id, 'propiedad').catch(() => {})
-    // Invalida el query de publicaciones (prefijo parcial cubre todos los userId)
-    // para que la lista de propiedades muestre el estado correcto al regresar.
-    queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
-
-    // Actualizar progreso en tarea de tipo publicar_propiedades
-    const { count } = await supabase
-      .from('propiedad_publicacion')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gt('veces_publicada', 0)
-
-    const totalPublicadas = count ?? 0
-
-    const { data: asigs } = await supabase
-      .from('tarea_asignaciones')
-      .select('id, tarea:tareas!inner(tipo, meta_cantidad)')
-      .eq('user_id', user.id)
-      .eq('completada', false)
-      .eq('tareas.tipo', 'publicar_propiedades')
-
-    for (const a of (asigs ?? []) as any[]) {
-      const meta = a.tarea?.meta_cantidad ?? 1
-      const completada = totalPublicadas >= meta
-      await supabase
+      const { data: asigs } = await supabase
         .from('tarea_asignaciones')
-        .update({
-          progreso: Math.min(totalPublicadas, meta),
-          completada,
-          completada_at: completada ? new Date().toISOString() : null,
-        })
-        .eq('id', a.id)
-    }
+        .select('id, tarea:tareas!inner(tipo, meta_cantidad)')
+        .eq('user_id', userId)
+        .eq('completada', false)
+        .eq('tareas.tipo', 'publicar_propiedades')
 
-    setTogglingPublicacion(false)
+      for (const a of (asigs ?? []) as any[]) {
+        const meta = a.tarea?.meta_cantidad ?? 1
+        const completada = totalPublicadas >= meta
+        await supabase
+          .from('tarea_asignaciones')
+          .update({
+            progreso: Math.min(totalPublicadas, meta),
+            completada,
+            completada_at: completada ? new Date().toISOString() : null,
+          })
+          .eq('id', a.id)
+      }
+    } catch { /* mejor perder el tick de la tarea que romper la publicación */ }
   }
 
   async function deshacerPublicacion() {
@@ -820,9 +855,14 @@ export default function DetallePropiedad() {
         const html2canvas = (await import('html2canvas')).default
 
         const container = document.createElement('div')
-        container.style.position = 'fixed'
+        // ABSOLUTE (no fixed): html2canvas tiene un bug conocido con elementos
+        // position:fixed cuando la página está scrolleada (aplica el offset del
+        // scroll al clon y captura un área vacía → PDF en blanco). El botón de
+        // descargar vive abajo del fold, así que la página casi siempre está
+        // scrolleada. absolute + top:0 ancla al documento y es inmune al scroll.
+        container.style.position = 'absolute'
         container.style.top = '0'
-        container.style.left = '-9999px'
+        container.style.left = '-10000px'
         container.style.width = '800px'
         container.innerHTML = html
         document.body.appendChild(container)
@@ -842,13 +882,44 @@ export default function DetallePropiedad() {
             })
             setTimeout(resolve, 8000)
           })
-          const canvas = await html2canvas(container, {
+          const renderizar = () => html2canvas(container, {
             useCORS: false,
             allowTaint: true,
             scale: 2,
             width: 800,
             windowWidth: 800,
+            scrollX: 0,
+            scrollY: 0,
+            backgroundColor: '#ffffff',
           })
+          let canvas = await renderizar()
+
+          // Guardia anti-PDF-en-blanco: si el canvas salió completamente blanco
+          // (síntoma del bug de scroll de html2canvas), reintentar una vez con la
+          // página en el tope y restaurar el scroll del usuario después.
+          const canvasEnBlanco = (cv: HTMLCanvasElement): boolean => {
+            const cctx = cv.getContext('2d')
+            if (!cctx) return false
+            const paso = Math.max(1, Math.floor(cv.height / 24))
+            for (let y = 0; y < cv.height; y += paso) {
+              const { data } = cctx.getImageData(0, y, cv.width, 1)
+              for (let i = 0; i < data.length; i += 4) {
+                if (data[i] < 245 || data[i + 1] < 245 || data[i + 2] < 245) return false
+              }
+            }
+            return true
+          }
+          if (canvasEnBlanco(canvas)) {
+            const sx = window.scrollX, sy = window.scrollY
+            window.scrollTo(0, 0)
+            try {
+              await new Promise<void>(r => setTimeout(r, 150))
+              canvas = await renderizar()
+            } finally {
+              window.scrollTo(sx, sy)
+            }
+            if (canvasEnBlanco(canvas)) throw new Error('captura en blanco')
+          }
 
           const doc = new jsPDF('p', 'pt', 'a4')
           const pageWidth = doc.internal.pageSize.getWidth()
@@ -1231,31 +1302,10 @@ export default function DetallePropiedad() {
         window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
         try { await navigator.clipboard.writeText(texto) } catch { /* ignorar */ }
 
-        for (let i = 0; i < imagenes.length; i++) {
-          try {
-            const resp = await fetch(imagenes[i].url)
-            const blob = await resp.blob()
-            const objectUrl = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = objectUrl
-            a.download = `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-          } catch {
-            const a = document.createElement('a')
-            a.href = imagenes[i].url
-            a.download = `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`
-            a.target = '_blank'
-            a.rel = 'noopener'
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-          }
-          if (i < imagenes.length - 1) {
-            await new Promise<void>(r => setTimeout(r, 500))
-          }
+        // Fotos en UN solo ZIP (carpeta = código): las descargas múltiples las
+        // bloquea el navegador y solo llegaba la primera foto.
+        if (imagenes.length > 0) {
+          await descargarFotosZipWeb(imagenes.map(img => img.url), propiedad.codigo ?? propiedad.id)
         }
         setCompartiendoFotos(false)
         return
@@ -1324,34 +1374,18 @@ export default function DetallePropiedad() {
 
     if (Platform.OS === 'web') {
       try {
-        for (let i = 0; i < imagenes.length; i++) {
-          try {
-            const resp = await fetch(imagenes[i].url)
-            const blob = await resp.blob()
-            const objectUrl = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = objectUrl
-            a.download = `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            // Defer revoke — el navegador necesita tiempo para leer el blob antes de que se libere
-            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-          } catch {
-            // CORS bloqueó fetch — abrir directamente la URL
-            const a = document.createElement('a')
-            a.href = imagenes[i].url
-            a.download = `${propiedad.codigo ?? 'propiedad'}-foto-${i + 1}.jpg`
-            a.target = '_blank'
-            a.rel = 'noopener'
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-          }
-          // Pausa entre descargas para que el navegador no bloquee las múltiples descargas
-          if (i < imagenes.length - 1) {
-            await new Promise<void>(r => setTimeout(r, 500))
-          }
+        // UN solo ZIP con carpeta = código de la propiedad. Antes se hacía un
+        // click de descarga POR foto y el navegador bloqueaba las descargas
+        // múltiples (al usuario solo le llegaba la primera). El ZIP es una sola
+        // descarga (nunca se bloquea) y al abrirlo crea la carpeta con el ID.
+        const incluidas = await descargarFotosZipWeb(
+          imagenes.map(img => img.url),
+          propiedad.codigo ?? propiedad.id,
+        )
+        if (incluidas === 0) {
+          window.alert('No se pudieron descargar las fotos. Revisa tu conexión e intenta de nuevo.')
+        } else if (incluidas < imagenes.length) {
+          window.alert(`Se descargó un ZIP con ${incluidas} de ${imagenes.length} fotos (algunas no se pudieron obtener). Ábrelo para ver la carpeta ${propiedad.codigo ?? ''}.`)
         }
       } finally {
         setDescargando(false)
