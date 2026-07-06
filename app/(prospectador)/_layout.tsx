@@ -177,11 +177,20 @@ export default function ProspectadorLayout() {
     programarRecordatorios().catch(() => {})
     solicitarPermisoWeb().catch(() => {})
 
-    // Deep link al tocar una notificación: navegar al cliente relacionado
+    // Deep link al tocar una notificación push: navegar a la pantalla correcta
     const subNotif = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data as any
-      if (data?.tipo === 'recordatorio' && data?.cliente_id) {
-        router.push(`/(prospectador)/detalle-cliente?id=${data.cliente_id}`)
+      const data = response.notification.request.content.data as Record<string, unknown> | undefined
+      const tipo = data?.tipo as string | undefined
+      const clienteId = data?.cliente_id as string | undefined
+      const propiedadId = data?.propiedad_id as string | undefined
+      if (clienteId) {
+        router.push(`/(prospectador)/detalle-cliente?id=${clienteId}`)
+      } else if (tipo === 'nueva_propiedad' && propiedadId) {
+        router.push(`/(prospectador)/detalle-propiedad?id=${propiedadId}`)
+      } else if (propiedadId) {
+        router.push(`/(prospectador)/detalle-propiedad?id=${propiedadId}`)
+      } else {
+        router.push('/(prospectador)/notificaciones')
       }
     })
 

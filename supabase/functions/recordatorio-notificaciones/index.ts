@@ -112,7 +112,9 @@ serve(async (_req) => {
 
   // ─── Insertar notificaciones en DB ───────────────────────────────────────
   if (notificaciones.length > 0) {
-    const { error: errInsert } = await supabase.from('notificaciones').insert(notificaciones)
+    // push_enviado=true porque este mismo handler envía el push justo abajo.
+    const notificacionesConFlag = notificaciones.map(n => ({ ...n, push_enviado: true }))
+    const { error: errInsert } = await supabase.from('notificaciones').insert(notificacionesConFlag)
     if (errInsert) console.error('Error inserting notificaciones:', errInsert.message)
 
     // ─── Enviar push a cada usuario ──────────────────────────────────────

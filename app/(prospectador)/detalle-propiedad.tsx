@@ -1165,9 +1165,7 @@ export default function DetallePropiedad() {
         p_cliente_id: clienteCreado.id,
         p_accion_url: accionUrl,
       })
-      supabase.functions.invoke('enviar-push', {
-        body: { userId: propiedad.created_by, titulo: tituloNotif, mensaje: mensajeNotif },
-      }).catch(() => {})
+      // El push lo maneja el cron procesar-pushes al detectar push_enviado=false
 
       Alert.alert(
         'Cliente registrado',

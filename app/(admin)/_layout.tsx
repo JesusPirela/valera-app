@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
-import { Image, Text, TouchableOpacity, View, StyleSheet } from 'react-native'
+import { Image, Platform, Text, TouchableOpacity, View, StyleSheet } from 'react-native'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { Stack, router } from 'expo-router'
+import * as Notifications from 'expo-notifications'
 import { supabase } from '../../lib/supabase'
 import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme } from '../../lib/ThemeContext'
@@ -28,9 +29,30 @@ export default function AdminLayout() {
       })
       .subscribe()
 
+    // Deep link al tocar una notificación push (admin)
+    let subNotif: Notifications.Subscription | null = null
+    if (Platform.OS !== 'web') {
+      subNotif = Notifications.addNotificationResponseReceivedListener(response => {
+        const data = response.notification.request.content.data as Record<string, unknown> | undefined
+        const clienteId = data?.cliente_id as string | undefined
+        const propiedadId = data?.propiedad_id as string | undefined
+        const tipo = data?.tipo as string | undefined
+        if (clienteId) {
+          router.push(`/(admin)/detalle-cliente?id=${clienteId}`)
+        } else if (propiedadId) {
+          router.push(`/(admin)/editar-propiedad?id=${propiedadId}`)
+        } else if (tipo === 'tienda' || tipo === 'ruleta' || tipo === 'cofre') {
+          router.push('/(admin)/tienda-compras')
+        } else {
+          router.push('/(admin)/notificaciones')
+        }
+      })
+    }
+
     return () => {
       mountedRef.current = false
       supabase.removeChannel(channel)
+      subNotif?.remove()
     }
   }, [])
 

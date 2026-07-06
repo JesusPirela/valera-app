@@ -197,6 +197,7 @@ serve(async (req) => {
           titulo,
           mensaje,
           leida: false,
+          push_enviado: true, // este evento envía el push directamente abajo
         })
         if (errNotif) continue
 
