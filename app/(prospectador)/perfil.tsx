@@ -5,6 +5,8 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
+import * as Notifications from 'expo-notifications'
+import Constants from 'expo-constants'
 import { supabase } from '../../lib/supabase'
 import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme, useColors } from '../../lib/ThemeContext'
@@ -614,6 +616,33 @@ export default function Perfil() {
 
         {/* Cambiar de cuenta (solo si hay 2+ guardadas) */}
         <CambiarCuenta />
+
+        {/* Debug push token — solo visible para el usuario de prueba */}
+        {userId === '5dbfde2a-be3c-4c8b-a7e6-4654e3feb127' && (
+          <TouchableOpacity
+            style={[s.btnSalir, { backgroundColor: '#1a6470', marginBottom: 8 }]}
+            onPress={async () => {
+              try {
+                const { status } = await Notifications.getPermissionsAsync()
+                Alert.alert('Paso 1', `Permiso: ${status}`)
+                if (status !== 'granted') {
+                  const { status: s2 } = await Notifications.requestPermissionsAsync()
+                  if (s2 !== 'granted') { Alert.alert('Error', `Permiso denegado: ${s2}`); return }
+                }
+                const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? 'c8a64954-8c24-4d51-829d-55ede1f5fb6d'
+                Alert.alert('Paso 2', `projectId: ${projectId}`)
+                const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data
+                Alert.alert('Paso 3', `Token: ${token}`)
+                const { error } = await supabase.from('profiles').update({ push_token: token }).eq('id', userId)
+                Alert.alert('Paso 4', error ? `Error DB: ${error.message}` : '✅ Token guardado correctamente')
+              } catch (e: any) {
+                Alert.alert('Error', e?.message ?? String(e))
+              }
+            }}
+          >
+            <Text style={[s.btnSalirText, { color: '#fff' }]}>🔔 Debug push token</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Cerrar sesión */}
         <TouchableOpacity

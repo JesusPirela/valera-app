@@ -38,17 +38,25 @@ async function registrarPushToken(userId: string) {
   if (Platform.OS === 'web') return
   try {
     const { status: existing } = await Notifications.getPermissionsAsync()
+    console.log('[Push] Permiso actual:', existing)
     let finalStatus = existing
     if (existing !== 'granted') {
       const { status } = await Notifications.requestPermissionsAsync()
       finalStatus = status
     }
-    if (finalStatus !== 'granted') return
+    if (finalStatus !== 'granted') {
+      console.warn('[Push] Permiso denegado:', finalStatus)
+      return
+    }
     const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? 'c8a64954-8c24-4d51-829d-55ede1f5fb6d'
+    console.log('[Push] Obteniendo token con projectId:', projectId)
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data
-    await supabase.from('profiles').update({ push_token: token }).eq('id', userId)
+    console.log('[Push] Token obtenido:', token)
+    const { error } = await supabase.from('profiles').update({ push_token: token }).eq('id', userId)
+    if (error) console.error('[Push] Error guardando token:', error)
+    else console.log('[Push] Token guardado correctamente')
   } catch (e) {
-    console.warn('[Push] Error registrando token:', e)
+    console.error('[Push] Error registrando token:', e)
   }
 }
 
