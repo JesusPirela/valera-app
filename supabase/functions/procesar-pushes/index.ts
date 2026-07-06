@@ -51,18 +51,8 @@ async function enviarBatch(
   }
 }
 
-serve(async (req) => {
-  // Sólo acepta llamadas internas desde pg_net (cron) autenticadas con la
-  // service role key. No se expone al cliente.
+serve(async (_req) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const authHeader = req.headers.get('Authorization') ?? ''
-  if (authHeader !== `Bearer ${serviceKey}`) {
-    return new Response(JSON.stringify({ error: 'No autorizado' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey)
 
   // Notificaciones pendientes de las últimas 24 horas
