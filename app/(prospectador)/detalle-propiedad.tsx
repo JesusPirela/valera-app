@@ -248,6 +248,29 @@ export default function DetallePropiedad() {
   const rol = detalle?.rol ?? null
   const esStaff = esStaffSupervision(rol)
 
+  // Lista COMPLETA de fotos, pedida directo a la base al momento de usarla.
+  // El detalle se siembra desde el listado con SOLO la portada (para abrir al
+  // instante); si el usuario genera el PDF o descarga fotos antes de que el
+  // refetch complete (o si falló por red), propiedad_imagenes trae 1 sola foto
+  // y el PDF/la descarga salían con una única imagen. Si esta consulta falla,
+  // se usa lo que haya en cache (mejor 1 foto que nada).
+  async function obtenerImagenesCompletas(): Promise<{ url: string; orden: number }[]> {
+    try {
+      const { data } = await conTimeout(
+        supabase.from('propiedad_imagenes').select('url, orden').eq('propiedad_id', id).order('orden'),
+        10_000,
+      )
+      if (data && data.length > 0) {
+        // Sincronizar el cache del detalle para que la galería/modal también
+        // muestren todas las fotos aunque el refetch original haya fallado.
+        queryClient.setQueryData(['detalle-propiedad', id], (old: any) =>
+          old?.propiedad ? { ...old, propiedad: { ...old.propiedad, propiedad_imagenes: data } } : old)
+        return data as { url: string; orden: number }[]
+      }
+    } catch { /* sin red: usar el cache */ }
+    return [...(propiedad?.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
+  }
+
   // Admin/Supervisor: quiénes publicaron esta propiedad y cuántas veces
   const { data: publicadores } = useQuery({
     queryKey: ['publicadores-propiedad', id],
@@ -698,7 +721,7 @@ export default function DetallePropiedad() {
         ? propiedad.operacion.charAt(0).toUpperCase() + propiedad.operacion.slice(1)
         : ''
 
-      const imagenes = [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
+      const imagenes = await obtenerImagenesCompletas()
 
       // Presupuesto de memoria del PDF: en nativo el HTML con fotos base64 se
       // renderiza en un WebView de impresión; con 13 fotos a 1100/700px Android
@@ -1285,7 +1308,9 @@ export default function DetallePropiedad() {
 
   async function descargarImagenes(seleccion?: { url: string }[]) {
     if (!propiedad) return
-    const imagenes = seleccion ?? [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
+    // "Descargar todas": pedir la lista completa (el cache puede tener solo la
+    // portada sembrada desde el listado — bajaba 1 sola foto).
+    const imagenes = seleccion ?? await obtenerImagenesCompletas()
     if (imagenes.length === 0) return
 
     setDescargando(true)
@@ -1788,6 +1813,9 @@ export default function DetallePropiedad() {
               onPress={() => {
                 setSeleccionadas(new Set())
                 setModalSeleccion(true)
+                // Completar las fotos en segundo plano por si el cache solo
+                // tiene la portada (el sync actualiza el grid del modal).
+                obtenerImagenesCompletas().catch(() => {})
               }}
               disabled={descargando}
             >

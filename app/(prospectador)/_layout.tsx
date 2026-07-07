@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Text, TouchableOpacity, Image, View, Platform, Modal, StyleSheet } from 'react-native'
+import { Image, View, Platform, StyleSheet } from 'react-native'
 import { Tabs, usePathname, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
@@ -8,43 +8,10 @@ import { useTheme } from '../../lib/ThemeContext'
 import { AccentBackground } from '../../lib/patrones'
 import { trackLoginDiario } from '../../lib/gamification'
 import { programarRecordatorios, solicitarPermisoWeb, notificarWeb } from '../../lib/notificaciones-locales'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import HeaderBack from '../../components/HeaderBack'
 import ClienteFormBack from '../../components/ClienteFormBack'
 import { useVistaComo } from '../../lib/VistaComo'
 import VistaComoBanner from '../../components/VistaComoBanner'
-
-const CRM_POPUP_KEY = '@valera_crm_popup'
-const MAX_POPUP_DIA = 2
-
-async function conteoPopupHoy(): Promise<number> {
-  try {
-    const hoy = new Date().toLocaleDateString('es-MX')
-    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(CRM_POPUP_KEY)
-      if (!raw) return 0
-      const d = JSON.parse(raw)
-      return d.fecha === hoy ? (d.count ?? 0) : 0
-    }
-    const raw = await AsyncStorage.getItem(CRM_POPUP_KEY)
-    if (!raw) return 0
-    const d = JSON.parse(raw)
-    return d.fecha === hoy ? (d.count ?? 0) : 0
-  } catch { return 0 }
-}
-
-async function incrementarConteoPopup() {
-  try {
-    const hoy = new Date().toLocaleDateString('es-MX')
-    const count = (await conteoPopupHoy()) + 1
-    const payload = JSON.stringify({ fecha: hoy, count })
-    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-      localStorage.setItem(CRM_POPUP_KEY, payload)
-    } else {
-      await AsyncStorage.setItem(CRM_POPUP_KEY, payload)
-    }
-  } catch {}
-}
 
 const LOGO = require('../../assets/logo.png')
 
@@ -76,7 +43,6 @@ function HoverTabIcon({ name, nameFocused, focused, color }: {
 
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
-  const [showCrmPopup, setShowCrmPopup] = useState(false)
   const [role, setRole] = useState<string | null>(null)
   const { vistaComo } = useVistaComo()
   const { primaryColor: colorAcento, acentoId, darkMode } = useTheme()
@@ -95,16 +61,6 @@ export default function ProspectadorLayout() {
       supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
         if (mountedRef.current) setRole(data?.role ?? null)
       })
-    })
-  }, [])
-
-  // Mostrar popup CRM máximo 2 veces por día
-  useEffect(() => {
-    conteoPopupHoy().then(count => {
-      if (count < MAX_POPUP_DIA) {
-        setShowCrmPopup(true)
-        incrementarConteoPopup()
-      }
     })
   }, [])
 
@@ -365,42 +321,6 @@ export default function ProspectadorLayout() {
       <Tabs.Screen name="chats"              options={{ href: null, title: 'Chats' }} />
       <Tabs.Screen name="chat-cliente"       options={{ href: null, title: 'Chat' }} />
     </Tabs>
-
-    <Modal visible={showCrmPopup} transparent animationType="fade" onRequestClose={() => setShowCrmPopup(false)}>
-      <View style={popupStyles.overlay}>
-        <View style={popupStyles.card}>
-          <TouchableOpacity style={popupStyles.closeBtn} onPress={() => setShowCrmPopup(false)}>
-            <Ionicons name="close" size={20} color="#94a3b8" />
-          </TouchableOpacity>
-          <Text style={popupStyles.emoji}>📋</Text>
-          <Text style={popupStyles.titulo}>¿Ya revisaste tu CRM?</Text>
-          <Text style={popupStyles.mensaje}>
-            Recuerda agregar nuevos clientes y dar seguimiento a tus leads de hoy.
-          </Text>
-          <TouchableOpacity
-            style={[popupStyles.btn, { backgroundColor: colorAcento }]}
-            onPress={() => { setShowCrmPopup(false); router.navigate('/(prospectador)/crm') }}
-          >
-            <Text style={popupStyles.btnText}>Ir al CRM</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowCrmPopup(false)}>
-            <Text style={popupStyles.skip}>Ahora no</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
     </>
   )
 }
-
-const popupStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 32 },
-  card: { backgroundColor: '#fff', borderRadius: 20, padding: 28, alignItems: 'center', width: '100%', maxWidth: 360 },
-  closeBtn: { position: 'absolute', top: 14, right: 14 },
-  emoji: { fontSize: 44, marginBottom: 12 },
-  titulo: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 8, textAlign: 'center' },
-  mensaje: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  btn: { borderRadius: 12, paddingVertical: 13, paddingHorizontal: 40, width: '100%', alignItems: 'center', marginBottom: 12 },
-  btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  skip: { fontSize: 13, color: '#94a3b8' },
-})
