@@ -680,9 +680,10 @@ export default function DetallePropiedad() {
       return null
     }
     // Nativo: descarga optimizada via thumb() al sistema de archivos.
-    // quality 65: cada punto de calidad multiplica la memoria que el WebView de
-    // impresión necesita para decodificar; 65 es indistinguible en el PDF.
-    const urlOptimizada = thumb(url, { width: _anchoMax, quality: 65, resize: 'contain' }) ?? url
+    // quality 55: el tamaño del JPEG no es el problema (se decodifica igual),
+    // pero un JPEG más liviano reduce el string base64 en el HTML y la presión
+    // del bridge/WebView; 55 es indistinguible en el PDF impreso.
+    const urlOptimizada = thumb(url, { width: _anchoMax, quality: 55, resize: 'contain' }) ?? url
     for (let intento = 1; intento <= 3; intento++) {
       try {
         const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
@@ -727,10 +728,14 @@ export default function DetallePropiedad() {
       // renderiza en un WebView de impresión; con 13 fotos a 1100/700px Android
       // se quedaba sin memoria y CERRABA la app al guardar la ficha. En nativo
       // se bajan resolución y cantidad (visualmente imperceptible en el PDF).
+      // En nativo el pico de memoria = (nº fotos) × (ancho² × 4 bytes por bitmap
+      // decodificado). Se recorta agresivo para caber en gama baja (~192MB heap):
+      // portada + 7 fotos, resolución baja y q55 en imagenABase64. Imperceptible
+      // en el PDF impreso; es la diferencia entre generar o que el SO mate la app.
       const esWeb = Platform.OS === 'web'
-      const maxFotos = esWeb ? 13 : 10
-      const anchoPrincipal = esWeb ? 1100 : 850
-      const anchoGaleria = esWeb ? 700 : 500
+      const maxFotos = esWeb ? 13 : 8
+      const anchoPrincipal = esWeb ? 1100 : 720
+      const anchoGaleria = esWeb ? 700 : 460
 
       const [imagenesConSrcRaw, logoSrc, inmobiliariaLogoSrc] = await Promise.all([
         Promise.all(
@@ -1015,20 +1020,29 @@ export default function DetallePropiedad() {
         const Print = await import('expo-print')
         const ShareLib = await import('expo-sharing')
         // Escribir el HTML a archivo temporal para evitar el límite del bridge
-        // de React Native al pasar strings muy grandes (base64 de muchas fotos).
-        // Con uri= el WKWebView espera didFinishNavigation antes de capturar.
-        const htmlFileUri = `${FileSystem.cacheDirectory}ficha_print_tmp.html`
-        await FileSystem.writeAsStringAsync(htmlFileUri, html, { encoding: FileSystem.EncodingType.UTF8 })
+        // Mecanismo por plataforma (verificado leyendo el código nativo de
+        // expo-print 14.1.4):
+        //  · Android renderiza SIEMPRE `options.html` en un WebView e IGNORA
+        //    `options.uri` (con uri el PDF sale en blanco). Se pasa el html
+        //    directo; con Hermes/JSI el string grande ya no rompe el bridge.
+        //  · iOS (WKWebView) sí carga desde archivo y es más estable con html
+        //    grande leído de disco que pasado como prop.
+        // El CRASH real era memoria: el WebView decodifica todas las fotos
+        // base64 a bitmaps a la vez; el presupuesto reducido de arriba (pocas
+        // fotos, baja resolución/calidad) es lo que de verdad lo evita.
         let pdfUri: string
-        try {
-          // `uri` no figura en los tipos de FilePrintOptions (lo documentado es
-          // `html`); se conserva el comportamiento con cast. Si las fichas
-          // nativas salieran EN BLANCO, este es el primer sospechoso: volver a
-          // printToFileAsync({ html, width: 595 }).
-          const result = await Print.printToFileAsync({ uri: htmlFileUri, width: 595 } as any)
+        if (Platform.OS === 'android') {
+          const result = await Print.printToFileAsync({ html, width: 595 })
           pdfUri = result.uri
-        } finally {
-          FileSystem.deleteAsync(htmlFileUri, { idempotent: true }).catch(() => {})
+        } else {
+          const htmlFileUri = `${FileSystem.cacheDirectory}ficha_print_tmp.html`
+          await FileSystem.writeAsStringAsync(htmlFileUri, html, { encoding: FileSystem.EncodingType.UTF8 })
+          try {
+            const result = await Print.printToFileAsync({ uri: htmlFileUri, width: 595 } as any)
+            pdfUri = result.uri
+          } finally {
+            FileSystem.deleteAsync(htmlFileUri, { idempotent: true }).catch(() => {})
+          }
         }
         const isAvailable = await ShareLib.isAvailableAsync()
         if (!isAvailable) {

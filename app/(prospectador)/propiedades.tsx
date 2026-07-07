@@ -308,7 +308,11 @@ export default function ProspectadorPropiedades() {
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
+          // descripcion_corta (col. generada, 180 chars) en vez de la completa:
+          // el listado solo muestra un preview de 2 líneas, así que traer las
+          // descripciones completas eran ~1.5MB inútiles al entrar. La descripción
+          // completa la trae el detalle por su cuenta.
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -324,6 +328,9 @@ export default function ProspectadorPropiedades() {
       const rol = vistaComo ?? profileRes.data?.role ?? null
       let propiedades = propsData.map((p: any) => ({
         ...p,
+        // La tarjeta usa `descripcion` para el preview; el listado ahora trae
+        // solo la versión corta, se mapea al mismo campo.
+        descripcion: p.descripcion_corta ?? null,
         inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
       })) as unknown as Propiedad[]
       if (!esPlusOMejor(rol)) {
