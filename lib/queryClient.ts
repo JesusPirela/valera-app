@@ -30,5 +30,8 @@ export const persister = createAsyncStoragePersister({
   // sin riesgo real de pérdida (solo se pierde lo no persistido si la app
   // muere en esa ventana, y el servidor sigue siendo la fuente de verdad).
   throttleTime: 3000,
-  maxAge: 1000 * 60 * 60 * 24 * 7,     // descartar cache con más de 7 días
 })
+
+// Edad máxima del cache persistido (se pasa en persistOptions del provider;
+// como opción del persister no existe y se ignoraba silenciosamente).
+export const PERSIST_MAX_AGE = 1000 * 60 * 60 * 24 * 7  // 7 días
