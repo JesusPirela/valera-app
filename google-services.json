@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "749848579227",
+    "project_id": "valera-app-73620",
+    "storage_bucket": "valera-app-73620.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:749848579227:android:3311cfe487be4d64af8a3e",
+        "android_client_info": {
+          "package_name": "com.valerarealestate.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBi8vXUpu0VBNVb42Hgm-Dmdnp9p2eLzCU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

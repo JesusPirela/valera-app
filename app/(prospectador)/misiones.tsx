@@ -200,8 +200,8 @@ export default function Misiones() {
           <View style={s.levelBadge}>
             <Text style={s.levelNum}>{info.nivel}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={s.titulo}>{tituloPorNivel(info.nivel)}</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.titulo} numberOfLines={2}>{tituloPorNivel(info.nivel)}</Text>
             <Text style={s.nivelLabel}>Nivel {info.nivel}</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>

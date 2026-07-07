@@ -3,7 +3,7 @@
     "name": "Valera App",
     "slug": "valera-app",
     "scheme": "valera-app",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.valerarealestate.app",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "config": {
         "googleMapsApiKey": "AIzaSyCPML-wonbnHif1HswVfTk-ypInP1u94sE"
       },
@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "com.valerarealestate.app",
-      "versionCode": 11,
+      "versionCode": 12,
       "softwareKeyboardLayoutMode": "pan",
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
@@ -41,6 +41,7 @@
           "apiKey": "AIzaSyCPML-wonbnHif1HswVfTk-ypInP1u94sE"
         }
       },
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_EXTERNAL_STORAGE",

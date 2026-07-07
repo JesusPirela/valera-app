@@ -44,6 +44,10 @@ yarn-error.*
 /ios
 /android
 
+# Firebase service account keys (nunca commitear)
+*firebase-adminsdk*.json
+*serviceAccountKey*.json
+
 # local scripts with credentials
 scripts/insert_batch.js
 scripts/parse_leads.js
