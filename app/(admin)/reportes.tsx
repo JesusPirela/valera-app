@@ -582,7 +582,9 @@ export default function Reportes() {
           {/* Período header */}
           <View style={s.rangoHeader}>
             <Text style={s.rangoHeaderTxt}>{rangoLabel}</Text>
-            <TouchableOpacity onPress={cargar} style={s.recargarBtn}>
+            {/* () => cargar(): pasar `cargar` directo metía el evento del tap
+                como si fuera el periodo y rompía la recarga. */}
+            <TouchableOpacity onPress={() => cargar()} style={s.recargarBtn}>
               <Text style={s.recargarTxt}>↻ Actualizar</Text>
             </TouchableOpacity>
           </View>

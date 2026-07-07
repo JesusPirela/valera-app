@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type Stats = {

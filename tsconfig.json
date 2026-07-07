@@ -1,6 +1,12 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
-  }
+    "strict": true,
+    // Resuelve los módulos con split por plataforma (MiniMapa.web.tsx, etc.):
+    // tsc typechequea la variante .web; Metro sigue eligiendo por plataforma.
+    "moduleSuffixes": [".web", ""]
+  },
+  // Las edge functions corren en Deno (imports por URL, global Deno): tienen su
+  // propio runtime y se despliegan aparte — fuera del typecheck del app.
+  "exclude": ["node_modules", "supabase/functions"]
 }

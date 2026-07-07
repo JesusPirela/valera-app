@@ -18,7 +18,7 @@ import { normalizar } from '../../lib/texto'
 import { adminAjustarMonedas } from '../../lib/gamification'
 import { calcularCrmMetricas, type CrmMetricas } from '../../lib/crmMetricas'
 import CrmMetricasPanel from '../../components/CrmMetricasPanel'
-import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useColors } from '../../lib/ThemeContext'
 
 type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus' | 'supervisor' | 'asesor'
 

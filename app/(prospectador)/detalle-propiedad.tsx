@@ -24,7 +24,6 @@ import { enqueuePublicacion } from '../../lib/offline-queue'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
 import * as MediaLibrary from 'expo-media-library'
-import * as Sharing from 'expo-sharing'
 import * as Clipboard from 'expo-clipboard'
 import * as FileSystem from 'expo-file-system'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -146,33 +145,6 @@ function capitalize(s: string | null) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-function formatearFichaWhatsApp(p: Propiedad): string {
-  const tipo = capitalize(p.tipo)
-  const operacion = capitalize(p.operacion)
-
-  let msg = `🏠 *${p.codigo ?? ''} – ${p.titulo}*`
-  if (tipo || operacion) msg += `\n_${[tipo, operacion].filter(Boolean).join(' en ')}_`
-  msg += `\n\n📍 ${p.direccion}`
-  msg += `\n💰 ${formatPrecio(p.precio)}`
-
-  const meta: string[] = []
-  if (p.recamaras != null) meta.push(`🛏 ${p.recamaras} rec`)
-  if (p.banos != null || p.medios_banos != null) {
-    const partes: string[] = []
-    if (p.banos != null) partes.push(`${p.banos} completo${p.banos === 1 ? '' : 's'}`)
-    if (p.medios_banos != null && p.medios_banos > 0) partes.push(`${p.medios_banos} medio${p.medios_banos === 1 ? '' : 's'}`)
-    meta.push(`🚿 ${partes.join(' + ')}`)
-  }
-  if (p.m2 != null) meta.push(`📐 ${p.m2} m² const.`)
-  if (p.m2_terreno != null) meta.push(`🌳 ${p.m2_terreno} m² terreno`)
-  if (p.estacionamientos != null) meta.push(`🚗 ${p.estacionamientos} est`)
-  if (meta.length) msg += '\n\n' + meta.join('   ')
-
-  if (p.descripcion) msg += `\n\n${p.descripcion}`
-
-  msg += '\n\n_Información compartida por tu asesor inmobiliario_'
-  return msg
-}
 
 export default function DetallePropiedad() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -183,7 +155,6 @@ export default function DetallePropiedad() {
   const [descargando, setDescargando] = useState(false)
   const [modalSeleccion, setModalSeleccion] = useState(false)
   const [seleccionadas, setSeleccionadas] = useState<Set<number>>(new Set())
-  const [compartiendoFotos, setCompartiendoFotos] = useState(false)
   const [nota, setNota] = useState('')
   const [notaGuardada, setNotaGuardada] = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
@@ -330,7 +301,7 @@ export default function DetallePropiedad() {
   const [solicitandoDiseno, setSolicitandoDiseno] = useState(false)
   const [generandoPDF, setGenerandoPDF] = useState(false)
   const [descripcionCopiada, setDescripcionCopiada] = useState(false)
-  const [publicada, setPublicada] = useState(false)
+  const [, setPublicada] = useState(false)
   const [fechaPublicacion, setFechaPublicacion] = useState<string | null>(null)
   const [togglingPublicacion, setTogglingPublicacion] = useState(false)
   const [vecesPublicada, setVecesPublicada] = useState(0)
@@ -1027,7 +998,11 @@ export default function DetallePropiedad() {
         await FileSystem.writeAsStringAsync(htmlFileUri, html, { encoding: FileSystem.EncodingType.UTF8 })
         let pdfUri: string
         try {
-          const result = await Print.printToFileAsync({ uri: htmlFileUri, width: 595 })
+          // `uri` no figura en los tipos de FilePrintOptions (lo documentado es
+          // `html`); se conserva el comportamiento con cast. Si las fichas
+          // nativas salieran EN BLANCO, este es el primer sospechoso: volver a
+          // printToFileAsync({ html, width: 595 }).
+          const result = await Print.printToFileAsync({ uri: htmlFileUri, width: 595 } as any)
           pdfUri = result.uri
         } finally {
           FileSystem.deleteAsync(htmlFileUri, { idempotent: true }).catch(() => {})
@@ -1307,104 +1282,6 @@ export default function DetallePropiedad() {
     }
   }
 
-  async function compartirEnWhatsApp() {
-    if (!propiedad) return
-    const texto = formatearFichaWhatsApp(propiedad)
-    const imagenes = [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
-
-    setCompartiendoFotos(true)
-    registrarActividad('descarga')
-
-    try {
-      if (Platform.OS === 'web') {
-        // Abrir WhatsApp PRIMERO (gesto directo del usuario, sin ningún await previo)
-        window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
-        try { await navigator.clipboard.writeText(texto) } catch { /* ignorar */ }
-
-        // Descargas individuales nombradas con el ID de la casa.
-        const idCasa = (propiedad.codigo ?? propiedad.id).replace(/[^a-zA-Z0-9._-]/g, '_')
-        for (let i = 0; i < imagenes.length; i++) {
-          try {
-            const resp = await fetch(imagenes[i].url)
-            const blob = await resp.blob()
-            const objectUrl = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = objectUrl
-            a.download = `${idCasa}-foto-${i + 1}.jpg`
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-          } catch {
-            const a = document.createElement('a')
-            a.href = imagenes[i].url
-            a.download = `${idCasa}-foto-${i + 1}.jpg`
-            a.target = '_blank'
-            a.rel = 'noopener'
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-          }
-          if (i < imagenes.length - 1) {
-            await new Promise<void>(r => setTimeout(r, 500))
-          }
-        }
-        setCompartiendoFotos(false)
-        return
-      }
-
-      // Nativo: copiar texto al portapapeles automáticamente
-      await Clipboard.setStringAsync(texto)
-
-      const encoded = encodeURIComponent(texto)
-      const abrirWhatsApp = () =>
-        Linking.openURL(`https://wa.me/?text=${encoded}`)
-
-      if (imagenes.length === 0) {
-        await abrirWhatsApp()
-        setCompartiendoFotos(false)
-        return
-      }
-
-      // Descargar imágenes con la API estable de expo-file-system
-      const uris: string[] = []
-      for (let i = 0; i < imagenes.length; i++) {
-        try {
-          const dest = `${FileSystem.cacheDirectory}${propiedad.codigo ?? 'prop'}-wa-${i}.jpg`
-          const { uri } = await FileSystem.downloadAsync(imagenes[i].url, dest)
-          uris.push(uri)
-        } catch { /* continuar con las demás */ }
-      }
-
-      // Guardar en galería para adjuntar desde WhatsApp
-      let guardadas = 0
-      if (uris.length > 0) {
-        const { status } = await MediaLibrary.requestPermissionsAsync(true)
-        if (status === 'granted') {
-          for (const uri of uris) {
-            try { await MediaLibrary.saveToLibraryAsync(uri); guardadas++ } catch { /* skip */ }
-          }
-        }
-        // Limpiar los temporales del cache: ya están en la galería, no hace
-        // falta conservarlos — si no se borran se acumulan con cada propiedad.
-        for (const uri of uris) {
-          FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {})
-        }
-      }
-
-      Alert.alert(
-        'Listo para enviar',
-        guardadas > 0
-          ? `Texto copiado al portapapeles.\n${guardadas} foto${guardadas > 1 ? 's guardadas' : ' guardada'} en tu galería.\n\nAbre WhatsApp, pega el texto (manteniendo presionado) y adjunta las fotos con el clip (📎).`
-          : 'Texto copiado al portapapeles.\n\nAbre WhatsApp y pega el texto (manteniendo presionado).',
-        [{ text: 'Abrir WhatsApp', onPress: abrirWhatsApp }]
-      )
-    } catch {
-      Alert.alert('Error', 'No se pudo compartir la propiedad.')
-    }
-
-    setCompartiendoFotos(false)
-  }
 
   async function descargarImagenes(seleccion?: { url: string }[]) {
     if (!propiedad) return

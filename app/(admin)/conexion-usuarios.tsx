@@ -6,14 +6,13 @@ import {
 import { useFocusEffect } from 'expo-router'
 import Svg, { Rect, Text as SvgText, Line } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
-import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type ConexionRow = { user_id: string; nombre: string; fecha: string; minutos: number }
 type UserConexion = { user_id: string; nombre: string; dias: { fecha: string; minutos: number }[] }
 
 const TEAL  = '#1a6470'
-const GOLD  = '#c9a84c'
 
 function formatMinutos(min: number): string {
   if (min < 60) return `${min}m`

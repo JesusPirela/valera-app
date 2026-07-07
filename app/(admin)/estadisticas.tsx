@@ -10,7 +10,7 @@ import {
 import Svg, { Path, Text as SvgText } from 'react-native-svg'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useColors } from '../../lib/ThemeContext'
 
 // ─── Types ───────────────────────────────────────────────
 type Resumen = {

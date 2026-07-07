@@ -3,8 +3,8 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Platform, Alert,
 } from 'react-native'
-import { router, useFocusEffect } from 'expo-router'
-import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useFocusEffect } from 'expo-router'
+import { useColors } from '../../lib/ThemeContext'
 import { supabase } from '../../lib/supabase'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 

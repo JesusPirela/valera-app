@@ -27,7 +27,7 @@ const AVATARES_PREMIUM = [
 // Antes eran hex sueltos que se guardaban pero NO se veían en el perfil.
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type Compra = {
@@ -193,7 +193,6 @@ export default function TiendaCompras() {
   })
   const pendientes      = compras.filter(comp => !esCofre(comp) && comp.estado === 'pendiente').length
   const cofrePendientes = compras.filter(comp =>  esCofre(comp) && comp.estado === 'pendiente').length
-  const rechazadas      = compras.filter(comp => comp.estado === 'rechazado').length
 
   if (loading) return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg }}>

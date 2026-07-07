@@ -41,42 +41,6 @@ export type PropiedadCoord = {
   tipo: string | null
 }
 
-const SUBZONAS: Record<string, { label: string; coords: [number, number]; keywords: string[] }[]> = {
-  queretaro: [
-    { label: 'Corregidora',      coords: [20.5167, -100.4417], keywords: ['corregidora'] },
-    { label: 'Juriquilla',       coords: [20.7050, -100.4550], keywords: ['juriquilla'] },
-    { label: 'El Marqués',       coords: [20.6167, -100.2800], keywords: ['marqués', 'marques', 'el marqués', 'el marques'] },
-    { label: 'San Juan del Río', coords: [20.3833, -99.9833],  keywords: ['san juan del río', 'san juan del rio', 'san juan'] },
-    { label: 'Tequisquiapan',    coords: [20.5167, -99.8833],  keywords: ['tequisquiapan', 'tequis'] },
-    { label: 'Centro Sur',       coords: [20.5650, -100.3850], keywords: ['centro sur'] },
-    { label: 'Zibatá',           coords: [20.6800, -100.3400], keywords: ['zibatá', 'zibata'] },
-    { label: 'El Refugio',       coords: [20.6300, -100.3700], keywords: ['el refugio', 'refugio'] },
-    { label: 'Candiles',         coords: [20.6100, -100.4200], keywords: ['candiles'] },
-    { label: 'Constituyentes',   coords: [20.5950, -100.4100], keywords: ['constituyentes'] },
-    { label: 'Cumbres',          coords: [20.6500, -100.4300], keywords: ['cumbres'] },
-    { label: 'Milenio',          coords: [20.5750, -100.4200], keywords: ['milenio'] },
-    { label: 'Santa Fe',         coords: [20.5500, -100.4100], keywords: ['santa fe'] },
-    { label: 'Interlomas',       coords: [20.6950, -100.4600], keywords: ['interlomas'] },
-    { label: 'Pedregal',         coords: [20.5400, -100.4000], keywords: ['pedregal'] },
-    { label: 'Centro',           coords: [20.5881, -100.3900], keywords: ['centro histórico', 'centro historico', 'centro'] },
-  ],
-  monterrey: [
-    { label: 'San Pedro G.G.',   coords: [25.6500, -100.4000], keywords: ['san pedro', 'garza garcia', 'garza garcía'] },
-    { label: 'Santa Catarina',   coords: [25.6731, -100.4569], keywords: ['santa catarina'] },
-    { label: 'Guadalupe',        coords: [25.6739, -100.2533], keywords: ['guadalupe'] },
-    { label: 'Apodaca',          coords: [25.7847, -100.1875], keywords: ['apodaca'] },
-    { label: 'San Nicolás',      coords: [25.7444, -100.3036], keywords: ['san nicolás', 'san nicolas'] },
-    { label: 'Escobedo',         coords: [25.7978, -100.3336], keywords: ['escobedo'] },
-    { label: 'Centro MTY',       coords: [25.6866, -100.3161], keywords: ['centro'] },
-  ],
-  puebla: [
-    { label: 'Cholula',          coords: [19.0556, -98.3014],  keywords: ['cholula', 'san andrés', 'san andres'] },
-    { label: 'Angelópolis',      coords: [19.0167, -98.2500],  keywords: ['angelópolis', 'angelopolis'] },
-    { label: 'Atlixco',          coords: [18.9083, -98.4386],  keywords: ['atlixco'] },
-    { label: 'Tehuacán',         coords: [18.4617, -97.3939],  keywords: ['tehuacán', 'tehuacan'] },
-    { label: 'Centro Puebla',    coords: [19.0414, -98.2063],  keywords: ['centro'] },
-  ],
-}
 
 const CITY_VIEW: Record<string, { center: [number, number]; zoom: number }> = {
   queretaro: { center: [20.57,  -100.35], zoom: 10 },
@@ -168,7 +132,7 @@ export default function MiniMapa({ zonas, onZonaPress, onPropiedadPress }: Props
         initialRegion={MEXICO_REGION}
         showsUserLocation={false}
         onPress={() => { setSelectedPin(null); setSelectedCluster(null) }}
-        onRegionChangeComplete={r => setLatDelta(r.latitudeDelta)}
+        onRegionChangeComplete={(r: { latitudeDelta: number }) => setLatDelta(r.latitudeDelta)}
       >
         {!selectedZona && zonas.map(z => (
           <Marker

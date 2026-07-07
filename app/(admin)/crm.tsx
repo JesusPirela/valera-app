@@ -1,13 +1,13 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking,
-  ActivityIndicator, TouchableOpacity, ScrollView, Modal, Alert, FlatList,
+  ActivityIndicator, TouchableOpacity, ScrollView, Modal, Alert,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { normalizar } from '../../lib/texto'
-import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ORDEN_ESTADOS as ORDEN_ESTADOS_BASE } from '../(prospectador)/crm'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
 import { normalizarTelefono } from '../../lib/telefono'

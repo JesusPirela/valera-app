@@ -1,12 +1,11 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
-  TouchableOpacity, Image, TextInput, Platform, Alert, Modal,
+  TouchableOpacity, TextInput, Platform, Alert, Modal,
 } from 'react-native'
 import { useFocusEffect, useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
-import { thumb } from '../../lib/img'
 import { ThumbImage } from '../../components/ThumbImage'
 
 type Modelo = {

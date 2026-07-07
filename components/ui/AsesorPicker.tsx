@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   Modal,
-  FlatList,
   ActivityIndicator,
   StyleSheet,
   KeyboardAvoidingView,

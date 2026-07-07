@@ -66,7 +66,6 @@ export default function Tienda() {
   const [avatarsDesbloqueados, setAvatarsDesbloqueados] = useState<string[]>([])
   const [tab, setTab]             = useState<'tienda' | 'historial' | 'cofre'>('tienda')
   const [loading, setLoading]     = useState(true)
-  const [loadingHistorial, setLoadingHistorial] = useState(false)
   const [comprando, setComprando]       = useState<string | null>(null)
   const [comprandoPatron, setComprandoPatron] = useState<string | null>(null)
   const [showRuleta, setShowRuleta]           = useState(false)
@@ -112,7 +111,9 @@ export default function Tienda() {
     setCoins(statsRes.data?.valera_coins ?? 0)
     setCofresPendientes((statsRes.data as any)?.cofres_pendientes ?? 0)
     setItems((itemsRes.data ?? []) as StoreItem[])
-    setCompras((comprasRes.data ?? []) as Compra[])
+    // Cast via unknown: supabase-js infiere la relación store_items como array,
+    // pero es to-one (item_id) y en runtime llega como objeto.
+    setCompras((comprasRes.data ?? []) as unknown as Compra[])
     setColoresDesbloqueados((perfilRes.data as any)?.colores_desbloqueados ?? [])
     setAvatarsDesbloqueados((perfilRes.data as any)?.avatares_desbloqueados ?? [])
 
@@ -233,7 +234,7 @@ export default function Tienda() {
         .select('id, created_at, costo_coins, estado, notas_admin, es_ruleta, es_milestone, nombre_premio, store_items(nombre, icono)')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
-      setCompras((data ?? []) as Compra[])
+      setCompras((data ?? []) as unknown as Compra[])
     }
   }
 

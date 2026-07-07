@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ActivityIndicator, TouchableOpacity,
-  FlatList, Image, TextInput, Alert, Platform,
+  FlatList, TextInput, Alert, Platform,
 } from 'react-native'
 import { useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
-import { thumb } from '../../lib/img'
 import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar } from '../../lib/texto'
 

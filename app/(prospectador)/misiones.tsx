@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Animated,
+  ActivityIndicator,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
-import { calcularNivel, infoNivel, tituloPorNivel, sincronizarMisionesBase } from '../../lib/gamification'
+import { infoNivel, tituloPorNivel, sincronizarMisionesBase } from '../../lib/gamification'
 
 type UserStats = {
   xp: number

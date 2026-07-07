@@ -12,7 +12,6 @@ import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import {
   PATRONES_ANIMADOS, baseColorDeAcento, AnimatedGradientView, AccentBackground,
-  type PatronAnimado,
 } from '../../lib/patrones'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import CambiarCuenta from '../../components/CambiarCuenta'
@@ -66,7 +65,7 @@ type AvatarGridProps = {
   comprando: string | null
   gifsFallidos: Set<string>
   seleccionarEmoji: (e: string) => void
-  comprarItem: (tipo: string, valor: string) => void
+  comprarItem: (tipo: 'color' | 'avatar', valor: string) => void
   onGifError: (e: string) => void
 }
 const AvatarGrid = memo(function AvatarGrid({

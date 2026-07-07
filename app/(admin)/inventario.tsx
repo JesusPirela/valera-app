@@ -7,7 +7,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Image,
   Platform,
   Modal,
   TextInput,
@@ -15,10 +14,8 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
-import { thumb } from '../../lib/img'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
-import ToggleSwitch from '../../components/ToggleSwitch'
 
 type InvProp = {
   id: string

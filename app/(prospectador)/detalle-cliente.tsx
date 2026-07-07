@@ -236,42 +236,6 @@ export default function DetalleCliente() {
   const [tituloSeguimiento, setTituloSeguimiento] = useState('')
   const [guardandoSeguimiento, setGuardandoSeguimiento] = useState(false)
 
-  async function cambiarEstado(nuevoEstado: string) {
-    if (!cliente || nuevoEstado === cliente.estado) return
-    const estadoAnterior = ESTADOS[cliente.estado]?.label ?? cliente.estado
-    const estadoNuevo = ESTADOS[nuevoEstado]?.label ?? nuevoEstado
-    const { error } = await supabase.from('clientes').update({ estado: nuevoEstado }).eq('id', id)
-    if (error) { Alert.alert('Error', error.message); return }
-    const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('interacciones').insert({
-      cliente_id: id, user_id: user!.id, tipo: 'estado_cambiado',
-      descripcion: `Estado cambiado de "${estadoAnterior}" a "${estadoNuevo}".`,
-    })
-    if (nuevoEstado === 'cita_agendada') registrarAccion(user!.id, 'agendar_cita').catch(() => {})
-    if (nuevoEstado === 'compro') registrarAccion(user!.id, 'cerrar_venta').catch(() => {})
-
-    // Crear / actualizar entrada en coordinación de citas al agendar
-    if (nuevoEstado === 'cita_agendada' || nuevoEstado === 'cita_por_agendar') {
-      const estadoCita = nuevoEstado === 'cita_agendada' ? 'en_coordinacion' : 'por_contactar'
-      // Solo insertar si no existe ya una cita activa para este cliente
-      const { data: existe } = await supabase
-        .from('citas_coordinacion')
-        .select('id')
-        .eq('cliente_id', id)
-        .not('estado', 'in', '("realizada","cancelada")')
-        .maybeSingle()
-      if (!existe) {
-        supabase.from('citas_coordinacion').insert({
-          cliente_id: id,
-          prospectador_id: user!.id,
-          estado: estadoCita,
-        }).then(() => {})
-      }
-    }
-
-    refetch()
-  }
-
   async function agregarInteraccion() {
     if (!textoInteraccion.trim()) { Alert.alert('Requerido', 'Escribe una descripción.'); return }
     setGuardandoInteraccion(true)

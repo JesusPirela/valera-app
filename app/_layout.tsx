@@ -150,7 +150,8 @@ export default function RootLayout() {
           setUpdateRequerido(true)
         }
       })
-      .catch(() => {})
+      // .then(undefined, ...): el builder de supabase es PromiseLike (sin .catch)
+      .then(undefined, () => {})
   }, [])
 
   useEffect(() => {
@@ -363,7 +364,7 @@ export default function RootLayout() {
           router.replace('/(prospectador)/propiedades')
         }
       })
-      .catch(() => {})
+      .then(undefined, () => {})
   }, [loading])
 
   if (loading || !fontsLoaded) {

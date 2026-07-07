@@ -121,7 +121,6 @@ const CHEST_W   = 210
 const CHEST_H   = 155
 const LID_INNER = 52
 const HINGE_H   = 7
-const LID_H     = LID_INNER + HINGE_H
 
 function buildStrip(premios: Premio[], winner: Premio, cofresAbiertos = 0): Premio[] {
   const disponibles = premios.filter(p => (p.min_cofres ?? 0) <= cofresAbiertos)

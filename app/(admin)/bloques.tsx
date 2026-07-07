@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
-  TouchableOpacity, TextInput, Switch, Platform,
+  TouchableOpacity, TextInput, Switch,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'

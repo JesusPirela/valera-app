@@ -155,7 +155,7 @@ export default function LeadsPool() {
   const s = makeStyles(c)
 
   return (
-    <View style={[s.root, { backgroundColor: c.background }]}>
+    <View style={[s.root, { backgroundColor: c.bg }]}>
       {/* Header */}
       <View style={[s.header, { backgroundColor: c.card, borderBottomColor: c.border }]}>
         <Text style={[s.headerTitle, { color: c.text }]}>Pool de Leads</Text>

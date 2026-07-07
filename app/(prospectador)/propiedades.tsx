@@ -127,16 +127,6 @@ function mezclar<T>(arr: T[]): T[] {
   return out
 }
 
-function agruparPorZona(propiedades: Propiedad[]): [string, Propiedad[]][] {
-  const result: [string, Propiedad[]][] = []
-  for (const z of ZONAS_CONFIG) {
-    const group = propiedades.filter(p => p.zona === z.key)
-    if (group.length > 0) result.push([z.label, group])
-  }
-  const sinZona = propiedades.filter(p => !p.zona)
-  if (sinZona.length > 0) result.push(['Otras', sinZona])
-  return result
-}
 
 // Tarjeta de propiedad memoizada: solo se re-renderiza si cambian SUS datos
 // (veces publicada, estado de toggle, etc.), no en cada tecla de búsqueda.
@@ -292,7 +282,7 @@ export default function ProspectadorPropiedades() {
   // Orden aleatorio estable por sesión para usuarios no-admin
   const shuffleMapRef = useRef<Map<string, number>>(new Map())
   const [shuffleTick, setShuffleTick] = useState(0)
-  const [zonasExpandidas, setZonasExpandidas] = useState<Set<string>>(new Set())
+  const [, setZonasExpandidas] = useState<Set<string>>(new Set())
   // Web: renderizado incremental para no montar 1000+ tarjetas/imágenes de golpe
   const PAGE_WEB = 24
   const [visibleCount, setVisibleCount] = useState(PAGE_WEB)
@@ -444,7 +434,6 @@ export default function ProspectadorPropiedades() {
 
   const propiedades = queryData?.propiedades ?? []
   const publicaciones = pubData?.publicacionesMap ?? {}
-  const publicacionFechas = pubData?.publicacionFechasMap ?? {}
   const esAdmin = queryData?.rol === 'admin'
   const esAsesorOMas = ['asesor', 'supervisor', 'admin'].includes(queryData?.rol ?? '')
 
@@ -607,14 +596,6 @@ export default function ProspectadorPropiedades() {
     )
   }
 
-  function toggleZona(zona: string) {
-    setZonasExpandidas(prev => {
-      const s = new Set(prev)
-      if (s.has(zona)) s.delete(zona)
-      else s.add(zona)
-      return s
-    })
-  }
 
   function enviarAyuda() {
     const msg = mensajeAyuda.trim()
@@ -754,7 +735,6 @@ export default function ProspectadorPropiedades() {
     fechaDesdeCustom, fechaHastaCustom,
   ])
 
-  const propiedadesPorZona = vistaZonas ? agruparPorZona(propiedadesFiltradas) : []
 
   const zonasParaMapa = ZONAS_CONFIG.map(z => {
     const propsZona = propiedades.filter(p => p.zona === z.key)

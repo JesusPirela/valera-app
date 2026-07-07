@@ -252,7 +252,9 @@ export default function ProspectadorLayout() {
           shadowRadius: 8,
           elevation: 12,
         },
-        contentStyle: { backgroundColor: darkMode ? '#0d1b2a' : '#f0f4f5' },
+        // sceneStyle es la prop real de bottom-tabs para el fondo detrás de las
+        // pantallas; "contentStyle" no existe en Tabs y se ignoraba en silencio.
+        sceneStyle: { backgroundColor: darkMode ? '#0d1b2a' : '#f0f4f5' },
         tabBarLabelStyle: {
           fontSize: 9,
           fontWeight: '600',

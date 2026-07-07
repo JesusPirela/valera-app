@@ -8,7 +8,6 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  Image,
   Platform,
   ScrollView,
   Modal,
@@ -16,8 +15,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { useColors, AppColors } from '../../lib/ThemeContext'
-import { thumb } from '../../lib/img'
+import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar } from '../../lib/texto'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'

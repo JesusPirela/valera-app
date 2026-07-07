@@ -6,7 +6,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { useColors, AppColors } from '../../lib/ThemeContext'
+import { useColors } from '../../lib/ThemeContext'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const SWIPE_THRESHOLD = -80
@@ -115,7 +115,6 @@ function NotifItem({ item, onPress, onDelete, cardBg, textColor }: NotifItemProp
   ).current
 
   const esCliente   = item.tipo === 'nuevo_cliente' || item.tipo === 'lead_caliente'
-  const esLogin     = item.tipo === 'login'
   const esDestacada = item.tipo === 'destacada'
   const navegable   = esNavegable(item)
   const hint        = hintTexto(item)
