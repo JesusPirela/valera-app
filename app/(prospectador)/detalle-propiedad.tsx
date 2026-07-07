@@ -685,8 +685,10 @@ export default function DetallePropiedad() {
 
       return null
     }
-    // Nativo: descarga optimizada via thumb() al sistema de archivos
-    const urlOptimizada = thumb(url, { width: _anchoMax, quality: 75, resize: 'contain' }) ?? url
+    // Nativo: descarga optimizada via thumb() al sistema de archivos.
+    // quality 65: cada punto de calidad multiplica la memoria que el WebView de
+    // impresión necesita para decodificar; 65 es indistinguible en el PDF.
+    const urlOptimizada = thumb(url, { width: _anchoMax, quality: 65, resize: 'contain' }) ?? url
     for (let intento = 1; intento <= 3; intento++) {
       try {
         const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
@@ -727,10 +729,19 @@ export default function DetallePropiedad() {
 
       const imagenes = [...(propiedad.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
 
+      // Presupuesto de memoria del PDF: en nativo el HTML con fotos base64 se
+      // renderiza en un WebView de impresión; con 13 fotos a 1100/700px Android
+      // se quedaba sin memoria y CERRABA la app al guardar la ficha. En nativo
+      // se bajan resolución y cantidad (visualmente imperceptible en el PDF).
+      const esWeb = Platform.OS === 'web'
+      const maxFotos = esWeb ? 13 : 10
+      const anchoPrincipal = esWeb ? 1100 : 850
+      const anchoGaleria = esWeb ? 700 : 500
+
       const [imagenesConSrcRaw, logoSrc, inmobiliariaLogoSrc] = await Promise.all([
         Promise.all(
-          imagenes.slice(0, 13).map(async (img, i) => {
-            const src = await imagenABase64(img.url, i === 0 ? 1100 : 700)
+          imagenes.slice(0, maxFotos).map(async (img, i) => {
+            const src = await imagenABase64(img.url, i === 0 ? anchoPrincipal : anchoGaleria)
             if (!src) console.error('[PDF] imagen no cargó:', img.url)
             return { ...img, src }
           })

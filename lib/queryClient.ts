@@ -24,6 +24,11 @@ export const queryClient = new QueryClient({
 export const persister = createAsyncStoragePersister({
   storage: AsyncStorage,
   key: `VALERA_CACHE_b${CACHE_BUSTER}`,
-  throttleTime: 1000,
+  // 3s (antes 1s): cada persistencia serializa TODO el cache (varios MB de
+  // JSON) en el hilo JS; hacerlo cada segundo producía micro-congelamientos
+  // perceptibles en Android durante scroll/edición. 3s reduce el trabajo 3×
+  // sin riesgo real de pérdida (solo se pierde lo no persistido si la app
+  // muere en esa ventana, y el servidor sigue siendo la fuente de verdad).
+  throttleTime: 3000,
   maxAge: 1000 * 60 * 60 * 24 * 7,     // descartar cache con más de 7 días
 })
