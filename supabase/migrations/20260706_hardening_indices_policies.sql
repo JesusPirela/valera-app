@@ -447,3 +447,20 @@ ALTER POLICY "xp_tx_select_own" ON public.xp_transactions USING (((SELECT auth.u
 -- E) Cierra la ENUMERACIÓN anónima del bucket propiedades (las URLs
 --    públicas directas /object/public/ siguen funcionando: no usan RLS).
 ALTER POLICY "Publico puede ver imagenes" ON storage.objects TO authenticated;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- C-bis) Correcciones aplicadas durante la ejecución (06/jul/2026):
+--
+-- 1. El REVOKE ... FROM anon del bloque C no bastaba: el EXECUTE les llegaba
+--    por el pseudo-rol PUBLIC (grant por defecto de Postgres). Se revocó de
+--    PUBLIC y se otorgó explícito a authenticated/service_role:
+--      REVOKE EXECUTE ON FUNCTION <fn> FROM PUBLIC, anon;
+--      GRANT EXECUTE ON FUNCTION <fn> TO authenticated, service_role;
+--    (para las 73 funciones SECURITY DEFINER no-trigger de public)
+--
+-- 2. EXCEPCIÓN NECESARIA: is_admin() se usa DENTRO de políticas RLS y se
+--    evalúa con los privilegios del rol consultante; sin EXECUTE para anon la
+--    ficha pública quedaba rota ("permission denied for function is_admin").
+--    Cualquier función citada en políticas RLS debe conservar EXECUTE para
+--    todos los roles que consultan esas tablas:
+GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated;
