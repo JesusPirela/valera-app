@@ -679,11 +679,9 @@ export default function DetallePropiedad() {
 
       return null
     }
-    // Nativo: descarga optimizada via thumb() al sistema de archivos.
-    // quality 55: el tamaño del JPEG no es el problema (se decodifica igual),
-    // pero un JPEG más liviano reduce el string base64 en el HTML y la presión
-    // del bridge/WebView; 55 es indistinguible en el PDF impreso.
-    const urlOptimizada = thumb(url, { width: _anchoMax, quality: 55, resize: 'contain' }) ?? url
+    // Nativo: descarga optimizada via thumb() al sistema de archivos (q72, como
+    // el original que funcionaba).
+    const urlOptimizada = thumb(url, { width: _anchoMax, quality: 72, resize: 'contain' }) ?? url
     for (let intento = 1; intento <= 3; intento++) {
       try {
         const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
@@ -728,14 +726,15 @@ export default function DetallePropiedad() {
       // renderiza en un WebView de impresión; con 13 fotos a 1100/700px Android
       // se quedaba sin memoria y CERRABA la app al guardar la ficha. En nativo
       // se bajan resolución y cantidad (visualmente imperceptible en el PDF).
-      // En nativo el pico de memoria = (nº fotos) × (ancho² × 4 bytes por bitmap
-      // decodificado). Se recorta agresivo para caber en gama baja (~192MB heap):
-      // portada + 7 fotos, resolución baja y q55 en imagenABase64. Imperceptible
-      // en el PDF impreso; es la diferencia entre generar o que el SO mate la app.
+      // 14 fotos (lo que pide el usuario). El crash de gama baja era por MEMORIA,
+      // y la memoria del WebView ∝ resolución² (no tanto a la cantidad). Se
+      // mantienen las 14 fotos pero en nativo se baja la resolución un poco:
+      // menos memoria que el original de 13 fotos → no se cierra, y en un PDF
+      // (galería a 6 por hoja) 560px es de sobra.
       const esWeb = Platform.OS === 'web'
-      const maxFotos = esWeb ? 13 : 8
-      const anchoPrincipal = esWeb ? 1100 : 720
-      const anchoGaleria = esWeb ? 700 : 460
+      const maxFotos = 14
+      const anchoPrincipal = esWeb ? 1100 : 900
+      const anchoGaleria = esWeb ? 700 : 560
 
       const [imagenesConSrcRaw, logoSrc, inmobiliariaLogoSrc] = await Promise.all([
         Promise.all(
@@ -1019,31 +1018,11 @@ export default function DetallePropiedad() {
       } else {
         const Print = await import('expo-print')
         const ShareLib = await import('expo-sharing')
-        // Escribir el HTML a archivo temporal para evitar el límite del bridge
-        // Mecanismo por plataforma (verificado leyendo el código nativo de
-        // expo-print 14.1.4):
-        //  · Android renderiza SIEMPRE `options.html` en un WebView e IGNORA
-        //    `options.uri` (con uri el PDF sale en blanco). Se pasa el html
-        //    directo; con Hermes/JSI el string grande ya no rompe el bridge.
-        //  · iOS (WKWebView) sí carga desde archivo y es más estable con html
-        //    grande leído de disco que pasado como prop.
-        // El CRASH real era memoria: el WebView decodifica todas las fotos
-        // base64 a bitmaps a la vez; el presupuesto reducido de arriba (pocas
-        // fotos, baja resolución/calidad) es lo que de verdad lo evita.
-        let pdfUri: string
-        if (Platform.OS === 'android') {
-          const result = await Print.printToFileAsync({ html, width: 595 })
-          pdfUri = result.uri
-        } else {
-          const htmlFileUri = `${FileSystem.cacheDirectory}ficha_print_tmp.html`
-          await FileSystem.writeAsStringAsync(htmlFileUri, html, { encoding: FileSystem.EncodingType.UTF8 })
-          try {
-            const result = await Print.printToFileAsync({ uri: htmlFileUri, width: 595 } as any)
-            pdfUri = result.uri
-          } finally {
-            FileSystem.deleteAsync(htmlFileUri, { idempotent: true }).catch(() => {})
-          }
-        }
+        // Mecanismo original (probado y funcionando): html directo en ambas
+        // plataformas. Cambiarlo a { uri: archivo } rompió iOS (WKWebView) y no
+        // resolvía nada: el original ya generaba fichas con muchas fotos sin
+        // cerrar la app. No reintroducir el archivo temporal ni el split por SO.
+        const { uri: pdfUri } = await Print.printToFileAsync({ html, width: 595 })
         const isAvailable = await ShareLib.isAvailableAsync()
         if (!isAvailable) {
           Alert.alert('Error', 'Compartir no está disponible en este dispositivo.')

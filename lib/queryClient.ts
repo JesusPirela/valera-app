@@ -4,7 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 // Incrementar CACHE_BUSTER en deploys que cambien la estructura de datos cacheados.
 // Esto invalida el cache persistido en AsyncStorage para evitar datos corruptos/viejos.
-const CACHE_BUSTER = '3'
+// b4 (07/jul): descarta el cache inflado que causaba arranque lento (ver abajo).
+const CACHE_BUSTER = '4'
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,3 +36,21 @@ export const persister = createAsyncStoragePersister({
 // Edad máxima del cache persistido (se pasa en persistOptions del provider;
 // como opción del persister no existe y se ignoraba silenciosamente).
 export const PERSIST_MAX_AGE = 1000 * 60 * 60 * 24 * 7  // 7 días
+
+// Qué queries se GUARDAN a disco. Al migrar ~40 pantallas a React Query, todas
+// empezaron a persistir su cache; al abrir la app se rehidrataba TODO ese JSON
+// (varios MB) de golpe en el hilo JS → arranque lento. Solución: persistir solo
+// lo pesado/offline-crítico (home y CRM). El resto sigue cacheado en MEMORIA
+// durante la sesión (navegación instantánea) pero no infla el arranque.
+const KEYS_PERSISTIBLES = new Set([
+  'prospectador-propiedades', // home del prospectador (lo primero que se ve)
+  'admin-propiedades',        // home admin
+  'clientes',                 // CRM (además es crítico para el modo offline)
+  'detalle-propiedad',        // abrir una propiedad sin red
+])
+
+export function shouldPersistQuery(query: { queryKey: unknown; state: { status: string } }): boolean {
+  if (query.state.status !== 'success') return false
+  const key = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : String(query.queryKey)
+  return KEYS_PERSISTIBLES.has(key)
+}

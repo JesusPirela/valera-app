@@ -4,7 +4,7 @@ import { Stack, router, usePathname } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { Session } from '@supabase/supabase-js'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
-import { queryClient, persister, PERSIST_MAX_AGE } from '../lib/queryClient'
+import { queryClient, persister, PERSIST_MAX_AGE, shouldPersistQuery } from '../lib/queryClient'
 import { ThemeProvider, useColors } from '../lib/ThemeContext'
 import { VistaComoProvider, VISTA_COMO_KEY } from '../lib/VistaComo'
 import { actualizarNombreRole, guardarTokensSesion, accountSwitch, userSignOut } from '../lib/cuentas'
@@ -378,7 +378,10 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <WebThemeCSS />
-      <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: PERSIST_MAX_AGE }}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister, maxAge: PERSIST_MAX_AGE, dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery } }}
+      >
         <VistaComoProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
