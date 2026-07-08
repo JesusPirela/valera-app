@@ -145,6 +145,16 @@ export default function Mapa() {
     <View style={[s.container, { backgroundColor: c.bg }]}>
       {/* Filtros */}
       <View style={[s.filtrosBar, { backgroundColor: c.card, borderBottomColor: c.border }]}>
+        {/* Salir del mapa: el MapView captura los gestos (no hay swipe-back) y
+            el header del tab queda tapado, así que se necesita un botón propio. */}
+        <TouchableOpacity
+          style={[s.salirBtn, { borderColor: c.border }]}
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(prospectador)/propiedades')}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel="Salir del mapa"
+        >
+          <Text style={[s.salirTxt, { color: c.text }]}>‹ Salir</Text>
+        </TouchableOpacity>
         {(['todas', 'contactadas', 'no_contactadas'] as FiltroLona[]).map(f => {
           const activo = filtro === f
           const color = f === 'contactadas' ? VERDE : f === 'no_contactadas' ? ROJO : TEAL
@@ -222,8 +232,13 @@ const s = StyleSheet.create({
 
   filtrosBar: {
     flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 8,
-    borderBottomWidth: 1,
+    borderBottomWidth: 1, alignItems: 'center',
   },
+  salirBtn: {
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1,
+    justifyContent: 'center',
+  },
+  salirTxt: { fontSize: 13, fontWeight: '800' },
   filtroBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     borderRadius: 20, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6,

@@ -6,9 +6,8 @@ import { Session } from '@supabase/supabase-js'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { queryClient, persister, PERSIST_MAX_AGE, shouldPersistQuery } from '../lib/queryClient'
 import { ThemeProvider, useColors } from '../lib/ThemeContext'
-import { VistaComoProvider, VISTA_COMO_KEY } from '../lib/VistaComo'
+import { VistaComoProvider } from '../lib/VistaComo'
 import { actualizarNombreRole, guardarTokensSesion, accountSwitch, userSignOut } from '../lib/cuentas'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
 import { Ionicons } from '@expo/vector-icons'
@@ -342,29 +341,11 @@ export default function RootLayout() {
       router.replace('/(auth)/login')
       return
     }
-    // Al recargar la página, verificar el rol y redirigir al home correcto.
-    // Guardamos el userId al inicio: si el usuario cambia de cuenta mientras esta
-    // consulta está en vuelo, cancelamos la redirección (evita volver al admin
-    // después de cambiar a prospectador).
-    const startUserId = session.user.id
-    supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', startUserId)
-      .single()
-      .then(async ({ data }) => {
-        if (sessionRef.current?.user.id !== startUserId) return
-        if (data?.role === 'admin') {
-          // Si el admin tiene activada una "vista como rol", entrar a la app de
-          // prospectador en lugar de la de admin (sobrevive recargas).
-          let vistaComo: string | null = null
-          try { vistaComo = await AsyncStorage.getItem(VISTA_COMO_KEY) } catch {}
-          router.replace(vistaComo ? '/(prospectador)/propiedades' : '/(admin)/propiedades')
-        } else {
-          router.replace('/(prospectador)/propiedades')
-        }
-      })
-      .then(undefined, () => {})
+    // Con sesión NO se redirige desde aquí. El envío al home según rol lo hace
+    // app/index.tsx, que solo se monta al entrar en "/". Antes este efecto hacía
+    // router.replace(home) SIEMPRE al cargar, así que al RECARGAR en cualquier
+    // pantalla (detalle, CRM, mapa…) te rebotaba al inicio. Ahora te quedas donde
+    // estabas; solo se maneja el caso de sesión perdida (arriba).
   }, [loading])
 
   if (loading || !fontsLoaded) {
