@@ -824,6 +824,9 @@ export default function ProspectadorPropiedades() {
           { key: 'renta',      label: 'Renta',      icon: 'key'       as const, activo: filtroOperacion === 'renta', onPress: () => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta') },
           { key: 'nuevas',     label: 'Nuevas',     icon: 'sparkles'  as const, activo: filtroNueva,                 onPress: () => setFiltroNueva(v => !v) },
           { key: 'exclusivas', label: 'Exclusivas', icon: 'star'      as const, activo: filtroExclusiva,             onPress: () => setFiltroExclusiva(v => !v) },
+          // Acceso rápido a "Sin publicar" (antes solo estaba escondido en el
+          // panel de filtros avanzados, bajo "Mis propiedades").
+          { key: 'sin_publicar', label: 'Sin publicar', icon: 'cloud-upload-outline' as const, activo: filtroPublicadas === 'sin_publicar', onPress: () => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar') },
         ]).map(btn => (
           <TouchableOpacity
             key={btn.key}
