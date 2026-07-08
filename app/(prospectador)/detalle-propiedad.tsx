@@ -782,7 +782,9 @@ export default function DetallePropiedad() {
       if (propiedad.lat && propiedad.lng) {
         const lat = propiedad.lat
         const lng = propiedad.lng
-        const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=740x340&scale=2&markers=color:${colorFichaMap}%7C${lat},${lng}&key=${GMAPS_KEY}`
+        const staticUrl = esAndroid
+          ? `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=400x200&scale=1&markers=color:${colorFichaMap}%7C${lat},${lng}&key=${GMAPS_KEY}`
+          : `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=740x340&scale=2&markers=color:${colorFichaMap}%7C${lat},${lng}&key=${GMAPS_KEY}`
         const mapSrc = await imagenABase64(staticUrl)
         mapaHTML = `
           <div class="seccion-grupo">
