@@ -75,11 +75,17 @@ export default function AdminLayout() {
         headerTitleStyle: { fontWeight: 'bold' },
         headerLeft: () => <HeaderBack />,
         headerTitle: () => (
-          <Image
-            source={LOGO}
-            style={{ width: 100, height: 44 }}
-            resizeMode="contain"
-          />
+          <TouchableOpacity
+            onPress={() => router.navigate('/(admin)/propiedades')}
+            accessibilityLabel="Ir al inicio"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Image
+              source={LOGO}
+              style={{ width: 100, height: 44 }}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
         ),
         headerRight: () => (
           <View style={styles.headerRight}>

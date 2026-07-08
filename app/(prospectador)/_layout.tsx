@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Image, View, Platform, StyleSheet } from 'react-native'
+import { Image, View, Platform, StyleSheet, TouchableOpacity } from 'react-native'
 import { Tabs, usePathname, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
@@ -223,11 +223,17 @@ export default function ProspectadorLayout() {
         headerTintColor: '#c9a84c',
         headerTitleStyle: { fontWeight: 'bold' },
         headerTitle: () => (
-          <Image
-            source={LOGO}
-            style={{ width: 130, height: 54 }}
-            resizeMode="contain"
-          />
+          <TouchableOpacity
+            onPress={() => router.navigate('/(prospectador)/propiedades')}
+            accessibilityLabel="Ir al inicio"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Image
+              source={LOGO}
+              style={{ width: 130, height: 54 }}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
         ),
         headerLeft: () => <HeaderBack />,
         headerRight: () => null,
