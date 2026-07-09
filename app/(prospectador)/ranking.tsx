@@ -1,59 +1,31 @@
 import { useState, useCallback } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, Image,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, RefreshControl,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { calcularNivel, tituloPorNivel } from '../../lib/gamification'
 import { AccentBackground } from '../../lib/patrones'
+import AvatarConMarco from '../../components/AvatarConMarco'
+import { marcoPorNivel } from '../../lib/marcos'
 
+// El ranking es de PRODUCTIVIDAD: no incluye valera_coins a propósito.
 type RankEntry = {
   id: string
   nombre: string
   avatar_url: string | null
   color_acento: string | null
   xp: number
-  valera_coins: number
   streak_dias: number
   posicion: number
+  ventas_cerradas: number
+  rentas_cerradas: number
+  citas_realizadas: number
+  propiedades_publicadas: number
+  clientes_registrados: number
+  cursos_completados: number
 }
-
-// Emojis premium → GIF animado de Noto (para mostrar el ícono animado del perfil).
-const NOTO = (hex: string) => `https://fonts.gstatic.com/s/e/notoemoji/latest/${hex}/512.gif`
-const GIF_MAP: Record<string, string> = {
-  '🔥': NOTO('1f525'), '⚡': NOTO('26a1'), '🌈': NOTO('1f308'), '🦋': NOTO('1f98b'),
-  '🐉': NOTO('1f409'), '🦄': NOTO('1f984'), '👑': NOTO('1f451'), '💫': NOTO('1f4ab'),
-  '🌸': NOTO('1f338'), '🔮': NOTO('1f52e'), '🌊': NOTO('1f30a'), '🏆': NOTO('1f3c6'),
-  '🎉': NOTO('1f389'), '✨': NOTO('2728'), '🦁': NOTO('1f981'), '🐺': NOTO('1f43a'),
-}
-
-// Avatar grande para la mini-visualización del perfil: foto, GIF animado o emoji.
-function AvatarBig({ avatarUrl, nombre }: { avatarUrl: string | null; nombre: string }) {
-  const isPhoto = !!avatarUrl && /^https?:\/\//.test(avatarUrl)
-  const emoji = avatarUrl?.startsWith('emoji:') ? avatarUrl.replace('emoji:', '') : null
-  const gif = emoji ? GIF_MAP[emoji] : null
-  if (isPhoto) return <Image source={{ uri: avatarUrl! }} style={mp.avImg} />
-  if (gif)     return <Image source={{ uri: gif }} style={mp.avGif} resizeMode="contain" />
-  return <Text style={mp.avEmoji}>{emoji ?? (nombre?.[0]?.toUpperCase() ?? '?')}</Text>
-}
-
-function AvatarCircle({ avatarUrl, nombre, size = 42 }: { avatarUrl: string | null; nombre: string; size?: number }) {
-  const letra = (nombre ?? '?')[0]?.toUpperCase() ?? '?'
-  const isEmoji = avatarUrl?.startsWith('emoji:')
-  const emoji   = isEmoji ? avatarUrl!.replace('emoji:', '') : null
-  return (
-    <View style={[av.circle, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Text style={[av.text, { fontSize: emoji ? size * 0.55 : size * 0.45 }]}>
-        {emoji ?? letra}
-      </Text>
-    </View>
-  )
-}
-const av = StyleSheet.create({
-  circle: { backgroundColor: '#1e3448', alignItems: 'center', justifyContent: 'center' },
-  text:   { fontWeight: '800', color: '#c9a84c' },
-})
 
 const MEDAL = ['🥇', '🥈', '🥉']
 
@@ -64,7 +36,7 @@ export default function Ranking() {
   // React Query: el ranking cacheado aparece al instante al volver a la pantalla;
   // solo se vuelve a pedir en segundo plano si pasaron >2 min (antes recargaba
   // desde cero en cada foco). getSession() es local (no red) para el userId.
-  const { data, isLoading: loading } = useQuery({
+  const { data, isLoading: loading, refetch } = useQuery({
     queryKey: ['ranking'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -76,6 +48,13 @@ export default function Ranking() {
   })
   const userId = data?.userId ?? null
   const entries = data?.entries ?? []
+
+  // Jalar para actualizar
+  const [refreshing, setRefreshing] = useState(false)
+  const onPull = useCallback(async () => {
+    setRefreshing(true)
+    try { await refetch() } catch {} finally { setRefreshing(false) }
+  }, [refetch])
 
   useFocusEffect(useCallback(() => {
     const st = queryClient.getQueryState(['ranking'])
@@ -93,7 +72,12 @@ export default function Ranking() {
   )
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={s.container}
+      contentContainerStyle={{ paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor="#c9a84c" colors={['#c9a84c']} />}
+    >
 
       {/* Header */}
       <View style={s.header}>
@@ -105,8 +89,8 @@ export default function Ranking() {
       {miEntry && miEntry.posicion > 10 && (
         <TouchableOpacity style={[s.entryCard, s.miCard]} activeOpacity={0.7} onPress={() => setSel(miEntry)}>
           <Text style={s.posMi}>#{miEntry.posicion}</Text>
-          <AvatarCircle avatarUrl={miEntry.avatar_url} nombre={miEntry.nombre} />
-          <View style={{ flex: 1 }}>
+          <AvatarConMarco avatarUrl={miEntry.avatar_url} nombre={miEntry.nombre} nivel={calcularNivel(miEntry.xp)} size={44} fondo="#1a1500" />
+          <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={s.entryNombre}>{miEntry.nombre} <Text style={s.tuLabel}>(Tú)</Text></Text>
             <Text style={s.entryTitulo}>{tituloPorNivel(calcularNivel(miEntry.xp))}</Text>
           </View>
@@ -138,13 +122,17 @@ export default function Ranking() {
                 }
               </View>
 
-              <AvatarCircle avatarUrl={e.avatar_url} nombre={e.nombre} />
+              <AvatarConMarco avatarUrl={e.avatar_url} nombre={e.nombre} nivel={nivel} size={44} fondo={esYo ? '#1a1500' : '#111f2e'} />
 
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={[s.entryNombre, esYo && { color: '#c9a84c' }]} numberOfLines={1}>
                   {e.nombre}{esYo ? ' 👈' : ''}
                 </Text>
                 <Text style={s.entryTitulo}>{tituloPorNivel(nivel)} · Nv. {nivel}</Text>
+                {/* Resultados reales, de un vistazo */}
+                <Text style={s.entryStats} numberOfLines={1}>
+                  💰 {e.ventas_cerradas}  🔑 {e.rentas_cerradas}  📅 {e.citas_realizadas}  🏠 {e.propiedades_publicadas}
+                </Text>
               </View>
 
               <View style={s.entryRight}>
@@ -161,24 +149,49 @@ export default function Ranking() {
       {/* Mini-visualización del perfil al tocar a un usuario */}
       <Modal visible={sel !== null} transparent animationType="fade" onRequestClose={() => setSel(null)}>
         <TouchableOpacity style={mp.overlay} activeOpacity={1} onPress={() => setSel(null)}>
-          {sel && (
+          {sel && (() => {
+            const nivelSel = calcularNivel(sel.xp)
+            const marcoSel = marcoPorNivel(nivelSel)
+            return (
             <View style={mp.card}>
               <AccentBackground acentoId={sel.color_acento || '#1a6470'} style={mp.headerBand} />
               <View style={mp.avWrap}>
-                <AvatarBig avatarUrl={sel.avatar_url} nombre={sel.nombre} />
+                <AvatarConMarco avatarUrl={sel.avatar_url} nombre={sel.nombre} nivel={nivelSel} size={92} fondo="#122030" />
               </View>
               <Text style={mp.nombre} numberOfLines={2}>{sel.nombre}</Text>
-              <Text style={mp.titulo}>{tituloPorNivel(calcularNivel(sel.xp))}</Text>
+              <Text style={mp.titulo}>{tituloPorNivel(nivelSel)}</Text>
+              <Text style={[mp.marcoLbl, { color: marcoSel.color }]}>🎖 Marco {marcoSel.nombre}</Text>
+
               <View style={mp.stats}>
-                <View style={mp.stat}><Text style={mp.statNum}>{calcularNivel(sel.xp)}</Text><Text style={mp.statLbl}>Nivel</Text></View>
+                <View style={mp.stat}><Text style={mp.statNum}>{nivelSel}</Text><Text style={mp.statLbl}>Nivel</Text></View>
                 <View style={mp.statDiv} />
                 <View style={mp.stat}><Text style={mp.statNum}>{sel.xp.toLocaleString()}</Text><Text style={mp.statLbl}>XP</Text></View>
                 <View style={mp.statDiv} />
                 <View style={mp.stat}><Text style={mp.statNum}>🔥 {sel.streak_dias}</Text><Text style={mp.statLbl}>Racha</Text></View>
               </View>
+
+              {/* Resultados reales (productividad) */}
+              <View style={mp.grid}>
+                {([
+                  ['💰', sel.ventas_cerradas,        'Ventas cerradas'],
+                  ['🔑', sel.rentas_cerradas,        'Rentas cerradas'],
+                  ['📅', sel.citas_realizadas,       'Citas realizadas'],
+                  ['🏠', sel.propiedades_publicadas, 'Propiedades'],
+                  ['👥', sel.clientes_registrados,   'Clientes'],
+                  ['🎓', sel.cursos_completados,     'Cursos'],
+                ] as const).map(([icono, valor, label]) => (
+                  <View key={label} style={mp.gridItem}>
+                    <Text style={mp.gridIcon}>{icono}</Text>
+                    <Text style={mp.gridNum}>{valor}</Text>
+                    <Text style={mp.gridLbl} numberOfLines={2}>{label}</Text>
+                  </View>
+                ))}
+              </View>
+
               <Text style={mp.hint}>Toca fuera para cerrar</Text>
             </View>
-          )}
+            )
+          })()}
         </TouchableOpacity>
       </Modal>
     </ScrollView>
@@ -188,23 +201,31 @@ export default function Ranking() {
 const mp = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 32 },
   card: {
-    width: '100%', maxWidth: 300, backgroundColor: '#122030',
+    width: '100%', maxWidth: 330, backgroundColor: '#122030',
     borderRadius: 20, overflow: 'hidden', alignItems: 'center', paddingBottom: 20,
     borderWidth: 1, borderColor: '#1e3448',
   },
   headerBand: { width: '100%', height: 70 },
-  // Avatar cruzando el borde del header (fuera del AccentBackground para que no
-  // lo recorte el overflow:hidden del gradiente).
-  avWrap: {
-    width: 84, height: 84, borderRadius: 42, marginTop: -44,
-    backgroundColor: '#0d1b2a', borderWidth: 4, borderColor: '#122030',
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-  },
-  avImg: { width: 84, height: 84 },
-  avGif: { width: 58, height: 58 },
-  avEmoji: { fontSize: 44, lineHeight: 52 },
+  // Avatar (con su marco) cruzando el borde del header. Va FUERA del
+  // AccentBackground para que el overflow:hidden del gradiente no lo recorte.
+  avWrap: { marginTop: -48 },
   nombre: { fontSize: 18, fontWeight: '900', color: '#fff', marginTop: 12, textAlign: 'center', paddingHorizontal: 16 },
   titulo: { fontSize: 13, fontWeight: '700', color: '#c9a84c', marginTop: 3 },
+  marcoLbl: { fontSize: 11.5, fontWeight: '800', marginTop: 5 },
+
+  grid: {
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
+    marginTop: 14, paddingHorizontal: 8, gap: 6,
+  },
+  gridItem: {
+    width: '30%', alignItems: 'center', backgroundColor: '#0d1b2a',
+    borderRadius: 10, paddingVertical: 9, paddingHorizontal: 4,
+    borderWidth: 1, borderColor: '#1e3448',
+  },
+  gridIcon: { fontSize: 15 },
+  gridNum: { fontSize: 16, fontWeight: '900', color: '#fff', marginTop: 2 },
+  gridLbl: { fontSize: 9.5, color: '#7a9ab5', textAlign: 'center', marginTop: 2, lineHeight: 12 },
+
   stats: { flexDirection: 'row', alignItems: 'center', marginTop: 16, paddingHorizontal: 10 },
   stat: { alignItems: 'center', paddingHorizontal: 14, minWidth: 64 },
   statNum: { fontSize: 16, fontWeight: '900', color: '#fff' },
@@ -241,6 +262,7 @@ const s = StyleSheet.create({
 
   entryNombre:  { fontSize: 14, fontWeight: '700', color: '#e8f0f4' },
   entryTitulo:  { fontSize: 11, color: '#556a7a', marginTop: 1 },
+  entryStats:   { fontSize: 10.5, color: '#7a9ab5', marginTop: 3, letterSpacing: 0.2 },
   tuLabel:      { color: GOLD, fontSize: 11 },
 
   entryRight: { alignItems: 'flex-end', gap: 2 },
