@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Image, Modal, Platform,
+  ActivityIndicator, Image, Modal, Platform, RefreshControl,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -62,7 +62,7 @@ export default function University() {
   // React Query (stale-while-revalidate): muestra los cursos cacheados al
   // instante y refresca en segundo plano al enfocar, así el progreso de lecciones
   // (que cambia en otra pantalla) se refleja sin spinner ni recarga en blanco.
-  const { data, isLoading: loading } = useQuery({
+  const { data, isLoading: loading, refetch } = useQuery({
     queryKey: ['university'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -123,6 +123,13 @@ export default function University() {
   const introUrl = data?.introUrl ?? ''
   const introTitulo = data?.introTitulo ?? 'Bienvenido a Valera University'
 
+  // Jalar para actualizar
+  const [refreshing, setRefreshing] = useState(false)
+  const onPull = useCallback(async () => {
+    setRefreshing(true)
+    try { await refetch() } catch {} finally { setRefreshing(false) }
+  }, [refetch])
+
   // Refresco en segundo plano al enfocar (el cache se muestra al instante).
   useFocusEffect(useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['university'] })
@@ -171,7 +178,11 @@ export default function University() {
         </View>
       </Modal>
 
-      <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView
+        style={[estilos.container, { backgroundColor: c.bg }]}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor="#c9a84c" colors={['#c9a84c']} />}
+      >
         {/* Header */}
         <View style={estilos.header}>
           <View style={estilos.headerLogo}>

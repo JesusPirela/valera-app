@@ -16,6 +16,7 @@ import {
 import ToggleSwitch from '../../components/ToggleSwitch'
 import CambiarCuenta from '../../components/CambiarCuenta'
 import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
+import { marcoPorNivel } from '../../lib/marcos'
 
 const COLORES_LIBRES = [
   '#1a6470', '#c9a84c', '#1e3a5f', '#7b1e3a',
@@ -326,15 +327,25 @@ export default function Perfil() {
 
   if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
 
+  // Marco por nivel: solo cambia el borde del avatar (misma estructura de antes).
+  const nivelActual = stats ? calcularNivel(stats.xp) : 1
+  const marco = marcoPorNivel(nivelActual)
+  const bordeMarco = {
+    borderColor: marco.color,
+    ...(marco.brillo
+      ? { shadowColor: marco.color, shadowOpacity: 0.9, shadowRadius: 12, shadowOffset: { width: 0, height: 0 }, elevation: 10 }
+      : null),
+  }
+
   return (
     <ScrollView style={[s.container, darkMode && { backgroundColor: '#0d1b2a' }]} contentContainerStyle={{ paddingBottom: 60 }}>
       {/* Avatar */}
       <AccentBackground acentoId={colorAcento} style={s.headerBg}>
         <View style={s.avatarWrap}>
           {avatarMostrado ? (
-            <Image source={{ uri: avatarMostrado }} style={s.avatarImg} />
+            <Image source={{ uri: avatarMostrado }} style={[s.avatarImg, bordeMarco]} />
           ) : GIF_MAP[avatarEmoji] && avatarsDesbloqueados.includes(avatarEmoji) && !gifsFallidos.has(avatarEmoji) ? (
-            <View style={[s.avatarEmoji, { backgroundColor: '#1a1200', borderColor: '#c9a84c' }]}>
+            <View style={[s.avatarEmoji, { backgroundColor: '#1a1200' }, bordeMarco]}>
               <Image
                 source={{ uri: GIF_MAP[avatarEmoji] }}
                 style={{ width: 66, height: 66 }}
@@ -343,11 +354,12 @@ export default function Perfil() {
               />
             </View>
           ) : (
-            <AccentBackground acentoId={colorAcento} style={s.avatarEmoji}>
+            <AccentBackground acentoId={colorAcento} style={[s.avatarEmoji, bordeMarco]}>
               <Text style={s.avatarEmojiText}>{avatarEmoji}</Text>
             </AccentBackground>
           )}
         </View>
+        <Text style={[s.marcoNombre, { color: marco.color }]}>🎖 Marco {marco.nombre}</Text>
         <Text style={s.emailText}>{email}</Text>
       </AccentBackground>
 
@@ -662,6 +674,7 @@ const s = StyleSheet.create({
   avatarImg: { width: 90, height: 90, borderRadius: 45, borderWidth: 3, borderColor: '#fff' },
   avatarEmoji: { width: 90, height: 90, borderRadius: 45, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#fff' },
   avatarEmojiText: { fontSize: 44 },
+  marcoNombre: { fontSize: 11.5, fontWeight: '800', marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 },
   emailText: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
   body: { padding: 20 },
   seccion: { fontSize: 11, fontWeight: '800', color: '#888', letterSpacing: 1, marginTop: 24, marginBottom: 12 },

@@ -1,7 +1,7 @@
 ﻿import { useState, useCallback, useEffect, createElement } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking, Alert,
-  ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions,
+  ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions, RefreshControl,
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -250,6 +250,13 @@ export default function CRM() {
     networkMode: 'offlineFirst',
     staleTime: 1000 * 60 * 5,
   })
+
+  // Jalar para actualizar
+  const [refreshing, setRefreshing] = useState(false)
+  const onPull = useCallback(async () => {
+    setRefreshing(true)
+    try { await refetch() } catch {} finally { setRefreshing(false) }
+  }, [refetch])
 
   // Refrescar al enfocar SOLO si el cache ya está viejo (respeta staleTime).
   // Antes hacía refetch() en cada visita: como expo-router mantiene el tab
@@ -1116,6 +1123,7 @@ export default function CRM() {
             keyExtractor={item => item.id}
             contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100, paddingTop: 10 }}
             showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor="#1a6470" colors={['#1a6470']} />}
             renderItem={({ item }) => {
               const info      = estadoInfo(item.estado)
               const rec       = proximoRec(item.recordatorios ?? [])

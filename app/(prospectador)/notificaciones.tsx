@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Animated,
+  RefreshControl,
   PanResponder,
   Platform,
   Dimensions,
@@ -255,7 +256,7 @@ export default function Notificaciones() {
   // React Query: la lista cacheada aparece al instante al volver; solo se
   // refresca en segundo plano si pasó >1 min. Antes recargaba desde cero en
   // cada foco. Las mutaciones actualizan el cache de forma optimista.
-  const { data: notificaciones = [], isLoading: loading } = useQuery({
+  const { data: notificaciones = [], isLoading: loading, refetch } = useQuery({
     queryKey: ['notificaciones'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -272,6 +273,13 @@ export default function Notificaciones() {
     staleTime: 1000 * 60,
     networkMode: 'offlineFirst',
   })
+
+  // Jalar para actualizar
+  const [refreshing, setRefreshing] = useState(false)
+  const onPull = useCallback(async () => {
+    setRefreshing(true)
+    try { await refetch() } catch {} finally { setRefreshing(false) }
+  }, [refetch])
 
   useFocusEffect(useCallback(() => {
     const st = queryClient.getQueryState(['notificaciones'])
@@ -370,6 +378,7 @@ export default function Notificaciones() {
           data={notificaciones}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor="#1a6470" colors={['#1a6470']} />}
           renderItem={({ item }) => (
             <NotifItem
               item={item}

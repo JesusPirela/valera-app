@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator,
+  ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -130,7 +130,7 @@ export default function Misiones() {
   // React Query: misiones y stats cacheados (aparecen al instante al enfocar,
   // antes recargaba con spinner en cada visita). El realtime de user_misiones /
   // user_stats invalida el cache para refrescar el progreso en vivo.
-  const { data, isLoading: loading } = useQuery({
+  const { data, isLoading: loading, refetch } = useQuery({
     queryKey: ['misiones'],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -155,6 +155,13 @@ export default function Misiones() {
   const userId = data?.userId ?? null
   const stats = data?.stats ?? null
   const misiones = data?.misiones ?? []
+
+  // Jalar para actualizar
+  const [refreshing, setRefreshing] = useState(false)
+  const onPull = useCallback(async () => {
+    setRefreshing(true)
+    try { await refetch() } catch {} finally { setRefreshing(false) }
+  }, [refetch])
 
   // Refresco en segundo plano al enfocar (el cache se muestra al instante).
   useFocusEffect(useCallback(() => {
@@ -192,7 +199,12 @@ export default function Misiones() {
   )
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={s.container}
+      contentContainerStyle={{ paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor="#c9a84c" colors={['#c9a84c']} />}
+    >
 
       {/* ── HERO CARD ─────────────────────────────────────────── */}
       <View style={s.hero}>
