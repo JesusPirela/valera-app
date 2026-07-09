@@ -48,6 +48,7 @@ serve(async (_req) => {
     mensaje: string
     tipo: string
     leida: boolean
+    cita_id?: string
   }[] = []
 
   // ─── Recordatorios a 24 horas ────────────────────────────────────────────
@@ -108,6 +109,70 @@ serve(async (_req) => {
       leida: false,
     })
     await supabase.from('recordatorios').update({ notificado_2h: true }).eq('id', rec.id)
+  }
+
+  // ─── Citas: aviso 2 horas antes ──────────────────────────────────────────
+  // Sobre citas_coordinacion (las citas reales del CRM), no sobre recordatorios.
+  const cita2 = new Date(ahora.getTime() + 2 * 60 * 60 * 1000)
+  const { data: citasProximas, error: errCitas2 } = await supabase
+    .from('citas_coordinacion')
+    .select('id, prospectador_id, fecha_cita, clientes(nombre), propiedades(codigo)')
+    .is('notif_previa_at', null)
+    .in('estado', ['coordinada', 'reagendada'])
+    .gte('fecha_cita', new Date(cita2.getTime() - VENTANA_MS).toISOString())
+    .lte('fecha_cita', new Date(cita2.getTime() + VENTANA_MS).toISOString())
+
+  if (errCitas2) console.error('Error citas 2h:', errCitas2.message)
+
+  for (const cita of citasProximas ?? []) {
+    // deno-lint-ignore no-explicit-any
+    const c = cita as any
+    const hora = new Date(c.fecha_cita).toLocaleTimeString('es-MX', {
+      hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City',
+    })
+    const cliente = c.clientes?.nombre ?? 'tu cliente'
+    const propiedad = c.propiedades?.codigo ? ` (${c.propiedades.codigo})` : ''
+    notificaciones.push({
+      user_id: c.prospectador_id,
+      titulo: '📅 Cita en 2 horas',
+      mensaje: `Tu cita con ${cliente}${propiedad} es a las ${hora}.`,
+      tipo: 'cita',
+      leida: false,
+      cita_id: c.id,
+    })
+    await supabase.from('citas_coordinacion')
+      .update({ notif_previa_at: ahora.toISOString() }).eq('id', c.id)
+  }
+
+  // ─── Citas: pedir confirmación 30-60 min después ─────────────────────────
+  // Agendar una cita NO la cuenta como realizada: solo se suma cuando el asesor
+  // confirma aquí que ocurrió (RPC confirmar_cita).
+  const { data: citasPasadas, error: errCitasConf } = await supabase
+    .from('citas_coordinacion')
+    .select('id, prospectador_id, fecha_cita, clientes(nombre), propiedades(codigo)')
+    .is('notif_confirmacion_at', null)
+    .is('confirmada_at', null)
+    .in('estado', ['coordinada', 'reagendada'])
+    .gte('fecha_cita', new Date(ahora.getTime() - 60 * 60 * 1000).toISOString())
+    .lte('fecha_cita', new Date(ahora.getTime() - 30 * 60 * 1000).toISOString())
+
+  if (errCitasConf) console.error('Error citas confirmación:', errCitasConf.message)
+
+  for (const cita of citasPasadas ?? []) {
+    // deno-lint-ignore no-explicit-any
+    const c = cita as any
+    const cliente = c.clientes?.nombre ?? 'tu cliente'
+    const propiedad = c.propiedades?.codigo ? ` (${c.propiedades.codigo})` : ''
+    notificaciones.push({
+      user_id: c.prospectador_id,
+      titulo: '❓ ¿La cita se realizó?',
+      mensaje: `Confirma qué pasó con la cita de ${cliente}${propiedad}.`,
+      tipo: 'cita',
+      leida: false,
+      cita_id: c.id,
+    })
+    await supabase.from('citas_coordinacion')
+      .update({ notif_confirmacion_at: ahora.toISOString() }).eq('id', c.id)
   }
 
   // ─── Insertar notificaciones en DB ───────────────────────────────────────

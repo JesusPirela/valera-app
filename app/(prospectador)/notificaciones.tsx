@@ -16,6 +16,7 @@ import { useFocusEffect, router } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useColors, useTheme } from '../../lib/ThemeContext'
+import ConfirmarCitaModal, { type CitaPorConfirmar } from '../../components/ConfirmarCitaModal'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const SWIPE_THRESHOLD = -80
@@ -30,7 +31,8 @@ type Notificacion = {
   propiedad_id: string | null
   cliente_id: string | null
   chatbot_lead_id: string | null
-  tipo: 'nueva_propiedad' | 'destacada' | 'exclusiva' | 'recordatorio' | 'lead_caliente' | string
+  cita_id: string | null
+  tipo: 'nueva_propiedad' | 'destacada' | 'exclusiva' | 'recordatorio' | 'lead_caliente' | 'cita' | string
 }
 
 function tiempoRelativo(fechaISO: string): string {
@@ -54,6 +56,7 @@ function iconoPorTipo(tipo: string) {
   if (tipo === 'destacada')    return '⭐'
   if (tipo === 'exclusiva')    return '🔴'
   if (tipo === 'cofre')        return '🎁'
+  if (tipo === 'cita')         return '📅'
   return '🔔'
 }
 
@@ -85,6 +88,7 @@ function ordenarPorPrioridad(items: Notificacion[]): Notificacion[] {
 }
 
 function esNavegable(n: Notificacion): boolean {
+  if (n.cita_id) return true
   if (n.tipo === 'recordatorio' && n.cliente_id) return true
   if (n.tipo === 'lead_caliente' && n.chatbot_lead_id) return true
   if (n.cliente_id) return true
@@ -264,7 +268,7 @@ export default function Notificaciones() {
       if (!uid) return [] as Notificacion[]
       const { data, error } = await supabase
         .from('notificaciones')
-        .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, chatbot_lead_id, tipo')
+        .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, chatbot_lead_id, cita_id, tipo')
         .eq('user_id', uid)
         .order('created_at', { ascending: false })
       if (error) throw error
@@ -274,12 +278,29 @@ export default function Notificaciones() {
     networkMode: 'offlineFirst',
   })
 
+  // Citas que ya pasaron y siguen sin confirmar. Alimentan el banner y el tap
+  // sobre la notificación "¿La cita se realizó?".
+  const { data: citasPorConfirmar = [], refetch: refetchCitas } = useQuery({
+    queryKey: ['citas-por-confirmar'],
+    queryFn: async () => {
+      // Banner opcional: si la RPC falla, no molestamos al usuario ni
+      // reintentamos; simplemente no se muestra.
+      const { data, error } = await supabase.rpc('get_citas_por_confirmar')
+      if (error) return [] as CitaPorConfirmar[]
+      return (data ?? []) as CitaPorConfirmar[]
+    },
+    staleTime: 1000 * 60,
+    networkMode: 'offlineFirst',
+  })
+
+  const [citaAbierta, setCitaAbierta] = useState<CitaPorConfirmar | null>(null)
+
   // Jalar para actualizar
   const [refreshing, setRefreshing] = useState(false)
   const onPull = useCallback(async () => {
     setRefreshing(true)
-    try { await refetch() } catch {} finally { setRefreshing(false) }
-  }, [refetch])
+    try { await Promise.all([refetch(), refetchCitas()]) } catch {} finally { setRefreshing(false) }
+  }, [refetch, refetchCitas])
 
   useFocusEffect(useCallback(() => {
     const st = queryClient.getQueryState(['notificaciones'])
@@ -327,6 +348,14 @@ export default function Notificaciones() {
   async function handlePress(item: Notificacion) {
     if (!item.leida) marcarLeida(item.id)
 
+    // Si la notificación apunta a una cita que sigue sin confirmar, abrimos el
+    // modal de confirmación en vez de navegar. Si ya se confirmó (o es el aviso
+    // de "cita en 2 horas"), cae al comportamiento normal de abajo.
+    if (item.cita_id) {
+      const pendiente = citasPorConfirmar.find(c => c.id === item.cita_id)
+      if (pendiente) { setCitaAbierta(pendiente); return }
+    }
+
     if (item.tipo === 'recordatorio' && item.cliente_id) {
       router.push(`/(prospectador)/detalle-cliente?id=${item.cliente_id}`)
     } else if (item.tipo === 'lead_caliente' && item.chatbot_lead_id) {
@@ -352,6 +381,36 @@ export default function Notificaciones() {
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
+      {citasPorConfirmar.length > 0 && (
+        <TouchableOpacity
+          style={styles.citasBanner}
+          onPress={() => setCitaAbierta(citasPorConfirmar[0])}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.citasBannerIcono}>📅</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.citasBannerTitulo}>
+              {citasPorConfirmar.length === 1
+                ? 'Tienes 1 cita por confirmar'
+                : `Tienes ${citasPorConfirmar.length} citas por confirmar`}
+            </Text>
+            <Text style={styles.citasBannerSub}>Toca para decirnos qué pasó →</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      <ConfirmarCitaModal
+        cita={citaAbierta}
+        onClose={() => setCitaAbierta(null)}
+        onConfirmado={() => {
+          setCitaAbierta(null)
+          refetchCitas()
+          queryClient.invalidateQueries({ queryKey: ['notificaciones'] })
+          queryClient.invalidateQueries({ queryKey: ['ranking'] })
+          queryClient.invalidateQueries({ queryKey: ['clientes'] })
+        }}
+      />
+
       {hayNoLeidas && (
         <TouchableOpacity
           style={styles.marcarTodasBtn}
@@ -395,6 +454,14 @@ export default function Notificaciones() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: '#f5f5f5' },
+  citasBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#1a6470', borderRadius: 12,
+    padding: 14, marginHorizontal: 12, marginTop: 10, marginBottom: 4,
+  },
+  citasBannerIcono:  { fontSize: 24 },
+  citasBannerTitulo: { color: '#fff', fontSize: 14.5, fontWeight: '800' },
+  citasBannerSub:    { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 },
   marcarTodasBtn: {
     alignSelf: 'flex-end',
     marginBottom: 12,
