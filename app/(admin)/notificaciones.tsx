@@ -62,6 +62,7 @@ function esNavegable(n: Notificacion): boolean {
   if (n.tipo === 'registro_constructora' && n.accion_url) return true
   if ((n.tipo === 'nuevo_cliente' || n.tipo === 'apartado') && n.cliente_id) return true
   if (n.tipo === 'lead_caliente' && n.chatbot_lead_id) return true
+  if (n.cliente_id) return true
   if (n.propiedad_id) return true
   return false
 }
@@ -261,7 +262,11 @@ export default function AdminNotificaciones() {
 
       if (lead?.telefono) {
         router.push(`/(admin)/chat-cliente?telefono=${lead.telefono}&nombre=${encodeURIComponent(lead.nombre ?? '')}`)
+      } else if (item.cliente_id) {
+        router.push(`/(admin)/detalle-cliente?id=${item.cliente_id}`)
       }
+    } else if (item.cliente_id) {
+      router.push(`/(admin)/detalle-cliente?id=${item.cliente_id}`)
     } else if (item.propiedad_id) {
       router.push(`/(admin)/editar-propiedad?id=${item.propiedad_id}`)
     }

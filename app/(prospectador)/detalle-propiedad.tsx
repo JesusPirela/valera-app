@@ -710,6 +710,62 @@ export default function DetallePropiedad() {
       const esc = (s: string | null | undefined) =>
         (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
+      // Convierte emoji en <img> embebida como data URI para que se vean en el PDF.
+      // Android: descarga PNG 72x72 de Twemoji vía FileSystem (mismo mecanismo que
+      // las fotos de la propiedad). data:image/png siempre funciona en el renderer
+      // de impresión de Android; data:image/svg+xml no renderiza en ese contexto.
+      // Web: mantiene SVG vía fetch (mayor calidad vectorial en jsPDF).
+      const prepararDescripcionPDF = async (desc: string): Promise<string> => {
+        const EMOJI_RE = /[\u{1F300}-\u{1FAFF}]|[\u{2600}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{231A}\u{231B}\u{23E9}-\u{23F3}\u{2702}\u{2705}\u{2708}-\u{270D}\u{270F}\u{2712}\u{2714}\u{2716}\u{2721}\u{2728}\u{274C}\u{274E}\u{2753}-\u{2755}\u{2757}\u{2764}\u{2795}-\u{2797}\u{27A1}\u{27B0}\u{27BF}]/gu
+        const uniqueEmoji = [...new Set([...desc.matchAll(EMOJI_RE)].map(m => m[0]))]
+        const emojiMap = new Map<string, string>()
+        await Promise.all(uniqueEmoji.map(async (emoji) => {
+          try {
+            const cp = [...emoji]
+              .map(c => c.codePointAt(0)!)
+              .filter(c => c !== 0xFE0F && c !== 0xFE0E && c !== 0x200D)
+              .map(c => c.toString(16))
+              .join('-')
+            if (!cp) return
+
+            if (Platform.OS !== 'web') {
+              // Nativo: PNG descargado a caché temporal y leído como base64.
+              // PNG es el formato que el renderer de impresión de Android soporta
+              // siempre; SVG data URI no renderiza en ese contexto.
+              const localUri = FileSystem.cacheDirectory + `emoji_${cp}.png`
+              try {
+                const { status } = await conTimeout(
+                  FileSystem.downloadAsync(
+                    `https://cdn.jsdelivr.net/npm/@twemoji/api@latest/assets/72x72/${cp}.png`,
+                    localUri,
+                  ),
+                  8000,
+                )
+                if (status !== 200) return
+                const b64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 })
+                FileSystem.deleteAsync(localUri, { idempotent: true }).catch(() => {})
+                if (!b64) return
+                emojiMap.set(emoji, `<img src="data:image/png;base64,${b64}" style="height:1.1em;width:1.1em;vertical-align:middle;margin:0 1px;">`)
+              } catch {
+                FileSystem.deleteAsync(localUri, { idempotent: true }).catch(() => {})
+              }
+            } else {
+              // Web: SVG vectorial vía fetch
+              const resp = await fetch(`https://cdn.jsdelivr.net/npm/@twemoji/api@latest/assets/svg/${cp}.svg`)
+              if (!resp.ok) return
+              const svgText = await resp.text()
+              const b64 = btoa(unescape(encodeURIComponent(svgText)))
+              emojiMap.set(emoji, `<img src="data:image/svg+xml;base64,${b64}" style="height:1em;width:1em;vertical-align:middle;margin:0 1px;">`)
+            }
+          } catch { /* deja el emoji como texto si falla */ }
+        }))
+        let result = esc(desc)
+        for (const [emoji, img] of emojiMap) {
+          result = result.split(emoji).join(img)
+        }
+        return result.replace(/\r?\n/g, '<br>')
+      }
+
       const precio = propiedad.precio != null
         ? '$' + propiedad.precio.toLocaleString('es-MX') + ' MXN'
         : 'Precio a consultar'
@@ -722,23 +778,39 @@ export default function DetallePropiedad() {
 
       const imagenes = await obtenerImagenesCompletas()
 
-      // Presupuesto de memoria del PDF: en nativo el HTML con fotos base64 se
-      // renderiza en un WebView de impresión; con 13 fotos a 1100/700px Android
-      // se quedaba sin memoria y CERRABA la app al guardar la ficha. En nativo
-      // se bajan resolución y cantidad (visualmente imperceptible en el PDF).
-      // 14 fotos (lo que pide el usuario). El crash de gama baja era por MEMORIA,
-      // y la memoria del WebView ∝ resolución² (no tanto a la cantidad). Se
-      // mantienen las 14 fotos pero en nativo se baja la resolución un poco:
-      // menos memoria que el original de 13 fotos → no se cierra, y en un PDF
-      // (galería a 6 por hoja) 560px es de sobra.
+      // Presupuesto de memoria del PDF: el WebView de impresión en Android tiene
+      // poca tolerancia a HTMLs pesados con muchas imágenes base64. Con 14 fotos
+      // a 900px el WebView se congela sin crashear (promise que nunca resuelve).
+      // Android: lotes de 4 en paralelo — 13 simultáneas saturaban el stack de
+      // red y todas fallaban; 1 por 1 tardaba ~40 s. Lotes de 4 ≈ 4 rondas ~12 s.
       const esWeb = Platform.OS === 'web'
-      const maxFotos = 14
-      const anchoPrincipal = esWeb ? 1100 : 900
-      const anchoGaleria = esWeb ? 700 : 560
+      const esAndroid = Platform.OS === 'android'
+      const maxFotos = esAndroid ? 13 : 14
+      const anchoPrincipal = esWeb ? 1100 : esAndroid ? 600 : 900
+      const anchoGaleria = esWeb ? 700 : esAndroid ? 340 : 560
 
+      const descargarEnLotes = async (
+        items: { url: string; orden: number }[],
+        tamLote: number,
+      ): Promise<Array<{ url: string; orden: number; src: string | null }>> => {
+        const resultados: Array<{ url: string; orden: number; src: string | null }> = []
+        for (let i = 0; i < items.length; i += tamLote) {
+          const lote = items.slice(i, i + tamLote)
+          const srcs = await Promise.all(
+            lote.map((img, j) => imagenABase64(img.url, i + j === 0 ? anchoPrincipal : anchoGaleria))
+          )
+          lote.forEach((img, j) => {
+            if (!srcs[j]) console.error('[PDF] imagen no cargó:', img.url)
+            resultados.push({ ...img, src: srcs[j] })
+          })
+        }
+        return resultados
+      }
+
+      const batch = imagenes.slice(0, maxFotos)
       const [imagenesConSrcRaw, logoSrc, inmobiliariaLogoSrc] = await Promise.all([
-        Promise.all(
-          imagenes.slice(0, maxFotos).map(async (img, i) => {
+        esAndroid ? descargarEnLotes(batch, 4) : Promise.all(
+          batch.map(async (img, i) => {
             const src = await imagenABase64(img.url, i === 0 ? anchoPrincipal : anchoGaleria)
             if (!src) console.error('[PDF] imagen no cargó:', img.url)
             return { ...img, src }
@@ -796,6 +868,8 @@ export default function DetallePropiedad() {
           </div>`
       }
 
+      const descHTML = propiedad.descripcion ? await prepararDescripcionPDF(propiedad.descripcion) : null
+
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${propiedad.codigo ?? 'ficha'}</title><style>
         * {
           box-sizing: border-box; margin: 0; padding: 0;
@@ -816,23 +890,20 @@ export default function DetallePropiedad() {
         .inmob-logo-wrap { text-align: center; margin-bottom: 16px; }
         .inmob-logo { max-height: 90px; max-width: 240px; object-fit: contain; }
         .inmob-nombre { font-size: 12px; color: #888; font-weight: 600; margin-top: 4px; }
-        .fotos { display: block; }
-        .fotos::after { content: ""; display: table; clear: both; }
-        .foto-galeria { width: calc(50% - 7px); height: 330px; object-fit: contain; background: #eef2f3; border-radius: 8px; border: 1px solid #e0e8ea; float: left; margin: 0 14px 14px 0; break-inside: avoid; page-break-inside: avoid; }
-        .foto-galeria:nth-child(2n) { margin-right: 0; }
-        .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1.2px; text-transform: uppercase; margin: 20px 0 10px; }
-        .cars { display: block; }
-        .cars::after { content: ""; display: table; clear: both; }
+        .fotos { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; }
+        .foto-galeria { width: calc(50% - 7px); height: 330px; object-fit: contain; background: #eef2f3; border-radius: 8px; border: 1px solid #e0e8ea; break-inside: avoid; page-break-inside: avoid; }
+        .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1.2px; text-transform: uppercase; margin: 20px 0 10px; display: block; clear: both; }
+        .cars { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; overflow: hidden; }
         .car-val { display: block; font-size: 20px; font-weight: 800; color: ${colorFicha}; }
         .car-lbl { display: block; font-size: 11px; color: #888; margin-top: 2px; }
-        .desc { font-size: 13px; line-height: 1.7; color: #444; white-space: pre-wrap; }
+        .desc { display: block; clear: both; font-size: 15px; font-weight: 500; line-height: 1.7; color: #222; padding: 4px 0 12px; word-break: break-word; white-space: pre-wrap; overflow: visible; }
         .mapa-box { border: 1.5px solid #e0e8ea; border-radius: 10px; overflow: hidden; margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
         .mapa-img { width: 100%; height: 340px; object-fit: cover; display: block; }
         .mapa-dir { background: #f0f5f5; padding: 10px 14px; font-size: 12px; color: ${colorFicha}; font-weight: 600; }
-        .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; break-inside: avoid; page-break-inside: avoid; }
+        .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; clear: both; }
         .galeria-grupo { break-inside: avoid; page-break-inside: avoid; }
-        .seccion-grupo { break-inside: avoid; page-break-inside: avoid; }
-        .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; float: left; margin: 0 12px 12px 0; break-inside: avoid; page-break-inside: avoid; }
+        .seccion-grupo { break-inside: avoid; page-break-inside: avoid; overflow: hidden; }
+        .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; break-inside: avoid; page-break-inside: avoid; }
       </style></head><body>
       <div class="header">
         <div class="header-left">
@@ -851,7 +922,7 @@ export default function DetallePropiedad() {
           ${propiedad.inmobiliarias?.nombre ? `<div class="inmob-nombre">${esc(propiedad.inmobiliarias.nombre)}</div>` : ''}
         </div>` : ''}
         ${cars.length > 0 ? `<div class="seccion-grupo"><div class="seccion">Características</div><div class="cars">${cars.join('')}</div></div>` : ''}
-        ${propiedad.descripcion ? `<div class="seccion">Descripción</div><p class="desc">${esc(propiedad.descripcion)}</p>` : ''}
+        ${descHTML !== null && descHTML.trim() !== '' ? `<div class="seccion">Descripción</div><div class="desc">${descHTML}</div>` : ''}
         ${galeriaHTML}
         ${mapaHTML}
         <div class="footer">Valera Real Estate · valerarealestate.com</div>
@@ -1024,7 +1095,12 @@ export default function DetallePropiedad() {
         // plataformas. Cambiarlo a { uri: archivo } rompió iOS (WKWebView) y no
         // resolvía nada: el original ya generaba fichas con muchas fotos sin
         // cerrar la app. No reintroducir el archivo temporal ni el split por SO.
-        const { uri: pdfUri } = await Print.printToFileAsync({ html, width: 595 })
+        const { uri: pdfUri } = await Promise.race([
+          Print.printToFileAsync({ html, width: 595 }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('El PDF tardó demasiado. Intenta de nuevo o usa la versión web.')), 90000)
+          ),
+        ])
         const isAvailable = await ShareLib.isAvailableAsync()
         if (!isAvailable) {
           Alert.alert('Error', 'Compartir no está disponible en este dispositivo.')

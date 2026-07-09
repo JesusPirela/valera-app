@@ -86,6 +86,7 @@ function ordenarPorPrioridad(items: Notificacion[]): Notificacion[] {
 function esNavegable(n: Notificacion): boolean {
   if (n.tipo === 'recordatorio' && n.cliente_id) return true
   if (n.tipo === 'lead_caliente' && n.chatbot_lead_id) return true
+  if (n.cliente_id) return true
   if (n.propiedad_id) return true
   return false
 }
@@ -329,7 +330,11 @@ export default function Notificaciones() {
 
       if (lead?.telefono) {
         router.push(`/(prospectador)/chat-cliente?telefono=${lead.telefono}&nombre=${encodeURIComponent(lead.nombre ?? '')}`)
+      } else if (item.cliente_id) {
+        router.push(`/(prospectador)/detalle-cliente?id=${item.cliente_id}`)
       }
+    } else if (item.cliente_id) {
+      router.push(`/(prospectador)/detalle-cliente?id=${item.cliente_id}`)
     } else if (item.propiedad_id) {
       router.push(`/(prospectador)/detalle-propiedad?id=${item.propiedad_id}`)
     }

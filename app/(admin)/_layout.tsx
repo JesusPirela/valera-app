@@ -32,13 +32,22 @@ export default function AdminLayout() {
     // Deep link al tocar una notificación push (admin)
     let subNotif: Notifications.Subscription | null = null
     if (Platform.OS !== 'web') {
-      subNotif = Notifications.addNotificationResponseReceivedListener(response => {
+      subNotif = Notifications.addNotificationResponseReceivedListener(async response => {
         const data = response.notification.request.content.data as Record<string, unknown> | undefined
         const clienteId = data?.cliente_id as string | undefined
         const propiedadId = data?.propiedad_id as string | undefined
         const tipo = data?.tipo as string | undefined
+        const chatbotLeadId = data?.chatbot_lead_id as string | undefined
         if (clienteId) {
           router.push(`/(admin)/detalle-cliente?id=${clienteId}`)
+        } else if (chatbotLeadId) {
+          const { data: lead } = await supabase
+            .from('chatbot_leads').select('telefono, nombre').eq('id', chatbotLeadId).maybeSingle()
+          if (lead?.telefono) {
+            router.push(`/(admin)/chat-cliente?telefono=${lead.telefono}&nombre=${encodeURIComponent(lead.nombre ?? '')}`)
+          } else {
+            router.push('/(admin)/notificaciones')
+          }
         } else if (propiedadId) {
           router.push(`/(admin)/editar-propiedad?id=${propiedadId}`)
         } else if (tipo === 'tienda' || tipo === 'ruleta' || tipo === 'cofre') {

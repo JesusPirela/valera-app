@@ -134,13 +134,22 @@ export default function ProspectadorLayout() {
     solicitarPermisoWeb().catch(() => {})
 
     // Deep link al tocar una notificación push: navegar a la pantalla correcta
-    const subNotif = Notifications.addNotificationResponseReceivedListener(response => {
+    const subNotif = Notifications.addNotificationResponseReceivedListener(async response => {
       const data = response.notification.request.content.data as Record<string, unknown> | undefined
       const tipo = data?.tipo as string | undefined
       const clienteId = data?.cliente_id as string | undefined
       const propiedadId = data?.propiedad_id as string | undefined
+      const chatbotLeadId = data?.chatbot_lead_id as string | undefined
       if (clienteId) {
         router.push(`/(prospectador)/detalle-cliente?id=${clienteId}`)
+      } else if (chatbotLeadId) {
+        const { data: lead } = await supabase
+          .from('chatbot_leads').select('telefono, nombre').eq('id', chatbotLeadId).maybeSingle()
+        if (lead?.telefono) {
+          router.push(`/(prospectador)/chat-cliente?telefono=${lead.telefono}&nombre=${encodeURIComponent(lead.nombre ?? '')}`)
+        } else {
+          router.push('/(prospectador)/notificaciones')
+        }
       } else if (tipo === 'nueva_propiedad' && propiedadId) {
         router.push(`/(prospectador)/detalle-propiedad?id=${propiedadId}`)
       } else if (propiedadId) {
