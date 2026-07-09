@@ -17,6 +17,7 @@ import {
   StatusBar,
   Share,
   ToastAndroid,
+  RefreshControl,
 } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import { useFocusEffect, router } from 'expo-router'
@@ -385,6 +386,14 @@ export default function ProspectadorPropiedades() {
     networkMode: 'offlineFirst',
     refetchOnWindowFocus: false,
   })
+
+  // Jalar para actualizar: fuerza traer propiedades y publicaciones frescas.
+  const [refreshing, setRefreshing] = useState(false)
+  const onPull = useCallback(async () => {
+    setRefreshing(true)
+    try { await Promise.all([refetch(), refetchPub()]) } catch {}
+    finally { setRefreshing(false) }
+  }, [refetch, refetchPub])
 
   useFocusEffect(useCallback(() => {
     // Solo rebotar al admin a su app si NO está "viendo como" otro rol
@@ -1124,6 +1133,14 @@ export default function ProspectadorPropiedades() {
             maxToRenderPerBatch={8}
             windowSize={11}
             ListHeaderComponent={filtrosHeader}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onPull}
+                tintColor={primaryColor}
+                colors={[primaryColor]}
+              />
+            }
           />
         )}
 
