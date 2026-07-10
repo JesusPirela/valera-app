@@ -818,14 +818,15 @@ export default function DetallePropiedad() {
       }
 
       const batch = imagenes.slice(0, maxFotos)
+      const tamLote = esAndroid ? 4 : 6
       const [imagenesConSrcRaw, logoSrc, inmobiliariaLogoSrc] = await Promise.all([
-        esAndroid ? descargarEnLotes(batch, 4) : Promise.all(
-          batch.map(async (img, i) => {
-            const src = await imagenABase64(img.url, i === 0 ? anchoPrincipal : anchoGaleria)
-            if (!src) console.error('[PDF] imagen no cargó:', img.url)
-            return { ...img, src }
-          })
-        ),
+        esWeb
+          ? Promise.all(batch.map(async (img, i) => {
+              const src = await imagenABase64(img.url, i === 0 ? anchoPrincipal : anchoGaleria)
+              if (!src) console.error('[PDF] imagen no cargó:', img.url)
+              return { ...img, src }
+            }))
+          : descargarEnLotes(batch, tamLote),
         getLogoBase64(),
         propiedad.inmobiliarias?.logo_url ? imagenABase64(propiedad.inmobiliarias.logo_url) : Promise.resolve(null),
       ])

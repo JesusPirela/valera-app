@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, TextInput, StyleSheet, ScrollView,
-  TouchableOpacity, ActivityIndicator, Alert, Modal, Platform,
+  TouchableOpacity, ActivityIndicator, Alert, Modal, Platform, Keyboard,
 } from 'react-native'
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -428,7 +428,12 @@ export default function ClienteForm() {
   if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={[styles.container, { backgroundColor: c.bg }]}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="always"
+      onScrollBeginDrag={Keyboard.dismiss}
+    >
       <Text style={styles.screenTitle}>{esEdicion ? 'Editar cliente' : 'Nuevo cliente'}</Text>
 
       {/* ── 1. Tipo de operación (siempre primero) ── */}
