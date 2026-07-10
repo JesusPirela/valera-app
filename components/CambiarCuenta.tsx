@@ -11,6 +11,7 @@ import {
 } from '../lib/cuentas'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
+import { useVistaComo } from '../lib/VistaComo'
 
 const ROLE_LABEL: Record<string, string> = {
   admin: 'Admin', supervisor: 'Supervisor',
@@ -20,6 +21,7 @@ const ROLE_LABEL: Record<string, string> = {
 export default function CambiarCuenta() {
   const c = useColors()
   const qc = useQueryClient()
+  const { setVistaComo } = useVistaComo()
   const [cuentas, setCuentas] = useState<CuentaGuardada[]>([])
   const [actualId, setActualId] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
@@ -49,6 +51,9 @@ export default function CambiarCuenta() {
   if (!listo) return null
 
   async function irAHome(role: string | null | undefined) {
+    // La simulación "ver como" era de la cuenta anterior: al cambiar de cuenta se
+    // descarta, si no la sesión nueva arrancaba viendo la app del rol simulado.
+    setVistaComo(null)
     // Limpiar la caché en disco SIN bloquear la navegación: si AsyncStorage
     // tarda (contención con la escritura de la sesión nueva), navegamos igual.
     // Antes, si esto se colgaba, el botón se quedaba "cargando" para siempre y

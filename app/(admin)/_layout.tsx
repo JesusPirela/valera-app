@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications'
 import { supabase } from '../../lib/supabase'
 import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme } from '../../lib/ThemeContext'
+import { useVistaComo } from '../../lib/VistaComo'
 import HeaderBack from '../../components/HeaderBack'
 
 const LOGO = require('../../assets/logo.png')
@@ -14,6 +15,33 @@ export default function AdminLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
   const mountedRef = useRef(false)
   const { darkMode, toggleDarkMode } = useTheme()
+  const { vistaComo, listo: vistaComoListo } = useVistaComo()
+
+  // Diez pantallas existen con el mismo nombre en (admin) y en (prospectador)
+  // — propiedades, crm, misiones, university… — y en web la URL no lleva el
+  // grupo. Al recargar /propiedades el router entra por (admin), así que un
+  // admin que estaba "viendo como usuario" aterrizaba en el panel de admin.
+  // Aquí lo devolvemos a la app que estaba usando.
+  useEffect(() => {
+    if (vistaComoListo && vistaComo) router.replace('/(prospectador)/propiedades')
+  }, [vistaComoListo, vistaComo])
+
+  // Por la misma colisión de nombres, un usuario sin permisos podía aterrizar en
+  // (admin) al recargar. Los datos ya los protege RLS; esto saca de la pantalla.
+  useEffect(() => {
+    let activo = true
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session || !activo) return
+      supabase.from('profiles').select('role').eq('id', session.user.id).single()
+        .then(({ data }) => {
+          if (!activo || !data) return
+          if (data.role !== 'admin' && data.role !== 'supervisor') {
+            router.replace('/(prospectador)/propiedades')
+          }
+        })
+    })
+    return () => { activo = false }
+  }, [])
 
   useEffect(() => {
     mountedRef.current = true
@@ -75,6 +103,10 @@ export default function AdminLayout() {
       .eq('leida', false)
     if (mountedRef.current) setNoLeidas(count ?? 0)
   }
+
+  // No pintar el panel de admin mientras no sepamos si hay simulación activa,
+  // ni cuando la hay: evita el parpadeo del header de admin antes del replace.
+  if (!vistaComoListo || vistaComo) return null
 
   return (
     <Stack

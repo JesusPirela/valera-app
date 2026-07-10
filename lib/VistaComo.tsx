@@ -8,18 +8,22 @@ export type RolSimulado = 'prospectador' | 'prospectador_plus' | 'supervisor' | 
 
 export const VISTA_COMO_KEY = '@valera_vista_como'
 
-const Ctx = createContext<{ vistaComo: RolSimulado; setVistaComo: (r: RolSimulado) => void }>({
+// `listo` distingue "todavía no leí el disco" de "no hay simulación activa".
+// Sin él, cualquier guard que mire `vistaComo` decide con un null prematuro.
+const Ctx = createContext<{ vistaComo: RolSimulado; listo: boolean; setVistaComo: (r: RolSimulado) => void }>({
   vistaComo: null,
+  listo: false,
   setVistaComo: () => {},
 })
 
 export function VistaComoProvider({ children }: { children: ReactNode }) {
   const [vistaComo, setEstado] = useState<RolSimulado>(null)
+  const [listo, setListo] = useState(false)
 
   useEffect(() => {
     AsyncStorage.getItem(VISTA_COMO_KEY).then(v => {
       if (v === 'prospectador' || v === 'prospectador_plus' || v === 'supervisor') setEstado(v)
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setListo(true))
   }, [])
 
   function setVistaComo(r: RolSimulado) {
@@ -28,7 +32,7 @@ export function VistaComoProvider({ children }: { children: ReactNode }) {
     else AsyncStorage.removeItem(VISTA_COMO_KEY).catch(() => {})
   }
 
-  return <Ctx.Provider value={{ vistaComo, setVistaComo }}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={{ vistaComo, listo, setVistaComo }}>{children}</Ctx.Provider>
 }
 
 export const useVistaComo = () => useContext(Ctx)

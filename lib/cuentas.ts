@@ -4,6 +4,14 @@ import { supabase } from './supabase'
 const KEY = '@valera_cuentas'
 const KEY_PASS = '@valera_account_passwords'
 
+// La simulación "ver como" pertenece a la cuenta que la activó. Si no se borra al
+// salir o al cambiar de cuenta, la siguiente sesión arranca "viendo como usuario".
+const KEY_VISTA_COMO = '@valera_vista_como'
+
+export async function limpiarVistaComo() {
+  try { await AsyncStorage.removeItem(KEY_VISTA_COMO) } catch {}
+}
+
 // Objeto mutable compartido entre módulos. Usar un objeto (no un `export let`)
 // garantiza que el consumidor siempre lea el valor actual del campo, sin depender
 // de cómo el bundler (Metro/Babel) maneje los live bindings de ES modules.
@@ -19,6 +27,7 @@ export const userSignOut = { pending: false }
 // para que el handler global sepa que este SIGNED_OUT sí debe ir al login.
 export async function cerrarSesionUsuario() {
   userSignOut.pending = true
+  await limpiarVistaComo()
   try {
     await supabase.auth.signOut()
   } finally {
