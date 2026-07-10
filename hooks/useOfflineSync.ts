@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { AppState } from 'react-native'
 import NetInfo from '@react-native-community/netinfo'
 import { flushQueue, getPendingCount } from '../lib/offline-queue'
 import { queryClient } from '../lib/queryClient'
@@ -50,12 +51,18 @@ export function useOfflineSync(): OfflineSyncState {
   }, [refreshPending])
 
   useEffect(() => {
-    // Leer estado inicial y conteo de pendientes
-    NetInfo.fetch().then(state => {
-      setIsOnline(state.isConnected ?? true)
+    // Al abrir la app: leer estado y, si hay conexión, VACIAR la cola de una vez.
+    // Antes solo se sincronizaba en la transición offline→online estando la app
+    // abierta; si el usuario publicaba con mala señal, cerraba y reabría ya con
+    // internet, la publicación quedaba pendiente para siempre. Ahora se drena al
+    // arrancar (y al volver a primer plano, abajo).
+    NetInfo.fetch().then(async state => {
+      const online = !!(state.isConnected && state.isInternetReachable !== false)
+      setIsOnline(online)
+      await refreshPending()
+      if (online && (await getPendingCount()) > 0) syncNow()
     })
-    refreshPending()
-  }, [])
+  }, [syncNow, refreshPending])
 
   useEffect(() => {
     const unsub = NetInfo.addEventListener(state => {
@@ -69,6 +76,18 @@ export function useOfflineSync(): OfflineSyncState {
       })
     })
     return unsub
+  }, [syncNow])
+
+  useEffect(() => {
+    // Al volver a primer plano (típico: publiqué, bloqueé el teléfono, volví con
+    // señal), intentar drenar la cola si quedó algo y hay conexión.
+    const sub = AppState.addEventListener('change', async next => {
+      if (next !== 'active') return
+      const state = await NetInfo.fetch()
+      const online = !!(state.isConnected && state.isInternetReachable !== false)
+      if (online && (await getPendingCount()) > 0) syncNow()
+    })
+    return () => sub.remove()
   }, [syncNow])
 
   return { isOnline, isSyncing, pendingCount, syncError, refreshPending, syncNow }
