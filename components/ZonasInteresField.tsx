@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { useColors, useTheme } from '../lib/ThemeContext'
 import { ZONAS_INTERES, parseZonasGuardadas, joinZonasGuardadas } from '../lib/zonas-interes'
@@ -16,11 +17,26 @@ export function ZonasInteresField({
   const { primaryColor } = useTheme()
   const { zonas, otra } = parseZonasGuardadas(value)
 
+  // El input de "Otra" usa estado local: si mandáramos cada tecla por
+  // joinZonasGuardadas (que hace trim), el espacio final se recortaría en el
+  // acto y sería imposible teclear espacios ("El Mirador Norte"). Local mientras
+  // se escribe; el valor guardado se normaliza en cada cambio, ya sin trailing.
+  const [otraLocal, setOtraLocal] = useState(otra)
+  useEffect(() => {
+    // Sincronizar solo cuando el valor externo (guardado) difiere de lo tecleado
+    // ignorando espacios de borde — evita pisar lo que el usuario está escribiendo.
+    if (otra !== otraLocal.trim()) setOtraLocal(otra)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otra])
+
   const toggle = (z: string) => {
     const next = zonas.includes(z) ? zonas.filter(x => x !== z) : [...zonas, z]
-    onChange(joinZonasGuardadas(next, otra))
+    onChange(joinZonasGuardadas(next, otraLocal))
   }
-  const setOtra = (t: string) => onChange(joinZonasGuardadas(zonas, t))
+  const setOtra = (t: string) => {
+    setOtraLocal(t)
+    onChange(joinZonasGuardadas(zonas, t))
+  }
 
   return (
     <View>
@@ -45,7 +61,7 @@ export function ZonasInteresField({
       </View>
       <TextInput
         style={[styles.otra, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-        value={otra}
+        value={otraLocal}
         onChangeText={setOtra}
         placeholder="Otra zona (opcional)"
         placeholderTextColor={c.placeholder}

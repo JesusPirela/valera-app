@@ -53,8 +53,10 @@ function DateTimePicker({
       if (field === 'date')   d.setDate(d.getDate() + delta)
       if (field === 'month')  d.setMonth(d.getMonth() + delta)
       if (field === 'year')   d.setFullYear(d.getFullYear() + delta)
-      if (field === 'hour')   d.setHours(d.getHours() + delta)
-      if (field === 'minute') d.setMinutes(d.getMinutes() + delta)
+      // Hora y minutos dan la vuelta DENTRO del mismo día: pasar de 23 a 0 (o de
+      // 0 a 23) ya no cambia la fecha, que era lo confuso. Módulo sin acarreo.
+      if (field === 'hour')   d.setHours((d.getHours() + delta + 24) % 24)
+      if (field === 'minute') d.setMinutes((d.getMinutes() + delta + 60) % 60)
       // No permitir fechas/horas anteriores al presente
       const ahora = new Date()
       if (d.getTime() < ahora.getTime()) return ahora
@@ -79,7 +81,19 @@ function DateTimePicker({
   return (
     <>
       <Text style={dpStyles.label}>{label}</Text>
-      <TouchableOpacity style={dpStyles.trigger} onPress={() => { const b = new Date(value ?? new Date()); b.setMinutes(Math.round(b.getMinutes() / 5) * 5, 0, 0); setTemp(b); setOpen(true) }}>
+      <TouchableOpacity style={dpStyles.trigger} onPress={() => {
+        let b: Date
+        if (value) {
+          b = new Date(value)
+          b.setMinutes(Math.round(b.getMinutes() / 5) * 5, 0, 0)
+        } else {
+          // Sin fecha previa: arrancar a las 7:00 am. Si las 7 de hoy ya pasaron,
+          // arrancar mañana a las 7 (nunca en el pasado).
+          b = new Date(); b.setHours(7, 0, 0, 0)
+          if (b.getTime() < Date.now()) b.setDate(b.getDate() + 1)
+        }
+        setTemp(b); setOpen(true)
+      }}>
         <Text style={[dpStyles.triggerText, !value && dpStyles.triggerPlaceholder]}>
           {displayStr}
         </Text>

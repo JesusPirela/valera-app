@@ -20,6 +20,7 @@ import { enqueueClienteUpdate } from '../../lib/offline-queue'
 import { conTimeout } from '../../lib/redIntentos'
 import { puedeEnviarClienteAChatbot } from '../../lib/permisos'
 import { ZonasInteresField } from '../../components/ZonasInteresField'
+import { Tooltip } from '../../components/Tooltip'
 import { parseZonasGuardadas } from '../../lib/zonas-interes'
 
 type Cliente = {
@@ -821,25 +822,35 @@ export default function CRM() {
               clearButtonMode="while-editing"
             />
           </View>
-          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setShowSort(true)}>
-            <Ionicons name="funnel-outline" size={15} color="#1a6470" />
-            {sortBy !== 'reciente' && <View style={s.sortDot} />}
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={toggleVista}>
-            <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
-            <Ionicons name="cloud-upload-outline" size={15} color="#1a6470" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={exportarCSV} disabled={exportando}>
-            {exportando
-              ? <ActivityIndicator size="small" color="#1a6470" />
-              : <Ionicons name="download-outline" size={15} color="#1a6470" />
-            }
-          </TouchableOpacity>
-          <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
-            <Ionicons name="add" size={20} color="#fff" />
-          </TouchableOpacity>
+          <Tooltip label="Ordenar clientes">
+            <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setShowSort(true)}>
+              <Ionicons name="funnel-outline" size={15} color="#1a6470" />
+              {sortBy !== 'reciente' && <View style={s.sortDot} />}
+            </TouchableOpacity>
+          </Tooltip>
+          <Tooltip label={vistaExcel ? 'Ver como lista' : 'Ver como tabla'}>
+            <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={toggleVista}>
+              <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
+            </TouchableOpacity>
+          </Tooltip>
+          <Tooltip label="Importar clientes (CSV)">
+            <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
+              <Ionicons name="cloud-upload-outline" size={15} color="#1a6470" />
+            </TouchableOpacity>
+          </Tooltip>
+          <Tooltip label="Exportar clientes (CSV)">
+            <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={exportarCSV} disabled={exportando}>
+              {exportando
+                ? <ActivityIndicator size="small" color="#1a6470" />
+                : <Ionicons name="download-outline" size={15} color="#1a6470" />
+              }
+            </TouchableOpacity>
+          </Tooltip>
+          <Tooltip label="Nuevo cliente">
+            <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
+              <Ionicons name="add" size={20} color="#fff" />
+            </TouchableOpacity>
+          </Tooltip>
         </View>
 
         {/* ── Operacion tabs ── */}
