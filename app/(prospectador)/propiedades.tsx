@@ -442,7 +442,17 @@ export default function ProspectadorPropiedades() {
           // muestre algo al instante. El detalle hace refetch (staleTime:0) y
           // completa el resto de fotos; si ese refetch falla por mala red, el
           // usuario sigue viendo la portada en vez de quedarse en "Sin imágenes".
-          return { propiedad: { ...p }, subidoPor: null, nombreUsuario: queryData.nombreUsuario, rol: queryData.rol }
+          //
+          // `descripcion` se siembra en null a propósito: en el listado ese campo
+          // es descripcion_corta (180 chars) y el detalle la mostraba cortada a
+          // media palabra hasta que llegaba el refetch — y para siempre si fallaba,
+          // porque este cache se persiste. Mejor sin descripción que con media.
+          return {
+            propiedad: { ...p, descripcion: null },
+            subidoPor: null,
+            nombreUsuario: queryData.nombreUsuario,
+            rol: queryData.rol,
+          }
         }
       )
     }

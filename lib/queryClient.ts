@@ -5,7 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 // Incrementar CACHE_BUSTER en deploys que cambien la estructura de datos cacheados.
 // Esto invalida el cache persistido en AsyncStorage para evitar datos corruptos/viejos.
 // b4 (07/jul): descarta el cache inflado que causaba arranque lento (ver abajo).
-const CACHE_BUSTER = '4'
+// b5 (09/jul): descarta los detalles sembrados con la descripción cortada a 180.
+const CACHE_BUSTER = '5'
 
 export const queryClient = new QueryClient({
   defaultOptions: {
