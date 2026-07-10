@@ -19,6 +19,7 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
 import { esPlusOMejor, esStaffSupervision } from '../../lib/permisos'
+import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb } from '../../lib/img'
 import { enqueuePublicacion } from '../../lib/offline-queue'
 import { ThumbImage } from '../../components/ThumbImage'
@@ -215,7 +216,16 @@ export default function DetallePropiedad() {
         const { data: perfil } = await supabase
           .from('profiles').select('nombre, telefono, color_ficha').eq('id', dataNormalizada.created_by).maybeSingle()
         if (perfil) {
-          subidoPor = { nombre: perfil.nombre ?? 'Admin', telefono: perfil.telefono ?? null, colorFicha: (perfil as any).color_ficha ?? null }
+          // Ante un usuario normal, solo se nombra a las cuentas de la casa. Si la
+          // subió un asesor con rol admin, se muestra la marca en vez de su nombre.
+          // El teléfono no se toca: la cita y el WhatsApp siguen yendo a quien
+          // corresponde. El staff ve siempre el nombre real.
+          const ocultarNombre = !esStaffSupervision(rol) && !esAdminPrincipal(dataNormalizada.created_by)
+          subidoPor = {
+            nombre: ocultarNombre ? NOMBRE_MARCA : (perfil.nombre ?? 'Admin'),
+            telefono: perfil.telefono ?? null,
+            colorFicha: (perfil as any).color_ficha ?? null,
+          }
         }
       }
 
