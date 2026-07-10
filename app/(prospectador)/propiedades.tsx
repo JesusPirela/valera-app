@@ -655,14 +655,10 @@ export default function ProspectadorPropiedades() {
   let propiedadesFiltradas = propiedades
 
   if (busqueda.trim()) {
-    // Con coma ("2,500,000") se busca por precio; sin coma, como siempre.
-    const rangoPrecio = parsearPrecioBusqueda(busqueda)
-    if (rangoPrecio) {
-      propiedadesFiltradas = propiedadesFiltradas.filter(p =>
-        p.precio != null &&
-        (rangoPrecio.min == null || p.precio >= rangoPrecio.min) &&
-        (rangoPrecio.max == null || p.precio <= rangoPrecio.max)
-      )
+    // Con coma ("2,5", "2,500,000") se busca por precio; sin coma, como siempre.
+    const matchPrecio = parsearPrecioBusqueda(busqueda)
+    if (matchPrecio) {
+      propiedadesFiltradas = propiedadesFiltradas.filter(p => matchPrecio(p.precio))
     } else {
       const q = normalizar(busqueda.trim())
       const qDigits = q.replace(/\D/g, '')
@@ -1060,7 +1056,7 @@ export default function ProspectadorPropiedades() {
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
                 style={[styles.searchInput, { color: darkMode ? '#fff' : '#1a1a2e' }]}
-                placeholder="Buscar propiedades o precio (2,500,000)"
+                placeholder="Buscar propiedades o precio (ej. 2,5)"
                 placeholderTextColor={darkMode ? 'rgba(255,255,255,0.6)' : '#666'}
                 value={busqueda}
                 onChangeText={setBusqueda}

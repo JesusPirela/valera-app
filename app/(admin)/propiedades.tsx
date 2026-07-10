@@ -222,14 +222,10 @@ export default function AdminPropiedades() {
   const { propiedadesFiltradas, propiedadesParaSugerenciasContacto } = useMemo(() => {
   let propiedadesFiltradas = propiedades.filter((p) => !p.es_inventario)
   if (busqueda.trim()) {
-    // Con coma ("2,500,000") se busca por precio; sin coma, como siempre.
-    const rangoPrecio = parsearPrecioBusqueda(busqueda)
-    if (rangoPrecio) {
-      propiedadesFiltradas = propiedadesFiltradas.filter((p) =>
-        p.precio != null &&
-        (rangoPrecio.min == null || p.precio >= rangoPrecio.min) &&
-        (rangoPrecio.max == null || p.precio <= rangoPrecio.max)
-      )
+    // Con coma ("2,5", "2,500,000") se busca por precio; sin coma, como siempre.
+    const matchPrecio = parsearPrecioBusqueda(busqueda)
+    if (matchPrecio) {
+      propiedadesFiltradas = propiedadesFiltradas.filter((p) => matchPrecio(p.precio))
     } else {
       const q = normalizar(busqueda.trim())
       const qDigits = q.replace(/\D/g, '')
@@ -413,7 +409,7 @@ export default function AdminPropiedades() {
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
           style={[styles.searchInput, { color: c.inputText }]}
-          placeholder="Código, título, dirección o precio (2,500,000)"
+          placeholder="Código, título, dirección o precio (ej. 2,5)"
           placeholderTextColor={c.placeholder}
           value={busqueda}
           onChangeText={setBusqueda}
