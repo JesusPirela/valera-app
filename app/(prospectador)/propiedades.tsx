@@ -869,7 +869,6 @@ export default function ProspectadorPropiedades() {
             <Text
               style={[styles.quickFilterText, { color: btn.activo ? '#fff' : primaryColor }]}
               numberOfLines={1}
-              adjustsFontSizeToFit
               maxFontSizeMultiplier={1.2}
             >
               {btn.label}
@@ -883,7 +882,7 @@ export default function ProspectadorPropiedades() {
             {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
           </Text>
         </TouchableOpacity>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', flexGrow: 1 }}>
           <TouchableOpacity
             style={[styles.constructorasBtn, { borderColor: primaryColor }]}
             onPress={() => router.push('/(prospectador)/constructoras')}
@@ -1311,15 +1310,20 @@ const styles = StyleSheet.create({
   },
   constructorasIcon: { fontSize: 14 },
   constructorasTxt: { fontSize: 13, fontWeight: '700' },
+  // Los chips se reparten el ancho, pero saltan de línea cuando no caben: con
+  // `flex: 1` fijo, "Sin publicar" (mucho más largo que "Venta") se salía de la
+  // pantalla en móvil. `flexGrow` reparte el sobrante sin forzar anchos iguales.
   quickFiltersRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    gap: 10,
+    gap: 8,
     marginBottom: 0,
   },
   quickFilterBtn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1327,6 +1331,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: 8,
     paddingVertical: 8,
+    paddingHorizontal: 10,
   },
   quickFilterText: {
     fontSize: 12,
@@ -1336,6 +1341,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    rowGap: 8,
     paddingHorizontal: 16,
     marginBottom: 8,
   },
