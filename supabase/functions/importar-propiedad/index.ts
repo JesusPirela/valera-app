@@ -114,6 +114,37 @@ function stripThousands(s: string): string {
   return s.replace(/,/g, '')
 }
 
+// Texto visible de la página, sin scripts, estilos ni etiquetas. Buscar sobre
+// esto (y no sobre el HTML crudo) evita que un nombre de archivo o una clase
+// CSS haga match: en gpvivienda.com, "construccion.svg" era el ícono de OTRA
+// casa listada más abajo y el importador le robaba los m² a esa.
+function textoPlano(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+// Superficies de construcción y terreno a partir del texto visible.
+//
+// Hay dos formatos en la calle y son ambiguos entre sí:
+//   valor→etiqueta:  "122 m² Constr. 108 m² Terreno"     (gpvivienda)
+//   etiqueta→valor:  "Construcción 180 m² Terreno 200 m²" (portales clásicos)
+// Leer el primero con la regla del segundo (o al revés) devuelve el número de la
+// otra superficie. Como una misma página es consistente, se cuenta cuál de las
+// dos formas aparece más y se usa esa para ambas superficies.
+const RE_POST = /([\d,.]+)\s*m[²2][^\d]{0,15}?(constr(?:\.|u)|terreno)/gi
+const RE_PRE  = /(constr(?:\.|ucci[oó]n|uido)|terreno)[^\d]{0,25}([\d,.]+)\s*m[²2]/gi
+
+function superficies(texto: string): { constr: string | null; terreno: string | null } {
+  const post = [...texto.matchAll(RE_POST)].map(m => ({ etq: m[2].toLowerCase(), val: m[1] }))
+  const pre  = [...texto.matchAll(RE_PRE)].map(m => ({ etq: m[1].toLowerCase(), val: m[2] }))
+  const usar = post.length >= pre.length ? post : pre
+  const primero = (p: string) => usar.find(x => x.etq.startsWith(p))?.val ?? null
+  return { constr: primero('constr'), terreno: primero('terreno') }
+}
+
 function firstInt(v: unknown): number | null {
   if (v == null) return null
   const s = String(v)
@@ -773,25 +804,28 @@ serve(async (req) => {
     }
 
     // ── 8. Superficies (construcción / terreno) ───────────────────────────────
+    // Se busca sobre el texto visible, no sobre el HTML: así "construccion.svg"
+    // (un ícono) ya no cuenta como la etiqueta "construcción".
+    // El patrón "122 m² Constr." (valor ANTES de la etiqueta) se prueba primero,
+    // porque con "122 m² Constr. 108 m² Terreno" el patrón inverso se saltaría al
+    // 108 del terreno. La ventana entre número y etiqueta se deja corta a
+    // propósito para que no cruce de una ficha a la otra.
+    const sup = superficies(textoPlano(dhtml))
     if (!m2) {
       const sp = specInt('construccion', 'construida', 'superficie construida', 'sup construida', 'total construido', 'construido', 'm construccion')
       // Lamudi: <div class="area-value">306 m²</div>
       const lam = dhtml.match(/area-value["'][^>]*>\s*([\d,.]+)/i)
-      const mc = dhtml.match(/construcci[oó]n[\s\S]{0,80}?([\d,.]+)\s*m[²2]/i)
-              || dhtml.match(/([\d,.]+)\s*m[²2][\s\S]{0,40}?construcci[oó]n/i)
       if (sp != null) m2 = String(sp)
       else if (lam) m2 = stripThousands(lam[1])
-      else if (mc) m2 = stripThousands(mc[1])
+      else if (sup.constr) m2 = stripThousands(sup.constr)
     }
     if (!m2Terreno) {
       const sp = specInt('terreno', 'superficie terreno', 'superficie del terreno', 'sup terreno', 'm terreno')
       // Lamudi: <span class="lot-area-value">251 m²</span>
       const lot = dhtml.match(/lot-area-value["'][^>]*>\s*([\d,.]+)/i)
-      const mt = dhtml.match(/terreno[\s\S]{0,80}?([\d,.]+)\s*m[²2]/i)
-              || dhtml.match(/([\d,.]+)\s*m[²2][\s\S]{0,40}?terreno/i)
       if (sp != null) m2Terreno = String(sp)
       else if (lot) m2Terreno = stripThousands(lot[1])
-      else if (mt) m2Terreno = stripThousands(mt[1])
+      else if (sup.terreno) m2Terreno = stripThousands(sup.terreno)
     }
 
     // ── 9. Precio (orden de prioridad por fiabilidad) ─────────────────────────
@@ -955,6 +989,23 @@ serve(async (req) => {
     // ── 11. Fallbacks finales para tipo / operación / imágenes / zona ─────────
     if (!tipo) {
       tipo = mapTipo(titulo + ' ' + getMeta(html, 'og:title'))
+    }
+    // Sitios de desarrolladora (gpvivienda…) no dicen "casa" en el título ni en
+    // og:title. Se decide por la palabra dominante del texto visible, exigiendo
+    // ventaja clara para no clasificar mal un portal que menciona ambas.
+    if (!tipo) {
+      const t = textoPlano(dhtml).toLowerCase()
+      const cuenta = (re: RegExp) => (t.match(re) ?? []).length
+      const candidatos: [typeof tipo, number][] = [
+        ['casa',          cuenta(/\bcasas?\b/g)],
+        ['departamento',  cuenta(/\bdepartamentos?\b|\bdeptos?\b/g)],
+        ['local',         cuenta(/\blocales?\b|\boficinas?\b|\bbodegas?\b/g)],
+        ['terreno',       cuenta(/\bterrenos?\b|\blotes?\b/g)],
+      ]
+      candidatos.sort((a, b) => b[1] - a[1])
+      const [mejor, nMejor] = candidatos[0]
+      const nSegundo = candidatos[1][1]
+      if (nMejor >= 3 && nMejor >= nSegundo * 3) tipo = mejor
     }
     if (!operacion) {
       const snippet = titulo + ' ' + getMeta(html, 'og:title') + ' ' + url + ' ' + html.slice(0, 3000)
