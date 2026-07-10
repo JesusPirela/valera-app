@@ -37,7 +37,7 @@ import { actualizarMisionesPorCategoria } from '../../lib/gamification'
 import { thumb } from '../../lib/img'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
-import { normalizar } from '../../lib/texto'
+import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import MiniMapa from '../../components/MiniMapa'
 
 type Propiedad = {
@@ -645,16 +645,26 @@ export default function ProspectadorPropiedades() {
   let propiedadesFiltradas = propiedades
 
   if (busqueda.trim()) {
-    const q = normalizar(busqueda.trim())
-    const qDigits = q.replace(/\D/g, '')
-    propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
-      const cod = normalizar(p.codigo)
-      // Código tolerante a ceros: "4", "004" y "vr-004" encuentran VR-004
-      const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
-      return codMatch ||
-        normalizar(p.direccion).includes(q) ||
-        normalizar(p.titulo).includes(q)
-    })
+    // Con coma ("2,500,000") se busca por precio; sin coma, como siempre.
+    const rangoPrecio = parsearPrecioBusqueda(busqueda)
+    if (rangoPrecio) {
+      propiedadesFiltradas = propiedadesFiltradas.filter(p =>
+        p.precio != null &&
+        (rangoPrecio.min == null || p.precio >= rangoPrecio.min) &&
+        (rangoPrecio.max == null || p.precio <= rangoPrecio.max)
+      )
+    } else {
+      const q = normalizar(busqueda.trim())
+      const qDigits = q.replace(/\D/g, '')
+      propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
+        const cod = normalizar(p.codigo)
+        // Código tolerante a ceros: "4", "004" y "vr-004" encuentran VR-004
+        const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
+        return codMatch ||
+          normalizar(p.direccion).includes(q) ||
+          normalizar(p.titulo).includes(q)
+      })
+    }
   }
   if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) > 0)
   if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0)
@@ -1041,7 +1051,7 @@ export default function ProspectadorPropiedades() {
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
                 style={[styles.searchInput, { color: darkMode ? '#fff' : '#1a1a2e' }]}
-                placeholder="Buscar propiedades..."
+                placeholder="Buscar propiedades o precio (2,500,000)"
                 placeholderTextColor={darkMode ? 'rgba(255,255,255,0.6)' : '#666'}
                 value={busqueda}
                 onChangeText={setBusqueda}

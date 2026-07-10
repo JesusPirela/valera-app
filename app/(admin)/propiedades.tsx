@@ -17,7 +17,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
-import { normalizar } from '../../lib/texto'
+import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
 type Propiedad = {
@@ -222,13 +222,23 @@ export default function AdminPropiedades() {
   const { propiedadesFiltradas, propiedadesParaSugerenciasContacto } = useMemo(() => {
   let propiedadesFiltradas = propiedades.filter((p) => !p.es_inventario)
   if (busqueda.trim()) {
-    const q = normalizar(busqueda.trim())
-    const qDigits = q.replace(/\D/g, '')
-    propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
-      const cod = normalizar(p.codigo)
-      const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
-      return codMatch || normalizar(p.direccion).includes(q) || normalizar(p.titulo).includes(q)
-    })
+    // Con coma ("2,500,000") se busca por precio; sin coma, como siempre.
+    const rangoPrecio = parsearPrecioBusqueda(busqueda)
+    if (rangoPrecio) {
+      propiedadesFiltradas = propiedadesFiltradas.filter((p) =>
+        p.precio != null &&
+        (rangoPrecio.min == null || p.precio >= rangoPrecio.min) &&
+        (rangoPrecio.max == null || p.precio <= rangoPrecio.max)
+      )
+    } else {
+      const q = normalizar(busqueda.trim())
+      const qDigits = q.replace(/\D/g, '')
+      propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
+        const cod = normalizar(p.codigo)
+        const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
+        return codMatch || normalizar(p.direccion).includes(q) || normalizar(p.titulo).includes(q)
+      })
+    }
   }
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroEstado) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.estado === filtroEstado)
@@ -403,7 +413,7 @@ export default function AdminPropiedades() {
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
           style={[styles.searchInput, { color: c.inputText }]}
-          placeholder="Buscar por código, título o dirección..."
+          placeholder="Código, título, dirección o precio (2,500,000)"
           placeholderTextColor={c.placeholder}
           value={busqueda}
           onChangeText={setBusqueda}
