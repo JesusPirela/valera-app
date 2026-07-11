@@ -7,6 +7,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { queryClient, persister, PERSIST_MAX_AGE, shouldPersistQuery } from '../lib/queryClient'
 import { ThemeProvider, useColors } from '../lib/ThemeContext'
 import { VistaComoProvider } from '../lib/VistaComo'
+import { CargaDatosProvider } from '../lib/CargaDatos'
 import { actualizarNombreRole, guardarTokensSesion, accountSwitch, userSignOut } from '../lib/cuentas'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
@@ -364,6 +365,7 @@ export default function RootLayout() {
         persistOptions={{ persister, maxAge: PERSIST_MAX_AGE, dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery } }}
       >
         <VistaComoProvider>
+        <CargaDatosProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(admin)" />
@@ -389,6 +391,7 @@ export default function RootLayout() {
             </View>
           </View>
         </Modal>
+        </CargaDatosProvider>
         </VistaComoProvider>
       </PersistQueryClientProvider>
     </ThemeProvider>

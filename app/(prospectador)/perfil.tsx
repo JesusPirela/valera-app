@@ -18,6 +18,7 @@ import CambiarCuenta from '../../components/CambiarCuenta'
 import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
 import { marcoPorNivel } from '../../lib/marcos'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
+import { useCargaDatos } from '../../lib/CargaDatos'
 
 const COLORES_LIBRES = [
   '#1a6470', '#c9a84c', '#1e3a5f', '#7b1e3a',
@@ -129,6 +130,7 @@ const AvatarGrid = memo(function AvatarGrid({
 
 export default function Perfil() {
   const { setPrimaryColor, setAcentoId, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap } = useTheme()
+  const { modo: modoCarga, setModo: setModoCarga, conexionLenta } = useCargaDatos()
   const c = useColors()
 
   const [loading, setLoading] = useState(true)
@@ -534,6 +536,46 @@ export default function Perfil() {
           />
         </View>
 
+        {/* Carga de propiedades (adaptable a la conexión) */}
+        <Text style={s.seccion}>CARGA DE PROPIEDADES</Text>
+        <Text style={[s.label, darkMode && { color: '#7a9ab5' }]}>
+          En internet lento la app puede cargar menos propiedades y con imágenes más ligeras, para que vaya más fluida.
+        </Text>
+        <View style={s.cargaOpciones}>
+          {([
+            { v: 'auto' as const,     t: '⚙️ Automático',    d: 'Se ajusta solo según tu conexión' },
+            { v: 'completo' as const, t: '🚀 Cargar todo',    d: 'Siempre calidad completa' },
+            { v: 'ahorro' as const,   t: '🪶 Ahorro de datos', d: 'Siempre ligero, gasta menos datos' },
+          ]).map(op => {
+            const activo = modoCarga === op.v
+            return (
+              <TouchableOpacity
+                key={op.v}
+                style={[
+                  s.cargaOpcion,
+                  { borderColor: darkMode ? '#1e3448' : '#dde8e9', backgroundColor: darkMode ? '#111f2e' : '#fff' },
+                  activo && { borderColor: colorBase, backgroundColor: colorBase + '14' },
+                ]}
+                onPress={() => setModoCarga(op.v)}
+                activeOpacity={0.85}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.cargaOpcionTitulo, darkMode && { color: '#fff' }, activo && { color: colorBase }]}>{op.t}</Text>
+                  <Text style={[s.cargaOpcionSub, darkMode && { color: '#7a9ab5' }]}>{op.d}</Text>
+                </View>
+                {activo && <Text style={[s.cargaCheck, { color: colorBase }]}>✓</Text>}
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+        {modoCarga === 'auto' && (
+          <Text style={[s.cargaEstado, darkMode && { color: '#7a9ab5' }]}>
+            {conexionLenta
+              ? '🐢 Detectamos conexión lenta: modo ahorro activo.'
+              : '⚡ Detectamos buena conexión: cargando todo.'}
+          </Text>
+        )}
+
         {/* Color de acento */}
         <Text style={s.seccion}>COLOR DE LA APLICACIÓN</Text>
         <Text style={s.label}>Elige tu color principal</Text>
@@ -677,6 +719,12 @@ const s = StyleSheet.create({
   avatarEmoji: { width: 90, height: 90, borderRadius: 45, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#fff' },
   avatarEmojiText: { fontSize: 44 },
   marcoNombre: { fontSize: 11.5, fontWeight: '800', marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 },
+  cargaOpciones: { gap: 8, marginTop: 4 },
+  cargaOpcion: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 12, padding: 12 },
+  cargaOpcionTitulo: { fontSize: 14.5, fontWeight: '800', color: '#1a1a2e' },
+  cargaOpcionSub: { fontSize: 12, color: '#888', marginTop: 2 },
+  cargaCheck: { fontSize: 18, fontWeight: '900', marginLeft: 8 },
+  cargaEstado: { fontSize: 12, marginTop: 8, color: '#666', fontStyle: 'italic' },
   emailText: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
   body: { padding: 20 },
   seccion: { fontSize: 11, fontWeight: '800', color: '#888', letterSpacing: 1, marginTop: 24, marginBottom: 12 },

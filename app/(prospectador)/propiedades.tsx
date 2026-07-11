@@ -34,8 +34,9 @@ const LOGO = require('../../assets/logo.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import { AccentBackground } from '../../lib/patrones'
 import { actualizarMisionesPorCategoria } from '../../lib/gamification'
-import { thumb } from '../../lib/img'
+import { thumb, type ThumbOpts } from '../../lib/img'
 import { ThumbImage } from '../../components/ThumbImage'
+import { useCargaDatos, opcionesImagenTarjeta, tarjetasIniciales, tarjetasPorTanda } from '../../lib/CargaDatos'
 import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import MiniMapa from '../../components/MiniMapa'
@@ -133,11 +134,11 @@ function mezclar<T>(arr: T[]): T[] {
 // (veces publicada, estado de toggle, etc.), no en cada tecla de búsqueda.
 const PropiedadCard = memo(function PropiedadCard({
   item, width, veces, isToggling, destacada, esAdmin, primaryColor,
-  cardBg, cardBorder, isOnline, onOpen, onShare, onPublish, onZoom,
+  cardBg, cardBorder, isOnline, imgOpts, onOpen, onShare, onPublish, onZoom,
 }: {
   item: Propiedad; width?: number; veces: number; isToggling: boolean
   destacada: boolean; esAdmin: boolean; primaryColor: string
-  cardBg: string; cardBorder: string; isOnline: boolean
+  cardBg: string; cardBorder: string; isOnline: boolean; imgOpts: ThumbOpts
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
 }) {
@@ -159,7 +160,7 @@ const PropiedadCard = memo(function PropiedadCard({
         <View style={styles.cardImagenWrap}>
           <ThumbImage
             url={primera.url}
-            opts={{ width: 640, quality: 65 }}
+            opts={imgOpts}
             style={styles.cardImagen}
             resizeMode="contain"
           />
@@ -261,6 +262,8 @@ export default function ProspectadorPropiedades() {
   const isOnline = useNetworkStatus()
   const { primaryColor, acentoId, darkMode } = useTheme()
   const c = useColors()
+  const { ahorroActivo } = useCargaDatos()
+  const imgOpts = opcionesImagenTarjeta(ahorroActivo)
   const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 28) : 44
 
   const [busqueda, setBusqueda] = useState('')
@@ -825,6 +828,7 @@ export default function ProspectadorPropiedades() {
       cardBg={c.card}
       cardBorder={c.border}
       isOnline={isOnline}
+      imgOpts={imgOpts}
       onOpen={onOpenCard}
       onShare={onShareCard}
       onPublish={onPublishCard}
@@ -1144,9 +1148,9 @@ export default function ProspectadorPropiedades() {
             renderItem={({ item }) => renderCard(item)}
             extraData={publicaciones}
             removeClippedSubviews
-            initialNumToRender={6}
-            maxToRenderPerBatch={8}
-            windowSize={11}
+            initialNumToRender={tarjetasIniciales(ahorroActivo)}
+            maxToRenderPerBatch={tarjetasPorTanda(ahorroActivo)}
+            windowSize={ahorroActivo ? 5 : 11}
             ListHeaderComponent={filtrosHeader}
             refreshControl={
               <RefreshControl
