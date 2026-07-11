@@ -9,6 +9,7 @@ import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar } from '../../lib/texto'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Modelo = {
   id: string
@@ -90,6 +91,7 @@ export default function Constructoras() {
   const [rol, setRol] = useState<string | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   async function consultarModelos() {
     return supabase
@@ -189,7 +191,7 @@ export default function Constructoras() {
           <Text style={[styles.emptyText, { color: c.textMute }]}>No hay propiedades de constructora aún.</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
           {zonaGrupos.map(zg => (
             <View key={zg.key ?? '_sin_zona'}>
               <Text style={[styles.zonaSectionHeader, { color: c.textMute, borderBottomColor: c.border }]}>{zg.label}</Text>

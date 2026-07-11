@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { comprarItem, getCoinsDisplay, registrarPremioRuleta, calcularNivel } from '../../lib/gamification'
 import { RuletaModal, checkMilestone, CONFIG_DEFAULT, type Premio, type RuletaConfig } from '../../components/RuletaModal'
 import { PATRONES_ANIMADOS, AnimatedGradientView } from '../../lib/patrones'
@@ -82,6 +83,7 @@ export default function Tienda() {
   const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar, '#c9a84c')
 
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
@@ -292,7 +294,7 @@ export default function Tienda() {
       </View>
 
       {tab === 'tienda' ? (
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
 
           <Text style={s.hint}>
             💡 Tras comprar, el equipo de Valera te contactará para entregar tu recompensa.
@@ -431,7 +433,7 @@ export default function Tienda() {
 
         </ScrollView>
       ) : tab === 'historial' ? (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
 
           {compras.filter(c => !esCofre(c)).length === 0 ? (
             <View style={s.emptyHistorial}>
@@ -484,7 +486,7 @@ export default function Tienda() {
         </ScrollView>
       ) : (
         // ── Tab Cofre ──────────────────────────────────────────────
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
 
           {/* ── Notificación de nivel ── */}
           {nivelCofresGanados && (

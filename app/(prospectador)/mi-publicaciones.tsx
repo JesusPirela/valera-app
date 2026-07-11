@@ -5,6 +5,7 @@ import {
 import { router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { ThumbImage } from '../../components/ThumbImage'
 
 type Pub = {
@@ -56,6 +57,7 @@ export default function MisPublicaciones() {
   }
 
   useEffect(() => { cargar() }, [])
+  const { refreshControl } = usePullRefresh(cargar)
 
   function renderItem({ item }: { item: Pub }) {
     const prop = item.propiedades
@@ -124,6 +126,7 @@ export default function MisPublicaciones() {
         </View>
       ) : (
         <FlatList
+          refreshControl={refreshControl}
           data={pubs}
           keyExtractor={(item) => item.propiedad_id}
           renderItem={renderItem}

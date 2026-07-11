@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar } from '../../lib/texto'
 
@@ -126,6 +127,7 @@ export default function Zonas() {
   const [rol, setRol] = useState<string | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   async function cargar() {
     const { data: { session } } = await supabase.auth.getSession()
@@ -187,7 +189,7 @@ export default function Zonas() {
           <Text style={[s.emptyTxt, { color: c.textMute }]}>No hay propiedades con zona asignada.</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
           {ZONAS_CONFIG.filter(z => arbol[z.key]).map(zConf => {
             const subzonaData = arbol[zConf.key]
             const totalZona = Object.values(subzonaData).reduce((a, b) => a + b.length, 0)

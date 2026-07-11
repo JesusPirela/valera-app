@@ -4,6 +4,7 @@ import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { normalizar } from '../../lib/texto'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type TablaData = {
   headers: string[]
@@ -53,6 +54,7 @@ export default function TablaEquipo() {
   const [zonaMap, setZonaMap] = useState<Map<string, string>>(new Map())
 
   useFocusEffect(useCallback(() => { cargar(); cargarZonaMap() }, []))
+  const { refreshControl } = usePullRefresh(async () => { await Promise.all([cargar(), cargarZonaMap()]) })
 
   async function cargarZonaMap() {
     const { data } = await supabase
@@ -262,6 +264,7 @@ export default function TablaEquipo() {
             {busqueda.trim() ? ` (filtrado)` : ''}
           </Text>
           <SectionList
+            refreshControl={refreshControl}
             sections={grupos}
             keyExtractor={(item, i) => `${item[0]}_${i}`}
             renderSectionHeader={renderSectionHeader}

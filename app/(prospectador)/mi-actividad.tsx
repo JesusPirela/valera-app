@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from 'expo-router'
 import Svg, { Rect, Text as SvgText, Line } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type ActividadPeriodo = {
   clientes_nuevos:        number
@@ -104,6 +105,7 @@ export default function MiActividad() {
   const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { cargar('hoy') }, []))
+  const { refreshControl } = usePullRefresh(() => cargar(periodo))
 
   async function cargar(p: 'hoy' | 'semana' | 'mes') {
     // Solo spinner completo la primera vez; al volver, refresca en segundo plano
@@ -165,7 +167,7 @@ export default function MiActividad() {
   )
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }} refreshControl={refreshControl}>
 
       {/* Header con selector de período */}
       <View style={s.header}>

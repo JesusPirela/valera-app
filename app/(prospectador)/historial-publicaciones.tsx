@@ -4,6 +4,7 @@ import {
   TouchableOpacity, TextInput,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { normalizar } from '../../lib/texto'
@@ -53,6 +54,7 @@ export default function HistorialPublicaciones() {
     setError(null)
     cargar(0, true)
   }, []))
+  const { refreshControl } = usePullRefresh(() => cargar(0, true))
 
   async function cargarPortadas(ids: string[]) {
     const nuevos = [...new Set(ids)].filter(Boolean)
@@ -193,6 +195,7 @@ export default function HistorialPublicaciones() {
         </View>
       ) : (
         <FlatList
+          refreshControl={refreshControl}
           data={filtradas}
           keyExtractor={item => item.id}
           renderItem={renderItem}

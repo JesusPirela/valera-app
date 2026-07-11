@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { calcularCrmMetricas, type CrmMetricas } from '../../lib/crmMetricas'
 import CrmMetricasPanel from '../../components/CrmMetricasPanel'
 
@@ -29,6 +30,7 @@ export default function AsesorEstadisticas() {
   }
 
   useFocusEffect(useCallback(() => { cargar(modo) }, [modo]))
+  const { refreshControl } = usePullRefresh(() => cargar(modo))
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
@@ -52,7 +54,7 @@ export default function AsesorEstadisticas() {
       {loading || !metricas ? (
         <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }} refreshControl={refreshControl}>
           <CrmMetricasPanel metricas={metricas} c={c} />
         </ScrollView>
       )}

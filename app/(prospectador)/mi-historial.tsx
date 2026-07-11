@@ -4,6 +4,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { calcularNivel, tituloPorNivel } from '../../lib/gamification'
 
 type Historial = {
@@ -82,6 +83,7 @@ export default function MiHistorial() {
   const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
@@ -144,7 +146,7 @@ export default function MiHistorial() {
   const diasRegistrado = diasDesde(data.created_at)
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 48 }}>
+    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 48 }} refreshControl={refreshControl}>
 
       {/* Hero */}
       <View style={s.hero}>
