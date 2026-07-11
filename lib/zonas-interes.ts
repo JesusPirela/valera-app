@@ -59,6 +59,20 @@ export function matchZonasInteres(raw: string): string[] {
   return ZONAS_INTERES.filter(z => hits.has(z))
 }
 
+// Estas coincidencias son en realidad municipio / zona amplia (no un
+// fraccionamiento). Casi toda dirección de Querétaro termina en "El Marqués" o
+// "Corregidora", así que solo se usan como último recurso cuando el texto no
+// menciona un fraccionamiento más específico (Zakia, Zibatá, El Refugio…).
+const MUNICIPIOS = new Set(['El Marqués', 'Corregidora', 'Centro'])
+
+// La zona MÁS específica de un texto libre (dirección/título), para agrupar
+// propiedades por colonia/fraccionamiento y no solo por ciudad. Prefiere un
+// fraccionamiento real; si no hay, cae al municipio; si nada, null.
+export function zonaDetallada(raw: string): string | null {
+  const m = matchZonasInteres(raw)
+  return m.find(z => !MUNICIPIOS.has(z)) ?? m[0] ?? null
+}
+
 // Heurística: ¿el texto es en realidad una nota de crédito/presupuesto puesta en
 // el campo de zona? (sin ninguna zona real reconocible). Se usa en la migración
 // para moverlo a Notas y dejar la zona limpia.
