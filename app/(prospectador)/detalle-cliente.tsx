@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ETAPAS_CLIENTE } from './crm'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { registrarAccion } from '../../lib/gamification'
 import { programarRecordatorios } from '../../lib/notificaciones-locales'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -229,6 +230,7 @@ export default function DetalleCliente() {
   })
 
   useFocusEffect(useCallback(() => { refetch() }, [refetch]))
+  const { refreshControl } = usePullRefresh(refetch)
 
   const cliente = data?.cliente ?? null
   const interacciones = data?.interacciones ?? []
@@ -407,7 +409,7 @@ export default function DetalleCliente() {
   const waDefault = `Hola ${cliente.nombre}, soy tu asesor de Valera Real Estate. Te contacto para dar seguimiento a tu búsqueda de propiedad. ¿Tienes un momento para platicar?`
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
       <OfflineBanner />
 
       {/* ── Hero ──────────────────────────────────────── */}

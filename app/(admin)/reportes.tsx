@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Periodo = '24h' | '7dias' | '30dias'
@@ -438,6 +439,7 @@ export default function Reportes() {
   const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { setPeriodo('24h'); cargar('24h'); cargarProgramados() }, []))
+  const { refreshControl } = usePullRefresh(async () => { await Promise.all([cargar(periodo), cargarProgramados()]) })
 
   async function cargar(p: Periodo = periodo) {
     if (!yaCargoRef.current) setLoading(true)
@@ -577,7 +579,7 @@ export default function Reportes() {
           <Text style={{ color: '#556a7a', marginTop: 12, fontSize: 13 }}>Cargando datos del equipo…</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
 
           {/* Período header */}
           <View style={s.rangoHeader}>

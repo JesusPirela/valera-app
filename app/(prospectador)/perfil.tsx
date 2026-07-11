@@ -17,6 +17,7 @@ import ToggleSwitch from '../../components/ToggleSwitch'
 import CambiarCuenta from '../../components/CambiarCuenta'
 import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
 import { marcoPorNivel } from '../../lib/marcos'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 const COLORES_LIBRES = [
   '#1a6470', '#c9a84c', '#1e3a5f', '#7b1e3a',
@@ -177,6 +178,7 @@ export default function Perfil() {
   // (los datos del perfil ya visibles permanecen, sin spinner en cada visita).
   const yaCargoRef = useRef(false)
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
@@ -338,7 +340,7 @@ export default function Perfil() {
   }
 
   return (
-    <ScrollView style={[s.container, darkMode && { backgroundColor: '#0d1b2a' }]} contentContainerStyle={{ paddingBottom: 60 }}>
+    <ScrollView style={[s.container, darkMode && { backgroundColor: '#0d1b2a' }]} contentContainerStyle={{ paddingBottom: 60 }} refreshControl={refreshControl}>
       {/* Avatar */}
       <AccentBackground acentoId={colorAcento} style={s.headerBg}>
         <View style={s.avatarWrap}>

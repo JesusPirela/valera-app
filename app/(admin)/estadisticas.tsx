@@ -11,6 +11,7 @@ import Svg, { Path, Text as SvgText } from 'react-native-svg'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 // ─── Types ───────────────────────────────────────────────
 type Resumen = {
@@ -235,6 +236,7 @@ export default function Estadisticas() {
   }
 
   useFocusEffect(useCallback(() => { setPeriodo('dia'); cargar('dia') }, []))
+  const { refreshControl } = usePullRefresh(() => cargar(periodo))
 
   if (loading) {
     return (
@@ -330,7 +332,7 @@ export default function Estadisticas() {
   const maxProsp = top_prospectadores.length > 0 ? top_prospectadores[0].total : 1
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 48 }}>
+    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 48 }} refreshControl={refreshControl}>
       <View style={styles.pageHeader}>
         <Text style={[styles.pageTitle, { color: c.text }]}>Estadísticas</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>

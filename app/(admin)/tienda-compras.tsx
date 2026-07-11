@@ -29,6 +29,7 @@ import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Compra = {
   id: string
@@ -92,6 +93,7 @@ export default function TiendaCompras() {
   const [compraRechazo, setCompraRechazo] = useState<Compra | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   const yaCargoRef = useRef(false)
   async function cargar() {
@@ -241,7 +243,7 @@ export default function TiendaCompras() {
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }} refreshControl={refreshControl}>
         {lista.length === 0 ? (
           <View style={s.emptyBox}>
             <Text style={s.emptyTxt}>No hay compras {filtro === 'pendiente' ? 'pendientes' : filtro === 'entregado' ? 'entregadas' : ''}.</Text>

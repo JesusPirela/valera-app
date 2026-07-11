@@ -7,6 +7,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const SWIPE_THRESHOLD = -80
@@ -224,6 +225,7 @@ export default function AdminNotificaciones() {
   }
 
   useFocusEffect(useCallback(() => { cargarNotificaciones() }, []))
+  const { refreshControl } = usePullRefresh(cargarNotificaciones)
 
   async function marcarLeida(id: string) {
     await supabase.from('notificaciones').update({ leida: true }).eq('id', id)
@@ -299,6 +301,7 @@ export default function AdminNotificaciones() {
         </View>
       ) : (
         <FlatList
+          refreshControl={refreshControl}
           data={notificaciones}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}

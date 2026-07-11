@@ -7,6 +7,7 @@ import { useFocusEffect } from 'expo-router'
 import { useColors } from '../../lib/ThemeContext'
 import { supabase } from '../../lib/supabase'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Entrega = {
   id: string
@@ -60,6 +61,7 @@ export default function AdminEntregas() {
   }>>({})
 
   useFocusEffect(useCallback(() => { cargar() }, [filtroEstado]))
+  const { refreshControl } = usePullRefresh(cargar)
 
   const yaCargoRef = useRef(false)
   async function cargar() {
@@ -197,7 +199,7 @@ export default function AdminEntregas() {
           <Text style={s.emptyText}>No hay entregas con estado "{filtroEstado}"</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={s.lista}>
+        <ScrollView contentContainerStyle={s.lista} refreshControl={refreshControl}>
           {entregas.map(e => {
             const expanded = expandedId === e.id
             const form = getForm(e.id)

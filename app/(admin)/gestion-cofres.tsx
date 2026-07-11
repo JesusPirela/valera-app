@@ -6,6 +6,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,8 @@ export default function GestionCofres() {
     cargarUsuarios()
     cargarHistorial()
   }, []))
+
+  const { refreshControl } = usePullRefresh(async () => { await Promise.all([cargarUsuarios(), cargarHistorial()]) })
 
   async function cargarUsuarios() {
     setLoadingUsuarios(true)
@@ -252,6 +255,7 @@ export default function GestionCofres() {
             <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
           ) : (
             <FlatList
+              refreshControl={refreshControl}
               data={usuariosFiltrados}
               keyExtractor={u => u.id}
               contentContainerStyle={{ padding: 14, paddingBottom: 60 }}

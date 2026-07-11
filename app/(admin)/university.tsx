@@ -7,6 +7,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Stats = {
   total_cursos: number
@@ -49,6 +50,7 @@ export default function AdminUniversity() {
   const [configGuardada, setConfigGuardada] = useState(false)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   const yaCargoRef = useRef(false)
   async function cargar() {
@@ -99,7 +101,7 @@ export default function AdminUniversity() {
   }
 
   return (
-    <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 48 }}>
+    <ScrollView style={[estilos.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 48 }} refreshControl={refreshControl}>
       {/* Header */}
       <View style={estilos.header}>
         <View style={estilos.logoRow}>

@@ -28,6 +28,7 @@ import * as MediaLibrary from 'expo-media-library'
 import * as Clipboard from 'expo-clipboard'
 import * as FileSystem from 'expo-file-system'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { conReintentoData, generarIdemKey, conTimeout } from '../../lib/redIntentos'
@@ -171,7 +172,7 @@ export default function DetallePropiedad() {
   const similaresX = useRef(0)
 
   const { vistaComo } = useVistaComo()
-  const { data: detalle, isLoading, isFetching } = useQuery({
+  const { data: detalle, isLoading, isFetching, refetch } = useQuery({
     queryKey: vistaComo ? ['detalle-propiedad', id, vistaComo] : ['detalle-propiedad', id],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -256,6 +257,7 @@ export default function DetallePropiedad() {
   const subidoPor = detalle?.subidoPor ?? null
   const nombreUsuario = detalle?.nombreUsuario ?? null
   const rol = detalle?.rol ?? null
+  const { refreshControl } = usePullRefresh(refetch)
   const esStaff = esStaffSupervision(rol)
 
   // Lista COMPLETA de fotos, pedida directo a la base al momento de usarla.
@@ -1512,7 +1514,7 @@ export default function DetallePropiedad() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }} refreshControl={refreshControl}>
       <OfflineBanner />
       {/* Galería de imágenes */}
       {imagenes.length > 0 ? (

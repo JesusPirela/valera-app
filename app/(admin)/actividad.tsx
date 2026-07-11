@@ -12,6 +12,7 @@ import {
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, AppColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Registro = {
   id: string
@@ -69,6 +70,7 @@ export default function ActividadAdmin() {
   }
 
   useFocusEffect(useCallback(() => { cargarActividad() }, []))
+  const { refreshControl } = usePullRefresh(cargarActividad)
 
   const registrosFiltrados = filtro === 'todos'
     ? registros
@@ -135,6 +137,7 @@ export default function ActividadAdmin() {
         </View>
       ) : (
         <FlatList
+          refreshControl={refreshControl}
           data={registrosFiltrados}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}

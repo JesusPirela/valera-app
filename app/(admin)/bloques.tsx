@@ -7,6 +7,7 @@ import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 const TEAL = '#1a6470'
 const PURPLE = '#5e35b1'
@@ -53,6 +54,7 @@ export default function Bloques() {
   const periodoRef = useRef<Periodo>(1)
 
   useFocusEffect(useCallback(() => { cargar(periodoRef.current, yaCargoRef.current) }, []))
+  const { refreshControl } = usePullRefresh(() => cargar(periodoRef.current))
 
   async function cargar(p: Periodo, silencioso = false) {
     if (!silencioso) setLoading(true)
@@ -169,7 +171,7 @@ export default function Bloques() {
       {loading ? (
         <ActivityIndicator size="large" color={TEAL} style={{ marginTop: 40 }} />
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
           {grupos.map((g) => {
             const t = totales(g.users)
             const esSinAsignar = g.key === SIN_ASIGNAR

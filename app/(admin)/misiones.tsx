@@ -7,6 +7,7 @@ import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Mision = {
   id: string
@@ -81,6 +82,8 @@ export default function AdminMisiones() {
   }, []))
 
   const yaCargoRef = useRef(false)
+  const { refreshControl } = usePullRefresh(cargar)
+
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
     yaCargoRef.current = true
@@ -219,7 +222,7 @@ export default function AdminMisiones() {
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 40, padding: 12 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40, padding: 12 }} refreshControl={refreshControl}>
         {grupos.map(([titulo, items]) => items.length === 0 ? null : (
           <View key={titulo}>
             <Text style={s.grupoTitle}>{titulo} ({items.length})</Text>

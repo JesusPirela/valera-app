@@ -6,6 +6,7 @@ import {
 import { useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 const PURPLE = '#5e35b1'
 const PAGE = 150
@@ -174,9 +175,12 @@ export default function UsuarioHistorial() {
     )
   }
 
+  const { refreshControl } = usePullRefresh(cargarInicial)
+
   return (
     <View style={[s.container, { backgroundColor: c.bg }]}>
       <FlatList
+        refreshControl={refreshControl}
         data={eventosFiltrados}
         keyExtractor={(_, i) => String(i)}
         ListHeaderComponent={header}

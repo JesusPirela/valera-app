@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar } from '../../lib/texto'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 const RED = '#c0392b'
 const TEAL = '#1a6470'
@@ -148,9 +149,12 @@ export default function UsuarioPublicaciones() {
     )
   }
 
+  const { refreshControl } = usePullRefresh(cargar)
+
   return (
     <View style={[s.container, { backgroundColor: c.bg }]}>
       <FlatList
+        refreshControl={refreshControl}
         data={filtradas}
         keyExtractor={(item) => item.propiedad_id}
         ListHeaderComponent={header}

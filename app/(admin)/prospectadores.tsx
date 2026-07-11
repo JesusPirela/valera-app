@@ -19,6 +19,7 @@ import { adminAjustarMonedas } from '../../lib/gamification'
 import { calcularCrmMetricas, type CrmMetricas } from '../../lib/crmMetricas'
 import CrmMetricasPanel from '../../components/CrmMetricasPanel'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus' | 'supervisor' | 'asesor'
 
@@ -184,6 +185,8 @@ export default function Prospectadores() {
   const [loadingCrm, setLoadingCrm] = useState(false)
 
   const yaCargoRef = useRef(false)
+  const { refreshControl } = usePullRefresh(cargar)
+
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
     const { data, error } = await supabase.rpc('get_prospectadores')
@@ -400,6 +403,7 @@ export default function Prospectadores() {
         </View>
       ) : (
         <FlatList
+          refreshControl={refreshControl}
           data={lista.filter(p =>
             !busqueda.trim() ||
             normalizar(p.nombre).includes(normalizar(busqueda)) ||

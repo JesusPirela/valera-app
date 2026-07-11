@@ -7,6 +7,7 @@ import { useFocusEffect, useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Modelo = {
   id: string
@@ -76,6 +77,7 @@ export default function AdminConstructoras() {
     cargarCatalogo()
     cargarContactos()
   }, []))
+  const { refreshControl } = usePullRefresh(async () => { await Promise.all([cargarCatalogo(), cargarContactos()]) })
 
   async function cargarRol() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -213,7 +215,7 @@ export default function AdminConstructoras() {
               <Text style={[styles.emptyText, { color: c.textMute }]}>No hay propiedades de constructora aún.</Text>
             </View>
           ) : (
-            <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
               {zonaGrupos.map(zg => (
                 <View key={zg.key ?? '_sin_zona'}>
                   <Text style={[styles.zonaSectionHeader, { color: c.textMute, borderBottomColor: c.border }]}>{zg.label}</Text>
@@ -278,7 +280,7 @@ export default function AdminConstructoras() {
               </TouchableOpacity>
             </View>
           ) : (
-            <ScrollView contentContainerStyle={{ paddingBottom: 24, gap: 12 }} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={{ paddingBottom: 24, gap: 12 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
               <TouchableOpacity style={styles.btnNuevoContacto} onPress={abrirNuevoContacto}>
                 <Text style={styles.btnNuevoContactoTxt}>+ Nueva constructora</Text>
               </TouchableOpacity>

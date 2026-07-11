@@ -6,6 +6,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Admin = { id: string; nombre: string | null; color_ficha: string | null }
 
@@ -42,6 +43,7 @@ export default function ColoresFicha() {
   }
 
   useEffect(() => { cargar() }, [])
+  const { refreshControl } = usePullRefresh(cargar)
 
   async function guardarColor(adminId: string, color: string) {
     setGuardando(adminId)
@@ -65,7 +67,7 @@ export default function ColoresFicha() {
   }
 
   return (
-    <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+    <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }} refreshControl={refreshControl}>
       <Text style={[s.titulo, { color: c.text }]}>Colores de ficha PDF</Text>
       <Text style={[s.sub, { color: c.textSub }]}>
         El color define el encabezado de la ficha PDF de las propiedades subidas por cada administrador.

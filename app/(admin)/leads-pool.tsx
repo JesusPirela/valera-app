@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -120,6 +121,7 @@ export default function LeadsPool() {
     cargarPool()
     cargarHistorial()
   }, []))
+  const { refreshControl } = usePullRefresh(async () => { await Promise.all([cargarPool(), cargarHistorial()]) })
 
   async function agregar() {
     if (!fTelefono.trim()) { alerta('El teléfono es obligatorio.'); return }
@@ -187,7 +189,7 @@ export default function LeadsPool() {
       </View>
 
       {tab === 'pool' ? (
-        <ScrollView contentContainerStyle={s.scroll}>
+        <ScrollView contentContainerStyle={s.scroll} refreshControl={refreshControl}>
 
           {/* Formulario agregar */}
           <View style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -307,6 +309,7 @@ export default function LeadsPool() {
       ) : (
         /* ── Historial ── */
         <FlatList
+          refreshControl={refreshControl}
           data={historial}
           keyExtractor={i => i.id}
           contentContainerStyle={s.scroll}

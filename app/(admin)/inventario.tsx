@@ -16,6 +16,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type InvProp = {
   id: string
@@ -71,6 +72,7 @@ export default function Inventario() {
   }
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   // Agrupa por sección preservando orden de aparición.
   const grupos: { seccion: string; props: InvProp[] }[] = []
@@ -175,7 +177,7 @@ export default function Inventario() {
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 32 }} refreshControl={refreshControl}>
           {grupos.map((g) => {
             // Por defecto cerrados al entrar (undefined → colapsada)
             const colapsada = colapsadas[g.seccion] ?? true

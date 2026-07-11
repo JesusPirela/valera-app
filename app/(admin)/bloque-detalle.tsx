@@ -6,6 +6,7 @@ import {
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 const hoyISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 
@@ -324,6 +325,7 @@ export default function BloqueDetalle() {
   const periodoPedidoRef = useRef<Periodo>('24h')
 
   useFocusEffect(useCallback(() => { setPeriodo('24h'); cargar('24h') }, []))
+  const { refreshControl } = usePullRefresh(() => cargar(periodo))
 
   // Cambiar de periodo DEBE recargar: antes el tab solo hacía setPeriodo y los
   // datos se quedaban en "Hoy" (7/30 días no cambiaban nada).
@@ -425,7 +427,7 @@ export default function BloqueDetalle() {
           <Text style={{ color: '#556a7a', marginTop: 12, fontSize: 13 }}>Cargando estadísticas del bloque…</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
           <View style={s.rangoHeader}>
             <Text style={s.rangoHeaderTxt}>{rangoLabel}</Text>
             <TouchableOpacity onPress={() => cargar(periodo)} style={s.recargarBtn}>

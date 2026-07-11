@@ -11,6 +11,7 @@ import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ORDEN_ESTADOS as ORDEN_ESTADOS_BASE } from '../(prospectador)/crm'
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
 import { normalizarTelefono } from '../../lib/telefono'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type ClienteAdmin = {
   id: string
@@ -166,6 +167,7 @@ export default function AdminCRM() {
   }
 
   useFocusEffect(useCallback(() => { cargarClientes() }, []))
+  const { refreshControl } = usePullRefresh(cargarClientes)
 
   async function abrirModalNuevo() {
     setNuevoNombre(''); setNuevoTelefono(''); setNuevoEmail('')
@@ -500,7 +502,7 @@ export default function AdminCRM() {
           <Text style={styles.emptyTitle}>Sin resultados</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 32, paddingTop: 4 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 32, paddingTop: 4 }} refreshControl={refreshControl}>
           {seccionesFiltradas.map((sec) => {
             const colapsada = seccionesColapsadas.has(sec.responsableId)
             const totalSec = secciones.find((s) => s.responsableId === sec.responsableId)?.total ?? 0

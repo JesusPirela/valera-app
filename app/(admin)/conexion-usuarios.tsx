@@ -8,6 +8,7 @@ import Svg, { Rect, Text as SvgText, Line } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type ConexionRow = { user_id: string; nombre: string; fecha: string; minutos: number }
 type UserConexion = { user_id: string; nombre: string; dias: { fecha: string; minutos: number }[] }
@@ -98,6 +99,8 @@ export default function ConexionUsuarios() {
     cargar(1, yaCargoRef.current)  // al volver, refresca sin spinner completo
   }, []))
 
+  const { refreshControl } = usePullRefresh(() => cargar(periodo))
+
   async function cargar(dias: 1 | 7 | 30, silencioso = false) {
     if (!silencioso) setLoading(true)
     setErrorMsg(null)
@@ -136,7 +139,7 @@ export default function ConexionUsuarios() {
   }
 
   return (
-    <ScrollView style={[ss.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView style={[ss.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 40 }} refreshControl={refreshControl}>
       <View style={ss.header}>
         <View>
           <Text style={[ss.title, { color: c.text }]}>Tiempo conectado</Text>

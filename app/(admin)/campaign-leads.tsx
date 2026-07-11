@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Lead = {
   id: string
@@ -49,6 +50,7 @@ export default function CampaignLeads() {
   const [filtroCampana, setFiltroCampana] = useState<string>('todas')
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   const yaCargoRef = useRef(false)
   async function cargar() {
@@ -261,7 +263,7 @@ export default function CampaignLeads() {
       )}
 
       {/* Lista */}
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }} refreshControl={refreshControl}>
         {leadsFiltrados.length === 0 ? (
           <View style={{ alignItems: 'center', paddingTop: 60 }}>
             <Text style={{ fontSize: 40 }}>📭</Text>

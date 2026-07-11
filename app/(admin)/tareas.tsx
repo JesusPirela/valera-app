@@ -7,6 +7,7 @@ import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type UserProfile = { id: string; nombre: string }
 
@@ -163,6 +164,7 @@ export default function AdminTareas() {
   const isWide = width >= 768
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   const yaCargoRef = useRef(false)
   async function cargar() {
@@ -312,7 +314,7 @@ export default function AdminTareas() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={[{ paddingBottom: 40 }, isWide && { alignItems: 'center' }]}>
+      <ScrollView contentContainerStyle={[{ paddingBottom: 40 }, isWide && { alignItems: 'center' }]} refreshControl={refreshControl}>
         <View style={isWide ? { width: '100%', maxWidth: 860, paddingHorizontal: 16 } : { paddingHorizontal: 16 }}>
         {tareas.length === 0 && (
           <View style={s.empty}>

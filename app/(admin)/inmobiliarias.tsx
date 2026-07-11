@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Inmobiliaria = {
   id: string
@@ -41,6 +42,7 @@ export default function AdminInmobiliarias() {
   const [guardando, setGuardando] = useState(false)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   const yaCargoRef = useRef(false)
   async function cargar() {
@@ -133,7 +135,7 @@ export default function AdminInmobiliarias() {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={s.lista}>
+        <ScrollView contentContainerStyle={s.lista} refreshControl={refreshControl}>
           {lista.map(inm => (
             <View key={inm.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
               <View style={[s.cardIcon, { backgroundColor: c.bg }]}>

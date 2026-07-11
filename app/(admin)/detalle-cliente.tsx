@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS } from '../(prospectador)/crm'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 function abrirWhatsApp(telefono: string, nombre: string) {
   const phone = telefono.replace(/\D/g, '')
@@ -227,6 +228,7 @@ export default function AdminDetalleCliente() {
   }
 
   useFocusEffect(useCallback(() => { cargar() }, [id]))
+  const { refreshControl } = usePullRefresh(cargar)
 
   if (loading) return <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 80 }} />
   if (!cliente) return (
@@ -240,7 +242,7 @@ export default function AdminDetalleCliente() {
   const recCompletados = recordatorios.filter((r) => r.completado)
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={styles.content}>
+    <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={styles.content} refreshControl={refreshControl}>
 
       {/* Back + acciones rápidas */}
       <View style={styles.topBar}>

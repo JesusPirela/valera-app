@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { useColors, useTheme } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -128,6 +129,8 @@ export default function Proyectos() {
   useFocusEffect(useCallback(() => { cargar() }, []))
 
   const yaCargoRef = useRef(false)
+  const { refreshControl } = usePullRefresh(cargar)
+
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
     yaCargoRef.current = true
@@ -398,6 +401,7 @@ export default function Proyectos() {
         </View>
       ) : (
         <ScrollView
+          refreshControl={refreshControl}
           contentContainerStyle={{ padding: 14, paddingBottom: 60, gap: 10 }}
           showsVerticalScrollIndicator={false}
         >

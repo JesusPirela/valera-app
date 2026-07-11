@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type StoreItem = {
   id: string
@@ -80,6 +81,7 @@ export default function TiendaItems() {
   const [rawProbs, setRawProbs] = useState<Record<string, string>>({})
 
   useFocusEffect(useCallback(() => { cargar() }, []))
+  const { refreshControl } = usePullRefresh(cargar)
 
   const yaCargoRef = useRef(false)
   async function cargar() {
@@ -293,7 +295,7 @@ export default function TiendaItems() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }} refreshControl={refreshControl}>
         {items.map(item => (
           <View key={item.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }, !item.disponible && s.cardInactiva]}>
             <View style={s.cardTop}>
