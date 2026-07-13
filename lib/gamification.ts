@@ -127,6 +127,22 @@ function getHoyMX(): string {
   return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 }
 
+// El día ANTERIOR según el calendario de México.
+//
+// Antes la racha calculaba "ayer" con toISOString(), que es UTC. México va 6h
+// detrás, así que a partir de las 18:00 hora de México en UTC ya es el día
+// siguiente: "ayer" en UTC daba HOY en México, la comparación nunca coincidía y
+// la racha se reiniciaba a 1 aunque el usuario entrara todos los días. A quien
+// usaba la app de tarde/noche se le rompía la racha a diario.
+//
+// Se deriva del propio día MX (mediodía UTC evita los bordes) para que ambos
+// valores vivan en el mismo calendario.
+function getAyerMX(): string {
+  const d = new Date(getHoyMX() + 'T12:00:00Z')
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
 // ── Actualizar progreso de misiones para una categoría ─────────
 // Exportada para los flujos (ej. publicar propiedad) cuyo premio base de
 // xp/coins ahora se otorga en un RPC SQL atómico propio, pero que igual
@@ -308,9 +324,7 @@ export async function trackLoginDiario(userId: string): Promise<{ nuevo: boolean
       return { nuevo: false, streak: stats.streak_dias ?? 0 }
     }
 
-    const ayer = new Date()
-    ayer.setDate(ayer.getDate() - 1)
-    const ayerStr    = ayer.toISOString().slice(0, 10)
+    const ayerStr = getAyerMX()
     const nuevoStreak = stats?.ultimo_acceso === ayerStr
       ? (stats.streak_dias ?? 0) + 1
       : 1
