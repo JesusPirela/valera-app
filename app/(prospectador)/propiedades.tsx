@@ -222,13 +222,13 @@ const PropiedadCard = memo(function PropiedadCard({
           </View>
         )}
         <View style={styles.cardFooter}>
-          <Text style={[styles.precio, { color: primaryColor }]}>{formatPrecio(item.precio)}</Text>
+          <Text style={[styles.precio, { color: primaryColor }]} maxFontSizeMultiplier={1.2}>{formatPrecio(item.precio)}</Text>
           <TouchableOpacity
             style={styles.shareBtn}
             onPress={(e) => { e.stopPropagation(); onShare(item.codigo) }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.shareBtnText}>🔗 Copiar ficha</Text>
+            <Text style={styles.shareBtnText} maxFontSizeMultiplier={1.2} numberOfLines={1}>🔗 Copiar ficha</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
@@ -246,7 +246,7 @@ const PropiedadCard = memo(function PropiedadCard({
             {isToggling ? (
               <ActivityIndicator size="small" color={veces > 0 ? '#fff' : primaryColor} />
             ) : (
-              <Text style={[styles.publicadaBtnText, { color: veces > 0 ? '#fff' : primaryColor }]}>
+              <Text style={[styles.publicadaBtnText, { color: veces > 0 ? '#fff' : primaryColor }]} maxFontSizeMultiplier={1.2} numberOfLines={1}>
                 {veces === 0 ? 'Publicar' : veces >= 10 ? '10/10 ✅' : `${veces}/10`}
               </Text>
             )}
@@ -1060,7 +1060,7 @@ export default function ProspectadorPropiedades() {
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
                 style={[styles.searchInput, { color: darkMode ? '#fff' : '#1a1a2e' }]}
-                placeholder="Buscar propiedades o precio (ej. 2,5)"
+                placeholder="Buscar o precio (ej. 2,5)"
                 placeholderTextColor={darkMode ? 'rgba(255,255,255,0.6)' : '#666'}
                 value={busqueda}
                 onChangeText={setBusqueda}
@@ -1572,16 +1572,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
+  // El pie envuelve: con la letra del sistema en grande, precio + "Copiar ficha"
+  // + "Publicar" no caben en una línea y el botón de publicar se salía por el
+  // borde derecho de la tarjeta. Al envolver, baja a la siguiente línea y se ve
+  // completo. Los botones no se encogen; el que cede espacio es el precio.
   cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
     marginTop: 4,
   },
-  precio: { fontSize: 16, fontWeight: '700' },
+  precio: { fontSize: 16, fontWeight: '700', flexShrink: 1 },
   shareBtn: {
-    height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 12, backgroundColor: 'rgba(26,100,112,0.12)',
+    minHeight: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 12, paddingVertical: 5, backgroundColor: 'rgba(26,100,112,0.12)',
+    flexShrink: 0,
   },
   shareBtnText: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
   publicadaBtn: {
@@ -1590,6 +1597,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     minWidth: 80,
+    flexShrink: 0,
     alignItems: 'center',
   },
   publicadaBtnDisabled: {
