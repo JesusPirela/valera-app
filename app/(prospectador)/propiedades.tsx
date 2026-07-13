@@ -671,7 +671,9 @@ export default function ProspectadorPropiedades() {
         const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
         return codMatch ||
           normalizar(p.direccion).includes(q) ||
-          normalizar(p.titulo).includes(q)
+          normalizar(p.titulo).includes(q) ||
+          // Por desarrollo/constructora: escribir "balkan" trae sus modelos.
+          normalizar(p.nombre_constructora).includes(q)
       })
     }
   }

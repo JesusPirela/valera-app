@@ -232,7 +232,11 @@ export default function AdminPropiedades() {
       propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
         const cod = normalizar(p.codigo)
         const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
-        return codMatch || normalizar(p.direccion).includes(q) || normalizar(p.titulo).includes(q)
+        return codMatch ||
+          normalizar(p.direccion).includes(q) ||
+          normalizar(p.titulo).includes(q) ||
+          // Por desarrollo/constructora: escribir "balkan" trae sus modelos.
+          normalizar(p.nombre_constructora).includes(q)
       })
     }
   }
