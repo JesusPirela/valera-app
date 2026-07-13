@@ -34,13 +34,26 @@ jobs:
       - name: Create .htaccess
         run: |
           cat > dist/.htaccess << 'EOF'
-          ErrorDocument 404 /index.html
-          Options -Indexes
+          Options -Indexes -MultiViews
+
+          RewriteEngine On
 
           # Forzar HTTPS
-          RewriteEngine On
           RewriteCond %{HTTPS} !=on
           RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+          # SPA: las rutas como /ficha/VR-1184 no son archivos reales; las sirve
+          # index.html y el router del cliente decide qué pintar.
+          # Antes esto se hacía con `ErrorDocument 404 /index.html`, que devuelve
+          # el HTML correcto pero CON ESTADO 404: los navegadores dentro de apps
+          # (WhatsApp en iOS) muestran su propia pantalla de error ante un 404 y
+          # la ficha compartida se veía en blanco. Con RewriteRule se sirve con 200.
+          RewriteCond %{REQUEST_FILENAME} !-f
+          RewriteCond %{REQUEST_FILENAME} !-d
+          RewriteRule ^ index.html [L]
+
+          # Red de seguridad por si mod_rewrite no estuviera activo.
+          ErrorDocument 404 /index.html
 
           # Cabeceras de seguridad
           Header always set X-Content-Type-Options "nosniff"
