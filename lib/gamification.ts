@@ -158,13 +158,21 @@ export async function actualizarMisionesPorCategoria(userId: string, categoria: 
   })
   if (errDiaria) console.warn('[Misiones diarias]', errDiaria.message)
   // Otorgar recompensas por misiones diarias recién completadas
+  let completoAlgunaDiaria = false
   for (const c of completadas ?? []) {
     if (c.recien_completada) {
+      completoAlgunaDiaria = true
       await conReintento(() => supabase.rpc('award_xp_coins', {
         p_user_id: userId, p_xp: c.recompensa_xp, p_coins: c.recompensa_coins,
         p_concepto: '¡Misión diaria completada! ⚡', p_campo_contador: null,
       }))
     }
+  }
+
+  // META DIARIA cumplida: completar una misión diaria es lo que mantiene viva la
+  // racha (modelo Duolingo). Abrir la app ya no basta.
+  if (completoAlgunaDiaria) {
+    await sincronizarRacha(userId, true).catch(() => {})
   }
 
   // ── Misiones BASE: usar contador real de user_stats (fuente de verdad) ──
@@ -308,28 +316,78 @@ export async function sincronizarMisionesBase(userId: string): Promise<void> {
   }
 }
 
-// ── Tracking de login diario y streak ─────────────────────────
+// ── Racha (modelo Duolingo) ───────────────────────────────────
+// La racha YA NO sube por abrir la app: sube al cumplir la META DIARIA, que es
+// completar al menos una misión diaria. La lleva el servidor (sincronizar_racha),
+// que además consume los protectores si faltaste un día. Aquí solo se dispara.
+
+export type EstadoRacha = {
+  racha: number
+  racha_maxima: number
+  protectores: number
+  max_protectores: number
+  meta_cumplida_hoy: boolean
+  en_riesgo: boolean
+  coins: number
+  costo_protector: number
+  reparable: boolean
+  racha_perdida: number | null
+  costo_reparar: number | null
+}
+
+export async function getEstadoRacha(): Promise<EstadoRacha | null> {
+  const { data, error } = await supabase.rpc('get_estado_racha')
+  if (error || !data?.ok) return null
+  return data as EstadoRacha
+}
+
+export async function comprarProtectorRacha(): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('comprar_protector_racha')
+  if (error) return { ok: false, error: error.message }
+  if (!data?.ok) return { ok: false, error: data?.error ?? 'No se pudo comprar' }
+  return { ok: true }
+}
+
+export async function repararRacha(): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('reparar_racha')
+  if (error) return { ok: false, error: error.message }
+  if (!data?.ok) return { ok: false, error: data?.error ?? 'No se pudo reparar' }
+  return { ok: true }
+}
+
+// Avisa al servidor de que se cumplió la meta diaria (o solo resuelve días
+// faltados si p_cumplio = false). Devuelve la racha resultante.
+async function sincronizarRacha(userId: string, cumplioMeta: boolean): Promise<number> {
+  const { data, error } = await supabase.rpc('sincronizar_racha', { p_cumplio: cumplioMeta })
+  if (error || !data?.ok) return 0
+  const racha: number = data.racha ?? 0
+  // Las misiones de streak (7/15/30/45/60) se alimentan de la racha real.
+  if (racha > 0) await actualizarMisionesStreak(userId, racha)
+  return racha
+}
+
+// ── Tracking de login diario ──────────────────────────────────
+// Sigue dando el bono de XP/coins por entrar (eso no cambia), pero YA NO mueve
+// la racha: solo la sincroniza para consumir protectores / marcarla perdida.
 export async function trackLoginDiario(userId: string): Promise<{ nuevo: boolean; streak: number }> {
   try {
     const hoy = getHoyMX()
 
     const { data: stats } = await supabase
       .from('user_stats')
-      .select('streak_dias, ultimo_acceso')
+      .select('ultimo_acceso')
       .eq('id', userId)
       .maybeSingle()
 
-    // Ya registrado hoy
+    // Al abrir, siempre se resuelve el estado de la racha (protectores/pérdida).
+    const racha = await sincronizarRacha(userId, false)
+
+    // Ya se dio el bono de hoy
     if (stats?.ultimo_acceso === hoy) {
-      return { nuevo: false, streak: stats.streak_dias ?? 0 }
+      return { nuevo: false, streak: racha }
     }
 
-    const ayerStr = getAyerMX()
-    const nuevoStreak = stats?.ultimo_acceso === ayerStr
-      ? (stats.streak_dias ?? 0) + 1
-      : 1
-
-    // Otorgar XP y coins del acceso diario
+    // Bono de XP y coins por acceso diario
     await conReintento(() => supabase.rpc('award_xp_coins', {
       p_user_id:        userId,
       p_xp:             20,
@@ -338,16 +396,12 @@ export async function trackLoginDiario(userId: string): Promise<{ nuevo: boolean
       p_campo_contador: null,
     }))
 
-    // Actualizar streak en user_stats
     await supabase
       .from('user_stats')
-      .update({ streak_dias: nuevoStreak, ultimo_acceso: hoy })
+      .update({ ultimo_acceso: hoy })
       .eq('id', userId)
 
-    // Verificar misiones de streak
-    await actualizarMisionesStreak(userId, nuevoStreak)
-
-    return { nuevo: true, streak: nuevoStreak }
+    return { nuevo: true, streak: racha }
   } catch (e) {
     console.warn('[Gamification] trackLoginDiario:', e)
     return { nuevo: false, streak: 0 }

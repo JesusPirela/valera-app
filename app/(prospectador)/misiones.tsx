@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { infoNivel, tituloPorNivel, sincronizarMisionesBase } from '../../lib/gamification'
+import PanelRacha from '../../components/PanelRacha'
 
 type UserStats = {
   xp: number
@@ -258,17 +259,14 @@ export default function Misiones() {
           </View>
           <View style={s.statDivider} />
           <View style={s.statItem}>
-            <Text style={s.statIcon}>🔥</Text>
-            <Text style={s.statVal}>{stats?.streak_dias ?? 0}</Text>
-            <Text style={s.statLbl}>Días de racha</Text>
-          </View>
-          <View style={s.statDivider} />
-          <View style={s.statItem}>
             <Text style={s.statIcon}>🏠</Text>
             <Text style={s.statVal}>{stats?.total_propiedades ?? 0}</Text>
             <Text style={s.statLbl}>Publicadas</Text>
           </View>
         </View>
+
+        {/* Racha (llama, meta diaria, protectores, reparar) */}
+        <PanelRacha />
 
         {/* Accesos rápidos */}
         <View style={s.quickRow}>
