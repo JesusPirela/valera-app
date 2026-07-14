@@ -324,12 +324,18 @@ export async function sincronizarMisionesBase(userId: string): Promise<void> {
 export type EstadoRacha = {
   racha: number
   racha_maxima: number
+  // Tener protectores NO tiene tope: se acumulan todos los que ganes.
   protectores: number
-  max_protectores: number
   meta_cumplida_hoy: boolean
   en_riesgo: boolean
   coins: number
   costo_protector: number
+  // Comprar SÍ tiene tope (cupo semanal), para que nadie se vuelva inmune pagando.
+  compras_restantes: number
+  max_compras_semana: number
+  // Los protectores también se GANAN: 1 cada 5 niveles.
+  nivel: number
+  proximo_protector_nivel: number
   reparable: boolean
   racha_perdida: number | null
   costo_reparar: number | null

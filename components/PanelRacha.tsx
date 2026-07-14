@@ -4,8 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getEstadoRacha, comprarProtectorRacha, repararRacha } from '../lib/gamification'
 import { useColors } from '../lib/ThemeContext'
 
-const MAX_PROTECTORES = 2
-
 function avisar(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
   else Alert.alert('Racha', msg)
@@ -53,7 +51,8 @@ export default function PanelRacha() {
     avisar('🔥 ¡Racha recuperada!')
   }
 
-  const puedeComprar = r.protectores < MAX_PROTECTORES && r.coins >= r.costo_protector
+  // Tener no tiene tope; comprar sí (cupo semanal).
+  const puedeComprar = r.compras_restantes > 0 && r.coins >= r.costo_protector
 
   return (
     <View style={{ gap: 10, marginBottom: 14 }}>
@@ -113,27 +112,35 @@ export default function PanelRacha() {
           </View>
         )}
 
-        {/* Protectores */}
+        {/* Protectores: se acumulan sin tope; comprarlos tiene cupo semanal */}
         <View style={s.protRow}>
           <View style={{ flex: 1 }}>
             <Text style={[s.protTitulo, { color: c.text }]}>
-              🛡️ Protectores: {r.protectores}/{MAX_PROTECTORES}
+              🛡️ Protectores: {r.protectores}
             </Text>
             <Text style={[s.protSub, { color: c.textMute }]}>
               Si faltas un día, se usa uno solo y tu racha sobrevive.
             </Text>
+            <Text style={[s.protSub, { color: c.textMute }]}>
+              🎁 Ganas 1 al llegar al nivel {r.proximo_protector_nivel} (vas en el {r.nivel}).
+            </Text>
           </View>
-          <TouchableOpacity
-            style={[s.protBtn, !puedeComprar && { opacity: 0.45 }]}
-            onPress={comprar}
-            disabled={!puedeComprar || ocupado != null}
-          >
-            {ocupado === 'comprar'
-              ? <ActivityIndicator size="small" color="#000" />
-              : <Text style={s.protBtnTxt}>
-                  {r.protectores >= MAX_PROTECTORES ? 'Al máximo' : `${r.costo_protector} 💰`}
-                </Text>}
-          </TouchableOpacity>
+          <View style={{ alignItems: 'center', gap: 3 }}>
+            <TouchableOpacity
+              style={[s.protBtn, !puedeComprar && { opacity: 0.45 }]}
+              onPress={comprar}
+              disabled={!puedeComprar || ocupado != null}
+            >
+              {ocupado === 'comprar'
+                ? <ActivityIndicator size="small" color="#000" />
+                : <Text style={s.protBtnTxt}>
+                    {r.compras_restantes === 0 ? 'Sin cupo' : `${r.costo_protector} 💰`}
+                  </Text>}
+            </TouchableOpacity>
+            <Text style={[s.protCupo, { color: c.textMute }]}>
+              {r.compras_restantes}/{r.max_compras_semana} esta semana
+            </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -161,6 +168,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 9, minWidth: 78, alignItems: 'center',
   },
   protBtnTxt: { color: '#000', fontWeight: '800', fontSize: 12.5 },
+  protCupo: { fontSize: 10, fontWeight: '600' },
 
   repararCard: {
     backgroundColor: '#7b1e3a', borderRadius: 16, padding: 14, gap: 6,
