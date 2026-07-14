@@ -354,6 +354,9 @@ $fn$;
 -- ── Rachas en riesgo (para el aviso de la tarde) ───────────────────────────
 -- Devuelve a quién avisar y lo marca, para no avisarle dos veces el mismo día.
 -- Solo la usa la edge function (service_role).
+-- Los alias internos NO pueden llamarse igual que las columnas de salida
+-- (meta_diaria, racha…): Postgres no sabría a cuál te refieres y falla con
+-- "column reference is ambiguous".
 CREATE OR REPLACE FUNCTION public.rachas_en_riesgo()
 RETURNS TABLE(user_id uuid, racha integer, meta_diaria integer, misiones_hoy integer)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
@@ -362,10 +365,10 @@ DECLARE v_hoy date := hoy_mx();
 BEGIN
   RETURN QUERY
   WITH candidatos AS (
-    SELECT us.id,
-           us.streak_dias,
-           us.meta_diaria,
-           misiones_diarias_hoy(us.id) AS hechas
+    SELECT us.id            AS c_id,
+           us.streak_dias   AS c_racha,
+           us.meta_diaria   AS c_meta,
+           misiones_diarias_hoy(us.id) AS c_hechas
     FROM user_stats us
     WHERE us.streak_dias > 0
       -- Cumplió AYER (racha viva) pero hoy todavía no.
@@ -374,16 +377,16 @@ BEGIN
       AND (us.notif_racha_fecha IS DISTINCT FROM v_hoy)
   ),
   a_avisar AS (
-    SELECT * FROM candidatos WHERE hechas < meta_diaria
+    SELECT * FROM candidatos WHERE c_hechas < c_meta
   ),
   marcados AS (
     UPDATE user_stats SET notif_racha_fecha = v_hoy
-    WHERE id IN (SELECT id FROM a_avisar)
-    RETURNING id
+    WHERE id IN (SELECT c_id FROM a_avisar)
+    RETURNING id AS m_id
   )
-  SELECT a.id, a.streak_dias, a.meta_diaria, a.hechas
+  SELECT a.c_id, a.c_racha, a.c_meta, a.c_hechas
   FROM a_avisar a
-  WHERE a.id IN (SELECT id FROM marcados);
+  WHERE a.c_id IN (SELECT m_id FROM marcados);
 END;
 $fn$;
 
