@@ -233,7 +233,7 @@ export default function TiendaCompras() {
 
       {/* Filtros */}
       <View style={[s.filtroWrap, { backgroundColor: c.card, borderBottomColor: c.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filtroRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtroScroll} contentContainerStyle={s.filtroRow}>
           {([
             ['todas',     'Todas'],
             ['pendiente', `⏳ Pendientes${pendientes > 0 ? ` (${pendientes})` : ''}`],
@@ -253,7 +253,7 @@ export default function TiendaCompras() {
 
         {/* Sub-filtros del cofre: pendientes / entregados / rechazados */}
         {filtro === 'cofre' && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filtroRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtroScroll} contentContainerStyle={s.filtroRow}>
             {([
               ['todos',     `Todos (${cofreTotal})`],
               ['pendiente', `⏳ Pendientes (${cofrePendientes})`],
@@ -531,7 +531,11 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
   headerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
 
-  filtroWrap:   { flexShrink: 0, borderBottomWidth: 1, height: 52 },
+  // Sin altura fija: el contenedor tiene que poder crecer cuando aparece la
+  // segunda fila (los sub-filtros del cofre). Antes estaba clavado en 52 y la
+  // segunda fila quedaba recortada por completo — invisible.
+  filtroWrap:   { flexShrink: 0, borderBottomWidth: 1 },
+  filtroScroll: { height: 52, flexGrow: 0 },
   filtroRow:    { flexDirection: 'row', gap: 6, paddingHorizontal: 12, alignItems: 'center', height: 52 },
   filtroBtn:    { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', alignItems: 'center' },
   filtroBtnActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
