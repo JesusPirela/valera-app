@@ -37,6 +37,7 @@ import { actualizarMisionesPorCategoria } from '../../lib/gamification'
 import { thumb, type ThumbOpts } from '../../lib/img'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useCargaDatos, opcionesImagenTarjeta, tarjetasIniciales, tarjetasPorTanda } from '../../lib/CargaDatos'
+import RachaHeader from '../../components/RachaHeader'
 import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import MiniMapa from '../../components/MiniMapa'
@@ -1057,6 +1058,8 @@ export default function ProspectadorPropiedades() {
                   {propiedades.length > 0 ? `${propiedades.length} propiedades disponibles` : 'Cargando...'}
                 </Text>
               </View>
+              {/* Racha siempre a la vista (y celebración al llegar a un hito) */}
+              <RachaHeader />
             </View>
             <View style={[styles.searchWrapper, { backgroundColor: darkMode ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.95)' }]}>
               <Text style={styles.searchIcon}>🔍</Text>

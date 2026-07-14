@@ -172,7 +172,7 @@ export async function actualizarMisionesPorCategoria(userId: string, categoria: 
   // META DIARIA cumplida: completar una misión diaria es lo que mantiene viva la
   // racha (modelo Duolingo). Abrir la app ya no basta.
   if (completoAlgunaDiaria) {
-    await sincronizarRacha(userId, true).catch(() => {})
+    await sincronizarRacha(userId).catch(() => {})
   }
 
   // ── Misiones BASE: usar contador real de user_stats (fuente de verdad) ──
@@ -336,6 +336,9 @@ export type EstadoRacha = {
   // Los protectores también se GANAN: 1 cada 5 niveles.
   nivel: number
   proximo_protector_nivel: number
+  // Meta diaria elegida por el usuario (1, 2 o 3 misiones) y progreso de hoy.
+  meta_diaria: number
+  misiones_hoy: number
   reparable: boolean
   racha_perdida: number | null
   costo_reparar: number | null
@@ -354,6 +357,16 @@ export async function comprarProtectorRacha(): Promise<{ ok: boolean; error?: st
   return { ok: true }
 }
 
+// La meta diaria la elige el usuario: 1 (tranquilo), 2 (constante), 3 (intenso).
+export async function setMetaDiaria(meta: 1 | 2 | 3): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('set_meta_diaria', { p_meta: meta })
+  if (error) return { ok: false, error: error.message }
+  if (!data?.ok) return { ok: false, error: data?.error ?? 'No se pudo guardar la meta' }
+  return { ok: true }
+}
+
+export type HitoRacha = { dias: number; coins: number; protectores: number }
+
 export async function repararRacha(): Promise<{ ok: boolean; error?: string }> {
   const { data, error } = await supabase.rpc('reparar_racha')
   if (error) return { ok: false, error: error.message }
@@ -363,10 +376,26 @@ export async function repararRacha(): Promise<{ ok: boolean; error?: string }> {
 
 // Avisa al servidor de que se cumplió la meta diaria (o solo resuelve días
 // faltados si p_cumplio = false). Devuelve la racha resultante.
-async function sincronizarRacha(userId: string, cumplioMeta: boolean): Promise<number> {
-  const { data, error } = await supabase.rpc('sincronizar_racha', { p_cumplio: cumplioMeta })
+// El SERVIDOR decide si la meta está cumplida (cuenta las misiones diarias de
+// hoy contra la meta elegida). Aquí solo se dispara y se recoge el hito, si lo hubo.
+let ultimoHito: HitoRacha | null = null
+export function tomarHitoPendiente(): HitoRacha | null {
+  const h = ultimoHito
+  ultimoHito = null
+  return h
+}
+
+async function sincronizarRacha(userId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('sincronizar_racha')
   if (error || !data?.ok) return 0
   const racha: number = data.racha ?? 0
+  if (data.hito_alcanzado && data.premio_hito) {
+    ultimoHito = {
+      dias: data.hito_alcanzado,
+      coins: data.premio_hito.coins ?? 0,
+      protectores: data.premio_hito.protectores ?? 0,
+    }
+  }
   // Las misiones de streak (7/15/30/45/60) se alimentan de la racha real.
   if (racha > 0) await actualizarMisionesStreak(userId, racha)
   return racha
@@ -386,7 +415,7 @@ export async function trackLoginDiario(userId: string): Promise<{ nuevo: boolean
       .maybeSingle()
 
     // Al abrir, siempre se resuelve el estado de la racha (protectores/pérdida).
-    const racha = await sincronizarRacha(userId, false)
+    const racha = await sincronizarRacha(userId)
 
     // Ya se dio el bono de hoy
     if (stats?.ultimo_acceso === hoy) {

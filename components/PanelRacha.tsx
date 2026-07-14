@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, Alert } from 'react-native'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getEstadoRacha, comprarProtectorRacha, repararRacha } from '../lib/gamification'
+import { getEstadoRacha, comprarProtectorRacha, repararRacha, setMetaDiaria } from '../lib/gamification'
 import { useColors } from '../lib/ThemeContext'
 
 function avisar(msg: string) {
@@ -42,6 +42,12 @@ export default function PanelRacha() {
     avisar('🛡️ Protector comprado. Si faltas un día, tu racha se salva sola.')
   }
 
+  async function cambiarMeta(v: 1 | 2 | 3) {
+    const res = await setMetaDiaria(v)
+    if (!res.ok) { avisar(res.error ?? 'No se pudo guardar la meta'); return }
+    await refrescar()
+  }
+
   async function reparar() {
     setOcupado('reparar')
     const res = await repararRacha()
@@ -50,6 +56,9 @@ export default function PanelRacha() {
     await refrescar()
     avisar('🔥 ¡Racha recuperada!')
   }
+
+  const meta   = r.meta_diaria ?? 1
+  const hechas = r.misiones_hoy ?? 0
 
   // Tener no tiene tope; comprar sí (cupo semanal). Los ?? son por si la app
   // corre antes de que la migración esté aplicada: mejor degradar que romper.
@@ -98,22 +107,54 @@ export default function PanelRacha() {
           </View>
         </View>
 
-        {/* Meta diaria */}
+        {/* Meta diaria: progreso de hoy */}
         {r.meta_cumplida_hoy ? (
           <View style={[s.meta, { backgroundColor: '#16a34a18', borderColor: '#16a34a55' }]}>
             <Text style={[s.metaTxt, { color: '#16a34a' }]}>
-              ✅ Meta de hoy cumplida. Tu racha está a salvo.
+              ✅ Meta de hoy cumplida ({hechas}/{meta}). Tu racha está a salvo.
             </Text>
           </View>
         ) : (
           <View style={[s.meta, { backgroundColor: '#d9770618', borderColor: '#d9770655' }]}>
             <Text style={[s.metaTxt, { color: '#d97706' }]}>
               {r.en_riesgo
-                ? '⚠️ Tu racha está en riesgo: completa 1 misión diaria hoy para no perderla.'
-                : '🎯 Completa 1 misión diaria para encender tu racha.'}
+                ? `⚠️ Tu racha está en riesgo: llevas ${hechas}/${meta} misiones de hoy.`
+                : `🎯 Llevas ${hechas}/${meta} misiones diarias. Complétalas para encender tu racha.`}
             </Text>
+            <View style={s.barra}>
+              <View style={[s.barraFill, { width: `${Math.min(100, (hechas / meta) * 100)}%` }]} />
+            </View>
           </View>
         )}
+
+        {/* Elegir la meta: quien elige su propia meta la cumple más */}
+        <View>
+          <Text style={[s.protTitulo, { color: c.text, marginBottom: 6 }]}>🎯 Mi meta diaria</Text>
+          <View style={s.metaOpciones}>
+            {([
+              [1, 'Tranquilo', '1 misión'],
+              [2, 'Constante', '2 misiones'],
+              [3, 'Intenso',   '3 misiones'],
+            ] as const).map(([v, titulo, sub]) => {
+              const activo = meta === v
+              return (
+                <TouchableOpacity
+                  key={v}
+                  style={[
+                    s.metaOpcion,
+                    { borderColor: c.border },
+                    activo && { borderColor: '#1a6470', backgroundColor: '#1a647014' },
+                  ]}
+                  onPress={() => cambiarMeta(v)}
+                  disabled={ocupado != null}
+                >
+                  <Text style={[s.metaOpTitulo, { color: activo ? '#1a6470' : c.text }]}>{titulo}</Text>
+                  <Text style={[s.metaOpSub, { color: c.textMute }]}>{sub}</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        </View>
 
         {/* Protectores: se acumulan sin tope; comprarlos tiene cupo semanal */}
         <View style={s.protRow}>
@@ -174,6 +215,12 @@ const s = StyleSheet.create({
   },
   protBtnTxt: { color: '#000', fontWeight: '800', fontSize: 12.5 },
   protCupo: { fontSize: 10, fontWeight: '600' },
+  barra: { height: 6, borderRadius: 3, backgroundColor: '#00000018', marginTop: 8, overflow: 'hidden' },
+  barraFill: { height: '100%', borderRadius: 3, backgroundColor: '#d97706' },
+  metaOpciones: { flexDirection: 'row', gap: 8 },
+  metaOpcion: { flex: 1, borderWidth: 1.5, borderRadius: 10, paddingVertical: 8, alignItems: 'center' },
+  metaOpTitulo: { fontSize: 12.5, fontWeight: '800' },
+  metaOpSub: { fontSize: 10.5, marginTop: 1 },
 
   repararCard: {
     backgroundColor: '#7b1e3a', borderRadius: 16, padding: 14, gap: 6,

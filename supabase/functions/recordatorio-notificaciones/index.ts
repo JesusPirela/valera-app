@@ -175,6 +175,37 @@ serve(async (_req) => {
       .update({ notif_confirmacion_at: ahora.toISOString() }).eq('id', c.id)
   }
 
+  // ─── Racha en riesgo: aviso de la tarde ──────────────────────────────────
+  // A quien tiene una racha viva pero aún no cumple su meta de hoy. Es el aviso
+  // que más recupera gente (Duolingo vive de esto): sin él, la racha solo la
+  // cuidan los que ya son constantes.
+  //
+  // Se manda una sola vez al día, en la franja de las 19:00–20:59 hora de México
+  // (el cron corre cada 30 min; la RPC marca a quién ya se le avisó, así que
+  // aunque el cron pase varias veces en la franja, nadie recibe dos avisos).
+  const horaMX = Number(
+    new Date().toLocaleString('en-US', { hour: '2-digit', hour12: false, timeZone: 'America/Mexico_City' })
+  )
+  if (horaMX === 19 || horaMX === 20) {
+    const { data: enRiesgo, error: errRacha } = await supabase.rpc('rachas_en_riesgo')
+    if (errRacha) console.error('Error rachas_en_riesgo:', errRacha.message)
+
+    for (const u of enRiesgo ?? []) {
+      // deno-lint-ignore no-explicit-any
+      const r = u as any
+      const faltan = Math.max((r.meta_diaria ?? 1) - (r.misiones_hoy ?? 0), 1)
+      notificaciones.push({
+        user_id: r.user_id,
+        titulo: `🔥 Tu racha de ${r.racha} ${r.racha === 1 ? 'día' : 'días'} está en riesgo`,
+        mensaje: faltan === 1
+          ? 'Te falta 1 misión diaria para mantenerla. ¡Aún estás a tiempo!'
+          : `Te faltan ${faltan} misiones diarias para mantenerla. ¡Aún estás a tiempo!`,
+        tipo: 'recordatorio',
+        leida: false,
+      })
+    }
+  }
+
   // ─── Insertar notificaciones en DB ───────────────────────────────────────
   if (notificaciones.length > 0) {
     // push_enviado=true porque este mismo handler envía el push justo abajo.
