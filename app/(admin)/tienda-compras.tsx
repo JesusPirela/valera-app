@@ -30,6 +30,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
+import InventarioPerfilUsuario from '../../components/InventarioPerfilUsuario'
 
 type Compra = {
   id: string
@@ -75,6 +76,8 @@ export default function TiendaCompras() {
   const [compras, setCompras]       = useState<Compra[]>([])
   const [loading, setLoading]       = useState(true)
   const [filtro, setFiltro]         = useState<'todas' | 'pendiente' | 'entregado' | 'rechazado' | 'cofre'>('pendiente')
+  // Dentro de la pestaña de cofres, filtrar por estado (antes salían todos revueltos).
+  const [estadoCofre, setEstadoCofre] = useState<'todos' | 'pendiente' | 'entregado' | 'rechazado'>('todos')
 
   // Modal de atención
   const [modal, setModal]           = useState(false)
@@ -186,7 +189,10 @@ export default function TiendaCompras() {
   const esCofre = (comp: Compra) => comp.es_ruleta === true || comp.costo_coins === 0
 
   const lista = compras.filter(comp => {
-    if (filtro === 'cofre')     return esCofre(comp)
+    if (filtro === 'cofre') {
+      if (!esCofre(comp)) return false
+      return estadoCofre === 'todos' || comp.estado === estadoCofre
+    }
     if (filtro === 'todas')     return !esCofre(comp)
     if (filtro === 'pendiente') return !esCofre(comp) && comp.estado === 'pendiente'
     if (filtro === 'entregado') return !esCofre(comp) && comp.estado === 'entregado'
@@ -195,6 +201,9 @@ export default function TiendaCompras() {
   })
   const pendientes      = compras.filter(comp => !esCofre(comp) && comp.estado === 'pendiente').length
   const cofrePendientes = compras.filter(comp =>  esCofre(comp) && comp.estado === 'pendiente').length
+  const cofreEntregados = compras.filter(comp =>  esCofre(comp) && comp.estado === 'entregado').length
+  const cofreRechazados = compras.filter(comp =>  esCofre(comp) && comp.estado === 'rechazado').length
+  const cofreTotal      = compras.filter(esCofre).length
 
   if (loading) return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg }}>
@@ -241,6 +250,26 @@ export default function TiendaCompras() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        {/* Sub-filtros del cofre: pendientes / entregados / rechazados */}
+        {filtro === 'cofre' && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filtroRow}>
+            {([
+              ['todos',     `Todos (${cofreTotal})`],
+              ['pendiente', `⏳ Pendientes (${cofrePendientes})`],
+              ['entregado', `✅ Entregados (${cofreEntregados})`],
+              ['rechazado', `❌ Rechazados (${cofreRechazados})`],
+            ] as const).map(([val, lbl]) => (
+              <TouchableOpacity
+                key={val}
+                style={[s.filtroBtn, estadoCofre === val && s.filtroBtnActivo]}
+                onPress={() => setEstadoCofre(val)}
+              >
+                <Text style={[s.filtroTxt, { color: c.textSub }, estadoCofre === val && s.filtroTxtActivo]}>{lbl}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }} refreshControl={refreshControl}>
@@ -319,6 +348,9 @@ export default function TiendaCompras() {
                     ) : null}
                   </View>
                 </View>
+
+                {/* Qué avatares/colores YA TIENE: para no regalarle uno repetido */}
+                <InventarioPerfilUsuario userId={seleccionada.user_id} />
 
                 {/* Si es tipo lead: registrar cliente */}
                 {ES_LEAD(seleccionada.item_tipo) && (

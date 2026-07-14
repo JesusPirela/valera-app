@@ -51,8 +51,11 @@ export default function PanelRacha() {
     avisar('🔥 ¡Racha recuperada!')
   }
 
-  // Tener no tiene tope; comprar sí (cupo semanal).
-  const puedeComprar = r.compras_restantes > 0 && r.coins >= r.costo_protector
+  // Tener no tiene tope; comprar sí (cupo semanal). Los ?? son por si la app
+  // corre antes de que la migración esté aplicada: mejor degradar que romper.
+  const maxCompras       = r.max_compras_semana ?? 2
+  const comprasRestantes = r.compras_restantes ?? maxCompras
+  const puedeComprar     = comprasRestantes > 0 && r.coins >= r.costo_protector
 
   return (
     <View style={{ gap: 10, marginBottom: 14 }}>
@@ -121,9 +124,11 @@ export default function PanelRacha() {
             <Text style={[s.protSub, { color: c.textMute }]}>
               Si faltas un día, se usa uno solo y tu racha sobrevive.
             </Text>
-            <Text style={[s.protSub, { color: c.textMute }]}>
-              🎁 Ganas 1 al llegar al nivel {r.proximo_protector_nivel} (vas en el {r.nivel}).
-            </Text>
+            {r.proximo_protector_nivel != null && (
+              <Text style={[s.protSub, { color: c.textMute }]}>
+                🎁 Ganas 1 al llegar al nivel {r.proximo_protector_nivel} (vas en el {r.nivel}).
+              </Text>
+            )}
           </View>
           <View style={{ alignItems: 'center', gap: 3 }}>
             <TouchableOpacity
@@ -134,11 +139,11 @@ export default function PanelRacha() {
               {ocupado === 'comprar'
                 ? <ActivityIndicator size="small" color="#000" />
                 : <Text style={s.protBtnTxt}>
-                    {r.compras_restantes === 0 ? 'Sin cupo' : `${r.costo_protector} 💰`}
+                    {comprasRestantes === 0 ? 'Sin cupo' : `${r.costo_protector} 💰`}
                   </Text>}
             </TouchableOpacity>
             <Text style={[s.protCupo, { color: c.textMute }]}>
-              {r.compras_restantes}/{r.max_compras_semana} esta semana
+              {comprasRestantes}/{maxCompras} esta semana
             </Text>
           </View>
         </View>
