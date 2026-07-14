@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
-  TouchableOpacity, TextInput, Platform, Alert, Modal,
+  TouchableOpacity, TextInput, Platform, Alert, Modal, Linking,
 } from 'react-native'
 import { useFocusEffect, useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -34,11 +34,22 @@ const SIN_ZONA = 'Otras zonas'
 type Contacto = {
   id: string
   nombre: string
+  coordinador_nombre: string | null
   telefono_contacto: string | null
+  email: string | null
+  cargo: string | null
+  notas: string | null
 }
 
 const SIN_CONSTRUCTORA = 'Sin constructora'
-const EMPTY_CONTACTO: Omit<Contacto, 'id'> = { nombre: '', telefono_contacto: null }
+const EMPTY_CONTACTO: Omit<Contacto, 'id'> = {
+  nombre: '',
+  coordinador_nombre: null,
+  telefono_contacto: null,
+  email: null,
+  cargo: null,
+  notas: null,
+}
 
 function formatPrecio(precio: number | null) {
   if (precio == null) return 'Precio a consultar'
@@ -63,9 +74,10 @@ export default function AdminConstructoras() {
   const [busqueda, setBusqueda] = useState('')
   const [zonaSel, setZonaSel] = useState<string | null>(null)
 
-  // ── Contactos (teléfono por constructora — solo admin) ──────────────────
+  // ── Contactos (coordinadores de constructoras — solo admin) ──────────────
   const [contactos, setContactos] = useState<Contacto[]>([])
   const [loadingContactos, setLoadingContactos] = useState(true)
+  const [busquedaContactos, setBusquedaContactos] = useState('')
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<Contacto | null>(null)
   const [form, setForm] = useState<Omit<Contacto, 'id'>>(EMPTY_CONTACTO)
@@ -178,17 +190,28 @@ export default function AdminConstructoras() {
 
   function abrirEditarContacto(item: Contacto) {
     setEditando(item)
-    setForm({ nombre: item.nombre, telefono_contacto: item.telefono_contacto })
+    setForm({
+      nombre: item.nombre,
+      coordinador_nombre: item.coordinador_nombre,
+      telefono_contacto: item.telefono_contacto,
+      email: item.email,
+      cargo: item.cargo,
+      notas: item.notas,
+    })
     setModal(true)
   }
 
   async function guardarContacto() {
-    if (!form.nombre.trim()) { alerta('El nombre es obligatorio'); return }
+    if (!form.nombre.trim()) { alerta('El nombre de la constructora es obligatorio'); return }
     setGuardando(true)
     try {
       const payload = {
-        nombre: form.nombre.trim(),
-        telefono_contacto: form.telefono_contacto?.trim() || null,
+        nombre:              form.nombre.trim(),
+        coordinador_nombre:  form.coordinador_nombre?.trim() || null,
+        telefono_contacto:   form.telefono_contacto?.trim() || null,
+        email:               form.email?.trim() || null,
+        cargo:               form.cargo?.trim() || null,
+        notas:               form.notas?.trim() || null,
       }
       if (editando) {
         const { error } = await supabase.from('constructoras').update(payload).eq('id', editando.id)
@@ -362,92 +385,231 @@ export default function AdminConstructoras() {
         </>
       ) : (
         <>
-          <Text style={[styles.introSub, { color: c.textMute, marginBottom: 8 }]}>
-            El teléfono de contacto se usa para generar el mensaje de WhatsApp al registrar un cliente con esta constructora.
-          </Text>
+          {/* Barra superior: búsqueda + botón nuevo */}
+          <View style={styles.contactosTopRow}>
+            <View style={[styles.searchBox, { flex: 1, backgroundColor: c.card, borderColor: c.border }]}>
+              <Text style={styles.searchIcon}>🔍</Text>
+              <TextInput
+                style={[styles.searchInput, { color: c.text }]}
+                placeholder="Buscar constructora o coordinador…"
+                placeholderTextColor={c.textMute}
+                value={busquedaContactos}
+                onChangeText={setBusquedaContactos}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {busquedaContactos.length > 0 && (
+                <TouchableOpacity onPress={() => setBusquedaContactos('')}>
+                  <Text style={[styles.clearBtn, { color: c.textMute }]}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity style={styles.btnNuevoCircle} onPress={abrirNuevoContacto}>
+              <Text style={styles.btnNuevoCircleTxt}>+</Text>
+            </TouchableOpacity>
+          </View>
 
           {loadingContactos ? (
             <ActivityIndicator color="#c9a84c" size="large" style={{ marginTop: 40 }} />
-          ) : contactos.length === 0 ? (
-            <View style={styles.empty}>
-              <Text style={[styles.emptyText, { color: c.textMute }]}>No hay constructoras registradas aún.</Text>
-              <TouchableOpacity style={styles.btnAdd} onPress={abrirNuevoContacto}>
-                <Text style={styles.btnAddText}>+ Agregar primera</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <ScrollView contentContainerStyle={{ paddingBottom: 24, gap: 12 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
-              <TouchableOpacity style={styles.btnNuevoContacto} onPress={abrirNuevoContacto}>
-                <Text style={styles.btnNuevoContactoTxt}>+ Nueva constructora</Text>
-              </TouchableOpacity>
-              {contactos.map(item => (
-                <View key={item.id} style={[styles.contactoCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                  <View style={[styles.contactoIcon, { backgroundColor: c.bg }]}>
-                    <Text style={{ fontSize: 22 }}>🏗️</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.modeloTitulo, { color: c.text }]}>{item.nombre}</Text>
+          ) : (() => {
+            const q = normalizar(busquedaContactos.trim())
+            const filtrados = contactos.filter(item =>
+              !q ||
+              normalizar(item.nombre).includes(q) ||
+              normalizar(item.coordinador_nombre ?? '').includes(q) ||
+              normalizar(item.cargo ?? '').includes(q) ||
+              normalizar(item.email ?? '').includes(q)
+            )
+            if (contactos.length === 0) return (
+              <View style={styles.empty}>
+                <Text style={{ fontSize: 46, marginBottom: 10 }}>📋</Text>
+                <Text style={[styles.emptyText, { color: c.textMute }]}>No hay contactos registrados aún.</Text>
+                <TouchableOpacity style={styles.btnAdd} onPress={abrirNuevoContacto}>
+                  <Text style={styles.btnAddText}>+ Agregar primero</Text>
+                </TouchableOpacity>
+              </View>
+            )
+            if (filtrados.length === 0) return (
+              <View style={styles.empty}>
+                <Text style={[styles.emptyText, { color: c.textMute }]}>Sin resultados para "{busquedaContactos}".</Text>
+              </View>
+            )
+            return (
+              <ScrollView contentContainerStyle={{ paddingBottom: 32, gap: 12 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
+                <Text style={[styles.contactosCount, { color: c.textMute }]}>
+                  {filtrados.length} {filtrados.length === 1 ? 'constructora' : 'constructoras'}
+                </Text>
+                {filtrados.map(item => (
+                  <View key={item.id} style={[styles.contactoCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                    {/* Encabezado: empresa + acciones */}
+                    <View style={styles.contactoHeaderRow}>
+                      <View style={[styles.contactoIconBig, { backgroundColor: '#e8f4f0' }]}>
+                        <Text style={{ fontSize: 24 }}>🏗️</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.contactoEmpresa, { color: c.text }]}>{item.nombre}</Text>
+                        {item.cargo ? (
+                          <Text style={[styles.contactoCargo, { color: '#1a6470' }]}>{item.cargo}</Text>
+                        ) : null}
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 4 }}>
+                        <TouchableOpacity style={styles.contactoAccionBtn} onPress={() => abrirEditarContacto(item)}>
+                          <Text style={styles.contactoAccionIco}>✏️</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.contactoAccionBtn} onPress={() => eliminarContacto(item)}>
+                          <Text style={styles.contactoAccionIco}>🗑️</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Datos del coordinador */}
+                    {item.coordinador_nombre ? (
+                      <View style={styles.contactoRow}>
+                        <Text style={styles.contactoRowIco}>👤</Text>
+                        <Text style={[styles.contactoRowTxt, { color: c.text }]}>{item.coordinador_nombre}</Text>
+                      </View>
+                    ) : null}
+
+                    {/* Teléfono + botón WhatsApp */}
                     {item.telefono_contacto ? (
-                      <Text style={[styles.modeloCodigo, { color: c.textMute }]}>📞 {item.telefono_contacto}</Text>
+                      <View style={styles.contactoRow}>
+                        <Text style={styles.contactoRowIco}>📞</Text>
+                        <Text style={[styles.contactoRowTxt, { color: c.text, flex: 1 }]}>{item.telefono_contacto}</Text>
+                        <TouchableOpacity
+                          style={styles.contactoWaBtn}
+                          onPress={() => {
+                            const tel = item.telefono_contacto!.replace(/\D/g, '')
+                            const nombre = item.coordinador_nombre ? ` con ${item.coordinador_nombre}` : ''
+                            const txt = encodeURIComponent(`Hola${nombre}, soy de Valera. Me gustaría agendar una cita para presentar a un prospecto interesado en ${item.nombre}.`)
+                            Linking.openURL(`https://wa.me/52${tel}?text=${txt}`)
+                          }}
+                        >
+                          <Text style={styles.contactoWaTxt}>WhatsApp</Text>
+                        </TouchableOpacity>
+                      </View>
                     ) : (
-                      <Text style={styles.contactoFalta}>⚠ Falta teléfono de contacto</Text>
+                      <View style={styles.contactoRow}>
+                        <Text style={styles.contactoRowIco}>📞</Text>
+                        <Text style={styles.contactoFalta}>Sin teléfono de contacto</Text>
+                      </View>
                     )}
+
+                    {/* Email */}
+                    {item.email ? (
+                      <TouchableOpacity
+                        style={styles.contactoRow}
+                        onPress={() => Linking.openURL(`mailto:${item.email}`)}
+                      >
+                        <Text style={styles.contactoRowIco}>✉️</Text>
+                        <Text style={[styles.contactoRowTxt, { color: '#1a6470', textDecorationLine: 'underline' }]}>{item.email}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+
+                    {/* Notas */}
+                    {item.notas ? (
+                      <View style={[styles.contactoNotas, { backgroundColor: c.bg }]}>
+                        <Text style={[styles.contactoNotasTxt, { color: c.textMute }]}>{item.notas}</Text>
+                      </View>
+                    ) : null}
                   </View>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity style={{ padding: 8 }} onPress={() => abrirEditarContacto(item)}>
-                      <Text style={{ fontSize: 18 }}>✏</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ padding: 8 }} onPress={() => eliminarContacto(item)}>
-                      <Text style={{ fontSize: 18 }}>🗑</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          )}
+                ))}
+              </ScrollView>
+            )
+          })()}
         </>
       )}
 
       {/* Modal agregar/editar contacto */}
       <Modal visible={modal} transparent animationType="slide" onRequestClose={() => setModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { backgroundColor: c.card }]}>
-            <Text style={[styles.modalTitulo, { color: c.text }]}>{editando ? 'Editar constructora' : 'Nueva constructora'}</Text>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ justifyContent: 'flex-end', flexGrow: 1 }}
+            keyboardShouldPersistTaps="always"
+          >
+            <View style={[styles.modalBox, { backgroundColor: c.card }]}>
+              <Text style={[styles.modalTitulo, { color: c.text }]}>
+                {editando ? 'Editar constructora' : 'Nueva constructora'}
+              </Text>
 
-            <Text style={[styles.fieldLabel, { color: c.textSub }]}>Nombre *</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-              value={form.nombre}
-              onChangeText={v => setForm(f => ({ ...f, nombre: v }))}
-              placeholder="Ej. Spacio Vitale"
-              placeholderTextColor={c.placeholder}
-              autoCapitalize="words"
-            />
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Nombre de la constructora *</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={form.nombre}
+                onChangeText={v => setForm(f => ({ ...f, nombre: v }))}
+                placeholder="Ej. Spacio Vitale"
+                placeholderTextColor={c.placeholder}
+                autoCapitalize="words"
+              />
 
-            <Text style={[styles.fieldLabel, { color: c.textSub }]}>Teléfono de contacto (WhatsApp)</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-              value={form.telefono_contacto ?? ''}
-              onChangeText={v => setForm(f => ({ ...f, telefono_contacto: v }))}
-              placeholder="Ej. 7821234567"
-              placeholderTextColor={c.placeholder}
-              keyboardType="phone-pad"
-            />
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Nombre del coordinador</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={form.coordinador_nombre ?? ''}
+                onChangeText={v => setForm(f => ({ ...f, coordinador_nombre: v }))}
+                placeholder="Ej. Ana García"
+                placeholderTextColor={c.placeholder}
+                autoCapitalize="words"
+              />
 
-            <TouchableOpacity
-              style={[styles.btnGuardar, guardando && { opacity: 0.5 }]}
-              onPress={guardarContacto}
-              disabled={guardando}
-            >
-              {guardando
-                ? <ActivityIndicator color="#000" />
-                : <Text style={styles.btnGuardarText}>💾 Guardar</Text>
-              }
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btnCancelar} onPress={() => setModal(false)}>
-              <Text style={[styles.btnCancelarText, { color: c.textSub }]}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Cargo</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={form.cargo ?? ''}
+                onChangeText={v => setForm(f => ({ ...f, cargo: v }))}
+                placeholder="Ej. Coordinadora de ventas"
+                placeholderTextColor={c.placeholder}
+                autoCapitalize="sentences"
+              />
+
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Teléfono (WhatsApp)</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={form.telefono_contacto ?? ''}
+                onChangeText={v => setForm(f => ({ ...f, telefono_contacto: v }))}
+                placeholder="Ej. 4421234567"
+                placeholderTextColor={c.placeholder}
+                keyboardType="phone-pad"
+              />
+
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Email</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={form.email ?? ''}
+                onChangeText={v => setForm(f => ({ ...f, email: v }))}
+                placeholder="Ej. coordinacion@constructora.com"
+                placeholderTextColor={c.placeholder}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Notas</Text>
+              <TextInput
+                style={[styles.input, styles.inputMultiline, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={form.notas ?? ''}
+                onChangeText={v => setForm(f => ({ ...f, notas: v }))}
+                placeholder="Horario de atención, observaciones, etc."
+                placeholderTextColor={c.placeholder}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={[styles.btnGuardar, guardando && { opacity: 0.5 }]}
+                onPress={guardarContacto}
+                disabled={guardando}
+              >
+                {guardando
+                  ? <ActivityIndicator color="#000" />
+                  : <Text style={styles.btnGuardarText}>Guardar</Text>
+                }
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnCancelar} onPress={() => setModal(false)}>
+                <Text style={[styles.btnCancelarText, { color: c.textSub }]}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -510,14 +672,43 @@ const styles = StyleSheet.create({
   modeloCodigo: { fontSize: 11, color: '#aaa', marginTop: 2, fontWeight: '600' },
   modeloChevron: { fontSize: 26, color: '#c9a84c', fontWeight: '700' },
 
-  btnNuevoContacto: { backgroundColor: '#c9a84c', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginBottom: 4 },
-  btnNuevoContactoTxt: { color: '#000', fontWeight: '700', fontSize: 13 },
-  contactoCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10,
+  contactosTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  contactosCount: { fontSize: 12, fontWeight: '600', marginBottom: 4, paddingLeft: 2 },
+
+  btnNuevoCircle: {
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: '#c9a84c', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
   },
-  contactoIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  contactoFalta: { fontSize: 12, marginTop: 4, color: '#c0392b', fontWeight: '600' },
+  btnNuevoCircleTxt: { color: '#000', fontSize: 26, fontWeight: '700', lineHeight: 30 },
+
+  contactoCard: {
+    borderRadius: 14, borderWidth: 1, padding: 14, gap: 10,
+  },
+  contactoHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  contactoIconBig: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  contactoEmpresa: { fontSize: 16, fontWeight: '800' },
+  contactoCargo: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+
+  contactoAccionBtn: { padding: 6 },
+  contactoAccionIco: { fontSize: 18 },
+
+  contactoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  contactoRowIco: { fontSize: 16, flexShrink: 0 },
+  contactoRowTxt: { fontSize: 14, flex: 1 },
+
+  contactoWaBtn: {
+    backgroundColor: '#25D366', borderRadius: 14,
+    paddingHorizontal: 12, paddingVertical: 5, flexShrink: 0,
+  },
+  contactoWaTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  contactoNotas: { borderRadius: 8, padding: 10 },
+  contactoNotasTxt: { fontSize: 13, lineHeight: 19 },
+
+  contactoFalta: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
+
+  inputMultiline: { minHeight: 80 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalBox: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, gap: 4 },
