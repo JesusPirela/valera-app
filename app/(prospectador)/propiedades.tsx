@@ -508,7 +508,6 @@ export default function ProspectadorPropiedades() {
     const idemKey = generarIdemKey()
     const exito = (vecesReal: number) => {
       setVeces(vecesReal)
-      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
       actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
     }
     const encolar = async () => {
@@ -562,12 +561,10 @@ export default function ProspectadorPropiedades() {
         exito(data.veces_publicada ?? vecesActual + 1)
       } else if (data?.error === 'limite') {
         setVeces(vecesActual)
-        queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
         avisar('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
       } else if (ok && data && data.ok === false) {
         // Error de negocio del servidor distinto de límite: reintentar no ayuda.
         setVeces(vecesActual)
-        queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', userId] })
         avisar('No se pudo publicar', String(data.error ?? 'Error del servidor'))
       } else {
         // Red/timeout/error transitorio → ENCOLAR. Se mantiene el +1 optimista
