@@ -496,6 +496,12 @@ export default function Prospectadores() {
                 >
                   <Text style={styles.publicacionesBtnSmallText}>📤 Publicaciones</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.graficaBtnSmall}
+                  onPress={() => router.push({ pathname: '/(admin)/usuario-actividad', params: { id: item.id, nombre: item.nombre ?? item.email } })}
+                >
+                  <Text style={styles.graficaBtnSmallText}>📈 Gráfica</Text>
+                </TouchableOpacity>
                 {item.role !== 'admin' && (
                   <TouchableOpacity
                     style={[styles.eliminarBtnSmall, eliminandoId === item.id && styles.btnDisabled]}
@@ -1070,6 +1076,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   publicacionesBtnSmallText: { color: '#c0392b', fontSize: 12, fontWeight: '700' },
+  graficaBtnSmall: {
+    backgroundColor: '#e8f0f4',
+    borderWidth: 1,
+    borderColor: '#1a6470',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  graficaBtnSmallText: { color: '#1a6470', fontSize: 12, fontWeight: '700' },
   eliminarBtnSmall: {
     backgroundColor: '#c0392b',
     borderRadius: 6,
