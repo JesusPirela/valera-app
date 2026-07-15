@@ -92,7 +92,26 @@ serve(async (req) => {
         const { data: id, error } = await supabaseAdmin.rpc('get_profile_id_by_email', { p_email: prospectadorEmail })
         if (error) warnings.push(`Error resolviendo prospectador_email: ${error.message}`)
         else if (!id) warnings.push(`No se encontró un usuario con email ${prospectadorEmail}`)
-        else prospectadorId = id
+        else {
+          prospectadorId = id
+          // Sincronizar automáticamente al asesor en el directorio prospectadores.
+          // Usa nombre y telefono de profiles; si el telefono no está en formato
+          // 521XXXXXXXXXX se normaliza (agrega prefijo si tiene 10 dígitos).
+          supabaseAdmin
+            .from('profiles')
+            .select('nombre, telefono')
+            .eq('id', id)
+            .maybeSingle()
+            .then(({ data: perfil }) => {
+              if (!perfil?.nombre || !perfil?.telefono) return
+              let wa = perfil.telefono.replace(/\D/g, '')
+              if (wa.length === 10) wa = '52' + wa
+              supabaseAdmin
+                .from('prospectadores')
+                .upsert({ email: prospectadorEmail, nombre: perfil.nombre, whatsapp: wa }, { onConflict: 'email' })
+                .then(() => {}, (e) => console.error('[chatbot-eventos] upsert prospectadores:', e))
+            }, () => {})
+        }
       } else {
         warnings.push('prospectador_email no fue enviado')
       }

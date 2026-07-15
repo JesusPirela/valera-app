@@ -256,6 +256,7 @@ export default function Notificaciones() {
   const c = useColors()
   const queryClient = useQueryClient()
   const [marcandoTodas, setMarcandoTodas] = useState(false)
+  const [eliminandoTodas, setEliminandoTodas] = useState(false)
 
   // React Query: la lista cacheada aparece al instante al volver; solo se
   // refresca en segundo plano si pasó >1 min. Antes recargaba desde cero en
@@ -345,6 +346,22 @@ export default function Notificaciones() {
     await supabase.from('notificaciones').delete().eq('id', id)
   }
 
+  async function eliminarTodasLeidas() {
+    const leidas = notificaciones.filter((n) => n.leida)
+    if (leidas.length === 0) return
+    setEliminandoTodas(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    const uid = session?.user?.id
+    if (!uid) { setEliminandoTodas(false); return }
+    const { error } = await supabase
+      .from('notificaciones')
+      .delete()
+      .eq('user_id', uid)
+      .eq('leida', true)
+    if (!error) setNotis((prev) => prev.filter((n) => !n.leida))
+    setEliminandoTodas(false)
+  }
+
   async function handlePress(item: Notificacion) {
     if (!item.leida) marcarLeida(item.id)
 
@@ -411,16 +428,31 @@ export default function Notificaciones() {
         }}
       />
 
-      {hayNoLeidas && (
-        <TouchableOpacity
-          style={styles.marcarTodasBtn}
-          onPress={marcarTodasLeidas}
-          disabled={marcandoTodas}
-        >
-          <Text style={styles.marcarTodasText}>
-            {marcandoTodas ? 'Marcando...' : 'Marcar todas como leídas'}
-          </Text>
-        </TouchableOpacity>
+      {(hayNoLeidas || notificaciones.some((n) => n.leida)) && (
+        <View style={styles.accionesRow}>
+          {hayNoLeidas && (
+            <TouchableOpacity
+              style={styles.marcarTodasBtn}
+              onPress={marcarTodasLeidas}
+              disabled={marcandoTodas}
+            >
+              <Text style={styles.marcarTodasText}>
+                {marcandoTodas ? 'Marcando...' : 'Marcar leídas'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {notificaciones.some((n) => n.leida) && (
+            <TouchableOpacity
+              style={styles.eliminarLeidasBtn}
+              onPress={eliminarTodasLeidas}
+              disabled={eliminandoTodas}
+            >
+              <Text style={styles.eliminarLeidasText}>
+                {eliminandoTodas ? 'Borrando...' : '🗑 Borrar leídas'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
 
       {loading ? (
@@ -462,9 +494,14 @@ const styles = StyleSheet.create({
   citasBannerIcono:  { fontSize: 24 },
   citasBannerTitulo: { color: '#fff', fontSize: 14.5, fontWeight: '800' },
   citasBannerSub:    { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 },
-  marcarTodasBtn: {
-    alignSelf: 'flex-end',
+  accionesRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 12,
+  },
+  marcarTodasBtn: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 8,
@@ -472,6 +509,14 @@ const styles = StyleSheet.create({
     borderColor: '#1a6470',
   },
   marcarTodasText: { fontSize: 13, color: '#1a6470', fontWeight: '600' },
+  eliminarLeidasBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e53935',
+  },
+  eliminarLeidasText: { fontSize: 13, color: '#e53935', fontWeight: '600' },
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1a6470', marginBottom: 8, textAlign: 'center' },
   emptySubtitle: { fontSize: 14, color: '#999', textAlign: 'center', lineHeight: 20 },

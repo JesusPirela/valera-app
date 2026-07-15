@@ -56,7 +56,7 @@ serve(async (req) => {
       .eq('id', user.id)
       .single()
 
-    if (!['prospectador_plus', 'asesor', 'supervisor'].includes(profile?.role ?? '')) {
+    if (!['prospectador_plus', 'asesor', 'supervisor', 'admin'].includes(profile?.role ?? '')) {
       return json({ error: 'Acceso denegado' }, 403)
     }
 

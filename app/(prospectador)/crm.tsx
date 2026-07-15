@@ -191,7 +191,15 @@ export default function CRM() {
         },
       })
       if (error || data?.error) {
-        setChatbotError(data?.error || error?.message || 'No se pudo enviar al chatbot.')
+        let msg = data?.error || 'No se pudo enviar al chatbot.'
+        if (!data?.error && error) {
+          try {
+            // FunctionsHttpError esconde el body real en error.context
+            const body = await (error as any).context?.json?.()
+            msg = body?.error || error.message || msg
+          } catch { msg = error.message || msg }
+        }
+        setChatbotError(msg)
         return
       }
       setClienteChatbot(null)
