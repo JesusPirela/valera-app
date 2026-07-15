@@ -281,6 +281,7 @@ export default function ProspectadorPropiedades() {
   const [filtroPublicadas, setFiltroPublicadas] = useState<FiltroPublicadas>(null)
   const [filtroNueva, setFiltroNueva] = useState(false)
   const [filtroExclusiva, setFiltroExclusiva] = useState(false)
+  const [filtroDestacada, setFiltroDestacada] = useState(false)
   const [filtroFechaPreset, setFiltroFechaPreset] = useState<7 | 30 | 90 | 180 | null>(null)
   const [fechaDesdeCustom, setFechaDesdeCustom] = useState('')
   const [fechaHastaCustom, setFechaHastaCustom] = useState('')
@@ -655,6 +656,7 @@ export default function ProspectadorPropiedades() {
     filtroPublicadas,
     filtroNueva ? 'nueva' : null,
     filtroExclusiva ? 'exclusiva' : null,
+    filtroDestacada ? 'destacada' : null,
     (filtroFechaPreset || fechaDesdeCustom || fechaHastaCustom) ? 'fecha' : null,
   ].filter(Boolean).length
 
@@ -690,6 +692,9 @@ export default function ProspectadorPropiedades() {
   if (filtroNueva) {
     const haceUnaS = Date.now() - 7 * 24 * 60 * 60 * 1000
     propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() > haceUnaS)
+  }
+  if (filtroDestacada) {
+    propiedadesFiltradas = propiedadesFiltradas.filter(p => _estaDestacada(p))
   }
   if (filtroExclusiva) {
     propiedadesFiltradas = propiedadesFiltradas.filter(p => p.exclusiva || p.inmobiliarias?.exclusiva)
@@ -745,30 +750,21 @@ export default function ProspectadorPropiedades() {
     )
   }
 
-  if (esAdmin) {
-    // Admins: destacadas primero, luego orden original (fecha desc del servidor)
-    propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
-      const aD = _estaDestacada(a) ? 1 : 0
-      const bD = _estaDestacada(b) ? 1 : 0
-      return bD - aD
-    })
-  } else if (!ordenPrecio && !filtroNueva) {
-    // Usuarios no-admin: destacadas primero, resto en orden aleatorio por sesión.
-    // Si "Nuevas" está activo no se aplica: ese filtro ya ordenó por fecha
-    // más reciente arriba y no debe perderse ese orden.
-    propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
-      const aD = _estaDestacada(a) ? 1 : 0
-      const bD = _estaDestacada(b) ? 1 : 0
-      if (aD !== bD) return bD - aD
-      return (shuffleMapRef.current.get(a.id) ?? 0) - (shuffleMapRef.current.get(b.id) ?? 0)
-    })
+  // Las destacadas YA NO se fijan arriba: se mezclan con el resto. Siguen
+  // marcadas con su banner dorado y se pueden ver todas juntas con el filtro
+  // "Destacadas" (abajo). Antes copaban las primeras posiciones del inicio.
+  if (!esAdmin && !ordenPrecio && !filtroNueva) {
+    // Usuarios no-admin: orden aleatorio por sesión (sin priorizar destacadas).
+    propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
+      (shuffleMapRef.current.get(a.id) ?? 0) - (shuffleMapRef.current.get(b.id) ?? 0)
+    )
   }
 
   return propiedadesFiltradas
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     propiedades, busqueda, filtroPublicadas, publicaciones, filtroNueva,
-    filtroExclusiva, filtroOperacion, filtroTipo, precioMinNum, precioMaxNum,
+    filtroExclusiva, filtroDestacada, filtroOperacion, filtroTipo, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
     shuffleTick,
   ])
@@ -863,6 +859,7 @@ export default function ProspectadorPropiedades() {
           { key: 'renta',      label: 'Renta',      icon: 'key'       as const, activo: filtroOperacion === 'renta', onPress: () => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta') },
           { key: 'nuevas',     label: 'Nuevas',     icon: 'sparkles'  as const, activo: filtroNueva,                 onPress: () => setFiltroNueva(v => !v) },
           { key: 'exclusivas', label: 'Exclusivas', icon: 'star'      as const, activo: filtroExclusiva,             onPress: () => setFiltroExclusiva(v => !v) },
+          { key: 'destacadas', label: 'Destacadas', icon: 'megaphone-outline' as const, activo: filtroDestacada,    onPress: () => setFiltroDestacada(v => !v) },
           // Acceso rápido a "Sin publicar" (antes solo estaba escondido en el
           // panel de filtros avanzados, bajo "Mis propiedades").
           { key: 'sin_publicar', label: 'Sin publicar', icon: 'cloud-upload-outline' as const, activo: filtroPublicadas === 'sin_publicar', onPress: () => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar') },
