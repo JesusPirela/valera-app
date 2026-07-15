@@ -105,14 +105,26 @@ export default function AdminCRM() {
       if (yo) setMiId(yo)
     }
 
-    const { data: clientesData, error: errorClientes } = await supabase
-      .from('clientes')
-      .select('id, nombre, telefono, email, empresa, estado, tipo_operacion, created_at, responsable_id')
-      .is('eliminado_at', null)
-      .order('updated_at', { ascending: false })
+    // Paginar: PostgREST corta en 1000 filas/petición. Sin esto, con >1000
+    // clientes el CRM solo contaba/mostraba los primeros 1000 (por eso el total
+    // se quedaba clavado en "1000" aunque hubiera más).
+    const PAGE = 1000
+    let clientesData: any[] = []
+    let errorClientes: any = null
+    for (let desde = 0; ; desde += PAGE) {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('id, nombre, telefono, email, empresa, estado, tipo_operacion, created_at, responsable_id')
+        .is('eliminado_at', null)
+        .order('updated_at', { ascending: false })
+        .range(desde, desde + PAGE - 1)
+      if (error) { errorClientes = error; break }
+      clientesData = clientesData.concat(data ?? [])
+      if (!data || data.length < PAGE) break
+    }
 
     if (errorClientes) { setErrorMsg(errorClientes.message); setLoading(false); cargadoUnaVez.current = true; return }
-    if (!clientesData?.length) { setSecciones([]); setLoading(false); cargadoUnaVez.current = true; return }
+    if (!clientesData.length) { setSecciones([]); setLoading(false); cargadoUnaVez.current = true; return }
 
     const idsUnicos = [...new Set(clientesData.map((c: any) => c.responsable_id).filter(Boolean))]
     const { data: perfilesData } = await supabase
@@ -235,12 +247,20 @@ export default function AdminCRM() {
   async function exportarCSV() {
     setExportando(true)
     try {
-      const { data } = await supabase
-        .from('clientes')
-        .select('nombre, telefono, email, empresa, estado, tipo_operacion, proximo_contacto, notas, zona_busqueda, presupuesto, created_at, responsable_id')
-        .is('eliminado_at', null)
-        .order('updated_at', { ascending: false })
-      if (!data?.length) return
+      // Paginar: sin esto la exportación se cortaba en 1000 clientes.
+      const PAGE = 1000
+      let data: any[] = []
+      for (let desde = 0; ; desde += PAGE) {
+        const { data: lote } = await supabase
+          .from('clientes')
+          .select('nombre, telefono, email, empresa, estado, tipo_operacion, proximo_contacto, notas, zona_busqueda, presupuesto, created_at, responsable_id')
+          .is('eliminado_at', null)
+          .order('updated_at', { ascending: false })
+          .range(desde, desde + PAGE - 1)
+        data = data.concat(lote ?? [])
+        if (!lote || lote.length < PAGE) break
+      }
+      if (!data.length) return
       const idsUnicos = [...new Set(data.map((c: any) => c.responsable_id).filter(Boolean))]
       const { data: perfs } = await supabase.from('profiles').select('id, nombre').in('id', idsUnicos)
       const mapa = new Map((perfs ?? []).map((p: any) => [p.id, p.nombre ?? '']))
