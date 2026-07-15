@@ -24,6 +24,12 @@ const LABEL_METRICA: Record<Metrica, string> = {
   seguimientos:  '✅ Seguimientos',
   clientes:      '👤 Clientes nuevos',
 }
+// Métrica → tipo de fila en el detalle del día.
+const TIPO_METRICA: Record<Metrica, string> = {
+  publicaciones: 'publicacion',
+  seguimientos:  'seguimiento',
+  clientes:      'cliente',
+}
 
 // Día MX de hoy, como texto YYYY-MM-DD.
 function hoyMX(): string {
@@ -252,32 +258,38 @@ export default function UsuarioActividad() {
               </Svg>
             </View>
 
-            {/* Detalle del día seleccionado */}
-            {diaSel && (
-              <View style={[s.detCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                <View style={s.detHead}>
-                  <Text style={[s.detTitulo, { color: c.text }]}>📅 {fmtCorto(diaSel)}</Text>
-                  <TouchableOpacity onPress={() => setDiaSel(null)}>
-                    <Text style={{ color: c.textMute, fontSize: 16 }}>✕</Text>
-                  </TouchableOpacity>
+            {/* Detalle del día: SOLO lo de la métrica elegida (si ves "Clientes
+                nuevos", muestra clientes, no publicaciones). */}
+            {diaSel && (() => {
+              const detFiltrado = (detalle ?? []).filter(d => d.tipo === TIPO_METRICA[metrica])
+              return (
+                <View style={[s.detCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                  <View style={s.detHead}>
+                    <Text style={[s.detTitulo, { color: c.text }]}>📅 {fmtCorto(diaSel)} · {LABEL_METRICA[metrica]}</Text>
+                    <TouchableOpacity onPress={() => setDiaSel(null)}>
+                      <Text style={{ color: c.textMute, fontSize: 16 }}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {loadingDet ? (
+                    <ActivityIndicator color={TEAL} style={{ marginVertical: 16 }} />
+                  ) : detFiltrado.length === 0 ? (
+                    <Text style={[s.detVacio, { color: c.textMute }]}>
+                      Sin {LABEL_METRICA[metrica].toLowerCase().replace(/[^a-zñáéíóú ]/gi, '').trim()} este día.
+                    </Text>
+                  ) : (
+                    detFiltrado.map((d, i) => (
+                      <View key={i} style={[s.detFila, { borderBottomColor: c.border }]}>
+                        <Text style={s.detIcono}>
+                          {d.tipo === 'publicacion' ? '📤' : d.tipo === 'seguimiento' ? '✅' : '👤'}
+                        </Text>
+                        <Text style={[s.detTxt, { color: c.text }]} numberOfLines={1}>{d.titulo}</Text>
+                        <Text style={[s.detHora, { color: c.textMute }]}>{d.hora}</Text>
+                      </View>
+                    ))
+                  )}
                 </View>
-                {loadingDet ? (
-                  <ActivityIndicator color={TEAL} style={{ marginVertical: 16 }} />
-                ) : !detalle || detalle.length === 0 ? (
-                  <Text style={[s.detVacio, { color: c.textMute }]}>Sin actividad registrada este día.</Text>
-                ) : (
-                  detalle.map((d, i) => (
-                    <View key={i} style={[s.detFila, { borderBottomColor: c.border }]}>
-                      <Text style={s.detIcono}>
-                        {d.tipo === 'publicacion' ? '📤' : d.tipo === 'seguimiento' ? '✅' : '👤'}
-                      </Text>
-                      <Text style={[s.detTxt, { color: c.text }]} numberOfLines={1}>{d.titulo}</Text>
-                      <Text style={[s.detHora, { color: c.textMute }]}>{d.hora}</Text>
-                    </View>
-                  ))
-                )}
-              </View>
-            )}
+              )
+            })()}
           </>
         )}
        </View>
