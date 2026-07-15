@@ -50,6 +50,31 @@ export function aplicarCensuraWeb(src: string, caja: CajaCensura): Promise<strin
   })
 }
 
+// RECORTAR: se queda SOLO con la región de la caja y descarta el resto.
+export function aplicarRecorteWeb(src: string, caja: CajaCensura): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      try { resolve(bakeRecorteEnCanvas(img, caja)) } catch (e) { reject(e) }
+    }
+    img.onerror = () => reject(new Error('No se pudo cargar la imagen'))
+    img.src = src
+  })
+}
+
+function bakeRecorteEnCanvas(img: HTMLImageElement, caja: CajaCensura): string {
+  const W = img.naturalWidth, H = img.naturalHeight
+  const bx = Math.max(0, Math.round(caja.x * W))
+  const by = Math.max(0, Math.round(caja.y * H))
+  const bw = Math.max(1, Math.min(W - bx, Math.round(caja.w * W)))
+  const bh = Math.max(1, Math.min(H - by, Math.round(caja.h * H)))
+  const canvas = document.createElement('canvas')
+  canvas.width = bw; canvas.height = bh
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(img, bx, by, bw, bh, 0, 0, bw, bh)
+  return canvas.toDataURL('image/jpeg', 0.9)
+}
+
 function bakeCensuraEnCanvas(img: HTMLImageElement, caja: CajaCensura): string {
   const W = img.naturalWidth, H = img.naturalHeight
   const canvas = document.createElement('canvas')
@@ -112,10 +137,31 @@ function bake(srcDataUri, caja) {
     img.src = srcDataUri
   })
 }
+function recortar(srcDataUri, caja) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const W = img.naturalWidth, H = img.naturalHeight
+        const bx = Math.max(0, Math.round(caja.x * W))
+        const by = Math.max(0, Math.round(caja.y * H))
+        const bw = Math.max(1, Math.min(W - bx, Math.round(caja.w * W)))
+        const bh = Math.max(1, Math.min(H - by, Math.round(caja.h * H)))
+        const canvas = document.createElement('canvas')
+        canvas.width = bw; canvas.height = bh
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, bx, by, bw, bh, 0, 0, bw, bh)
+        resolve(canvas.toDataURL('image/jpeg', 0.9))
+      } catch (e) { reject(e) }
+    }
+    img.onerror = () => reject(new Error('No se pudo cargar la imagen'))
+    img.src = srcDataUri
+  })
+}
 async function procesar(raw) {
   try {
-    const { src, caja } = JSON.parse(raw)
-    const data = await bake(src, caja)
+    const { src, caja, op } = JSON.parse(raw)
+    const data = op === 'recortar' ? await recortar(src, caja) : await bake(src, caja)
     window.ReactNativeWebView.postMessage(JSON.stringify({ ok: true, data: data }))
   } catch (e) {
     window.ReactNativeWebView.postMessage(JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e) }))

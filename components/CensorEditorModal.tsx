@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Modal, View, Text, TouchableOpacity, StyleSheet, PanResponder, Image, Platform, ActivityIndicator, Dimensions, Alert } from 'react-native'
 import { WebView } from 'react-native-webview'
-import { prepararFuenteImagen, aplicarCensuraWeb, htmlCensuraWebView, CajaCensura } from '../lib/censura'
+import { prepararFuenteImagen, aplicarCensuraWeb, aplicarRecorteWeb, htmlCensuraWebView, CajaCensura } from '../lib/censura'
 import { conTimeout } from '../lib/redIntentos'
+
+type Modo = 'censurar' | 'recortar'
 
 type Props = {
   visible: boolean
@@ -18,6 +20,7 @@ const MAX_H = 420
 export default function CensorEditorModal({ visible, uri, onCancelar, onAplicar }: Props) {
   const [tamañoImg, setTamañoImg] = useState<{ w: number; h: number } | null>(null)
   const [box, setBox] = useState({ x: 0, y: 0, w: 0, h: 0 })
+  const [modo, setModo] = useState<Modo>('censurar')
   const [procesando, setProcesando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const boxRef = useRef(box)
@@ -96,12 +99,15 @@ export default function CensorEditorModal({ visible, uri, onCancelar, onAplicar 
       const src = await conTimeout(prepararFuenteImagen(uri), 15000)
       let resultado: string
       if (Platform.OS === 'web') {
-        resultado = await conTimeout(aplicarCensuraWeb(src, caja), 15000)
+        resultado = await conTimeout(
+          modo === 'recortar' ? aplicarRecorteWeb(src, caja) : aplicarCensuraWeb(src, caja),
+          15000,
+        )
       } else {
         resultado = await conTimeout(
           new Promise<string>((resolve, reject) => {
             resolverRef.current = (r) => (r.ok && r.data ? resolve(r.data) : reject(new Error(r.error ?? 'falló')))
-            const payload = JSON.stringify({ src, caja })
+            const payload = JSON.stringify({ src, caja, op: modo })
             webviewRef.current?.postMessage(payload)
           }),
           15000,
@@ -130,8 +136,31 @@ export default function CensorEditorModal({ visible, uri, onCancelar, onAplicar 
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancelar}>
       <View style={styles.overlay}>
         <View style={styles.card}>
-          <Text style={styles.titulo}>Censurar parte de la imagen</Text>
-          <Text style={styles.ayuda}>Arrastra el recuadro y ajusta su tamaño con la esquina inferior derecha.</Text>
+          <Text style={styles.titulo}>
+            {modo === 'recortar' ? 'Recortar la imagen' : 'Censurar parte de la imagen'}
+          </Text>
+
+          {/* Elegir qué hacer con el recuadro */}
+          <View style={styles.modoRow}>
+            {(['censurar', 'recortar'] as Modo[]).map(m => (
+              <TouchableOpacity
+                key={m}
+                style={[styles.modoBtn, modo === m && styles.modoBtnOn]}
+                onPress={() => setModo(m)}
+                disabled={procesando}
+              >
+                <Text style={[styles.modoBtnTxt, modo === m && styles.modoBtnTxtOn]}>
+                  {m === 'censurar' ? '🌫️ Difuminar' : '✂️ Recortar'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.ayuda}>
+            {modo === 'recortar'
+              ? 'Se quedará SOLO lo de dentro del recuadro. Arrástralo y ajusta su tamaño con la esquina.'
+              : 'Se difuminará lo de DENTRO del recuadro. Arrástralo y ajusta su tamaño con la esquina.'}
+          </Text>
 
           {!tamañoImg ? (
             <View style={[styles.imgBox, { width: MAX_W, height: MAX_H, justifyContent: 'center' }]}>
@@ -140,11 +169,26 @@ export default function CensorEditorModal({ visible, uri, onCancelar, onAplicar 
           ) : (
             <View style={[styles.imgBox, { width: disp.w, height: disp.h }]}>
               <Image source={{ uri: uri ?? undefined }} style={{ width: disp.w, height: disp.h, borderRadius: 8 }} resizeMode="contain" />
+
+              {/* En recortar: oscurecer lo que se va a descartar (fuera de la caja) */}
+              {modo === 'recortar' && (
+                <>
+                  <View style={[styles.dim, { left: 0, top: 0, width: disp.w, height: box.y }]} pointerEvents="none" />
+                  <View style={[styles.dim, { left: 0, top: box.y + box.h, width: disp.w, height: Math.max(0, disp.h - box.y - box.h) }]} pointerEvents="none" />
+                  <View style={[styles.dim, { left: 0, top: box.y, width: box.x, height: box.h }]} pointerEvents="none" />
+                  <View style={[styles.dim, { left: box.x + box.w, top: box.y, width: Math.max(0, disp.w - box.x - box.w), height: box.h }]} pointerEvents="none" />
+                </>
+              )}
+
               <View
                 {...panArrastrar.panHandlers}
-                style={[styles.box, { left: box.x, top: box.y, width: box.w, height: box.h }]}
+                style={[
+                  styles.box,
+                  modo === 'recortar' && styles.boxRecorte,
+                  { left: box.x, top: box.y, width: box.w, height: box.h },
+                ]}
               >
-                <View {...panRedimensionar.panHandlers} style={styles.handle} />
+                <View {...panRedimensionar.panHandlers} style={[styles.handle, modo === 'recortar' && styles.handleRecorte]} />
               </View>
             </View>
           )}
@@ -173,7 +217,7 @@ export default function CensorEditorModal({ visible, uri, onCancelar, onAplicar 
               <Text style={styles.btnCancelarText}>Cancelar</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.btn, styles.btnAplicar]} onPress={aplicar} disabled={procesando || !tamañoImg}>
-              {procesando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnAplicarText}>Aplicar</Text>}
+              {procesando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnAplicarText}>{modo === 'recortar' ? '✂️ Recortar' : 'Aplicar'}</Text>}
             </TouchableOpacity>
           </View>
 
@@ -190,7 +234,13 @@ const styles = StyleSheet.create({
   titulo: { fontSize: 16, fontWeight: '800', color: '#1a1a2e', marginBottom: 4 },
   ayuda: { fontSize: 12, color: '#777', marginBottom: 12, textAlign: 'center' },
   error: { fontSize: 12, color: '#c0392b', marginTop: 10, textAlign: 'center' },
+  modoRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  modoBtn: { borderWidth: 1.5, borderColor: '#ccd', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7 },
+  modoBtnOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  modoBtnTxt: { fontSize: 13, fontWeight: '800', color: '#555' },
+  modoBtnTxtOn: { color: '#fff' },
   imgBox: { position: 'relative', backgroundColor: '#eee', borderRadius: 8, overflow: 'hidden' },
+  dim: { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.55)' },
   box: {
     position: 'absolute',
     backgroundColor: 'rgba(26,100,112,0.35)',
@@ -209,6 +259,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
   },
+  // En recortar la caja marca "lo que se queda": borde claro, sin relleno.
+  boxRecorte: { backgroundColor: 'transparent', borderColor: '#fff' },
+  handleRecorte: { backgroundColor: '#fff', borderColor: '#1a6470' },
   webviewOculto: { width: 1, height: 1, opacity: 0, position: 'absolute' },
   botones: { flexDirection: 'row', gap: 10, marginTop: 16, width: '100%' },
   btn: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
