@@ -6,12 +6,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 // Esto invalida el cache persistido en AsyncStorage para evitar datos corruptos/viejos.
 // b4 (07/jul): descarta el cache inflado que causaba arranque lento (ver abajo).
 // b5 (09/jul): descarta los detalles sembrados con la descripción cortada a 180.
-const CACHE_BUSTER = '5'
+// b6 (14/jul): staleTime global cambiado a 30 min; descarta metadatos viejos.
+const CACHE_BUSTER = '6'
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5,          // 5 min sin refetch
+      staleTime: 1000 * 60 * 30,         // 30 min sin refetch
       gcTime: 1000 * 60 * 60 * 24 * 3,  // 3 días en disco
       retry: 2,
       networkMode: 'offlineFirst',        // muestra cache aunque no haya internet

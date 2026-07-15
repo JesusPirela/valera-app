@@ -24,6 +24,7 @@ import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { esPlusOMejor } from '../../lib/permisos'
+import { listarCuentas } from '../../lib/cuentas'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -354,7 +355,7 @@ export default function ProspectadorPropiedades() {
       }
     },
     networkMode: 'offlineFirst',
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 30,
     refetchOnWindowFocus: false,
   })
 
@@ -400,18 +401,27 @@ export default function ProspectadorPropiedades() {
   }, [refetch, refetchPub])
 
   useFocusEffect(useCallback(() => {
-    // Solo rebotar al admin a su app si NO está "viendo como" otro rol
+    // Solo rebotar al admin a su app si NO está "viendo como" otro rol.
+    // Leemos el rol de AsyncStorage (instantáneo) para no hacer 2 llamadas de red
+    // en cada focus; fallback a red si no hay entrada cacheada.
     if (!vistaComo) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (!session?.user?.id) return
-        supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
-          if (data?.role === 'admin') router.replace('/(admin)/propiedades')
-        })
+        let role: string | null = null
+        try {
+          const cuentas = await listarCuentas()
+          role = cuentas.find(c => c.user_id === session.user.id)?.role ?? null
+        } catch {}
+        if (!role) {
+          const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle()
+          role = data?.role ?? null
+        }
+        if (role === 'admin') router.replace('/(admin)/propiedades')
       })
     }
     if (togglingRef.current.size === 0) {
       const state = queryClient.getQueryState(['prospectador-propiedades', vistaComo])
-      const isStale = !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt > 1000 * 60 * 5
+      const isStale = !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt > 1000 * 60 * 30
       if (isStale) refetch()
       // Las publicaciones siempre se refresca en focus: el query tiene gcTime=0
       // (nunca persiste) y staleTime=0, así cualquier estado optimista perdido

@@ -74,15 +74,14 @@ function compareVersions(current: string, minimum: string): boolean {
   return true
 }
 
-async function checkForUpdate() {
+// Solo dispara el check; useUpdates() en el componente reacciona al resultado
+// via eventos nativos (isUpdateAvailable → fetch → isUpdatePending → reload).
+// Esto cubre el caso donde el auto-check nativo ya descargó el update en
+// background: nuestro código anterior nunca lo detectaba y el update quedaba
+// congelado hasta el próximo cold start (raro en iOS).
+async function dispararCheckUpdate() {
   if (Platform.OS === 'web' || __DEV__) return
-  try {
-    const result = await Updates.checkForUpdateAsync()
-    if (result.isAvailable) {
-      await Updates.fetchUpdateAsync()
-      await Updates.reloadAsync()
-    }
-  } catch { /* ignorar errores de red al verificar actualizaciones */ }
+  try { await Updates.checkForUpdateAsync() } catch { }
 }
 
 function WebThemeCSS() {
@@ -121,6 +120,33 @@ export default function RootLayout() {
   pathnameRef.current = pathname
   const ultimaRevisionUpdateRef = useRef(0)
 
+  // ── Actualizaciones OTA ──────────────────────────────────────────────────
+  // useUpdates() escucha eventos nativos: cubre tanto el check manual como el
+  // auto-check que expo-updates hace en background al arrancar la app.
+  // Antes solo usábamos checkForUpdateAsync() manual, que no detectaba el update
+  // cuando el nativo lo había descargado ya — en iOS esto dejaba el update
+  // pendiente indefinidamente porque los cold-starts son muy poco frecuentes.
+  const { isUpdateAvailable, isUpdatePending } = Updates.useUpdates()
+
+  useEffect(() => {
+    // Update descargado (por auto-check nativo O por fetchUpdateAsync): aplicar ya
+    if (!__DEV__ && Platform.OS !== 'web' && isUpdatePending) {
+      Updates.reloadAsync().catch(() => {})
+    }
+  }, [isUpdatePending])
+
+  useEffect(() => {
+    // Update detectado pero no descargado: descargarlo (isUpdatePending lo aplica)
+    if (!__DEV__ && Platform.OS !== 'web' && isUpdateAvailable) {
+      Updates.fetchUpdateAsync().catch(() => {})
+    }
+  }, [isUpdateAvailable])
+
+  useEffect(() => {
+    // Check inicial al montar — el resultado llega por eventos a useUpdates()
+    dispararCheckUpdate()
+  }, [])
+
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return
     const id = 'ionicons-css'
@@ -129,10 +155,6 @@ export default function RootLayout() {
     style.id = id
     style.textContent = "@font-face{font-family:'Ionicons';src:url('/fonts/Ionicons.ttf') format('truetype');font-weight:normal;font-style:normal;}"
     document.head.appendChild(style)
-  }, [])
-
-  useEffect(() => {
-    checkForUpdate()
   }, [])
 
   // Verifica si la versión instalada cumple el mínimo requerido en Supabase
@@ -257,7 +279,7 @@ export default function RootLayout() {
         const ahora = Date.now()
         if (ahora - ultimaRevisionUpdateRef.current > 10 * 60 * 1000) {
           ultimaRevisionUpdateRef.current = ahora
-          checkForUpdate()
+          dispararCheckUpdate()
         }
       } else if (state === 'background' || state === 'inactive') {
         supabase.auth.stopAutoRefresh()
