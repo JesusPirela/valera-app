@@ -132,7 +132,7 @@ export default function UsuarioActividad() {
 
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 40, alignItems: 'center' }} refreshControl={refreshControl}>
        <View style={{ width: CONTENIDO }}>
-        {/* Rango */}
+        {/* Rango + elegir fecha */}
         <View style={s.chipsRow}>
           {([[7, '7 días'], [30, '30 días'], [90, '90 días']] as const).map(([v, lbl]) => (
             <TouchableOpacity
@@ -143,6 +143,9 @@ export default function UsuarioActividad() {
               <Text style={[s.chipTxt, { color: c.textSub }, rango === v && s.chipTxtOn]}>{lbl}</Text>
             </TouchableOpacity>
           ))}
+          <TouchableOpacity style={[s.chip, { borderColor: '#1a6470', backgroundColor: '#1a647014' }]} onPress={() => setPicker(true)}>
+            <Text style={[s.chipTxt, { color: '#1a6470' }]}>📅 Elegir fecha</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Métrica */}
@@ -203,9 +206,6 @@ export default function UsuarioActividad() {
             <View style={[s.chartCard, { backgroundColor: c.card, borderColor: c.border }]}>
               <View style={s.chartTop}>
                 <Text style={[s.chartTitulo, { color: c.text }]}>{LABEL_METRICA[metrica]} por día</Text>
-                <TouchableOpacity style={[s.fechaBtn, { borderColor: colorMet }]} onPress={() => setPicker(true)}>
-                  <Text style={[s.fechaBtnTxt, { color: colorMet }]}>📅 Elegir fecha</Text>
-                </TouchableOpacity>
               </View>
               <Text style={[s.chartHint, { color: c.textMute }]}>
                 {isWeb ? 'Pasa el mouse sobre una barra para ver el dato · haz clic para ver ese día' : 'Toca una barra para ver ese día'}
