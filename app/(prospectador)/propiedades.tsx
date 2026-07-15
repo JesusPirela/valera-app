@@ -750,14 +750,27 @@ export default function ProspectadorPropiedades() {
     )
   }
 
-  // Las destacadas YA NO se fijan arriba: se mezclan con el resto. Siguen
-  // marcadas con su banner dorado y se pueden ver todas juntas con el filtro
-  // "Destacadas" (abajo). Antes copaban las primeras posiciones del inicio.
-  if (!esAdmin && !ordenPrecio && !filtroNueva) {
-    // Usuarios no-admin: orden aleatorio por sesión (sin priorizar destacadas).
+  // Las destacadas van ARRIBA para empujar al usuario a publicarlas, PERO solo
+  // mientras ESE usuario no las haya publicado. En cuanto le da "Publicar"
+  // (veces > 0), la destacada se revuelve con las demás: ya cumplió su función
+  // de recordatorio. Siguen con su banner dorado y se ven todas con el filtro
+  // "Destacadas".
+  const destacadaPendiente = (p: Propiedad) =>
+    _estaDestacada(p) && (publicaciones[p.id] ?? 0) === 0
+
+  if (esAdmin) {
+    // Admin: destacadas pendientes primero, resto en orden del servidor (fecha desc).
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
-      (shuffleMapRef.current.get(a.id) ?? 0) - (shuffleMapRef.current.get(b.id) ?? 0)
+      (destacadaPendiente(b) ? 1 : 0) - (destacadaPendiente(a) ? 1 : 0)
     )
+  } else if (!ordenPrecio && !filtroNueva) {
+    // Usuarios: destacadas pendientes primero, resto en orden aleatorio por sesión.
+    propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
+      const aD = destacadaPendiente(a) ? 1 : 0
+      const bD = destacadaPendiente(b) ? 1 : 0
+      if (aD !== bD) return bD - aD
+      return (shuffleMapRef.current.get(a.id) ?? 0) - (shuffleMapRef.current.get(b.id) ?? 0)
+    })
   }
 
   return propiedadesFiltradas
