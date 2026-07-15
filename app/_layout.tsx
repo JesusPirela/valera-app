@@ -9,6 +9,7 @@ import { ThemeProvider, useColors } from '../lib/ThemeContext'
 import { VistaComoProvider } from '../lib/VistaComo'
 import { CargaDatosProvider } from '../lib/CargaDatos'
 import { actualizarNombreRole, guardarTokensSesion, accountSwitch, userSignOut } from '../lib/cuentas'
+import { initMonitoreo, track } from '../lib/monitor'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
 import { Ionicons } from '@expo/vector-icons'
@@ -145,6 +146,12 @@ export default function RootLayout() {
   useEffect(() => {
     // Check inicial al montar — el resultado llega por eventos a useUpdates()
     dispararCheckUpdate()
+  }, [])
+
+  useEffect(() => {
+    // Monitoreo: captura de errores globales + evento de apertura de la app.
+    initMonitoreo()
+    track('app_open')
   }, [])
 
   useEffect(() => {
@@ -309,6 +316,7 @@ export default function RootLayout() {
         }
       } else if (event === 'SIGNED_IN') {
         setSession(session)
+        track('login')
         if (session) {
           // Guardar tokens INMEDIATAMENTE del evento (sin llamar a getSession).
           guardarTokensSesion(session).catch(() => {})

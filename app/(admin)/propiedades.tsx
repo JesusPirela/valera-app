@@ -71,6 +71,7 @@ const NAV_ITEMS = [
   { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828', grupo: 'Gestión' },
   { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F', grupo: 'Gestión' },
   { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2', grupo: 'Gestión' },
+  { label: 'Monitoreo', icon: '🩺', route: '/(admin)/monitoreo', color: '#00695C', grupo: 'Gestión' },
   { label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#F57F17', grupo: 'Crecimiento' },
   { label: 'Tienda', icon: '🛒', route: '/(admin)/tienda-compras', color: '#558B2F', grupo: 'Crecimiento' },
   { label: 'Pool Leads', icon: '🔥', route: '/(admin)/leads-pool', color: '#B71C1C', grupo: 'Crecimiento' },

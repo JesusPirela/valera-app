@@ -35,6 +35,8 @@ const LOGO = require('../../assets/logo.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import { AccentBackground } from '../../lib/patrones'
 import { actualizarMisionesPorCategoria } from '../../lib/gamification'
+import { track } from '../../lib/monitor'
+import { SkeletonListaPropiedades } from '../../components/Skeleton'
 import { thumb, type ThumbOpts } from '../../lib/img'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useCargaDatos, opcionesImagenTarjeta, tarjetasIniciales, tarjetasPorTanda } from '../../lib/CargaDatos'
@@ -519,6 +521,7 @@ export default function ProspectadorPropiedades() {
     const idemKey = generarIdemKey()
     const exito = (vecesReal: number) => {
       setVeces(vecesReal)
+      track('publicar_propiedad', { veces: vecesReal })
       actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
     }
     const encolar = async () => {
@@ -1104,7 +1107,7 @@ export default function ProspectadorPropiedades() {
         {(isLoading || vistaZonas || propiedadesFiltradas.length === 0) && filtrosHeader}
 
         {isLoading ? (
-          <ActivityIndicator size="large" color={primaryColor} style={{ marginTop: 40 }} />
+          <SkeletonListaPropiedades n={4} />
         ) : propiedadesFiltradas.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>🔍</Text>
