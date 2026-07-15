@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
-  TouchableOpacity, useWindowDimensions,
+  TouchableOpacity, useWindowDimensions, Modal,
 } from 'react-native'
 import { useLocalSearchParams, useFocusEffect, router } from 'expo-router'
 import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg'
@@ -50,6 +50,7 @@ export default function UsuarioActividad() {
   const [diaSel, setDiaSel] = useState<string | null>(null)
   const [detalle, setDetalle] = useState<Detalle[] | null>(null)
   const [loadingDet, setLoadingDet] = useState(false)
+  const [picker, setPicker] = useState(false)
 
   const cargar = useCallback(async () => {
     if (!id) return
@@ -88,18 +89,22 @@ export default function UsuarioActividad() {
     return { total, tendencia, promedio, prim, seg }
   }, [dias, metrica])
 
-  const W = Math.min(width - 32, 560)
-  const H = 180
-  const padL = 34, padB = 34, padT = 14, padR = 8
+  // El contenido se limita a un ancho máximo y se centra; la gráfica llena ese
+  // ancho (antes en web quedaba chiquita y perdida en un card enorme).
+  const CONTENIDO = Math.min(width - 28, 720)
+  const W = CONTENIDO - 24            // menos el padding del card
+  const H = 240
+  const padL = 40, padB = 34, padT = 22, padR = 12
   const chartW = W - padL - padR
   const chartH = H - padT - padB
 
   const maxVal = Math.max(1, ...dias.map(d => d[metrica]))
   const gap    = dias.length ? chartW / dias.length : chartW
-  const barW   = Math.max(3, Math.min(28, gap * 0.68))
+  const barW   = Math.max(5, Math.min(46, gap * 0.72))
   const ticks  = [0, Math.ceil(maxVal / 2), maxVal]
   // Con muchos días, no caben todas las etiquetas: se muestra 1 de cada N.
   const cadaN  = dias.length <= 10 ? 1 : dias.length <= 31 ? 5 : 10
+  const colorMet = COLOR_METRICA[metrica]
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
@@ -113,7 +118,8 @@ export default function UsuarioActividad() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 40 }} refreshControl={refreshControl}>
+      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 40, alignItems: 'center' }} refreshControl={refreshControl}>
+       <View style={{ width: CONTENIDO }}>
         {/* Rango */}
         <View style={s.chipsRow}>
           {([[7, '7 días'], [30, '30 días'], [90, '90 días']] as const).map(([v, lbl]) => (
@@ -183,7 +189,12 @@ export default function UsuarioActividad() {
 
             {/* Gráfica */}
             <View style={[s.chartCard, { backgroundColor: c.card, borderColor: c.border }]}>
-              <Text style={[s.chartHint, { color: c.textMute }]}>Toca una barra para ver ese día</Text>
+              <View style={s.chartTop}>
+                <Text style={[s.chartHint, { color: c.textMute }]}>Toca una barra para ver ese día</Text>
+                <TouchableOpacity style={[s.fechaBtn, { borderColor: colorMet }]} onPress={() => setPicker(true)}>
+                  <Text style={[s.fechaBtnTxt, { color: colorMet }]}>📅 Elegir fecha</Text>
+                </TouchableOpacity>
+              </View>
               <Svg width={W} height={H}>
                 {ticks.map(t => {
                   const y = padT + chartH - (t / maxVal) * chartH
@@ -191,24 +202,37 @@ export default function UsuarioActividad() {
                 })}
                 {ticks.map(t => {
                   const y = padT + chartH - (t / maxVal) * chartH
-                  return <SvgText key={`yt${t}`} x={padL - 4} y={y + 4} fill={c.textMute} fontSize={9} textAnchor="end">{t}</SvgText>
+                  return <SvgText key={`yt${t}`} x={padL - 6} y={y + 4} fill={c.textMute} fontSize={11} textAnchor="end">{t}</SvgText>
                 })}
                 {dias.map((d, i) => {
                   const val  = d[metrica]
                   const x    = padL + i * gap + (gap - barW) / 2
-                  const barH = Math.max(val > 0 ? 3 : 0, (val / maxVal) * chartH)
+                  const barH = Math.max(val > 0 ? 4 : 0, (val / maxVal) * chartH)
                   const y    = padT + chartH - barH
                   const sel  = diaSel === d.dia
                   return (
                     <Rect
                       key={d.dia}
-                      x={x} y={y} width={barW} height={barH} rx={2}
-                      fill={COLOR_METRICA[metrica]}
-                      opacity={sel ? 1 : 0.55}
+                      x={x} y={y} width={barW} height={barH} rx={3}
+                      fill={colorMet}
+                      opacity={diaSel && !sel ? 0.4 : 1}
                       stroke={sel ? c.text : undefined}
-                      strokeWidth={sel ? 1.5 : 0}
+                      strokeWidth={sel ? 2 : 0}
                       onPress={() => abrirDia(d.dia)}
                     />
+                  )
+                })}
+                {/* Valor encima de la barra (si cabe y no son demasiados días) */}
+                {dias.length <= 31 && dias.map((d, i) => {
+                  const val = d[metrica]
+                  if (val === 0) return null
+                  const barH = Math.max(4, (val / maxVal) * chartH)
+                  const y    = padT + chartH - barH
+                  return (
+                    <SvgText key={`v${d.dia}`} x={padL + i * gap + gap / 2} y={y - 4}
+                      fill={c.text} fontSize={barW < 14 ? 8 : 10} fontWeight="bold" textAnchor="middle">
+                      {val}
+                    </SvgText>
                   )
                 })}
                 {/* Área táctil de toda la columna (para días con barra chica o en 0) */}
@@ -221,7 +245,7 @@ export default function UsuarioActividad() {
                   />
                 ))}
                 {dias.map((d, i) => (i % cadaN === 0 ? (
-                  <SvgText key={`x${d.dia}`} x={padL + i * gap + gap / 2} y={H - 4} fill={c.textMute} fontSize={8} textAnchor="middle">
+                  <SvgText key={`x${d.dia}`} x={padL + i * gap + gap / 2} y={H - 6} fill={c.textMute} fontSize={10} textAnchor="middle">
                     {new Date(d.dia + 'T12:00:00').getDate()}
                   </SvgText>
                 ) : null))}
@@ -256,8 +280,71 @@ export default function UsuarioActividad() {
             )}
           </>
         )}
+       </View>
       </ScrollView>
+
+      {/* Selector de fecha libre: cualquier día, aunque esté fuera del rango */}
+      <SelectorFecha
+        visible={picker}
+        onClose={() => setPicker(false)}
+        onElegir={(f) => { setPicker(false); abrirDia(f) }}
+      />
     </View>
+  )
+}
+
+// ── Selector de fecha (día / mes / año con flechas, sin dependencias) ────────
+function SelectorFecha({ visible, onClose, onElegir }: {
+  visible: boolean; onClose: () => void; onElegir: (fecha: string) => void
+}) {
+  const c = useColors()
+  const [f, setF] = useState<string>(hoyMX())
+
+  const d = new Date(f + 'T12:00:00Z')
+  const ajustar = (campo: 'd' | 'm' | 'a', delta: number) => {
+    const n = new Date(f + 'T12:00:00Z')
+    if (campo === 'd') n.setUTCDate(n.getUTCDate() + delta)
+    if (campo === 'm') n.setUTCMonth(n.getUTCMonth() + delta)
+    if (campo === 'a') n.setUTCFullYear(n.getUTCFullYear() + delta)
+    // No permitir fechas futuras.
+    if (n.toISOString().slice(0, 10) > hoyMX()) return
+    setF(n.toISOString().slice(0, 10))
+  }
+
+  const Spin = ({ label, valor, campo }: { label: string; valor: string | number; campo: 'd' | 'm' | 'a' }) => (
+    <View style={{ alignItems: 'center', flex: 1 }}>
+      <Text style={[sf.spinLbl, { color: c.textMute }]}>{label}</Text>
+      <TouchableOpacity style={[sf.spinBtn, { borderColor: c.border }]} onPress={() => ajustar(campo, 1)}>
+        <Text style={[sf.spinArrow, { color: c.text }]}>▲</Text>
+      </TouchableOpacity>
+      <Text style={[sf.spinVal, { color: c.text }]}>{valor}</Text>
+      <TouchableOpacity style={[sf.spinBtn, { borderColor: c.border }]} onPress={() => ajustar(campo, -1)}>
+        <Text style={[sf.spinArrow, { color: c.text }]}>▼</Text>
+      </TouchableOpacity>
+    </View>
+  )
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={sf.overlay}>
+        <View style={[sf.box, { backgroundColor: c.card }]}>
+          <Text style={[sf.titulo, { color: c.text }]}>Elegir fecha</Text>
+          <View style={sf.row}>
+            <Spin label="Día" valor={d.getUTCDate()} campo="d" />
+            <Spin label="Mes" valor={d.toLocaleDateString('es-MX', { month: 'short', timeZone: 'UTC' })} campo="m" />
+            <Spin label="Año" valor={d.getUTCFullYear()} campo="a" />
+          </View>
+          <View style={sf.acciones}>
+            <TouchableOpacity style={sf.btnCancel} onPress={onClose}>
+              <Text style={[sf.btnCancelTxt, { color: c.textSub }]}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={sf.btnOk} onPress={() => onElegir(f)}>
+              <Text style={sf.btnOkTxt}>Ver ese día</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   )
 }
 
@@ -286,7 +373,10 @@ const s = StyleSheet.create({
   alertaTxt: { color: '#dc2626', fontSize: 12.5, fontWeight: '600', lineHeight: 17 },
 
   chartCard: { borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 10, alignItems: 'center' },
-  chartHint: { fontSize: 11, marginBottom: 6, alignSelf: 'flex-start' },
+  chartTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 8 },
+  chartHint: { fontSize: 11 },
+  fechaBtn: { borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  fechaBtnTxt: { fontSize: 12, fontWeight: '800' },
 
   detCard: { borderWidth: 1, borderRadius: 14, padding: 14 },
   detHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
@@ -296,4 +386,20 @@ const s = StyleSheet.create({
   detIcono: { fontSize: 15 },
   detTxt: { flex: 1, fontSize: 13.5, fontWeight: '600' },
   detHora: { fontSize: 12, fontWeight: '600' },
+})
+
+const sf = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  box: { borderRadius: 16, padding: 20, width: '100%', maxWidth: 340 },
+  titulo: { fontSize: 17, fontWeight: '800', textAlign: 'center', marginBottom: 14 },
+  row: { flexDirection: 'row', gap: 10 },
+  spinLbl: { fontSize: 11, fontWeight: '700', marginBottom: 6 },
+  spinBtn: { borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 18, marginVertical: 4 },
+  spinArrow: { fontSize: 13 },
+  spinVal: { fontSize: 17, fontWeight: '800', minWidth: 44, textAlign: 'center' },
+  acciones: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  btnCancel: { flex: 1, paddingVertical: 12, alignItems: 'center' },
+  btnCancelTxt: { fontSize: 14, fontWeight: '700' },
+  btnOk: { flex: 1, backgroundColor: TEAL, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  btnOkTxt: { color: '#fff', fontSize: 14, fontWeight: '800' },
 })
