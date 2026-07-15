@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
-  TouchableOpacity, useWindowDimensions, Modal,
+  TouchableOpacity, useWindowDimensions, Modal, Platform,
 } from 'react-native'
 import { useLocalSearchParams, useFocusEffect, router } from 'expo-router'
 import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg'
@@ -57,6 +57,7 @@ export default function UsuarioActividad() {
   const [detalle, setDetalle] = useState<Detalle[] | null>(null)
   const [loadingDet, setLoadingDet] = useState(false)
   const [picker, setPicker] = useState(false)
+  const [hover, setHover] = useState<{ dia: string; val: number; i: number } | null>(null)
 
   const cargar = useCallback(async () => {
     if (!id) return
@@ -96,21 +97,26 @@ export default function UsuarioActividad() {
   }, [dias, metrica])
 
   // El contenido se limita a un ancho máximo y se centra; la gráfica llena ese
-  // ancho (antes en web quedaba chiquita y perdida en un card enorme).
-  const CONTENIDO = Math.min(width - 28, 720)
+  // ancho. Se hizo grande (antes quedaba chiquita y perdida en un card enorme).
+  const CONTENIDO = Math.min(width - 28, 1040)
   const W = CONTENIDO - 24            // menos el padding del card
-  const H = 240
-  const padL = 40, padB = 34, padT = 22, padR = 12
+  const H = 320
+  // padL: espacio para el título vertical "Cantidad" + números del eje Y.
+  // padB: espacio para las fechas del eje X + el título "Fecha".
+  const padL = 56, padB = 56, padT = 24, padR = 18
   const chartW = W - padL - padR
   const chartH = H - padT - padB
 
   const maxVal = Math.max(1, ...dias.map(d => d[metrica]))
   const gap    = dias.length ? chartW / dias.length : chartW
-  const barW   = Math.max(5, Math.min(46, gap * 0.72))
+  const barW   = Math.max(6, Math.min(52, gap * 0.72))
   const ticks  = [0, Math.ceil(maxVal / 2), maxVal]
   // Con muchos días, no caben todas las etiquetas: se muestra 1 de cada N.
-  const cadaN  = dias.length <= 10 ? 1 : dias.length <= 31 ? 5 : 10
+  const cadaN  = dias.length <= 12 ? 1 : dias.length <= 31 ? 4 : 9
   const colorMet = COLOR_METRICA[metrica]
+  const isWeb = Platform.OS === 'web'
+  const fmtDiaMes = (fecha: string) =>
+    new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
@@ -196,65 +202,107 @@ export default function UsuarioActividad() {
             {/* Gráfica */}
             <View style={[s.chartCard, { backgroundColor: c.card, borderColor: c.border }]}>
               <View style={s.chartTop}>
-                <Text style={[s.chartHint, { color: c.textMute }]}>Toca una barra para ver ese día</Text>
+                <Text style={[s.chartTitulo, { color: c.text }]}>{LABEL_METRICA[metrica]} por día</Text>
                 <TouchableOpacity style={[s.fechaBtn, { borderColor: colorMet }]} onPress={() => setPicker(true)}>
                   <Text style={[s.fechaBtnTxt, { color: colorMet }]}>📅 Elegir fecha</Text>
                 </TouchableOpacity>
               </View>
+              <Text style={[s.chartHint, { color: c.textMute }]}>
+                {isWeb ? 'Pasa el mouse sobre una barra para ver el dato · haz clic para ver ese día' : 'Toca una barra para ver ese día'}
+              </Text>
               <Svg width={W} height={H}>
+                {/* Rejilla + números del eje Y (cantidad) */}
                 {ticks.map(t => {
                   const y = padT + chartH - (t / maxVal) * chartH
                   return <Line key={`g${t}`} x1={padL} y1={y} x2={W - padR} y2={y} stroke={c.border} strokeWidth={1} />
                 })}
                 {ticks.map(t => {
                   const y = padT + chartH - (t / maxVal) * chartH
-                  return <SvgText key={`yt${t}`} x={padL - 6} y={y + 4} fill={c.textMute} fontSize={11} textAnchor="end">{t}</SvgText>
+                  return <SvgText key={`yt${t}`} x={padL - 8} y={y + 4} fill={c.textMute} fontSize={12} textAnchor="end">{t}</SvgText>
                 })}
+                {/* Título del eje Y (vertical) */}
+                <SvgText x={16} y={padT + chartH / 2} fill={c.textSub} fontSize={12} fontWeight="bold"
+                  textAnchor="middle" transform={`rotate(-90, 16, ${padT + chartH / 2})`}>
+                  Cantidad
+                </SvgText>
+
+                {/* Barras */}
                 {dias.map((d, i) => {
                   const val  = d[metrica]
                   const x    = padL + i * gap + (gap - barW) / 2
                   const barH = Math.max(val > 0 ? 4 : 0, (val / maxVal) * chartH)
                   const y    = padT + chartH - barH
-                  const sel  = diaSel === d.dia
+                  const act  = hover?.dia === d.dia || diaSel === d.dia
                   return (
                     <Rect
                       key={d.dia}
                       x={x} y={y} width={barW} height={barH} rx={3}
                       fill={colorMet}
-                      opacity={diaSel && !sel ? 0.4 : 1}
-                      stroke={sel ? c.text : undefined}
-                      strokeWidth={sel ? 2 : 0}
+                      opacity={(hover || diaSel) && !act ? 0.4 : 1}
+                      stroke={act ? c.text : undefined}
+                      strokeWidth={act ? 2 : 0}
                       onPress={() => abrirDia(d.dia)}
                     />
                   )
                 })}
-                {/* Valor encima de la barra (si cabe y no son demasiados días) */}
+                {/* Valor encima de la barra (si no son demasiados días) */}
                 {dias.length <= 31 && dias.map((d, i) => {
                   const val = d[metrica]
                   if (val === 0) return null
                   const barH = Math.max(4, (val / maxVal) * chartH)
                   const y    = padT + chartH - barH
                   return (
-                    <SvgText key={`v${d.dia}`} x={padL + i * gap + gap / 2} y={y - 4}
-                      fill={c.text} fontSize={barW < 14 ? 8 : 10} fontWeight="bold" textAnchor="middle">
+                    <SvgText key={`v${d.dia}`} x={padL + i * gap + gap / 2} y={y - 5}
+                      fill={c.text} fontSize={barW < 16 ? 9 : 11} fontWeight="bold" textAnchor="middle">
                       {val}
                     </SvgText>
                   )
                 })}
-                {/* Área táctil de toda la columna (para días con barra chica o en 0) */}
-                {dias.map((d, i) => (
-                  <Rect
-                    key={`t${d.dia}`}
-                    x={padL + i * gap} y={padT} width={gap} height={chartH}
-                    fill="transparent"
-                    onPress={() => abrirDia(d.dia)}
-                  />
-                ))}
+                {/* Área de toda la columna: clic = ver día; en web, hover = tooltip */}
+                {dias.map((d, i) => {
+                  const webHover = isWeb ? {
+                    onMouseEnter: () => setHover({ dia: d.dia, val: d[metrica], i }),
+                    onMouseLeave: () => setHover(h => (h?.dia === d.dia ? null : h)),
+                  } : {}
+                  return (
+                    <Rect
+                      key={`t${d.dia}`}
+                      x={padL + i * gap} y={padT} width={gap} height={chartH}
+                      fill="transparent"
+                      onPress={() => abrirDia(d.dia)}
+                      {...(webHover as any)}
+                    />
+                  )
+                })}
+                {/* Fechas del eje X */}
                 {dias.map((d, i) => (i % cadaN === 0 ? (
-                  <SvgText key={`x${d.dia}`} x={padL + i * gap + gap / 2} y={H - 6} fill={c.textMute} fontSize={10} textAnchor="middle">
-                    {new Date(d.dia + 'T12:00:00').getDate()}
+                  <SvgText key={`x${d.dia}`} x={padL + i * gap + gap / 2} y={padT + chartH + 18}
+                    fill={c.textMute} fontSize={11} textAnchor="middle">
+                    {fmtDiaMes(d.dia)}
                   </SvgText>
                 ) : null))}
+                {/* Título del eje X */}
+                <SvgText x={padL + chartW / 2} y={H - 6} fill={c.textSub} fontSize={12} fontWeight="bold" textAnchor="middle">
+                  Fecha
+                </SvgText>
+
+                {/* Tooltip (hover): recuadro con la fecha y el dato exacto */}
+                {hover && (() => {
+                  const cx = padL + hover.i * gap + gap / 2
+                  const tw = 118, th = 40
+                  const tx = Math.max(padL, Math.min(cx - tw / 2, W - padR - tw))
+                  return (
+                    <>
+                      <Rect x={tx} y={padT + 2} width={tw} height={th} rx={7} fill={c.text} opacity={0.92} />
+                      <SvgText x={tx + tw / 2} y={padT + 18} fill={c.bg} fontSize={11} fontWeight="bold" textAnchor="middle">
+                        {fmtDiaMes(hover.dia)}
+                      </SvgText>
+                      <SvgText x={tx + tw / 2} y={padT + 33} fill={c.bg} fontSize={12} fontWeight="bold" textAnchor="middle">
+                        {hover.val} {metrica === 'clientes' ? 'clientes' : metrica === 'seguimientos' ? 'seguim.' : 'public.'}
+                      </SvgText>
+                    </>
+                  )
+                })()}
               </Svg>
             </View>
 
@@ -385,8 +433,9 @@ const s = StyleSheet.create({
   alertaTxt: { color: '#dc2626', fontSize: 12.5, fontWeight: '600', lineHeight: 17 },
 
   chartCard: { borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 10, alignItems: 'center' },
-  chartTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 8 },
-  chartHint: { fontSize: 11 },
+  chartTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 2 },
+  chartTitulo: { fontSize: 14, fontWeight: '800' },
+  chartHint: { fontSize: 11, alignSelf: 'flex-start', marginBottom: 6 },
   fechaBtn: { borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   fechaBtnTxt: { fontSize: 12, fontWeight: '800' },
 
