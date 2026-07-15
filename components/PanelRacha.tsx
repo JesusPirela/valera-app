@@ -156,37 +156,41 @@ export default function PanelRacha() {
           </View>
         </View>
 
-        {/* Protectores: se acumulan sin tope; comprarlos tiene cupo semanal */}
-        <View style={s.protRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[s.protTitulo, { color: c.text }]}>
-              🛡️ Protectores: {r.protectores}
-            </Text>
-            <Text style={[s.protSub, { color: c.textMute }]}>
-              Si faltas un día, se usa uno solo y tu racha sobrevive.
-            </Text>
-            {r.proximo_protector_nivel != null && (
-              <Text style={[s.protSub, { color: c.textMute }]}>
-                🎁 Ganas 1 al llegar al nivel {r.proximo_protector_nivel} (vas en el {r.nivel}).
+        {/* Protectores: se acumulan sin tope; comprarlos tiene cupo semanal.
+            El botón va arriba a la derecha y el texto a todo el ancho debajo,
+            para que no se encimen ni se corten. */}
+        <View style={[s.protBlock, { borderTopColor: c.border }]}>
+          <View style={s.protHeader}>
+            <View style={s.protHeaderLeft}>
+              <Text style={s.protShield}>🛡️</Text>
+              <View>
+                <Text style={[s.protTitulo, { color: c.text }]}>Protectores</Text>
+                <Text style={[s.protCount, { color: c.text }]}>{r.protectores}</Text>
+              </View>
+            </View>
+            <View style={{ alignItems: 'flex-end', gap: 4 }}>
+              <TouchableOpacity
+                style={[s.protBtn, !puedeComprar && { opacity: 0.45 }]}
+                onPress={comprar}
+                disabled={!puedeComprar || ocupado != null}
+              >
+                {ocupado === 'comprar'
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <Text style={s.protBtnTxt}>
+                      {comprasRestantes === 0 ? 'Sin cupo' : `${r.costo_protector} 💰`}
+                    </Text>}
+              </TouchableOpacity>
+              <Text style={[s.protCupo, { color: c.textMute }]}>
+                {comprasRestantes}/{maxCompras} esta semana
               </Text>
-            )}
+            </View>
           </View>
-          <View style={{ alignItems: 'center', gap: 3 }}>
-            <TouchableOpacity
-              style={[s.protBtn, !puedeComprar && { opacity: 0.45 }]}
-              onPress={comprar}
-              disabled={!puedeComprar || ocupado != null}
-            >
-              {ocupado === 'comprar'
-                ? <ActivityIndicator size="small" color="#000" />
-                : <Text style={s.protBtnTxt}>
-                    {comprasRestantes === 0 ? 'Sin cupo' : `${r.costo_protector} 💰`}
-                  </Text>}
-            </TouchableOpacity>
-            <Text style={[s.protCupo, { color: c.textMute }]}>
-              {comprasRestantes}/{maxCompras} esta semana
-            </Text>
-          </View>
+          <Text style={[s.protSub, { color: c.textMute }]}>
+            Si faltas un día, se usa uno solo y tu racha sobrevive.
+            {r.proximo_protector_nivel != null
+              ? `  🎁 Ganas 1 al llegar al nivel ${r.proximo_protector_nivel} (vas en el ${r.nivel}).`
+              : ''}
+          </Text>
         </View>
       </View>
     </View>
@@ -206,15 +210,19 @@ const s = StyleSheet.create({
   meta: { borderWidth: 1, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 11 },
   metaTxt: { fontSize: 12.5, fontWeight: '700', lineHeight: 17 },
 
-  protRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  protTitulo: { fontSize: 13.5, fontWeight: '800' },
-  protSub: { fontSize: 11.5, marginTop: 2, lineHeight: 15 },
+  protBlock: { borderTopWidth: 1, paddingTop: 12, gap: 6 },
+  protHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  protHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  protShield: { fontSize: 26 },
+  protTitulo: { fontSize: 13, fontWeight: '800' },
+  protCount: { fontSize: 22, fontWeight: '900', lineHeight: 26 },
+  protSub: { fontSize: 11.5, lineHeight: 16 },
   protBtn: {
     backgroundColor: '#c9a84c', borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 9, minWidth: 78, alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 9, minWidth: 84, alignItems: 'center',
   },
-  protBtnTxt: { color: '#000', fontWeight: '800', fontSize: 12.5 },
-  protCupo: { fontSize: 10, fontWeight: '600' },
+  protBtnTxt: { color: '#000', fontWeight: '800', fontSize: 13 },
+  protCupo: { fontSize: 10.5, fontWeight: '600' },
   barra: { height: 6, borderRadius: 3, backgroundColor: '#00000018', marginTop: 8, overflow: 'hidden' },
   barraFill: { height: '100%', borderRadius: 3, backgroundColor: '#d97706' },
   metaOpciones: { flexDirection: 'row', gap: 8 },
