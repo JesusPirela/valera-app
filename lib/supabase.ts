@@ -31,10 +31,15 @@ const webStorage = {
 let cadenaAuth: Promise<unknown> = Promise.resolve()
 
 function conTope<R>(p: Promise<R>, ms: number): Promise<R> {
-  return Promise.race([
-    p,
-    new Promise<R>((_, reject) => setTimeout(() => reject(new Error('auth lock timeout')), ms)),
-  ])
+  // OJO: hay que CANCELAR el timer cuando la operación termina. Si no, aunque
+  // `p` gane la carrera, el setTimeout sigue vivo y 30 s después rechaza una
+  // promesa que ya nadie escucha → "promesa sin manejar: auth lock timeout"
+  // (aparecía en el monitoreo aunque todo funcionara bien).
+  let timer: ReturnType<typeof setTimeout>
+  const tope = new Promise<R>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('auth lock timeout')), ms)
+  })
+  return Promise.race([p, tope]).finally(() => clearTimeout(timer))
 }
 
 function lockSerial<R>(_name: string, _timeout: number, fn: () => Promise<R>): Promise<R> {
