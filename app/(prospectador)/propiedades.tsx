@@ -148,6 +148,23 @@ const PropiedadCard = memo(function PropiedadCard({
 }) {
   const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
   const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.estacionamientos != null
+
+  // La caja de la imagen adapta su alto a la PROPORCIÓN real de la foto, para
+  // que se vea completa y llene el ancho, sin barras blancas ni recorte. Se
+  // acota (0.9–1.6) para que una foto muy vertical no haga una tarjeta enorme;
+  // en ese caso extremo sí llena con un recorte mínimo.
+  const [aspecto, setAspecto] = useState(1.4)  // ancho/alto; 1.4 = apaisado normal
+  useEffect(() => {
+    if (!primera?.url) return
+    let vivo = true
+    Image.getSize(
+      thumb(primera.url, { width: 320 }) ?? primera.url,
+      (w, h) => { if (vivo && w > 0 && h > 0) setAspecto(Math.max(0.9, Math.min(1.6, w / h))) },
+      () => {},
+    )
+    return () => { vivo = false }
+  }, [primera?.url])
+
   return (
     <TouchableOpacity
       style={[
@@ -161,12 +178,12 @@ const PropiedadCard = memo(function PropiedadCard({
       onPress={() => onOpen(item.id)}
     >
       {primera?.url && (
-        <View style={styles.cardImagenWrap}>
+        <View style={[styles.cardImagenWrap, { aspectRatio: aspecto }]}>
           <ThumbImage
             url={primera.url}
             opts={imgOpts}
             style={styles.cardImagen}
-            resizeMode="contain"
+            resizeMode="cover"
           />
           <TouchableOpacity
             style={styles.lupitaBtn}
@@ -1531,7 +1548,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f5e07a',
   },
-  cardImagenWrap: { width: '100%', height: Platform.OS === 'web' ? 200 : 180, backgroundColor: '#f0f4f5', overflow: 'hidden' },
+  // Sin alto fijo: el alto lo pone `aspectRatio` según la proporción de la foto.
+  cardImagenWrap: { width: '100%', backgroundColor: '#f0f4f5', overflow: 'hidden' },
   cardImagen: { width: '100%', height: '100%' },
   lupitaBtn: {
     position: 'absolute', top: 8, right: 8,
