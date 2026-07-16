@@ -1,12 +1,16 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Platform } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 
-type ErrRow = { mensaje: string; contexto: string | null; n: number; ultimo: string }
+type ErrRow = {
+  mensaje: string; contexto: string | null; n: number; usuarios: number; ultimo: string
+  stack: string | null; plataforma: string | null; version_app: string | null
+}
+type Ocurrencia = { contexto: string | null; plataforma: string | null; version_app: string | null; usuario: string; created_at: string; stack: string | null }
 type EvtRow = { evento: string; n: number; usuarios: number }
 
 const TEAL = '#1a6470'
@@ -19,6 +23,9 @@ export default function Monitoreo() {
   const [errores, setErrores] = useState<ErrRow[]>([])
   const [eventos, setEventos] = useState<EvtRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandido, setExpandido] = useState<string | null>(null)   // mensaje del error abierto
+  const [ocurrencias, setOcurrencias] = useState<Ocurrencia[]>([])
+  const [cargandoOcur, setCargandoOcur] = useState(false)
 
   const cargar = useCallback(async () => {
     const [e, ev] = await Promise.all([
@@ -34,6 +41,16 @@ export default function Monitoreo() {
   const { refreshControl } = usePullRefresh(cargar)
 
   const fmt = (iso: string) => new Date(iso).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+
+  async function toggleError(mensaje: string) {
+    if (expandido === mensaje) { setExpandido(null); return }
+    setExpandido(mensaje)
+    setCargandoOcur(true)
+    setOcurrencias([])
+    const { data } = await supabase.rpc('get_error_ocurrencias', { p_mensaje: mensaje, p_dias: 30 })
+    setOcurrencias((data ?? []) as Ocurrencia[])
+    setCargandoOcur(false)
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
@@ -73,16 +90,58 @@ export default function Monitoreo() {
               <Text style={[s.vacioTxt, { color: c.textMute }]}>Ningún error en este periodo. Todo tranquilo.</Text>
             </View>
           ) : (
-            errores.map((e, i) => (
-              <View key={i} style={[s.errCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                <View style={s.errTop}>
-                  <Text style={[s.errN, { color: '#dc2626' }]}>×{e.n}</Text>
-                  <Text style={[s.errFecha, { color: c.textMute }]}>{fmt(e.ultimo)}</Text>
-                </View>
-                <Text style={[s.errMsg, { color: c.text }]}>{e.mensaje}</Text>
-                {e.contexto ? <Text style={[s.errCtx, { color: c.textMute }]}>en: {e.contexto}</Text> : null}
-              </View>
-            ))
+            errores.map((e, i) => {
+              const abierto = expandido === e.mensaje
+              return (
+                <TouchableOpacity
+                  key={i}
+                  activeOpacity={0.9}
+                  onPress={() => toggleError(e.mensaje)}
+                  style={[s.errCard, { backgroundColor: c.card, borderColor: c.border }]}
+                >
+                  <View style={s.errTop}>
+                    <Text style={[s.errN, { color: '#dc2626' }]}>×{e.n}</Text>
+                    <Text style={[s.errFecha, { color: c.textMute }]}>{fmt(e.ultimo)}</Text>
+                  </View>
+                  <Text style={[s.errMsg, { color: c.text }]}>{e.mensaje}</Text>
+                  <View style={s.errMetaRow}>
+                    {e.contexto ? <Text style={[s.errTag, { color: c.textMute, borderColor: c.border }]}>📍 {e.contexto}</Text> : null}
+                    {e.plataforma ? <Text style={[s.errTag, { color: c.textMute, borderColor: c.border }]}>📱 {e.plataforma}</Text> : null}
+                    {e.version_app ? <Text style={[s.errTag, { color: c.textMute, borderColor: c.border }]}>v{e.version_app}</Text> : null}
+                    <Text style={[s.errTag, { color: c.textMute, borderColor: c.border }]}>👤 {e.usuarios} usuario{e.usuarios === 1 ? '' : 's'}</Text>
+                  </View>
+                  <Text style={[s.errVer, { color: '#00838F' }]}>{abierto ? '▲ Ocultar detalle' : '▼ Ver detalle'}</Text>
+
+                  {abierto && (
+                    <View style={[s.errDetalle, { borderTopColor: c.border }]}>
+                      {e.stack ? (
+                        <>
+                          <Text style={[s.errDetLbl, { color: c.textMute }]}>Stack (dónde ocurrió):</Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator style={{ marginBottom: 8 }}>
+                            <Text style={[s.errStack, { color: c.text }]} selectable>{e.stack}</Text>
+                          </ScrollView>
+                        </>
+                      ) : (
+                        <Text style={[s.errDetLbl, { color: c.textMute }]}>Sin stack disponible.</Text>
+                      )}
+
+                      <Text style={[s.errDetLbl, { color: c.textMute }]}>Últimas veces que pasó:</Text>
+                      {cargandoOcur ? (
+                        <ActivityIndicator color={TEAL} style={{ marginVertical: 8 }} />
+                      ) : (
+                        ocurrencias.map((o, j) => (
+                          <View key={j} style={[s.ocurFila, { borderBottomColor: c.border }]}>
+                            <Text style={[s.ocurTxt, { color: c.text }]} numberOfLines={1}>
+                              {fmt(o.created_at)} · {o.usuario} · {o.plataforma ?? '?'} {o.version_app ? `v${o.version_app}` : ''}
+                            </Text>
+                          </View>
+                        ))
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )
+            })
           )
         ) : (
           eventos.length === 0 ? (
@@ -127,7 +186,14 @@ const s = StyleSheet.create({
   errN: { fontSize: 13, fontWeight: '900' },
   errFecha: { fontSize: 11 },
   errMsg: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
-  errCtx: { fontSize: 11, marginTop: 4, fontStyle: 'italic' },
+  errMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  errTag: { fontSize: 10.5, fontWeight: '600', borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  errVer: { fontSize: 12, fontWeight: '800', marginTop: 8 },
+  errDetalle: { borderTopWidth: 1, marginTop: 10, paddingTop: 10 },
+  errDetLbl: { fontSize: 11, fontWeight: '700', marginBottom: 4 },
+  errStack: { fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 16 },
+  ocurFila: { paddingVertical: 6, borderBottomWidth: 1 },
+  ocurTxt: { fontSize: 11.5 },
 
   evtCard: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   evtNombre: { fontSize: 14, fontWeight: '700', flex: 1 },
