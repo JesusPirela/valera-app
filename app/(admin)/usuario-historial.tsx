@@ -167,6 +167,11 @@ export default function UsuarioHistorial() {
     </View>
   )
 
+  // El hook DEBE ir antes de cualquier return condicional (Regla de Hooks). Si
+  // se llamaba después del `if (loading) return`, el nº de hooks cambiaba entre
+  // renders y React tronaba → pantalla en blanco.
+  const { refreshControl } = usePullRefresh(cargarInicial)
+
   if (loading) {
     return (
       <View style={[s.container, { backgroundColor: c.bg, justifyContent: 'center' }]}>
@@ -174,8 +179,6 @@ export default function UsuarioHistorial() {
       </View>
     )
   }
-
-  const { refreshControl } = usePullRefresh(cargarInicial)
 
   return (
     <View style={[s.container, { backgroundColor: c.bg }]}>

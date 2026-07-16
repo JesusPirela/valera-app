@@ -141,6 +141,10 @@ export default function UsuarioPublicaciones() {
     </View>
   )
 
+  // El hook va ANTES del return condicional (Regla de Hooks): si no, el nº de
+  // hooks cambia entre renders y React truena → pantalla en blanco.
+  const { refreshControl } = usePullRefresh(cargar)
+
   if (loading) {
     return (
       <View style={[s.container, { backgroundColor: c.bg, justifyContent: 'center' }]}>
@@ -148,8 +152,6 @@ export default function UsuarioPublicaciones() {
       </View>
     )
   }
-
-  const { refreshControl } = usePullRefresh(cargar)
 
   return (
     <View style={[s.container, { backgroundColor: c.bg }]}>
