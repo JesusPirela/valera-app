@@ -13,17 +13,43 @@ const webStorage = {
   removeItem: (key: string) => { try { localStorage.removeItem(key) } catch {} return Promise.resolve() },
 }
 
+// ── Lock de auth: serializa EN MEMORIA (una cadena de promesas) ──────────────
+// El problema que resuelve: Supabase ROTA el refresh_token en cada refresco
+// (cada token es de un solo uso). Si dos refrescos corren a la vez —el automático
+// de startAutoRefresh + uno que dispara una petición cuando el token está por
+// expirar— el segundo usa un refresh_token ya rotado; Supabase lo trata como
+// "token reusado" e INVALIDA la sesión entera. Sintoma: tras ~1 hora conectado,
+// al usuario lo sacan solo y pierde lo que estaba haciendo.
+//
+// Antes se desactivaba el lock por completo (fn => fn()) para evitar deadlocks
+// del lock por almacenamiento (navigator.locks en web, processLock en nativo).
+// Pero eso es justo lo que permitia la carrera. Este lock serializa las
+// operaciones de auth en una cadena de promesas EN MEMORIA: nunca dos refrescos
+// a la vez, y como no toca el almacenamiento no puede reproducir aquellos
+// deadlocks. Cada operacion tiene un tope de 30 s por si la red se cuelga, para
+// que la cadena nunca se quede bloqueada para siempre.
+let cadenaAuth: Promise<unknown> = Promise.resolve()
+
+function conTope<R>(p: Promise<R>, ms: number): Promise<R> {
+  return Promise.race([
+    p,
+    new Promise<R>((_, reject) => setTimeout(() => reject(new Error('auth lock timeout')), ms)),
+  ])
+}
+
+function lockSerial<R>(_name: string, _timeout: number, fn: () => Promise<R>): Promise<R> {
+  // Corre después de que la operación anterior termine (éxito o fallo).
+  const resultado = cadenaAuth.then(() => conTope(fn(), 30000), () => conTope(fn(), 30000))
+  cadenaAuth = resultado.then(() => undefined, () => undefined)
+  return resultado
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: Platform.OS === 'web' ? webStorage : AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
-    // Bypass el mecanismo de lock en todos los entornos.
-    // En web evita deadlocks con PersistQueryClient.
-    // En React Native (monohilo) no hay concurrencia real, y el lock
-    // basado en AsyncStorage puede causar que el token refresh se quede
-    // colgado tras un background/foreground, generando SIGNED_OUT falsos.
-    lock: <R>(_name: string, _timeout: number, fn: () => Promise<R>): Promise<R> => fn(),
+    lock: lockSerial,
   },
 })
