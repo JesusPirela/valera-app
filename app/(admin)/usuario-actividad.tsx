@@ -138,7 +138,7 @@ export default function UsuarioActividad() {
             <TouchableOpacity
               key={v}
               style={[s.chip, { borderColor: c.border }, rango === v && s.chipOn]}
-              onPress={() => { setRango(v); setDiaSel(null) }}
+              onPress={() => setRango(v)}
             >
               <Text style={[s.chipTxt, { color: c.textSub }, rango === v && s.chipTxtOn]}>{lbl}</Text>
             </TouchableOpacity>
@@ -154,7 +154,7 @@ export default function UsuarioActividad() {
             <TouchableOpacity
               key={m}
               style={[s.chip, { borderColor: c.border }, metrica === m && { backgroundColor: COLOR_METRICA[m], borderColor: COLOR_METRICA[m] }]}
-              onPress={() => { setMetrica(m); setDiaSel(null) }}
+              onPress={() => setMetrica(m)}
             >
               <Text style={[s.chipTxt, { color: c.textSub }, metrica === m && s.chipTxtOn]}>{LABEL_METRICA[m]}</Text>
             </TouchableOpacity>

@@ -886,12 +886,15 @@ const s = StyleSheet.create({
   btnNuevoTxt: { color: '#1a3a2a', fontWeight: '800', fontSize: 13 },
 
   // KPI
-  kpiScroll: { flexGrow: 0, borderBottomWidth: 1 },
-  kpiContent: { paddingHorizontal: 14, paddingVertical: 10, gap: 8, flexDirection: 'row' },
-  kpiCard: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, gap: 3, minWidth: 90 },
-  kpiDot: { width: 7, height: 7, borderRadius: 4, marginBottom: 2 },
+  // Con `ScrollView horizontal`, la web pone overflow-y:hidden y recortaba las
+  // tarjetas (solo se veía el punto y un pedazo del número). Se le da alto fijo
+  // que alcance para punto + número + etiqueta.
+  kpiScroll: { flexGrow: 0, borderBottomWidth: 1, height: 96 },
+  kpiContent: { paddingHorizontal: 14, paddingVertical: 10, gap: 8, flexDirection: 'row', alignItems: 'center' },
+  kpiCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, gap: 2, minWidth: 96, height: 74 },
+  kpiDot: { width: 8, height: 8, borderRadius: 4 },
   kpiNum: { fontSize: 22, fontWeight: '900', lineHeight: 26 },
-  kpiLbl: { fontSize: 9, fontWeight: '600', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
+  kpiLbl: { fontSize: 9, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
 
   // Filtros
   chipScroll: { flexGrow: 0, borderBottomWidth: 1 },
