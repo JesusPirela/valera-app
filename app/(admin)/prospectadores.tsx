@@ -187,6 +187,17 @@ export default function Prospectadores() {
   const yaCargoRef = useRef(false)
   const { refreshControl } = usePullRefresh(cargar)
 
+  const listaFiltrada = useMemo(() => {
+    const q = normalizar(busqueda)
+    return lista
+      .filter(p => !busqueda.trim() || normalizar(p.nombre).includes(q) || normalizar(p.email).includes(q))
+      .sort((a, b) => {
+        const r = (rol: string) => RANGO_ROL[rol] ?? 99
+        const dr = r(a.role) - r(b.role)
+        return dr !== 0 ? dr : (a.nombre ?? a.email).localeCompare(b.nombre ?? b.email)
+      })
+  }, [lista, busqueda])
+
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
     const { data, error } = await supabase.rpc('get_prospectadores')
@@ -404,16 +415,7 @@ export default function Prospectadores() {
       ) : (
         <FlatList
           refreshControl={refreshControl}
-          data={useMemo(() => {
-            const q = normalizar(busqueda)
-            return lista
-              .filter(p => !busqueda.trim() || normalizar(p.nombre).includes(q) || normalizar(p.email).includes(q))
-              .sort((a, b) => {
-                const r = (rol: string) => RANGO_ROL[rol] ?? 99
-                const dr = r(a.role) - r(b.role)
-                return dr !== 0 ? dr : (a.nombre ?? a.email).localeCompare(b.nombre ?? b.email)
-              })
-          }, [lista, busqueda])}
+          data={listaFiltrada}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
           removeClippedSubviews
