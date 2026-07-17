@@ -12,6 +12,9 @@ import { ESTADOS, ORDEN_ESTADOS as ORDEN_ESTADOS_BASE } from '../(prospectador)/
 import ImportCSVModal, { parsearCSV, type ImportedRow } from '../../components/ImportCSVModal'
 import { normalizarTelefono } from '../../lib/telefono'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
+// Pantalla recuperable + log si el CRM lanza un error al renderizar (en vez de
+// quedarse en blanco/negro). expo-router usa este export por ruta.
+export { ErrorBoundary } from '../../components/PantallaError'
 
 type ClienteAdmin = {
   id: string

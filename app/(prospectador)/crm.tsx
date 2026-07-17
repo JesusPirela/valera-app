@@ -21,6 +21,9 @@ import { conTimeout } from '../../lib/redIntentos'
 import { puedeEnviarClienteAChatbot } from '../../lib/permisos'
 import { ZonasInteresField } from '../../components/ZonasInteresField'
 import { Tooltip } from '../../components/Tooltip'
+// Si el CRM lanza un error al renderizar, mostrar pantalla recuperable + log
+// en vez de quedarse en blanco/negro (expo-router usa este export por ruta).
+export { ErrorBoundary } from '../../components/PantallaError'
 import { parseZonasGuardadas } from '../../lib/zonas-interes'
 
 type Cliente = {
@@ -830,6 +833,15 @@ export default function CRM() {
     return isWeb ? { flex: col.flex } : { minWidth: col.mw }
   }
 
+  // renderItem HOISTEADO. Antes estaba como `renderItem={useCallback(...)}`
+  // DENTRO del <FlatList>, que solo se renderiza en la vista LISTA. Al alternar
+  // a la vista TABLA ese hook dejaba de llamarse → "Rendered more hooks than
+  // during the previous render" → la pantalla se quedaba en blanco/negro. Un
+  // hook debe llamarse siempre, al nivel del componente, sin condicionales.
+  const renderCliente = useCallback(({ item }: { item: Cliente }) => (
+    <ClienteCard item={item} c={c} darkMode={darkMode} userRole={userRole} onChatbot={abrirModalChatbot} />
+  ), [c, darkMode, userRole, abrirModalChatbot])
+
   return (
     <>
       <OfflineBanner />
@@ -1278,9 +1290,7 @@ export default function CRM() {
             maxToRenderPerBatch={10}
             windowSize={7}
             initialNumToRender={15}
-            renderItem={useCallback(({ item }: { item: Cliente }) => (
-              <ClienteCard item={item} c={c} darkMode={darkMode} userRole={userRole} onChatbot={abrirModalChatbot} />
-            ), [c, darkMode, userRole, abrirModalChatbot])}
+            renderItem={renderCliente}
           />
         )}
       </View>
