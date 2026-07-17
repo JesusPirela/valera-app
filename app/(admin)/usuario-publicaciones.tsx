@@ -159,6 +159,10 @@ export default function UsuarioPublicaciones() {
         refreshControl={refreshControl}
         data={filtradas}
         keyExtractor={(item) => item.propiedad_id}
+        removeClippedSubviews
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        initialNumToRender={15}
         ListHeaderComponent={header}
         contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 16 }}
         renderItem={({ item }) => {

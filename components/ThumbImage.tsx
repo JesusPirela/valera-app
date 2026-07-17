@@ -1,14 +1,7 @@
-import { useState } from 'react'
-import { Image, ImageStyle, StyleProp, Platform } from 'react-native'
+import { useState, memo } from 'react'
+import { ImageStyle, StyleProp } from 'react-native'
+import { Image } from 'expo-image'
 import { thumb, ThumbOpts } from '../lib/img'
-
-// Props de Android que mejoran cómo cargan las fotos: renderizado progresivo
-// (el JPEG aparece borroso→nítido en vez de esperar a estar completo) y sin el
-// retardo de fundido (la foto se muestra apenas se decodifica). En iOS/web se
-// ignoran.
-const androidImgProps = Platform.OS === 'android'
-  ? { progressiveRenderingEnabled: true, fadeDuration: 120 as number }
-  : {}
 
 type Props = {
   url: string | null | undefined
@@ -25,7 +18,7 @@ type Props = {
   onRatio?: (ratio: number) => void
 }
 
-export function ThumbImage({
+export const ThumbImage = memo(function ThumbImage({
   url, opts, style, resizeMode = 'cover',
   autoAspect = false, minAspect = 0.72, maxAspect = 1.6, onRatio,
 }: Props) {
@@ -40,13 +33,13 @@ export function ThumbImage({
   const src = erroredSrc === transformada ? url : transformada
   return (
     <Image
-      {...androidImgProps}
       source={{ uri: src }}
       style={[style, autoAspect && ratio ? { aspectRatio: ratio } : null]}
-      resizeMode={resizeMode}
-      // Al llegar la foto sabemos su tamaño real → fijamos la proporción acotada.
+      contentFit={resizeMode === 'contain' ? 'contain' : resizeMode === 'stretch' ? 'fill' : resizeMode === 'center' ? 'scale-down' : 'cover'}
+      cachePolicy="memory-and-disk"
+      transition={120}
       onLoad={autoAspect ? (e) => {
-        const s: any = e?.nativeEvent?.source
+        const s: any = e?.source
         if (s?.width && s?.height) {
           const r = Math.min(maxAspect, Math.max(minAspect, s.width / s.height))
           setRatio(r)
@@ -56,4 +49,4 @@ export function ThumbImage({
       onError={() => setErroredSrc(transformada)}
     />
   )
-}
+})

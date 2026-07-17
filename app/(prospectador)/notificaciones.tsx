@@ -424,7 +424,6 @@ export default function Notificaciones() {
           refetchCitas()
           queryClient.invalidateQueries({ queryKey: ['notificaciones'] })
           queryClient.invalidateQueries({ queryKey: ['ranking'] })
-          queryClient.invalidateQueries({ queryKey: ['clientes'] })
         }}
       />
 
@@ -469,6 +468,10 @@ export default function Notificaciones() {
           data={notificaciones}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
+          removeClippedSubviews
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          initialNumToRender={15}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor="#1a6470" colors={['#1a6470']} />}
           renderItem={({ item }) => (
             <NotifItem

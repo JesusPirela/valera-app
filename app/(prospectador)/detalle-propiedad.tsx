@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   ActivityIndicator,
   TouchableOpacity,
   Platform,
@@ -15,6 +14,7 @@ import {
   FlatList,
   useWindowDimensions,
 } from 'react-native'
+import { Image } from 'expo-image'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
@@ -240,7 +240,7 @@ export default function DetallePropiedad() {
     },
     enabled: !!id,
     networkMode: 'offlineFirst',
-    staleTime: 0,
+    staleTime: 1000 * 60 * 5,
   })
 
   const { data: notaData } = useQuery({
@@ -1516,7 +1516,7 @@ export default function DetallePropiedad() {
 
   function irAImagen(index: number) {
     setImagenActual(index)
-    scrollRef.current?.scrollTo({ x: index * SCREEN_WIDTH, animated: true })
+    scrollRef.current?.scrollToOffset({ offset: index * SCREEN_WIDTH, animated: true })
   }
 
   return (
@@ -1526,13 +1526,18 @@ export default function DetallePropiedad() {
       {imagenes.length > 0 ? (
         <View>
           <View style={{ position: 'relative' }}>
-            <ScrollView
+            <FlatList
               ref={scrollRef}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
+              data={imagenes}
+              keyExtractor={(_, i) => String(i)}
+              initialNumToRender={1}
+              maxToRenderPerBatch={2}
+              windowSize={3}
+              getItemLayout={(_, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
               onScroll={(e) => {
-                // En web no hay "momentum"; onScroll mantiene el índice al día.
                 const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH)
                 if (index !== imagenActual) setImagenActual(index)
               }}
@@ -1541,23 +1546,23 @@ export default function DetallePropiedad() {
                 const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH)
                 setImagenActual(index)
               }}
-            >
-              {imagenes.map((img, i) => (
+              renderItem={({ item: img, index: i }) => (
                 <TouchableOpacity
-                  key={i}
                   activeOpacity={0.92}
                   onPress={() => { setLightboxIndex(i); setLightboxVisible(true) }}
                 >
                   <Image
-                    source={{ uri: thumbFallidas.has(img.url) ? img.url : thumb(img.url, { width: 1080, quality: 72 }) }}
+                    source={{ uri: thumbFallidas.has(img.url) ? img.url : thumb(img.url, { width: Math.round(SCREEN_WIDTH * 2), quality: 72 }) }}
                     style={[styles.imagen, { width: SCREEN_WIDTH, height: heroH }]}
-                    resizeMode="contain"
-                    progressiveRenderingEnabled
+                    contentFit="contain"
+                    cachePolicy="memory-and-disk"
+                    priority={i === 0 ? 'high' : 'normal'}
+                    transition={120}
                     onError={() => setThumbFallidas(prev => prev.has(img.url) ? prev : new Set(prev).add(img.url))}
                   />
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              )}
+            />
 
             {/* Flechas para navegar el carrusel (en web no se puede deslizar
                 con el mouse; sin esto solo se ve la primera foto). */}
@@ -1606,7 +1611,7 @@ export default function DetallePropiedad() {
         {/* Logo de la inmobiliaria — solo staff */}
         {esStaff && propiedad.inmobiliarias?.logo_url && (
           <View style={styles.inmobiliariaLogoWrapper}>
-            <Image source={{ uri: propiedad.inmobiliarias.logo_url }} style={styles.inmobiliariaLogo} resizeMode="contain" />
+            <Image source={{ uri: propiedad.inmobiliarias.logo_url }} style={styles.inmobiliariaLogo} contentFit="contain" cachePolicy="memory-and-disk" />
             {propiedad.inmobiliarias.nombre && (
               <Text style={styles.inmobiliariaNombre}>{propiedad.inmobiliarias.nombre}</Text>
             )}
@@ -1983,7 +1988,7 @@ export default function DetallePropiedad() {
                     onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${sp.id}` as any)}
                   >
                     {sp.imagen
-                      ? <Image source={{ uri: thumb(sp.imagen) }} style={styles.simImg} resizeMode="cover" />
+                      ? <Image source={{ uri: thumb(sp.imagen) }} style={styles.simImg} contentFit="cover" cachePolicy="memory-and-disk" />
                       : <View style={[styles.simImg, styles.simImgPlaceholder]}><Text style={{ fontSize: 26 }}>🏠</Text></View>
                     }
                     <View style={styles.simInfo}>
@@ -2069,7 +2074,8 @@ export default function DetallePropiedad() {
                 <Image
                   source={{ uri: imagenes[lightboxIndex]?.url }}
                   style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.72 }}
-                  resizeMode="contain"
+                  contentFit="contain"
+                  cachePolicy="memory-and-disk"
                   onLoad={() => setLightboxLoading(false)}
                 />
               </View>

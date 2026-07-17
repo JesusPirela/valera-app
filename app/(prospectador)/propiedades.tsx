@@ -171,16 +171,13 @@ const PropiedadCard = memo(function PropiedadCard({
             <ThumbImage
               url={primera.thumb_url ?? primera.url}
               style={styles.cardImagen}
-              resizeMode="contain"
+              resizeMode="cover"
             />
           ) : (
             <ThumbImage
               url={primera.thumb_url ?? primera.url}
               style={styles.cardImagenMovil}
-              resizeMode="contain"
-              autoAspect
-              minAspect={0.72}
-              maxAspect={1.5}
+              resizeMode="cover"
             />
           )}
           <TouchableOpacity
@@ -1577,10 +1574,8 @@ const styles = StyleSheet.create({
   // Proporción fija 4:3 → todas las tarjetas con la misma altura de imagen.
   cardImagenWrap: { width: '100%', aspectRatio: 4 / 3, overflow: 'hidden' },
   cardImagen: { width: '100%', height: '100%' },
-  // Móvil: la imagen (autoAspect) define su propia altura al cargar. Se reserva
-  // 4:3 de arranque para no dar un salto de layout mientras llega la foto.
-  cardImagenWrapMovil: { width: '100%', overflow: 'hidden' },
-  cardImagenMovil: { width: '100%', aspectRatio: 4 / 3 },
+  cardImagenWrapMovil: { width: '100%', aspectRatio: 4 / 3, overflow: 'hidden' },
+  cardImagenMovil: { width: '100%', height: '100%' },
   lupitaBtn: {
     position: 'absolute', top: 8, right: 8,
     backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18,

@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef } from 'react'
 import {
-  View, Text, ScrollView, Image, TouchableOpacity,
+  View, Text, ScrollView, TouchableOpacity,
   ActivityIndicator, StyleSheet, Platform, Linking,
   useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native'
+import { Image } from 'expo-image'
 import { useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import PropMapa from '../../components/PropMapa'
+import { thumb } from '../../lib/img'
 
 type Propiedad = {
   id: string
@@ -127,9 +129,12 @@ export default function FichaPublica() {
               {imagenes.map((img, i) => (
                 <Image
                   key={i}
-                  source={{ uri: img.url }}
+                  source={{ uri: thumb(img.url, { width: Math.round(imgW * 2), quality: 72 }) ?? img.url }}
                   style={{ width: imgW, height: imgW * 0.65 }}
-                  resizeMode="cover"
+                  contentFit="cover"
+                  cachePolicy="memory-and-disk"
+                  priority={i === 0 ? 'high' : 'normal'}
+                  transition={120}
                 />
               ))}
             </ScrollView>

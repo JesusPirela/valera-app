@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useMemo, createElement } from 'react'
+﻿import { useState, useCallback, useEffect, useMemo, createElement, memo } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking, Alert,
   ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions, RefreshControl,
@@ -114,6 +114,128 @@ const SORT_LABELS: Record<SortBy, string> = {
   nombre:   'Nombre A–Z',
   contacto: 'Próximo contacto',
 }
+
+type ColoresCard = ReturnType<typeof import('../../lib/ThemeContext').useColors>
+const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onChatbot }: {
+  item: Cliente
+  c: ColoresCard
+  darkMode: boolean
+  userRole: string | null
+  onChatbot: (item: Cliente) => void
+}) {
+  const info    = estadoInfo(item.estado)
+  const rec     = proximoRec(item.recordatorios ?? [])
+  const recVenc = rec && new Date(rec.fecha_hora) < new Date()
+  const recHoy  = rec && !recVenc && new Date(rec.fecha_hora).toDateString() === new Date().toDateString()
+  const inits   = iniciales(item.nombre)
+  return (
+    <TouchableOpacity
+      style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}
+      onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
+      activeOpacity={0.8}
+    >
+      <View style={[s.cardBar, { backgroundColor: info.color }]} />
+      <View style={s.cardBody}>
+        <View style={s.cardHead}>
+          <View style={[s.avatar, { backgroundColor: info.color + '22' }]}>
+            <Text style={[s.avatarTxt, { color: info.color }]}>{inits}</Text>
+          </View>
+          <View style={s.cardHeadInfo}>
+            <Text style={[s.cardNombre, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
+            <View style={s.cardSubRow}>
+              {item.nivel_interes ? (
+                <View style={[s.fuenteTag, {
+                  backgroundColor: item.nivel_interes === 'alto'
+                    ? (darkMode ? '#2d0f0f' : '#fee2e2')
+                    : item.nivel_interes === 'medio'
+                    ? (darkMode ? '#271c07' : '#fef3c7')
+                    : (darkMode ? '#0d1e3d' : '#dbeafe'),
+                }]}>
+                  <Text style={[s.fuenteTagTxt, {
+                    color: item.nivel_interes === 'alto'
+                      ? (darkMode ? '#f87171' : '#b91c1c')
+                      : item.nivel_interes === 'medio'
+                      ? (darkMode ? '#fbbf24' : '#92400e')
+                      : (darkMode ? '#93c5fd' : '#1e40af'),
+                  }]}>{NIVEL_INTERES_LABEL[item.nivel_interes]}</Text>
+                </View>
+              ) : null}
+              {item.fuente_lead ? (
+                <View style={[s.fuenteTag, { backgroundColor: darkMode ? c.bg : '#f1f5f9' }]}>
+                  <Text style={[s.fuenteTagTxt, { color: c.textSub }]}>{item.fuente_lead}</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+          <View style={[s.estadoBadge, { backgroundColor: darkMode ? info.color + '40' : info.bg }]}>
+            <View style={[s.estadoDot, { backgroundColor: info.color }]} />
+            <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
+          </View>
+        </View>
+        <View style={s.metaRow}>
+          <View style={s.metaItem}>
+            <Ionicons name="call-outline" size={11} color={c.textMute} />
+            <Text style={[s.metaTxt, { color: c.textSub }]}>{item.telefono}</Text>
+          </View>
+          {item.tipo_operacion && (
+            <View style={s.metaItem}>
+              <Ionicons name="home-outline" size={11} color={c.textMute} />
+              <Text style={[s.metaTxt, { color: c.textSub, textTransform: 'capitalize' }]}>{item.tipo_operacion}</Text>
+            </View>
+          )}
+          <View style={s.metaTime}>
+            <Ionicons name="time-outline" size={11} color={c.textMute} />
+            <Text style={[s.metaTxt, { color: c.textMute }]}>{tiempoRelativo(item.created_at)}</Text>
+          </View>
+        </View>
+        {rec && (
+          <View style={[s.recRow,
+            recVenc ? { backgroundColor: darkMode ? '#2a0e0e' : '#fef2f2' }
+            : recHoy ? { backgroundColor: darkMode ? '#27190a' : '#fffbeb' }
+            : { backgroundColor: darkMode ? '#091e20' : '#f0fdfa' },
+          ]}>
+            <Ionicons
+              name={recVenc ? 'warning-outline' : recHoy ? 'alarm-outline' : 'calendar-outline'}
+              size={12}
+              color={recVenc ? '#ef4444' : recHoy ? '#d97706' : '#1a6470'}
+            />
+            <Text style={[s.recTxt, { color: recVenc ? '#ef4444' : recHoy ? '#92400e' : '#1a6470' }]} numberOfLines={1}>
+              {recVenc ? '⚠ Vencido · ' : recHoy ? 'Hoy · ' : ''}
+              {new Date(rec.fecha_hora).toLocaleDateString('es-MX', {
+                day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+              })} — {rec.titulo}
+            </Text>
+          </View>
+        )}
+        <View style={s.actions}>
+          <TouchableOpacity
+            style={[s.actionWa, darkMode && { backgroundColor: '#0b2016', borderColor: '#1a6b38' }]}
+            onPress={() => abrirWhatsApp(item.telefono, item.nombre)}
+          >
+            <Ionicons name="logo-whatsapp" size={14} color={darkMode ? '#22c55e' : '#16a34a'} />
+            <Text style={[s.actionWaTxt, darkMode && { color: '#22c55e' }]}>WhatsApp</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.actionCall, darkMode && { backgroundColor: '#091929', borderColor: '#0e5282' }]}
+            onPress={() => llamar(item.telefono)}
+          >
+            <Ionicons name="call-outline" size={14} color={darkMode ? '#38bdf8' : '#0369a1'} />
+            <Text style={[s.actionCallTxt, darkMode && { color: '#38bdf8' }]}>Llamar</Text>
+          </TouchableOpacity>
+          {puedeEnviarClienteAChatbot(userRole) && (
+            <TouchableOpacity
+              style={[s.actionChatbot, darkMode && { backgroundColor: '#241a33', borderColor: '#6a3fa0' }]}
+              onPress={() => onChatbot(item)}
+            >
+              <Ionicons name="chatbubbles-outline" size={14} color={darkMode ? '#c084fc' : '#7c3aed'} />
+              <Text style={[s.actionChatbotTxt, darkMode && { color: '#c084fc' }]}>Chatbot</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  )
+})
 
 export default function CRM() {
   // ?mios=1 → "Mi CRM": solo los clientes de los que el usuario es responsable.
@@ -1152,137 +1274,13 @@ export default function CRM() {
             contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100, paddingTop: 10 }}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor="#1a6470" colors={['#1a6470']} />}
-            renderItem={({ item }) => {
-              const info      = estadoInfo(item.estado)
-              const rec       = proximoRec(item.recordatorios ?? [])
-              const recVenc   = rec && new Date(rec.fecha_hora) < new Date()
-              const recHoy    = rec && !recVenc && new Date(rec.fecha_hora).toDateString() === new Date().toDateString()
-              const inits     = iniciales(item.nombre)
-
-              return (
-                <TouchableOpacity
-                  style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}
-                  onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[s.cardBar, { backgroundColor: info.color }]} />
-                  <View style={s.cardBody}>
-
-                    {/* ── Fila superior ── */}
-                    <View style={s.cardHead}>
-                      <View style={[s.avatar, { backgroundColor: info.color + '22' }]}>
-                        <Text style={[s.avatarTxt, { color: info.color }]}>{inits}</Text>
-                      </View>
-                      <View style={s.cardHeadInfo}>
-                        <Text style={[s.cardNombre, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
-                        <View style={s.cardSubRow}>
-                          {item.nivel_interes
-                            ? <View style={[s.fuenteTag, {
-                                backgroundColor: item.nivel_interes === 'alto'
-                                  ? (darkMode ? '#2d0f0f' : '#fee2e2')
-                                  : item.nivel_interes === 'medio'
-                                  ? (darkMode ? '#271c07' : '#fef3c7')
-                                  : (darkMode ? '#0d1e3d' : '#dbeafe'),
-                              }]}>
-                                <Text style={[s.fuenteTagTxt, {
-                                  color: item.nivel_interes === 'alto'
-                                    ? (darkMode ? '#f87171' : '#b91c1c')
-                                    : item.nivel_interes === 'medio'
-                                    ? (darkMode ? '#fbbf24' : '#92400e')
-                                    : (darkMode ? '#93c5fd' : '#1e40af'),
-                                }]}>
-                                  {NIVEL_INTERES_LABEL[item.nivel_interes]}
-                                </Text>
-                              </View>
-                            : null
-                          }
-                          {item.fuente_lead
-                            ? <View style={[s.fuenteTag, { backgroundColor: darkMode ? c.bg : '#f1f5f9' }]}>
-                                <Text style={[s.fuenteTagTxt, { color: c.textSub }]}>{item.fuente_lead}</Text>
-                              </View>
-                            : null
-                          }
-                        </View>
-                      </View>
-                      <View style={[s.estadoBadge, { backgroundColor: darkMode ? info.color + '40' : info.bg }]}>
-                        <View style={[s.estadoDot, { backgroundColor: info.color }]} />
-                        <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
-                      </View>
-                    </View>
-
-                    {/* ── Meta ── */}
-                    <View style={s.metaRow}>
-                      <View style={s.metaItem}>
-                        <Ionicons name="call-outline" size={11} color={c.textMute} />
-                        <Text style={[s.metaTxt, { color: c.textSub }]}>{item.telefono}</Text>
-                      </View>
-                      {item.tipo_operacion && (
-                        <View style={s.metaItem}>
-                          <Ionicons name="home-outline" size={11} color={c.textMute} />
-                          <Text style={[s.metaTxt, { color: c.textSub, textTransform: 'capitalize' }]}>{item.tipo_operacion}</Text>
-                        </View>
-                      )}
-                      <View style={s.metaTime}>
-                        <Ionicons name="time-outline" size={11} color={c.textMute} />
-                        <Text style={[s.metaTxt, { color: c.textMute }]}>{tiempoRelativo(item.created_at)}</Text>
-                      </View>
-                    </View>
-
-                    {/* ── Recordatorio ── */}
-                    {rec && (
-                      <View style={[s.recRow,
-                        recVenc ? { backgroundColor: darkMode ? '#2a0e0e' : '#fef2f2' }
-                        : recHoy ? { backgroundColor: darkMode ? '#27190a' : '#fffbeb' }
-                        : { backgroundColor: darkMode ? '#091e20' : '#f0fdfa' },
-                      ]}>
-                        <Ionicons
-                          name={recVenc ? 'warning-outline' : recHoy ? 'alarm-outline' : 'calendar-outline'}
-                          size={12}
-                          color={recVenc ? '#ef4444' : recHoy ? '#d97706' : '#1a6470'}
-                        />
-                        <Text
-                          style={[s.recTxt, { color: recVenc ? '#ef4444' : recHoy ? '#92400e' : '#1a6470' }]}
-                          numberOfLines={1}
-                        >
-                          {recVenc ? '⚠ Vencido · ' : recHoy ? 'Hoy · ' : ''}
-                          {new Date(rec.fecha_hora).toLocaleDateString('es-MX', {
-                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                          })} — {rec.titulo}
-                        </Text>
-                      </View>
-                    )}
-
-                    {/* ── Acciones ── */}
-                    <View style={s.actions}>
-                      <TouchableOpacity
-                        style={[s.actionWa, darkMode && { backgroundColor: '#0b2016', borderColor: '#1a6b38' }]}
-                        onPress={() => abrirWhatsApp(item.telefono, item.nombre)}
-                      >
-                        <Ionicons name="logo-whatsapp" size={14} color={darkMode ? '#22c55e' : '#16a34a'} />
-                        <Text style={[s.actionWaTxt, darkMode && { color: '#22c55e' }]}>WhatsApp</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[s.actionCall, darkMode && { backgroundColor: '#091929', borderColor: '#0e5282' }]}
-                        onPress={() => llamar(item.telefono)}
-                      >
-                        <Ionicons name="call-outline" size={14} color={darkMode ? '#38bdf8' : '#0369a1'} />
-                        <Text style={[s.actionCallTxt, darkMode && { color: '#38bdf8' }]}>Llamar</Text>
-                      </TouchableOpacity>
-                      {puedeEnviarClienteAChatbot(userRole) && (
-                        <TouchableOpacity
-                          style={[s.actionChatbot, darkMode && { backgroundColor: '#241a33', borderColor: '#6a3fa0' }]}
-                          onPress={() => abrirModalChatbot(item)}
-                        >
-                          <Ionicons name="chatbubbles-outline" size={14} color={darkMode ? '#c084fc' : '#7c3aed'} />
-                          <Text style={[s.actionChatbotTxt, darkMode && { color: '#c084fc' }]}>Chatbot</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-
-                  </View>
-                </TouchableOpacity>
-              )
-            }}
+            removeClippedSubviews
+            maxToRenderPerBatch={10}
+            windowSize={7}
+            initialNumToRender={15}
+            renderItem={useCallback(({ item }: { item: Cliente }) => (
+              <ClienteCard item={item} c={c} darkMode={darkMode} userRole={userRole} onChatbot={abrirModalChatbot} />
+            ), [c, darkMode, userRole, abrirModalChatbot])}
           />
         )}
       </View>

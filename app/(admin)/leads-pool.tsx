@@ -312,6 +312,10 @@ export default function LeadsPool() {
           refreshControl={refreshControl}
           data={historial}
           keyExtractor={i => i.id}
+          removeClippedSubviews
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          initialNumToRender={15}
           contentContainerStyle={s.scroll}
           ListEmptyComponent={
             loadingHistorial

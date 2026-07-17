@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -93,13 +93,13 @@ export default function Mapa() {
     setLoading(false)
   }
 
-  const propsFiltradas = propiedades.filter(p => {
+  const propsFiltradas = useMemo(() => propiedades.filter(p => {
     if (filtro === 'contactadas')    return p.lona_contactada === true
     if (filtro === 'no_contactadas') return p.lona_contactada === false
     return true
-  })
+  }), [propiedades, filtro])
 
-  const zonasParaMapa: ZonaPin[] = ZONAS_CONFIG.map(z => {
+  const zonasParaMapa: ZonaPin[] = useMemo(() => ZONAS_CONFIG.map(z => {
     const propsZona = propsFiltradas
       .map(p => ({ p, coords: corregirCoordenadas(p.lat!, p.lng!) }))
       .filter(({ coords }) => coords != null)
@@ -131,7 +131,7 @@ export default function Mapa() {
         inv_notas: p.inv_notas,
       })),
     }
-  }).filter(z => z.count > 0)
+  }).filter(z => z.count > 0), [propsFiltradas, filtro])
 
   // Con inferirZona, todas las propiedades con lat/lng tienen zona asignada
   const sinZona: typeof propsFiltradas = []

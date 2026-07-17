@@ -186,6 +186,10 @@ export default function UsuarioHistorial() {
         refreshControl={refreshControl}
         data={eventosFiltrados}
         keyExtractor={(_, i) => String(i)}
+        removeClippedSubviews
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        initialNumToRender={15}
         ListHeaderComponent={header}
         contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 16 }}
         renderItem={({ item }) => {

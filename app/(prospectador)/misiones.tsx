@@ -150,7 +150,7 @@ export default function Misiones() {
         misiones: buildLista(misionesRes.data ?? [], progresoRes.data ?? [], conteosMap, hoy),
       }
     },
-    staleTime: 1000 * 30,
+    staleTime: 1000 * 60 * 5,
     networkMode: 'offlineFirst',
   })
   const userId = data?.userId ?? null
@@ -164,10 +164,11 @@ export default function Misiones() {
     try { await refetch() } catch {} finally { setRefreshing(false) }
   }, [refetch])
 
-  // Refresco en segundo plano al enfocar (el cache se muestra al instante).
+  // Refresco en segundo plano al enfocar solo si el dato tiene más de 5 minutos.
   useFocusEffect(useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['misiones'] })
-  }, [queryClient]))
+    const st = queryClient.getQueryState(['misiones'])
+    if (!st?.dataUpdatedAt || Date.now() - st.dataUpdatedAt > 1000 * 60 * 5) refetch()
+  }, [queryClient, refetch]))
 
   // Realtime: cambios en las misiones/stats del usuario refrescan el cache en vivo.
   useEffect(() => {

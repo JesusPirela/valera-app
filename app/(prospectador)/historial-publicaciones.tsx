@@ -198,6 +198,10 @@ export default function HistorialPublicaciones() {
           refreshControl={refreshControl}
           data={filtradas}
           keyExtractor={item => item.id}
+          removeClippedSubviews
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          initialNumToRender={15}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
           ListHeaderComponent={
