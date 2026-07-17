@@ -781,7 +781,15 @@ export default function DetallePropiedad() {
         for (const [emoji, img] of emojiMap) {
           result = result.split(emoji).join(img)
         }
-        return result.replace(/\r?\n/g, '<br>')
+        // Compactar: quitar espacios sobrantes al final de línea y COLAPSAR las
+        // líneas en blanco (el texto suele traer dobles saltos `\n\n` que en el
+        // PDF se veían como huecos enormes entre cada renglón). Queda una lista
+        // limpia, un renglón por punto.
+        return result
+          .replace(/[ \t]+\n/g, '\n')
+          .replace(/(?:\r?\n){2,}/g, '\n')
+          .replace(/^\s+|\s+$/g, '')
+          .replace(/\r?\n/g, '<br>')
       }
 
       const precio = propiedad.precio != null
@@ -847,18 +855,16 @@ export default function DetallePropiedad() {
 
       console.log(`[PDF] ${imagenesConSrc.length}/${imagenes.length} imágenes cargadas`)
       const imagenPrincipal = imagenesConSrc[0]
-      // Agrupar el resto de imágenes en bloques de máximo 6 por hoja
+      // Galería en UN solo flujo (2 por fila) que arranca justo después de la
+      // descripción. Antes se agrupaban de 6 con salto de página forzado por
+      // grupo, lo que dejaba un hueco grande antes de las fotos. Ahora cada foto
+      // evita cortarse a la mitad (break-inside en .foto-galeria) pero el flujo
+      // sigue de una página a la otra, sin huecos.
       const fotosRestantes = imagenesConSrc.slice(1)
-      const gruposFotos: typeof fotosRestantes[] = []
-      for (let i = 0; i < fotosRestantes.length; i += 6) {
-        gruposFotos.push(fotosRestantes.slice(i, i + 6))
-      }
-      const galeriaHTML = gruposFotos.map((grupo, i) => `
-        <div class="galeria-grupo">
-          ${i === 0 ? '<div class="seccion">Galería</div>' : ''}
-          <div class="fotos">${grupo.map(img => `<img src="${img.src}" class="foto-galeria" />`).join('')}</div>
-        </div>
-      `).join('')
+      const galeriaHTML = fotosRestantes.length > 0
+        ? `<div class="seccion">Galería</div>
+           <div class="fotos">${fotosRestantes.map(img => `<img src="${img.src}" class="foto-galeria" />`).join('')}</div>`
+        : ''
 
       const cars: string[] = []
       if (propiedad.recamaras != null) cars.push(`<div class="car"><span class="car-val">${propiedad.recamaras}</span><span class="car-lbl">Recámaras</span></div>`)
@@ -915,7 +921,7 @@ export default function DetallePropiedad() {
         .cars { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; overflow: hidden; }
         .car-val { display: block; font-size: 20px; font-weight: 800; color: ${colorFicha}; }
         .car-lbl { display: block; font-size: 11px; color: #888; margin-top: 2px; }
-        .desc { display: block; clear: both; font-size: 15px; font-weight: 500; line-height: 1.7; color: #222; padding: 4px 0 12px; word-break: break-word; white-space: pre-wrap; overflow: visible; }
+        .desc { display: block; clear: both; font-size: 14px; font-weight: 500; line-height: 1.45; color: #222; background: #f7f9fa; border: 1px solid #e0e8ea; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; word-break: break-word; white-space: normal; overflow: visible; break-inside: avoid; page-break-inside: avoid; }
         .mapa-box { border: 1.5px solid #e0e8ea; border-radius: 10px; overflow: hidden; margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
         .mapa-img { width: 100%; height: 340px; object-fit: cover; display: block; }
         .mapa-dir { background: #f0f5f5; padding: 10px 14px; font-size: 12px; color: ${colorFicha}; font-weight: 600; }
@@ -941,7 +947,7 @@ export default function DetallePropiedad() {
           ${propiedad.inmobiliarias?.nombre ? `<div class="inmob-nombre">${esc(propiedad.inmobiliarias.nombre)}</div>` : ''}
         </div>` : ''}
         ${cars.length > 0 ? `<div class="seccion-grupo"><div class="seccion">Características</div><div class="cars">${cars.join('')}</div></div>` : ''}
-        ${descHTML !== null && descHTML.trim() !== '' ? `<div class="seccion">Descripción</div><div class="desc">${descHTML}</div>` : ''}
+        ${descHTML !== null && descHTML.trim() !== '' ? `<div class="seccion-grupo"><div class="seccion">Descripción</div><div class="desc">${descHTML}</div></div>` : ''}
         ${galeriaHTML}
         ${mapaHTML}
         <div class="footer">Valera Real Estate · valerarealestate.com</div>
