@@ -114,6 +114,11 @@ export default function AdminDetalleCliente() {
   const [cierreNotas, setCierreNotas] = useState('')
   const [guardandoCierre, setGuardandoCierre] = useState(false)
 
+  // Edición inline de campos del cliente
+  const [editField, setEditField] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [guardandoField, setGuardandoField] = useState(false)
+
   const yaCargoRef = useRef(false)
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
@@ -136,6 +141,22 @@ export default function AdminDetalleCliente() {
     setInteracciones(i ?? [])
     setRecordatorios(r ?? [])
     setLoading(false)
+  }
+
+  async function guardarField(field: string, value: string) {
+    if (!cliente) return
+    const valorFinal = value.trim() || null
+    if (field === 'telefono' && !valorFinal) return  // teléfono no puede quedar vacío
+    setGuardandoField(true)
+    const { error } = await supabase.from('clientes').update({ [field]: valorFinal }).eq('id', id)
+    setGuardandoField(false)
+    if (error) {
+      if (Platform.OS === 'web') window.alert(`Error: ${error.message}`)
+      else Alert.alert('Error', error.message)
+      return
+    }
+    setCliente(prev => prev ? { ...prev, [field]: valorFinal } as Cliente : prev)
+    setEditField(null)
   }
 
   async function alternarCierreCompletado() {
@@ -270,16 +291,39 @@ export default function AdminDetalleCliente() {
           </View>
         </View>
 
-        <View style={styles.infoRow}>
+        <TouchableOpacity style={styles.infoRow} onPress={() => { setEditField('telefono'); setEditValue(cliente.telefono) }}>
           <Text style={styles.infoLabel}>Teléfono</Text>
-          <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.telefono}</Text>
-        </View>
-        {cliente.email ? (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Email</Text>
-            <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.email}</Text>
-          </View>
-        ) : null}
+          {editField === 'telefono' ? (
+            <TextInput
+              style={[styles.infoValueInput, { color: c.text, borderColor: '#1a9aaa' }]}
+              value={editValue}
+              onChangeText={setEditValue}
+              keyboardType="phone-pad"
+              autoFocus
+              onBlur={() => guardarField('telefono', editValue)}
+              onSubmitEditing={() => guardarField('telefono', editValue)}
+            />
+          ) : (
+            <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.telefono} ✏️</Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.infoRow} onPress={() => { setEditField('email'); setEditValue(cliente.email ?? '') }}>
+          <Text style={styles.infoLabel}>Email</Text>
+          {editField === 'email' ? (
+            <TextInput
+              style={[styles.infoValueInput, { color: c.text, borderColor: '#1a9aaa' }]}
+              value={editValue}
+              onChangeText={setEditValue}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoFocus
+              onBlur={() => guardarField('email', editValue)}
+              onSubmitEditing={() => guardarField('email', editValue)}
+            />
+          ) : (
+            <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.email ?? '—'} ✏️</Text>
+          )}
+        </TouchableOpacity>
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Fuente</Text>
           <Text style={[styles.infoValue, { color: c.textSub }]}>{FUENTE_LABELS[cliente.fuente_lead] ?? cliente.fuente_lead}</Text>
@@ -302,12 +346,22 @@ export default function AdminDetalleCliente() {
             <Text style={[styles.infoValue, { color: c.textSub }]}>{CREDITO_LABELS[cliente.tipo_credito] ?? cliente.tipo_credito}</Text>
           </View>
         ) : null}
-        {cliente.presupuesto ? (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Presupuesto</Text>
-            <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.presupuesto}</Text>
-          </View>
-        ) : null}
+        <TouchableOpacity style={styles.infoRow} onPress={() => { setEditField('presupuesto'); setEditValue(cliente.presupuesto ?? '') }}>
+          <Text style={styles.infoLabel}>Presupuesto</Text>
+          {editField === 'presupuesto' ? (
+            <TextInput
+              style={[styles.infoValueInput, { color: c.text, borderColor: '#1a9aaa' }]}
+              value={editValue}
+              onChangeText={setEditValue}
+              keyboardType="default"
+              autoFocus
+              onBlur={() => guardarField('presupuesto', editValue)}
+              onSubmitEditing={() => guardarField('presupuesto', editValue)}
+            />
+          ) : (
+            <Text style={[styles.infoValue, { color: c.textSub }]}>{cliente.presupuesto ?? '—'} ✏️</Text>
+          )}
+        </TouchableOpacity>
         {cliente.proximo_contacto ? (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Próx. contacto</Text>
@@ -318,12 +372,21 @@ export default function AdminDetalleCliente() {
           <Text style={styles.infoLabel}>Agregado</Text>
           <Text style={[styles.infoValue, { color: c.textSub }]}>{tiempoRelativo(cliente.created_at)}</Text>
         </View>
-        {cliente.notas ? (
-          <View style={styles.notasBox}>
-            <Text style={styles.notasLabel}>Notas</Text>
-            <Text style={[styles.notasText, { color: c.textSub }]}>{cliente.notas}</Text>
-          </View>
-        ) : null}
+        <TouchableOpacity style={styles.notasBox} onPress={() => { setEditField('notas'); setEditValue(cliente.notas ?? '') }}>
+          <Text style={styles.notasLabel}>Notas ✏️</Text>
+          {editField === 'notas' ? (
+            <TextInput
+              style={[styles.notasText, { color: c.text, borderWidth: 1, borderColor: '#1a9aaa', borderRadius: 6, padding: 6, minHeight: 60 }]}
+              value={editValue}
+              onChangeText={setEditValue}
+              multiline
+              autoFocus
+              onBlur={() => guardarField('notas', editValue)}
+            />
+          ) : (
+            <Text style={[styles.notasText, { color: c.textSub }]}>{cliente.notas ?? 'Sin notas. Toca para agregar.'}</Text>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Estado + Asesor */}
@@ -584,6 +647,10 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 12, color: '#9eafb2', fontWeight: '600', width: 120 },
   infoValue: { fontSize: 13, fontWeight: '500', flex: 1 },
+  infoValueInput: {
+    flex: 1, fontSize: 13, fontWeight: '500',
+    borderBottomWidth: 1.5, paddingBottom: 2, paddingHorizontal: 4,
+  },
 
   notasBox: {
     marginTop: 10, backgroundColor: '#f8f9fb', borderRadius: 12,
