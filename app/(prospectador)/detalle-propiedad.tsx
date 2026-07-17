@@ -1559,6 +1559,7 @@ export default function DetallePropiedad() {
                 >
                   <Image
                     source={{ uri: thumbFallidas.has(img.url) ? img.url : thumb(img.url, { width: Math.round(SCREEN_WIDTH * 2), quality: 72 }) }}
+                    recyclingKey={img.url}
                     style={[styles.imagen, { width: SCREEN_WIDTH, height: heroH }]}
                     contentFit="contain"
                     cachePolicy="memory-disk"

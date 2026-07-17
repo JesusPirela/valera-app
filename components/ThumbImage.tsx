@@ -34,6 +34,11 @@ export const ThumbImage = memo(function ThumbImage({
   return (
     <Image
       source={{ uri: src }}
+      // recyclingKey: al reciclar la vista nativa en una lista, expo-image
+      // RESETEA en vez de mostrar por un instante la foto de la tarjeta anterior.
+      // Sin esto, al hacer scroll rápido una tarjeta puede enseñar la imagen de
+      // otra propiedad por ~100ms y el usuario termina tocando la equivocada.
+      recyclingKey={url}
       style={[style, autoAspect && ratio ? { aspectRatio: ratio } : null]}
       contentFit={resizeMode === 'contain' ? 'contain' : resizeMode === 'stretch' ? 'fill' : resizeMode === 'center' ? 'scale-down' : 'cover'}
       cachePolicy="memory-disk"
