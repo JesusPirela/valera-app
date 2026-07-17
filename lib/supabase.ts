@@ -49,6 +49,42 @@ function lockSerial<R>(_name: string, _timeout: number, fn: () => Promise<R>): P
   return resultado
 }
 
+// ── Red de seguridad: fetch con auto-recuperación de sesión ──────────────────
+// Aunque el token se mantiene fresco solo (startAutoRefresh + lock serializado),
+// existe una ventana minúscula en la que una petición puede salir con el token
+// recién vencido y el servidor la rechaza con 401. SIN esto, esa escritura se
+// perdería en silencio. CON esto: si una petición de DATOS (rest/v1) vuelve 401,
+// se refresca la sesión y se REINTENTA la misma petición UNA vez con el token
+// nuevo. Así, aunque alguien lleve horas conectado y publique, ninguna acción se
+// pierde por un token vencido: se recupera sola.
+//
+// Solo se reintenta rest/v1 (datos), no auth/v1 (login/refresh), para no entrar
+// en bucle. Y solo 401 (token), no 403 (permiso de RLS).
+const fetchConAuth: typeof fetch = async (input, init) => {
+  const res = await fetch(input as any, init)
+  if (res.status !== 401) return res
+  const url = typeof input === 'string' ? input
+    : input instanceof URL ? input.href
+    : (input as Request).url
+  if (!url || !url.includes('/rest/v1/')) return res
+
+  try {
+    const { data, error } = await supabase.auth.refreshSession()
+    const token = data?.session?.access_token
+    if (error || !token) return res
+    const headers = new Headers(
+      (init?.headers as HeadersInit | undefined) ??
+      (typeof input === 'string' || input instanceof URL ? undefined : (input as Request).headers),
+    )
+    headers.set('Authorization', `Bearer ${token}`)
+    headers.set('apikey', supabaseAnonKey)
+    const destino = typeof input === 'string' || input instanceof URL ? input : (input as Request).url
+    return await fetch(destino, { ...(init ?? {}), headers })
+  } catch {
+    return res  // si el refresh falla, devolvemos el 401 original
+  }
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: Platform.OS === 'web' ? webStorage : AsyncStorage,
@@ -57,4 +93,5 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
     lock: lockSerial,
   },
+  global: { fetch: fetchConAuth },
 })
