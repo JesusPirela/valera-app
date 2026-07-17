@@ -24,8 +24,8 @@ export type ThumbOpts = {
  */
 export function thumb(url: string | null | undefined, opts: ThumbOpts = {}): string | undefined {
   if (!url) return undefined
-  // Ya transformada o no es del storage público → no tocar
-  if (url.includes(RENDER_SEG) || !url.includes(OBJECT_SEG)) return url
+  // Ya transformada, no es del storage público, o es un thumbnail pregenerado → no tocar
+  if (url.includes(RENDER_SEG) || !url.includes(OBJECT_SEG) || url.includes('/thumbs/')) return url
 
   const { width = 400, quality = 70, resize = 'cover' } = opts
   const base = url.replace(OBJECT_SEG, RENDER_SEG)

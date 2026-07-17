@@ -44,7 +44,7 @@ type Propiedad = {
   es_inventario: boolean | null
   inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
   asesores: { nombre: string; inmobiliaria: string | null } | null
-  propiedad_imagenes: { url: string; orden: number }[]
+  propiedad_imagenes: { url: string; thumb_url: string | null; orden: number }[]
 }
 
 function contactoLabel(p: { asesores?: { nombre: string; inmobiliaria: string | null } | null; inmobiliarias?: { nombre: string } | null }): string | null {
@@ -161,7 +161,7 @@ export default function AdminPropiedades() {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, destacada_hasta, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria), propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, destacada_hasta, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria), propiedad_imagenes(url, thumb_url, orden)')
         .order('created_at', { ascending: false })
         .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
         .limit(1, { referencedTable: 'propiedad_imagenes' })
@@ -541,7 +541,7 @@ export default function AdminPropiedades() {
   )
 
   function renderCardContent(item: Propiedad, width?: number) {
-    const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+    const primera = (item.propiedad_imagenes ?? [])[0]
     const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.m2_terreno != null || item.estacionamientos != null
     const CardWrapper: any = esSupervisor ? TouchableOpacity : View
     return (
@@ -555,7 +555,7 @@ export default function AdminPropiedades() {
       >
         <View style={styles.imagenWrapper}>
           {primera?.url ? (
-            <ThumbImage url={primera.url} opts={{ width: 640, quality: 65 }} style={styles.cardImagen} />
+            <ThumbImage url={primera.thumb_url ?? primera.url} style={styles.cardImagen} />
           ) : (
             <View style={styles.cardImagenPlaceholder}>
               <Text style={styles.cardImagenPlaceholderText}>🏠</Text>

@@ -73,7 +73,7 @@ type Propiedad = {
   created_at: string
   inmobiliaria_id: string | null
   inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
-  propiedad_imagenes: { url: string; orden: number }[]
+  propiedad_imagenes: { url: string; thumb_url: string | null; orden: number }[]
 }
 
 type FiltroOperacion = 'venta' | 'renta' | null
@@ -169,15 +169,13 @@ const PropiedadCard = memo(function PropiedadCard({
         <View style={[Platform.OS === 'web' ? styles.cardImagenWrap : styles.cardImagenWrapMovil, { backgroundColor: cardBg }]}>
           {Platform.OS === 'web' ? (
             <ThumbImage
-              url={primera.url}
-              opts={imgOpts}
+              url={primera.thumb_url ?? primera.url}
               style={styles.cardImagen}
               resizeMode="contain"
             />
           ) : (
             <ThumbImage
-              url={primera.url}
-              opts={imgOpts}
+              url={primera.thumb_url ?? primera.url}
               style={styles.cardImagenMovil}
               resizeMode="contain"
               autoAspect
@@ -187,7 +185,7 @@ const PropiedadCard = memo(function PropiedadCard({
           )}
           <TouchableOpacity
             style={styles.lupitaBtn}
-            onPress={(e) => { e.stopPropagation(); onZoom(thumb(primera.url, { width: 1200, quality: 85 }) ?? null) }}
+            onPress={(e) => { e.stopPropagation(); onZoom(thumb(primera.url, { width: 1080, quality: 72 }) ?? null) }}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
             <Text style={styles.lupitaText}>🔍</Text>
@@ -375,7 +373,7 @@ export default function ProspectadorPropiedades() {
         const size = i === 0 ? PRIMERA : PAGE
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
           .eq('estado', 'disponible')
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -849,7 +847,7 @@ export default function ProspectadorPropiedades() {
       propiedades: propsZona.map(p => ({
         id: p.id, titulo: p.titulo, precio: p.precio, tipo: p.tipo,
         direccion: p.direccion, lat: p.lat, lng: p.lng,
-        imagen: thumb((p.propiedad_imagenes ?? [])[0]?.url, { width: 320, quality: 60 }) ?? null,
+        imagen: (p.propiedad_imagenes ?? [])[0]?.thumb_url ?? (p.propiedad_imagenes ?? [])[0]?.url ?? null,
       })),
     }
   }).filter(z => z.count > 0), [propiedades])

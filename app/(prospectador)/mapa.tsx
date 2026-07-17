@@ -26,7 +26,7 @@ type InvMapa = {
   inv_apartada: boolean
   inv_no_autorizada: boolean
   inv_notas: string | null
-  propiedad_imagenes: { url: string; orden: number }[]
+  propiedad_imagenes: { url: string; thumb_url: string | null; orden: number }[]
 }
 
 type FiltroLona = 'todas' | 'contactadas' | 'no_contactadas'
@@ -83,7 +83,7 @@ export default function Mapa() {
         lona_contactada, inventario_seccion,
         inv_asesor_contactado, inv_asesor_respondio, inv_autorizado_publicar,
         inv_asesor_no_contesto, inv_apartada, inv_no_autorizada, inv_notas,
-        propiedad_imagenes(url, orden)
+        propiedad_imagenes(url, thumb_url, orden)
       `)
       .eq('es_inventario', true)
       .not('lat', 'is', null)
@@ -118,10 +118,7 @@ export default function Mapa() {
         direccion: p.direccion,
         lat: coords!.lat,
         lng: coords!.lng,
-        imagen: thumb(
-          [...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]?.url,
-          { width: 320, quality: 60 }
-        ) ?? null,
+        imagen: (p.propiedad_imagenes ?? [])[0]?.thumb_url ?? (p.propiedad_imagenes ?? [])[0]?.url ?? null,
         pinColor: filtro === 'todas' ? (p.lona_contactada ? VERDE : ROJO) : undefined,
         codigo: p.codigo,
         inventario_seccion: p.inventario_seccion,

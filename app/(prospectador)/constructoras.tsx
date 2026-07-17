@@ -22,7 +22,7 @@ type Modelo = {
   direccion: string | null
   exclusiva: boolean | null
   inmobiliarias: { exclusiva: boolean } | null
-  propiedad_imagenes: { url: string; orden: number }[]
+  propiedad_imagenes: { url: string; thumb_url: string | null; orden: number }[]
 }
 
 // Modelo + su fraccionamiento/colonia ya calculado (para no recalcular en cada render).
@@ -67,7 +67,7 @@ export default function Constructoras() {
   async function consultarModelos() {
     return supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, nombre_constructora, zona, direccion, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, nombre_constructora, zona, direccion, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, thumb_url, orden)')
       .eq('es_constructora', true)
       .eq('es_inventario', false)
       .order('nombre_constructora', { ascending: true, nullsFirst: false })
@@ -291,7 +291,7 @@ export default function Constructoras() {
                     </TouchableOpacity>
 
                     {abierta && g.modelos.map((m) => {
-                      const img = [...(m.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+                      const img = (m.propiedad_imagenes ?? [])[0]
                       return (
                         <TouchableOpacity
                           key={m.id}
@@ -303,7 +303,7 @@ export default function Constructoras() {
                           activeOpacity={0.85}
                         >
                           {img?.url ? (
-                            <ThumbImage url={img.url} opts={{ width: 200, quality: 60 }} style={styles.modeloImg} />
+                            <ThumbImage url={img.thumb_url ?? img.url} style={styles.modeloImg} />
                           ) : (
                             <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
                           )}

@@ -1983,7 +1983,7 @@ export default function DetallePropiedad() {
                     onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${sp.id}` as any)}
                   >
                     {sp.imagen
-                      ? <Image source={{ uri: thumb(sp.imagen, { width: 380, quality: 62 }) }} style={styles.simImg} resizeMode="cover" />
+                      ? <Image source={{ uri: thumb(sp.imagen) }} style={styles.simImg} resizeMode="cover" />
                       : <View style={[styles.simImg, styles.simImgPlaceholder]}><Text style={{ fontSize: 26 }}>🏠</Text></View>
                     }
                     <View style={styles.simInfo}>

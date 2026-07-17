@@ -34,7 +34,7 @@ type InvProp = {
   inv_apartada: boolean
   inv_no_autorizada: boolean
   inv_notas: string | null
-  propiedad_imagenes: { url: string; orden: number }[]
+  propiedad_imagenes: { url: string; thumb_url: string | null; orden: number }[]
 }
 
 const SIN_SECCION = 'Sin sección'
@@ -59,7 +59,7 @@ export default function Inventario() {
   async function cargar() {
     const { data, error } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, tipo, operacion, inventario_seccion, inv_asesor_contactado, inv_asesor_respondio, inv_autorizado_publicar, inv_asesor_no_contesto, inv_apartada, inv_no_autorizada, inv_notas, propiedad_imagenes(url, orden)')
+      .select('id, codigo, titulo, precio, direccion, tipo, operacion, inventario_seccion, inv_asesor_contactado, inv_asesor_respondio, inv_autorizado_publicar, inv_asesor_no_contesto, inv_apartada, inv_no_autorizada, inv_notas, propiedad_imagenes(url, thumb_url, orden)')
       .eq('es_inventario', true)
       .order('inventario_seccion', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
@@ -194,13 +194,13 @@ export default function Inventario() {
                 </TouchableOpacity>
 
                 {!colapsada && g.props.map((p) => {
-                  const img = [...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+                  const img = (p.propiedad_imagenes ?? [])[0]
                   return (
                     <View key={p.id} style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
                       <View style={styles.cardTop}>
                         {img?.url ? (
                           <TouchableOpacity activeOpacity={0.85} onPress={() => abrirGaleria((p.propiedad_imagenes ?? []).slice().sort((a, b) => a.orden - b.orden).map(i => i.url))}>
-                            <ThumbImage url={img.url} opts={{ width: 220, quality: 65 }} style={styles.cardImg} />
+                            <ThumbImage url={img.thumb_url ?? img.url} style={styles.cardImg} />
                             <View style={styles.cardImgZoom}><Text style={{ fontSize: 11 }}>🔍</Text></View>
                           </TouchableOpacity>
                         ) : (

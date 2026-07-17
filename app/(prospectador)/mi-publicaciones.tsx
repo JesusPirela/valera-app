@@ -19,7 +19,7 @@ type Pub = {
     tipo: string | null
     operacion: string | null
     estado: string | null
-    propiedad_imagenes: { url: string; orden: number }[]
+    propiedad_imagenes: { url: string; thumb_url: string | null; orden: number }[]
   } | null
 }
 
@@ -42,7 +42,7 @@ export default function MisPublicaciones() {
     if (!user) { setLoading(false); return }
     const { data } = await supabase
       .from('propiedad_publicacion')
-      .select('propiedad_id, veces_publicada, fecha_publicacion, propiedades(codigo, titulo, precio, tipo, operacion, estado, propiedad_imagenes(url, orden))')
+      .select('propiedad_id, veces_publicada, fecha_publicacion, propiedades(codigo, titulo, precio, tipo, operacion, estado, propiedad_imagenes(url, thumb_url, orden))')
       .eq('user_id', user.id)
       .gt('veces_publicada', 0)
       .order('fecha_publicacion', { ascending: false })
@@ -61,9 +61,8 @@ export default function MisPublicaciones() {
 
   function renderItem({ item }: { item: Pub }) {
     const prop = item.propiedades
-    const cover = prop?.propiedad_imagenes?.length
-      ? [...prop.propiedad_imagenes].sort((a, b) => a.orden - b.orden)[0]?.url
-      : null
+    const coverImg = prop?.propiedad_imagenes?.[0]
+    const cover = coverImg?.thumb_url ?? coverImg?.url ?? null
     return (
       <TouchableOpacity
         style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}
@@ -71,7 +70,7 @@ export default function MisPublicaciones() {
         onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.propiedad_id}` as any)}
       >
         {cover
-          ? <ThumbImage url={cover} opts={{ width: 200, quality: 60 }} style={s.img} resizeMode="cover" />
+          ? <ThumbImage url={cover} style={s.img} resizeMode="cover" />
           : <View style={[s.img, s.imgPlaceholder]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
         }
         <View style={s.info}>
