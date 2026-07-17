@@ -36,7 +36,7 @@ export const ThumbImage = memo(function ThumbImage({
       source={{ uri: src }}
       style={[style, autoAspect && ratio ? { aspectRatio: ratio } : null]}
       contentFit={resizeMode === 'contain' ? 'contain' : resizeMode === 'stretch' ? 'fill' : resizeMode === 'center' ? 'scale-down' : 'cover'}
-      cachePolicy="memory-and-disk"
+      cachePolicy="memory-disk"
       transition={120}
       onLoad={autoAspect ? (e) => {
         const s: any = e?.source

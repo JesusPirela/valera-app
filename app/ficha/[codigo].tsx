@@ -132,7 +132,7 @@ export default function FichaPublica() {
                   source={{ uri: thumb(img.url, { width: Math.round(imgW * 2), quality: 72 }) ?? img.url }}
                   style={{ width: imgW, height: imgW * 0.65 }}
                   contentFit="cover"
-                  cachePolicy="memory-and-disk"
+                  cachePolicy="memory-disk"
                   priority={i === 0 ? 'high' : 'normal'}
                   transition={120}
                 />

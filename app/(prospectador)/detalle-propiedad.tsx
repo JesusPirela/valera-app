@@ -166,7 +166,7 @@ export default function DetallePropiedad() {
   const [nota, setNota] = useState('')
   const [notaGuardada, setNotaGuardada] = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
-  const scrollRef = useRef<ScrollView>(null)
+  const scrollRef = useRef<FlatList<any>>(null)
   const [lightboxVisible, setLightboxVisible] = useState(false)
   const [lightboxIndex, setLightboxIndex]     = useState(0)
   const [lightboxLoading, setLightboxLoading] = useState(false)
@@ -1555,7 +1555,7 @@ export default function DetallePropiedad() {
                     source={{ uri: thumbFallidas.has(img.url) ? img.url : thumb(img.url, { width: Math.round(SCREEN_WIDTH * 2), quality: 72 }) }}
                     style={[styles.imagen, { width: SCREEN_WIDTH, height: heroH }]}
                     contentFit="contain"
-                    cachePolicy="memory-and-disk"
+                    cachePolicy="memory-disk"
                     priority={i === 0 ? 'high' : 'normal'}
                     transition={120}
                     onError={() => setThumbFallidas(prev => prev.has(img.url) ? prev : new Set(prev).add(img.url))}
@@ -1611,7 +1611,7 @@ export default function DetallePropiedad() {
         {/* Logo de la inmobiliaria — solo staff */}
         {esStaff && propiedad.inmobiliarias?.logo_url && (
           <View style={styles.inmobiliariaLogoWrapper}>
-            <Image source={{ uri: propiedad.inmobiliarias.logo_url }} style={styles.inmobiliariaLogo} contentFit="contain" cachePolicy="memory-and-disk" />
+            <Image source={{ uri: propiedad.inmobiliarias.logo_url }} style={styles.inmobiliariaLogo} contentFit="contain" cachePolicy="memory-disk" />
             {propiedad.inmobiliarias.nombre && (
               <Text style={styles.inmobiliariaNombre}>{propiedad.inmobiliarias.nombre}</Text>
             )}
@@ -1988,7 +1988,7 @@ export default function DetallePropiedad() {
                     onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${sp.id}` as any)}
                   >
                     {sp.imagen
-                      ? <Image source={{ uri: thumb(sp.imagen) }} style={styles.simImg} contentFit="cover" cachePolicy="memory-and-disk" />
+                      ? <Image source={{ uri: thumb(sp.imagen) }} style={styles.simImg} contentFit="cover" cachePolicy="memory-disk" />
                       : <View style={[styles.simImg, styles.simImgPlaceholder]}><Text style={{ fontSize: 26 }}>🏠</Text></View>
                     }
                     <View style={styles.simInfo}>
@@ -2075,7 +2075,7 @@ export default function DetallePropiedad() {
                   source={{ uri: imagenes[lightboxIndex]?.url }}
                   style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.72 }}
                   contentFit="contain"
-                  cachePolicy="memory-and-disk"
+                  cachePolicy="memory-disk"
                   onLoad={() => setLightboxLoading(false)}
                 />
               </View>
