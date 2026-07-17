@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "lint": "eslint \"app/**/*.{ts,tsx}\" \"components/**/*.{ts,tsx}\""
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.5",
@@ -51,7 +52,10 @@
   },
   "devDependencies": {
     "@types/react": "~18.3.0",
-    "typescript": "~5.9.2"
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.64.0"
   },
   "private": true
 }

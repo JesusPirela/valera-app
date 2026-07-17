@@ -35,7 +35,7 @@ const NIVEL_LABEL: Record<string, string> = {
 async function getLogoBase64(): Promise<string> {
   try {
     if (Platform.OS === 'web') {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const logoModule = require('../../assets/logo.png')
       const url = typeof logoModule === 'string' ? logoModule : ''
       if (!url) return ''
@@ -47,7 +47,7 @@ async function getLogoBase64(): Promise<string> {
         reader.readAsDataURL(blob)
       })
     }
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const asset = Asset.fromModule(require('../../assets/logo.png'))
     await asset.downloadAsync()
     if (!asset.localUri) return ''

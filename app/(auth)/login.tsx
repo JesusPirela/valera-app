@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { actualizarNombreRole } from '../../lib/cuentas'
 import { conTimeout } from '../../lib/redIntentos'
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const LOGO = require('../../assets/logo.png')
 
 export default function LoginScreen() {
