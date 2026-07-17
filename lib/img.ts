@@ -8,12 +8,19 @@
 // propiedades con varias fotos → se disparaba a >15,000/mes (15,000%+ del
 // quota), poniendo el proyecto en riesgo de modo solo-lectura.
 //
-// Solución: redimensionar con un proxy de imágenes GRATUITO (wsrv.nl, sobre
-// Cloudflare) que toma la URL pública original de Supabase, la reescala y la
-// cachea. Ventajas: (1) NO consume el quota de transformaciones de Supabase,
-// (2) miniaturas aún más chicas (medido: 128KB → ~7KB a 320px), (3) baja el
-// egress de Supabase porque el proxy cachea. Si el proxy fallara, ThumbImage
-// cae solo a la imagen original.
+// Solución en dos capas (complementarias):
+//  1) Al SUBIR una imagen se genera y guarda un thumbnail propio en `/thumbs/`
+//     (ver editar-propiedad.tsx + columna propiedad_imagenes.thumb_url). Las
+//     vistas usan `thumb_url ?? url`; cuando hay thumb pregenerado se sirve tal
+//     cual, sin proxy ni transformación.
+//  2) Para el resto (las ~15k imágenes YA existentes, sin thumb pregenerado)
+//     redimensionamos con un proxy GRATUITO (wsrv.nl, sobre Cloudflare) que toma
+//     la URL pública original y la reescala+cachea. Así NINGÚN camino consume el
+//     quota de transformaciones de Supabase.
+//
+// Ventajas del proxy: no gasta el quota de Supabase, miniaturas más chicas
+// (medido: 128KB → ~7KB a 320px) y baja el egress (el proxy cachea). Si el
+// proxy fallara, ThumbImage cae solo a la imagen original.
 
 const OBJECT_SEG = '/storage/v1/object/public/'
 const RENDER_SEG = '/storage/v1/render/image/public/'
@@ -32,14 +39,14 @@ export type ThumbOpts = {
  */
 export function thumb(url: string | null | undefined, opts: ThumbOpts = {}): string | undefined {
   if (!url) return undefined
-  // Ya viene proxeada → no volver a envolver.
-  if (url.startsWith(PROXY)) return url
+  // Ya proxeada, o thumbnail propio pregenerado (/thumbs/) → servir tal cual.
+  if (url.startsWith(PROXY) || url.includes('/thumbs/')) return url
 
-  // Normalizar al ORIGINAL público de Supabase. Puede venir ya como URL de
-  // transformación (`/render/image/`) desde caché viejo: la revertimos al
-  // objeto público para que el proxy tome el original.
+  // Normalizar al ORIGINAL público de Supabase.
   let origen = url
   if (url.includes(RENDER_SEG)) {
+    // URL de transformación vieja (de caché): volver al objeto público para que
+    // el proxy tome el original y no se dispare otra transformación de Supabase.
     origen = url.split('?')[0].replace(RENDER_SEG, OBJECT_SEG)
   } else if (!url.includes(OBJECT_SEG)) {
     // No es del storage público de Supabase → dejar intacta.

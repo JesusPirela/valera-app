@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import {
   View,
   Text,
@@ -186,6 +186,17 @@ export default function Prospectadores() {
 
   const yaCargoRef = useRef(false)
   const { refreshControl } = usePullRefresh(cargar)
+
+  const listaFiltrada = useMemo(() => {
+    const q = normalizar(busqueda)
+    return lista
+      .filter(p => !busqueda.trim() || normalizar(p.nombre).includes(q) || normalizar(p.email).includes(q))
+      .sort((a, b) => {
+        const r = (rol: string) => RANGO_ROL[rol] ?? 99
+        const dr = r(a.role) - r(b.role)
+        return dr !== 0 ? dr : (a.nombre ?? a.email).localeCompare(b.nombre ?? b.email)
+      })
+  }, [lista, busqueda])
 
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
@@ -404,18 +415,13 @@ export default function Prospectadores() {
       ) : (
         <FlatList
           refreshControl={refreshControl}
-          data={lista.filter(p =>
-            !busqueda.trim() ||
-            normalizar(p.nombre).includes(normalizar(busqueda)) ||
-            normalizar(p.email).includes(normalizar(busqueda))
-          ).sort((a, b) => {
-            // Orden jerárquico por rol; dentro del mismo rol, por nombre
-            const r = (rol: string) => RANGO_ROL[rol] ?? 99
-            const dr = r(a.role) - r(b.role)
-            return dr !== 0 ? dr : (a.nombre ?? a.email).localeCompare(b.nombre ?? b.email)
-          })}
+          data={listaFiltrada}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
+          removeClippedSubviews
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          initialNumToRender={15}
           renderItem={({ item }) => (
             <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
               <View style={styles.cardMainRow}>

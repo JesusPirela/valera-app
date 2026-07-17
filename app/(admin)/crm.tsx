@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking,
   ActivityIndicator, TouchableOpacity, ScrollView, Modal, Alert,
@@ -309,21 +309,24 @@ export default function AdminCRM() {
     cargarClientes()
   }
 
-  const todosClientes = secciones.flatMap((s) => s.data)
-  const totalGlobal = todosClientes.length
-  // Pipeline chips: respetar el filtro de operación activo
-  const clientesParaPipeline = operacionFiltro
-    ? todosClientes.filter(c => c.tipo_operacion === operacionFiltro)
-    : todosClientes
-  const totalPipeline = clientesParaPipeline.length
-  const enProceso = clientesParaPipeline.filter(c => c.estado === 'seguimiento_cierre' || c.estado === 'cita_agendada').length
-  const comprados = clientesParaPipeline.filter(c => c.estado === 'compro').length
-  const conteosPorEstado = ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
-    acc[e] = clientesParaPipeline.filter((c) => c.estado === e).length
-    return acc
-  }, {})
+  const { todosClientes, totalGlobal, totalPipeline, enProceso, comprados, conteosPorEstado } = useMemo(() => {
+    const todos = secciones.flatMap((s) => s.data)
+    const pipeline = operacionFiltro ? todos.filter(c => c.tipo_operacion === operacionFiltro) : todos
+    return {
+      todosClientes: todos,
+      totalGlobal: todos.length,
+      clientesParaPipeline: pipeline,
+      totalPipeline: pipeline.length,
+      enProceso: pipeline.filter(c => c.estado === 'seguimiento_cierre' || c.estado === 'cita_agendada').length,
+      comprados: pipeline.filter(c => c.estado === 'compro').length,
+      conteosPorEstado: ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
+        acc[e] = pipeline.filter((c) => c.estado === e).length
+        return acc
+      }, {}),
+    }
+  }, [secciones, operacionFiltro])
 
-  const seccionesFiltradas: Seccion[] = secciones
+  const seccionesFiltradas: Seccion[] = useMemo(() => secciones
     .map((sec) => {
       let clientes = sec.data
       if (busqueda.trim()) {
@@ -338,7 +341,8 @@ export default function AdminCRM() {
       if (operacionFiltro) clientes = clientes.filter((c) => c.tipo_operacion === operacionFiltro)
       return { ...sec, data: clientes }
     })
-    .filter((sec) => sec.data.length > 0)
+    .filter((sec) => sec.data.length > 0),
+  [secciones, busqueda, estadoFiltro, operacionFiltro])
 
   // ── Importar CSV ─────────────────────────────────────────────
   const [importModal, setImportModal]   = useState(false)

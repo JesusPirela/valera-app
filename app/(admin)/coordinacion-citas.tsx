@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, createElement } from 'react'
+import { useState, useRef, useCallback, useEffect, createElement, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
   TextInput, ActivityIndicator, ScrollView, Platform, Alert,
@@ -954,47 +954,47 @@ export default function CoordinacionCitas() {
     setCitaEditando(null)
   }
 
-  // ── Filtros ──────────────────────────────────────────────────────────────
-  const citasFiltradas = citas.filter(c => {
-    if (filtroAdmin) {
-      if (filtroAdmin === 'sin_asignar' && c.coordinado_por) return false
-      if (filtroAdmin !== 'sin_asignar' && c.coordinado_por !== filtroAdmin) return false
+  // ── Filtros + conteos (todos en un solo useMemo para evitar 5 recálculos) ──
+  const { citasFiltradas, conteos, urgentes, citasVenta, citasRenta } = useMemo(() => {
+    const filtradas = citas.filter(c => {
+      if (filtroAdmin) {
+        if (filtroAdmin === 'sin_asignar' && c.coordinado_por) return false
+        if (filtroAdmin !== 'sin_asignar' && c.coordinado_por !== filtroAdmin) return false
+      }
+      if (filtroOperacion && c.clientes.tipo_operacion !== filtroOperacion) return false
+      if (busqueda.trim()) {
+        const q = busqueda.toLowerCase()
+        return (
+          c.clientes.nombre.toLowerCase().includes(q) ||
+          c.clientes.telefono.includes(q) ||
+          c.prospectador?.nombre.toLowerCase().includes(q) ||
+          c.coordinador?.nombre.toLowerCase().includes(q) ||
+          false
+        )
+      }
+      return true
+    })
+    const ahora = Date.now()
+    return {
+      citasFiltradas: filtradas,
+      conteos: ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
+        acc[e] = filtradas.filter(c => c.estado === e).length
+        return acc
+      }, {}),
+      urgentes: citas.filter(c =>
+        c.estado === 'coordinada' && c.fecha_cita &&
+        new Date(c.fecha_cita).getTime() - ahora < 48 * 3600 * 1000 &&
+        new Date(c.fecha_cita).getTime() > ahora
+      ).length,
+      citasVenta: filtradas.filter(c => c.clientes.tipo_operacion !== 'renta'),
+      citasRenta: filtradas.filter(c => c.clientes.tipo_operacion === 'renta'),
     }
-    if (filtroOperacion) {
-      if (c.clientes.tipo_operacion !== filtroOperacion) return false
-    }
-    if (busqueda.trim()) {
-      const q = busqueda.toLowerCase()
-      return (
-        c.clientes.nombre.toLowerCase().includes(q) ||
-        c.clientes.telefono.includes(q) ||
-        c.prospectador?.nombre.toLowerCase().includes(q) ||
-        c.coordinador?.nombre.toLowerCase().includes(q) ||
-        false
-      )
-    }
-    return true
-  })
-
-  // ── Conteos por estado ────────────────────────────────────────────────────
-  const conteos = ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
-    acc[e] = citasFiltradas.filter(c => c.estado === e).length
-    return acc
-  }, {})
-
-  const ahora   = Date.now()
-  const urgentes = citas.filter(c =>
-    c.estado === 'coordinada' && c.fecha_cita &&
-    new Date(c.fecha_cita).getTime() - ahora < 48 * 3600 * 1000 &&
-    new Date(c.fecha_cita).getTime() > ahora
-  ).length
+  }, [citas, filtroAdmin, filtroOperacion, busqueda])
 
   // El rol "asesor" usa una vista simplificada (solo etapas posteriores al
   // cierre, separadas en dos tableros Venta/Renta) — admin sigue viendo el
   // pipeline completo de siempre, sin ningún cambio.
   const vistaAsesor = miRole === 'asesor'
-  const citasVenta = citasFiltradas.filter(c => c.clientes.tipo_operacion !== 'renta')
-  const citasRenta = citasFiltradas.filter(c => c.clientes.tipo_operacion === 'renta')
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f1f5f9' }}>

@@ -140,6 +140,10 @@ export default function ActividadAdmin() {
           refreshControl={refreshControl}
           data={registrosFiltrados}
           keyExtractor={(item) => item.id}
+          removeClippedSubviews
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          initialNumToRender={15}
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => (
             <View style={s.row}>

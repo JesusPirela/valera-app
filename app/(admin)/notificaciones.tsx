@@ -304,6 +304,10 @@ export default function AdminNotificaciones() {
           refreshControl={refreshControl}
           data={notificaciones}
           keyExtractor={(item) => item.id}
+          removeClippedSubviews
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          initialNumToRender={15}
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => (
             <NotifItem

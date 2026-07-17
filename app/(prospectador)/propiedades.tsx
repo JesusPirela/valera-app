@@ -73,7 +73,7 @@ type Propiedad = {
   created_at: string
   inmobiliaria_id: string | null
   inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
-  propiedad_imagenes: { url: string; orden: number }[]
+  propiedad_imagenes: { url: string; thumb_url: string | null; orden: number }[]
 }
 
 type FiltroOperacion = 'venta' | 'renta' | null
@@ -146,7 +146,7 @@ const PropiedadCard = memo(function PropiedadCard({
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
 }) {
-  const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+  const primera = (item.propiedad_imagenes ?? [])[0]
   const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.estacionamientos != null
 
   return (
@@ -169,25 +169,20 @@ const PropiedadCard = memo(function PropiedadCard({
         <View style={[Platform.OS === 'web' ? styles.cardImagenWrap : styles.cardImagenWrapMovil, { backgroundColor: cardBg }]}>
           {Platform.OS === 'web' ? (
             <ThumbImage
-              url={primera.url}
-              opts={imgOpts}
+              url={primera.thumb_url ?? primera.url}
               style={styles.cardImagen}
-              resizeMode="contain"
+              resizeMode="cover"
             />
           ) : (
             <ThumbImage
-              url={primera.url}
-              opts={imgOpts}
+              url={primera.thumb_url ?? primera.url}
               style={styles.cardImagenMovil}
-              resizeMode="contain"
-              autoAspect
-              minAspect={0.72}
-              maxAspect={1.5}
+              resizeMode="cover"
             />
           )}
           <TouchableOpacity
             style={styles.lupitaBtn}
-            onPress={(e) => { e.stopPropagation(); onZoom(thumb(primera.url, { width: 1200, quality: 85 }) ?? null) }}
+            onPress={(e) => { e.stopPropagation(); onZoom(thumb(primera.url, { width: 1080, quality: 72 }) ?? null) }}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
             <Text style={styles.lupitaText}>🔍</Text>
@@ -375,7 +370,7 @@ export default function ProspectadorPropiedades() {
         const size = i === 0 ? PRIMERA : PAGE
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
+          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
           .eq('estado', 'disponible')
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -493,7 +488,7 @@ export default function ProspectadorPropiedades() {
 
   useEffect(() => {
     if (!queryData?.propiedades) return
-    for (const p of queryData.propiedades) {
+    for (const p of queryData.propiedades.slice(0, 20)) {
       queryClient.setQueryData(
         ['detalle-propiedad', p.id],
         (old: unknown) => {
@@ -838,7 +833,7 @@ export default function ProspectadorPropiedades() {
   ])
 
 
-  const zonasParaMapa = ZONAS_CONFIG.map(z => {
+  const zonasParaMapa = useMemo(() => ZONAS_CONFIG.map(z => {
     const propsZona = propiedades.filter(p => p.zona === z.key)
     return {
       key: z.key,
@@ -849,10 +844,10 @@ export default function ProspectadorPropiedades() {
       propiedades: propsZona.map(p => ({
         id: p.id, titulo: p.titulo, precio: p.precio, tipo: p.tipo,
         direccion: p.direccion, lat: p.lat, lng: p.lng,
-        imagen: thumb([...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]?.url, { width: 320, quality: 60 }) ?? null,
+        imagen: (p.propiedad_imagenes ?? [])[0]?.thumb_url ?? (p.propiedad_imagenes ?? [])[0]?.url ?? null,
       })),
     }
-  }).filter(z => z.count > 0)
+  }).filter(z => z.count > 0), [propiedades])
 
   function handleZonaMapPress(key: string) {
     const config = ZONAS_CONFIG.find(z => z.key === key)
@@ -1579,10 +1574,8 @@ const styles = StyleSheet.create({
   // Proporción fija 4:3 → todas las tarjetas con la misma altura de imagen.
   cardImagenWrap: { width: '100%', aspectRatio: 4 / 3, overflow: 'hidden' },
   cardImagen: { width: '100%', height: '100%' },
-  // Móvil: la imagen (autoAspect) define su propia altura al cargar. Se reserva
-  // 4:3 de arranque para no dar un salto de layout mientras llega la foto.
-  cardImagenWrapMovil: { width: '100%', overflow: 'hidden' },
-  cardImagenMovil: { width: '100%', aspectRatio: 4 / 3 },
+  cardImagenWrapMovil: { width: '100%', aspectRatio: 4 / 3, overflow: 'hidden' },
+  cardImagenMovil: { width: '100%', height: '100%' },
   lupitaBtn: {
     position: 'absolute', top: 8, right: 8,
     backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18,

@@ -16,6 +16,7 @@ import {
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
+import * as ImageManipulator from 'expo-image-manipulator'
 import { supabase } from '../../lib/supabase'
 import { thumb } from '../../lib/img'
 import { useColors } from '../../lib/ThemeContext'
@@ -614,22 +615,49 @@ export default function EditarPropiedad() {
     try { await mejorarConDatos() } catch { /* error ya visible en mejorandoMsg */ }
   }
 
-  async function subirImagen(uri: string, propiedadId: string, orden: number): Promise<string> {
+  async function subirImagen(
+    uri: string, propiedadId: string, orden: number,
+  ): Promise<{ url: string; thumbUrl: string | null }> {
     // URLs externas (importadas desde portal): guardar directo, sin re-subir.
-    // Hacer fetch de dominios externos falla por CORS en el browser.
-    if (/^https?:\/\//.test(uri)) return uri
+    if (/^https?:\/\//.test(uri)) return { url: uri, thumbUrl: null }
 
+    const ts = Date.now()
     const response = await fetch(uri)
     const blob = await response.blob()
     const mimeType = blob.type || 'image/jpeg'
     const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'jpg'
-    const filePath = `${propiedadId}/${Date.now()}_${orden}.${ext}`
+
+    // Subir original
+    const filePath = `${propiedadId}/${ts}_${orden}.${ext}`
     const { error } = await supabase.storage
       .from('propiedades')
       .upload(filePath, blob, { contentType: mimeType, upsert: true })
     if (error) throw error
-    const { data } = supabase.storage.from('propiedades').getPublicUrl(filePath)
-    return data.publicUrl
+    const { data: pub } = supabase.storage.from('propiedades').getPublicUrl(filePath)
+
+    // Generar y subir thumbnail (400px ancho, 70% calidad)
+    let thumbUrl: string | null = null
+    try {
+      const manipResult = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 400 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
+      )
+      const thumbResponse = await fetch(manipResult.uri)
+      const thumbBlob = await thumbResponse.blob()
+      const thumbPath = `thumbs/${propiedadId}/${ts}_${orden}.jpg`
+      const { error: thumbError } = await supabase.storage
+        .from('propiedades')
+        .upload(thumbPath, thumbBlob, { contentType: 'image/jpeg', upsert: true })
+      if (!thumbError) {
+        const { data: thumbPub } = supabase.storage.from('propiedades').getPublicUrl(thumbPath)
+        thumbUrl = thumbPub.publicUrl
+      }
+    } catch {
+      // Si falla el thumb no bloqueamos el guardado — la imagen original funciona de fallback
+    }
+
+    return { url: pub.publicUrl, thumbUrl }
   }
 
   async function handleGuardar() {
@@ -716,8 +744,9 @@ export default function EditarPropiedad() {
         if (item.esExistente) {
           if (item.modificada) {
             opsImagenes.push((async () => {
-              const url = await subirImagen(item.uri, id, orden)
-              const { error } = await supabase.from('propiedad_imagenes').update({ url, orden }).eq('id', item.id)
+              const { url, thumbUrl } = await subirImagen(item.uri, id, orden)
+              const { error } = await supabase.from('propiedad_imagenes')
+                .update({ url, thumb_url: thumbUrl, orden }).eq('id', item.id)
               if (error) throw error
             })())
           } else if (item.ordenOriginal !== orden) {
@@ -728,8 +757,9 @@ export default function EditarPropiedad() {
           }
         } else {
           opsImagenes.push((async () => {
-            const url = await subirImagen(item.uri, id, orden)
-            const { error } = await supabase.from('propiedad_imagenes').insert({ propiedad_id: id, url, orden })
+            const { url, thumbUrl } = await subirImagen(item.uri, id, orden)
+            const { error } = await supabase.from('propiedad_imagenes')
+              .insert({ propiedad_id: id, url, thumb_url: thumbUrl, orden })
             if (error) throw error
           })())
         }
