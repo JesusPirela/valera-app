@@ -146,7 +146,7 @@ const PropiedadCard = memo(function PropiedadCard({
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
 }) {
-  const primera = [...(item.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]
+  const primera = (item.propiedad_imagenes ?? [])[0]
   const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.estacionamientos != null
 
   return (
@@ -493,7 +493,7 @@ export default function ProspectadorPropiedades() {
 
   useEffect(() => {
     if (!queryData?.propiedades) return
-    for (const p of queryData.propiedades) {
+    for (const p of queryData.propiedades.slice(0, 20)) {
       queryClient.setQueryData(
         ['detalle-propiedad', p.id],
         (old: unknown) => {
@@ -838,7 +838,7 @@ export default function ProspectadorPropiedades() {
   ])
 
 
-  const zonasParaMapa = ZONAS_CONFIG.map(z => {
+  const zonasParaMapa = useMemo(() => ZONAS_CONFIG.map(z => {
     const propsZona = propiedades.filter(p => p.zona === z.key)
     return {
       key: z.key,
@@ -849,10 +849,10 @@ export default function ProspectadorPropiedades() {
       propiedades: propsZona.map(p => ({
         id: p.id, titulo: p.titulo, precio: p.precio, tipo: p.tipo,
         direccion: p.direccion, lat: p.lat, lng: p.lng,
-        imagen: thumb([...(p.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)[0]?.url, { width: 320, quality: 60 }) ?? null,
+        imagen: thumb((p.propiedad_imagenes ?? [])[0]?.url, { width: 320, quality: 60 }) ?? null,
       })),
     }
-  }).filter(z => z.count > 0)
+  }).filter(z => z.count > 0), [propiedades])
 
   function handleZonaMapPress(key: string) {
     const config = ZONAS_CONFIG.find(z => z.key === key)

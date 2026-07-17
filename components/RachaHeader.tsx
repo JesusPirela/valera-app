@@ -16,7 +16,7 @@ export default function RachaHeader() {
   const { data: r } = useQuery({
     queryKey: ['estado-racha'],
     queryFn: getEstadoRacha,
-    staleTime: 1000 * 30,
+    staleTime: 1000 * 60 * 5,
     networkMode: 'offlineFirst',
   })
 

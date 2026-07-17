@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, createElement } from 'react'
+﻿import { useState, useCallback, useEffect, useMemo, createElement } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking, Alert,
   ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions, RefreshControl,
@@ -290,67 +290,77 @@ export default function CRM() {
 
   // ── KPIs ──────────────────────────────────────────────────────
   // Base filtrada por operación para que KPIs y chips sean consistentes con la lista
-  const clientesBase = opFiltro ? clientes.filter(c => c.tipo_operacion === opFiltro) : clientes
+  const clientesBase = useMemo(
+    () => opFiltro ? clientes.filter(c => c.tipo_operacion === opFiltro) : clientes,
+    [clientes, opFiltro]
+  )
 
-  const total    = clientesBase.length
-  const activos  = clientesBase.filter(c => c.estado !== 'descartado' && c.estado !== 'compro').length
-  const citas    = clientesBase.filter(c => c.estado === 'cita_agendada').length
-  const vencidos = clientesBase.filter(c =>
-    (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora) < new Date())
-  ).length
-  const cerrados = clientesBase.filter(c => c.estado === 'compro').length
-
-  const conteos = ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
-    acc[e] = clientesBase.filter(c => c.estado === e).length
-    return acc
-  }, {})
+  const { total, activos, citas, vencidos, cerrados, conteos } = useMemo(() => {
+    const now = Date.now()
+    return {
+      total:    clientesBase.length,
+      activos:  clientesBase.filter(c => c.estado !== 'descartado' && c.estado !== 'compro').length,
+      citas:    clientesBase.filter(c => c.estado === 'cita_agendada').length,
+      vencidos: clientesBase.filter(c =>
+        (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
+      ).length,
+      cerrados: clientesBase.filter(c => c.estado === 'compro').length,
+      conteos:  ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
+        acc[e] = clientesBase.filter(c => c.estado === e).length
+        return acc
+      }, {}),
+    }
+  }, [clientesBase])
 
   // ── Filtros ───────────────────────────────────────────────────
-  let filtrados = clientes
-  if (busqueda.trim()) {
-    const q = normalizar(busqueda)
-    filtrados = filtrados.filter(c =>
-      normalizar(c.nombre).includes(q) || c.telefono.includes(q) ||
-      normalizar(c.email).includes(q) ||
-      normalizar(c.empresa).includes(q)
-    )
-  }
-  if (estadoFiltro) filtrados = filtrados.filter(c => c.estado === estadoFiltro)
-  if (filtroVencidos) filtrados = filtrados.filter(c => (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora) < new Date()))
-  if (opFiltro)     filtrados = filtrados.filter(c => c.tipo_operacion === opFiltro)
-  if (interesFilter) filtrados = filtrados.filter(c => c.nivel_interes === interesFilter)
-  if (zonaFilter)   filtrados = filtrados.filter(c => {
-    // Un cliente puede tener varias zonas (coma-separadas): filtra por "contiene".
-    const { zonas, otra } = parseZonasGuardadas(c.zona_busqueda)
-    return zonas.includes(zonaFilter) || (otra !== '' && zonaFilter === '__otra__')
-  })
-
-  if (sortBy === 'nombre') {
-    filtrados = [...filtrados].sort((a, b) => a.nombre.localeCompare(b.nombre))
-  } else if (sortBy === 'contacto') {
-    filtrados = [...filtrados].sort((a, b) => {
-      const aT = a.proximo_contacto ? new Date(a.proximo_contacto).getTime() : Infinity
-      const bT = b.proximo_contacto ? new Date(b.proximo_contacto).getTime() : Infinity
-      return aT - bT
+  const filtrados = useMemo(() => {
+    let result = clientes
+    if (busqueda.trim()) {
+      const q = normalizar(busqueda)
+      result = result.filter(c =>
+        normalizar(c.nombre).includes(q) || c.telefono.includes(q) ||
+        normalizar(c.email).includes(q) ||
+        normalizar(c.empresa).includes(q)
+      )
+    }
+    if (estadoFiltro)  result = result.filter(c => c.estado === estadoFiltro)
+    if (filtroVencidos) {
+      const now = Date.now()
+      result = result.filter(c => (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now))
+    }
+    if (opFiltro)      result = result.filter(c => c.tipo_operacion === opFiltro)
+    if (interesFilter) result = result.filter(c => c.nivel_interes === interesFilter)
+    if (zonaFilter)    result = result.filter(c => {
+      const { zonas, otra } = parseZonasGuardadas(c.zona_busqueda)
+      return zonas.includes(zonaFilter) || (otra !== '' && zonaFilter === '__otra__')
     })
-  }
+    if (sortBy === 'nombre') {
+      result = [...result].sort((a, b) => a.nombre.localeCompare(b.nombre))
+    } else if (sortBy === 'contacto') {
+      result = [...result].sort((a, b) => {
+        const aT = a.proximo_contacto ? new Date(a.proximo_contacto).getTime() : Infinity
+        const bT = b.proximo_contacto ? new Date(b.proximo_contacto).getTime() : Infinity
+        return aT - bT
+      })
+    }
+    return result
+  }, [clientes, busqueda, estadoFiltro, filtroVencidos, opFiltro, interesFilter, zonaFilter, sortBy])
 
   // ── Excel table helpers ───────────────────────────────────────
-  let filtradosExcel = filtrados
-  if (excelSort) {
-    filtradosExcel = [...filtrados].sort((a, b) => {
+  const filtradosExcel = useMemo(() => {
+    if (!excelSort) return filtrados
+    return [...filtrados].sort((a, b) => {
       let cmp = 0
       if (excelSort.col === 'nombre') cmp = a.nombre.localeCompare(b.nombre)
       else if (excelSort.col === 'estado') cmp = a.estado.localeCompare(b.estado)
       else if (excelSort.col === 'fecha') {
-        // Próxima fecha de seguimiento; los sin fecha van al final
         const aT = a.proximo_contacto ? new Date(a.proximo_contacto).getTime() : Infinity
         const bT = b.proximo_contacto ? new Date(b.proximo_contacto).getTime() : Infinity
         cmp = aT === bT ? 0 : aT < bT ? -1 : 1
       }
       return excelSort.dir === 'asc' ? cmp : -cmp
     })
-  }
+  }, [filtrados, excelSort])
 
   function handleColSort(colId: string) {
     setExcelSort(prev => {
@@ -515,7 +525,6 @@ export default function CRM() {
           if (user) registrarAccion(user.id, 'completar_seguimiento').catch(() => {})
         }
       }
-      queryClient.invalidateQueries({ queryKey: ['clientes'] })
       mostrarGuardado('ok')
     } else if (errServidor) {
       // Error real del servidor (validación/permisos): avisar y revertir.
