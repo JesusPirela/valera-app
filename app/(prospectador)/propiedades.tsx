@@ -162,17 +162,29 @@ const PropiedadCard = memo(function PropiedadCard({
       onPress={() => onOpen(item.id)}
     >
       {primera?.url && (
-        // Proporción FIJA 4:3 (alturas parejas) + imagen COMPLETA (contain). El
-        // fondo es el color de la tarjeta, así los bordes de una foto vertical se
-        // funden en vez de verse barras blancas. Sin zoom, sin recorte, sin
-        // tarjetas "muy elevadas".
-        <View style={[styles.cardImagenWrap, { backgroundColor: cardBg }]}>
-          <ThumbImage
-            url={primera.url}
-            opts={imgOpts}
-            style={styles.cardImagen}
-            resizeMode="contain"
-          />
+        // Móvil (una columna): la foto adopta su PROPORCIÓN REAL (autoAspect), así
+        // se ve COMPLETA llenando el ancho, sin barras ni recorte —vertical alta,
+        // horizontal ancha—. Web (rejilla): proporción fija 4:3 para alturas
+        // parejas, con la foto completa (contain) sobre el fondo de la tarjeta.
+        <View style={[Platform.OS === 'web' ? styles.cardImagenWrap : styles.cardImagenWrapMovil, { backgroundColor: cardBg }]}>
+          {Platform.OS === 'web' ? (
+            <ThumbImage
+              url={primera.url}
+              opts={imgOpts}
+              style={styles.cardImagen}
+              resizeMode="contain"
+            />
+          ) : (
+            <ThumbImage
+              url={primera.url}
+              opts={imgOpts}
+              style={styles.cardImagenMovil}
+              resizeMode="contain"
+              autoAspect
+              minAspect={0.72}
+              maxAspect={1.5}
+            />
+          )}
           <TouchableOpacity
             style={styles.lupitaBtn}
             onPress={(e) => { e.stopPropagation(); onZoom(thumb(primera.url, { width: 1200, quality: 85 }) ?? null) }}
@@ -1539,6 +1551,10 @@ const styles = StyleSheet.create({
   // Proporción fija 4:3 → todas las tarjetas con la misma altura de imagen.
   cardImagenWrap: { width: '100%', aspectRatio: 4 / 3, overflow: 'hidden' },
   cardImagen: { width: '100%', height: '100%' },
+  // Móvil: la imagen (autoAspect) define su propia altura al cargar. Se reserva
+  // 4:3 de arranque para no dar un salto de layout mientras llega la foto.
+  cardImagenWrapMovil: { width: '100%', overflow: 'hidden' },
+  cardImagenMovil: { width: '100%', aspectRatio: 4 / 3 },
   lupitaBtn: {
     position: 'absolute', top: 8, right: 8,
     backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18,

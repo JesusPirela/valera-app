@@ -151,6 +151,12 @@ function capitalize(s: string | null) {
 export default function DetallePropiedad() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions()
+  // Alto del carrusel principal. Se muestra la foto COMPLETA (contain), no una
+  // franja recortada: en móvil el alto crece con el ancho para que una foto
+  // horizontal entre entera; en web se acota para que no domine la pantalla.
+  const heroH = Platform.OS === 'web'
+    ? Math.min(SCREEN_HEIGHT * 0.62, 560)
+    : Math.round(SCREEN_WIDTH * 0.82)
   const isOnline = useNetworkStatus()
   const queryClient = useQueryClient()
   const [imagenActual, setImagenActual] = useState(0)
@@ -1544,8 +1550,8 @@ export default function DetallePropiedad() {
                 >
                   <Image
                     source={{ uri: thumbFallidas.has(img.url) ? img.url : thumb(img.url, { width: 1080, quality: 72 }) }}
-                    style={[styles.imagen, { width: SCREEN_WIDTH }]}
-                    resizeMode="cover"
+                    style={[styles.imagen, { width: SCREEN_WIDTH, height: heroH }]}
+                    resizeMode="contain"
                     onError={() => setThumbFallidas(prev => prev.has(img.url) ? prev : new Set(prev).add(img.url))}
                   />
                 </TouchableOpacity>
@@ -1585,7 +1591,7 @@ export default function DetallePropiedad() {
       ) : isFetching ? (
         // Caché sembrada sin fotos todavía + refetch en curso: mostrar carga,
         // no "Sin imágenes" (evita el falso "sin fotos" en redes lentas).
-        <View style={[styles.sinImagen, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.sinImagen, { width: SCREEN_WIDTH, height: heroH }]}>
           <ActivityIndicator size="large" color="#1a6470" />
         </View>
       ) : (
@@ -2425,7 +2431,9 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: '#aaa', fontSize: 15 },
 
-  imagen: { height: 340, backgroundColor: '#d0d0d0' },
+  // El alto real se pasa inline (heroH). El fondo claro hace que las barras de
+  // una foto vertical se fundan en vez de verse como un marco gris oscuro.
+  imagen: { height: 340, backgroundColor: '#eef2f3' },
 
   // Opciones similares
   similaresSection: { marginTop: 26, marginBottom: 6 },
