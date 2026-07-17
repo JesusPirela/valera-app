@@ -1552,6 +1552,7 @@ export default function DetallePropiedad() {
                     source={{ uri: thumbFallidas.has(img.url) ? img.url : thumb(img.url, { width: 1080, quality: 72 }) }}
                     style={[styles.imagen, { width: SCREEN_WIDTH, height: heroH }]}
                     resizeMode="contain"
+                    progressiveRenderingEnabled
                     onError={() => setThumbFallidas(prev => prev.has(img.url) ? prev : new Set(prev).add(img.url))}
                   />
                 </TouchableOpacity>

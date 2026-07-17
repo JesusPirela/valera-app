@@ -327,52 +327,74 @@ export default function ProspectadorPropiedades() {
         supabase.from('profiles').select('role, nombre, telefono').eq('id', userId).single(),
       ])
 
-      // Paginar: PostgREST corta en 1000 filas/petición. Sin esto, las
-      // propiedades más viejas (códigos VR bajos) no se cargan ni se buscan.
-      const PAGE = 1000
+      // Rol efectivo: si un admin está "viendo como" otro rol, se usa ese.
+      const rol = vistaComo ?? profileRes.data?.role ?? null
+
+      // Arma el objeto de datos a partir de las filas crudas (mapeo + filtro por
+      // rol + mezcla). Se usa tanto para la publicación PARCIAL (primera tanda)
+      // como para la final, así ambas tienen exactamente la misma forma.
+      const construir = (rows: any[]): PropiedadesData => {
+        let propiedades = rows.map((p: any) => ({
+          ...p,
+          // La tarjeta usa `descripcion` para el preview; el listado trae solo la
+          // versión corta (descripcion_corta), se mapea al mismo campo.
+          descripcion: p.descripcion_corta ?? null,
+          inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
+        })) as unknown as Propiedad[]
+        if (!esPlusOMejor(rol)) {
+          propiedades = propiedades.filter(p => !p.exclusiva && !p.inmobiliarias?.exclusiva)
+        }
+        propiedades = mezclar(propiedades)
+        return {
+          rol,
+          nombreUsuario: profileRes.data?.nombre ?? null,
+          userId,
+          telefono: profileRes.data?.telefono ?? null,
+          propiedades,
+        }
+      }
+
+      // Carga en dos fases (clave en Android / red lenta): antes se bajaban las
+      // ~1500 propiedades de golpe (~4.5 MB) y la pantalla se quedaba en skeleton
+      // hasta terminar TODO. Ahora se trae una primera tanda chica y se PUBLICA
+      // de inmediato (setQueryData) para que el usuario vea y use propiedades ya;
+      // el resto sigue cargando en segundo plano y se agrega al terminar. La
+      // búsqueda y el mapa quedan completos una vez que llega todo.
+      // Solo pintar la tanda parcial en arranque EN FRÍO (sin datos previos). En
+      // un refetch tibio ya hay lista completa en pantalla; publicar 200 la
+      // encogería un instante (y el mapa perdería puntos) hasta que llegue el
+      // resto. En ese caso no publicamos parcial: se reemplaza todo al final.
+      const habiaDatosPrevios = ((queryClient.getQueryData(['prospectador-propiedades', vistaComo]) as PropiedadesData | undefined)?.propiedades?.length ?? 0) > 0
+
+      const PRIMERA = 200   // primera tanda: paint casi instantáneo
+      const PAGE = 1000     // PostgREST corta en 1000 filas/petición
       let propsData: any[] = []
-      for (let from = 0; ; from += PAGE) {
+      let from = 0
+      let parcialPublicada = false
+      for (let i = 0; ; i++) {
+        const size = i === 0 ? PRIMERA : PAGE
         const { data, error } = await supabase
           .from('propiedades')
-          // descripcion_corta (col. generada, 180 chars) en vez de la completa:
-          // el listado solo muestra un preview de 2 líneas, así que traer las
-          // descripciones completas eran ~1.5MB inútiles al entrar. La descripción
-          // completa la trae el detalle por su cuenta.
           .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, orden)')
           .eq('estado', 'disponible')
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
           .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
           .limit(1, { referencedTable: 'propiedad_imagenes' })
-          .range(from, from + PAGE - 1)
+          .range(from, from + size - 1)
         if (error) throw error
         propsData = propsData.concat(data ?? [])
-        if (!data || data.length < PAGE) break
+        from += size
+        // Publicar la primera tanda ya (solo si aún faltan más; si todo cupo en
+        // la primera, la publicación final basta y evitamos un doble render).
+        if (!parcialPublicada && !habiaDatosPrevios && (data?.length ?? 0) >= size) {
+          parcialPublicada = true
+          queryClient.setQueryData(['prospectador-propiedades', vistaComo], construir(propsData))
+        }
+        if (!data || data.length < size) break
       }
 
-      // Rol efectivo: si un admin está "viendo como" otro rol, se usa ese.
-      const rol = vistaComo ?? profileRes.data?.role ?? null
-      let propiedades = propsData.map((p: any) => ({
-        ...p,
-        // La tarjeta usa `descripcion` para el preview; el listado ahora trae
-        // solo la versión corta, se mapea al mismo campo.
-        descripcion: p.descripcion_corta ?? null,
-        inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
-      })) as unknown as Propiedad[]
-      if (!esPlusOMejor(rol)) {
-        propiedades = propiedades.filter(p => !p.exclusiva && !p.inmobiliarias?.exclusiva)
-      }
-      // Orden aleatorio en vez de "más reciente primero": se mezcla una vez
-      // por cada carga fresca (entrar a la app / refetch), no en cada render.
-      propiedades = mezclar(propiedades)
-
-      return {
-        rol,
-        nombreUsuario: profileRes.data?.nombre ?? null,
-        userId,
-        telefono: profileRes.data?.telefono ?? null,
-        propiedades,
-      }
+      return construir(propsData)
     },
     networkMode: 'offlineFirst',
     staleTime: 1000 * 60 * 30,
@@ -450,17 +472,23 @@ export default function ProspectadorPropiedades() {
     }
   }, [refetch, refetchPub, queryClient, vistaComo]))
 
-  // Generar orden aleatorio único por sesión cuando llegan las propiedades
+  // Orden aleatorio estable por sesión. Se asigna un valor a cada propiedad la
+  // primera vez que aparece y NO se cambia después, así el orden se mantiene
+  // entre refetch. Con la carga en dos fases van llegando propiedades nuevas: a
+  // esas se les asigna su valor aquí (antes solo se hacía una vez, y las que
+  // llegaban en la segunda tanda quedaban sin posición → amontonadas arriba).
   useEffect(() => {
     if (!queryData?.propiedades || queryData.propiedades.length === 0) return
-    if (shuffleMapRef.current.size === 0) {
-      const map = new Map<string, number>()
-      queryData.propiedades.forEach(p => map.set(p.id, Math.random()))
-      shuffleMapRef.current = map
-      // Bump para que el orden aleatorio se aplique en el memo (el ref no
-      // dispara re-render por sí solo).
-      setShuffleTick(t => t + 1)
+    let agrego = false
+    for (const p of queryData.propiedades) {
+      if (!shuffleMapRef.current.has(p.id)) {
+        shuffleMapRef.current.set(p.id, Math.random())
+        agrego = true
+      }
     }
+    // Bump para que el orden aleatorio se aplique en el memo (el ref no dispara
+    // re-render por sí solo).
+    if (agrego) setShuffleTick(t => t + 1)
   }, [queryData?.propiedades])
 
   useEffect(() => {

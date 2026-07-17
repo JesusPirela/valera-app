@@ -1,6 +1,14 @@
 import { useState } from 'react'
-import { Image, ImageStyle, StyleProp } from 'react-native'
+import { Image, ImageStyle, StyleProp, Platform } from 'react-native'
 import { thumb, ThumbOpts } from '../lib/img'
+
+// Props de Android que mejoran cómo cargan las fotos: renderizado progresivo
+// (el JPEG aparece borroso→nítido en vez de esperar a estar completo) y sin el
+// retardo de fundido (la foto se muestra apenas se decodifica). En iOS/web se
+// ignoran.
+const androidImgProps = Platform.OS === 'android'
+  ? { progressiveRenderingEnabled: true, fadeDuration: 120 as number }
+  : {}
 
 type Props = {
   url: string | null | undefined
@@ -32,6 +40,7 @@ export function ThumbImage({
   const src = erroredSrc === transformada ? url : transformada
   return (
     <Image
+      {...androidImgProps}
       source={{ uri: src }}
       style={[style, autoAspect && ratio ? { aspectRatio: ratio } : null]}
       resizeMode={resizeMode}

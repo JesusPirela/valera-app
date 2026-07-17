@@ -55,6 +55,7 @@
     "plugins": [
       "expo-router",
       "./plugins/withCppStandard",
+      "./plugins/withAsyncStorageSize",
       [
         "expo-build-properties",
         {
