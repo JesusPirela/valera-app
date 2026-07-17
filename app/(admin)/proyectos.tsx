@@ -339,19 +339,15 @@ export default function Proyectos() {
         </TouchableOpacity>
       </View>
 
-      {/* KPI Strip */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={[s.kpiScroll, { backgroundColor: c.card, borderBottomColor: c.border }]}
-        contentContainerStyle={s.kpiContent}
-      >
+      {/* KPI Strip: fila que se acomoda sola (flex-wrap), no ScrollView — así no
+          se recorta en web ni se amontona, y hay espacio real entre tarjetas. */}
+      <View style={[s.kpiWrap, { backgroundColor: c.bg, borderBottomColor: c.border }]}>
         {Object.entries(ESTADOS).map(([key, cfg]) => {
           const activo = filtroEstado === key
           return (
             <TouchableOpacity
               key={key}
-              style={[s.kpiCard, { backgroundColor: activo ? cfg.color + '20' : c.bg, borderColor: activo ? cfg.color : c.border }]}
+              style={[s.kpiCard, { backgroundColor: activo ? cfg.color + '22' : c.card, borderColor: activo ? cfg.color : c.border }]}
               onPress={() => setFiltroEstado(filtroEstado === key ? null : key)}
             >
               <View style={[s.kpiDot, { backgroundColor: cfg.color }]} />
@@ -360,7 +356,7 @@ export default function Proyectos() {
             </TouchableOpacity>
           )
         })}
-      </ScrollView>
+      </View>
 
       {/* Filtro prioridad */}
       <ScrollView
@@ -886,12 +882,17 @@ const s = StyleSheet.create({
   btnNuevoTxt: { color: '#1a3a2a', fontWeight: '800', fontSize: 13 },
 
   // KPI
-  // Con `ScrollView horizontal`, la web pone overflow-y:hidden y recortaba las
-  // tarjetas (solo se veía el punto y un pedazo del número). Se le da alto fijo
-  // que alcance para punto + número + etiqueta.
-  kpiScroll: { flexGrow: 0, borderBottomWidth: 1, height: 96 },
-  kpiContent: { paddingHorizontal: 14, paddingVertical: 10, gap: 8, flexDirection: 'row', alignItems: 'center' },
-  kpiCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, gap: 2, minWidth: 96, height: 74 },
+  // Fila que se acomoda sola: sin ScrollView (no se recorta en web), con gap
+  // real entre tarjetas y padding arriba para separarlas del header.
+  kpiWrap: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
+    paddingHorizontal: 14, paddingTop: 14, paddingBottom: 12, borderBottomWidth: 1,
+  },
+  kpiCard: {
+    flexGrow: 1, flexBasis: 96, minWidth: 96, height: 72,
+    alignItems: 'center', justifyContent: 'center', gap: 3,
+    paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1.5,
+  },
   kpiDot: { width: 8, height: 8, borderRadius: 4 },
   kpiNum: { fontSize: 22, fontWeight: '900', lineHeight: 26 },
   kpiLbl: { fontSize: 9, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },

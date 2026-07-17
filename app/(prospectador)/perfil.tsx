@@ -19,6 +19,7 @@ import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats 
 import { marcoPorNivel } from '../../lib/marcos'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { useCargaDatos } from '../../lib/CargaDatos'
+import { queryClient } from '../../lib/queryClient'
 
 const COLORES_LIBRES = [
   '#1a6470', '#c9a84c', '#1e3a5f', '#7b1e3a',
@@ -279,6 +280,11 @@ export default function Perfil() {
       if (error) throw error
       setAcentoId(colorAcento)
       setPrimaryColor(baseColorDeAcento(colorAcento))
+      // El saludo del inicio ("Hola, X") y el ranking leen el nombre de sus
+      // propios caches; sin invalidarlos, seguian mostrando el nombre viejo tras
+      // cambiarlo aquí.
+      queryClient.invalidateQueries({ queryKey: ['prospectador-propiedades'] })
+      queryClient.invalidateQueries({ queryKey: ['ranking'] })
       mostrarAlerta('¡Perfil actualizado!')
       cargar()
     } catch (e: any) {
