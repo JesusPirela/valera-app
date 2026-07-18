@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, ActivityIndicator, Platform, Alert,
+  TouchableOpacity, ActivityIndicator, Platform, Alert, Image,
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -40,6 +40,22 @@ function alerta(titulo: string, msg: string) {
 
 let keyCounter = 0
 function nuevaKey() { return String(++keyCounter) }
+
+// Prompt para generar la miniatura del curso con IA, ADAPTADO al tema (según el
+// título/categoría). Estilo "miniatura de YouTube" para que combine con las de
+// los cursos que ya tienen video.
+function promptMiniatura(titulo: string, categoria: string): string {
+  const t = `${titulo} ${categoria}`.toLowerCase()
+  let escena = 'asesor inmobiliario profesional en traje con casas residenciales modernas de fondo'
+  if (/marketplace/.test(t)) escena = 'telefono mostrando Facebook Marketplace con anuncios de casas y propiedades en venta'
+  else if (/facebook|instagram|redes/.test(t)) escena = 'telefono mostrando una publicacion en redes sociales de una casa en venta'
+  else if (/estadistic|metric|dashboard|analitic/.test(t)) escena = 'telefono mostrando graficas y estadisticas de bienes raices, dashboard con numeros y flechas hacia arriba'
+  else if (/credito|hipotec|financ|infonavit/.test(t)) escena = 'llaves de casa, documentos de credito hipotecario y billetes, tema financiero inmobiliario'
+  else if (/legal|contrato|escritur|notari|juridic/.test(t)) escena = 'contrato inmobiliario, escrituras y llaves de casa sobre un escritorio'
+  else if (/renta/.test(t)) escena = 'asesor inmobiliario mostrando una casa en renta con un letrero de renta'
+  else if (/prospec|lead|cliente|captaci/.test(t)) escena = 'asesor inmobiliario atendiendo a una pareja de clientes frente a una casa'
+  return `miniatura estilo YouTube vibrante y llamativa para curso de bienes raices sobre ${titulo}, ${escena}, colores muy saturados, alto contraste, iluminacion profesional, alta calidad, sin texto, sin letras`
+}
 
 function TareaEditor({ tarea, onChange, onQuitar }: {
   tarea: TareaDraft
@@ -105,6 +121,7 @@ export default function UniversityCursoForm() {
   const [descripcion, setDescripcion] = useState('')
   const [descripcionCorta, setDescripcionCorta] = useState('')
   const [imagenUrl, setImagenUrl] = useState('')
+  const [generandoIA, setGenerandoIA] = useState(false)
   const [instructor, setInstructor] = useState('Valera University')
   const [duracionTexto, setDuracionTexto] = useState('')
   const [categoria, setCategoria] = useState('Fundamentos')
@@ -210,6 +227,41 @@ export default function UniversityCursoForm() {
       ;[arr[idx], arr[nuevoIdx]] = [arr[nuevoIdx], arr[idx]]
       return arr.map((l, i) => ({ ...l, orden: i + 1 }))
     })
+  }
+
+  // Genera una miniatura con IA acorde al tema del curso, la sube a Supabase y
+  // la deja como portada. Pollinations permite CORS, así que se leen los bytes
+  // directo (también en web) y se suben al bucket como el resto de imágenes.
+  async function generarMiniaturaIA() {
+    if (!titulo.trim()) {
+      alerta('Escribe el título primero', 'La miniatura se genera según el título y la categoría del curso.')
+      return
+    }
+    setGenerandoIA(true)
+    try {
+      const prompt = promptMiniatura(titulo, categoria)
+      const seed = Math.floor(Math.random() * 100000)
+      const pol = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=640&height=360&nologo=true&seed=${seed}&model=flux`
+      // IMPORTANTE: se pide a través de wsrv (proxy), NO directo a Pollinations.
+      // Pollinations bloquea (403) las peticiones del navegador por el header
+      // Origin; wsrv pide del lado servidor (sin Origin), genera y devuelve la
+      // imagen con CORS para poder leer los bytes y subirlos.
+      const url = `https://wsrv.nl/?url=${encodeURIComponent(pol)}&w=640&h=360&output=jpg`
+      const resp = await fetch(url)
+      if (!resp.ok) throw new Error(`El generador respondió ${resp.status}`)
+      const blob = await resp.blob()
+      const filePath = `university-thumbs/gen-${Date.now()}.jpg`
+      const { error: upErr } = await supabase.storage
+        .from('propiedades')
+        .upload(filePath, blob, { contentType: 'image/jpeg', upsert: true })
+      if (upErr) throw upErr
+      const { data: pub } = supabase.storage.from('propiedades').getPublicUrl(filePath)
+      setImagenUrl(pub.publicUrl)
+    } catch (e: any) {
+      alerta('No se pudo generar', e?.message ?? 'Intenta de nuevo en un momento.')
+    } finally {
+      setGenerandoIA(false)
+    }
   }
 
   async function guardar() {
@@ -339,8 +391,32 @@ export default function UniversityCursoForm() {
         <Text style={estilos.label}>Duración estimada</Text>
         <TextInput style={[estilos.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={duracionTexto} onChangeText={setDuracionTexto} placeholder="Ej. ~60 min · 4 lecciones" />
 
-        <Text style={estilos.label}>URL portada (imagen)</Text>
-        <TextInput style={[estilos.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]} value={imagenUrl} onChangeText={setImagenUrl} placeholder="https://..." autoCapitalize="none" />
+        <Text style={estilos.label}>Portada (imagen)</Text>
+        {imagenUrl ? (
+          <Image source={{ uri: imagenUrl }} style={estilos.portadaPreview} resizeMode="cover" />
+        ) : null}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 6 }}>
+          <TextInput
+            style={[estilos.input, { flex: 1, marginBottom: 0, backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+            value={imagenUrl}
+            onChangeText={setImagenUrl}
+            placeholder="https://... o genera una con IA →"
+            autoCapitalize="none"
+          />
+          <TouchableOpacity
+            style={[estilos.btnIA, generandoIA && { opacity: 0.7 }]}
+            onPress={generarMiniaturaIA}
+            disabled={generandoIA}
+            activeOpacity={0.85}
+          >
+            {generandoIA ? <ActivityIndicator size="small" color="#fff" /> : <Text style={estilos.btnIATxt}>✨ IA</Text>}
+          </TouchableOpacity>
+        </View>
+        <Text style={estilos.iaHint}>
+          {generandoIA
+            ? 'Generando una miniatura acorde al tema del curso… (~30 s)'
+            : 'Si no tienes portada, el botón ✨ IA genera una según el título y la categoría.'}
+        </Text>
 
         <Text style={estilos.label}>Categoría</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
@@ -458,6 +534,10 @@ const estilos = StyleSheet.create({
   seccionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 8 },
   label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
   input: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, marginBottom: 14 },
+  portadaPreview: { width: '100%', aspectRatio: 16 / 9, borderRadius: 10, marginBottom: 8, backgroundColor: '#0d2b30' },
+  btnIA: { backgroundColor: '#7c3aed', borderRadius: 10, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', minWidth: 64 },
+  btnIATxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  iaHint: { fontSize: 11.5, color: '#8a7fb0', marginBottom: 16 },
   inputMulti: { height: 100, textAlignVertical: 'top' },
   chip: { borderWidth: 1, borderColor: '#ddd', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: '#fff' },
   chipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
