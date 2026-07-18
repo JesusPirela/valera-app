@@ -258,10 +258,7 @@ export default function ProspectadorLayout() {
       />
       <Tabs.Screen
         name="mi-dia"
-        options={{
-          title: 'Mi Día',
-          tabBarIcon: tabIcon('today-outline', 'today'),
-        }}
+        options={{ href: null, title: 'Mi Día' }}
       />
       <Tabs.Screen
         name="crm"

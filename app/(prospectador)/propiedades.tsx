@@ -1119,6 +1119,13 @@ export default function ProspectadorPropiedades() {
                 </Text>
               </View>
               {/* Racha siempre a la vista (y celebración al llegar a un hito) */}
+              <TouchableOpacity
+                style={styles.miDiaBtn}
+                onPress={() => router.push('/(prospectador)/mi-dia')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.miDiaBtnTxt}>☀️ Mi día</Text>
+              </TouchableOpacity>
               <RachaHeader />
             </View>
             <View style={[styles.searchWrapper, { backgroundColor: darkMode ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.95)' }]}>
@@ -1345,6 +1352,14 @@ const styles = StyleSheet.create({
   headerIconoText: { fontSize: 18 },
   headerLogo: { width: 110, height: 38 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  miDiaBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5,
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)',
+    marginRight: 6,
+  },
+  miDiaBtnTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
