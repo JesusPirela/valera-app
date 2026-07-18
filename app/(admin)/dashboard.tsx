@@ -228,10 +228,10 @@ export default function Dashboard() {
             {activosAhora.map(u => (
               <View key={u.id} style={st.activoPill}>
                 <View style={st.activoDot} />
-                <Text style={[st.activoNombre, { color: c.text }]} numberOfLines={1}>
+                <Text style={st.activoNombre} numberOfLines={1}>
                   {u.nombre ?? u.id.slice(0, 8)}
                 </Text>
-                <Text style={[st.activoRol, { color: c.textMute }]}>{rolLabel(u.role)}</Text>
+                <Text style={st.activoRol}>{rolLabel(u.role)}</Text>
               </View>
             ))}
           </View>
@@ -362,8 +362,8 @@ const st = StyleSheet.create({
     borderWidth: 1, borderColor: '#bbf7d0',
   },
   activoDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22c55e' },
-  activoNombre: { fontSize: 12, fontWeight: '700', maxWidth: 100 },
-  activoRol: { fontSize: 10, fontWeight: '500' },
+  activoNombre: { fontSize: 12, fontWeight: '700', maxWidth: 100, color: '#14532d' },
+  activoRol: { fontSize: 10, fontWeight: '600', color: '#166534' },
 
   citaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 },
   citaHoraBadge: { minWidth: 46, alignItems: 'center', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 6 },
