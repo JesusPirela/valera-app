@@ -49,6 +49,29 @@ function emojiTema(categoria: string, titulo: string): string {
   return '🎓'
 }
 
+// Imagen GENERADA POR IA (según el tema del curso) para los que no tienen ni
+// portada propia ni video de YouTube. Se usa Pollinations: generación por IA
+// sin API key, tomando una URL con el prompt. El `seed` estable (derivado del
+// id del curso) hace que la imagen sea SIEMPRE la misma para ese curso y quede
+// cacheada tras la primera vez. Si el servicio fallara, CursoThumb cae al emoji.
+function hashEstable(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+function imagenIACurso(curso: CursoCard): string {
+  // Prompt pensado para que se PAREZCA a las miniaturas de YouTube de los otros
+  // cursos: asesor inmobiliario en traje, casas modernas de fondo, diseño
+  // vibrante de alto contraste, composición dinámica. Sin texto (la IA escribe
+  // texto ilegible; mejor sin él).
+  const prompt = `miniatura estilo YouTube para curso inmobiliario sobre ${curso.titulo}, asesor de bienes raices profesional en traje, casas residenciales modernas de fondo, diseño vibrante de alto contraste, colores saturados, composicion dinamica, iluminacion cinematografica, alta calidad, sin texto, sin letras`
+  const seed = hashEstable(curso.id) % 100000
+  const pol = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=640&height=360&nologo=true&seed=${seed}&model=flux`
+  // Se sirve por wsrv (proxy) para evitar el bloqueo ORB del navegador en web y
+  // para cachear la imagen generada tras la primera vez.
+  return `https://wsrv.nl/?url=${encodeURIComponent(pol)}&w=640&h=360&output=jpg`
+}
+
 const NIVEL_COLOR: Record<string, string> = {
   basico: '#2e7d32',
   intermedio: '#e65100',
@@ -85,6 +108,7 @@ function VideoEmbed({ url }: { url: string }) {
 //  3) Sin nada → placeholder temático (emoji del tema + categoría).
 function CursoThumb({ curso, nivelColor }: { curso: CursoCard; nivelColor: string }) {
   const [ytError, setYtError] = useState(false)
+  const [iaError, setIaError] = useState(false)
 
   if (curso.imagen_url) {
     return (
@@ -105,6 +129,20 @@ function CursoThumb({ curso, nivelColor }: { curso: CursoCard; nivelColor: strin
       </View>
     )
   }
+  // 3) Sin portada ni video: imagen GENERADA POR IA acorde al tema.
+  if (!iaError) {
+    return (
+      <View style={[estilos.cardImgBox, { backgroundColor: nivelColor }]}>
+        <Image
+          source={{ uri: imagenIACurso(curso) }}
+          style={estilos.cardImgFill}
+          resizeMode="cover"
+          onError={() => setIaError(true)}
+        />
+      </View>
+    )
+  }
+  // 4) Último recurso si la IA no responde: placeholder temático con emoji.
   return (
     <View style={[estilos.cardImgBox, estilos.cardImgPlaceholder, { backgroundColor: nivelColor }]}>
       <Text style={estilos.cardImgEmoji}>{emojiTema(curso.categoria, curso.titulo)}</Text>
@@ -115,6 +153,7 @@ function CursoThumb({ curso, nivelColor }: { curso: CursoCard; nivelColor: strin
 
 export default function University() {
   const c = useColors()
+  const isWeb = Platform.OS === 'web'
   const queryClient = useQueryClient()
   const [showIntro, setShowIntro] = useState(false)
 
@@ -312,7 +351,11 @@ export default function University() {
             <Text style={estilos.emptyText}>No hay cursos publicados aún</Text>
           </View>
         ) : (
-          cursos.map((curso) => {
+          // En PC: rejilla de tarjetas de ancho fijo (como Udemy/Coursera), para
+          // que la miniatura no salga gigante ocupando todo el ancho. En móvil:
+          // una sola columna a lo ancho.
+          <View style={isWeb ? estilos.grid : undefined}>
+          {cursos.map((curso) => {
             const pct = curso.totalLecciones > 0
               ? Math.round((curso.completadas / curso.totalLecciones) * 100) : 0
             const nivelColor = NIVEL_COLOR[curso.nivel] ?? '#555'
@@ -320,7 +363,7 @@ export default function University() {
             return (
               <TouchableOpacity
                 key={curso.id}
-                style={[estilos.card, { backgroundColor: c.card, borderColor: c.border }]}
+                style={[estilos.card, { backgroundColor: c.card, borderColor: c.border }, isWeb && estilos.cardWeb]}
                 onPress={() => router.push(`/(prospectador)/university-curso?id=${curso.id}`)}
                 activeOpacity={0.85}
               >
@@ -373,7 +416,8 @@ export default function University() {
                 </View>
               </TouchableOpacity>
             )
-          })
+          })}
+          </View>
         )}
       </ScrollView>
     </View>
@@ -420,6 +464,9 @@ const estilos = StyleSheet.create({
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: '#aaa', fontSize: 14 },
   card: { backgroundColor: '#fff', borderRadius: 16, marginHorizontal: 16, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e8eef0', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
+  // PC: rejilla centrada de tarjetas de ancho fijo (como sitios de cursos).
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 18, paddingHorizontal: 16, maxWidth: 1180, width: '100%', alignSelf: 'center' },
+  cardWeb: { width: 350, marginHorizontal: 0, marginBottom: 0 },
   cardImgWrapper: { position: 'relative' },
   // Caja 16:9 para la miniatura (formato de video). El fondo se ve solo si la
   // portada es de otra proporción (contain); las miniaturas de YT la llenan.
