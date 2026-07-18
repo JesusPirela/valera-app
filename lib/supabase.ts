@@ -60,8 +60,28 @@ function lockSerial<R>(_name: string, _timeout: number, fn: () => Promise<R>): P
 //
 // Solo se reintenta rest/v1 (datos), no auth/v1 (login/refresh), para no entrar
 // en bucle. Y solo 401 (token), no 403 (permiso de RLS).
+// ── Timeout por petición ─────────────────────────────────────────────────────
+// El problema: tras dejar la pantalla abierta un rato (idle), el socket TCP
+// puede quedar MUERTO sin que el sistema lo detecte. La siguiente petición se
+// queda colgada PARA SIEMPRE (fetch no tiene timeout propio) → el botón se queda
+// cargando y atorado. Con esto, cualquier petición que pase de TIMEOUT_MS se
+// ABORTA: la promesa se rechaza, el catch del botón corre y la UI se libera
+// (React Query/mutaciones reintentan y abren una conexión fresca). Se respeta
+// un signal que ya venga del caller (cancelación de React Query, etc.).
+const TIMEOUT_MS = 30000
+function fetchConTimeout(input: any, init: RequestInit | undefined, ms: number): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), ms)
+  const callerSignal = init?.signal as AbortSignal | undefined | null
+  if (callerSignal) {
+    if (callerSignal.aborted) ctrl.abort()
+    else callerSignal.addEventListener('abort', () => ctrl.abort(), { once: true })
+  }
+  return fetch(input, { ...(init ?? {}), signal: ctrl.signal }).finally(() => clearTimeout(timer))
+}
+
 const fetchConAuth: typeof fetch = async (input, init) => {
-  const res = await fetch(input as any, init)
+  const res = await fetchConTimeout(input as any, init, TIMEOUT_MS)
   if (res.status !== 401) return res
   const url = typeof input === 'string' ? input
     : input instanceof URL ? input.href
@@ -79,7 +99,7 @@ const fetchConAuth: typeof fetch = async (input, init) => {
     headers.set('Authorization', `Bearer ${token}`)
     headers.set('apikey', supabaseAnonKey)
     const destino = typeof input === 'string' || input instanceof URL ? input : (input as Request).url
-    return await fetch(destino, { ...(init ?? {}), headers })
+    return await fetchConTimeout(destino, { ...(init ?? {}), headers }, TIMEOUT_MS)
   } catch {
     return res  // si el refresh falla, devolvemos el 401 original
   }
