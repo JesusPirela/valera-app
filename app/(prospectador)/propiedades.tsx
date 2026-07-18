@@ -293,6 +293,9 @@ export default function ProspectadorPropiedades() {
   const [precioMin, setPrecioMin] = useState('')
   const [precioMax, setPrecioMax] = useState('')
   const [filtroPublicadas, setFiltroPublicadas] = useState<FiltroPublicadas>(null)
+  // IDs publicados en esta sesión: se quedan visibles en el filtro "sin publicar"
+  // hasta que el usuario quite el filtro, evitando que desaparezcan al instante.
+  const recienPublicadosRef = useRef<Set<string>>(new Set())
   const [filtroNueva, setFiltroNueva] = useState(false)
   const [filtroExclusiva, setFiltroExclusiva] = useState(false)
   const [filtroDestacada, setFiltroDestacada] = useState(false)
@@ -557,10 +560,12 @@ export default function ProspectadorPropiedades() {
         old ? { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: n } } : old)
     }
     setVeces(vecesActual + 1)
+    recienPublicadosRef.current = new Set([...recienPublicadosRef.current, propiedadId])
 
     const idemKey = generarIdemKey()
     const exito = (vecesReal: number) => {
       setVeces(vecesReal)
+      recienPublicadosRef.current = new Set([...recienPublicadosRef.current, propiedadId])
       track('publicar_propiedad', { veces: vecesReal })
       actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
     }
@@ -731,7 +736,7 @@ export default function ProspectadorPropiedades() {
     }
   }
   if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) > 0)
-  if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0)
+  if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0 || recienPublicadosRef.current.has(p.id))
   if (filtroNueva) {
     const haceUnaS = Date.now() - 7 * 24 * 60 * 60 * 1000
     propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() > haceUnaS)
