@@ -24,6 +24,29 @@ type CursoCard = {
   completadas: number
   tieneCertificado: boolean
   es_certificacion: boolean
+  youtubeId: string | null
+}
+
+// ID de un video de YouTube a partir de su URL (watch, youtu.be, embed, shorts).
+function youtubeIdDe(url: string | null | undefined): string | null {
+  if (!url) return null
+  const m = url.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/)
+  return m ? m[1] : null
+}
+
+// Emoji acorde al tema del curso, para el placeholder de los que no tienen ni
+// portada ni video de YouTube (así la miniatura "tiene que ver con el tema").
+function emojiTema(categoria: string, titulo: string): string {
+  const t = `${categoria} ${titulo}`.toLowerCase()
+  if (/venta|cierre|negoci/.test(t)) return '💰'
+  if (/prospec|lead|cliente|captaci/.test(t)) return '📞'
+  if (/legal|contrato|escritur|notari|juridic/.test(t)) return '📄'
+  if (/credito|hipotec|financ|banco|infonavit/.test(t)) return '🏦'
+  if (/propiedad|inmueble|casa|departamento|terreno/.test(t)) return '🏠'
+  if (/marketing|redes|publicidad|social|anuncio/.test(t)) return '📣'
+  if (/foto|imagen|video|contenido/.test(t)) return '📸'
+  if (/servicio|atenci|posventa|segui/.test(t)) return '🤝'
+  return '🎓'
 }
 
 const NIVEL_COLOR: Record<string, string> = {
@@ -54,6 +77,42 @@ function VideoEmbed({ url }: { url: string }) {
   )
 }
 
+// Miniatura del curso, en caja 16:9, SIEMPRE con imagen y sin recorte del tema:
+//  1) Portada propia (imagen_url) → contain, se ve completa.
+//  2) Miniatura de YouTube → hqdefault con `cover`; hqdefault viene con barras
+//     negras (letterbox) y el `cover` en 16:9 recorta EXACTAMENTE esas barras,
+//     dejando el cuadro del video completo, sin barras ni deformación.
+//  3) Sin nada → placeholder temático (emoji del tema + categoría).
+function CursoThumb({ curso, nivelColor }: { curso: CursoCard; nivelColor: string }) {
+  const [ytError, setYtError] = useState(false)
+
+  if (curso.imagen_url) {
+    return (
+      <View style={[estilos.cardImgBox, { backgroundColor: '#0d2b30' }]}>
+        <Image source={{ uri: curso.imagen_url }} style={estilos.cardImgFill} resizeMode="contain" />
+      </View>
+    )
+  }
+  if (curso.youtubeId && !ytError) {
+    return (
+      <View style={[estilos.cardImgBox, { backgroundColor: '#000' }]}>
+        <Image
+          source={{ uri: `https://img.youtube.com/vi/${curso.youtubeId}/hqdefault.jpg` }}
+          style={estilos.cardImgFill}
+          resizeMode="cover"
+          onError={() => setYtError(true)}
+        />
+      </View>
+    )
+  }
+  return (
+    <View style={[estilos.cardImgBox, estilos.cardImgPlaceholder, { backgroundColor: nivelColor }]}>
+      <Text style={estilos.cardImgEmoji}>{emojiTema(curso.categoria, curso.titulo)}</Text>
+      <Text style={estilos.cardImgCat}>{curso.categoria.toUpperCase()}</Text>
+    </View>
+  )
+}
+
 export default function University() {
   const c = useColors()
   const queryClient = useQueryClient()
@@ -78,7 +137,7 @@ export default function University() {
         { data: configData },
       ] = await Promise.all([
         supabase.from('profiles').select('nombre').eq('id', user.id).single(),
-        supabase.from('vu_cursos').select('id, titulo, descripcion_corta, imagen_url, nivel, categoria, instructor, duracion_texto, es_certificacion, vu_lecciones(id)').eq('publicado', true).order('orden'),
+        supabase.from('vu_cursos').select('id, titulo, descripcion_corta, imagen_url, nivel, categoria, instructor, duracion_texto, es_certificacion, vu_lecciones(id, youtube_url, orden)').eq('publicado', true).order('orden'),
         supabase.from('vu_progreso').select('leccion_id, curso_id').eq('user_id', user.id),
         supabase.from('vu_certificados').select('curso_id').eq('user_id', user.id),
         supabase.from('vu_puntos').select('puntos').eq('user_id', user.id),
@@ -104,6 +163,11 @@ export default function University() {
         completadas: completadasPorCurso.get(c.id) ?? 0,
         tieneCertificado: certSet.has(c.id),
         es_certificacion: c.es_certificacion ?? false,
+        // ID del primer video de YouTube (por orden de lección) para la miniatura.
+        youtubeId: [...(c.vu_lecciones ?? [])]
+          .sort((a: any, b: any) => (a.orden ?? 0) - (b.orden ?? 0))
+          .map((l: any) => youtubeIdDe(l.youtube_url))
+          .find(Boolean) ?? null,
       }))
       return {
         nombreUsuario: perfil?.nombre ?? 'Prospectador',
@@ -253,7 +317,6 @@ export default function University() {
               ? Math.round((curso.completadas / curso.totalLecciones) * 100) : 0
             const nivelColor = NIVEL_COLOR[curso.nivel] ?? '#555'
             const nivelLabel = curso.nivel.charAt(0).toUpperCase() + curso.nivel.slice(1)
-            const inicial = curso.titulo.trim().charAt(0).toUpperCase()
             return (
               <TouchableOpacity
                 key={curso.id}
@@ -261,16 +324,10 @@ export default function University() {
                 onPress={() => router.push(`/(prospectador)/university-curso?id=${curso.id}`)}
                 activeOpacity={0.85}
               >
-                {/* Imagen o placeholder con letra inicial */}
+                {/* Miniatura (siempre): portada propia, o miniatura de YouTube, o
+                    placeholder temático. Se ve completa, sin zoom ni deformación. */}
                 <View style={estilos.cardImgWrapper}>
-                  {curso.imagen_url ? (
-                    <Image source={{ uri: curso.imagen_url }} style={estilos.cardImg} />
-                  ) : (
-                    <View style={[estilos.cardImgPlaceholder, { backgroundColor: nivelColor }]}>
-                      <Text style={estilos.cardImgInit}>{inicial}</Text>
-                      <Text style={estilos.cardImgCat}>{curso.categoria.toUpperCase()}</Text>
-                    </View>
-                  )}
+                  <CursoThumb curso={curso} nivelColor={nivelColor} />
                   {/* Badges sobre la imagen */}
                   <View style={estilos.imgOverlayRow}>
                     <View style={[estilos.nivelBadgeImg, { backgroundColor: nivelColor }]}>
@@ -364,10 +421,13 @@ const estilos = StyleSheet.create({
   emptyText: { color: '#aaa', fontSize: 14 },
   card: { backgroundColor: '#fff', borderRadius: 16, marginHorizontal: 16, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e8eef0', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
   cardImgWrapper: { position: 'relative' },
-  cardImg: { width: '100%', height: 165 },
-  cardImgPlaceholder: { width: '100%', height: 165, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  cardImgInit: { fontSize: 56, fontWeight: '800', color: 'rgba(255,255,255,0.9)' },
-  cardImgCat: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5 },
+  // Caja 16:9 para la miniatura (formato de video). El fondo se ve solo si la
+  // portada es de otra proporción (contain); las miniaturas de YT la llenan.
+  cardImgBox: { width: '100%', aspectRatio: 16 / 9, overflow: 'hidden' },
+  cardImgFill: { width: '100%', height: '100%' },
+  cardImgPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: 6 },
+  cardImgEmoji: { fontSize: 52 },
+  cardImgCat: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.75)', letterSpacing: 1.5 },
   imgOverlayRow: { position: 'absolute', bottom: 10, left: 10, flexDirection: 'row', gap: 6 },
   nivelBadgeImg: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   nivelBadgeImgText: { fontSize: 10, fontWeight: '700', color: '#fff' },
