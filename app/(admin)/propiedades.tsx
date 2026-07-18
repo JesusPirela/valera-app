@@ -446,8 +446,8 @@ export default function AdminPropiedades() {
   const contentWidth = screenWidth - 32
   const cardWidth = isWeb ? (contentWidth - 16 * (numCols - 1)) / numCols : undefined
 
-  // Shared header: navGrid + search + inventario + filtros
-  const pageHeader = (
+  // Cuadrícula de navegación — fija arriba en móvil, parte del scroll en web
+  const navHeader = (
     <>
       {NAV_GRUPOS.map((grupo) => {
         const items = navItems.filter((item) => item.grupo === grupo)
@@ -479,6 +479,12 @@ export default function AdminPropiedades() {
         )
       })}
 
+    </>
+  )
+
+  // Buscador + filtros + selección múltiple — scrollean con las tarjetas
+  const listHeader = (
+    <>
       {!esSupervisor && (
         <TouchableOpacity
           style={[styles.seleccionarBtn, modoSeleccion && styles.seleccionarBtnActivo]}
@@ -747,8 +753,7 @@ export default function AdminPropiedades() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       {isWeb ? (
-        // Web: un solo ScrollView que abarca toda la página (navGrid → filtros → tarjetas)
-        // Así el scrollbar aparece desde el inicio y los filtros no bloquean el scroll.
+        // Web: un solo ScrollView (navGrid → filtros → tarjetas)
         <ScrollView
           contentContainerStyle={styles.webOuterContent}
           showsVerticalScrollIndicator
@@ -760,7 +765,8 @@ export default function AdminPropiedades() {
             }
           }}
         >
-          {pageHeader}
+          {navHeader}
+          {listHeader}
           {loading ? (
             <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
           ) : propiedadesFiltradas.length === 0 ? emptyView : (
@@ -780,16 +786,27 @@ export default function AdminPropiedades() {
           )}
         </ScrollView>
       ) : (
-        // Mobile: navGrid + filtros fijos arriba, FlatList para las tarjetas
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
-          {pageHeader}
+        // Móvil: navGrid fijo arriba, buscador/filtros/tarjetas scrollean abajo
+        <View style={{ flex: 1 }}>
+          <View style={{ paddingHorizontal: 16, paddingTop: 16, backgroundColor: c.bg }}>
+            {navHeader}
+          </View>
           {loading ? (
-            <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
-          ) : propiedadesFiltradas.length === 0 ? emptyView : (
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}>
+              {listHeader}
+              <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
+            </ScrollView>
+          ) : propiedadesFiltradas.length === 0 ? (
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}>
+              {listHeader}
+              {emptyView}
+            </ScrollView>
+          ) : (
             <FlatList
               data={propiedadesFiltradas}
               keyExtractor={(item) => item.id}
-              contentContainerStyle={{ paddingBottom: 24 }}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
+              ListHeaderComponent={listHeader}
               renderItem={({ item }) => renderCardContent(item)}
               removeClippedSubviews
               initialNumToRender={6}
