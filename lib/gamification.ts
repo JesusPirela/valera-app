@@ -524,6 +524,26 @@ export async function getUserStats(userId: string): Promise<UserStats | null> {
   return data as UserStats | null
 }
 
+// ── Admin: ajustar XP de un usuario ──────────────────────────
+export async function adminAjustarXP(
+  targetUserId: string,
+  cantidad: number,
+  concepto: string
+): Promise<{ ok: boolean; error?: string; nuevoXP?: number }> {
+  try {
+    const { data, error } = await supabase.rpc('admin_ajustar_xp', {
+      p_target_user_id: targetUserId,
+      p_cantidad:        cantidad,
+      p_concepto:        concepto,
+    })
+    if (error) return { ok: false, error: error.message }
+    if (!data?.ok) return { ok: false, error: data?.error ?? 'Error al ajustar XP' }
+    return { ok: true, nuevoXP: data.nuevo_xp }
+  } catch (e: any) {
+    return { ok: false, error: e.message }
+  }
+}
+
 // ── Admin: ajustar monedas de un usuario ──────────────────────
 export async function adminAjustarMonedas(
   targetUserId: string,

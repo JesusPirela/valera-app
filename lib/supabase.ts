@@ -44,7 +44,8 @@ function conTope<R>(p: Promise<R>, ms: number): Promise<R> {
 
 function lockSerial<R>(_name: string, _timeout: number, fn: () => Promise<R>): Promise<R> {
   // Corre después de que la operación anterior termine (éxito o fallo).
-  const resultado = cadenaAuth.then(() => conTope(fn(), 30000), () => conTope(fn(), 30000))
+  // 60 s: conexiones lentas/móviles en modo ahorro necesitan más margen.
+  const resultado = cadenaAuth.then(() => conTope(fn(), 60000), () => conTope(fn(), 60000))
   cadenaAuth = resultado.then(() => undefined, () => undefined)
   return resultado
 }

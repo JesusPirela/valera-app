@@ -244,6 +244,10 @@ export default function AdminDetalleCliente() {
         descripcion: `Estado cambiado de "${ESTADOS[estadoAnterior]?.label ?? estadoAnterior}" a "${ESTADOS[estadoSeleccionado]?.label ?? estadoSeleccionado}" por el administrador.`,
       })
     }
+    // Premiar al prospectador responsable cuando el admin confirma el cierre
+    if (estadoSeleccionado === 'compro' && estadoAnterior !== 'compro' && cliente?.responsable_id) {
+      void supabase.rpc('admin_award_cierre_venta', { p_responsable_id: cliente.responsable_id })
+    }
     setModalEstado(false)
     cargar()
   }

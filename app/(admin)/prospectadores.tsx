@@ -15,7 +15,7 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { normalizar } from '../../lib/texto'
-import { adminAjustarMonedas } from '../../lib/gamification'
+import { adminAjustarMonedas, adminAjustarXP } from '../../lib/gamification'
 import { calcularCrmMetricas, type CrmMetricas } from '../../lib/crmMetricas'
 import CrmMetricasPanel from '../../components/CrmMetricasPanel'
 import { useColors } from '../../lib/ThemeContext'
@@ -173,12 +173,16 @@ export default function Prospectadores() {
 
   // Modal de gestión de coins
   const [coinsModal, setCoinsModal]         = useState<CoinsModal | null>(null)
-  const [coinsTab, setCoinsTab]             = useState<'ajustar' | 'historial'>('ajustar')
+  const [coinsTab, setCoinsTab]             = useState<'coins' | 'xp' | 'historial'>('coins')
   const [cantidadStr, setCantidadStr]       = useState('')
   const [conceptoCoins, setConceptoCoins]   = useState('')
   const [ajustandoCoins, setAjustandoCoins] = useState(false)
   const [coinsTxs, setCoinsTxs]             = useState<CoinTx[]>([])
   const [loadingTxs, setLoadingTxs]         = useState(false)
+  const [cantidadXpStr, setCantidadXpStr]   = useState('')
+  const [conceptoXp, setConceptoXp]         = useState('')
+  const [ajustandoXp, setAjustandoXp]       = useState(false)
+  const [xpActual, setXpActual]             = useState(0)
 
   // Modal de métricas CRM
   const [crmModal, setCrmModal]   = useState<CrmMetricas | null>(null)
@@ -315,11 +319,14 @@ export default function Prospectadores() {
 
   async function abrirCoinsModal(p: Prospectador) {
     const { data: stats } = await supabase
-      .from('user_stats').select('valera_coins').eq('id', p.id).maybeSingle()
+      .from('user_stats').select('valera_coins, xp').eq('id', p.id).maybeSingle()
     setCoinsModal({ userId: p.id, nombre: p.nombre ?? p.email, coinsActuales: stats?.valera_coins ?? 0 })
-    setCoinsTab('ajustar')
+    setXpActual(stats?.xp ?? 0)
+    setCoinsTab('coins')
     setCantidadStr('')
     setConceptoCoins('')
+    setCantidadXpStr('')
+    setConceptoXp('')
     setCoinsTxs([])
   }
 
@@ -342,6 +349,20 @@ export default function Prospectadores() {
     } finally {
       setLoadingCrm(false)
     }
+  }
+
+  async function aplicarAjusteXp(signo: 1 | -1) {
+    if (!coinsModal) return
+    const cantidad = parseInt(cantidadXpStr, 10)
+    if (!cantidad || cantidad <= 0) { mostrarError('Ingresa una cantidad válida'); return }
+    if (!conceptoXp.trim()) { mostrarError('Agrega un concepto/razón'); return }
+    setAjustandoXp(true)
+    const result = await adminAjustarXP(coinsModal.userId, cantidad * signo, conceptoXp.trim())
+    setAjustandoXp(false)
+    if (!result.ok) { mostrarError(result.error ?? 'Error al ajustar XP'); return }
+    setXpActual(result.nuevoXP ?? 0)
+    setCantidadXpStr('')
+    setConceptoXp('')
   }
 
   async function aplicarAjuste(signo: 1 | -1) {
@@ -611,10 +632,16 @@ export default function Prospectadores() {
             {/* Tabs */}
             <View style={styles.coinsTabRow}>
               <TouchableOpacity
-                style={[styles.coinsTab, coinsTab === 'ajustar' && styles.coinsTabActive]}
-                onPress={() => setCoinsTab('ajustar')}
+                style={[styles.coinsTab, coinsTab === 'coins' && styles.coinsTabActive]}
+                onPress={() => setCoinsTab('coins')}
               >
-                <Text style={[styles.coinsTabTxt, coinsTab === 'ajustar' && styles.coinsTabActiveTxt]}>Ajustar</Text>
+                <Text style={[styles.coinsTabTxt, coinsTab === 'coins' && styles.coinsTabActiveTxt]}>💰 Coins</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.coinsTab, coinsTab === 'xp' && styles.coinsTabActive]}
+                onPress={() => setCoinsTab('xp')}
+              >
+                <Text style={[styles.coinsTabTxt, coinsTab === 'xp' && styles.coinsTabActiveTxt]}>⭐ XP</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.coinsTab, coinsTab === 'historial' && styles.coinsTabActive]}
@@ -627,7 +654,52 @@ export default function Prospectadores() {
               </TouchableOpacity>
             </View>
 
-            {coinsTab === 'ajustar' ? (
+            {coinsTab === 'xp' ? (
+              <>
+                <View style={styles.coinsSaldoRow}>
+                  <Text style={styles.coinsSaldoLabel}>XP actual</Text>
+                  <Text style={styles.coinsSaldoVal}>{xpActual.toLocaleString()} ⭐</Text>
+                </View>
+                <Text style={[styles.inputLabel, { color: c.textSub }]}>Cantidad de XP</Text>
+                <TextInput
+                  style={[styles.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]}
+                  placeholder="Ej: 400"
+                  value={cantidadXpStr}
+                  onChangeText={setCantidadXpStr}
+                  keyboardType="number-pad"
+                />
+                <Text style={[styles.inputLabel, { color: c.textSub }]}>Concepto / Razón</Text>
+                <TextInput
+                  style={[styles.input, { borderColor: c.inputBorder, color: c.inputText, backgroundColor: c.input }]}
+                  placeholder="Ej: Corrección 2 rentas cerradas históricas"
+                  value={conceptoXp}
+                  onChangeText={setConceptoXp}
+                  maxLength={80}
+                />
+                <View style={styles.coinsAcciones}>
+                  <TouchableOpacity
+                    style={[styles.coinsBtn, { backgroundColor: '#1a6470' }, ajustandoXp && { opacity: 0.6 }]}
+                    onPress={() => aplicarAjusteXp(1)}
+                    disabled={ajustandoXp}
+                  >
+                    {ajustandoXp
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={styles.coinsBtnTxt}>+ Agregar XP</Text>
+                    }
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.coinsBtn, { backgroundColor: '#c0392b' }, ajustandoXp && { opacity: 0.6 }]}
+                    onPress={() => aplicarAjusteXp(-1)}
+                    disabled={ajustandoXp}
+                  >
+                    {ajustandoXp
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={styles.coinsBtnTxt}>− Quitar XP</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : coinsTab === 'coins' ? (
               <>
                 <Text style={[styles.inputLabel, { color: c.textSub }]}>Cantidad de coins</Text>
                 <TextInput

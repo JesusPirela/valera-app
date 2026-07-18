@@ -336,8 +336,15 @@ export default function ClienteForm() {
 
     setGuardando(true)
     try {
-      // getSession() lee del storage local — funciona offline (getUser() hace red y falla)
-      const { data: { session } } = await supabase.auth.getSession()
+      // getSession() lee del storage local — funciona offline (getUser() hace red y falla).
+      // En conexiones lentas el auth lock puede tardar; se reintenta una vez antes de fallar.
+      let session = (await supabase.auth.getSession().catch(async (e) => {
+        if (e?.message?.includes('auth lock timeout')) {
+          await new Promise(r => setTimeout(r, 2000))
+          return supabase.auth.getSession()
+        }
+        throw e
+      })).data.session
       const user = session?.user ?? null
       if (!user) { mostrarError('Error', 'Sesión expirada, vuelve a iniciar sesión.'); return }
 
