@@ -142,6 +142,22 @@ function formatPrecio(precio: number | null) {
   return `$${precio.toLocaleString('es-MX')} MXN`
 }
 
+// Hace cuánto se publicó la propiedad en la página (a partir de created_at).
+function publicadaHace(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const ms = Date.now() - new Date(iso).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return null
+  const min = Math.floor(ms / 60000)
+  if (min < 60) return min <= 1 ? 'hace un momento' : `hace ${min} minutos`
+  const h = Math.floor(min / 60)
+  if (h < 24) return h === 1 ? 'hace 1 hora' : `hace ${h} horas`
+  const d = Math.floor(h / 24)
+  if (d < 7) return d === 1 ? 'hace 1 día' : `hace ${d} días`
+  if (d < 30) { const s = Math.floor(d / 7); return s === 1 ? 'hace 1 semana' : `hace ${s} semanas` }
+  if (d < 365) { const m = Math.floor(d / 30); return m === 1 ? 'hace 1 mes' : `hace ${m} meses` }
+  const a = Math.floor(d / 365); return a === 1 ? 'hace 1 año' : `hace ${a} años`
+}
+
 function capitalize(s: string | null) {
   if (!s) return ''
   return s.charAt(0).toUpperCase() + s.slice(1)
@@ -196,7 +212,7 @@ export default function DetallePropiedad() {
 
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)')
         .eq('id', id)
         .single()
 
@@ -1665,6 +1681,9 @@ export default function DetallePropiedad() {
         <Text style={styles.titulo}>{propiedad.titulo}</Text>
         <Text style={styles.precio}>{formatPrecio(propiedad.precio)}</Text>
         <Text style={styles.direccion}>{propiedad.direccion}</Text>
+        {publicadaHace((propiedad as any).created_at) && (
+          <Text style={styles.publicadaHace}>🗓️ Publicada {publicadaHace((propiedad as any).created_at)}</Text>
+        )}
 
         {/* Contactar asesor */}
         <View style={styles.accionesRapidas}>
@@ -2567,7 +2586,8 @@ const styles = StyleSheet.create({
 
   titulo: { fontSize: 22, fontWeight: '800', color: '#1a6470', marginBottom: 6 },
   precio: { fontSize: 20, fontWeight: '700', color: '#1a6470', marginBottom: 6 },
-  direccion: { fontSize: 14, color: '#888', marginBottom: 20 },
+  direccion: { fontSize: 14, color: '#888', marginBottom: 4 },
+  publicadaHace: { fontSize: 12.5, color: '#9aa5ab', marginBottom: 20 },
 
   seccion: {
     backgroundColor: '#fff',
