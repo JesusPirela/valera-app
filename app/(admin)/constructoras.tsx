@@ -182,6 +182,22 @@ export default function AdminConstructoras() {
       })
   }, [filtrados, zonasDisponibles])
 
+  // Contactos ya guardados (coordinador + teléfono), sin repetir, para reusarlos
+  // con un click en el formulario en vez de reescribir el número cada vez.
+  const contactosGuardados = useMemo(() => {
+    const vistos = new Set<string>()
+    const out: { key: string; coordinador: string | null; telefono: string; cargo: string | null; email: string | null }[] = []
+    for (const ct of contactos) {
+      const tel = (ct.telefono_contacto ?? '').replace(/\D/g, '')
+      if (!tel) continue
+      const key = `${(ct.coordinador_nombre ?? '').trim().toLowerCase()}|${tel}`
+      if (vistos.has(key)) continue
+      vistos.add(key)
+      out.push({ key, coordinador: ct.coordinador_nombre, telefono: ct.telefono_contacto!, cargo: ct.cargo, email: ct.email })
+    }
+    return out
+  }, [contactos])
+
   function abrirNuevoContacto() {
     setEditando(null)
     setForm(EMPTY_CONTACTO)
@@ -542,6 +558,33 @@ export default function AdminConstructoras() {
                 autoCapitalize="words"
               />
 
+              {/* Reusar un contacto ya guardado: llena coordinador + teléfono (+
+                  cargo/email) con un toque, sin reescribir el número cada vez. */}
+              {contactosGuardados.length > 0 && (
+                <>
+                  <Text style={[styles.fieldLabel, { color: c.textSub }]}>Reusar un contacto guardado</Text>
+                  <View style={styles.reusarWrap}>
+                    {contactosGuardados.map(cg => (
+                      <TouchableOpacity
+                        key={cg.key}
+                        style={[styles.reusarChip, { borderColor: c.border, backgroundColor: c.input }]}
+                        onPress={() => setForm(f => ({
+                          ...f,
+                          coordinador_nombre: cg.coordinador,
+                          telefono_contacto: cg.telefono,
+                          cargo: cg.cargo ?? f.cargo,
+                          email: cg.email ?? f.email,
+                        }))}
+                      >
+                        <Text style={[styles.reusarChipTxt, { color: c.text }]} numberOfLines={1}>
+                          👤 {cg.coordinador || 'Contacto'} · 📞 {cg.telefono}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+
               <Text style={[styles.fieldLabel, { color: c.textSub }]}>Nombre del coordinador</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
@@ -715,6 +758,9 @@ const styles = StyleSheet.create({
   modalTitulo: { fontSize: 18, fontWeight: '800', marginBottom: 12 },
   fieldLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
   input: { borderRadius: 8, borderWidth: 1, padding: 12, fontSize: 14, marginBottom: 10 },
+  reusarWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  reusarChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6, maxWidth: '100%' },
+  reusarChipTxt: { fontSize: 12, fontWeight: '600' },
   btnGuardar: { backgroundColor: '#c9a84c', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
   btnGuardarText: { color: '#000', fontWeight: '800', fontSize: 15 },
   btnCancelar: { paddingVertical: 12, alignItems: 'center' },
