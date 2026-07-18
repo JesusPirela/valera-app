@@ -61,6 +61,7 @@ type OrdenPrecio = 'asc' | 'desc' | null
 type OrdenPublicaciones = 'desc' | 'asc' | null
 
 const NAV_ITEMS = [
+  { label: 'Dashboard', icon: '📋', route: '/(admin)/dashboard', color: '#0f4c81', grupo: 'Propiedades' },
   { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2', grupo: 'Propiedades' },
   { label: 'Constructoras', icon: '🏗️', route: '/(admin)/constructoras', color: '#455A64', grupo: 'Propiedades' },
   { label: 'Bloques', icon: '🧩', route: '/(admin)/bloques', color: '#5e35b1', grupo: 'Propiedades' },
@@ -146,6 +147,12 @@ export default function AdminPropiedades() {
 
   const [role, setRole] = useState<string | null>(null)
   const esSupervisor = role === 'supervisor'
+
+  // Modo selección múltiple
+  const [modoSeleccion, setModoSeleccion] = useState(false)
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
+  const [aplicandoMasivo, setAplicandoMasivo] = useState(false)
+  const [modalEstadoMasivo, setModalEstadoMasivo] = useState(false)
 
   // Web: renderizado incremental para no montar 1000+ tarjetas/imágenes de golpe
   const PAGE_WEB = 24
@@ -362,6 +369,68 @@ export default function AdminPropiedades() {
     return `$${precio.toLocaleString('es-MX')} MXN`
   }
 
+  function toggleSeleccion(id: string) {
+    setSeleccionados(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function salirModoSeleccion() {
+    setModoSeleccion(false)
+    setSeleccionados(new Set())
+  }
+
+  async function aplicarDestacadoMasivo() {
+    if (!seleccionados.size) return
+    setAplicandoMasivo(true)
+    const ids = Array.from(seleccionados)
+    await Promise.all(ids.map(id =>
+      supabase.rpc('destacar_propiedad_manual', { p_id: id, p_mensaje: null, p_dias: 7 })
+    ))
+    setPropiedades(prev => prev.map(p =>
+      seleccionados.has(p.id)
+        ? { ...p, destacada: true, destacada_mensaje: null, destacada_hasta: new Date(Date.now() + 7 * 86400_000).toISOString() }
+        : p
+    ))
+    setAplicandoMasivo(false)
+    salirModoSeleccion()
+  }
+
+  async function aplicarEstadoMasivo(nuevoEstado: string) {
+    if (!seleccionados.size) return
+    setAplicandoMasivo(true)
+    setModalEstadoMasivo(false)
+    const ids = Array.from(seleccionados)
+    await supabase.from('propiedades').update({ estado: nuevoEstado }).in('id', ids)
+    setPropiedades(prev => prev.map(p =>
+      seleccionados.has(p.id) ? { ...p, estado: nuevoEstado } : p
+    ))
+    setAplicandoMasivo(false)
+    salirModoSeleccion()
+  }
+
+  async function aplicarArchivarMasivo() {
+    if (!seleccionados.size) return
+    const confirmar = Platform.OS === 'web'
+      ? window.confirm(`¿Mover ${seleccionados.size} propiedad(es) a Inventario?`)
+      : await new Promise<boolean>(res => Alert.alert(
+          'Mover a Inventario',
+          `¿Mover ${seleccionados.size} propiedad(es) a Inventario?`,
+          [{ text: 'Cancelar', onPress: () => res(false) }, { text: 'Mover', onPress: () => res(true) }]
+        ))
+    if (!confirmar) return
+    setAplicandoMasivo(true)
+    const ids = Array.from(seleccionados)
+    await supabase.from('propiedades').update({ es_inventario: true }).in('id', ids)
+    setPropiedades(prev => prev.map(p =>
+      seleccionados.has(p.id) ? { ...p, es_inventario: true } : p
+    ))
+    setAplicandoMasivo(false)
+    salirModoSeleccion()
+  }
+
   function limpiarFiltros() {
     setFiltroOperacion(null)
     setFiltroEstado(null)
@@ -409,6 +478,17 @@ export default function AdminPropiedades() {
           </View>
         )
       })}
+
+      {!esSupervisor && (
+        <TouchableOpacity
+          style={[styles.seleccionarBtn, modoSeleccion && styles.seleccionarBtnActivo]}
+          onPress={() => modoSeleccion ? salirModoSeleccion() : setModoSeleccion(true)}
+        >
+          <Text style={[styles.seleccionarBtnTxt, modoSeleccion && { color: '#fff' }]}>
+            {modoSeleccion ? `✕ Cancelar selección (${seleccionados.size})` : '☑ Selección múltiple'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <View style={[styles.searchRow, { backgroundColor: c.card, borderColor: c.inputBorder }]}>
         <Text style={styles.searchIcon}>🔍</Text>
@@ -543,16 +623,24 @@ export default function AdminPropiedades() {
   function renderCardContent(item: Propiedad, width?: number) {
     const primera = (item.propiedad_imagenes ?? [])[0]
     const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.m2_terreno != null || item.estacionamientos != null
-    const CardWrapper: any = esSupervisor ? TouchableOpacity : View
+    const estaSeleccionada = seleccionados.has(item.id)
+    const CardWrapper: any = (esSupervisor || modoSeleccion) ? TouchableOpacity : View
     return (
       <CardWrapper
         key={item.id}
-        style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada, width ? { width } : undefined]}
-        {...(esSupervisor ? {
+        style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, item.destacada && styles.cardDestacada, estaSeleccionada && styles.cardSeleccionada, width ? { width } : undefined]}
+        {...((esSupervisor || modoSeleccion) ? {
           activeOpacity: 0.85,
-          onPress: () => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } }),
+          onPress: () => modoSeleccion
+            ? toggleSeleccion(item.id)
+            : router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: item.id } }),
         } : {})}
       >
+        {modoSeleccion && (
+          <View style={[styles.checkboxOverlay, estaSeleccionada && styles.checkboxOverlayActivo]}>
+            <Text style={styles.checkboxIcon}>{estaSeleccionada ? '✓' : ''}</Text>
+          </View>
+        )}
         <View style={styles.imagenWrapper}>
           {primera?.url ? (
             <ThumbImage url={primera.thumb_url ?? primera.url} style={styles.cardImagen} />
@@ -767,6 +855,64 @@ export default function AdminPropiedades() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal cambio de estado masivo */}
+      <Modal visible={modalEstadoMasivo} transparent animationType="fade" onRequestClose={() => setModalEstadoMasivo(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitulo}>Cambiar estado</Text>
+            <Text style={styles.modalSubtitulo}>{seleccionados.size} propiedad{seleccionados.size !== 1 ? 'es' : ''} seleccionada{seleccionados.size !== 1 ? 's' : ''}</Text>
+            {(['disponible', 'vendida', 'rentada'] as const).map((est) => (
+              <TouchableOpacity
+                key={est}
+                style={styles.estadoOpcionBtn}
+                onPress={() => aplicarEstadoMasivo(est)}
+                disabled={aplicandoMasivo}
+              >
+                <Text style={styles.estadoOpcionTxt}>
+                  {est === 'disponible' ? '🟢 Disponible' : est === 'vendida' ? '🔴 Vendida' : '🔵 Rentada'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={[styles.modalCancelar, { marginTop: 12 }]} onPress={() => setModalEstadoMasivo(false)}>
+              <Text style={styles.modalCancelarText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Barra de acciones masivas */}
+      {modoSeleccion && seleccionados.size > 0 && (
+        <View style={styles.accionesBar}>
+          <Text style={styles.accionesBarTxt}>{seleccionados.size} seleccionada{seleccionados.size !== 1 ? 's' : ''}</Text>
+          <View style={styles.accionesBarBtns}>
+            <TouchableOpacity
+              style={[styles.accionBtn, { backgroundColor: '#c9a84c' }, aplicandoMasivo && { opacity: 0.5 }]}
+              onPress={aplicarDestacadoMasivo}
+              disabled={aplicandoMasivo}
+            >
+              {aplicandoMasivo
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.accionBtnTxt}>★ Destacar 7d</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.accionBtn, { backgroundColor: '#1a6470' }, aplicandoMasivo && { opacity: 0.5 }]}
+              onPress={() => setModalEstadoMasivo(true)}
+              disabled={aplicandoMasivo}
+            >
+              <Text style={styles.accionBtnTxt}>🔄 Estado</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.accionBtn, { backgroundColor: '#c0392b' }, aplicandoMasivo && { opacity: 0.5 }]}
+              onPress={aplicarArchivarMasivo}
+              disabled={aplicandoMasivo}
+            >
+              <Text style={styles.accionBtnTxt}>📦 Archivar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   )
 }
@@ -1139,4 +1285,69 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalConfirmarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  // Selección múltiple
+  seleccionarBtn: {
+    borderWidth: 1.5,
+    borderColor: '#1a6470',
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  seleccionarBtnActivo: { backgroundColor: '#1a6470' },
+  seleccionarBtnTxt: { color: '#1a6470', fontSize: 13, fontWeight: '700' },
+
+  cardSeleccionada: { borderWidth: 2.5, borderColor: '#1a6470' },
+  checkboxOverlay: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 10,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: '#1a6470',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxOverlayActivo: { backgroundColor: '#1a6470' },
+  checkboxIcon: { color: '#fff', fontSize: 14, fontWeight: '800' },
+
+  // Barra de acciones masivas
+  accionesBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#1a2e38',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 16,
+  },
+  accionesBarTxt: { color: '#c9a84c', fontSize: 13, fontWeight: '700', flex: 1 },
+  accionesBarBtns: { flexDirection: 'row', gap: 8 },
+  accionBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
+  accionBtnTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  // Opciones de estado masivo
+  estadoOpcionBtn: {
+    borderWidth: 1.5,
+    borderColor: '#dde8e9',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  estadoOpcionTxt: { fontSize: 15, fontWeight: '700', color: '#1a3a44' },
 })

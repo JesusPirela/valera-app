@@ -630,6 +630,14 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
   const esUrgente = cita.estado === 'coordinada' && cita.fecha_cita &&
     new Date(cita.fecha_cita).getTime() - ahora < 48 * 3600 * 1000 &&
     new Date(cita.fecha_cita).getTime() > ahora
+  const ESTADOS_ACTIVOS: EstadoCita[] = [
+    'por_contactar', 'primer_contacto', 'buscando_opciones',
+    'en_coordinacion', 'coordinada', 'reagendada', 'no_responde_asesor',
+    'recaudando_documentacion', 'aprobando_credito',
+  ]
+  const diasSinCambios = Math.floor((ahora - new Date(cita.updated_at).getTime()) / 86400000)
+  const esInerte = ESTADOS_ACTIVOS.includes(cita.estado) && diasSinCambios >= 3
+  const inerciaCritica = esInerte && diasSinCambios >= 7
   const dia    = formatDia(cita.fecha_cita)
   const hora   = formatHora(cita.fecha_cita)
 
@@ -637,7 +645,7 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
 
   const card = (
     <TouchableOpacity
-      style={[kc.card, esUrgente && kc.cardUrgente, !isWebDrag && isDragging && kc.cardDragging, isWebDrag && { marginBottom: 0 }]}
+      style={[kc.card, esUrgente && kc.cardUrgente, esInerte && !inerciaCritica && kc.cardInerte, inerciaCritica && kc.cardInerteCritica, !isWebDrag && isDragging && kc.cardDragging, isWebDrag && { marginBottom: 0 }]}
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={400}
@@ -714,6 +722,14 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
             {tiempoRelativo(cita.updated_at)}
           </Text>
         </View>
+
+        {esInerte && (
+          <View style={[kc.inerciaBadge, inerciaCritica && kc.inerciaBadgeCritica]}>
+            <Text style={[kc.inerciaTxt, inerciaCritica && kc.inerciaTxtCritica]}>
+              {inerciaCritica ? '🔴' : '🟡'} {diasSinCambios}d sin movimiento
+            </Text>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   )
@@ -736,7 +752,16 @@ const kc = StyleSheet.create({
     shadowColor: '#0f172a', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
   },
-  cardUrgente:  { borderWidth: 1.5, borderColor: '#fbbf24' },
+  cardUrgente:       { borderWidth: 1.5, borderColor: '#fbbf24' },
+  cardInerte:        { borderWidth: 1.5, borderColor: '#f59e0b' },
+  cardInerteCritica: { borderWidth: 1.5, borderColor: '#ef4444' },
+  inerciaBadge: {
+    marginTop: 5, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 5,
+    backgroundColor: '#fef9c3', alignSelf: 'flex-start' as const,
+  },
+  inerciaBadgeCritica: { backgroundColor: '#fef2f2' },
+  inerciaTxt: { fontSize: 10, fontWeight: '700' as const, color: '#92400e' },
+  inerciaTxtCritica: { color: '#b91c1c' },
   cardDragging: { opacity: 0.45 },
   colorBar:    { width: 4 },
   body:        { flex: 1, padding: 10, gap: 5 },
