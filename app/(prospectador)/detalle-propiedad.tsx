@@ -20,7 +20,7 @@ import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
 import { esPlusOMejor, esStaffSupervision } from '../../lib/permisos'
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
-import { thumb } from '../../lib/img'
+import { thumb, proxyImagen } from '../../lib/img'
 import { enqueuePublicacion } from '../../lib/offline-queue'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
@@ -686,17 +686,20 @@ export default function DetallePropiedad() {
             console.error('[PDF] img error:', url, e)
             resolve(null)
           }
-          // Cache-bust para evitar respuesta sin CORS del caché del navegador
-          img.src = url + (url.includes('?') ? '&' : '?') + '_pdf=' + Date.now()
+          // Se carga SIEMPRE vía proxy (wsrv): agrega CORS y normaliza el
+          // formato, así funcionan también las fotos de CDNs externos (CloudFront
+          // sin CORS) que dejaban las fichas sin imágenes. Cache-bust incluido.
+          const viaProxy = proxyImagen(url, { width: 1100 }) ?? url
+          img.src = viaProxy + (viaProxy.includes('?') ? '&' : '?') + '_pdf=' + Date.now()
         })
 
       // Primer intento con canvas
       const r1 = await cargarConCanvas()
       if (r1) return r1
 
-      // Fallback: fetch + FileReader (en caso de que canvas falle)
+      // Fallback: fetch + FileReader (también por proxy, para CORS)
       try {
-        const resp = await fetch(url)
+        const resp = await fetch(proxyImagen(url, { width: 1100 }) ?? url)
         if (resp.ok) {
           const blob = await resp.blob()
           const b64 = await new Promise<string | null>((res) => {
@@ -713,19 +716,27 @@ export default function DetallePropiedad() {
 
       return null
     }
-    // Nativo: descarga optimizada via thumb() al sistema de archivos (q72, como
-    // el original que funcionaba).
-    const urlOptimizada = thumb(url, { width: _anchoMax, quality: 72, resize: 'contain' }) ?? url
-    for (let intento = 1; intento <= 3; intento++) {
-      try {
-        const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
-        const { uri } = await conTimeout(FileSystem.downloadAsync(urlOptimizada, localUri), 12000)
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })
-        FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {})
-        if (!base64) throw new Error('descarga vacía')
-        return `data:image/jpeg;base64,${base64}`
-      } catch {
-        if (intento < 3) await new Promise((r) => setTimeout(r, 600 * intento))
+    // Nativo: se descarga la imagen al sistema de archivos y se lee como base64.
+    // Se intenta PRIMERO la versión redimensionada por el proxy (wsrv, liviana);
+    // si el proxy falla o tarda, se cae a la imagen ORIGINAL directa de Supabase.
+    // Así el PDF nunca sale sin fotos aunque el proxy esté lento/caído (era la
+    // causa de las fichas sin imágenes tras cambiar thumb() a wsrv).
+    const candidatas = [
+      proxyImagen(url, { width: _anchoMax, quality: 72 }) ?? url,
+      url, // respaldo: original directo, sin proxy
+    ]
+    for (const candidata of candidatas) {
+      for (let intento = 1; intento <= 2; intento++) {
+        try {
+          const localUri = FileSystem.cacheDirectory + 'ficha_img_' + Math.random().toString(36).slice(2) + '.jpg'
+          const { uri } = await conTimeout(FileSystem.downloadAsync(candidata, localUri), 15000)
+          const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })
+          FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {})
+          if (!base64) throw new Error('descarga vacía')
+          return `data:image/jpeg;base64,${base64}`
+        } catch {
+          if (intento < 2) await new Promise((r) => setTimeout(r, 500 * intento))
+        }
       }
     }
     return null

@@ -56,3 +56,17 @@ export function thumb(url: string | null | undefined, opts: ThumbOpts = {}): str
   const { width = 400, quality = 70, resize = 'cover' } = opts
   return `${PROXY}?url=${encodeURIComponent(origen)}&w=${width}&q=${quality}&fit=${resize}&output=jpg`
 }
+
+/**
+ * Envía CUALQUIER imagen por el proxy (wsrv), sea de Supabase o de un CDN
+ * externo. Agrega CORS (`Access-Control-Allow-Origin: *`) y normaliza el formato
+ * a JPEG. Clave para convertir a base64 en el PDF: muchas propiedades importadas
+ * tienen sus fotos en CDNs (p.ej. CloudFront) SIN CORS y con content-type raro,
+ * lo que hacía fallar el canvas/fetch → fichas sin imágenes. Vía proxy sí cargan.
+ */
+export function proxyImagen(url: string | null | undefined, opts: { width?: number; quality?: number } = {}): string | undefined {
+  if (!url) return undefined
+  if (url.startsWith(PROXY)) return url
+  const { width = 1080, quality = 72 } = opts
+  return `${PROXY}?url=${encodeURIComponent(url)}&w=${width}&q=${quality}&output=jpg`
+}
