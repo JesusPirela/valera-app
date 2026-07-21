@@ -26,16 +26,35 @@ export default function Monitoreo() {
   const [expandido, setExpandido] = useState<string | null>(null)   // mensaje del error abierto
   const [ocurrencias, setOcurrencias] = useState<Ocurrencia[]>([])
   const [cargandoOcur, setCargandoOcur] = useState(false)
+  const [revisados, setRevisados] = useState<Set<string>>(new Set())   // errores ya vistos/atendidos
 
   const cargar = useCallback(async () => {
-    const [e, ev] = await Promise.all([
+    const [e, ev, rev] = await Promise.all([
       supabase.rpc('get_monitoreo_errores', { p_dias: dias }),
       supabase.rpc('get_monitoreo_eventos', { p_dias: dias }),
+      supabase.from('monitoreo_errores_revisados').select('mensaje'),
     ])
     setErrores((e.data ?? []) as ErrRow[])
     setEventos((ev.data ?? []) as EvtRow[])
+    setRevisados(new Set((rev.data ?? []).map((r: any) => r.mensaje)))
     setLoading(false)
   }, [dias])
+
+  // Marcar/desmarcar un error como revisado (check/uncheck). Se persiste para
+  // que quede entre sesiones y para que se pueda marcar automáticamente al
+  // arreglarlo.
+  async function toggleRevisado(mensaje: string) {
+    const yaEsta = revisados.has(mensaje)
+    setRevisados(prev => { const set = new Set(prev); yaEsta ? set.delete(mensaje) : set.add(mensaje); return set })
+    try {
+      if (yaEsta) {
+        await supabase.from('monitoreo_errores_revisados').delete().eq('mensaje', mensaje)
+      } else {
+        const { data: { user } } = await supabase.auth.getUser()
+        await supabase.from('monitoreo_errores_revisados').upsert({ mensaje, revisado_por: user?.id ?? null, revisado_en: new Date().toISOString() })
+      }
+    } catch { /* si falla, el estado local ya cambió; se corrige al recargar */ }
+  }
 
   useFocusEffect(useCallback(() => { setLoading(true); cargar() }, [cargar]))
   const { refreshControl } = usePullRefresh(cargar)
@@ -92,15 +111,27 @@ export default function Monitoreo() {
           ) : (
             errores.map((e, i) => {
               const abierto = expandido === e.mensaje
+              const revisado = revisados.has(e.mensaje)
               return (
                 <TouchableOpacity
                   key={i}
                   activeOpacity={0.9}
                   onPress={() => toggleError(e.mensaje)}
-                  style={[s.errCard, { backgroundColor: c.card, borderColor: c.border }]}
+                  style={[s.errCard, { backgroundColor: c.card, borderColor: c.border }, revisado && { opacity: 0.5 }]}
                 >
                   <View style={s.errTop}>
-                    <Text style={[s.errN, { color: '#dc2626' }]}>×{e.n}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                      {/* Check para marcar el error como ya visto/atendido */}
+                      <TouchableOpacity
+                        onPress={() => toggleRevisado(e.mensaje)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        style={[s.chkBox, { borderColor: c.border }, revisado && s.chkBoxOn]}
+                      >
+                        {revisado && <Text style={s.chkTick}>✓</Text>}
+                      </TouchableOpacity>
+                      <Text style={[s.errN, { color: '#dc2626' }]}>×{e.n}</Text>
+                      {revisado && <Text style={s.chkLbl}>Revisado</Text>}
+                    </View>
                     <Text style={[s.errFecha, { color: c.textMute }]}>{fmt(e.ultimo)}</Text>
                   </View>
                   <Text style={[s.errMsg, { color: c.text }]}>{e.mensaje}</Text>
@@ -185,6 +216,10 @@ const s = StyleSheet.create({
   errTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   errN: { fontSize: 13, fontWeight: '900' },
   errFecha: { fontSize: 11 },
+  chkBox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  chkBoxOn: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  chkTick: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  chkLbl: { fontSize: 10.5, fontWeight: '700', color: '#16a34a' },
   errMsg: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
   errMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   errTag: { fontSize: 10.5, fontWeight: '600', borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
