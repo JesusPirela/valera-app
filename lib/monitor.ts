@@ -24,11 +24,17 @@ function repetido(clave: string): boolean {
   return false
 }
 
+// Mensajes de RUIDO benigno que no vale la pena registrar (la app se recupera
+// sola y solo ensucian el panel). "auth lock timeout" es la red de seguridad
+// del lock de auth: si un refresco tarda demasiado se aborta y se reintenta; con
+// el timeout por petición del fetch ya casi nunca ocurre y nunca rompe nada.
+const MENSAJES_RUIDO = ['auth lock timeout']
+
 export function captureError(error: unknown, contexto?: string): void {
   try {
     const mensaje = error instanceof Error ? error.message : String(error)
     const stack = error instanceof Error ? error.stack ?? null : null
-    if (!mensaje || repetido(mensaje + (contexto ?? ''))) return
+    if (!mensaje || MENSAJES_RUIDO.some(m => mensaje.includes(m)) || repetido(mensaje + (contexto ?? ''))) return
     supabase.rpc('log_error', {
       p_mensaje: mensaje,
       p_stack: stack,
