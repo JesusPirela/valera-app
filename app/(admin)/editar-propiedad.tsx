@@ -1376,8 +1376,8 @@ const styles = StyleSheet.create({
   },
   miniaturaCensuraText: { fontSize: 11 },
   miniaturaIA: {
-    position: 'absolute', bottom: 4, right: 4,
-    backgroundColor: 'rgba(124,58,237,0.9)', borderRadius: 12,
+    position: 'absolute', bottom: 4, right: 30,
+    backgroundColor: 'rgba(124,58,237,0.95)', borderRadius: 12,
     width: 22, height: 22, alignItems: 'center', justifyContent: 'center',
   },
   miniaturaIAText: { fontSize: 11 },
