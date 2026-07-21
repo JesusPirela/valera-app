@@ -355,7 +355,7 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
   admins: Profile[]; asesores: Profile[]; vistaAsesor?: boolean; onClose: () => void; onGuardar: () => void
 }) {
   const [busqueda, setBusqueda]               = useState('')
-  const [clientes, setClientes]               = useState<{ id: string; nombre: string; telefono: string; tipo_operacion: string | null }[]>([])
+  const [clientes, setClientes]               = useState<{ id: string; nombre: string; telefono: string; tipo_operacion: string | null; responsable_id: string | null; responsable: { nombre: string } | null }[]>([])
   const [clienteId, setClienteId]             = useState('')
   const [clienteNombre, setClienteNombre]     = useState('')
   const [modoNuevo, setModoNuevo]             = useState(false)
@@ -384,9 +384,21 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
     if (txt.trim().length < 2) { setClientes([]); return }
     buscarDebounce.current = setTimeout(async () => {
       setBuscando(true)
-      const { data } = await supabase.from('clientes').select('id, nombre, telefono, tipo_operacion')
+      const { data } = await supabase.from('clientes')
+        .select('id, nombre, telefono, tipo_operacion, responsable_id')
         .ilike('nombre', `%${txt}%`).limit(8)
-      setClientes(data ?? [])
+      // No hay FK en responsable_id → se traen los nombres de los prospectadores
+      // en una segunda consulta y se mapean.
+      const ids = [...new Set((data ?? []).map((c: any) => c.responsable_id).filter(Boolean))]
+      let nombres: Record<string, string> = {}
+      if (ids.length) {
+        const { data: profs } = await supabase.from('profiles').select('id, nombre').in('id', ids)
+        nombres = Object.fromEntries((profs ?? []).map((p: any) => [p.id, p.nombre]))
+      }
+      setClientes((data ?? []).map((c: any) => ({
+        ...c,
+        responsable: c.responsable_id ? { nombre: nombres[c.responsable_id] ?? '' } : null,
+      })))
       setBuscando(false)
     }, 300)
   }
@@ -483,9 +495,14 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
                       <TouchableOpacity key={c.id} style={s.clienteRow}
                         onPress={() => {
                           setClienteId(c.id); setClienteNombre(c.nombre); setClientes([])
+                          // Autocompletar el prospectador con el dueño del cliente.
+                          if (c.responsable_id) setProspectadorId(c.responsable_id)
                           if (vistaAsesor) setTipoOperacion(c.tipo_operacion === 'renta' ? 'renta' : 'venta')
                         }}>
                         <Text style={s.clienteRowNombre}>{c.nombre}</Text>
+                        {c.responsable?.nombre && (
+                          <Text style={s.clienteRowProsp}>👤 {c.responsable.nombre}</Text>
+                        )}
                         <Text style={s.clienteRowTel}>{c.telefono}</Text>
                       </TouchableOpacity>
                     ))}
@@ -1408,6 +1425,7 @@ const s = StyleSheet.create({
   clienteSelNombre:    { fontSize: 14, fontWeight: '700', color: '#1a6470' },
   clienteRow:          { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   clienteRowNombre:    { fontSize: 14, fontWeight: '600', color: '#0f172a' },
+  clienteRowProsp:     { fontSize: 11, color: '#94a3b8', marginTop: 1 },
   clienteRowTel:       { fontSize: 12, color: '#64748b', marginTop: 2 },
 
   // Dropdown
