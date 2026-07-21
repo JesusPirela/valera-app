@@ -186,6 +186,7 @@ export default function EditarPropiedad() {
   const [verImagen, setVerImagen] = useState<string | null>(null)
   const [borrando, setBorrando] = useState(false)
   const [censurando, setCensurando] = useState<ImgItem | null>(null)
+  const [mejorandoKey, setMejorandoKey] = useState<string | null>(null)
 
   useEffect(() => { cargarPropiedad() }, [id])
 
@@ -284,6 +285,27 @@ export default function EditarPropiedad() {
   function aplicarCensura(itemKey: string, uriCensurada: string) {
     setImagenes((prev) => prev.map((i) => (i.key === itemKey ? { ...i, uri: uriCensurada, modificada: true } : i)))
     setCensurando(null)
+  }
+
+  // Mejora la imagen con IA (edge function segura): misma fachada, realista, de
+  // día, nitida. Solo sobre imagenes ya guardadas (URL publica), no locales.
+  async function mejorarImagen(item: ImgItem) {
+    if (!/^https?:\/\//.test(item.uri)) {
+      Alert.alert('Guarda primero', 'Solo se pueden mejorar imágenes ya guardadas. Guarda la propiedad, entra a editar y ahí mejórala.')
+      return
+    }
+    if (mejorandoKey) return
+    setMejorandoKey(item.key)
+    try {
+      const { data, error } = await supabase.functions.invoke('mejorar-imagen', { body: { imagenUrl: item.uri } })
+      const url = (data as any)?.url
+      if (error || !url) throw new Error((data as any)?.error || 'No se pudo mejorar la imagen')
+      setImagenes((prev) => prev.map((i) => (i.key === item.key ? { ...i, uri: url, modificada: true } : i)))
+    } catch (e: any) {
+      Alert.alert('No se pudo mejorar', e?.message ?? 'Intenta de nuevo en un momento.')
+    } finally {
+      setMejorandoKey(null)
+    }
   }
 
   function agregarUris(uris: string[]) {
@@ -899,6 +921,12 @@ export default function EditarPropiedad() {
                   <TouchableOpacity style={[styles.miniaturaCensura, { left: 26 }]} onPress={() => setCensurando(item)}>
                     <Text style={styles.miniaturaCensuraText}>🔲</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={styles.miniaturaIA} onPress={() => mejorarImagen(item)} disabled={!!mejorandoKey}>
+                    <Text style={styles.miniaturaIAText}>✨</Text>
+                  </TouchableOpacity>
+                  {mejorandoKey === item.key && (
+                    <View style={styles.miniaturaCargando}><ActivityIndicator color="#fff" /></View>
+                  )}
                   <View style={styles.miniaturaDragHandle}>
                     <Text style={{ color: '#fff', fontSize: 12 }}>⠿</Text>
                   </View>
@@ -924,6 +952,12 @@ export default function EditarPropiedad() {
                   <TouchableOpacity style={styles.miniaturaCensura} onPress={() => setCensurando(item)}>
                     <Text style={styles.miniaturaCensuraText}>🔲</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={styles.miniaturaIA} onPress={() => mejorarImagen(item)} disabled={!!mejorandoKey}>
+                    <Text style={styles.miniaturaIAText}>✨</Text>
+                  </TouchableOpacity>
+                  {mejorandoKey === item.key && (
+                    <View style={styles.miniaturaCargando}><ActivityIndicator color="#fff" /></View>
+                  )}
                   <View style={styles.miniaturaZoom}>
                     <Text style={styles.miniaturaZoomText}>🔍</Text>
                   </View>
@@ -1341,6 +1375,17 @@ const styles = StyleSheet.create({
     width: 22, height: 22, alignItems: 'center', justifyContent: 'center',
   },
   miniaturaCensuraText: { fontSize: 11 },
+  miniaturaIA: {
+    position: 'absolute', bottom: 4, right: 4,
+    backgroundColor: 'rgba(124,58,237,0.9)', borderRadius: 12,
+    width: 22, height: 22, alignItems: 'center', justifyContent: 'center',
+  },
+  miniaturaIAText: { fontSize: 11 },
+  miniaturaCargando: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
   miniaturaQuitar: {
     position: 'absolute',
     top: 4,
