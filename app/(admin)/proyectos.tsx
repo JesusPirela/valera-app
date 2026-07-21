@@ -214,6 +214,21 @@ export default function Proyectos() {
     })
   }
 
+  async function eliminarProyecto(p: Proyecto) {
+    confirmar(`¿Eliminar el proyecto "${p.titulo}"? Se borrarán también sus actividades y archivos. Esta acción no se puede deshacer.`, async () => {
+      // Los archivos del bucket no se borran solos: quitarlos primero. Las filas
+      // hijas (actividades y archivos) se borran solas por FK ON DELETE CASCADE.
+      const { data: archivos } = await supabase.from('proyecto_archivos').select('url').eq('proyecto_id', p.id)
+      const paths = (archivos ?? [])
+        .map((a: any) => a.url?.match(/proyectos-archivos\/(.+)$/)?.[1])
+        .filter(Boolean) as string[]
+      if (paths.length) await supabase.storage.from('proyectos-archivos').remove(paths)
+      await supabase.from('proyectos').delete().eq('id', p.id)
+      setDetalle(d => (d && d.id === p.id ? null : d))
+      cargar()
+    })
+  }
+
   async function agregarActividad() {
     if (!detalle || !nuevaAct.trim()) return
     setGuardandoAct(true)
@@ -474,6 +489,12 @@ export default function Proyectos() {
                       >
                         <Ionicons name="create-outline" size={13} color="#3b82f6" />
                       </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[s.actionBtn, { backgroundColor: '#ef444420', borderColor: '#ef444440' }]}
+                        onPress={() => eliminarProyecto(p)}
+                      >
+                        <Ionicons name="trash-outline" size={13} color="#ef4444" />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
@@ -709,6 +730,13 @@ export default function Proyectos() {
                     >
                       <Ionicons name="create-outline" size={15} color="#3b82f6" />
                       <Text style={[s.footerBtnTxt, { color: '#3b82f6' }]}>Editar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.footerBtn, { borderColor: '#ef4444' }]}
+                      onPress={() => eliminarProyecto(detalle)}
+                    >
+                      <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                      <Text style={[s.footerBtnTxt, { color: '#ef4444' }]}>Eliminar</Text>
                     </TouchableOpacity>
                     {detalle.estado !== 'completado' && (
                       <TouchableOpacity
