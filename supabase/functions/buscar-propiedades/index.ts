@@ -174,7 +174,12 @@ serve(async (req) => {
     let mensajeFinal: string
 
     if (!props || props.length === 0) {
-      mensajeFinal = intro + '\n\nPor ahora no encontré opciones con esos criterios, pero te aviso en cuanto entren. ¿Ajustamos zona o presupuesto?'
+      // Sin resultados: avisar al cliente que un asesor lo contactará.
+      // Make usará `criterios` (devuelto abajo) para armar el aviso al asesor por email.
+      mensajeFinal =
+        'Por ahora no tengo propiedades en el inventario que coincidan exactamente con esos criterios 🙏. ' +
+        'Le voy a pedir a uno de nuestros asesores que haga una búsqueda personalizada para ti — en breve ' +
+        'se pondrá en contacto contigo. ¿Hay algún horario en el que prefieras que te contacten?'
     } else {
       const fichas = props.map((p) => {
         const url = telefono_prospectador
@@ -190,7 +195,9 @@ serve(async (req) => {
       mensajeFinal = intro + '\n\n' + fichas.join('\n\n')
     }
 
-    return json({ buscado: true, cantidad: props?.length ?? 0, mensaje: mensajeFinal, contacto })
+    // Siempre devolver criterios para que Make pueda armar el aviso al asesor
+    // cuando cantidad === 0 (filtro: buscado=true AND cantidad=0 AND Sheets(12) devolvió fila).
+    return json({ buscado: true, cantidad: props?.length ?? 0, mensaje: mensajeFinal, contacto, criterios })
   } catch (err) {
     console.error('[buscar-propiedades] error inesperado:', err)
     return json({ error: 'Error interno' }, 500)

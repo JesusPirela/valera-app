@@ -3,6 +3,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const ROLES_VALIDOS = ['nuevo', 'prospectador', 'prospectador_plus', 'supervisor', 'asesor']
 
+// Solo estos roles generan notificación de ascenso dentro de la app.
+const ROLES_CON_NOTIF_ASCENSO = ['prospectador', 'prospectador_plus']
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -49,12 +52,39 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
+    // Obtener rol anterior para saber si es realmente un ascenso
+    const { data: perfilActual } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single()
+
     const { error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({ role })
       .eq('id', userId)
 
     if (updateError) return json({ error: updateError.message }, 500)
+
+    // Notificación de ascenso solo si el rol nuevo es un ascenso real
+    if (
+      ROLES_CON_NOTIF_ASCENSO.includes(role) &&
+      perfilActual?.role !== role
+    ) {
+      const esPlus = role === 'prospectador_plus'
+      const titulo = esPlus
+        ? '🚀 ¡Ascendiste a Prospectador Plus!'
+        : '🎉 ¡Ascendiste a Prospectador!'
+
+      // El mensaje lleva el nuevo rol como dato para que el modal lo use
+      await supabaseAdmin.from('notificaciones').insert({
+        user_id: userId,
+        titulo,
+        mensaje: role,  // 'prospectador' | 'prospectador_plus'
+        tipo: 'ascenso_rol',
+        leida: false,
+      })
+    }
 
     return json({ success: true })
   } catch (err) {

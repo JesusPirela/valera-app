@@ -55,20 +55,30 @@ export default function FichaPublica() {
   useEffect(() => { if (codigo) cargar() }, [codigo])
 
   async function cargar() {
-    const { data } = await supabase
-      .from('propiedades')
-      .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, lat, lng, propiedad_imagenes(url, orden)')
-      .eq('codigo', codigo)
-      .eq('estado', 'disponible')
-      .eq('es_inventario', false)
-      .maybeSingle()
+    try {
+      const timeout = new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 15000)
+      )
+      const query = supabase
+        .from('propiedades')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, lat, lng, propiedad_imagenes(url, orden)')
+        .eq('codigo', codigo)
+        .eq('estado', 'disponible')
+        .eq('es_inventario', false)
+        .maybeSingle()
+        .then(r => r.data)
 
-    if (!data) { setNotFound(true); setLoading(false); return }
-    setPropiedad({
-      ...data,
-      propiedad_imagenes: [...(data.propiedad_imagenes ?? [])].sort((a: any, b: any) => a.orden - b.orden),
-    } as Propiedad)
-    setLoading(false)
+      const data = await Promise.race([query, timeout])
+      if (!data) { setNotFound(true); setLoading(false); return }
+      setPropiedad({
+        ...data,
+        propiedad_imagenes: [...(data.propiedad_imagenes ?? [])].sort((a: any, b: any) => a.orden - b.orden),
+      } as Propiedad)
+    } catch {
+      setNotFound(true)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function onScrollImg(e: NativeSyntheticEvent<NativeScrollEvent>) {

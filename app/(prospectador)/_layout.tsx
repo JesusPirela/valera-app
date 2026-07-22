@@ -12,6 +12,7 @@ import HeaderBack from '../../components/HeaderBack'
 import ClienteFormBack from '../../components/ClienteFormBack'
 import { useVistaComo } from '../../lib/VistaComo'
 import VistaComoBanner from '../../components/VistaComoBanner'
+import AscensoRolModal from '../../components/AscensoRolModal'
 
 const LOGO = require('../../assets/logo.png')
 
@@ -44,6 +45,7 @@ function HoverTabIcon({ name, nameFocused, focused, color }: {
 export default function ProspectadorLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
   const [role, setRole] = useState<string | null>(null)
+  const [ascensoRol, setAscensoRol] = useState<'prospectador' | 'prospectador_plus' | null>(null)
   const { vistaComo } = useVistaComo()
   const { primaryColor: colorAcento, acentoId, darkMode } = useTheme()
   const pathname = usePathname()
@@ -123,6 +125,28 @@ export default function ProspectadorLayout() {
 
   useEffect(() => { cargarNoLeidas() }, [pathname])
 
+  async function verificarAscenso() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || !mountedRef.current) return
+    const { data } = await supabase
+      .from('notificaciones')
+      .select('id, mensaje')
+      .eq('user_id', user.id)
+      .eq('tipo', 'ascenso_rol')
+      .eq('leida', false)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!data || !mountedRef.current) return
+    const rol = data.mensaje as 'prospectador' | 'prospectador_plus'
+    if (rol === 'prospectador' || rol === 'prospectador_plus') {
+      setAscensoRol(rol)
+      // Marcar como leída de inmediato para no volver a mostrarla
+      await supabase.from('notificaciones').update({ leida: true }).eq('id', data.id)
+    }
+  }
+
   useEffect(() => {
     // Tracking de login diario y streak
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -161,6 +185,7 @@ export default function ProspectadorLayout() {
 
     cargarNoLeidas()
     verificarRecordatorios()
+    verificarAscenso()
 
     pollingRef.current = setInterval(() => {
       verificarRecordatorios()
@@ -200,6 +225,7 @@ export default function ProspectadorLayout() {
   return (
     <>
     <VistaComoBanner />
+    <AscensoRolModal rol={ascensoRol} onClose={() => setAscensoRol(null)} />
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colorAcento,

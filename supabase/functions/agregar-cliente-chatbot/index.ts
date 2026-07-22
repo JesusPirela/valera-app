@@ -6,7 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const TOPE_MENSUAL = 10
+const TOPE_POR_ROL: Record<string, number> = {
+  nuevo:              5,
+  prospectador:      10,
+  prospectador_plus: 20,
+  asesor:            20,
+  supervisor:        20,
+  admin:             999,
+}
 const PRESUPUESTO_MINIMO = 1_800_000
 
 // ── Normalización de teléfono (algoritmo específico de esta integración) ──
@@ -56,9 +63,11 @@ serve(async (req) => {
       .eq('id', user.id)
       .single()
 
-    if (!['prospectador_plus', 'asesor', 'supervisor', 'admin'].includes(profile?.role ?? '')) {
+    const rolUsuario = profile?.role ?? ''
+    if (!Object.keys(TOPE_POR_ROL).includes(rolUsuario)) {
       return json({ error: 'Acceso denegado' }, 403)
     }
+    const topeMensual = TOPE_POR_ROL[rolUsuario] ?? 5
 
     const body = await req.json()
     const nombre = String(body.nombre ?? '').trim()
@@ -79,7 +88,7 @@ serve(async (req) => {
       return json({ error: 'El teléfono no es válido. Debe tener 10 dígitos (o ya incluir el 52).' }, 400)
     }
 
-    // Tope de 10 clientes por mes por usuario.
+    // Tope mensual según rol.
     const inicioMes = new Date()
     inicioMes.setUTCDate(1)
     inicioMes.setUTCHours(0, 0, 0, 0)
@@ -89,8 +98,8 @@ serve(async (req) => {
       .eq('prospectador_id', user.id)
       .gte('created_at', inicioMes.toISOString())
 
-    if ((count ?? 0) >= TOPE_MENSUAL) {
-      return json({ error: `Ya alcanzaste el límite de ${TOPE_MENSUAL} clientes este mes.` }, 400)
+    if ((count ?? 0) >= topeMensual) {
+      return json({ error: `Ya alcanzaste el límite de ${topeMensual} clientes este mes.` }, 400)
     }
 
     const webhookUrl = Deno.env.get('MAKE_CHATBOT_WEBHOOK_URL')

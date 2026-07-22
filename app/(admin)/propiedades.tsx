@@ -786,18 +786,17 @@ export default function AdminPropiedades() {
           )}
         </ScrollView>
       ) : (
-        // Móvil: navGrid fijo arriba, buscador/filtros/tarjetas scrollean abajo
+        // Móvil: todo scrollea (navGrid incluido), así el usuario puede subir y ocultarlo
         <View style={{ flex: 1 }}>
-          <View style={{ paddingHorizontal: 16, paddingTop: 16, backgroundColor: c.bg }}>
-            {navHeader}
-          </View>
           {loading ? (
-            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 }}>
+              {navHeader}
               {listHeader}
               <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
             </ScrollView>
           ) : propiedadesFiltradas.length === 0 ? (
-            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 }}>
+              {navHeader}
               {listHeader}
               {emptyView}
             </ScrollView>
@@ -805,8 +804,8 @@ export default function AdminPropiedades() {
             <FlatList
               data={propiedadesFiltradas}
               keyExtractor={(item) => item.id}
-              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
-              ListHeaderComponent={listHeader}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 }}
+              ListHeaderComponent={<>{navHeader}{listHeader}</>}
               renderItem={({ item }) => renderCardContent(item)}
               removeClippedSubviews
               initialNumToRender={6}

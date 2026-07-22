@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, createElement, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
-  TextInput, ActivityIndicator, ScrollView, Platform, Alert,
+  TextInput, ActivityIndicator, ScrollView, Platform, Alert, Linking,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect, router } from 'expo-router'
@@ -38,7 +38,7 @@ type Cita = {
   created_at: string
   updated_at: string
   clientes: { nombre: string; telefono: string; tipo_operacion: string | null; estado: string }
-  prospectador: { nombre: string } | null
+  prospectador: { nombre: string; telefono: string | null } | null
   coordinador: { nombre: string } | null
   asesor: { nombre: string } | null
   propiedad: { titulo: string } | null
@@ -632,6 +632,71 @@ function ModalMover({ cita, vistaAsesor, onClose, onMover }: {
   )
 }
 
+// ─── MensajeRapidoBtn ────────────────────────────────────────────────────────
+
+const MENSAJES_RAPIDOS = [
+  { label: 'Reagendar', texto: (cliente: string, fecha: string | null) =>
+      `Hola, te escribo respecto a la cita de *${cliente}*${fecha ? ` agendada para el ${fecha}` : ''}. ¿Puedes coordinar para reagendar? 🗓️` },
+  { label: 'Sin noticias', texto: (cliente: string, _fecha: string | null) =>
+      `Hola, no hemos tenido novedades de la cita con *${cliente}*. ¿Cómo vas con el cliente? 🙏` },
+  { label: 'Confirmar asistencia', texto: (cliente: string, fecha: string | null) =>
+      `Hola, ¿ya confirmaste la asistencia de *${cliente}* a la cita${fecha ? ` del ${fecha}` : ''}? ✅` },
+  { label: 'Canceló el cliente', texto: (cliente: string, _fecha: string | null) =>
+      `Hola, nos informaron que el cliente *${cliente}* canceló. ¿Puedes confirmar y actualizar el estado? 🔄` },
+]
+
+function MensajeRapidoBtn({
+  nombreProspectador, telefonoProspectador, nombreCliente, fechaCita,
+}: {
+  nombreProspectador: string
+  telefonoProspectador: string
+  nombreCliente: string
+  fechaCita: string | null
+}) {
+  const [abierto, setAbierto] = useState(false)
+
+  function normalizarTelWA(tel: string): string {
+    let t = tel.replace(/\D/g, '')
+    if (t.length === 10) t = '52' + t
+    return t
+  }
+
+  function enviar(plantilla: typeof MENSAJES_RAPIDOS[0]) {
+    const fechaFmt = fechaCita
+      ? new Date(fechaCita).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+      : null
+    const msg = plantilla.texto(nombreCliente, fechaFmt)
+    const tel = normalizarTelWA(telefonoProspectador)
+    const url = `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`
+    if (Platform.OS === 'web') window.open(url, '_blank')
+    else Linking.openURL(url)
+    setAbierto(false)
+  }
+
+  return (
+    <>
+      <TouchableOpacity style={kc.waBtn} onPress={() => setAbierto(true)} activeOpacity={0.8}>
+        <Text style={kc.waBtnTxt}>💬 Msg a {nombreProspectador.split(' ')[0]}</Text>
+      </TouchableOpacity>
+
+      <Modal visible={abierto} transparent animationType="fade" onRequestClose={() => setAbierto(false)}>
+        <TouchableOpacity style={kc.msgOverlay} activeOpacity={1} onPress={() => setAbierto(false)}>
+          <TouchableOpacity activeOpacity={1} style={kc.msgSheet} onPress={e => e.stopPropagation()}>
+            <Text style={kc.msgTitulo}>Mensaje rápido a {nombreProspectador.split(' ')[0]}</Text>
+            <Text style={kc.msgSub}>Sobre la cita de {nombreCliente}</Text>
+            {MENSAJES_RAPIDOS.map((m, i) => (
+              <TouchableOpacity key={i} style={kc.msgOpcion} onPress={() => enviar(m)} activeOpacity={0.8}>
+                <Text style={kc.msgOpcionTxt}>{m.label}</Text>
+                <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  )
+}
+
 // ─── KanbanCard ───────────────────────────────────────────────────────────────
 
 function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
@@ -747,6 +812,16 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
             </Text>
           </View>
         )}
+
+        {/* Botón WhatsApp rápido al prospectador */}
+        {cita.prospectador?.telefono && (
+          <MensajeRapidoBtn
+            nombreProspectador={cita.prospectador.nombre}
+            telefonoProspectador={cita.prospectador.telefono}
+            nombreCliente={cita.clientes.nombre}
+            fechaCita={cita.fecha_cita}
+          />
+        )}
       </View>
     </TouchableOpacity>
   )
@@ -796,6 +871,23 @@ const kc = StyleSheet.create({
   proyectoTxt: { fontSize: 10, color: '#0d9488', fontWeight: '600' },
   metaRow:     { flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
   metaTxt:     { fontSize: 10, color: '#94a3b8' },
+  waBtn: {
+    marginTop: 4, backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#86efac',
+    borderRadius: 7, paddingVertical: 5, paddingHorizontal: 10, alignSelf: 'flex-start' as const,
+  },
+  waBtnTxt:    { fontSize: 11, fontWeight: '700', color: '#15803d' },
+  msgOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  msgSheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 24, paddingBottom: 36,
+  },
+  msgTitulo:   { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 2 },
+  msgSub:      { fontSize: 12, color: '#64748b', marginBottom: 18 },
+  msgOpcion: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+  },
+  msgOpcionTxt: { fontSize: 15, color: '#0f172a', fontWeight: '600' },
 })
 
 // ─── KanbanColumn ─────────────────────────────────────────────────────────────
@@ -913,7 +1005,7 @@ export default function CoordinacionCitas() {
       .select(`
         *,
         clientes ( nombre, telefono, tipo_operacion, estado ),
-        prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre ),
+        prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre, telefono ),
         coordinador:profiles!citas_coordinacion_coordinado_por_fkey ( nombre ),
         asesor:profiles!citas_coordinacion_asesor_id_fkey ( nombre ),
         propiedad:propiedades ( titulo )
