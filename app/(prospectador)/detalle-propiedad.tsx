@@ -1441,42 +1441,33 @@ export default function DetallePropiedad() {
 
     if (Platform.OS === 'web') {
       try {
-        // Descargas individuales, cada archivo nombrado con el ID de la casa
-        // (VAL-123-foto-1.jpg…). El navegador pide permiso para descargas
-        // múltiples la primera vez — avisar para que el usuario lo acepte,
-        // si no solo le llega la primera foto.
         const idCasa = (propiedad.codigo ?? propiedad.id).replace(/[^a-zA-Z0-9._-]/g, '_')
         if (imagenes.length > 1) {
-          window.alert(`Se descargarán ${imagenes.length} fotos. Si tu navegador pregunta "¿Descargar varios archivos?", dale PERMITIR — de lo contrario solo llegará la primera.`)
+          window.alert(`Se descargarán ${imagenes.length} fotos. Si tu navegador pregunta "¿Descargar varios archivos?", dale PERMITIR.`)
         }
-        for (let i = 0; i < imagenes.length; i++) {
-          try {
-            const resp = await fetch(imagenes[i].url)
-            const blob = await resp.blob()
-            const objectUrl = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = objectUrl
-            a.download = `${idCasa}-foto-${i + 1}.jpg`
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            // Defer revoke — el navegador necesita tiempo para leer el blob antes de que se libere
-            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-          } catch {
-            // CORS bloqueó fetch — abrir directamente la URL
-            const a = document.createElement('a')
-            a.href = imagenes[i].url
-            a.download = `${idCasa}-foto-${i + 1}.jpg`
-            a.target = '_blank'
-            a.rel = 'noopener'
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-          }
-          // Pausa entre descargas para que el navegador no bloquee las múltiples descargas
-          if (i < imagenes.length - 1) {
-            await new Promise<void>(r => setTimeout(r, 500))
-          }
+        // Se bajan TODAS en paralelo PRIMERO (por el proxy si la CDN no da CORS).
+        // Antes era secuencial con pausa de 500ms (lento) y, cuando fallaba el
+        // CORS, abría pestañas nuevas (`target=_blank`) → eso era el parpadeo.
+        // Ahora ya no se abren pestañas y descarga mucho más rápido.
+        const viaProxy = (u: string) => `https://wsrv.nl/?url=${encodeURIComponent(u)}`
+        const objectUrls = await Promise.all(imagenes.map(async (img) => {
+          let blob: Blob | null = null
+          try { const r = await fetch(img.url); if (r.ok) blob = await r.blob() } catch { /* CORS */ }
+          if (!blob) { try { const r = await fetch(viaProxy(img.url)); if (r.ok) blob = await r.blob() } catch { /* */ } }
+          return blob ? URL.createObjectURL(blob) : null
+        }))
+        for (let i = 0; i < objectUrls.length; i++) {
+          const u = objectUrls[i]
+          if (!u) continue
+          const a = document.createElement('a')
+          a.href = u
+          a.download = `${idCasa}-foto-${i + 1}.jpg`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          setTimeout(() => URL.revokeObjectURL(u), 60_000)
+          // Pausa mínima entre descargas para que el navegador no las bloquee.
+          if (i < objectUrls.length - 1) await new Promise<void>(r => setTimeout(r, 120))
         }
       } finally {
         setDescargando(false)
