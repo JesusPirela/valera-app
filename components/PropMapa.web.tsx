@@ -1,14 +1,18 @@
-import { useEffect, useRef } from 'react'
-import { View, TouchableOpacity } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { View, Text, TouchableOpacity } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
 type Props = { lat: number; lng: number; titulo?: string; height?: number }
 
-// Mapa interactivo (web) con Leaflet + OpenStreetMap: permite acercar, alejar
-// y arrastrar dentro de la app sin salir a Google Maps. Mismo enfoque que MiniMapa.web.
+// Mapa interactivo (web) con Leaflet + OpenStreetMap.
+// IMPORTANTE: arranca BLOQUEADO (sin arrastre ni zoom con la rueda) para que, al
+// scrollear la página y pasar el mouse por encima, NO se mueva el mapa por error
+// ni se robe el scroll. Se activa al hacer CLIC y se vuelve a bloquear cuando el
+// mouse sale del mapa (mismo patrón que los mapas de Google embebidos).
 export default function PropMapa({ lat, lng, titulo, height = 300 }: Props) {
   const containerRef = useRef<any>(null)
   const mapRef = useRef<any>(null)
+  const [activo, setActivo] = useState(false)
 
   useEffect(() => {
     if (!document.getElementById('leaflet-css')) {
@@ -23,7 +27,8 @@ export default function PropMapa({ lat, lng, titulo, height = 300 }: Props) {
       const L = (window as any).L
       const el = containerRef.current as unknown as HTMLElement
       if (!L || !el || mapRef.current) return
-      const map = L.map(el, { center: [lat, lng], zoom: 15, scrollWheelZoom: true, attributionControl: false })
+      // Bloqueado de inicio: sin scrollWheelZoom ni dragging.
+      const map = L.map(el, { center: [lat, lng], zoom: 15, scrollWheelZoom: false, dragging: false, attributionControl: false })
       mapRef.current = map
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map)
       const icon = L.divIcon({
@@ -35,6 +40,24 @@ export default function PropMapa({ lat, lng, titulo, height = 300 }: Props) {
       const m = L.marker([lat, lng], { icon }).addTo(map)
       if (titulo) m.bindPopup(`<b style="font-family:sans-serif">${titulo}</b>`)
       setTimeout(() => map.invalidateSize(), 200)
+
+      // Activar al hacer clic; bloquear de nuevo al salir el mouse.
+      const activar = () => {
+        map.scrollWheelZoom.enable()
+        map.dragging.enable()
+        setActivo(true)
+      }
+      const bloquear = () => {
+        map.scrollWheelZoom.disable()
+        map.dragging.disable()
+        setActivo(false)
+      }
+      el.addEventListener('click', activar)
+      el.addEventListener('mouseleave', bloquear)
+      ;(map as any).__cleanupInteract = () => {
+        el.removeEventListener('click', activar)
+        el.removeEventListener('mouseleave', bloquear)
+      }
     }
 
     const tryInit = () => {
@@ -52,7 +75,11 @@ export default function PropMapa({ lat, lng, titulo, height = 300 }: Props) {
 
     tryInit()
     return () => {
-      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
+      if (mapRef.current) {
+        mapRef.current.__cleanupInteract?.()
+        mapRef.current.remove()
+        mapRef.current = null
+      }
     }
   }, [lat, lng])
 
@@ -66,6 +93,24 @@ export default function PropMapa({ lat, lng, titulo, height = 300 }: Props) {
         ref={containerRef}
         style={{ width: '100%', height, borderRadius: 12, overflow: 'hidden', backgroundColor: '#dde8ee' } as any}
       />
+
+      {/* Aviso mientras está bloqueado: "haz clic para mover el mapa". No captura
+          eventos (pointerEvents none) para que el clic llegue al mapa y lo active. */}
+      {!activo && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            alignItems: 'center', justifyContent: 'center',
+            backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 12,
+          } as any}
+        >
+          <View style={{ backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 } as any}>
+            <Text style={{ color: '#fff', fontSize: 12.5, fontWeight: '700' } as any}>🖱️ Haz clic para mover el mapa</Text>
+          </View>
+        </View>
+      )}
+
       {/* Botón para volver a centrar el mapa en la propiedad tras moverlo. */}
       <TouchableOpacity
         onPress={recentrar}
