@@ -256,17 +256,38 @@ export default function RootLayout() {
       }
     }
 
+    // Refresca el token AHORA si venció o está por vencer. Clave para el bug de
+    // "llevo horas en sesión y no se guarda hasta recargar": tras dormir la
+    // laptop, el auto-refresh (setInterval) se pausa y el access_token vence;
+    // getSession lo devuelve vencido y las escrituras dan 401. Al volver a la
+    // app (foco/visibilidad/online) forzamos el refresh usando el refresh_token
+    // del storage, así el token ya está fresco cuando el usuario actúa.
+    const asegurarSesionFresca = async () => {
+      try {
+        const { data } = await supabase.auth.getSession()
+        const s = data.session
+        if (!s) { await supabase.auth.refreshSession(); return }
+        const expEnMs = (s.expires_at ?? 0) * 1000 - Date.now()
+        if (expEnMs < 90_000) await supabase.auth.refreshSession()  // vencido o < 90s
+      } catch { /* sin red: se reintenta al próximo foco */ }
+    }
+
     let removeWebListeners: (() => void) | null = null
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const onVisibility = () => {
         if (document.hidden) cerrarSesion()
-        else iniciarSesion()
+        else { iniciarSesion(); asegurarSesionFresca() }
       }
+      const onFocusOnline = () => { asegurarSesionFresca() }
       const onUnload = () => cerrarSesion()
       document.addEventListener('visibilitychange', onVisibility)
+      window.addEventListener('focus', onFocusOnline)
+      window.addEventListener('online', onFocusOnline)
       window.addEventListener('beforeunload', onUnload)
       removeWebListeners = () => {
         document.removeEventListener('visibilitychange', onVisibility)
+        window.removeEventListener('focus', onFocusOnline)
+        window.removeEventListener('online', onFocusOnline)
         window.removeEventListener('beforeunload', onUnload)
       }
     }
@@ -275,14 +296,10 @@ export default function RootLayout() {
       if (state === 'active') {
         supabase.auth.startAutoRefresh()
         iniciarSesion()
-        // Al volver del background verificar que la sesión no expiró.
-        // Si falta, refreshSession la renueva usando el refresh_token en storage.
-        ;(async () => {
-          try {
-            const { data } = await supabase.auth.getSession()
-            if (!data.session) await supabase.auth.refreshSession()
-          } catch { /* sin red: el SIGNED_OUT/getSession lo maneja después */ }
-        })()
+        // Al volver del background: refrescar el token si venció o está por
+        // vencer (no solo si falta la sesión). Cierra la ventana en la que una
+        // escritura salía con token vencido → 401 → se perdía.
+        asegurarSesionFresca()
         const ahora = Date.now()
         if (ahora - ultimaRevisionUpdateRef.current > 10 * 60 * 1000) {
           ultimaRevisionUpdateRef.current = ahora
@@ -293,6 +310,12 @@ export default function RootLayout() {
         cerrarSesion()
       }
     })
+
+    // Backstop: cada 4 min asegura el token fresco, por si el auto-refresh
+    // interno de supabase se pausó (sesiones largas, timers throttleados). Es
+    // redundante con su autoRefresh pero barato y evita el "tras horas no se
+    // guarda hasta recargar".
+    const refrescoBackstop = setInterval(asegurarSesionFresca, 4 * 60 * 1000)
 
     const fallbackTimer = setTimeout(() => {
       setLoading((prev) => {
@@ -354,6 +377,7 @@ export default function RootLayout() {
 
     return () => {
       clearTimeout(fallbackTimer)
+      clearInterval(refrescoBackstop)
       appStateSub.remove()
       subscription.unsubscribe()
       removeWebListeners?.()
