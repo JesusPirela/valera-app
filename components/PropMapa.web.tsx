@@ -11,6 +11,7 @@ type Props = { lat: number; lng: number; titulo?: string; height?: number }
 // mouse sale del mapa (mismo patrón que los mapas de Google embebidos).
 export default function PropMapa({ lat, lng, titulo, height = 300 }: Props) {
   const containerRef = useRef<any>(null)
+  const wrapperRef = useRef<any>(null)
   const mapRef = useRef<any>(null)
   const [activo, setActivo] = useState(false)
 
@@ -41,7 +42,9 @@ export default function PropMapa({ lat, lng, titulo, height = 300 }: Props) {
       if (titulo) m.bindPopup(`<b style="font-family:sans-serif">${titulo}</b>`)
       setTimeout(() => map.invalidateSize(), 200)
 
-      // Activar al hacer clic; bloquear de nuevo al salir el mouse.
+      // Activar al hacer clic EN el mapa; bloquear al hacer clic FUERA de él.
+      // (Antes se bloqueaba con mouseleave, pero si arrastrabas de más y salías
+      // del mapa se bloqueaba a media interacción — molesto.)
       const activar = () => {
         map.scrollWheelZoom.enable()
         map.dragging.enable()
@@ -53,10 +56,15 @@ export default function PropMapa({ lat, lng, titulo, height = 300 }: Props) {
         setActivo(false)
       }
       el.addEventListener('click', activar)
-      el.addEventListener('mouseleave', bloquear)
+      const onDocClick = (e: MouseEvent) => {
+        const wrap = wrapperRef.current as unknown as HTMLElement | null
+        // Clic fuera del recuadro del mapa → bloquear.
+        if (wrap && !wrap.contains(e.target as Node)) bloquear()
+      }
+      document.addEventListener('click', onDocClick, true)
       ;(map as any).__cleanupInteract = () => {
         el.removeEventListener('click', activar)
-        el.removeEventListener('mouseleave', bloquear)
+        document.removeEventListener('click', onDocClick, true)
       }
     }
 
@@ -88,7 +96,7 @@ export default function PropMapa({ lat, lng, titulo, height = 300 }: Props) {
   }
 
   return (
-    <View style={{ position: 'relative', width: '100%', height } as any}>
+    <View ref={wrapperRef} style={{ position: 'relative', width: '100%', height } as any}>
       <View
         ref={containerRef}
         style={{ width: '100%', height, borderRadius: 12, overflow: 'hidden', backgroundColor: '#dde8ee' } as any}
