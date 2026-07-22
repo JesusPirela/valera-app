@@ -157,12 +157,13 @@ export function RuletaModal({
   onConfirmarAbrir,
   onClose, onGanar, onGirarOtraVez,
 }: Props) {
-  // Merge DB config premios with CONFIG_DEFAULT so that new prizes (libro, campaña, etc.)
-  // are always available even if the Supabase ruleta_config doesn't list them yet.
-  const baseDefault = CONFIG_DEFAULT.premios
-  const premiosRaw  = premiosProp ?? baseDefault
-  const defaultIds  = new Set(premiosRaw.map(p => p.id))
-  const premios     = [...premiosRaw, ...baseDefault.filter(p => !defaultIds.has(p.id))]
+  // La config de la DB (app_config.ruleta_config) es la ÚNICA fuente de premios
+  // cuando existe. ANTES se mergeaba CONFIG_DEFAULT "para que nunca falten
+  // premios nuevos", pero eso RE-FILTRABA premios viejos que ya se habían
+  // quitado de la DB (p.ej. 'Merch Valera', o duplicados de libro/campaña) →
+  // a un usuario le tocaba algo que "ya no existe". CONFIG_DEFAULT solo se usa
+  // como respaldo cuando NO hay config en la DB.
+  const premios = premiosProp ?? CONFIG_DEFAULT.premios
 
   const [fase, setFase]           = useState<Fase>('listo')
   const [strip, setStrip]         = useState<Premio[]>([])
