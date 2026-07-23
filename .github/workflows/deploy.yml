@@ -31,6 +31,15 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
+      # WhatsApp/Facebook no ejecutan JavaScript: al compartir /ficha/VR-265 leían
+      # el HTML genérico de la SPA y la vista previa salía con el logo de la app.
+      # ficha.php inyecta las etiquetas og: con la foto real de la propiedad.
+      - name: Preparar vista previa de fichas (OpenGraph)
+        run: |
+          cp web/ficha.php dist/ficha.php
+          sed -i "s#__SUPABASE_URL__#${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}#g" dist/ficha.php
+          sed -i "s#__SUPABASE_ANON__#${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}#g" dist/ficha.php
+
       - name: Create .htaccess
         run: |
           cat > dist/.htaccess << 'EOF'
@@ -41,6 +50,11 @@ jobs:
           # Forzar HTTPS
           RewriteCond %{HTTPS} !=on
           RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+          # Las fichas compartidas pasan por ficha.php, que devuelve el MISMO
+          # index.html pero con las etiquetas og: de esa propiedad (foto, título
+          # y precio) para que la vista previa de WhatsApp muestre la casa.
+          RewriteRule ^ficha/([A-Za-z0-9._-]+)/?$ /ficha.php?codigo=$1 [L,QSA]
 
           # SPA: las rutas como /ficha/VR-1184 no son archivos reales; las sirve
           # index.html y el router del cliente decide qué pintar.

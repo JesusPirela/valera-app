@@ -641,8 +641,11 @@ export default function DetallePropiedad() {
     const tel = (c.telefono ?? '').replace(/\D/g, '')
     if (!tel) return
     const link = `https://valeraapp.valerarealestate.com/ficha/${propiedad.codigo}`
-    const primerNombre = (c.nombre || '').trim().split(' ')[0]
-    const msg = `Hola ${primerNombre}, te comparto esta propiedad:\n\n${propiedad.titulo}\n${formatPrecio(propiedad.precio)}\n\n${link}`
+    // Nombre COMPLETO tal como está capturado en el CRM (antes se recortaba al
+    // primer nombre y el saludo quedaba incompleto).
+    const nombreCompleto = (c.nombre || '').replace(/\s+/g, ' ').trim()
+    const saludo = nombreCompleto ? `Hola ${nombreCompleto}, ` : 'Hola, '
+    const msg = `${saludo}te comparto esta propiedad:\n\n${propiedad.titulo}\n${formatPrecio(propiedad.precio)}\n\n${link}`
     Linking.openURL(`https://wa.me/52${tel}?text=${encodeURIComponent(msg)}`)
     setModalEnviar(false)
   }
