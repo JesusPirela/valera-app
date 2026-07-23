@@ -102,7 +102,11 @@ if ($html === false) {
     exit;
 }
 // Insertar las etiquetas dentro del <head> del index de la app.
-$out = preg_replace('/<\/head>/i', $meta . '</head>', $html, 1);
+// OJO: aquí NO se puede usar preg_replace. El texto de reemplazo lleva el
+// precio (ej. "$12,500") y PCRE interpreta "$12" como retrorreferencia, así que
+// se comía el precio. Con substr_replace la inserción es literal.
+$pos = stripos($html, '</head>');
+$out = $pos !== false ? substr_replace($html, $meta, $pos, 0) : $html;
 
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: public, max-age=300');
