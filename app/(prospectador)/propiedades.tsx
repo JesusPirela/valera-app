@@ -1355,7 +1355,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerIconoText: { fontSize: 18 },
-  headerLogo: { width: 152, height: 50 },
+  // Alto ~= el del bloque naranja del header, para que el logo lo abarque de
+  // arriba a abajo en vez de quedar chico con espacio vacío alrededor.
+  headerLogo: { width: 170, height: 62, alignSelf: 'stretch' },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   miDiaBtn: {
     flexDirection: 'row', alignItems: 'center',

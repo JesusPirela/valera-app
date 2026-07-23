@@ -609,6 +609,44 @@ export default function DetallePropiedad() {
     await supabase.from('propiedad_actividad').insert({ propiedad_id: id, user_id: user.id, tipo })
   }
 
+  // ── Enviar la ficha al cliente por WhatsApp ────────────────────────────────
+  // Se manda el ENLACE público de la ficha (no un archivo): WhatsApp no permite
+  // adjuntar archivos desde un link, solo texto. El enlace se ve con preview,
+  // siempre está actualizado y no ocupa almacenamiento.
+  const [modalEnviar, setModalEnviar] = useState(false)
+  const [clientesEnviar, setClientesEnviar] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
+  const [cargandoClientes, setCargandoClientes] = useState(false)
+  const [buscaCliente, setBuscaCliente] = useState('')
+
+  async function abrirEnviarCliente() {
+    setModalEnviar(true)
+    setBuscaCliente('')
+    setCargandoClientes(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setCargandoClientes(false); return }
+      const { data } = await supabase
+        .from('clientes')
+        .select('id, nombre, telefono')
+        .eq('responsable_id', user.id)
+        .order('nombre')
+      setClientesEnviar((data ?? []) as any)
+    } catch { /* sin red */ } finally {
+      setCargandoClientes(false)
+    }
+  }
+
+  function enviarACliente(c: { nombre: string; telefono: string | null }) {
+    if (!propiedad) return
+    const tel = (c.telefono ?? '').replace(/\D/g, '')
+    if (!tel) return
+    const link = `https://valeraapp.valerarealestate.com/ficha/${propiedad.codigo}`
+    const primerNombre = (c.nombre || '').trim().split(' ')[0]
+    const msg = `Hola ${primerNombre}, te comparto esta propiedad:\n\n${propiedad.titulo}\n${formatPrecio(propiedad.precio)}\n\n${link}`
+    Linking.openURL(`https://wa.me/52${tel}?text=${encodeURIComponent(msg)}`)
+    setModalEnviar(false)
+  }
+
   // XP por descargar: se otorga UNA sola vez cuando la descarga se completó,
   // NO por cada imagen.
   async function premiarDescarga() {
@@ -1971,6 +2009,67 @@ export default function DetallePropiedad() {
           }
         </TouchableOpacity>
 
+        {/* Enviar la ficha a un cliente por WhatsApp */}
+        <TouchableOpacity
+          style={[styles.btnEnviarCliente, !propiedad && styles.btnDisabled]}
+          onPress={abrirEnviarCliente}
+          disabled={!propiedad}
+        >
+          <Text style={styles.btnEnviarClienteText}>📲 Enviar a mi cliente</Text>
+        </TouchableOpacity>
+
+        {/* Popup: elegir a qué cliente enviarle la ficha por WhatsApp */}
+        <Modal visible={modalEnviar} transparent animationType="slide" onRequestClose={() => setModalEnviar(false)}>
+          <View style={styles.envOverlay}>
+            <View style={styles.envBox}>
+              <View style={styles.envHeader}>
+                <Text style={styles.envTitulo}>📲 Enviar a mi cliente</Text>
+                <TouchableOpacity onPress={() => setModalEnviar(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={styles.envCerrar}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.envSub}>Elige el cliente y se abrirá su WhatsApp con la ficha lista para enviar.</Text>
+
+              <TextInput
+                style={styles.envInput}
+                placeholder="Buscar cliente…"
+                placeholderTextColor="#9aa5ab"
+                value={buscaCliente}
+                onChangeText={setBuscaCliente}
+              />
+
+              {cargandoClientes ? (
+                <ActivityIndicator color="#1a6470" style={{ marginVertical: 24 }} />
+              ) : (
+                <ScrollView style={{ maxHeight: 340 }} keyboardShouldPersistTaps="handled">
+                  {clientesEnviar
+                    .filter(c => !buscaCliente.trim() || (c.nombre ?? '').toLowerCase().includes(buscaCliente.trim().toLowerCase()))
+                    .map(c => {
+                      const sinTel = !((c.telefono ?? '').replace(/\D/g, ''))
+                      return (
+                        <TouchableOpacity
+                          key={c.id}
+                          style={[styles.envFila, sinTel && { opacity: 0.45 }]}
+                          onPress={() => enviarACliente(c)}
+                          disabled={sinTel}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.envNombre}>{c.nombre}</Text>
+                            <Text style={styles.envTel}>{sinTel ? 'Sin teléfono' : `📞 ${c.telefono}`}</Text>
+                          </View>
+                          {!sinTel && <Text style={styles.envWa}>WhatsApp</Text>}
+                        </TouchableOpacity>
+                      )
+                    })}
+                  {clientesEnviar.length === 0 && (
+                    <Text style={styles.envVacio}>Aún no tienes clientes en tu CRM.</Text>
+                  )}
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
+
         {/* Botón coordinar cita */}
         <TouchableOpacity
           style={[styles.btnCita, !propiedad && styles.btnDisabled]}
@@ -2833,6 +2932,30 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   btnPDFText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  btnEnviarCliente: {
+    backgroundColor: '#25D366', borderRadius: 12, paddingVertical: 14,
+    alignItems: 'center', marginBottom: 10,
+  },
+  btnEnviarClienteText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  // Popup "Enviar a mi cliente"
+  envOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  envBox: { backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, paddingBottom: 28, maxHeight: '80%' },
+  envHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  envTitulo: { fontSize: 17, fontWeight: '800', color: '#1a1a2e' },
+  envCerrar: { fontSize: 18, color: '#94a3b8', fontWeight: '700' },
+  envSub: { fontSize: 12.5, color: '#64748b', marginTop: 4, marginBottom: 12 },
+  envInput: {
+    borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1a1a2e', marginBottom: 10,
+  },
+  envFila: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+  },
+  envNombre: { fontSize: 14.5, fontWeight: '700', color: '#1a1a2e' },
+  envTel: { fontSize: 12, color: '#64748b', marginTop: 1 },
+  envWa: { fontSize: 12, fontWeight: '800', color: '#25D366' },
+  envVacio: { fontSize: 13, color: '#94a3b8', textAlign: 'center', marginVertical: 24 },
   btnCita: {
     backgroundColor: '#1a6b3a',
     borderRadius: 12,
