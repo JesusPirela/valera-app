@@ -1117,7 +1117,7 @@ export default function ProspectadorPropiedades() {
             {/* Logo + saludo en la misma fila */}
             <View style={[styles.headerTopRow, { marginBottom: 8 }]}>
               <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
-              <View style={{ flex: 1, marginLeft: 14, justifyContent: 'center' }}>
+              <View style={{ flex: 1, marginLeft: 14, justifyContent: 'flex-end' }}>
                 <Text style={styles.headerSaludo} numberOfLines={1} maxFontSizeMultiplier={1.3}>
                   {nombreCorto ? `Hola, ${nombreCorto} 👋` : 'Bienvenido 👋'}
                 </Text>
@@ -1360,7 +1360,13 @@ const styles = StyleSheet.create({
   // Proporción exacta del logo recortado (609x399 = 1.53) para que 'contain'
   // llene la caja completa y no sobre espacio a los lados ni arriba/abajo.
   headerLogo: { width: 104, height: 68 },
-  headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  // Alineado por ABAJO a propósito: el logo es un lockup vertical (los edificios
+  // ocupan el 47% de arriba y la palabra VALERA cae al 68% del alto), así que
+  // centrarlo dejaba el saludo ~12px por encima de la palabra y se veía chueco.
+  // Al compartir borde inferior, las dos líneas del logo (VALERA / REAL ESTATE)
+  // emparejan con las dos del texto (saludo / conteo) y los chips de la derecha
+  // quedan a la altura del texto, todo sobre una misma línea inferior.
+  headerTopRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 },
   miDiaBtn: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.18)',
