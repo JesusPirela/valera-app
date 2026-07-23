@@ -11,6 +11,7 @@ export type AccionGamificacion =
   | 'cerrar_venta'
   | 'completar_leccion'
   | 'completar_curso'
+  | 'descargar_propiedad'
 
 type CfgAccion = {
   xp: number
@@ -44,6 +45,8 @@ const ACCIONES: Record<AccionGamificacion, CfgAccion> = {
   cerrar_venta:          { xp: 200, coins: 50, concepto: 'Venta cerrada 🎉',          categoria: null,           contadorCampo: 'total_ventas'        },
   completar_leccion:     { xp: 30,  coins: 10, concepto: 'Lección completada 📚',     categoria: 'curso',        contadorCampo: null                  },
   completar_curso:       { xp: 100, coins: 20, concepto: 'Curso completado 🎓',       categoria: 'curso',        contadorCampo: 'total_cursos'        },
+  // Se otorga UNA sola vez por descarga completada (NO por cada imagen).
+  descargar_propiedad:   { xp: 3,   coins: 0,  concepto: 'Fotos descargadas 📥',      categoria: null,           contadorCampo: null                  },
 }
 
 // ── Sistema de niveles progresivo ─────────────────────────────

@@ -609,6 +609,15 @@ export default function DetallePropiedad() {
     await supabase.from('propiedad_actividad').insert({ propiedad_id: id, user_id: user.id, tipo })
   }
 
+  // XP por descargar: se otorga UNA sola vez cuando la descarga se completó,
+  // NO por cada imagen.
+  async function premiarDescarga() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) registrarAccion(user.id, 'descargar_propiedad').catch(() => {})
+    } catch { /* no-op */ }
+  }
+
   async function copiarDescripcion() {
     if (!propiedad?.descripcion) return
     const texto = `ID: ${propiedad.codigo}\n\n${propiedad.descripcion}`
@@ -1469,6 +1478,7 @@ export default function DetallePropiedad() {
           // Pausa mínima entre descargas para que el navegador no las bloquee.
           if (i < objectUrls.length - 1) await new Promise<void>(r => setTimeout(r, 120))
         }
+        if (objectUrls.some(Boolean)) premiarDescarga()
       } finally {
         setDescargando(false)
       }
@@ -1511,6 +1521,7 @@ export default function DetallePropiedad() {
         }
       }
       setDescargando(false)
+      if (guardadas > 0) premiarDescarga()
       Alert.alert(
         guardadas > 0 ? 'Listo' : 'Error',
         guardadas > 0

@@ -1355,7 +1355,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerIconoText: { fontSize: 18 },
-  headerLogo: { width: 110, height: 38 },
+  headerLogo: { width: 152, height: 50 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   miDiaBtn: {
     flexDirection: 'row', alignItems: 'center',
