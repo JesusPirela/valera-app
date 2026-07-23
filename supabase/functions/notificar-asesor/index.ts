@@ -52,21 +52,20 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // 3. Resolver email → user_id via auth.users (service role)
-    //    listUsers trae hasta 200; el equipo es pequeño, cabe de sobra.
-    const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers({ perPage: 200 })
-    if (listError) {
-      console.error('[notificar-asesor] listUsers error:', listError)
+    // 3. Resolver email → user_id via RPC (consulta auth.users directo, sin paginación)
+    const { data: userId, error: rpcError } = await supabaseAdmin.rpc('get_user_id_by_email', {
+      p_email: emailAsesor.trim().toLowerCase(),
+    })
+
+    if (rpcError) {
+      console.error('[notificar-asesor] rpc error:', rpcError)
       return json({ ok: false, error: 'Error al buscar usuario' }, 500)
     }
 
-    const asesorUser = users.find(u => u.email === emailAsesor)
-    if (!asesorUser) {
+    if (!userId) {
       console.warn('[notificar-asesor] no se encontró usuario con email:', emailAsesor)
       return json({ ok: true, motivo: 'asesor_no_encontrado' })
     }
-
-    const userId = asesorUser.id
 
     // 4. Armar contenido de la notificación
     const titulo  = '🔔 Lead para búsqueda personalizada'
