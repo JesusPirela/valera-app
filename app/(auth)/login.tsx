@@ -18,7 +18,7 @@ import { supabase } from '../../lib/supabase'
 import { actualizarNombreRole } from '../../lib/cuentas'
 import { conTimeout } from '../../lib/redIntentos'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const LOGO = require('../../assets/logo.png')
+const LOGO = require('../../assets/logo-recortado.png')
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
@@ -199,10 +199,13 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     paddingHorizontal: 32,
   },
+  // Proporción del logo recortado (1.53). Antes era una caja cuadrada de
+  // 160x160 y, como el PNG traía un margen enorme, el logo visible quedaba en
+  // ~94x62. Sin borderRadius: ahora la imagen llega al borde de la caja y
+  // redondear recortaría las esquinas del marco del logo.
   logo: {
-    width: 160,
-    height: 160,
-    borderRadius: 20,
+    width: 220,
+    height: 144,
     marginBottom: 12,
   },
   tagline: {

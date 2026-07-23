@@ -9,7 +9,7 @@ import { useTheme } from '../../lib/ThemeContext'
 import { useVistaComo } from '../../lib/VistaComo'
 import HeaderBack from '../../components/HeaderBack'
 
-const LOGO = require('../../assets/logo.png')
+const LOGO = require('../../assets/logo-recortado.png')
 
 export default function AdminLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
@@ -123,7 +123,7 @@ export default function AdminLayout() {
           >
             <Image
               source={LOGO}
-              style={{ width: 100, height: 44 }}
+              style={{ width: 67, height: 44 }}
               resizeMode="contain"
             />
           </TouchableOpacity>

@@ -14,7 +14,7 @@ import { useVistaComo } from '../../lib/VistaComo'
 import VistaComoBanner from '../../components/VistaComoBanner'
 import AscensoRolModal from '../../components/AscensoRolModal'
 
-const LOGO = require('../../assets/logo.png')
+const LOGO = require('../../assets/logo-recortado.png')
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name']
 
@@ -265,7 +265,7 @@ export default function ProspectadorLayout() {
           >
             <Image
               source={LOGO}
-              style={{ width: 130, height: 54 }}
+              style={{ width: 82, height: 54 }}
               resizeMode="contain"
             />
           </TouchableOpacity>

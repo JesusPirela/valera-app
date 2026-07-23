@@ -36,7 +36,7 @@ async function getLogoBase64(): Promise<string> {
   try {
     if (Platform.OS === 'web') {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const logoModule = require('../../assets/logo.png')
+      const logoModule = require('../../assets/logo-recortado.png')
       const url = typeof logoModule === 'string' ? logoModule : ''
       if (!url) return ''
       const resp = await fetch(url)
@@ -48,7 +48,7 @@ async function getLogoBase64(): Promise<string> {
       })
     }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const asset = Asset.fromModule(require('../../assets/logo.png'))
+    const asset = Asset.fromModule(require('../../assets/logo-recortado.png'))
     await asset.downloadAsync()
     if (!asset.localUri) return ''
     const b64 = await FileSystem.readAsStringAsync(asset.localUri, { encoding: FileSystem.EncodingType.Base64 })

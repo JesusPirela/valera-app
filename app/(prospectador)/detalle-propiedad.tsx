@@ -674,7 +674,7 @@ export default function DetallePropiedad() {
   async function getLogoBase64(): Promise<string> {
     try {
       if (Platform.OS === 'web') {
-        const logoModule = require('../../assets/logo.png')
+        const logoModule = require('../../assets/logo-recortado.png')
         const uri = typeof logoModule === 'string' ? logoModule : (logoModule?.uri ?? '')
         if (!uri) return ''
         try {
@@ -690,7 +690,7 @@ export default function DetallePropiedad() {
           return uri
         }
       }
-      const asset = Asset.fromModule(require('../../assets/logo.png'))
+      const asset = Asset.fromModule(require('../../assets/logo-recortado.png'))
       await asset.downloadAsync()
       if (!asset.localUri) return ''
       const b64 = await FileSystem.readAsStringAsync(asset.localUri, { encoding: FileSystem.EncodingType.Base64 })

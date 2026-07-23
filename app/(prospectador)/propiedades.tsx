@@ -33,7 +33,7 @@ import { enqueuePublicacion } from '../../lib/offline-queue'
 
 // Versión recortada: el logo.png original es 1024x1024 con un margen enorme
 // alrededor del dibujo, así que al escalarlo el logo real quedaba diminuto.
-const LOGO = require('../../assets/logo-header.png')
+const LOGO = require('../../assets/logo-recortado.png')
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import { AccentBackground } from '../../lib/patrones'
 import { actualizarMisionesPorCategoria } from '../../lib/gamification'
