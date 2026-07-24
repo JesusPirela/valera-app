@@ -220,7 +220,10 @@ export default function ClienteForm() {
 
   function irAtras() {
     if (esEdicion) {
-      router.replace(((fromAdmin ? '/(admin)/detalle-cliente?id=' : '/(prospectador)/detalle-cliente?id=') + params.id) as any)
+      // El form se abre siempre con router.push desde detalle-cliente,
+      // así que back() regresa exactamente a donde el usuario estaba.
+      if (router.canGoBack()) router.back()
+      else router.replace(((fromAdmin ? '/(admin)/detalle-cliente?id=' : '/(prospectador)/detalle-cliente?id=') + params.id) as any)
     } else {
       router.replace((fromAdmin ? '/(admin)/crm' : '/(prospectador)/crm') as any)
     }
@@ -228,6 +231,22 @@ export default function ClienteForm() {
 
   const [loading, setLoading] = useState(esEdicion)
   const [guardando, setGuardando] = useState(false)
+  const [telefonoDuplicado, setTelefonoDuplicado] = useState<string | null>(null)
+  const duplicadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function onCambioTelefono(val: string) {
+    setTelefono(val)
+    setTelefonoDuplicado(null)
+    if (esEdicion) return  // en edición no checar (es el propio cliente)
+    if (duplicadoTimer.current) clearTimeout(duplicadoTimer.current)
+    const digits = val.replace(/\D/g, '')
+    if (digits.length < 8) return
+    duplicadoTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from('clientes').select('nombre').eq('telefono', val.trim()).maybeSingle()
+      if (data?.nombre) setTelefonoDuplicado(data.nombre)
+    }, 600)
+  }
 
   // Se guarda el id del usuario en cuanto la pantalla abre, con la sesión sana.
   // Así, si al momento de GUARDAR la sesión no responde (socket muerto tras un
@@ -552,8 +571,13 @@ export default function ClienteForm() {
             placeholder="Nombre completo" autoCapitalize="words" />
 
           <Text style={styles.fieldLabel}>Teléfono *</Text>
-          <TextInput style={styles.input} value={telefono} onChangeText={setTelefono}
+          <TextInput style={styles.input} value={telefono} onChangeText={onCambioTelefono}
             placeholder="442 000 0000" keyboardType="phone-pad" />
+          {telefonoDuplicado && (
+            <Text style={{ color: '#d97706', fontSize: 12, marginTop: -10, marginBottom: 10, fontWeight: '600' }}>
+              ⚠️ Este número ya está registrado como "{telefonoDuplicado}"
+            </Text>
+          )}
 
           <Text style={styles.fieldLabel}>Email</Text>
           <TextInput style={styles.input} value={email} onChangeText={setEmail}
@@ -596,8 +620,13 @@ export default function ClienteForm() {
             placeholder="Nombre completo" autoCapitalize="words" />
 
           <Text style={styles.fieldLabel}>Teléfono *</Text>
-          <TextInput style={styles.input} value={telefono} onChangeText={setTelefono}
+          <TextInput style={styles.input} value={telefono} onChangeText={onCambioTelefono}
             placeholder="442 000 0000" keyboardType="phone-pad" />
+          {telefonoDuplicado && (
+            <Text style={{ color: '#d97706', fontSize: 12, marginTop: -10, marginBottom: 10, fontWeight: '600' }}>
+              ⚠️ Este número ya está registrado como "{telefonoDuplicado}"
+            </Text>
+          )}
 
           <Text style={styles.sectionTitle}>Perfil de renta</Text>
 

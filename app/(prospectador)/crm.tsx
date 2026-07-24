@@ -791,6 +791,28 @@ export default function CRM() {
     }
   }
 
+  async function eliminarClienteTabla(item: Cliente) {
+    const confirmar = Platform.OS === 'web'
+      ? window.confirm(`¿Eliminar a "${item.nombre}"? Esta acción no se puede deshacer.`)
+      : await new Promise<boolean>(resolve =>
+          Alert.alert('Eliminar cliente', `¿Eliminar a "${item.nombre}"? Esta acción no se puede deshacer.`, [
+            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Eliminar', style: 'destructive', onPress: () => resolve(true) },
+          ])
+        )
+    if (!confirmar) return
+    // Actualización optimista
+    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v3'], (old) =>
+      (old ?? []).filter(cl => cl.id !== item.id)
+    )
+    const { error } = await supabase.from('clientes').delete().eq('id', item.id)
+    if (error) {
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
+      if (Platform.OS === 'web') window.alert('No se pudo eliminar el cliente.')
+      else Alert.alert('Error', 'No se pudo eliminar el cliente.')
+    }
+  }
+
   async function handleImportConfirm(rows: ImportedRow[]) {
     const { data: { user } } = await getUsuarioActual()
     if (!user) throw new Error('Sesión expirada')
@@ -818,6 +840,7 @@ export default function CRM() {
     { id: 'presupuesto', label: 'Presupuesto',    flex: 1.2, mw: 0 },
     { id: 'fecha',       label: 'Prox. seguim.',  flex: 1.5, mw: 0, sortable: true },
     { id: 'notas',       label: 'Notas',          flex: 2.5, mw: 0 },
+    { id: 'acciones',   label: '',               flex: 0.3, mw: 0 },
   ] : [
     { id: 'nombre',      label: 'Nombre',         flex: 0, mw: 130 },
     { id: 'telefono',    label: 'Teléfono',       flex: 0, mw: 100 },
@@ -828,6 +851,7 @@ export default function CRM() {
     { id: 'presupuesto', label: 'Presupuesto',    flex: 0, mw: 105 },
     { id: 'fecha',       label: 'Prox. seguim.',  flex: 0, mw: 105, sortable: true },
     { id: 'notas',       label: 'Notas',          flex: 0, mw: 180 },
+    { id: 'acciones',   label: '',               flex: 0, mw: 44 },
   ]
 
   function cStyle(col: TCol) {
@@ -1236,6 +1260,18 @@ export default function CRM() {
                             : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ agregar</Text>
                           }
                         </TouchableOpacity>
+                      )
+                    case 'acciones':
+                      return (
+                        <View key={col.id} style={[s.excelTdCell, cs, { justifyContent: 'center', alignItems: 'center' }]}>
+                          <TouchableOpacity
+                            onPress={() => eliminarClienteTabla(item)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            activeOpacity={0.6}
+                          >
+                            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
                       )
                     default: return null
                   }
