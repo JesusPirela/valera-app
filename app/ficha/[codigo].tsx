@@ -9,6 +9,9 @@ import { useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import PropMapa from '../../components/PropMapa'
 import { thumb } from '../../lib/img'
+import {
+  IdiomaFicha, tf, tipoLabel, formatPrecioLang, traducirFicha,
+} from '../../lib/ficha-i18n'
 
 type Propiedad = {
   id: string
@@ -25,6 +28,8 @@ type Propiedad = {
   m2_terreno: number | null
   estacionamientos: number | null
   descripcion: string | null
+  titulo_en: string | null
+  descripcion_en: string | null
   lat: number | null
   lng: number | null
   propiedad_imagenes: { url: string; orden: number }[]
@@ -32,27 +37,38 @@ type Propiedad = {
 
 const TEAL = '#1a6470'
 
-function formatPrecio(precio: number | null) {
-  if (!precio) return 'Consultar precio'
-  return `$${precio.toLocaleString('es-MX')} MXN`
-}
-
-function capitalize(s: string | null) {
-  if (!s) return ''
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}
-
 export default function FichaPublica() {
-  const { codigo } = useLocalSearchParams<{ codigo: string }>()
+  const { codigo, lang } = useLocalSearchParams<{ codigo: string; lang?: string }>()
   const [propiedad, setPropiedad] = useState<Propiedad | null>(null)
   const [loading, setLoading]   = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [imgIdx, setImgIdx]     = useState(0)
+  // Idioma de la ficha: arranca según ?lang=en del link; el visitante lo puede
+  // cambiar con el botón ES/EN.
+  const [idioma, setIdioma] = useState<IdiomaFicha>(lang === 'en' ? 'en' : 'es')
+  // Traducción del texto libre (título/descripción). Se pide bajo demanda al
+  // pasar a inglés y se recuerda para no volver a pedirla.
+  const [traduccion, setTraduccion] = useState<{ titulo: string | null; descripcion: string | null } | null>(null)
+  const [traduciendo, setTraduciendo] = useState(false)
   const { width } = useWindowDimensions()
   const imgW = Math.min(width, 600)
   const scrollRef = useRef<ScrollView>(null)
 
   useEffect(() => { if (codigo) cargar() }, [codigo])
+
+  // Al pasar a inglés: usar la traducción ya guardada en la propiedad; si no
+  // existe todavía, pedirla a la Edge Function (que la genera y la cachea).
+  useEffect(() => {
+    if (idioma !== 'en' || !propiedad || traduccion) return
+    if (propiedad.titulo_en && propiedad.descripcion_en) {
+      setTraduccion({ titulo: propiedad.titulo_en, descripcion: propiedad.descripcion_en })
+      return
+    }
+    setTraduciendo(true)
+    traducirFicha(propiedad.codigo)
+      .then(r => { if (r) setTraduccion({ titulo: r.titulo_en, descripcion: r.descripcion_en }) })
+      .finally(() => setTraduciendo(false))
+  }, [idioma, propiedad, traduccion])
 
   async function cargar() {
     try {
@@ -61,7 +77,7 @@ export default function FichaPublica() {
       )
       const query = supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, lat, lng, propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, titulo_en, descripcion_en, lat, lng, propiedad_imagenes(url, orden)')
         .eq('codigo', codigo)
         .eq('estado', 'disponible')
         .eq('es_inventario', false)
@@ -102,27 +118,52 @@ export default function FichaPublica() {
   if (notFound || !propiedad) return (
     <View style={s.center}>
       <Text style={s.notFoundIcon}>🏚️</Text>
-      <Text style={s.notFoundTitle}>Propiedad no encontrada</Text>
-      <Text style={s.notFoundSub}>Es posible que ya no esté disponible.</Text>
+      <Text style={s.notFoundTitle}>{tf(idioma, 'noEncontrada')}</Text>
+      <Text style={s.notFoundSub}>{tf(idioma, 'noDisponible')}</Text>
     </View>
   )
 
   const imagenes = propiedad.propiedad_imagenes
-  const tipoLabel = capitalize(propiedad.tipo)
-  const opLabel   = propiedad.operacion === 'renta' ? 'en Renta' : 'en Venta'
+  const tipoTxt   = tipoLabel(propiedad.tipo, idioma)
+  const opLabel   = propiedad.operacion === 'renta' ? tf(idioma, 'enRenta') : tf(idioma, 'enVenta')
+
+  // En inglés se muestran el título y la descripción traducidos (si ya están);
+  // mientras se traducen, se deja el original para no dejar la ficha en blanco.
+  const tituloMostrar = idioma === 'en' && traduccion?.titulo ? traduccion.titulo : propiedad.titulo
+  const descMostrar   = idioma === 'en' && traduccion?.descripcion ? traduccion.descripcion : propiedad.descripcion
 
   const chips: { icon: string; val: string }[] = []
-  if (propiedad.recamaras != null)    chips.push({ icon: '🛏️', val: `${propiedad.recamaras} Rec.` })
+  if (propiedad.recamaras != null)    chips.push({ icon: '🛏️', val: `${propiedad.recamaras} ${tf(idioma, 'recamaras')}` })
   if (propiedad.banos != null) {
-    const bStr = `${propiedad.banos}${propiedad.medios_banos ? ` + ${propiedad.medios_banos}½` : ''} Baños`
+    const bStr = `${propiedad.banos}${propiedad.medios_banos ? ` + ${propiedad.medios_banos}½` : ''} ${tf(idioma, 'banos')}`
     chips.push({ icon: '🚿', val: bStr })
   }
-  if (propiedad.m2 != null)           chips.push({ icon: '📐', val: `${propiedad.m2} m² const.` })
-  if (propiedad.m2_terreno != null)   chips.push({ icon: '🌳', val: `${propiedad.m2_terreno} m² terr.` })
-  if (propiedad.estacionamientos != null) chips.push({ icon: '🚗', val: `${propiedad.estacionamientos} Est.` })
+  if (propiedad.m2 != null)           chips.push({ icon: '📐', val: `${propiedad.m2} ${tf(idioma, 'm2const')}` })
+  if (propiedad.m2_terreno != null)   chips.push({ icon: '🌳', val: `${propiedad.m2_terreno} ${tf(idioma, 'm2terreno')}` })
+  if (propiedad.estacionamientos != null) chips.push({ icon: '🚗', val: `${propiedad.estacionamientos} ${tf(idioma, 'estacionamientos')}` })
 
   return (
     <View style={s.root}>
+      {/* Selector de idioma: el visitante cambia ES/EN cuando quiera */}
+      <View style={s.langBar}>
+        <View style={s.langToggle}>
+          <TouchableOpacity
+            style={[s.langBtn, idioma === 'es' && s.langBtnActive]}
+            onPress={() => setIdioma('es')}
+            accessibilityLabel="Ver en español"
+          >
+            <Text style={[s.langBtnTxt, idioma === 'es' && s.langBtnTxtActive]}>ES</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.langBtn, idioma === 'en' && s.langBtnActive]}
+            onPress={() => setIdioma('en')}
+            accessibilityLabel="View in English"
+          >
+            <Text style={[s.langBtnTxt, idioma === 'en' && s.langBtnTxtActive]}>EN</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
 
         {/* Carrusel de imágenes */}
@@ -191,23 +232,23 @@ export default function FichaPublica() {
             <View style={[s.badge, { backgroundColor: TEAL }]}>
               <Text style={s.badgeTxt}>{propiedad.codigo}</Text>
             </View>
-            {tipoLabel ? (
+            {tipoTxt ? (
               <View style={s.badgeOutline}>
-                <Text style={s.badgeOutlineTxt}>{tipoLabel} {opLabel}</Text>
+                <Text style={s.badgeOutlineTxt}>{tipoTxt} {opLabel}</Text>
               </View>
             ) : null}
           </View>
 
           {/* Título */}
-          <Text style={s.titulo}>{propiedad.titulo}</Text>
+          <Text style={s.titulo}>{tituloMostrar}</Text>
 
           {/* Dirección */}
           <Text style={s.direccion}>📍 {propiedad.direccion}</Text>
 
           {/* Precio */}
           <View style={s.precioBox}>
-            <Text style={s.precioLabel}>Precio</Text>
-            <Text style={s.precioVal}>{formatPrecio(propiedad.precio)}</Text>
+            <Text style={s.precioLabel}>{tf(idioma, 'precio')}</Text>
+            <Text style={s.precioVal}>{formatPrecioLang(propiedad.precio, idioma)}</Text>
           </View>
 
           {/* Características */}
@@ -223,17 +264,20 @@ export default function FichaPublica() {
           )}
 
           {/* Descripción */}
-          {propiedad.descripcion ? (
+          {descMostrar ? (
             <View style={s.descBox}>
-              <Text style={s.descTitle}>Descripción</Text>
-              <Text style={s.descTxt}>{propiedad.descripcion}</Text>
+              <View style={s.descHead}>
+                <Text style={s.descTitle}>{tf(idioma, 'descripcion')}</Text>
+                {idioma === 'en' && traduciendo && <ActivityIndicator size="small" color={TEAL} />}
+              </View>
+              <Text style={s.descTxt}>{descMostrar}</Text>
             </View>
           ) : null}
 
           {/* Ubicación — mapa interactivo + abrir en Google Maps */}
           {propiedad.lat != null && propiedad.lng != null && (
             <View style={s.mapBox}>
-              <Text style={s.descTitle}>Ubicación</Text>
+              <Text style={[s.descTitle, { marginBottom: 8 }]}>{tf(idioma, 'ubicacion')}</Text>
               <View style={s.mapWrapper}>
                 <PropMapa key={propiedad.id} lat={propiedad.lat} lng={propiedad.lng} titulo={propiedad.titulo} height={300} />
                 <TouchableOpacity
@@ -245,7 +289,7 @@ export default function FichaPublica() {
                     else Linking.openURL(url)
                   }}
                 >
-                  <Text style={s.mapOverlayBtnTxt}>🗺️ Abrir en Maps</Text>
+                  <Text style={s.mapOverlayBtnTxt}>{tf(idioma, 'abrirMaps')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -265,6 +309,25 @@ export default function FichaPublica() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc', padding: 32 },
+
+  langBar: {
+    flexDirection: 'row', justifyContent: 'flex-end',
+    paddingHorizontal: 12, paddingTop: Platform.OS === 'web' ? 10 : 44, paddingBottom: 6,
+    backgroundColor: '#f8fafc',
+  },
+  langToggle: {
+    flexDirection: 'row', backgroundColor: '#e7edf0', borderRadius: 9, padding: 2,
+    borderWidth: 1, borderColor: '#dbe3e7',
+  },
+  langBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 7 },
+  langBtnActive: {
+    backgroundColor: '#fff',
+    ...Platform.select({ web: { boxShadow: '0 1px 2px rgba(0,0,0,0.12)' } as any, default: { elevation: 2 } }),
+  },
+  langBtnTxt: { fontSize: 12, fontWeight: '800', color: '#8aa0ab' },
+  langBtnTxtActive: { color: TEAL },
+
+  descHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
 
   carouselWrap: { backgroundColor: '#1e3448', alignSelf: 'center' },
   dots: { position: 'absolute', bottom: 10, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 5 },
@@ -315,7 +378,7 @@ const s = StyleSheet.create({
   chipTxt: { fontSize: 13, color: '#334155', fontWeight: '600' },
 
   descBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
-  descTitle: { fontSize: 13, fontWeight: '800', color: '#1e293b', marginBottom: 8 },
+  descTitle: { fontSize: 13, fontWeight: '800', color: '#1e293b' },
   descTxt: { fontSize: 14, color: '#475569', lineHeight: 22 },
 
   mapBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },

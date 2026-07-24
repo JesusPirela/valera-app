@@ -22,6 +22,9 @@ import { getUsuarioActual } from '../../lib/sesion'
 import { esPlusOMejor, esStaffSupervision } from '../../lib/permisos'
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb, proxyImagen } from '../../lib/img'
+import {
+  IdiomaFicha, tf, tipoOperacionLabel, formatPrecioLang, traducirFicha,
+} from '../../lib/ficha-i18n'
 import { enqueuePublicacion } from '../../lib/offline-queue'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
@@ -618,6 +621,9 @@ export default function DetallePropiedad() {
   const [clientesEnviar, setClientesEnviar] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
   const [cargandoClientes, setCargandoClientes] = useState(false)
   const [buscaCliente, setBuscaCliente] = useState('')
+  // Idioma de la ficha (PDF y link). Opcional: arranca en español; con un toque
+  // se cambia a inglés y afecta tanto el PDF como el link que se comparte.
+  const [idiomaFicha, setIdiomaFicha] = useState<IdiomaFicha>('es')
 
   async function abrirEnviarCliente() {
     setModalEnviar(true)
@@ -637,15 +643,28 @@ export default function DetallePropiedad() {
     }
   }
 
-  function enviarACliente(c: { nombre: string; telefono: string | null }) {
+  async function enviarACliente(c: { nombre: string; telefono: string | null }) {
     if (!propiedad) return
     const tel = (c.telefono ?? '').replace(/\D/g, '')
     if (!tel) return
-    const link = `https://valeraapp.valerarealestate.com/ficha/${propiedad.codigo}`
+    const en = idiomaFicha === 'en'
+
+    // Si se manda en inglés: dejar la traducción LISTA en la base ANTES de abrir
+    // WhatsApp, para que la vista previa del link (que la lee el robot de
+    // WhatsApp al instante) ya salga en inglés y no en español.
+    let tituloTxt = propiedad.titulo
+    if (en) {
+      const tr = await traducirFicha(propiedad.codigo)
+      if (tr?.titulo_en) tituloTxt = tr.titulo_en
+    }
+
+    const link = `https://valeraapp.valerarealestate.com/ficha/${propiedad.codigo}${en ? '?lang=en' : ''}`
     // Saludo genérico a propósito: el mensaje NO lleva el nombre del cliente.
     // El chat ya es de esa persona, así que nombrarla sobraba (y si el nombre
     // estaba capturado raro en el CRM, se veía mal en el mensaje).
-    const msg = `Hola, te comparto esta propiedad:\n\n${propiedad.titulo}\n${formatPrecio(propiedad.precio)}\n\n${link}`
+    const msg = en
+      ? `Hi, I'd like to share this property with you:\n\n${tituloTxt}\n${formatPrecioLang(propiedad.precio, 'en')}\n\n${link}`
+      : `Hola, te comparto esta propiedad:\n\n${tituloTxt}\n${formatPrecio(propiedad.precio)}\n\n${link}`
     Linking.openURL(`https://wa.me/52${tel}?text=${encodeURIComponent(msg)}`)
     setModalEnviar(false)
   }
@@ -792,11 +811,21 @@ export default function DetallePropiedad() {
     return null
   }
 
-  async function generarFichaPDF() {
+  async function generarFichaPDF(lang: IdiomaFicha = 'es') {
     if (!propiedad) return
 
     setGenerandoPDF(true)
     try {
+      // En inglés: traducir título y descripción (DeepL, con caché). Si por lo
+      // que sea no llega la traducción, se sigue con el texto en español para
+      // no dejar la ficha a medias.
+      let tituloTxt = propiedad.titulo
+      let descTxt = propiedad.descripcion
+      if (lang === 'en') {
+        const tr = await traducirFicha(propiedad.codigo)
+        if (tr?.titulo_en) tituloTxt = tr.titulo_en
+        if (tr?.descripcion_en) descTxt = tr.descripcion_en
+      }
       // Color de la ficha según quién subió la propiedad (created_by).
       // Configurable por admin; por defecto el teal de Valera.
       const colorFicha = subidoPor?.colorFicha || '#1a6470'
@@ -869,15 +898,9 @@ export default function DetallePropiedad() {
           .replace(/\r?\n/g, '<br>')
       }
 
-      const precio = propiedad.precio != null
-        ? '$' + propiedad.precio.toLocaleString('es-MX') + ' MXN'
-        : 'Precio a consultar'
-      const tipo = propiedad.tipo
-        ? propiedad.tipo.charAt(0).toUpperCase() + propiedad.tipo.slice(1)
-        : ''
-      const operacion = propiedad.operacion
-        ? propiedad.operacion.charAt(0).toUpperCase() + propiedad.operacion.slice(1)
-        : ''
+      const precio = formatPrecioLang(propiedad.precio, lang)
+      // "Casa en Renta" (es) / "House for Rent" (en). Ya viene unido.
+      const tipoOp = tipoOperacionLabel(propiedad.tipo, propiedad.operacion, lang)
 
       const imagenes = await obtenerImagenesCompletas()
 
@@ -944,12 +967,12 @@ export default function DetallePropiedad() {
         : ''
 
       const cars: string[] = []
-      if (propiedad.recamaras != null) cars.push(`<div class="car"><span class="car-val">${propiedad.recamaras}</span><span class="car-lbl">Recámaras</span></div>`)
-      if (propiedad.banos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.banos}</span><span class="car-lbl">Baños</span></div>`)
-      if (propiedad.medios_banos != null && propiedad.medios_banos > 0) cars.push(`<div class="car"><span class="car-val">${propiedad.medios_banos}</span><span class="car-lbl">Medio${propiedad.medios_banos === 1 ? '' : 's'} baño${propiedad.medios_banos === 1 ? '' : 's'}</span></div>`)
-      if (propiedad.m2 != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2}</span><span class="car-lbl">m² construcción</span></div>`)
-      if (propiedad.m2_terreno != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2_terreno}</span><span class="car-lbl">m² terreno</span></div>`)
-      if (propiedad.estacionamientos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.estacionamientos}</span><span class="car-lbl">Estacionamientos</span></div>`)
+      if (propiedad.recamaras != null) cars.push(`<div class="car"><span class="car-val">${propiedad.recamaras}</span><span class="car-lbl">${tf(lang, 'recamarasFull')}</span></div>`)
+      if (propiedad.banos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.banos}</span><span class="car-lbl">${tf(lang, 'banosFull')}</span></div>`)
+      if (propiedad.medios_banos != null && propiedad.medios_banos > 0) cars.push(`<div class="car"><span class="car-val">${propiedad.medios_banos}</span><span class="car-lbl">${propiedad.medios_banos === 1 ? tf(lang, 'medioBanoSing') : tf(lang, 'medioBanoPlur')}</span></div>`)
+      if (propiedad.m2 != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2}</span><span class="car-lbl">${tf(lang, 'm2constFull')}</span></div>`)
+      if (propiedad.m2_terreno != null) cars.push(`<div class="car"><span class="car-val">${propiedad.m2_terreno}</span><span class="car-lbl">${tf(lang, 'm2terrenoFull')}</span></div>`)
+      if (propiedad.estacionamientos != null) cars.push(`<div class="car"><span class="car-val">${propiedad.estacionamientos}</span><span class="car-lbl">${tf(lang, 'estacionamientosFull')}</span></div>`)
 
       // Mapa estático de Google si hay coordenadas
       let mapaHTML = ''
@@ -970,7 +993,7 @@ export default function DetallePropiedad() {
           </div>`
       }
 
-      const descHTML = propiedad.descripcion ? await prepararDescripcionPDF(propiedad.descripcion) : null
+      const descHTML = descTxt ? await prepararDescripcionPDF(descTxt) : null
 
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${propiedad.codigo ?? 'ficha'}</title><style>
         * {
@@ -1010,8 +1033,8 @@ export default function DetallePropiedad() {
       <div class="header">
         <div class="header-left">
           <div class="codigo">${esc(propiedad.codigo)}</div>
-          <div class="titulo">${esc(propiedad.titulo)}</div>
-          <div class="tipo-op">${[tipo, operacion].filter(Boolean).join(' en ')}</div>
+          <div class="titulo">${esc(tituloTxt)}</div>
+          <div class="tipo-op">${esc(tipoOp)}</div>
           <div class="precio">${precio}</div>
           <div class="direccion">${esc(propiedad.direccion)}</div>
         </div>
@@ -1023,8 +1046,8 @@ export default function DetallePropiedad() {
           <img src="${inmobiliariaLogoSrc}" class="inmob-logo" />
           ${propiedad.inmobiliarias?.nombre ? `<div class="inmob-nombre">${esc(propiedad.inmobiliarias.nombre)}</div>` : ''}
         </div>` : ''}
-        ${cars.length > 0 ? `<div class="seccion-grupo"><div class="seccion">Características</div><div class="cars">${cars.join('')}</div></div>` : ''}
-        ${descHTML !== null && descHTML.trim() !== '' ? `<div class="seccion-grupo"><div class="seccion">Descripción</div><div class="desc">${descHTML}</div></div>` : ''}
+        ${cars.length > 0 ? `<div class="seccion-grupo"><div class="seccion">${esc(tf(lang, 'caracteristicas'))}</div><div class="cars">${cars.join('')}</div></div>` : ''}
+        ${descHTML !== null && descHTML.trim() !== '' ? `<div class="seccion-grupo"><div class="seccion">${esc(tf(lang, 'descripcion'))}</div><div class="desc">${descHTML}</div></div>` : ''}
         ${galeriaHTML}
         ${mapaHTML}
         <div class="footer">Valera Real Estate · valerarealestate.com</div>
@@ -2003,15 +2026,34 @@ export default function DetallePropiedad() {
           </View>
         )}
 
+        {/* Idioma de la ficha (opcional): afecta el PDF y el link que compartes */}
+        <View style={styles.idiomaRow}>
+          <Text style={styles.idiomaLabel}>🌐 Idioma de la ficha</Text>
+          <View style={styles.idiomaToggle}>
+            <TouchableOpacity
+              style={[styles.idiomaBtn, idiomaFicha === 'es' && styles.idiomaBtnActive]}
+              onPress={() => setIdiomaFicha('es')}
+            >
+              <Text style={[styles.idiomaBtnTxt, idiomaFicha === 'es' && styles.idiomaBtnTxtActive]}>Español</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.idiomaBtn, idiomaFicha === 'en' && styles.idiomaBtnActive]}
+              onPress={() => setIdiomaFicha('en')}
+            >
+              <Text style={[styles.idiomaBtnTxt, idiomaFicha === 'en' && styles.idiomaBtnTxtActive]}>🇬🇧 English</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Botón generar ficha PDF */}
         <TouchableOpacity
           style={[styles.btnPDF, generandoPDF && styles.btnDisabled]}
-          onPress={generarFichaPDF}
+          onPress={() => generarFichaPDF(idiomaFicha)}
           disabled={generandoPDF}
         >
           {generandoPDF
             ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={styles.btnPDFText}>📄 Generar ficha PDF</Text>
+            : <Text style={styles.btnPDFText}>📄 {idiomaFicha === 'en' ? 'Generate PDF sheet' : 'Generar ficha PDF'}</Text>
           }
         </TouchableOpacity>
 
@@ -2938,6 +2980,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   btnPDFText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  idiomaRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 10, flexWrap: 'wrap', gap: 8,
+  },
+  idiomaLabel: { fontSize: 13, fontWeight: '600', color: '#64748b' },
+  idiomaToggle: {
+    flexDirection: 'row', backgroundColor: '#eef2f4', borderRadius: 10, padding: 3,
+    borderWidth: 1, borderColor: '#e0e6ea',
+  },
+  idiomaBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  idiomaBtnActive: {
+    backgroundColor: '#fff',
+    ...Platform.select({ web: { boxShadow: '0 1px 2px rgba(0,0,0,0.12)' } as any, default: { elevation: 2 } }),
+  },
+  idiomaBtnTxt: { fontSize: 13, fontWeight: '700', color: '#8aa0ab' },
+  idiomaBtnTxtActive: { color: '#1a6470' },
   btnEnviarCliente: {
     backgroundColor: '#25D366', borderRadius: 12, paddingVertical: 14,
     alignItems: 'center', marginBottom: 10,
