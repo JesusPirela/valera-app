@@ -126,9 +126,14 @@ export default function ChatClienteScreen({ volverHref, fichaHrefBuilder }: Chat
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
       <View style={[styles.header, { borderBottomColor: c.border }]}>
-        {/* Ir SIEMPRE a la lista de chats (volverHref), no `router.back()`: en
-            web/OTA el historial a veces mandaba al inicio en vez de a los chats. */}
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.replace(volverHref as any)}>
+        {/* Volver a donde estabas. Antes se forzaba SIEMPRE la lista de chats
+            porque el historial "mandaba al inicio", pero eso era el
+            backBehavior por defecto de las pestañas (ya corregido en el layout
+            a "history"). volverHref queda de plan B si no hay historial. */}
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace(volverHref as any))}
+        >
           <Ionicons name="arrow-back" size={20} color="#1a6470" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>

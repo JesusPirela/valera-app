@@ -228,6 +228,15 @@ export default function ProspectadorLayout() {
     <VistaComoBanner />
     <AscensoRolModal rol={ascensoRol} onClose={() => setAscensoRol(null)} />
     <Tabs
+      // "atrás" vuelve a la pantalla ANTERIOR de verdad, no al inicio.
+      //
+      // Todas las pantallas de detalle (cliente, propiedad, curso, tienda...)
+      // viven dentro de estas pestañas como pantallas ocultas. React Navigation
+      // usa por defecto backBehavior="firstRoute", que hace que atrás salte
+      // SIEMPRE a la primera pestaña —Propiedades—: por eso abrir un cliente
+      // desde el CRM y darle atrás te dejaba en la lista de propiedades en vez
+      // de volver al CRM. Con "history" se respeta el recorrido real.
+      backBehavior="history"
       screenOptions={{
         tabBarActiveTintColor: colorAcento,
         tabBarInactiveTintColor: darkMode ? '#556a7a' : '#9eafb2',

@@ -5,11 +5,13 @@ import { router } from 'expo-router'
 // navegación (evita duplicados en el historial del navegador). Solo usa
 // router.replace(to) cuando no hay historial al que volver (deep links).
 export default function HeaderBack({ color = '#c9a84c', to, alwaysReplace }: { color?: string; to?: string; alwaysReplace?: boolean }) {
-  const puede = router.canGoBack()
-  if (!to && !puede) return null
+  if (!to && !router.canGoBack()) return null
   const onPress = () => {
+    // Se consulta el historial AL TOCAR, no al pintar: entre que se dibuja el
+    // botón y el usuario lo toca puede haber navegado, y con el dato viejo se
+    // acababa haciendo replace (perdiendo el punto de retorno real).
     if (to && alwaysReplace) router.replace(to as any)
-    else if (puede) router.back()
+    else if (router.canGoBack()) router.back()
     else if (to) router.replace(to as any)
   }
   return (
