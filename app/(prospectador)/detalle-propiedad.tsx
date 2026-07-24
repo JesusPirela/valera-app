@@ -642,11 +642,10 @@ export default function DetallePropiedad() {
     const tel = (c.telefono ?? '').replace(/\D/g, '')
     if (!tel) return
     const link = `https://valeraapp.valerarealestate.com/ficha/${propiedad.codigo}`
-    // Nombre COMPLETO tal como está capturado en el CRM (antes se recortaba al
-    // primer nombre y el saludo quedaba incompleto).
-    const nombreCompleto = (c.nombre || '').replace(/\s+/g, ' ').trim()
-    const saludo = nombreCompleto ? `Hola ${nombreCompleto}, ` : 'Hola, '
-    const msg = `${saludo}te comparto esta propiedad:\n\n${propiedad.titulo}\n${formatPrecio(propiedad.precio)}\n\n${link}`
+    // Saludo genérico a propósito: el mensaje NO lleva el nombre del cliente.
+    // El chat ya es de esa persona, así que nombrarla sobraba (y si el nombre
+    // estaba capturado raro en el CRM, se veía mal en el mensaje).
+    const msg = `Hola, te comparto esta propiedad:\n\n${propiedad.titulo}\n${formatPrecio(propiedad.precio)}\n\n${link}`
     Linking.openURL(`https://wa.me/52${tel}?text=${encodeURIComponent(msg)}`)
     setModalEnviar(false)
   }
@@ -1211,6 +1210,9 @@ export default function DetallePropiedad() {
         }
         await ShareLib.shareAsync(pdfUri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: propiedad.codigo ?? 'ficha' })
       }
+      // El PDF también premia, igual que descargar las fotos: 3 XP una sola vez
+      // por ficha generada (y sujeto al tope diario de descargas).
+      premiarDescarga()
     } catch (e: any) {
       if (Platform.OS === 'web') {
         window.alert('No se pudo generar el PDF.')

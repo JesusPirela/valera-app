@@ -45,8 +45,10 @@ const ACCIONES: Record<AccionGamificacion, CfgAccion> = {
   cerrar_venta:          { xp: 200, coins: 50, concepto: 'Venta cerrada 🎉',          categoria: null,           contadorCampo: 'total_ventas'        },
   completar_leccion:     { xp: 30,  coins: 10, concepto: 'Lección completada 📚',     categoria: 'curso',        contadorCampo: null                  },
   completar_curso:       { xp: 100, coins: 20, concepto: 'Curso completado 🎓',       categoria: 'curso',        contadorCampo: 'total_cursos'        },
-  // Se otorga UNA sola vez por descarga completada (NO por cada imagen).
-  descargar_propiedad:   { xp: 3,   coins: 0,  concepto: 'Fotos descargadas 📥',      categoria: null,           contadorCampo: null                  },
+  // Se otorga UNA sola vez por descarga completada (NO por cada imagen) y con
+  // TOPE DIARIO de 200 XP — ver TOPE_DIARIO_DESCARGAS abajo. Cubre tanto las
+  // fotos como la ficha PDF.
+  descargar_propiedad:   { xp: 3,   coins: 0,  concepto: 'Descarga de propiedad 📥',  categoria: null,           contadorCampo: null                  },
 }
 
 // ── Sistema de niveles progresivo ─────────────────────────────
@@ -92,9 +94,25 @@ export function tituloPorNivel(nivel: number): string {
 // principal (publicar, agregar cliente, etc.) se guardaba bien, pero el
 // premio de coins/XP simplemente nunca llegaba al servidor. Se reintenta
 // igual que el resto de escrituras críticas de la app.
+// Acciones con tope diario de XP. Descargar es lo más fácil de repetir de toda
+// la app: sin tope se podía subir de nivel dándole a descargar en bucle. Lo
+// aplica el SERVIDOR (award_xp_descarga); aquí solo se enruta.
+export const TOPE_DIARIO_DESCARGAS = 200
+const ACCIONES_CON_TOPE: Partial<Record<AccionGamificacion, true>> = {
+  descargar_propiedad: true,
+}
+
 export async function registrarAccion(userId: string, accion: AccionGamificacion): Promise<void> {
   try {
     const cfg = ACCIONES[accion]
+
+    if (ACCIONES_CON_TOPE[accion]) {
+      await conReintento(() => supabase.rpc('award_xp_descarga', {
+        p_xp:       cfg.xp,
+        p_concepto: cfg.concepto,
+      }))
+      return  // sin misiones ni contadores asociados
+    }
 
     const exito = await conReintento(() => supabase.rpc('award_xp_coins', {
       p_user_id:         userId,
@@ -113,6 +131,31 @@ export async function registrarAccion(userId: string, accion: AccionGamificacion
     }
   } catch (e) {
     console.warn('[Gamification] registrarAccion:', e)
+  }
+}
+
+// ── Seguimiento a un cliente ──────────────────────────────────────────────
+// Un seguimiento es volver a un cliente YA EXISTENTE y moverlo: editarlo,
+// completarle un recordatorio o registrarle un seguimiento rápido. NO es darlo
+// de alta (antes la misión diaria avanzaba con solo crear el cliente).
+//
+// El premio lo decide el servidor y solo cuenta UNA VEZ POR CLIENTE POR DÍA;
+// así, reabrir y guardar el mismo cliente en bucle ya no farmea XP ni misiones.
+export async function registrarSeguimiento(userId: string, clienteId: string): Promise<void> {
+  try {
+    if (!clienteId) return
+    const { data, error } = await supabase.rpc('registrar_seguimiento_cliente', {
+      p_cliente_id: clienteId,
+    })
+    if (error || !data?.ok || !(data.otorgado > 0)) return  // repetido hoy o ajeno
+
+    // Recalcular misiones desde la fuente de verdad (no incrementos a ciegas).
+    await sincronizarMisionesDiarias(userId)
+    await sincronizarMisionesBase(userId).catch(() => {})
+    // Cumplir la meta diaria es lo que mantiene viva la racha.
+    await supabase.rpc('sincronizar_racha')
+  } catch (e) {
+    console.warn('[Gamification] registrarSeguimiento:', e)
   }
 }
 

@@ -7,7 +7,7 @@ import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ETAPAS_CLIENTE } from './crm'
-import { registrarAccion } from '../../lib/gamification'
+import { registrarAccion, registrarSeguimiento } from '../../lib/gamification'
 import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueClienteUpdate, enqueueClienteCreate, genUUID } from '../../lib/offline-queue'
 import { useQueryClient } from '@tanstack/react-query'
@@ -464,6 +464,9 @@ export default function ClienteForm() {
           cliente_id: params.id!, user_id: idGuardado,
           tipo: 'nota', descripcion: 'Información del cliente actualizada.',
         })
+        // Editar un cliente YA CREADO es dar seguimiento. Cuenta una sola vez
+        // por cliente al día (lo controla el servidor).
+        registrarSeguimiento(idGuardado, params.id!).catch(() => {})
         if (estado !== estadoOriginalRef.current) {
           if (estado === 'cita_agendada') registrarAccion(idGuardado, 'agendar_cita').catch(() => {})
           else if (estado === 'compro')   registrarAccion(idGuardado, 'cerrar_venta').catch(() => {})

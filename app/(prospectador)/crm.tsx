@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { normalizar } from '../../lib/texto'
-import { registrarAccion } from '../../lib/gamification'
+import { registrarAccion , registrarSeguimiento } from '../../lib/gamification'
 
 const VISTA_CRM_KEY = '@valera_crm_vista'
 import { useColors, useTheme } from '../../lib/ThemeContext'
@@ -639,17 +639,12 @@ export default function CRM() {
           Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Solicitud enviada', msg)
         }
       }
-      // Seguimiento hecho: si reprogramó el PRÓXIMO CONTACTO de un cliente cuyo
-      // seguimiento ya estaba VENCIDO/para hoy, cuenta como seguimiento completado
-      // (misión). Solo cuando el previo estaba vencido → no se puede farmear
-      // reagendando a futuro varias veces (una vez a futuro, ya no está vencido).
-      if (campo === 'proximo_contacto' && value && proximoPrevio) {
-        const previoVencido = new Date(proximoPrevio).getTime() <= Date.now()
-        const cambio = new Date(value).getTime() !== new Date(proximoPrevio).getTime()
-        if (previoVencido && cambio) {
-          const { data: { user } } = await getUsuarioActual()
-          if (user) registrarAccion(user.id, 'completar_seguimiento').catch(() => {})
-        }
+      // Editar cualquier dato de un cliente ya existente ES dar seguimiento.
+      // Ya no hace falta la regla del "próximo contacto vencido" para evitar
+      // farmeo: el servidor solo lo cuenta una vez por cliente al día.
+      {
+        const { data: { user } } = await getUsuarioActual()
+        if (user) registrarSeguimiento(user.id, id).catch(() => {})
       }
       mostrarGuardado('ok')
     } else if (errServidor) {

@@ -10,7 +10,7 @@ import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ETAPAS_CLIENTE } from './crm'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
-import { registrarAccion } from '../../lib/gamification'
+import { registrarAccion , registrarSeguimiento } from '../../lib/gamification'
 import { programarRecordatorios } from '../../lib/notificaciones-locales'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { Ionicons } from '@expo/vector-icons'
@@ -316,7 +316,8 @@ export default function DetalleCliente() {
     })
     if (!error) {
       const { data: { user } } = await getUsuarioActual()
-      if (user) registrarAccion(user.id, 'completar_seguimiento').catch(() => {})
+      // Completar un recordatorio es seguimiento de ESE cliente (1 vez al día).
+      if (user) registrarSeguimiento(user.id, id as string).catch(() => {})
     }
   }
 
@@ -333,7 +334,7 @@ export default function DetalleCliente() {
         fecha_hora: ahora, completado: true,
       })
       if (error) { Alert.alert('Error al guardar', error.message); return }
-      registrarAccion(uid, 'completar_seguimiento').catch(() => {})
+      registrarSeguimiento(uid, id as string).catch(() => {})
       setTituloSeguimiento('')
       setModalSeguimientoRapido(false)
       refetch()
