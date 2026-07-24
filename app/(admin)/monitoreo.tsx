@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Platform } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
@@ -50,7 +51,7 @@ export default function Monitoreo() {
       if (yaEsta) {
         await supabase.from('monitoreo_errores_revisados').delete().eq('mensaje', mensaje)
       } else {
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await getUsuarioActual()
         await supabase.from('monitoreo_errores_revisados').upsert({ mensaje, revisado_por: user?.id ?? null, revisado_en: new Date().toISOString() })
       }
     } catch { /* si falla, el estado local ya cambió; se corrige al recargar */ }

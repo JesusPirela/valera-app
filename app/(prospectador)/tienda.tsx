@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { comprarItem, getCoinsDisplay, registrarPremioRuleta, calcularNivel } from '../../lib/gamification'
 import { RuletaModal, checkMilestone, CONFIG_DEFAULT, type Premio, type RuletaConfig } from '../../components/RuletaModal'
@@ -87,7 +88,7 @@ export default function Tienda() {
 
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
     setUserId(user.id)
 

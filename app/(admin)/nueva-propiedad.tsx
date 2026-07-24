@@ -17,6 +17,7 @@ import {
 import { router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
@@ -660,7 +661,7 @@ export default function NuevaPropiedad() {
 
     setLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       if (!user) throw new Error('Sesión no válida. Vuelve a iniciar sesión.')
 
       // Siguiente número de código. Preferimos la función SQL (rápida y sin límite

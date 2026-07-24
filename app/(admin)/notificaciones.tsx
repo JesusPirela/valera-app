@@ -6,6 +6,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
@@ -209,7 +210,7 @@ export default function AdminNotificaciones() {
   const yaCargoRef = useRef(false)
   async function cargarNotificaciones() {
     if (!yaCargoRef.current) setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
 
     const { data, error } = await supabase
@@ -234,7 +235,7 @@ export default function AdminNotificaciones() {
 
   async function marcarTodasLeidas() {
     setMarcandoTodas(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (user) {
       await supabase.from('notificaciones').update({ leida: true }).eq('user_id', user.id).eq('leida', false)
       setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })))

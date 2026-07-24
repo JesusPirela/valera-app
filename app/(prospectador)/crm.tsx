@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { normalizar } from '../../lib/texto'
 import { registrarAccion } from '../../lib/gamification'
@@ -374,7 +375,7 @@ export default function CRM() {
         .is('eliminado_at', null)
         .order('updated_at', { ascending: false })
       if (soloMios) {
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await getUsuarioActual()
         if (user) q = q.eq('responsable_id', user.id)
       }
       const { data, error } = await q
@@ -628,7 +629,7 @@ export default function CRM() {
 
     if (ok) {
       if (campo === 'estado' && value !== estadoPrevio) {
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await getUsuarioActual()
         if (user) {
           if (value === 'cita_agendada') registrarAccion(user.id, 'agendar_cita').catch(() => {})
           else if (value === 'compro')   registrarAccion(user.id, 'cerrar_venta').catch(() => {})
@@ -646,7 +647,7 @@ export default function CRM() {
         const previoVencido = new Date(proximoPrevio).getTime() <= Date.now()
         const cambio = new Date(value).getTime() !== new Date(proximoPrevio).getTime()
         if (previoVencido && cambio) {
-          const { data: { user } } = await supabase.auth.getUser()
+          const { data: { user } } = await getUsuarioActual()
           if (user) registrarAccion(user.id, 'completar_seguimiento').catch(() => {})
         }
       }
@@ -791,7 +792,7 @@ export default function CRM() {
   }
 
   async function handleImportConfirm(rows: ImportedRow[]) {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) throw new Error('Sesión expirada')
     const { error } = await supabase.from('clientes').insert(rows.map(r => ({
       nombre: r.nombre, telefono: r.telefono,

@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar } from '../../lib/texto'
@@ -91,7 +92,7 @@ export default function AdminConstructoras() {
   const { refreshControl } = usePullRefresh(async () => { await Promise.all([cargarCatalogo(), cargarContactos()]) })
 
   async function cargarRol() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) return
     const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
     setRol(data?.role ?? null)

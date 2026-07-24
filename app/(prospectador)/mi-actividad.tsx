@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from 'expo-router'
 import Svg, { Rect, Text as SvgText, Line } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type ActividadPeriodo = {
@@ -110,7 +111,7 @@ export default function MiActividad() {
   async function cargar(p: 'hoy' | 'semana' | 'mes') {
     // Solo spinner completo la primera vez; al volver, refresca en segundo plano
     if (!yaCargoRef.current) setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
     setUserId(user.id)
     setPeriodo(p)

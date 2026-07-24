@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system'
@@ -233,7 +234,7 @@ export default function UniversityCurso() {
     if (!cursoId) return
     if (!yaCargoRef.current) setLoading(true)
     yaCargoRef.current = true
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
 
     const [

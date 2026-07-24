@@ -18,6 +18,7 @@ import { Image } from 'expo-image'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { esPlusOMejor, esStaffSupervision } from '../../lib/permisos'
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb, proxyImagen } from '../../lib/img'
@@ -411,7 +412,7 @@ export default function DetallePropiedad() {
   }, [lightboxVisible, propiedad])
 
   async function cargarPublicacion() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) return
     const { data } = await supabase
       .from('propiedad_publicacion')
@@ -593,7 +594,7 @@ export default function DetallePropiedad() {
   }
 
   async function guardarNota() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) return
     setGuardandoNota(true)
     const { error } = await supabase
@@ -604,7 +605,7 @@ export default function DetallePropiedad() {
   }
 
   async function registrarActividad(tipo: 'vista' | 'descarga') {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) return
     await supabase.from('propiedad_actividad').insert({ propiedad_id: id, user_id: user.id, tipo })
   }
@@ -623,7 +624,7 @@ export default function DetallePropiedad() {
     setBuscaCliente('')
     setCargandoClientes(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       if (!user) { setCargandoClientes(false); return }
       const { data } = await supabase
         .from('clientes')
@@ -654,7 +655,7 @@ export default function DetallePropiedad() {
   // NO por cada imagen.
   async function premiarDescarga() {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       if (user) registrarAccion(user.id, 'descargar_propiedad').catch(() => {})
     } catch { /* no-op */ }
   }
@@ -1223,7 +1224,7 @@ export default function DetallePropiedad() {
 
   async function pedirDiseno() {
     if (!propiedad) return
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) return
 
     const hoyInicio = new Date()
@@ -1276,7 +1277,7 @@ export default function DetallePropiedad() {
     }
     setRegistrandoConstructora(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       if (!user) return
 
       const nombreConstructora = propiedad.nombre_constructora?.trim() ?? ''
@@ -1373,7 +1374,7 @@ export default function DetallePropiedad() {
     setNuevoTelefono('')
     setModalCitaVisible(true)
     setLoadingClientes(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     const { data } = await supabase
       .from('clientes')
       .select('id, nombre, telefono, estado, tipo_operacion, nivel_interes, email, tipo_credito, presupuesto, zona_busqueda, num_personas, tiene_mascotas, detalle_mascotas, fecha_mudanza, problemas_poliza')
@@ -1404,7 +1405,7 @@ export default function DetallePropiedad() {
       return
     }
     setGuardandoCliente(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     const { data, error } = await supabase
       .from('clientes')
       .insert({
@@ -1427,7 +1428,7 @@ export default function DetallePropiedad() {
 
   async function confirmarCitaConFecha() {
     if (!propiedad || !clienteParaCita) return
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) return
 
     await supabase

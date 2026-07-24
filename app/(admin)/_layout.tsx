@@ -4,6 +4,7 @@ import ToggleSwitch from '../../components/ToggleSwitch'
 import { Stack, router } from 'expo-router'
 import * as Notifications from 'expo-notifications'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme } from '../../lib/ThemeContext'
 import { useVistaComo } from '../../lib/VistaComo'
@@ -94,7 +95,7 @@ export default function AdminLayout() {
   }, [])
 
   async function cargarNoLeidas() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user || !mountedRef.current) return
     const { count } = await supabase
       .from('notificaciones')

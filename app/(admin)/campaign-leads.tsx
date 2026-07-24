@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
@@ -132,7 +133,7 @@ export default function CampaignLeads() {
     if (updateError) { alerta('Error al actualizar leads: ' + updateError.message); setAsignando(false); return }
 
     // 4. Notificar al usuario
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (user) {
       await supabase.from('notificaciones').insert({
         user_id: usuarioId,

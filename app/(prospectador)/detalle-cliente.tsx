@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ETAPAS_CLIENTE } from './crm'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -254,7 +255,7 @@ export default function DetalleCliente() {
   async function agregarInteraccion() {
     if (!textoInteraccion.trim()) { Alert.alert('Requerido', 'Escribe una descripción.'); return }
     setGuardandoInteraccion(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     const { error } = await supabase.from('interacciones').insert({
       cliente_id: id, user_id: user!.id, tipo: tipoInteraccion, descripcion: textoInteraccion.trim(),
     })
@@ -314,7 +315,7 @@ export default function DetalleCliente() {
       return { ...old, recordatorios: old.recordatorios.map(r => r.id === recId ? { ...r, completado: true } : r) }
     })
     if (!error) {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       if (user) registrarAccion(user.id, 'completar_seguimiento').catch(() => {})
     }
   }

@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { normalizar } from '../../lib/texto'
 import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ORDEN_ESTADOS as ORDEN_ESTADOS_BASE } from '../(prospectador)/crm'
@@ -103,7 +104,7 @@ export default function AdminCRM() {
 
     let yo = miId
     if (!yo) {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       yo = user?.id ?? null
       if (yo) setMiId(yo)
     }

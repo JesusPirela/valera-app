@@ -6,6 +6,7 @@ import {
 import { WebView } from 'react-native-webview'
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import { registrarAccion } from '../../lib/gamification'
 
@@ -267,7 +268,7 @@ export default function UniversityLeccion() {
   async function cargar() {
     if (!id) return
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
 
     const [
@@ -308,7 +309,7 @@ export default function UniversityLeccion() {
     if (!leccion || !cursoId || yaCompletada || completando) return
     setCompletando(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       const { data, error } = await supabase.rpc('completar_leccion', {
         p_leccion_id: leccion.id,
         p_curso_id: cursoId,
@@ -378,7 +379,7 @@ export default function UniversityLeccion() {
 
     setEntregando(tareaId)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       if (!user) return
 
       let archivoUrl: string | null = null

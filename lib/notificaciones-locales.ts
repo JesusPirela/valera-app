@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { supabase } from './supabase'
 
+import { getUsuarioActual } from './sesion'
 // El handler global (qué tan visible es la notificación con la app abierta)
 // se define una sola vez en app/_layout.tsx, que siempre se carga primero.
 
@@ -58,7 +59,7 @@ export async function programarRecordatorios() {
     }
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user } } = await getUsuarioActual()
   if (!user) return
 
   const ahora  = new Date()

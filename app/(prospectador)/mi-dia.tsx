@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 
 const TEAL = '#1a6470'
@@ -67,7 +68,7 @@ export default function MiDia() {
   async function cargar(silent = false) {
     if (!silent) setLoading(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
 
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0)

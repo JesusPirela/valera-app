@@ -4,6 +4,7 @@ import {
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { calcularNivel, tituloPorNivel } from '../../lib/gamification'
 
@@ -87,7 +88,7 @@ export default function MiHistorial() {
 
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
 
     const [perfil, stats, minConexion, txs, propiedades, publicaciones, clientes, seguimientos, interacciones, cursos, xpTxsRes] = await Promise.all([

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native'
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { calcularCrmMetricas, type CrmMetricas } from '../../lib/crmMetricas'
@@ -20,7 +21,7 @@ export default function AsesorEstadisticas() {
   async function cargar(m: Modo) {
     if (!yaCargoRef.current) setLoading(true)
     yaCargoRef.current = true
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     const resultado = await calcularCrmMetricas(
       m === 'propio' ? (user?.id ?? null) : null,
       m === 'propio' ? 'Mis estadísticas' : 'Equipo completo'

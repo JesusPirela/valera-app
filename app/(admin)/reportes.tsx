@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
@@ -514,7 +515,7 @@ export default function Reportes() {
     const destinos = schedEmails.split(/[,;\n]/).map(e => e.trim()).filter(Boolean)
     if (!destinos.length) { alerta('Ingresa al menos un destinatario'); return }
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) { alerta('No autenticado'); return }
 
     const { error } = await supabase.from('report_programados').insert({

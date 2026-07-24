@@ -229,6 +229,17 @@ export default function ClienteForm() {
   const [loading, setLoading] = useState(esEdicion)
   const [guardando, setGuardando] = useState(false)
 
+  // Se guarda el id del usuario en cuanto la pantalla abre, con la sesión sana.
+  // Así, si al momento de GUARDAR la sesión no responde (socket muerto tras un
+  // rato de inactividad), no hace falta preguntar quién es: ya lo sabemos y el
+  // cliente se puede encolar sin perder nada de lo escrito.
+  const usuarioIdRef = useRef<string | null>(null)
+  useFocusEffect(useCallback(() => {
+    supabase.auth.getSession()
+      .then(({ data }) => { if (data.session?.user?.id) usuarioIdRef.current = data.session.user.id })
+      .catch(() => {})
+  }, []))
+
   // Común
   const [tipoOperacion, setTipoOperacion] = useState<'venta' | 'renta' | null>(null)
   const [nombre, setNombre] = useState('')
@@ -337,16 +348,30 @@ export default function ClienteForm() {
     setGuardando(true)
     try {
       // getSession() lee del storage local — funciona offline (getUser() hace red y falla).
-      // En conexiones lentas el auth lock puede tardar; se reintenta una vez antes de fallar.
-      let session = (await supabase.auth.getSession().catch(async (e) => {
-        if (e?.message?.includes('auth lock timeout')) {
-          await new Promise(r => setTimeout(r, 2000))
-          return supabase.auth.getSession()
-        }
-        throw e
-      })).data.session
+      //
+      // PERO puede tardar: si el token venció, auth-js lo refresca por dentro, y
+      // si el socket murió (típico al volver tras un rato) esa petición se queda
+      // colgada. Sin tope, el botón se quedaba girando indefinidamente y el
+      // usuario perdía todo lo escrito — el bug de "vuelvo, doy guardar y no
+      // deja hasta recargar". Con tope: si en 8 s no sabemos quién es el
+      // usuario, NO se pierde nada; se encola como si estuviéramos offline y la
+      // cola lo sube sola en cuanto la sesión se recupera.
+      const sesionConTope = Promise.race([
+        supabase.auth.getSession().then(r => r.data.session).catch(() => null),
+        new Promise<null>(r => setTimeout(() => r(null), 8000)),
+      ])
+      let session = await sesionConTope
+      if (!session) {
+        // Un segundo intento corto: el refresh suele haber terminado ya.
+        await new Promise(r => setTimeout(r, 1500))
+        session = await Promise.race([
+          supabase.auth.getSession().then(r => r.data.session).catch(() => null),
+          new Promise<null>(r => setTimeout(() => r(null), 4000)),
+        ])
+      }
       const user = session?.user ?? null
-      if (!user) { mostrarError('Error', 'Sesión expirada, vuelve a iniciar sesión.'); return }
+      const idGuardado = user?.id ?? usuarioIdRef.current
+      if (!idGuardado) { mostrarError('Error', 'Sesión expirada, vuelve a iniciar sesión.'); return }
 
       const esRenta = tipoOperacion === 'renta'
 
@@ -378,8 +403,17 @@ export default function ClienteForm() {
         problemas_poliza: esRenta ? problemasPoliza : null,
       }
 
-      // ── OFFLINE: encolar y salir ────────────────────────────────
-      if (!isOnline) {
+      // ── SIN CONEXIÓN o SIN SESIÓN A TIEMPO: encolar y salir ─────
+      // Encolar es lo que evita perder lo escrito, pero NO es lo mismo que
+      // haberlo guardado: se avisa para que nadie se quede con la duda si tarda
+      // en subir.
+      if (!isOnline || !session) {
+        if (isOnline && !session) {
+          mostrarError(
+            'Guardado pendiente',
+            'No se pudo confirmar tu sesión en este momento. El cliente quedó guardado en el dispositivo y se subirá solo; si tarda, recarga la app.',
+          )
+        }
         if (esEdicion) {
           await enqueueClienteUpdate(params.id!, payload)
           // Actualización optimista en cache
@@ -389,8 +423,8 @@ export default function ClienteForm() {
             (old ?? []).map(cl => cl.id === params.id ? { ...cl, ...payload } : cl))
         } else {
           const tempId = genUUID()
-          const fullPayload = { ...payload, responsable_id: user.id, id: tempId, created_at: new Date().toISOString() }
-          await enqueueClienteCreate(tempId, { ...payload, responsable_id: user.id })
+          const fullPayload = { ...payload, responsable_id: idGuardado, id: tempId, created_at: new Date().toISOString() }
+          await enqueueClienteCreate(tempId, { ...payload, responsable_id: idGuardado })
           // Insertar optimistamente en cache con el UUID local
           queryClient.setQueryData<any[]>(['clientes', 'mios', 'v2'], (old) => [fullPayload, ...(old ?? [])])
           queryClient.setQueryData<any[]>(['clientes', 'all', 'v2'], (old) => [fullPayload, ...(old ?? [])])
@@ -401,30 +435,30 @@ export default function ClienteForm() {
       }
 
       // ── ONLINE: guardar directamente ────────────────────────────
-      const { data: perfil } = await supabase.from('profiles').select('nombre').eq('id', user.id).single()
+      const { data: perfil } = await supabase.from('profiles').select('nombre').eq('id', idGuardado).single()
       const nombreProspectador = perfil?.nombre ?? 'Un prospectador'
 
       if (esEdicion) {
         const { error } = await supabase.from('clientes').update(payload).eq('id', params.id!)
         if (error) { mostrarError('Error al guardar', error.message); return }
         await supabase.from('interacciones').insert({
-          cliente_id: params.id!, user_id: user.id,
+          cliente_id: params.id!, user_id: idGuardado,
           tipo: 'nota', descripcion: 'Información del cliente actualizada.',
         })
         if (estado !== estadoOriginalRef.current) {
-          if (estado === 'cita_agendada') registrarAccion(user.id, 'agendar_cita').catch(() => {})
-          else if (estado === 'compro')   registrarAccion(user.id, 'cerrar_venta').catch(() => {})
+          if (estado === 'cita_agendada') registrarAccion(idGuardado, 'agendar_cita').catch(() => {})
+          else if (estado === 'compro')   registrarAccion(idGuardado, 'cerrar_venta').catch(() => {})
         }
       } else {
         const { data, error } = await supabase
           .from('clientes')
-          .insert({ ...payload, responsable_id: user.id })
+          .insert({ ...payload, responsable_id: idGuardado })
           .select('id')
           .single()
         if (error) { mostrarError('Error al registrar', error.message); return }
         if (data) {
           await supabase.from('interacciones').insert({
-            cliente_id: data.id, user_id: user.id,
+            cliente_id: data.id, user_id: idGuardado,
             tipo: 'nota', descripcion: 'Cliente registrado en el CRM.',
           })
           await supabase.rpc('notificar_admins_nuevo_cliente', {
@@ -432,9 +466,9 @@ export default function ClienteForm() {
             p_cliente_id: data.id,
             p_prospectador_nombre: nombreProspectador,
           })
-          registrarAccion(user.id, 'agregar_cliente').catch(() => {})
-          if (estado === 'cita_agendada') registrarAccion(user.id, 'agendar_cita').catch(() => {})
-          else if (estado === 'compro')   registrarAccion(user.id, 'cerrar_venta').catch(() => {})
+          registrarAccion(idGuardado, 'agregar_cliente').catch(() => {})
+          if (estado === 'cita_agendada') registrarAccion(idGuardado, 'agendar_cita').catch(() => {})
+          else if (estado === 'compro')   registrarAccion(idGuardado, 'cerrar_venta').catch(() => {})
         }
       }
 

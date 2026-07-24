@@ -4,6 +4,7 @@ import { Tabs, usePathname, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useTheme } from '../../lib/ThemeContext'
 import { AccentBackground } from '../../lib/patrones'
 import { trackLoginDiario } from '../../lib/gamification'
@@ -67,7 +68,7 @@ export default function ProspectadorLayout() {
   }, [])
 
   async function cargarNoLeidas() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user || !mountedRef.current) return
     const { count } = await supabase
       .from('notificaciones')
@@ -78,7 +79,7 @@ export default function ProspectadorLayout() {
   }
 
   async function verificarRecordatorios() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user || !mountedRef.current) return
 
     const { data: pendientes } = await supabase
@@ -126,7 +127,7 @@ export default function ProspectadorLayout() {
   useEffect(() => { cargarNoLeidas() }, [pathname])
 
   async function verificarAscenso() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user || !mountedRef.current) return
     const { data } = await supabase
       .from('notificaciones')
@@ -149,7 +150,7 @@ export default function ProspectadorLayout() {
 
   useEffect(() => {
     // Tracking de login diario y streak
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    getUsuarioActual().then(({ data: { user } }) => {
       if (user) trackLoginDiario(user.id).catch(() => {})
     })
 

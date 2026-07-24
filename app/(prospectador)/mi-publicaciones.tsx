@@ -4,6 +4,7 @@ import {
 } from 'react-native'
 import { router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { ThumbImage } from '../../components/ThumbImage'
@@ -38,7 +39,7 @@ export default function MisPublicaciones() {
 
   async function cargar() {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
     const { data } = await supabase
       .from('propiedad_publicacion')

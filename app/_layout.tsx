@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { View, ActivityIndicator, AppState, Platform, Modal, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native'
 import { Stack, router, usePathname } from 'expo-router'
 import { supabase } from '../lib/supabase'
+import { getUsuarioActual } from '../lib/sesion'
 import { Session } from '@supabase/supabase-js'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { queryClient, persister, PERSIST_MAX_AGE, shouldPersistQuery } from '../lib/queryClient'
@@ -194,7 +195,7 @@ export default function RootLayout() {
       if (sessionId || iniciando) return
       iniciando = true
       try {
-        const uid = userId ?? (await supabase.auth.getUser()).data.user?.id
+        const uid = userId ?? (await getUsuarioActual()).data.user?.id
         if (!uid) return
         registrarPushToken(uid)
         registrarVersionApp(uid)

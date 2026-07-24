@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { useColors, useTheme } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
@@ -194,10 +195,10 @@ export default function Proyectos() {
     if (editando) {
       const { error } = await supabase.from('proyectos').update(payload).eq('id', editando.id)
       if (error) { alerta('Error: ' + error.message); setGuardando(false); return }
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       if (user) await supabase.from('proyecto_actividades').insert({ proyecto_id: editando.id, user_id: user.id, descripcion: `Proyecto editado · estado: ${ESTADOS[form.estado]?.label ?? form.estado}` })
     } else {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       const { data: nuevo, error } = await supabase.from('proyectos').insert({ ...payload, creado_por: user?.id }).select().single()
       if (error) { alerta('Error: ' + error.message); setGuardando(false); return }
       if (nuevo && user) await supabase.from('proyecto_actividades').insert({ proyecto_id: nuevo.id, user_id: user.id, descripcion: 'Proyecto creado' })
@@ -207,7 +208,7 @@ export default function Proyectos() {
 
   async function cerrarProyecto(p: Proyecto) {
     confirmar(`¿Marcar "${p.titulo}" como completado?`, async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       await supabase.from('proyectos').update({ estado: 'completado', progreso: 100 }).eq('id', p.id)
       if (user) await supabase.from('proyecto_actividades').insert({ proyecto_id: p.id, user_id: user.id, descripcion: 'Proyecto cerrado como completado ✅' })
       cargar()
@@ -232,7 +233,7 @@ export default function Proyectos() {
   async function agregarActividad() {
     if (!detalle || !nuevaAct.trim()) return
     setGuardandoAct(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     await supabase.from('proyecto_actividades').insert({ proyecto_id: detalle.id, user_id: user!.id, descripcion: nuevaAct.trim() })
     setGuardandoAct(false); setNuevaAct(''); cargarActividades(detalle.id)
   }
@@ -245,7 +246,7 @@ export default function Proyectos() {
       const nuevoProy = { ...detalle, progreso: pct }
       setDetalle(nuevoProy)
       setProyectos(ps => ps.map(p => p.id === detalle.id ? { ...p, progreso: pct } : p))
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       if (user) await supabase.from('proyecto_actividades').insert({ proyecto_id: detalle.id, user_id: user.id, descripcion: `Progreso actualizado a ${pct}%` })
       cargarActividades(detalle.id)
     }
@@ -261,7 +262,7 @@ export default function Proyectos() {
       const { data: up, error } = await supabase.storage.from('proyectos-archivos').upload(path, file, { contentType: mimeType, upsert: true })
       if (error) { alerta('Error al subir: ' + error.message); setSubiendoArchivo(false); return }
       const { data: urlData } = supabase.storage.from('proyectos-archivos').getPublicUrl(up.path)
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
       await supabase.from('proyecto_archivos').insert({
         proyecto_id: detalle.id, user_id: user!.id,
         nombre, url: urlData.publicUrl,
@@ -608,7 +609,7 @@ export default function Proyectos() {
                             key={v}
                             style={[s.progQuick, { borderColor: detalle.progreso === v ? est.color : (darkMode ? '#2a4560' : '#e2e8f0'), backgroundColor: detalle.progreso === v ? est.color : 'transparent' }]}
                             onPress={async () => {
-                              const { data: { user } } = await supabase.auth.getUser()
+                              const { data: { user } } = await getUsuarioActual()
                               await supabase.from('proyectos').update({ progreso: v }).eq('id', detalle.id)
                               if (user) await supabase.from('proyecto_actividades').insert({ proyecto_id: detalle.id, user_id: user.id, descripcion: `Progreso actualizado a ${v}%` })
                               setDetalle(d => d ? { ...d, progreso: v } : d)

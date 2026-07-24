@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
+import { getUsuarioActual } from '../../lib/sesion'
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 type EstadoCita =
@@ -419,7 +420,7 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
         if (!nuevoNombre.trim() || !nuevoTelefono.trim()) {
           alerta('Nombre y teléfono son obligatorios.'); setGuardando(false); return
         }
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await getUsuarioActual()
         const { data: nuevo, error: errC } = await supabase.from('clientes').insert({
           nombre: nuevoNombre.trim(), telefono: nuevoTelefono.trim(),
           fuente_lead: 'otro', estado: 'por_perfilar',
@@ -1028,7 +1029,7 @@ export default function CoordinacionCitas() {
   }
 
   async function cargarMiPerfil() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) return
     const { data: perfil } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
     if (mountedRef.current) { setMiId(user.id); setMiRole(perfil?.role ?? null) }

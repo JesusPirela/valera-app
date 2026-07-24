@@ -90,5 +90,24 @@ export function useOfflineSync(): OfflineSyncState {
     return () => sub.remove()
   }, [syncNow])
 
+  useEffect(() => {
+    // Drenado periódico. Los disparadores de arriba (abrir la app, recuperar
+    // conexión, volver a primer plano) NO cubren un caso real: cuando algo se
+    // encola no por falta de internet, sino porque la SESIÓN no respondió a
+    // tiempo al guardar (socket muerto tras un rato inactivo). Ahí la red nunca
+    // se cae, así que no hay transición offline→online y en web la pestaña
+    // sigue "activa": la cola se quedaba esperando a la próxima apertura.
+    // Con esto lo pendiente sube solo en cuanto la sesión se recupera.
+    const id = setInterval(async () => {
+      try {
+        if (await getPendingCount() > 0) {
+          const state = await NetInfo.fetch()
+          if (state.isConnected && state.isInternetReachable !== false) syncNow()
+        }
+      } catch { /* se reintenta al siguiente tick */ }
+    }, 45000)
+    return () => clearInterval(id)
+  }, [syncNow])
+
   return { isOnline, isSyncing, pendingCount, syncError, refreshPending, syncNow }
 }

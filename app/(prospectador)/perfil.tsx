@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker'
 import * as Notifications from 'expo-notifications'
 import Constants from 'expo-constants'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import {
@@ -185,7 +186,7 @@ export default function Perfil() {
 
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
     setUserId(user.id)
     setEmail(user.email ?? '')

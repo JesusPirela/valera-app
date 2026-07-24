@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
@@ -269,7 +270,7 @@ export default function UniversityCursoForm() {
 
     setGuardando(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await getUsuarioActual()
 
       const payload = {
         titulo: titulo.trim(),
