@@ -13,18 +13,22 @@
  */
 
 $codigo = isset($_GET['codigo']) ? preg_replace('/[^A-Za-z0-9._-]/', '', $_GET['codigo']) : '';
+// Si el link se compartió en inglés (…/ficha/VR-265?lang=en), la vista previa
+// también sale en inglés usando la traducción ya guardada (titulo_en).
+$enIngles = isset($_GET['lang']) && $_GET['lang'] === 'en';
 
 // Los dos valores los sustituye el workflow de deploy desde los secrets.
 $SUPABASE = 'https://ystxicgrryyzhrxinsbq.supabase.co';
 $ANON     = 'sb_publishable_vWpgej-J549DakTpiXRZYA_ceu_y9rl';
 $BASE     = 'https://valeraapp.valerarealestate.com';
 
-$ogTitle = 'Valera Real Estate';
-$ogDesc  = 'Mira esta propiedad disponible';
+$ogTitle = $enIngles ? 'Valera Real Estate' : 'Valera Real Estate';
+$ogDesc  = $enIngles ? 'Check out this property' : 'Mira esta propiedad disponible';
 $ogImage = '';
+$ogLocale = $enIngles ? 'en_US' : 'es_MX';
 
 if ($codigo !== '') {
-    $sel = 'titulo,precio,direccion,operacion,tipo,propiedad_imagenes(url,orden)';
+    $sel = 'titulo,titulo_en,precio,direccion,operacion,tipo,propiedad_imagenes(url,orden)';
     $url = $SUPABASE . '/rest/v1/propiedades?select=' . rawurlencode($sel)
          . '&codigo=eq.' . rawurlencode($codigo)
          . '&limit=1';
@@ -61,7 +65,10 @@ if ($codigo !== '') {
 
     if (!empty($rows[0])) {
         $p = $rows[0];
-        if (!empty($p['titulo'])) $ogTitle = $p['titulo'];
+        // En inglés se usa titulo_en si ya está traducido; si aún no, se cae al
+        // título en español (mejor eso que nada en la vista previa).
+        if ($enIngles && !empty($p['titulo_en'])) $ogTitle = $p['titulo_en'];
+        elseif (!empty($p['titulo'])) $ogTitle = $p['titulo'];
 
         $partes = [];
         if (!empty($p['precio'])) $partes[] = '$' . number_format((float)$p['precio'], 0, '.', ',') . ' MXN';
@@ -80,11 +87,14 @@ if ($codigo !== '') {
     }
 }
 
+// La URL canónica conserva el idioma para que al abrirla la app arranque igual.
+$ogUrl = $BASE . '/ficha/' . $codigo . ($enIngles ? '?lang=en' : '');
 $meta  = '<meta property="og:type" content="website">' . "\n";
 $meta .= '<meta property="og:site_name" content="Valera Real Estate">' . "\n";
+$meta .= '<meta property="og:locale" content="' . $ogLocale . '">' . "\n";
 $meta .= '<meta property="og:title" content="' . htmlspecialchars($ogTitle, ENT_QUOTES) . '">' . "\n";
 $meta .= '<meta property="og:description" content="' . htmlspecialchars($ogDesc, ENT_QUOTES) . '">' . "\n";
-$meta .= '<meta property="og:url" content="' . htmlspecialchars($BASE . '/ficha/' . $codigo, ENT_QUOTES) . '">' . "\n";
+$meta .= '<meta property="og:url" content="' . htmlspecialchars($ogUrl, ENT_QUOTES) . '">' . "\n";
 if ($ogImage !== '') {
     $meta .= '<meta property="og:image" content="' . htmlspecialchars($ogImage, ENT_QUOTES) . '">' . "\n";
     $meta .= '<meta property="og:image:width" content="1200">' . "\n";
