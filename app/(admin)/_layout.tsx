@@ -1,7 +1,7 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { Image, Platform, Text, TouchableOpacity, View, StyleSheet } from 'react-native'
 import ToggleSwitch from '../../components/ToggleSwitch'
-import { Stack, router } from 'expo-router'
+import { Stack, router, usePathname, useGlobalSearchParams } from 'expo-router'
 import * as Notifications from 'expo-notifications'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
@@ -12,20 +12,45 @@ import HeaderBack from '../../components/HeaderBack'
 
 const LOGO = require('../../assets/logo-recortado.png')
 
+// Pantallas que existen con el MISMO nombre en (admin) y en (prospectador). Al
+// devolver a un usuario a su app se puede conservar la pantalla solo si está en
+// esta lista; si no, no existe del otro lado y habría que ir al inicio.
+const COMPARTIDAS = new Set([
+  'chat-cliente', 'chats', 'constructoras', 'crm', 'detalle-cliente',
+  'misiones', 'notificaciones', 'propiedades', 'tareas', 'university',
+])
+
 export default function AdminLayout() {
   const [noLeidas, setNoLeidas] = useState(0)
   const mountedRef = useRef(false)
   const { darkMode, toggleDarkMode } = useTheme()
   const { vistaComo, listo: vistaComoListo } = useVistaComo()
+  const pathname = usePathname()
+  const paramsUrl = useGlobalSearchParams()
 
   // Diez pantallas existen con el mismo nombre en (admin) y en (prospectador)
   // — propiedades, crm, misiones, university… — y en web la URL no lleva el
-  // grupo. Al recargar /propiedades el router entra por (admin), así que un
-  // admin que estaba "viendo como usuario" aterrizaba en el panel de admin.
-  // Aquí lo devolvemos a la app que estaba usando.
+  // grupo. Al abrir /crm el router entra por (admin), así que a un admin que
+  // estaba "viendo como usuario" hay que devolverlo a la app que usaba.
+  //
+  // OJO: antes esto mandaba SIEMPRE a /propiedades, y por eso al guardar un
+  // cliente (que deja en /crm) o al abrir el detalle de un cliente te sacaba a
+  // la lista de propiedades en vez de dejarte donde ibas. Ahora se conserva la
+  // MISMA pantalla y sus parámetros; solo se cae a propiedades si esa pantalla
+  // no existe del lado del prospectador.
+  const destinoProspectador = useCallback(() => {
+    const ruta = (pathname || '').replace(/^\/+/, '')
+    if (!COMPARTIDAS.has(ruta)) return '/(prospectador)/propiedades'
+    const qs = Object.entries(paramsUrl)
+      .filter(([, v]) => typeof v === 'string' && v !== '')
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v as string)}`)
+      .join('&')
+    return `/(prospectador)/${ruta}${qs ? `?${qs}` : ''}`
+  }, [pathname, paramsUrl])
+
   useEffect(() => {
-    if (vistaComoListo && vistaComo) router.replace('/(prospectador)/propiedades')
-  }, [vistaComoListo, vistaComo])
+    if (vistaComoListo && vistaComo) router.replace(destinoProspectador() as any)
+  }, [vistaComoListo, vistaComo, destinoProspectador])
 
   // Por la misma colisión de nombres, un usuario sin permisos podía aterrizar en
   // (admin) al recargar. Los datos ya los protege RLS; esto saca de la pantalla.
@@ -37,12 +62,12 @@ export default function AdminLayout() {
         .then(({ data }) => {
           if (!activo || !data) return
           if (data.role !== 'admin' && data.role !== 'supervisor') {
-            router.replace('/(prospectador)/propiedades')
+            router.replace(destinoProspectador() as any)
           }
         })
     })
     return () => { activo = false }
-  }, [])
+  }, [destinoProspectador])
 
   useEffect(() => {
     mountedRef.current = true

@@ -226,6 +226,16 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
             <Ionicons name="call-outline" size={14} color={darkMode ? '#38bdf8' : '#0369a1'} />
             <Text style={[s.actionCallTxt, darkMode && { color: '#38bdf8' }]}>Llamar</Text>
           </TouchableOpacity>
+          {/* Editar directo, sin pasar por el detalle: tocar la tarjeta sigue
+              abriendo los datos del cliente, y este botón va derecho al form. */}
+          <TouchableOpacity
+            style={[s.actionEdit, darkMode && { backgroundColor: '#2a2410', borderColor: '#8a6d1f' }]}
+            onPress={() => router.push(`/(prospectador)/cliente-form?id=${item.id}`)}
+            accessibilityLabel={`Editar ${item.nombre}`}
+          >
+            <Ionicons name="create-outline" size={14} color={darkMode ? '#fbbf24' : '#a16207'} />
+            <Text style={[s.actionEditTxt, darkMode && { color: '#fbbf24' }]}>Editar</Text>
+          </TouchableOpacity>
           {puedeEnviarClienteAChatbot(userRole) && (
             <TouchableOpacity
               style={[s.actionChatbot, darkMode && { backgroundColor: '#241a33', borderColor: '#6a3fa0' }]}
@@ -1736,6 +1746,12 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: '#bae6fd',
   },
   actionCallTxt: { fontSize: 13, fontWeight: '600', color: '#0369a1' },
+  actionEdit: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    backgroundColor: '#fefce8', borderRadius: 10, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#fde68a',
+  },
+  actionEditTxt: { fontSize: 13, fontWeight: '600', color: '#a16207' },
   actionChatbot: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
     backgroundColor: '#f5f3ff', borderRadius: 10, paddingVertical: 8,
