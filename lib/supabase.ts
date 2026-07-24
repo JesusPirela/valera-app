@@ -113,6 +113,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
     lock: Platform.OS === 'web' ? navigatorLock : processLock,
+    // Logs detallados del lock/refresh de auth. Apagado por defecto; se prende
+    // con EXPO_PUBLIC_AUTH_DEBUG=1 para diagnosticar cuelgues de sesión.
+    debug: process.env.EXPO_PUBLIC_AUTH_DEBUG === '1',
   },
   global: { fetch: fetchConAuth },
 })

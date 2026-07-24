@@ -68,21 +68,38 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Cargar color de acento al hacer login
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('color_acento')
-          .eq('id', session.user.id)
-          .single()
-        if (data?.color_acento) {
-          setAcentoId(data.color_acento)
-          setPrimaryColor(resolverColor(data.color_acento))
-        }
-      } else {
+    // ⚠️ Este callback corre DENTRO del lock de auth de Supabase:
+    // _notifyAllSubscribers hace `await callback(...)` mientras tiene el lock
+    // tomado. Si aquí se hace un `await` de RED (leer profiles), el lock queda
+    // tomado hasta que esa petición termine — y peor, para conseguir el token
+    // de esa misma petición se necesita el lock: se auto-bloquea. Tras un rato
+    // idle (token vencido → refresh → este evento) la consulta se colgaba y
+    // NINGÚN getSession/refresh volvía: "guardo algo y se queda cargando para
+    // siempre, solo recargar lo arregla". Documentado por Supabase: no usar
+    // async/await dentro de onAuthStateChange.
+    //
+    // Solución: el callback es SÍNCRONO (retorna ya, el lock se libera) y el
+    // trabajo de red se DIFIERE con setTimeout(0), fuera del lock.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const uid = session?.user?.id
+      if (!uid) {
         setAcentoId(DEFAULT_COLOR)
         setPrimaryColor(DEFAULT_COLOR)
+        return
       }
+      setTimeout(async () => {
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('color_acento')
+            .eq('id', uid)
+            .single()
+          if (data?.color_acento) {
+            setAcentoId(data.color_acento)
+            setPrimaryColor(resolverColor(data.color_acento))
+          }
+        } catch { /* se reintenta al próximo evento de auth */ }
+      }, 0)
     })
     return () => subscription.unsubscribe()
   }, [])
