@@ -344,6 +344,50 @@ export default function Perfil() {
   // Marco por nivel: solo cambia el borde del avatar (misma estructura de antes).
   const nivelActual = stats ? calcularNivel(stats.xp) : 1
   const marco = marcoPorNivel(nivelActual)
+
+  // Un patrón está disponible si: (recompensa) llegaste a su nivel o te lo
+  // concedieron manualmente; (tienda) lo compraste.
+  const patronDisponible = (p: (typeof PATRONES_ANIMADOS)[number]) =>
+    p.nivel != null
+      ? (nivelActual >= p.nivel || coloresDesbloqueados.includes(p.id))
+      : coloresDesbloqueados.includes(p.id)
+
+  // Un swatch de patrón (se usa en las dos secciones: nivel y tienda).
+  const renderSwatch = (patron: (typeof PATRONES_ANIMADOS)[number]) => {
+    const id = `animated:${patron.id}`
+    const esNivel = patron.nivel != null
+    const desbloqueado = patronDisponible(patron)
+    const enCompra = comprando === patron.id
+    const seleccionado = colorAcento === id && desbloqueado
+    return (
+      <View key={patron.id} style={s.patronItem}>
+        <TouchableOpacity
+          style={[s.colorBtn, { overflow: 'hidden' }, !desbloqueado && { opacity: 0.55 }, seleccionado && s.colorBtnActivo]}
+          onPress={() => {
+            if (desbloqueado) { setColorAcento(id); setPrimaryColor(patron.base); setAcentoId(id); return }
+            if (esNivel) { mostrarAlerta(`🔒 "${patron.nombre}" se desbloquea al llegar al nivel ${patron.nivel}.`); return }
+            comprarItem('color', patron.id)
+          }}
+          disabled={enCompra}
+        >
+          <AnimatedGradientView patron={patron} animate={seleccionado} style={StyleSheet.absoluteFillObject} />
+          {seleccionado && <Text style={s.colorCheck}>✓</Text>}
+          {enCompra && (
+            <View style={s.lockOverlay}><ActivityIndicator size="small" color="#fff" /></View>
+          )}
+          {!desbloqueado && !enCompra && (
+            <View style={s.lockOverlay}>
+              <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
+              {esNivel && <Text style={s.lockNivel}>Nv.{patron.nivel}</Text>}
+            </View>
+          )}
+        </TouchableOpacity>
+        <Text style={s.patronNombre}>
+          {patron.nombre}{!desbloqueado ? (esNivel ? ` · Nv.${patron.nivel}` : ` · ${precioPatron(patron.id)}💰`) : ''}
+        </Text>
+      </View>
+    )
+  }
   const bordeMarco = {
     borderColor: marco.color,
     ...(marco.brillo
@@ -601,45 +645,23 @@ export default function Perfil() {
           ))}
         </View>
 
+        {/* Recompensas por nivel: figuras cayendo + color animado, cada vez
+            mejores. Se desbloquean al subir de nivel. */}
         <View style={s.premiumHeader}>
-          <Text style={s.premiumLabel}>✨ Patrones animados</Text>
-          <Text style={s.premiumTag}>desde 100 💰</Text>
+          <Text style={s.premiumLabel}>🏆 Patrones por nivel</Text>
+          <Text style={s.premiumTag}>Nivel {nivelActual}</Text>
         </View>
         <View style={s.coloresGrid}>
-          {PATRONES_ANIMADOS.map(patron => {
-            const id = `animated:${patron.id}`
-            const desbloqueado = coloresDesbloqueados.includes(patron.id)
-            const enCompra = comprando === patron.id
-            const seleccionado = colorAcento === id && desbloqueado
-            return (
-              <View key={patron.id} style={s.patronItem}>
-                <TouchableOpacity
-                  style={[s.colorBtn, { overflow: 'hidden' }, !desbloqueado && { opacity: 0.55 }, seleccionado && s.colorBtnActivo]}
-                  onPress={() => {
-                    if (desbloqueado) { setColorAcento(id); setPrimaryColor(patron.base); setAcentoId(id); return }
-                    comprarItem('color', patron.id)
-                  }}
-                  disabled={enCompra}
-                >
-                  <AnimatedGradientView patron={patron} animate={seleccionado} style={StyleSheet.absoluteFillObject} />
-                  {seleccionado && <Text style={s.colorCheck}>✓</Text>}
-                  {enCompra && (
-                    <View style={s.lockOverlay}>
-                      <ActivityIndicator size="small" color="#fff" />
-                    </View>
-                  )}
-                  {!desbloqueado && !enCompra && (
-                    <View style={s.lockOverlay}>
-                      <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-                <Text style={s.patronNombre}>
-                  {patron.nombre}{!desbloqueado ? ` · ${precioPatron(patron.id)}💰` : ''}
-                </Text>
-              </View>
-            )
-          })}
+          {PATRONES_ANIMADOS.filter(p => p.nivel != null).map(renderSwatch)}
+        </View>
+
+        {/* Patrones de tienda: solo color animado. Se compran con coins. */}
+        <View style={s.premiumHeader}>
+          <Text style={s.premiumLabel}>✨ Patrones de tienda</Text>
+          <Text style={s.premiumTag}>300 💰 c/u</Text>
+        </View>
+        <View style={s.coloresGrid}>
+          {PATRONES_ANIMADOS.filter(p => p.nivel == null).map(renderSwatch)}
         </View>
         <AccentBackground acentoId={colorAcento} style={s.colorPreview}>
           <Text style={s.colorPreviewText}>Vista previa del color seleccionado</Text>
@@ -757,6 +779,7 @@ const s = StyleSheet.create({
   premiumTag: { fontSize: 11, fontWeight: '700', color: '#fff', backgroundColor: '#c9a84c', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
   lockOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 26 },
   lockIcon: { fontSize: 18 },
+  lockNivel: { fontSize: 8.5, fontWeight: '800', color: '#fff', marginTop: 1 },
   btnFoto: {
     borderWidth: 2, borderStyle: 'dashed', borderRadius: 10,
     paddingVertical: 14, alignItems: 'center', marginBottom: 16,

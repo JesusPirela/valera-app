@@ -1,31 +1,51 @@
 import { useRef, useEffect, useState } from 'react'
 import { View, Animated, Easing, StyleSheet, LayoutChangeEvent, Platform } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import Svg, { Path } from 'react-native-svg'
+import Svg, { Path, Circle, Rect, Polygon, G } from 'react-native-svg'
+
+// Figuras que pueden caer en un patrón (misma técnica para todas).
+export type FiguraTipo = 'casa' | 'llave' | 'edificio' | 'estrella' | 'diamante' | 'corona'
 
 export type PatronAnimado = {
   id: string
   nombre: string
   colores: [string, string, string]
   base: string
-  // 'casas' dibuja casitas cayendo (en diagonal) encima del gradiente.
-  casas?: boolean
-  // Precio en Valera Coins (por defecto 300). El servidor es el que cobra.
-  precio?: number
+  // Si tiene 'figura', se dibujan esas figuras cayendo en diagonal encima del
+  // color animado. Si además tiene 'nivel', es RECOMPENSA por nivel (se
+  // desbloquea al llegar). Si no, es un patrón de tienda (precio en coins).
+  figura?: FiguraTipo
+  nivel?: number
+  brillo?: boolean   // halo en las figuras (para los de nivel alto)
+  color?: string     // color de las figuras (por defecto dorado del logo)
+  precio?: number    // patrones de tienda; por defecto 300
 }
 
 // Colores originales de Valera: el teal por defecto + el dorado del logo.
 const VALERA_TEAL = '#1a6470'
 const VALERA_ORO  = '#c9a84c'
 
-// Precio de un patrón (para mostrar). El cobro real lo valida el servidor.
+// Precio de un patrón de tienda (para mostrar). El cobro lo valida el servidor.
 export function precioPatron(id: string): number {
   return PATRONES_ANIMADOS.find(p => p.id === id)?.precio ?? 300
 }
+// Nivel requerido de un patrón-recompensa (0 si no es de nivel).
+export function nivelPatron(id: string): number {
+  return PATRONES_ANIMADOS.find(p => p.id === id)?.nivel ?? 0
+}
 
 export const PATRONES_ANIMADOS: PatronAnimado[] = [
-  // El patrón de la casa: colores originales y casitas cayendo. Cuesta 100.
-  { id: 'valera',  nombre: 'Valera',    colores: [VALERA_TEAL, '#134e57', VALERA_TEAL], base: VALERA_TEAL, casas: true, precio: 100 },
+  // ── RECOMPENSAS POR NIVEL (figuras cayendo + color animado) ────────────────
+  // Van de menos a más: la figura y el color se vuelven más vistosos y los de
+  // nivel alto llevan brillo.
+  { id: 'valera',   nombre: 'Valera',      nivel: 10,  figura: 'casa',     colores: [VALERA_TEAL, '#134e57', VALERA_TEAL], base: VALERA_TEAL, color: VALERA_ORO },
+  { id: 'llaves',   nombre: 'Llaves',      nivel: 25,  figura: 'llave',    colores: ['#0d47a1', '#1565c0', '#01579b'],     base: '#0d47a1',   color: '#ffd54f' },
+  { id: 'ciudad',   nombre: 'Ciudad',      nivel: 40,  figura: 'edificio', colores: ['#311b92', '#4527a0', '#283593'],     base: '#311b92',   color: '#ce93d8' },
+  { id: 'estelar',  nombre: 'Estelar',     nivel: 55,  figura: 'estrella', colores: ['#1a237e', '#0d1b3e', '#311b92'],     base: '#1a237e',   color: '#ffe082', brillo: true },
+  { id: 'diamante', nombre: 'Diamante',    nivel: 75,  figura: 'diamante', colores: ['#006064', '#00838f', '#0097a7'],     base: '#006064',   color: '#b2ebf2', brillo: true },
+  { id: 'corona',   nombre: 'Corona Real', nivel: 100, figura: 'corona',   colores: ['#4a148c', '#6a1b9a', '#311b92'],     base: '#4a148c',   color: '#ffd700', brillo: true },
+
+  // ── PATRONES DE TIENDA (solo color animado) ────────────────────────────────
   { id: 'aurora',  nombre: 'Aurora',    colores: ['#5c3d99', '#00838f', '#283593'], base: '#5c3d99' },
   { id: 'lava',    nombre: 'Lava',      colores: ['#e65100', '#b71c1c', '#c62828'], base: '#c62828' },
   { id: 'ocean',   nombre: 'Océano',    colores: ['#01579b', '#006064', '#0288d1'], base: '#01579b' },
@@ -36,25 +56,64 @@ export const PATRONES_ANIMADOS: PatronAnimado[] = [
   { id: 'arctic',  nombre: 'Ártico',    colores: ['#0097a7', '#0277bd', '#00bcd4'], base: '#0097a7' },
 ]
 
-// ── Casita dorada (silueta estilo logo) ──────────────────────────────────────
-function Casita({ size, color, opacity }: { size: number; color: string; opacity: number }) {
+// ── Figuras (siluetas doradas) ───────────────────────────────────────────────
+// Cada patrón-recompensa deja caer una figura distinta. Se dibujan como silueta
+// rellena para que lean bien pequeñas y con opacidad baja.
+function trazoFigura(tipo: FiguraTipo, color: string) {
+  switch (tipo) {
+    case 'casa':
+      return <Path d="M12 3.5 L21.5 11.5 L18.8 11.5 L18.8 20.5 L5.2 20.5 L5.2 11.5 L2.5 11.5 Z" fill={color} />
+    case 'llave':
+      return (
+        <G>
+          <Circle cx="12" cy="6.5" r="4.2" fill="none" stroke={color} strokeWidth="2.4" />
+          <Path d="M12 10.7 L12 21 M12 18 L15.2 18 M12 15.3 L14.6 15.3" stroke={color} strokeWidth="2.3" strokeLinecap="round" fill="none" />
+        </G>
+      )
+    case 'edificio':
+      return (
+        <G fill={color}>
+          <Rect x="3.5" y="10" width="4.2" height="11" rx="0.4" />
+          <Rect x="9.9" y="4.5" width="4.4" height="16.5" rx="0.4" />
+          <Rect x="16.3" y="8" width="4.2" height="13" rx="0.4" />
+        </G>
+      )
+    case 'estrella':
+      return <Polygon points="12,2.6 14.35,9.1 21.2,9.25 15.75,13.5 17.65,20.2 12,16.2 6.35,20.2 8.25,13.5 2.8,9.25 9.65,9.1" fill={color} />
+    case 'diamante':
+      return <Path d="M7 3.5 H17 L21 9 L12 21.5 L3 9 Z" fill={color} />
+    case 'corona':
+      return (
+        <G fill={color}>
+          <Path d="M3 18 L4.6 8 L9 12.8 L12 5.2 L15 12.8 L19.4 8 L21 18 Z" />
+          <Rect x="3.5" y="18" width="17" height="2.6" rx="0.6" />
+        </G>
+      )
+  }
+}
+
+function Figura({ tipo, size, color, opacity, brillo }: {
+  tipo: FiguraTipo; size: number; color: string; opacity: number; brillo?: boolean
+}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      {/* Silueta simple: techo a dos aguas + cuerpo. */}
-      <Path
-        d="M12 3.5 L21.5 11.5 L18.8 11.5 L18.8 20.5 L5.2 20.5 L5.2 11.5 L2.5 11.5 Z"
-        fill={color}
-        opacity={opacity}
-      />
+      {/* Brillo: una copia más grande y tenue detrás → halo (sin blur, funciona
+          igual en web y nativo). */}
+      {brillo && (
+        <G opacity={opacity * 0.5} transform="translate(12 12) scale(1.35) translate(-12 -12)">
+          {trazoFigura(tipo, color)}
+        </G>
+      )}
+      <G opacity={opacity}>{trazoFigura(tipo, color)}</G>
     </Svg>
   )
 }
 
-// ── Casitas cayendo (en diagonal) ────────────────────────────────────────────
-// Varias casitas doradas caen en diagonal, sin parar, con tamaños y velocidades
+// ── Figuras cayendo (en diagonal) ────────────────────────────────────────────
+// Varias figuras caen en diagonal, sin parar, con tamaños y velocidades
 // distintas (parallax). Opacidad baja para que el texto del header siga legible.
-function CasitasCayendo({ color = VALERA_ORO, animar = true, densidad = 1 }: {
-  color?: string; animar?: boolean; densidad?: number
+function FigurasCayendo({ figura, color = VALERA_ORO, brillo, animar = true, densidad = 1 }: {
+  figura: FiguraTipo; color?: string; brillo?: boolean; animar?: boolean; densidad?: number
 }) {
   const [dim, setDim] = useState({ w: 0, h: 0 })
   const onLayout = (e: LayoutChangeEvent) => {
@@ -65,16 +124,16 @@ function CasitasCayendo({ color = VALERA_ORO, animar = true, densidad = 1 }: {
   return (
     <View style={StyleSheet.absoluteFillObject} onLayout={onLayout} pointerEvents="none">
       {dim.w > 0 && Array.from({ length: Math.max(5, Math.round(dim.w / 85 * densidad)) }).map((_, i) => (
-        <CasitaAnim key={i} idx={i} area={dim} color={color} animar={animar} />
+        <FiguraAnim key={i} idx={i} area={dim} figura={figura} color={color} brillo={brillo} animar={animar} />
       ))}
     </View>
   )
 }
 
-// Params deterministas por índice (estables entre renders). Cada casita tiene
+// Params deterministas por índice (estables entre renders). Cada figura tiene
 // su carril X, tamaño, velocidad y fase inicial.
-function CasitaAnim({ idx, area, color, animar }: {
-  idx: number; area: { w: number; h: number }; color: string; animar: boolean
+function FiguraAnim({ idx, area, figura, color, brillo, animar }: {
+  idx: number; area: { w: number; h: number }; figura: FiguraTipo; color: string; brillo?: boolean; animar: boolean
 }) {
   const prog = useRef(new Animated.Value(0)).current
   // "Ruido" reproducible a partir del índice.
@@ -127,7 +186,7 @@ function CasitaAnim({ idx, area, color, animar }: {
 
   return (
     <Animated.View style={{ position: 'absolute', left: xIni, transform: [{ translateX }, { translateY }] }}>
-      <Casita size={size} color={color} opacity={opacity} />
+      <Figura tipo={figura} size={size} color={color} opacity={opacity} brillo={brillo} />
     </Animated.View>
   )
 }
@@ -158,10 +217,13 @@ export function AnimatedGradientView({ patron, style, children, animate = true }
   const anim = useRef(new Animated.Value(0)).current
   useEffect(() => {
     if (!animate) return
+    // JS en web / nativo en móvil: en web el driver nativo congela el loop tras
+    // una vuelta (mismo motivo que las figuras).
+    const nativo = Platform.OS !== 'web'
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 1, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: nativo }),
+        Animated.timing(anim, { toValue: 0, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: nativo }),
       ])
     )
     loop.start()
@@ -172,7 +234,7 @@ export function AnimatedGradientView({ patron, style, children, animate = true }
     return (
       <View style={[{ overflow: 'hidden' }, style]}>
         <LinearGradient colors={patron.colores} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFillObject} />
-        {patron.casas && <CasitasCayendo animar={false} />}
+        {patron.figura && <FigurasCayendo figura={patron.figura} color={patron.color} brillo={patron.brillo} animar={false} />}
         {children}
       </View>
     )
@@ -184,7 +246,7 @@ export function AnimatedGradientView({ patron, style, children, animate = true }
       <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: anim }]}>
         <LinearGradient colors={[patron.colores[2], patron.colores[0], patron.colores[1]]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
       </Animated.View>
-      {patron.casas && <CasitasCayendo animar />}
+      {patron.figura && <FigurasCayendo figura={patron.figura} color={patron.color} brillo={patron.brillo} animar />}
       {children}
     </View>
   )
