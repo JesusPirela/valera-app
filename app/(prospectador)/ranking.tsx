@@ -156,7 +156,9 @@ export default function Ranking() {
             <View style={mp.card}>
               <AccentBackground acentoId={sel.color_acento || '#1a6470'} style={mp.headerBand} />
               <View style={mp.avWrap}>
-                <AvatarConMarco avatarUrl={sel.avatar_url} nombre={sel.nombre} nivel={nivelSel} size={92} fondo="#122030" />
+                {/* animado: al abrir un perfil su ícono (emoji premium) corre el
+                    GIF. En la lista se deja estático por rendimiento. */}
+                <AvatarConMarco avatarUrl={sel.avatar_url} nombre={sel.nombre} nivel={nivelSel} size={92} fondo="#122030" animado />
               </View>
               <Text style={mp.nombre} numberOfLines={2}>{sel.nombre}</Text>
               <Text style={mp.titulo}>{tituloPorNivel(nivelSel)}</Text>
