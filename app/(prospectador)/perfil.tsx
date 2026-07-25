@@ -651,6 +651,7 @@ export default function Perfil() {
           <Text style={s.premiumLabel}>🏆 Patrones por nivel</Text>
           <Text style={s.premiumTag}>Nivel {nivelActual}</Text>
         </View>
+        <Text style={s.label}>Cada patrón se desbloquea al llegar a su nivel (se indica en cada uno).</Text>
         <View style={s.coloresGrid}>
           {PATRONES_ANIMADOS.filter(p => p.nivel != null).map(renderSwatch)}
         </View>

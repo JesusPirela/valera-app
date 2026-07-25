@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { View, Text, Image, StyleSheet } from 'react-native'
 import { marcoPorNivel } from '../lib/marcos'
 
@@ -19,6 +20,9 @@ type Props = {
   animado?: boolean
   /** Fondo del hueco del avatar (para que el marco se lea recortado). */
   fondo?: string
+  /** Nodo pintado DETRÁS del contenido (para mostrar el color/patrón del
+   *  usuario). Se ve alrededor de emojis/inicial; una foto lo tapa. */
+  fondoNode?: ReactNode
 }
 
 /**
@@ -27,7 +31,7 @@ type Props = {
  * El marco es puramente visual y sale del nivel; no hay estado extra que guardar.
  */
 export default function AvatarConMarco({
-  avatarUrl, nombre, nivel, size = 72, animado = false, fondo = '#0d1b2a',
+  avatarUrl, nombre, nivel, size = 72, animado = false, fondo = '#0d1b2a', fondoNode,
 }: Props) {
   const marco = marcoPorNivel(nivel)
   const borde = Math.max(2, Math.round(size * 0.055))
@@ -63,6 +67,8 @@ export default function AvatarConMarco({
           },
         ]}
       >
+        {/* Color/patrón del usuario detrás del contenido. */}
+        {fondoNode ? <View style={StyleSheet.absoluteFillObject}>{fondoNode}</View> : null}
         {esFoto ? (
           <Image source={{ uri: avatarUrl! }} style={{ width: interior, height: interior }} resizeMode="cover" />
         ) : gif ? (

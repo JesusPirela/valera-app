@@ -1,14 +1,50 @@
 import { useState, useCallback } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, RefreshControl,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, RefreshControl, Platform,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { calcularNivel, tituloPorNivel } from '../../lib/gamification'
-import { AccentBackground } from '../../lib/patrones'
+import { AccentBackground, AnimatedGradientView, patronDeAcento } from '../../lib/patrones'
 import AvatarConMarco from '../../components/AvatarConMarco'
 import { marcoPorNivel } from '../../lib/marcos'
+
+// Avatar del ranking con el color/patrón del usuario detrás. Si tiene un patrón
+// animado, se muestra ESTÁTICO y solo se anima al pasar el mouse (o en el modal
+// al abrir el perfil); al quitar el mouse se detiene, para no animar decenas de
+// filas a la vez.
+function AvatarRanking({ entry, size, esYo }: {
+  entry: { avatar_url: string | null; nombre: string; xp: number; color_acento: string | null }
+  size: number; esYo: boolean
+}) {
+  const [hover, setHover] = useState(false)
+  const isWeb = Platform.OS === 'web'
+  const patron = entry.color_acento ? patronDeAcento(entry.color_acento) : null
+  const nivel = calcularNivel(entry.xp)
+  // Color plano (si el acento es un color, no un patrón): se usa de fondo.
+  const fondoColor = !patron && entry.color_acento?.startsWith('#')
+    ? entry.color_acento
+    : (esYo ? '#1a1500' : '#111f2e')
+  // En la lista solo el COLOR animado (sin figuras): a 44px las figuras se ven
+  // amontonadas. Las figuras completas se ven en el modal (header grande).
+  const fondoNode = patron
+    ? <AnimatedGradientView patron={{ ...patron, figura: undefined }} animate={hover} style={StyleSheet.absoluteFillObject} />
+    : undefined
+  return (
+    <View
+      // @ts-ignore eventos de mouse solo en web
+      onMouseEnter={isWeb ? () => setHover(true) : undefined}
+      // @ts-ignore
+      onMouseLeave={isWeb ? () => setHover(false) : undefined}
+    >
+      <AvatarConMarco
+        avatarUrl={entry.avatar_url} nombre={entry.nombre} nivel={nivel}
+        size={size} fondo={fondoColor} fondoNode={fondoNode}
+      />
+    </View>
+  )
+}
 
 // El ranking es de PRODUCTIVIDAD: no incluye valera_coins a propósito.
 type RankEntry = {
@@ -89,7 +125,7 @@ export default function Ranking() {
       {miEntry && miEntry.posicion > 10 && (
         <TouchableOpacity style={[s.entryCard, s.miCard]} activeOpacity={0.7} onPress={() => setSel(miEntry)}>
           <Text style={s.posMi}>#{miEntry.posicion}</Text>
-          <AvatarConMarco avatarUrl={miEntry.avatar_url} nombre={miEntry.nombre} nivel={calcularNivel(miEntry.xp)} size={44} fondo="#1a1500" />
+          <AvatarRanking entry={miEntry} size={44} esYo />
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={s.entryNombre}>{miEntry.nombre} <Text style={s.tuLabel}>(Tú)</Text></Text>
             <Text style={s.entryTitulo}>{tituloPorNivel(calcularNivel(miEntry.xp))}</Text>
@@ -122,7 +158,7 @@ export default function Ranking() {
                 }
               </View>
 
-              <AvatarConMarco avatarUrl={e.avatar_url} nombre={e.nombre} nivel={nivel} size={44} fondo={esYo ? '#1a1500' : '#111f2e'} />
+              <AvatarRanking entry={e} size={44} esYo={esYo} />
 
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={[s.entryNombre, esYo && { color: '#c9a84c' }]} numberOfLines={1}>

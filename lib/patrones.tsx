@@ -38,11 +38,13 @@ export const PATRONES_ANIMADOS: PatronAnimado[] = [
   // ── RECOMPENSAS POR NIVEL (figuras cayendo + color animado) ────────────────
   // Van de menos a más: la figura y el color se vuelven más vistosos y los de
   // nivel alto llevan brillo.
-  { id: 'valera',   nombre: 'Valera',      nivel: 10,  figura: 'casa',     colores: [VALERA_TEAL, '#134e57', VALERA_TEAL], base: VALERA_TEAL, color: VALERA_ORO },
-  { id: 'llaves',   nombre: 'Llaves',      nivel: 25,  figura: 'llave',    colores: ['#0d47a1', '#1565c0', '#01579b'],     base: '#0d47a1',   color: '#ffd54f' },
-  { id: 'ciudad',   nombre: 'Ciudad',      nivel: 40,  figura: 'edificio', colores: ['#311b92', '#4527a0', '#283593'],     base: '#311b92',   color: '#ce93d8' },
-  { id: 'estelar',  nombre: 'Estelar',     nivel: 55,  figura: 'estrella', colores: ['#1a237e', '#0d1b3e', '#311b92'],     base: '#1a237e',   color: '#ffe082', brillo: true },
-  { id: 'diamante', nombre: 'Diamante',    nivel: 75,  figura: 'diamante', colores: ['#006064', '#00838f', '#0097a7'],     base: '#006064',   color: '#b2ebf2', brillo: true },
+  { id: 'valera',   nombre: 'Valera',      nivel: 30,  figura: 'casa',     colores: [VALERA_TEAL, '#134e57', VALERA_TEAL], base: VALERA_TEAL, color: VALERA_ORO },
+  { id: 'llaves',   nombre: 'Llaves',      nivel: 45,  figura: 'llave',    colores: ['#0d47a1', '#1565c0', '#01579b'],     base: '#0d47a1',   color: '#ffd54f' },
+  { id: 'ciudad',   nombre: 'Ciudad',      nivel: 60,  figura: 'edificio', colores: ['#311b92', '#4527a0', '#283593'],     base: '#311b92',   color: '#ce93d8' },
+  { id: 'estelar',  nombre: 'Estelar',     nivel: 75,  figura: 'estrella', colores: ['#1a237e', '#0d1b3e', '#311b92'],     base: '#1a237e',   color: '#ffe082', brillo: true },
+  // Diamante: fondo navy OSCURO para que los diamantes claros contrasten (antes
+  // el fondo cian los "escondía").
+  { id: 'diamante', nombre: 'Diamante',    nivel: 90,  figura: 'diamante', colores: ['#0a1929', '#132f4c', '#0d1b2a'],     base: '#0a1929',   color: '#e0f7fa', brillo: true },
   { id: 'corona',   nombre: 'Corona Real', nivel: 100, figura: 'corona',   colores: ['#4a148c', '#6a1b9a', '#311b92'],     base: '#4a148c',   color: '#ffd700', brillo: true },
 
   // ── PATRONES DE TIENDA (solo color animado) ────────────────────────────────
