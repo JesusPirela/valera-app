@@ -37,20 +37,33 @@ export function nivelPatron(id: string): number {
   return PATRONES_ANIMADOS.find(p => p.id === id)?.nivel ?? 0
 }
 
-export const PATRONES_ANIMADOS: PatronAnimado[] = [
-  // ── RECOMPENSAS POR NIVEL (figuras cayendo + color animado) ────────────────
-  // Van de menos a más: la figura y el color se vuelven más vistosos y los de
-  // nivel alto llevan brillo.
-  { id: 'valera',   nombre: 'Valera',      nivel: 30,  figura: 'casa',     colores: [VALERA_TEAL, '#134e57', VALERA_TEAL], base: VALERA_TEAL, color: VALERA_ORO },
-  { id: 'llaves',   nombre: 'Llaves',      nivel: 45,  figura: 'llave',    colores: ['#0d47a1', '#1565c0', '#01579b'],     base: '#0d47a1',   color: '#ffd54f' },
-  { id: 'ciudad',   nombre: 'Ciudad',      nivel: 60,  figura: 'edificio', colores: ['#311b92', '#4527a0', '#283593'],     base: '#311b92',   color: '#ce93d8' },
-  { id: 'estelar',  nombre: 'Estelar',     nivel: 75,  figura: 'estrella', colores: ['#1a237e', '#0d1b3e', '#311b92'],     base: '#1a237e',   color: '#ffe082', brillo: true },
-  // Diamante: fondo navy OSCURO para que los diamantes claros contrasten (antes
-  // el fondo cian los "escondía").
-  { id: 'diamante', nombre: 'Diamante',    nivel: 90,  figura: 'diamante', colores: ['#0a1929', '#132f4c', '#0d1b2a'],     base: '#0a1929',   color: '#e0f7fa', brillo: true, figAlpha: 0.5 },
-  { id: 'corona',   nombre: 'Corona Real', nivel: 100, figura: 'corona',   colores: ['#4a148c', '#6a1b9a', '#311b92'],     base: '#4a148c',   color: '#ffd700', brillo: true },
+// ── FIGURAS por nivel (capa independiente) ──────────────────────────────────
+// Las figuras cayendo YA NO van pegadas a un color: son una CAPA que el usuario
+// pone encima del fondo que elija (color principal o patrón de tienda). Se
+// desbloquean por nivel (más bajos que antes). Cada una trae su color temático.
+export type FiguraNivel = {
+  id: FiguraTipo
+  nombre: string
+  nivel: number
+  color: string
+  brillo?: boolean
+  figAlpha?: number
+}
+export const FIGURAS_NIVEL: FiguraNivel[] = [
+  { id: 'casa',     nombre: 'Casas',     nivel: 10, color: VALERA_ORO },
+  { id: 'llave',    nombre: 'Llaves',    nivel: 20, color: '#ffd54f' },
+  { id: 'edificio', nombre: 'Edificios', nivel: 30, color: '#ce93d8' },
+  { id: 'estrella', nombre: 'Estrellas', nivel: 45, color: '#ffe082', brillo: true },
+  { id: 'diamante', nombre: 'Diamantes', nivel: 60, color: '#e0f7fa', brillo: true, figAlpha: 0.5 },
+  { id: 'corona',   nombre: 'Coronas',   nivel: 80, color: '#ffd700', brillo: true },
+]
+export function figuraNivelDef(id: string | null | undefined): FiguraNivel | null {
+  if (!id) return null
+  return FIGURAS_NIVEL.find(f => f.id === id) ?? null
+}
 
-  // ── PATRONES DE TIENDA (solo color animado) ────────────────────────────────
+export const PATRONES_ANIMADOS: PatronAnimado[] = [
+  // Patrones de tienda: SOLO color animado (las figuras van aparte).
   { id: 'aurora',  nombre: 'Aurora',    colores: ['#5c3d99', '#00838f', '#283593'], base: '#5c3d99' },
   { id: 'lava',    nombre: 'Lava',      colores: ['#e65100', '#b71c1c', '#c62828'], base: '#c62828' },
   { id: 'ocean',   nombre: 'Océano',    colores: ['#01579b', '#006064', '#0288d1'], base: '#01579b' },
@@ -257,12 +270,36 @@ export function AnimatedGradientView({ patron, style, children, animate = true }
   )
 }
 
-export function AccentBackground({ acentoId, style, children }: {
+// Capa de figuras cayendo, independiente del fondo. Se pone ENCIMA de cualquier
+// fondo (color o patrón de tienda).
+export function CapaFiguras({ figuraId, animar = true }: { figuraId: string | null | undefined; animar?: boolean }) {
+  const f = figuraNivelDef(figuraId)
+  if (!f) return null
+  return <FigurasCayendo figura={f.id} color={f.color} brillo={f.brillo} figAlpha={f.figAlpha} animar={animar} />
+}
+
+export function AccentBackground({ acentoId, figura, animarFigura = true, style, children }: {
   acentoId: string
+  // Figura cayendo encima del fondo (id de FIGURAS_NIVEL). Independiente del fondo.
+  figura?: string | null
+  animarFigura?: boolean
   style?: any
   children?: React.ReactNode
 }) {
   const patron = patronDeAcento(acentoId)
-  if (patron) return <AnimatedGradientView patron={patron} style={style}>{children}</AnimatedGradientView>
-  return <View style={[style, { backgroundColor: acentoId }]}>{children}</View>
+  const overlay = figura ? <CapaFiguras figuraId={figura} animar={animarFigura} /> : null
+  if (patron) {
+    return (
+      <AnimatedGradientView patron={patron} style={style}>
+        {overlay}
+        {children}
+      </AnimatedGradientView>
+    )
+  }
+  return (
+    <View style={[{ overflow: 'hidden' }, style, { backgroundColor: acentoId }]}>
+      {overlay}
+      {children}
+    </View>
+  )
 }

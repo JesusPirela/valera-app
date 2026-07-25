@@ -278,7 +278,7 @@ const PropiedadCard = memo(function PropiedadCard({
 export default function ProspectadorPropiedades() {
   const queryClient = useQueryClient()
   const isOnline = useNetworkStatus()
-  const { primaryColor, acentoId, darkMode } = useTheme()
+  const { primaryColor, acentoId, figuraAcento, darkMode } = useTheme()
   const c = useColors()
   const { ahorroActivo } = useCargaDatos()
   const imgOpts = opcionesImagenTarjeta(ahorroActivo)
@@ -1112,7 +1112,7 @@ export default function ProspectadorPropiedades() {
       <View style={[styles.container, { backgroundColor: c.bg }]}>
 
         {/* Header unificado con búsqueda */}
-        <AccentBackground acentoId={acentoId} style={[styles.header, { paddingTop: isWeb ? 10 : statusBarHeight + 8, paddingBottom: 12 }]}>
+        <AccentBackground acentoId={acentoId} figura={figuraAcento} style={[styles.header, { paddingTop: isWeb ? 10 : statusBarHeight + 8, paddingBottom: 12 }]}>
           <View style={isWeb ? styles.webHeaderInner : { flex: 1 }}>
             {/* Logo + saludo en la misma fila */}
             <View style={[styles.headerTopRow, { marginBottom: 8 }]}>

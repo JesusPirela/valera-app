@@ -21,6 +21,9 @@ type ThemeCtx = {
   setPrimaryColor: (color: string) => void
   acentoId: string
   setAcentoId: (id: string) => void
+  // Figura cayendo (capa independiente del fondo). null = ninguna.
+  figuraAcento: string | null
+  setFiguraAcento: (id: string | null) => void
   darkMode: boolean
   toggleDarkMode: () => void
   fontScaleCap: boolean
@@ -32,6 +35,8 @@ const ThemeContext = createContext<ThemeCtx>({
   setPrimaryColor: () => {},
   acentoId:        DEFAULT_COLOR,
   setAcentoId:     () => {},
+  figuraAcento:    null,
+  setFiguraAcento: () => {},
   darkMode:        true,
   toggleDarkMode:  () => {},
   fontScaleCap:       false,
@@ -49,6 +54,7 @@ function aplicarTopeFuente(activo: boolean) {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [primaryColor, setPrimaryColor] = useState(DEFAULT_COLOR)
   const [acentoId, setAcentoId]         = useState(DEFAULT_COLOR)
+  const [figuraAcento, setFiguraAcento] = useState<string | null>(null)
   const [darkMode, setDarkMode]         = useState(false)
   const [fontScaleCap, setFontScaleCap] = useState(false)
 
@@ -85,19 +91,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (!uid) {
         setAcentoId(DEFAULT_COLOR)
         setPrimaryColor(DEFAULT_COLOR)
+        setFiguraAcento(null)
         return
       }
       setTimeout(async () => {
         try {
           const { data } = await supabase
             .from('profiles')
-            .select('color_acento')
+            .select('color_acento, figura_acento')
             .eq('id', uid)
             .single()
           if (data?.color_acento) {
             setAcentoId(data.color_acento)
             setPrimaryColor(resolverColor(data.color_acento))
           }
+          setFiguraAcento((data as any)?.figura_acento ?? null)
         } catch { /* se reintenta al próximo evento de auth */ }
       }, 0)
     })
@@ -122,7 +130,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ThemeContext.Provider value={{ primaryColor, setPrimaryColor, acentoId, setAcentoId, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap }}>
+    <ThemeContext.Provider value={{ primaryColor, setPrimaryColor, acentoId, setAcentoId, figuraAcento, setFiguraAcento, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap }}>
       {children}
     </ThemeContext.Provider>
   )

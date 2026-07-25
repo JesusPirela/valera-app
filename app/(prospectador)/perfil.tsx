@@ -12,7 +12,7 @@ import { getUsuarioActual } from '../../lib/sesion'
 import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import {
-  PATRONES_ANIMADOS, baseColorDeAcento, AnimatedGradientView, AccentBackground, precioPatron,
+  PATRONES_ANIMADOS, FIGURAS_NIVEL, baseColorDeAcento, AnimatedGradientView, AccentBackground, precioPatron,
 } from '../../lib/patrones'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import CambiarCuenta from '../../components/CambiarCuenta'
@@ -131,7 +131,7 @@ const AvatarGrid = memo(function AvatarGrid({
 })
 
 export default function Perfil() {
-  const { setPrimaryColor, setAcentoId, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap } = useTheme()
+  const { setPrimaryColor, setAcentoId, setFiguraAcento, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap } = useTheme()
   const { modo: modoCarga, setModo: setModoCarga, conexionLenta } = useCargaDatos()
   const c = useColors()
 
@@ -148,6 +148,7 @@ export default function Perfil() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarEmoji, setAvatarEmoji] = useState('👤')
   const [colorAcento, setColorAcento] = useState('#1a6470')
+  const [figuraAcentoLocal, setFiguraAcentoLocal] = useState<string | null>(null)
   const [email, setEmail] = useState('')
   const fileRef = useRef<any>(null)
 
@@ -192,7 +193,7 @@ export default function Perfil() {
     setEmail(user.email ?? '')
 
     const [{ data }, statsData] = await Promise.all([
-      supabase.from('profiles').select('nombre, telefono, avatar_url, color_acento, colores_desbloqueados, avatares_desbloqueados').eq('id', user.id).single(),
+      supabase.from('profiles').select('nombre, telefono, avatar_url, color_acento, figura_acento, colores_desbloqueados, avatares_desbloqueados').eq('id', user.id).single(),
       getUserStats(user.id),
     ])
     setStats(statsData)
@@ -201,6 +202,7 @@ export default function Perfil() {
       setNombre(data.nombre ?? '')
       setTelefono(data.telefono ?? '')
       setColorAcento(data.color_acento ?? '#1a6470')
+      setFiguraAcentoLocal((data as any).figura_acento ?? null)
       setColoresDesbloqueados((data as any).colores_desbloqueados ?? [])
       setAvatarsDesbloqueados((data as any).avatares_desbloqueados ?? [])
       if (data.avatar_url?.startsWith('emoji:')) {
@@ -278,12 +280,14 @@ export default function Perfil() {
           telefono: telefono.trim() || null,
           avatar_url: avatarFinal,
           color_acento: colorAcento,
+          figura_acento: figuraAcentoLocal,
         })
         .eq('id', userId)
 
       if (error) throw error
       setAcentoId(colorAcento)
       setPrimaryColor(baseColorDeAcento(colorAcento))
+      setFiguraAcento(figuraAcentoLocal)
       // El saludo del inicio ("Hola, X") y el ranking leen el nombre de sus
       // propios caches; sin invalidarlos, seguian mostrando el nombre viejo tras
       // cambiarlo aquí.
@@ -388,6 +392,36 @@ export default function Perfil() {
       </View>
     )
   }
+
+  // Swatch de una FIGURA por nivel. Se previsualiza sobre el fondo actual, para
+  // que se vea la combinación real; solo la seleccionada se anima.
+  const renderFigura = (f: (typeof FIGURAS_NIVEL)[number]) => {
+    const desbloqueada = nivelActual >= f.nivel || coloresDesbloqueados.includes(f.id)
+    const seleccionada = figuraAcentoLocal === f.id
+    return (
+      <View key={f.id} style={s.patronItem}>
+        <TouchableOpacity
+          style={[s.colorBtn, { overflow: 'hidden' }, !desbloqueada && { opacity: 0.55 }, seleccionada && s.colorBtnActivo]}
+          onPress={() => {
+            if (desbloqueada) { setFiguraAcentoLocal(f.id); setFiguraAcento(f.id); return }
+            mostrarAlerta(`🔒 "${f.nombre}" se desbloquea al llegar al nivel ${f.nivel}.`)
+          }}
+        >
+          <AccentBackground acentoId={colorAcento} figura={f.id} animarFigura={seleccionada} style={StyleSheet.absoluteFillObject} />
+          {seleccionada && <Text style={s.colorCheck}>✓</Text>}
+          {!desbloqueada && (
+            <View style={s.lockOverlay}>
+              <Text style={[s.lockIcon, { fontSize: 13 }]}>🔒</Text>
+              <Text style={s.lockNivel}>Nv.{f.nivel}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        <Text style={s.patronNombre}>
+          {f.nombre}{!desbloqueada ? ` · Nv.${f.nivel}` : ''}
+        </Text>
+      </View>
+    )
+  }
   const bordeMarco = {
     borderColor: marco.color,
     ...(marco.brillo
@@ -398,7 +432,7 @@ export default function Perfil() {
   return (
     <ScrollView style={[s.container, darkMode && { backgroundColor: '#0d1b2a' }]} contentContainerStyle={{ paddingBottom: 60 }} refreshControl={refreshControl}>
       {/* Avatar */}
-      <AccentBackground acentoId={colorAcento} style={s.headerBg}>
+      <AccentBackground acentoId={colorAcento} figura={figuraAcentoLocal} style={s.headerBg}>
         <View style={s.avatarWrap}>
           {avatarMostrado ? (
             <Image source={{ uri: avatarMostrado }} style={[s.avatarImg, bordeMarco]} />
@@ -645,27 +679,39 @@ export default function Perfil() {
           ))}
         </View>
 
-        {/* Recompensas por nivel: figuras cayendo + color animado, cada vez
-            mejores. Se desbloquean al subir de nivel. */}
+        {/* Patrones de tienda: solo color animado de fondo. Se compran. */}
         <View style={s.premiumHeader}>
-          <Text style={s.premiumLabel}>🏆 Patrones por nivel</Text>
-          <Text style={s.premiumTag}>Nivel {nivelActual}</Text>
-        </View>
-        <Text style={s.label}>Cada patrón se desbloquea al llegar a su nivel (se indica en cada uno).</Text>
-        <View style={s.coloresGrid}>
-          {PATRONES_ANIMADOS.filter(p => p.nivel != null).map(renderSwatch)}
-        </View>
-
-        {/* Patrones de tienda: solo color animado. Se compran con coins. */}
-        <View style={s.premiumHeader}>
-          <Text style={s.premiumLabel}>✨ Patrones de tienda</Text>
+          <Text style={s.premiumLabel}>✨ Fondos de tienda</Text>
           <Text style={s.premiumTag}>300 💰 c/u</Text>
         </View>
         <View style={s.coloresGrid}>
-          {PATRONES_ANIMADOS.filter(p => p.nivel == null).map(renderSwatch)}
+          {PATRONES_ANIMADOS.map(renderSwatch)}
         </View>
-        <AccentBackground acentoId={colorAcento} style={s.colorPreview}>
-          <Text style={s.colorPreviewText}>Vista previa del color seleccionado</Text>
+
+        {/* Figuras cayendo: CAPA aparte que va encima del fondo elegido. Se
+            desbloquean por nivel. */}
+        <View style={s.premiumHeader}>
+          <Text style={s.premiumLabel}>🏆 Figuras por nivel</Text>
+          <Text style={s.premiumTag}>Nivel {nivelActual}</Text>
+        </View>
+        <Text style={s.label}>Caen encima del fondo que elijas. Cada una se desbloquea a su nivel.</Text>
+        <View style={s.coloresGrid}>
+          {/* "Ninguna" */}
+          <View style={s.patronItem}>
+            <TouchableOpacity
+              style={[s.colorBtn, { backgroundColor: '#26323c', alignItems: 'center', justifyContent: 'center' }, !figuraAcentoLocal && s.colorBtnActivo]}
+              onPress={() => { setFiguraAcentoLocal(null); setFiguraAcento(null) }}
+            >
+              <Text style={{ color: '#9fb3bd', fontSize: 16 }}>∅</Text>
+              {!figuraAcentoLocal && <Text style={s.colorCheck}>✓</Text>}
+            </TouchableOpacity>
+            <Text style={s.patronNombre}>Ninguna</Text>
+          </View>
+          {FIGURAS_NIVEL.map(renderFigura)}
+        </View>
+
+        <AccentBackground acentoId={colorAcento} figura={figuraAcentoLocal} style={s.colorPreview}>
+          <Text style={s.colorPreviewText}>Vista previa (fondo + figura)</Text>
         </AccentBackground>
 
         {/* Guardar */}

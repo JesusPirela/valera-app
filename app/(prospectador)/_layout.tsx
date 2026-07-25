@@ -48,7 +48,7 @@ export default function ProspectadorLayout() {
   const [role, setRole] = useState<string | null>(null)
   const [ascensoRol, setAscensoRol] = useState<'prospectador' | 'prospectador_plus' | null>(null)
   const { vistaComo } = useVistaComo()
-  const { primaryColor: colorAcento, acentoId, darkMode } = useTheme()
+  const { primaryColor: colorAcento, acentoId, figuraAcento, darkMode } = useTheme()
   const pathname = usePathname()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(false)
@@ -262,7 +262,7 @@ export default function ProspectadorLayout() {
           marginTop: 2,
         },
         headerBackground: () => (
-          <AccentBackground acentoId={acentoId} style={StyleSheet.absoluteFillObject} />
+          <AccentBackground acentoId={acentoId} figura={figuraAcento} style={StyleSheet.absoluteFillObject} />
         ),
         headerStyle: { backgroundColor: 'transparent' },
         headerTintColor: '#c9a84c',

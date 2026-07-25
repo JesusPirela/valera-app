@@ -52,6 +52,7 @@ type RankEntry = {
   nombre: string
   avatar_url: string | null
   color_acento: string | null
+  figura_acento: string | null
   xp: number
   streak_dias: number
   posicion: number
@@ -190,7 +191,7 @@ export default function Ranking() {
             const marcoSel = marcoPorNivel(nivelSel)
             return (
             <View style={mp.card}>
-              <AccentBackground acentoId={sel.color_acento || '#1a6470'} style={mp.headerBand} />
+              <AccentBackground acentoId={sel.color_acento || '#1a6470'} figura={sel.figura_acento} style={mp.headerBand} />
               <View style={mp.avWrap}>
                 {/* animado: al abrir un perfil su ícono (emoji premium) corre el
                     GIF. En la lista se deja estático por rendimiento. */}
