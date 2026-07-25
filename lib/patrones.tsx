@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react'
-import { View, Animated, Easing, StyleSheet, LayoutChangeEvent } from 'react-native'
+import { View, Animated, Easing, StyleSheet, LayoutChangeEvent, Platform } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Path } from 'react-native-svg'
 
@@ -8,19 +8,24 @@ export type PatronAnimado = {
   nombre: string
   colores: [string, string, string]
   base: string
-  // 'casas' dibuja casitas cayendo (arriba→abajo) encima del gradiente.
+  // 'casas' dibuja casitas cayendo (en diagonal) encima del gradiente.
   casas?: boolean
-  // 'gratis' = disponible sin comprar (no gasta monedas).
-  gratis?: boolean
+  // Precio en Valera Coins (por defecto 300). El servidor es el que cobra.
+  precio?: number
 }
 
 // Colores originales de Valera: el teal por defecto + el dorado del logo.
 const VALERA_TEAL = '#1a6470'
 const VALERA_ORO  = '#c9a84c'
 
+// Precio de un patrón (para mostrar). El cobro real lo valida el servidor.
+export function precioPatron(id: string): number {
+  return PATRONES_ANIMADOS.find(p => p.id === id)?.precio ?? 300
+}
+
 export const PATRONES_ANIMADOS: PatronAnimado[] = [
-  // El patrón de la casa: colores originales y casitas cayendo. Gratis.
-  { id: 'valera',  nombre: 'Valera',    colores: [VALERA_TEAL, '#134e57', VALERA_TEAL], base: VALERA_TEAL, casas: true, gratis: true },
+  // El patrón de la casa: colores originales y casitas cayendo. Cuesta 100.
+  { id: 'valera',  nombre: 'Valera',    colores: [VALERA_TEAL, '#134e57', VALERA_TEAL], base: VALERA_TEAL, casas: true, precio: 100 },
   { id: 'aurora',  nombre: 'Aurora',    colores: ['#5c3d99', '#00838f', '#283593'], base: '#5c3d99' },
   { id: 'lava',    nombre: 'Lava',      colores: ['#e65100', '#b71c1c', '#c62828'], base: '#c62828' },
   { id: 'ocean',   nombre: 'Océano',    colores: ['#01579b', '#006064', '#0288d1'], base: '#01579b' },
@@ -45,10 +50,9 @@ function Casita({ size, color, opacity }: { size: number; color: string; opacity
   )
 }
 
-// ── Casitas cayendo ──────────────────────────────────────────────────────────
-// Varias casitas doradas caen de arriba a abajo en bucle, con tamaños,
-// velocidades y posiciones distintas (efecto parallax). Opacidad baja para que
-// el texto del header siga legible. Usa el driver nativo (solo translateY).
+// ── Casitas cayendo (en diagonal) ────────────────────────────────────────────
+// Varias casitas doradas caen en diagonal, sin parar, con tamaños y velocidades
+// distintas (parallax). Opacidad baja para que el texto del header siga legible.
 function CasitasCayendo({ color = VALERA_ORO, animar = true, densidad = 1 }: {
   color?: string; animar?: boolean; densidad?: number
 }) {
@@ -60,44 +64,69 @@ function CasitasCayendo({ color = VALERA_ORO, animar = true, densidad = 1 }: {
 
   return (
     <View style={StyleSheet.absoluteFillObject} onLayout={onLayout} pointerEvents="none">
-      {dim.w > 0 && Array.from({ length: Math.max(3, Math.round(dim.w / 46 * densidad)) }).map((_, i) => (
+      {dim.w > 0 && Array.from({ length: Math.max(5, Math.round(dim.w / 85 * densidad)) }).map((_, i) => (
         <CasitaAnim key={i} idx={i} area={dim} color={color} animar={animar} />
       ))}
     </View>
   )
 }
 
-// Params deterministas por índice (estables entre renders, sin Math.random en
-// cada pintado). Cada casita tiene su carril X, tamaño, duración y desfase.
+// Params deterministas por índice (estables entre renders). Cada casita tiene
+// su carril X, tamaño, velocidad y fase inicial.
 function CasitaAnim({ idx, area, color, animar }: {
   idx: number; area: { w: number; h: number }; color: string; animar: boolean
 }) {
   const prog = useRef(new Animated.Value(0)).current
   // "Ruido" reproducible a partir del índice.
   const r = (n: number) => { const x = Math.sin(idx * 12.9898 + n * 78.233) * 43758.5453; return x - Math.floor(x) }
-  const size = 12 + Math.round(r(1) * 12)             // 12–24 px
-  const x = Math.round(r(2) * Math.max(1, area.w - size))
-  const dur = 4200 + Math.round(r(3) * 3800)          // 4.2–8 s (parallax)
-  const delay = Math.round(r(4) * dur)
-  const opacity = 0.12 + r(5) * 0.16                  // sutil: 0.12–0.28
+  // 3x más grandes que antes (antes 12–24): ahora 36–72 px, escalado al alto del
+  // contenedor para que en las miniaturas del perfil no queden desproporcionadas.
+  const escala = Math.min(1, area.h / 64)
+  const size = Math.round((36 + r(1) * 36) * escala)
+  const dur = 5000 + Math.round(r(3) * 4000)          // 5–9 s (parallax)
+  const fase = r(4)                                    // 0–1: arranque escalonado
+  const opacity = 0.22 + r(5) * 0.22                   // visible pero legible: 0.22–0.44
+  // Caída DIAGONAL: recorre toda la altura y se desplaza de lado ~la mitad del
+  // alto. Se arranca desde una X que ya descuenta ese desplazamiento para cubrir
+  // todo el ancho de forma pareja.
+  const deriva = area.h * 0.6
+  const xIni = Math.round(-deriva + r(2) * (area.w + deriva))
 
   useEffect(() => {
-    prog.setValue(0)
-    if (!animar) { prog.setValue(0.4); return }       // quieto: a media caída
-    const loop = Animated.loop(
-      Animated.timing(prog, { toValue: 1, duration: dur, delay, easing: Easing.linear, useNativeDriver: true }),
-    )
-    loop.start()
-    return () => loop.stop()
+    // Fase inicial estática. Se estabiliza aunque no anime (miniaturas).
+    prog.setValue(animar ? 0 : 0.35)
+    if (!animar) return
+    // Nunca dejan de caer: bucle continuo SIN 'delay' interno (el delay dentro
+    // de Animated.loop dejaba huecos y a la larga parecía que se detenían). El
+    // desfase entre casitas se logra arrancando cada una tras 'fase*dur' una
+    // sola vez; ya en el bucle, reinicia de arriba al instante (sin hueco).
+    //
+    // OJO web: react-native-web NO soporta useNativeDriver con Animated.loop —
+    // la caída corría UNA vez y se congelaba (justo el "después de un rato dejan
+    // de caer"). En web se usa el driver JS, que sí reinicia el bucle. En nativo
+    // se deja el driver nativo (más fluido).
+    const nativo = Platform.OS !== 'web'
+    let loop: Animated.CompositeAnimation | null = null
+    const t = setTimeout(() => {
+      loop = Animated.loop(
+        Animated.timing(prog, { toValue: 1, duration: dur, easing: Easing.linear, useNativeDriver: nativo, isInteraction: false }),
+      )
+      loop.start()
+    }, Math.round(fase * dur))
+    return () => { clearTimeout(t); loop?.stop() }
   }, [animar, area.w, area.h])
 
   const translateY = prog.interpolate({
     inputRange: [0, 1],
-    outputRange: [-size - 4, area.h + size + 4],       // entra por arriba, sale por abajo
+    outputRange: [-size - 4, area.h + size + 4],        // entra por arriba, sale por abajo
+  })
+  const translateX = prog.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, deriva],                           // se desplaza de lado → diagonal
   })
 
   return (
-    <Animated.View style={{ position: 'absolute', left: x, transform: [{ translateY }] }}>
+    <Animated.View style={{ position: 'absolute', left: xIni, transform: [{ translateX }, { translateY }] }}>
       <Casita size={size} color={color} opacity={opacity} />
     </Animated.View>
   )

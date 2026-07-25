@@ -12,7 +12,7 @@ import { getUsuarioActual } from '../../lib/sesion'
 import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme, useColors } from '../../lib/ThemeContext'
 import {
-  PATRONES_ANIMADOS, baseColorDeAcento, AnimatedGradientView, AccentBackground,
+  PATRONES_ANIMADOS, baseColorDeAcento, AnimatedGradientView, AccentBackground, precioPatron,
 } from '../../lib/patrones'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import CambiarCuenta from '../../components/CambiarCuenta'
@@ -217,9 +217,12 @@ export default function Perfil() {
   async function comprarItem(tipo: 'color' | 'avatar', valor: string) {
     if (comprando) return
     const label = tipo === 'color' ? `el color ${valor}` : `el avatar ${valor}`
+    // El precio depende del item (p. ej. el patrón Valera cuesta 100). El cobro
+    // real lo valida el servidor; esto es solo el texto de confirmación.
+    const costo = tipo === 'color' ? precioPatron(valor) : 300
     const confirmar = Platform.OS === 'web'
-      ? window.confirm(`¿Desbloquear ${label} por 300 Valera Coins?`)
-      : await new Promise<boolean>(r => Alert.alert('Desbloquear', `¿Desbloquear ${label} por 300 Valera Coins?`,
+      ? window.confirm(`¿Desbloquear ${label} por ${costo} Valera Coins?`)
+      : await new Promise<boolean>(r => Alert.alert('Desbloquear', `¿Desbloquear ${label} por ${costo} Valera Coins?`,
           [{ text: 'Cancelar', style: 'cancel', onPress: () => r(false) }, { text: 'Comprar', onPress: () => r(true) }]))
     if (!confirmar) return
     setComprando(valor)
@@ -600,14 +603,12 @@ export default function Perfil() {
 
         <View style={s.premiumHeader}>
           <Text style={s.premiumLabel}>✨ Patrones animados</Text>
-          <Text style={s.premiumTag}>300 💰 c/u</Text>
+          <Text style={s.premiumTag}>desde 100 💰</Text>
         </View>
         <View style={s.coloresGrid}>
           {PATRONES_ANIMADOS.map(patron => {
             const id = `animated:${patron.id}`
-            // Los patrones marcados como 'gratis' (p. ej. Valera) están siempre
-            // disponibles, sin comprarlos.
-            const desbloqueado = patron.gratis || coloresDesbloqueados.includes(patron.id)
+            const desbloqueado = coloresDesbloqueados.includes(patron.id)
             const enCompra = comprando === patron.id
             const seleccionado = colorAcento === id && desbloqueado
             return (
@@ -633,7 +634,9 @@ export default function Perfil() {
                     </View>
                   )}
                 </TouchableOpacity>
-                <Text style={s.patronNombre}>{patron.nombre}</Text>
+                <Text style={s.patronNombre}>
+                  {patron.nombre}{!desbloqueado ? ` · ${precioPatron(patron.id)}💰` : ''}
+                </Text>
               </View>
             )
           })}
