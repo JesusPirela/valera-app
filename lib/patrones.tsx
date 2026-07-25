@@ -18,6 +18,9 @@ export type PatronAnimado = {
   nivel?: number
   brillo?: boolean   // halo en las figuras (para los de nivel alto)
   color?: string     // color de las figuras (por defecto dorado del logo)
+  // Multiplicador de opacidad de las figuras (1 = normal). Se baja cuando las
+  // figuras son CLARAS y taparían el texto claro del header (p. ej. diamante).
+  figAlpha?: number
   precio?: number    // patrones de tienda; por defecto 300
 }
 
@@ -44,7 +47,7 @@ export const PATRONES_ANIMADOS: PatronAnimado[] = [
   { id: 'estelar',  nombre: 'Estelar',     nivel: 75,  figura: 'estrella', colores: ['#1a237e', '#0d1b3e', '#311b92'],     base: '#1a237e',   color: '#ffe082', brillo: true },
   // Diamante: fondo navy OSCURO para que los diamantes claros contrasten (antes
   // el fondo cian los "escondía").
-  { id: 'diamante', nombre: 'Diamante',    nivel: 90,  figura: 'diamante', colores: ['#0a1929', '#132f4c', '#0d1b2a'],     base: '#0a1929',   color: '#e0f7fa', brillo: true },
+  { id: 'diamante', nombre: 'Diamante',    nivel: 90,  figura: 'diamante', colores: ['#0a1929', '#132f4c', '#0d1b2a'],     base: '#0a1929',   color: '#e0f7fa', brillo: true, figAlpha: 0.5 },
   { id: 'corona',   nombre: 'Corona Real', nivel: 100, figura: 'corona',   colores: ['#4a148c', '#6a1b9a', '#311b92'],     base: '#4a148c',   color: '#ffd700', brillo: true },
 
   // ── PATRONES DE TIENDA (solo color animado) ────────────────────────────────
@@ -114,8 +117,8 @@ function Figura({ tipo, size, color, opacity, brillo }: {
 // ── Figuras cayendo (en diagonal) ────────────────────────────────────────────
 // Varias figuras caen en diagonal, sin parar, con tamaños y velocidades
 // distintas (parallax). Opacidad baja para que el texto del header siga legible.
-function FigurasCayendo({ figura, color = VALERA_ORO, brillo, animar = true, densidad = 1 }: {
-  figura: FiguraTipo; color?: string; brillo?: boolean; animar?: boolean; densidad?: number
+function FigurasCayendo({ figura, color = VALERA_ORO, brillo, figAlpha = 1, animar = true, densidad = 1 }: {
+  figura: FiguraTipo; color?: string; brillo?: boolean; figAlpha?: number; animar?: boolean; densidad?: number
 }) {
   const [dim, setDim] = useState({ w: 0, h: 0 })
   const onLayout = (e: LayoutChangeEvent) => {
@@ -126,7 +129,7 @@ function FigurasCayendo({ figura, color = VALERA_ORO, brillo, animar = true, den
   return (
     <View style={StyleSheet.absoluteFillObject} onLayout={onLayout} pointerEvents="none">
       {dim.w > 0 && Array.from({ length: Math.max(5, Math.round(dim.w / 85 * densidad)) }).map((_, i) => (
-        <FiguraAnim key={i} idx={i} area={dim} figura={figura} color={color} brillo={brillo} animar={animar} />
+        <FiguraAnim key={i} idx={i} area={dim} figura={figura} color={color} brillo={brillo} figAlpha={figAlpha} animar={animar} />
       ))}
     </View>
   )
@@ -134,8 +137,8 @@ function FigurasCayendo({ figura, color = VALERA_ORO, brillo, animar = true, den
 
 // Params deterministas por índice (estables entre renders). Cada figura tiene
 // su carril X, tamaño, velocidad y fase inicial.
-function FiguraAnim({ idx, area, figura, color, brillo, animar }: {
-  idx: number; area: { w: number; h: number }; figura: FiguraTipo; color: string; brillo?: boolean; animar: boolean
+function FiguraAnim({ idx, area, figura, color, brillo, figAlpha, animar }: {
+  idx: number; area: { w: number; h: number }; figura: FiguraTipo; color: string; brillo?: boolean; figAlpha: number; animar: boolean
 }) {
   const prog = useRef(new Animated.Value(0)).current
   // "Ruido" reproducible a partir del índice.
@@ -146,7 +149,7 @@ function FiguraAnim({ idx, area, figura, color, brillo, animar }: {
   const size = Math.round((36 + r(1) * 36) * escala)
   const dur = 5000 + Math.round(r(3) * 4000)          // 5–9 s (parallax)
   const fase = r(4)                                    // 0–1: arranque escalonado
-  const opacity = 0.22 + r(5) * 0.22                   // visible pero legible: 0.22–0.44
+  const opacity = (0.22 + r(5) * 0.22) * figAlpha      // 0.22–0.44, atenuado por figAlpha
   // Caída DIAGONAL: recorre toda la altura y se desplaza de lado ~la mitad del
   // alto. Se arranca desde una X que ya descuenta ese desplazamiento para cubrir
   // todo el ancho de forma pareja.
@@ -236,7 +239,7 @@ export function AnimatedGradientView({ patron, style, children, animate = true }
     return (
       <View style={[{ overflow: 'hidden' }, style]}>
         <LinearGradient colors={patron.colores} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFillObject} />
-        {patron.figura && <FigurasCayendo figura={patron.figura} color={patron.color} brillo={patron.brillo} animar={false} />}
+        {patron.figura && <FigurasCayendo figura={patron.figura} color={patron.color} brillo={patron.brillo} figAlpha={patron.figAlpha} animar={false} />}
         {children}
       </View>
     )
@@ -248,7 +251,7 @@ export function AnimatedGradientView({ patron, style, children, animate = true }
       <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: anim }]}>
         <LinearGradient colors={[patron.colores[2], patron.colores[0], patron.colores[1]]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
       </Animated.View>
-      {patron.figura && <FigurasCayendo figura={patron.figura} color={patron.color} brillo={patron.brillo} animar />}
+      {patron.figura && <FigurasCayendo figura={patron.figura} color={patron.color} brillo={patron.brillo} figAlpha={patron.figAlpha} animar />}
       {children}
     </View>
   )
