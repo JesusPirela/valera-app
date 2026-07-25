@@ -605,7 +605,9 @@ export default function Perfil() {
         <View style={s.coloresGrid}>
           {PATRONES_ANIMADOS.map(patron => {
             const id = `animated:${patron.id}`
-            const desbloqueado = coloresDesbloqueados.includes(patron.id)
+            // Los patrones marcados como 'gratis' (p. ej. Valera) están siempre
+            // disponibles, sin comprarlos.
+            const desbloqueado = patron.gratis || coloresDesbloqueados.includes(patron.id)
             const enCompra = comprando === patron.id
             const seleccionado = colorAcento === id && desbloqueado
             return (
