@@ -261,6 +261,12 @@ export default function DetallePropiedad() {
     enabled: !!id,
     networkMode: 'offlineFirst',
     staleTime: 1000 * 60 * 5,
+    // Siempre revalidar al abrir: con offlineFirst el caché se muestra al
+    // instante y se corrige en segundo plano. Evita quedarse con una versión
+    // vieja/parcial guardada (p. ej. una propiedad importada/editada después de
+    // haberla cacheado: solo salía la 1a foto y sin descripción hasta cerrar
+    // sesión, que era lo único que limpiaba el caché).
+    refetchOnMount: 'always',
   })
 
   const { data: notaData } = useQuery({
