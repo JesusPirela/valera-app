@@ -1524,9 +1524,7 @@ export default function DetallePropiedad() {
     if (Platform.OS === 'web') {
       try {
         const idCasa = (propiedad.codigo ?? propiedad.id).replace(/[^a-zA-Z0-9._-]/g, '_')
-        if (imagenes.length > 1) {
-          window.alert(`Se descargarán ${imagenes.length} fotos. Si tu navegador pregunta "¿Descargar varios archivos?", dale PERMITIR.`)
-        }
+        // Sin aviso previo: al tocar "Descargar todas" las fotos se bajan solas.
         // Se bajan TODAS en paralelo PRIMERO (por el proxy si la CDN no da CORS).
         // Antes era secuencial con pausa de 500ms (lento) y, cuando fallaba el
         // CORS, abría pestañas nuevas (`target=_blank`) → eso era el parpadeo.
