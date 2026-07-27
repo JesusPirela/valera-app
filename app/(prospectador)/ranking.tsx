@@ -69,15 +69,17 @@ const MEDAL = ['🥇', '🥈', '🥉']
 export default function Ranking() {
   const queryClient = useQueryClient()
   const [sel, setSel] = useState<RankEntry | null>(null)
+  // Histórico = XP de siempre; Mensual = XP ganado en el mes en curso.
+  const [modo, setModo] = useState<'historico' | 'mensual'>('historico')
 
   // React Query: el ranking cacheado aparece al instante al volver a la pantalla;
   // solo se vuelve a pedir en segundo plano si pasaron >2 min (antes recargaba
   // desde cero en cada foco). getSession() es local (no red) para el userId.
   const { data, isLoading: loading, refetch } = useQuery({
-    queryKey: ['ranking'],
+    queryKey: ['ranking', modo],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
-      const { data: rows } = await supabase.rpc('get_ranking')
+      const { data: rows } = await supabase.rpc(modo === 'mensual' ? 'get_ranking_mensual' : 'get_ranking')
       return { userId: session?.user?.id ?? null, entries: (rows ?? []) as RankEntry[] }
     },
     staleTime: 1000 * 60 * 2,
@@ -94,11 +96,11 @@ export default function Ranking() {
   }, [refetch])
 
   useFocusEffect(useCallback(() => {
-    const st = queryClient.getQueryState(['ranking'])
+    const st = queryClient.getQueryState(['ranking', modo])
     if (!st?.dataUpdatedAt || Date.now() - st.dataUpdatedAt > 1000 * 60 * 2) {
-      queryClient.invalidateQueries({ queryKey: ['ranking'] })
+      queryClient.invalidateQueries({ queryKey: ['ranking', modo] })
     }
-  }, [queryClient]))
+  }, [queryClient, modo]))
 
   const miEntry = entries.find(e => e.id === userId)
 
@@ -119,8 +121,32 @@ export default function Ranking() {
       {/* Header */}
       <View style={s.header}>
         <Text style={s.headerTitle}>🏆 Ranking</Text>
-        <Text style={s.headerSub}>Top prospectadores por XP acumulado</Text>
+        <Text style={s.headerSub}>
+          {modo === 'mensual' ? 'Top del mes en curso (se reinicia cada mes)' : 'Top por XP acumulado de siempre'}
+        </Text>
       </View>
+
+      {/* Toggle Mensual / Histórico */}
+      <View style={s.toggleRow}>
+        <TouchableOpacity
+          style={[s.toggleBtn, modo === 'mensual' && s.toggleBtnActivo]}
+          onPress={() => setModo('mensual')}
+          activeOpacity={0.8}
+        >
+          <Text style={[s.toggleTxt, modo === 'mensual' && s.toggleTxtActivo]}>📅 Mensual</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.toggleBtn, modo === 'historico' && s.toggleBtnActivo]}
+          onPress={() => setModo('historico')}
+          activeOpacity={0.8}
+        >
+          <Text style={[s.toggleTxt, modo === 'historico' && s.toggleTxtActivo]}>♾️ Histórico</Text>
+        </TouchableOpacity>
+      </View>
+
+      {modo === 'mensual' && entries.length === 0 && !loading && (
+        <Text style={s.emptyHint}>Aún nadie ha ganado XP este mes.</Text>
+      )}
 
       {/* Mi posición (si no está visible en el top) */}
       {miEntry && miEntry.posicion > 10 && (
@@ -285,6 +311,14 @@ const s = StyleSheet.create({
   },
   headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff' },
   headerSub:   { fontSize: 12, color: '#7a9ab5', marginTop: 3 },
+  toggleRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 },
+  toggleBtn: {
+    flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: 'center',
+    backgroundColor: '#122030', borderWidth: 1.5, borderColor: '#1e3448',
+  },
+  toggleBtnActivo: { backgroundColor: '#c9a84c22', borderColor: '#c9a84c' },
+  toggleTxt: { fontSize: 13, fontWeight: '800', color: '#7a9ab5' },
+  toggleTxtActivo: { color: '#c9a84c' },
 
   entryCard: {
     flexDirection: 'row', alignItems: 'center',
