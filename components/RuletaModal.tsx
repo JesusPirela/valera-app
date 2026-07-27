@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { BlurView } from 'expo-blur'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { playShake, playOpen, startRolling, stopRolling, playWin } from '../lib/sounds'
+import { playShake, playOpen, startRolling, stopRolling, playWin, playEpicWin } from '../lib/sounds'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +35,7 @@ export const CONFIG_DEFAULT: RuletaConfig = {
     { id: 'lead_meta', nombre: 'Lead Meta Ads',         icono: '📱', tipo: 'lead_meta',      prob_cofre: 13,  prob_milestone: 12  },
     { id: 'curso',     nombre: 'Acceso curso',          icono: '🎓', tipo: 'curso_premium',  prob_cofre: 10,  prob_milestone: 6   },
     { id: 'lead_prem', nombre: 'Lead Premium',          icono: '⭐', tipo: 'lead_premium',   prob_cofre: 5,   prob_milestone: 1.5 },
+    { id: 'diseno',    nombre: 'Diseño profesional',    icono: '🖌️', tipo: 'diseno_pro',     prob_cofre: 3,   prob_milestone: 2   },
     { id: 'color',     nombre: 'Color personalizado',   icono: '🎨', tipo: 'pack_color',     prob_cofre: 1.5, prob_milestone: 0.4 },
     // Desbloqueados solo a partir de los 8 cofres abiertos:
     { id: 'comision',  nombre: 'Comisión extra',        icono: '💰', tipo: 'comision_extra', prob_cofre: 0.5, prob_milestone: 0.1, min_cofres: 8 },
@@ -283,7 +284,10 @@ export function RuletaModal({
       ).start(() => glowOpac.setValue(1))
 
       setFase('resultado')
-      playWin()
+      // Recompensa "mejor" (rara): suena algo ÉPICO. Umbral: probabilidad baja
+      // en cofre (lead premium, diseño, color, comisión, libro, campaña).
+      if ((winner.prob_cofre ?? 99) <= 5) playEpicWin()
+      else playWin()
       onGanar(winner)
     })
   }

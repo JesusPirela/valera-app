@@ -99,7 +99,7 @@ export function stopRolling() {
   _rollingAbort = true
 }
 
-// Arpeggio ascendente al ganar
+// Arpeggio ascendente al ganar (premio común)
 export function playWin() {
   const c = ctx(); if (!c) return
   const notes = [523.25, 659.25, 783.99, 1046.5] // C5 E5 G5 C6
@@ -114,5 +114,68 @@ export function playWin() {
     gain.gain.exponentialRampToValueAtTime(0.01, t + 0.45)
     osc.connect(gain); gain.connect(c.destination)
     osc.start(t); osc.stop(t + 0.5)
+  })
+}
+
+// Fanfarria ÉPICA para recompensas raras/mejores: arpegio ascendente rápido +
+// acorde mayor sostenido con brillo + un golpe grave, más largo y triunfal.
+export function playEpicWin() {
+  const c = ctx(); if (!c) return
+  const now = c.currentTime
+
+  // 1) Arpegio ascendente rápido (dos octavas).
+  const subida = [392, 523.25, 659.25, 783.99, 1046.5, 1318.5] // G4→E6
+  subida.forEach((freq, i) => {
+    const osc = c.createOscillator()
+    const gain = c.createGain()
+    const t = now + i * 0.07
+    osc.type = 'sawtooth'
+    osc.frequency.value = freq
+    gain.gain.setValueAtTime(0, t)
+    gain.gain.linearRampToValueAtTime(0.16, t + 0.02)
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3)
+    osc.connect(gain); gain.connect(c.destination)
+    osc.start(t); osc.stop(t + 0.32)
+  })
+
+  // 2) Acorde mayor sostenido (C mayor) que entra tras el arpegio.
+  const acordeT = now + 0.42
+  const acorde = [523.25, 659.25, 783.99, 1046.5] // C5 E5 G5 C6
+  acorde.forEach((freq) => {
+    const osc = c.createOscillator()
+    const gain = c.createGain()
+    osc.type = 'triangle'
+    osc.frequency.value = freq
+    gain.gain.setValueAtTime(0, acordeT)
+    gain.gain.linearRampToValueAtTime(0.14, acordeT + 0.06)
+    gain.gain.exponentialRampToValueAtTime(0.01, acordeT + 1.2)
+    osc.connect(gain); gain.connect(c.destination)
+    osc.start(acordeT); osc.stop(acordeT + 1.3)
+  })
+
+  // 3) Golpe grave (impacto) que le da cuerpo.
+  const bass = c.createOscillator()
+  const bassGain = c.createGain()
+  bass.type = 'sine'
+  bass.frequency.setValueAtTime(130, acordeT)
+  bass.frequency.exponentialRampToValueAtTime(65, acordeT + 0.5)
+  bassGain.gain.setValueAtTime(0.35, acordeT)
+  bassGain.gain.exponentialRampToValueAtTime(0.01, acordeT + 0.8)
+  bass.connect(bassGain); bassGain.connect(c.destination)
+  bass.start(acordeT); bass.stop(acordeT + 0.85)
+
+  // 4) Brillo (shimmer) agudo al final.
+  const shimT = acordeT + 0.15
+  ;[1568, 2093].forEach((freq, i) => {
+    const osc = c.createOscillator()
+    const gain = c.createGain()
+    const t = shimT + i * 0.08
+    osc.type = 'sine'
+    osc.frequency.value = freq
+    gain.gain.setValueAtTime(0, t)
+    gain.gain.linearRampToValueAtTime(0.08, t + 0.03)
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5)
+    osc.connect(gain); gain.connect(c.destination)
+    osc.start(t); osc.stop(t + 0.55)
   })
 }
