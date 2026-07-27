@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   View,
   Text,
@@ -366,6 +366,21 @@ export default function DetallePropiedad() {
   const [nuevoTelefono, setNuevoTelefono] = useState('')
   const [guardandoCliente, setGuardandoCliente] = useState(false)
   const [solicitandoDiseno, setSolicitandoDiseno] = useState(false)
+  // Tokens de diseño: se necesita 1 para pedir un diseño. Se compran (100 coins,
+  // máx 2/día) o se ganan en cofres.
+  const [disenoTokens, setDisenoTokens] = useState<number | null>(null)
+  const [modalDiseno, setModalDiseno] = useState(false)
+  const [comprandoDiseno, setComprandoDiseno] = useState(false)
+
+  const cargarDisenoTokens = useCallback(async () => {
+    try {
+      const { data: { user } } = await getUsuarioActual()
+      if (!user) return
+      const { data } = await supabase.from('user_stats').select('disenos_tokens').eq('id', user.id).maybeSingle()
+      setDisenoTokens((data as any)?.disenos_tokens ?? 0)
+    } catch { /* sin red: se reintenta al abrir el modal */ }
+  }, [])
+  useEffect(() => { cargarDisenoTokens() }, [cargarDisenoTokens])
   const [generandoPDF, setGenerandoPDF] = useState(false)
   const [descripcionCopiada, setDescripcionCopiada] = useState(false)
   const [, setPublicada] = useState(false)
@@ -1253,41 +1268,56 @@ export default function DetallePropiedad() {
     }
   }
 
-  async function pedirDiseno() {
+  // Abre WhatsApp con André para el diseño (después de consumir el token).
+  function abrirWhatsAppDiseno() {
     if (!propiedad) return
-    const { data: { user } } = await getUsuarioActual()
-    if (!user) return
-
-    const hoyInicio = new Date()
-    hoyInicio.setHours(0, 0, 0, 0)
-
-    const { count } = await supabase
-      .from('propiedad_actividad')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('tipo', 'solicitud_diseno')
-      .gte('created_at', hoyInicio.toISOString())
-
-    if ((count ?? 0) > 0) {
-      if (Platform.OS === 'web') {
-        window.alert('Ya solicitaste un diseño hoy. Solo puedes pedir 1 diseño por día.')
-      } else {
-        Alert.alert('Límite alcanzado', 'Ya solicitaste un diseño hoy. Solo puedes pedir 1 diseño por día.')
-      }
-      return
-    }
-
-    setSolicitandoDiseno(true)
-    await supabase.from('propiedad_actividad').insert({
-      propiedad_id: propiedad.id,
-      user_id: user.id,
-      tipo: 'solicitud_diseno',
-    })
-    setSolicitandoDiseno(false)
-
     const nombre = nombreUsuario ?? 'Un prospectador'
     const mensaje = `Hola André, soy *${nombre}* y quisiera solicitar un diseño para la propiedad *${propiedad.codigo}* (ID: ${propiedad.id}). ¿Me puedes ayudar?`
     Linking.openURL(`https://wa.me/524428790740?text=${encodeURIComponent(mensaje)}`)
+  }
+
+  // Pedir un diseño: consume 1 token. Si no hay, abre el modal para conseguirlo.
+  async function pedirDiseno() {
+    if (!propiedad) return
+    if ((disenoTokens ?? 0) <= 0) { setModalDiseno(true); return }
+
+    setSolicitandoDiseno(true)
+    try {
+      const { data, error } = await supabase.rpc('usar_token_diseno')
+      if (error || !data?.ok) {
+        // Sin token (o carrera): abrir el modal para comprar.
+        setDisenoTokens(0)
+        setModalDiseno(true)
+        return
+      }
+      setDisenoTokens(data.tokens ?? 0)
+      try {
+        const uid = (await getUsuarioActual()).data.user?.id
+        if (uid) await supabase.from('propiedad_actividad').insert({
+          propiedad_id: propiedad.id, tipo: 'solicitud_diseno', user_id: uid,
+        })
+      } catch { /* el registro de actividad no es crítico */ }
+      abrirWhatsAppDiseno()
+    } finally {
+      setSolicitandoDiseno(false)
+    }
+  }
+
+  // Comprar un token de diseño (100 coins, máx 2/día).
+  async function comprarDiseno() {
+    if (comprandoDiseno) return
+    setComprandoDiseno(true)
+    try {
+      const { data, error } = await supabase.rpc('comprar_token_diseno')
+      if (error || !data?.ok) {
+        const msg = data?.mensaje ?? 'No se pudo comprar el diseño.'
+        Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Diseño', msg)
+        return
+      }
+      setDisenoTokens(data.tokens ?? ((disenoTokens ?? 0) + 1))
+    } finally {
+      setComprandoDiseno(false)
+    }
   }
 
   function normalizarTelMx(telRaw: string): string {
@@ -2133,18 +2163,66 @@ export default function DetallePropiedad() {
           </Text>
         </TouchableOpacity>
 
-        {/* Botón solicitar diseño con André */}
-        <TouchableOpacity
-          style={[styles.btnDiseno, (!propiedad || solicitandoDiseno) && styles.btnDisabled]}
-          onPress={pedirDiseno}
-          disabled={!propiedad || solicitandoDiseno}
-        >
-          {solicitandoDiseno
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={styles.btnDisenoText}>🎨 Solicitar diseño con André</Text>
-          }
-        </TouchableOpacity>
-        <Text style={styles.btnDisenoHint}>Puedes solicitar 1 diseño por día</Text>
+        {/* Botón solicitar diseño con André — necesita un token de diseño */}
+        {(() => {
+          const tokens = disenoTokens ?? 0
+          const bloqueado = tokens <= 0
+          return (
+            <TouchableOpacity
+              style={[styles.btnDiseno, bloqueado && { backgroundColor: '#8a7a3f' }, (!propiedad || solicitandoDiseno) && styles.btnDisabled]}
+              onPress={pedirDiseno}
+              disabled={!propiedad || solicitandoDiseno}
+            >
+              {solicitandoDiseno
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.btnDisenoText}>
+                    {bloqueado ? '🔒 Diseño profesional' : `🎨 Solicitar diseño con André (${tokens})`}
+                  </Text>
+              }
+            </TouchableOpacity>
+          )
+        })()}
+        <Text style={styles.btnDisenoHint}>
+          {(disenoTokens ?? 0) > 0
+            ? `Tienes ${disenoTokens} diseño${disenoTokens === 1 ? '' : 's'} disponible${disenoTokens === 1 ? '' : 's'}`
+            : 'Desbloquéalo con 100 monedas o gánalo en los cofres'}
+        </Text>
+
+        {/* Modal: conseguir un token de diseño */}
+        <Modal visible={modalDiseno} transparent animationType="fade" onRequestClose={() => setModalDiseno(false)}>
+          <TouchableOpacity style={styles.envOverlay} activeOpacity={1} onPress={() => setModalDiseno(false)}>
+            <View style={[styles.envBox, { alignItems: 'center' }]}>
+              <Text style={{ fontSize: 40 }}>🎨</Text>
+              <Text style={styles.envTitulo}>Diseño profesional</Text>
+              <Text style={{ color: '#5a6b78', textAlign: 'center', marginTop: 6, marginBottom: 4, fontSize: 13.5 }}>
+                Necesitas un diseño para pedírselo a André. Cómpralo por 100 monedas (máx. 2 al día) o gánalo en los cofres. Se guarda como token para usarlo cuando quieras.
+              </Text>
+              <Text style={{ color: '#1a6470', fontWeight: '800', marginVertical: 8 }}>
+                Tienes {disenoTokens ?? 0} diseño{(disenoTokens ?? 0) === 1 ? '' : 's'}
+              </Text>
+              <TouchableOpacity
+                style={[styles.btnDiseno, { alignSelf: 'stretch' }, comprandoDiseno && styles.btnDisabled]}
+                onPress={comprarDiseno}
+                disabled={comprandoDiseno}
+              >
+                {comprandoDiseno
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.btnDisenoText}>Comprar por 100 💰</Text>}
+              </TouchableOpacity>
+              {(disenoTokens ?? 0) > 0 && (
+                <TouchableOpacity
+                  style={{ marginTop: 10, paddingVertical: 8 }}
+                  onPress={() => { setModalDiseno(false); pedirDiseno() }}
+                >
+                  <Text style={{ color: '#16a34a', fontWeight: '800' }}>Usar uno ahora →</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={{ marginTop: 6, paddingVertical: 6 }} onPress={() => setModalDiseno(false)}>
+                <Text style={{ color: '#94a3b8' }}>Cerrar</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         {/* Botón agendar con Valera */}
         <TouchableOpacity
