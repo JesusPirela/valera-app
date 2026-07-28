@@ -357,7 +357,8 @@ export default function AdminConstructoras() {
                   </View>
                   {zg.grupos.map((g) => {
                     const aKey = `${zg.zona}_${g.nombre}`
-                    const abierta = abiertas[aKey] ?? false
+                    // Al buscar, abrir los grupos por defecto (ver constructoras.tsx del prospectador).
+                    const abierta = abiertas[aKey] ?? busqueda.trim().length > 0
                     return (
                       <View key={aKey} style={styles.grupo}>
                         <TouchableOpacity

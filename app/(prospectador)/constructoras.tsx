@@ -265,7 +265,11 @@ export default function Constructoras() {
               </View>
               {zg.grupos.map((g) => {
                 const aKey = `${zg.zona}_${g.nombre}`
-                const abierta = abiertas[aKey] ?? false
+                // Al BUSCAR, los grupos se muestran ABIERTOS por defecto para
+                // que los modelos salgan directos (antes salían colapsados y
+                // parecía que "no salía" la constructora). Sin búsqueda, cerrados.
+                // Si el usuario toca un grupo, su elección manda (abiertas[aKey]).
+                const abierta = abiertas[aKey] ?? busqueda.trim().length > 0
                 const popular = esPopularMercado(g.nombre)
                 const borderColor = popular ? '#e65100' : c.border
                 return (
