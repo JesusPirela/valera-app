@@ -409,15 +409,13 @@ export default function DetallePropiedad() {
   }
 
   useEffect(() => {
-    if (!id || !isOnline) return
-    setPublicada(false)
-    setVecesPublicada(0)
-    setFechaPublicacion(null)
-    cargarPublicacion()
-    // Registrar vista solo si el usuario permanece ≥30 s en la propiedad.
-    const timer = setTimeout(() => registrarActividad('vista'), 30_000)
+    if (!id) return
+    // Solo cargar si hay red; si se recupera la conexión (isOnline cambia a true)
+    // el efecto re-corre y carga el estado real sin resetear a 0 primero.
+    if (isOnline) cargarPublicacion()
+    const timer = setTimeout(() => { if (isOnline) registrarActividad('vista') }, 30_000)
     return () => clearTimeout(timer)
-  }, [id])
+  }, [id, isOnline])
 
   // Resetear estado de carga al cambiar de imagen en el lightbox
   useEffect(() => {
@@ -438,19 +436,21 @@ export default function DetallePropiedad() {
   }, [lightboxVisible, propiedad])
 
   async function cargarPublicacion() {
-    const { data: { user } } = await getUsuarioActual()
-    if (!user) return
-    const { data } = await supabase
-      .from('propiedad_publicacion')
-      .select('publicada, fecha_publicacion, veces_publicada')
-      .eq('propiedad_id', id)
-      .eq('user_id', user.id)
-      .maybeSingle()
-    if (data) {
-      setPublicada(data.publicada)
-      setFechaPublicacion(data.fecha_publicacion)
-      setVecesPublicada(data.veces_publicada ?? 0)
-    }
+    try {
+      const { data: { user } } = await getUsuarioActual()
+      if (!user) return
+      const { data } = await supabase
+        .from('propiedad_publicacion')
+        .select('publicada, fecha_publicacion, veces_publicada')
+        .eq('propiedad_id', id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (data) {
+        setPublicada(data.publicada)
+        setFechaPublicacion(data.fecha_publicacion)
+        setVecesPublicada(data.veces_publicada ?? 0)
+      }
+    } catch { /* sin red: mantener estado actual, no resetear */ }
   }
 
   async function togglePublicacion() {
