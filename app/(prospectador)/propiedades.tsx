@@ -291,6 +291,7 @@ export default function ProspectadorPropiedades() {
   togglingRef.current = toggling
   const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
+  const [filtroRecamaras, setFiltroRecamaras] = useState<number | null>(null)  // mínimo de recámaras
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
   const [precioMin, setPrecioMin] = useState('')
   const [precioMax, setPrecioMax] = useState('')
@@ -701,6 +702,7 @@ export default function ProspectadorPropiedades() {
   const filtrosActivos = [
     filtroOperacion,
     filtroTipo,
+    filtroRecamaras != null ? 'recamaras' : null,
     ordenPrecio,
     (precioMinNum != null || precioMaxNum != null) ? 'precio' : null,
     filtroPublicadas,
@@ -751,6 +753,7 @@ export default function ProspectadorPropiedades() {
   }
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
+  if (filtroRecamaras != null) propiedadesFiltradas = propiedadesFiltradas.filter((p) => (p.recamaras ?? 0) >= filtroRecamaras)
   if (precioMinNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio >= precioMinNum)
   if (precioMaxNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio <= precioMaxNum)
   if (filtroFechaPreset) {
@@ -827,14 +830,14 @@ export default function ProspectadorPropiedades() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     propiedades, busqueda, filtroPublicadas, publicaciones, filtroNueva,
-    filtroExclusiva, filtroDestacada, filtroOperacion, filtroTipo, precioMinNum, precioMaxNum,
+    filtroExclusiva, filtroDestacada, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
     shuffleTick,
   ])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
   useEffect(() => { setVisibleCount(PAGE_WEB) }, [
-    busqueda, filtroOperacion, filtroTipo, ordenPrecio, precioMin, precioMax,
+    busqueda, filtroOperacion, filtroTipo, filtroRecamaras, ordenPrecio, precioMin, precioMax,
     filtroPublicadas, filtroNueva, filtroExclusiva, filtroFechaPreset,
     fechaDesdeCustom, fechaHastaCustom,
   ])
@@ -865,6 +868,7 @@ export default function ProspectadorPropiedades() {
   function limpiarFiltros() {
     setFiltroOperacion(null)
     setFiltroTipo(null)
+    setFiltroRecamaras(null)
     setOrdenPrecio(null)
     setFiltroPublicadas(null)
     setFiltroNueva(false)
@@ -1009,6 +1013,13 @@ export default function ProspectadorPropiedades() {
             <FiltroChip label="Departamento" active={filtroTipo === 'departamento'} onPress={() => setFiltroTipo(filtroTipo === 'departamento' ? null : 'departamento')} color={primaryColor} />
             <FiltroChip label="Local" active={filtroTipo === 'local'} onPress={() => setFiltroTipo(filtroTipo === 'local' ? null : 'local')} color={primaryColor} />
             <FiltroChip label="Terreno" active={filtroTipo === 'terreno'} onPress={() => setFiltroTipo(filtroTipo === 'terreno' ? null : 'terreno')} color={primaryColor} />
+          </ScrollView>
+          <Text style={styles.filtroLabel}>Recámaras (mínimo)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="Todas" active={filtroRecamaras === null} onPress={() => setFiltroRecamaras(null)} color={primaryColor} />
+            {[1, 2, 3, 4].map(n => (
+              <FiltroChip key={n} label={`${n}+`} active={filtroRecamaras === n} onPress={() => setFiltroRecamaras(filtroRecamaras === n ? null : n)} color={primaryColor} />
+            ))}
           </ScrollView>
           <Text style={styles.filtroLabel}>Precio — ordenar</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
