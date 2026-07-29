@@ -2249,7 +2249,7 @@ export default function DetallePropiedad() {
         <Text style={styles.btnDisenoHint}>
           {(disenoTokens ?? 0) > 0
             ? `Tienes ${disenoTokens} diseño${disenoTokens === 1 ? '' : 's'} disponible${disenoTokens === 1 ? '' : 's'}`
-            : 'Desbloquéalo con 100 monedas o gánalo en los cofres'}
+            : 'Desbloquéalo con 50 monedas o gánalo en los cofres'}
         </Text>
 
         {/* Modal: conseguir un token de diseño */}
@@ -2259,7 +2259,7 @@ export default function DetallePropiedad() {
               <Text style={{ fontSize: 40 }}>🎨</Text>
               <Text style={styles.envTitulo}>Diseño profesional</Text>
               <Text style={{ color: '#5a6b78', textAlign: 'center', marginTop: 6, marginBottom: 4, fontSize: 13.5 }}>
-                Necesitas un diseño para pedírselo a André. Cómpralo por 100 monedas (máx. 2 al día) o gánalo en los cofres. Se guarda como token para usarlo cuando quieras.
+                Necesitas un diseño para pedírselo a André. Cómpralo por 50 monedas (máx. 2 al día) o gánalo en los cofres. Se guarda como token para usarlo cuando quieras.
               </Text>
               <Text style={{ color: '#1a6470', fontWeight: '800', marginVertical: 8 }}>
                 Tienes {disenoTokens ?? 0} diseño{(disenoTokens ?? 0) === 1 ? '' : 's'}
@@ -2271,7 +2271,7 @@ export default function DetallePropiedad() {
               >
                 {comprandoDiseno
                   ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.btnDisenoText}>Comprar por 100 💰</Text>}
+                  : <Text style={styles.btnDisenoText}>Comprar por 50 💰</Text>}
               </TouchableOpacity>
               {(disenoTokens ?? 0) > 0 && (
                 <TouchableOpacity

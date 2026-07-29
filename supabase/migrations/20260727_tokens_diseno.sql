@@ -17,7 +17,7 @@ DECLARE
   v_hoy   date := (now() AT TIME ZONE 'America/Mexico_City')::date;
   v_compras_hoy int;
   v_tokens int;
-  COSTO   constant int := 100;
+  COSTO   constant int := 50;
   MAX_DIA constant int := 2;
   v_concepto constant text := 'Token de diseño 🎨';
 BEGIN
