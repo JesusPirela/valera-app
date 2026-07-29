@@ -1942,25 +1942,24 @@ export default function DetallePropiedad() {
           </View>
         ) : null}
 
-        {/* IA: descripción lista para publicar (solo usuarios plus+). Cada clic
-            genera una versión DISTINTA (misma info) para no duplicar en redes. */}
-        {esPlusOMejor(rol) && (
-          <View style={styles.seccion}>
-            <TouchableOpacity
-              style={[styles.btnDescIA, generandoDescIA && styles.btnDisabled]}
-              onPress={generarDescripcionIA}
-              disabled={generandoDescIA}
-              activeOpacity={0.85}
-            >
-              {generandoDescIA
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.btnDescIAText}>✨ Copiar descripción para publicar (IA)</Text>}
-            </TouchableOpacity>
-            <Text style={styles.btnDescIAHint}>
-              {descIAMsg ?? 'Cada vez genera una versión distinta (misma info) para que no la detecten como duplicada.'}
-            </Text>
-          </View>
-        )}
+        {/* IA: descripción lista para publicar (para TODOS). Cada clic genera
+            una versión DISTINTA (misma info) para no duplicar en redes. Límite
+            de 5 usos por día por usuario (lo controla la edge function). */}
+        <View style={styles.seccion}>
+          <TouchableOpacity
+            style={[styles.btnDescIA, generandoDescIA && styles.btnDisabled]}
+            onPress={generarDescripcionIA}
+            disabled={generandoDescIA}
+            activeOpacity={0.85}
+          >
+            {generandoDescIA
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={styles.btnDescIAText}>✨ Copiar descripción para publicar (IA)</Text>}
+          </TouchableOpacity>
+          <Text style={styles.btnDescIAHint}>
+            {descIAMsg ?? 'Cada vez genera una versión distinta (misma info) para que no la detecten como duplicada. 5 usos al día.'}
+          </Text>
+        </View>
 
         {/* Ubicación — mapa interactivo (acercar/alejar/mover) + abrir en Google Maps */}
         {propiedad.lat != null && propiedad.lng != null && (

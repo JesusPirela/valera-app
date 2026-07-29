@@ -7,11 +7,10 @@ const CORS = {
   'Content-Type': 'application/json',
 }
 
-// Tope de generaciones por usuario por DÍA (hora de México). Calibrado para que
-// las cuotas gratis de las IAs (Groq + Gemini) alcancen entre todos los plus:
-// ~35 usuarios plus/admin × 15/día ≈ 525 generaciones/día, repartidas en 5
-// motores encadenados → dentro de las cuotas gratis. Ajustable con una línea.
-const LIMITE_DIARIO = 15
+// Tope de generaciones por usuario por DÍA (hora de México). Disponible para
+// TODOS los usuarios. 5/día por usuario mantiene el gasto dentro de las cuotas
+// gratis de las IAs (Groq + Gemini) aunque lo usen todos. Ajustable con esta línea.
+const LIMITE_DIARIO = 5
 
 // Cadena de respaldo: cada modelo de Groq tiene su propia cuota diaria gratis.
 // Si uno se agota (429) o no existe (404), se pasa al siguiente. Al final,
