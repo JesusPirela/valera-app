@@ -560,6 +560,81 @@ serve(async (req) => {
       }
     }
 
+    // ── 0b2. ficha.info (fichas de Tokko Broker) ────────────────────────────
+    // Next.js App Router con RSC streaming. Los datos vienen embebidos en los
+    // scripts self.__next_f.push([1,"..."]) — extractNocNokProperty ya lee ese
+    // formato. El objeto "property" contiene todo: tipo, precio, m2, fotos, etc.
+    if (/ficha\.info\/p\//i.test(url)) {
+      const np = extractNocNokProperty(html)
+      if (np) {
+        if (!tipo) tipo = mapTipo(String((np as any).type?.name ?? ''))
+
+        if (!precio) {
+          const ops = (np as any).operations as Record<string, string[]> | undefined
+          const rawSale = String(ops?.Sale?.[0] ?? ops?.sale?.[0] ?? '').replace(/\D/g, '')
+          const rawRent = String(ops?.Rent?.[0] ?? ops?.rent?.[0] ?? '').replace(/\D/g, '')
+          if (rawSale) { precio = rawSale; operacion = 'venta' }
+          else if (rawRent) { precio = rawRent; operacion = 'renta' }
+        }
+
+        for (const m of ((np as any).measurement ?? []) as any[]) {
+          if (m.key === 'total_surface' && !m2) m2 = String(m.original_value ?? '')
+          if (m.key === 'surface' && !m2Terreno) m2Terreno = String(m.original_value ?? '')
+        }
+
+        for (const b of ((np as any).basic_info ?? []) as any[]) {
+          const v = parseNum(b.value)
+          if (b.key === 'suite_amount'       && recamaras       === null) recamaras       = cap(v, 5)
+          if (b.key === 'bathroom_amount'    && banos           === null) banos           = cap(v, 4)
+          if (b.key === 'toilet_amount'      && mediosBanos     === null) mediosBanos     = cap(v, 2)
+          if (b.key === 'parking_lot_amount' && estacionamientos=== null) estacionamientos= cap(v, 3)
+        }
+
+        if (!direccion) {
+          const loc = String((np as any).location ?? (np as any).address ?? '')
+          if (loc) direccion = loc.replace(/\|/g, ',').replace(/\s{2,}/g, ' ').trim()
+        }
+
+        if (!zona) {
+          const l = String((np as any).location ?? '').toLowerCase()
+          if (/quer[eé]taro/.test(l))                zona = 'queretaro'
+          else if (/monterrey|nuevo\s*le[oó]n/.test(l)) zona = 'monterrey'
+          else if (/puebla/.test(l))                 zona = 'puebla'
+        }
+
+        if (!imagenes.length) {
+          const imgs = (np as any).pictures?.images
+          if (Array.isArray(imgs)) imagenes = imgs.filter(Boolean).slice(0, 30)
+        }
+      }
+
+      // Título desde edited_ficha.title (más limpio que property.address)
+      if (!titulo) {
+        const m = html.match(/"edited_ficha"\s*:\s*\{[^{}]{0,800}"title"\s*:\s*"([^"]+)"/)
+        if (m?.[1]) titulo = decodeEntities(m[1])
+      }
+
+      // Descripción en texto plano desde los chunks RSC (id:T<hex>,<texto>)
+      if (!descripcion) {
+        const allRsc = [...html.matchAll(/self\.__next_f\.push\(\[1,"([\s\S]*?)"\]\)/g)]
+          .map(b => b[1]
+            .replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+            .replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t')
+            .replace(/\\u([0-9a-fA-F]{4})/g, (_, c) => String.fromCharCode(parseInt(c, 16)))
+          ).join('')
+        // Tomar el chunk de texto plano (el de menor tamaño entre los T<hex>,<text>)
+        // ficha.info emite dos: HTML (~17:T7fa) y plano (~18:T518)
+        const txtMatches = [...allRsc.matchAll(/\d+:T[0-9a-f]+,([\s\S]+?)(?=\n?\d+:|$)/g)]
+        const plainChunk = txtMatches.reduce<string | null>((best, m) =>
+          (!best || m[1].length < best.length) ? m[1] : best, null)
+        if (plainChunk) {
+          descripcion = plainChunk
+            .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+            .replace(/\s+/g, ' ').trim().slice(0, 3000)
+        }
+      }
+    }
+
     // ── 0c. NocNok platform (realtydreamsmexico.com y similares) ────────────
     if (html.includes('nocnok-img')) {
       const np = extractNocNokProperty(html)
