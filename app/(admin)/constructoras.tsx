@@ -35,6 +35,7 @@ const SIN_ZONA = 'Otras zonas'
 type Contacto = {
   id: string
   nombre: string
+  empresa_matriz: string | null
   coordinador_nombre: string | null
   telefono_contacto: string | null
   email: string | null
@@ -183,6 +184,52 @@ export default function AdminConstructoras() {
       })
   }, [filtrados, zonasDisponibles])
 
+  const SIN_CONSTRUCTORA_ADM = 'Sin constructora'
+  const SIN_MATRIZ = 'Otros'
+
+  const empresaMap = useMemo(() => {
+    const m = new Map<string, string | null>()
+    for (const ct of contactos) m.set(ct.nombre, ct.empresa_matriz)
+    return m
+  }, [contactos])
+
+  const empresaGrupos = useMemo(() => {
+    const q = normalizar(busqueda.trim())
+    const lista = enriquecidos.filter(m => {
+      if (!q) return true
+      return (
+        normalizar(m.nombre_constructora ?? '').includes(q) ||
+        normalizar(m.titulo ?? '').includes(q) ||
+        normalizar(m.codigo ?? '').includes(q) ||
+        normalizar(m.zonaDet).includes(q) ||
+        normalizar(m.direccion ?? '').includes(q) ||
+        normalizar(empresaMap.get(m.nombre_constructora?.trim() ?? '') ?? '').includes(q)
+      )
+    })
+    const porEmpresa = new Map<string, Map<string, ModeloZona[]>>()
+    for (const m of lista) {
+      const constructora = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA_ADM
+      const empresa = empresaMap.get(constructora) ?? SIN_MATRIZ
+      if (!porEmpresa.has(empresa)) porEmpresa.set(empresa, new Map())
+      const porDesarrollo = porEmpresa.get(empresa)!
+      if (!porDesarrollo.has(constructora)) porDesarrollo.set(constructora, [])
+      porDesarrollo.get(constructora)!.push(m)
+    }
+    return Array.from(porEmpresa.entries())
+      .map(([empresa, desarrollosMap]) => ({
+        empresa,
+        desarrollos: Array.from(desarrollosMap.entries())
+          .map(([nombre, mods]) => ({ nombre, modelos: mods }))
+          .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+        total: Array.from(desarrollosMap.values()).reduce((s, ms) => s + ms.length, 0),
+      }))
+      .sort((a, b) => {
+        if (a.empresa === SIN_MATRIZ) return 1
+        if (b.empresa === SIN_MATRIZ) return -1
+        return b.total - a.total
+      })
+  }, [enriquecidos, busqueda, empresaMap])
+
   // Contactos ya guardados (coordinador + teléfono), sin repetir, para reusarlos
   // con un click en el formulario en vez de reescribir el número cada vez.
   const contactosGuardados = useMemo(() => {
@@ -284,7 +331,7 @@ export default function AdminConstructoras() {
         <>
           <View style={styles.intro}>
             <Text style={[styles.introTitle, { color: c.text }]}>🏗️ Constructoras</Text>
-            <Text style={[styles.introSub, { color: c.textMute }]}>Filtra por fraccionamiento o busca una constructora.</Text>
+            <Text style={[styles.introSub, { color: c.textMute }]}>Vista por empresa matriz → desarrollo → modelos.</Text>
           </View>
 
           <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -305,99 +352,77 @@ export default function AdminConstructoras() {
             )}
           </View>
 
-          {!loadingCatalogo && zonasDisponibles.length > 0 && (
-            <View style={styles.chipsWrap}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-                <TouchableOpacity
-                  style={[styles.chip, { borderColor: c.border }, zonaSel === null && styles.chipActivo]}
-                  onPress={() => setZonaSel(null)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.chipTxt, { color: zonaSel === null ? '#fff' : c.textSub }]}>
-                    Todas ({enriquecidos.length})
-                  </Text>
-                </TouchableOpacity>
-                {zonasDisponibles.map(z => {
-                  const activo = zonaSel === z.nombre
-                  return (
-                    <TouchableOpacity
-                      key={z.nombre}
-                      style={[styles.chip, { borderColor: c.border }, activo && styles.chipActivo]}
-                      onPress={() => setZonaSel(activo ? null : z.nombre)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.chipTxt, { color: activo ? '#fff' : c.textSub }]}>
-                        {z.nombre} ({z.n})
-                      </Text>
-                    </TouchableOpacity>
-                  )
-                })}
-              </ScrollView>
-            </View>
-          )}
-
           {loadingCatalogo ? (
             <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
-          ) : zonaGrupos.length === 0 ? (
+          ) : empresaGrupos.length === 0 ? (
             <View style={styles.empty}>
               <Text style={{ fontSize: 46, marginBottom: 10 }}>🏗️</Text>
               <Text style={[styles.emptyText, { color: c.textMute }]}>
-                {busqueda || zonaSel ? 'Sin resultados para ese filtro.' : 'No hay propiedades de constructora aún.'}
+                {busqueda ? 'Sin resultados para ese filtro.' : 'No hay propiedades de constructora aún.'}
               </Text>
             </View>
           ) : (
             <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
-              {zonaGrupos.map(zg => (
-                <View key={zg.zona}>
-                  <View style={[styles.zonaSectionHeader, { borderBottomColor: c.border }]}>
-                    <Text style={[styles.zonaSectionTitle, { color: c.text }]}>📍 {zg.zona}</Text>
-                    <Text style={[styles.zonaSectionMeta, { color: c.textMute }]}>
-                      {zg.ciudad ? `${zg.ciudad} · ` : ''}{zg.total} {zg.total === 1 ? 'modelo' : 'modelos'}
-                    </Text>
-                  </View>
-                  {zg.grupos.map((g) => {
-                    const aKey = `${zg.zona}_${g.nombre}`
-                    // Al buscar, abrir los grupos por defecto (ver constructoras.tsx del prospectador).
-                    const abierta = abiertas[aKey] ?? busqueda.trim().length > 0
-                    return (
-                      <View key={aKey} style={styles.grupo}>
-                        <TouchableOpacity
-                          style={[styles.grupoHeader, { backgroundColor: c.card, borderColor: c.border }]}
-                          onPress={() => setAbiertas((s) => ({ ...s, [aKey]: !abierta }))}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={[styles.grupoTitulo, { color: c.text }]}>{abierta ? '▼' : '▶'}  {g.nombre}</Text>
-                          <Text style={styles.grupoMeta}>{g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}</Text>
-                        </TouchableOpacity>
+              {empresaGrupos.map(eg => {
+                const empKey = `emp_${eg.empresa}`
+                const empAbierta = abiertas[empKey] ?? true
+                return (
+                  <View key={eg.empresa} style={{ marginBottom: 6 }}>
+                    <TouchableOpacity
+                      style={[styles.empresaHeader, { backgroundColor: '#1a6470' }]}
+                      onPress={() => setAbiertas(s => ({ ...s, [empKey]: !empAbierta }))}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.empresaChevron}>{empAbierta ? '▼' : '▶'}</Text>
+                      <Text style={styles.empresaTitulo} numberOfLines={1}>{eg.empresa}</Text>
+                      <Text style={styles.empresaMeta}>
+                        {eg.desarrollos.length} {eg.desarrollos.length === 1 ? 'desarrollo' : 'desarrollos'} · {eg.total} {eg.total === 1 ? 'modelo' : 'modelos'}
+                      </Text>
+                    </TouchableOpacity>
 
-                        {abierta && g.modelos.map((m) => {
-                          const img = (m.propiedad_imagenes ?? [])[0]
-                          return (
-                            <TouchableOpacity
-                              key={m.id}
-                              style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border }]}
-                              onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })}
-                              activeOpacity={0.85}
-                            >
-                              {img?.url ? (
-                                <ThumbImage url={img.thumb_url ?? img.url} style={styles.modeloImg} />
-                              ) : (
-                                <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
-                              )}
-                              <View style={{ flex: 1 }}>
-                                <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
-                                <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
-                                {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
-                              </View>
-                              <Text style={styles.modeloChevron}>›</Text>
-                            </TouchableOpacity>
-                          )
-                        })}
-                      </View>
-                    )
-                  })}
-                </View>
-              ))}
+                    {empAbierta && eg.desarrollos.map(d => {
+                      const devKey = `dev_${eg.empresa}_${d.nombre}`
+                      const devAbierta = abiertas[devKey] ?? busqueda.trim().length > 0
+                      return (
+                        <View key={devKey} style={{ paddingLeft: 12, marginTop: 4 }}>
+                          <TouchableOpacity
+                            style={[styles.grupoHeader, { backgroundColor: c.card, borderColor: '#c9a84c', borderWidth: 1.4 }]}
+                            onPress={() => setAbiertas(s => ({ ...s, [devKey]: !devAbierta }))}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={[styles.grupoTitulo, { color: c.text }]}>{devAbierta ? '▼' : '▶'}  {d.nombre}</Text>
+                            <Text style={styles.grupoMeta}>{d.modelos.length} {d.modelos.length === 1 ? 'modelo' : 'modelos'}</Text>
+                          </TouchableOpacity>
+
+                          {devAbierta && d.modelos.map((m) => {
+                            const img = (m.propiedad_imagenes ?? [])[0]
+                            return (
+                              <TouchableOpacity
+                                key={m.id}
+                                style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border, marginLeft: 8 }]}
+                                onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })}
+                                activeOpacity={0.85}
+                              >
+                                {img?.url ? (
+                                  <ThumbImage url={img.thumb_url ?? img.url} style={styles.modeloImg} />
+                                ) : (
+                                  <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
+                                )}
+                                <View style={{ flex: 1 }}>
+                                  <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
+                                  <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
+                                  {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
+                                </View>
+                                <Text style={styles.modeloChevron}>›</Text>
+                              </TouchableOpacity>
+                            )
+                          })}
+                        </View>
+                      )
+                    })}
+                  </View>
+                )
+              })}
             </ScrollView>
           )}
         </>
@@ -697,6 +722,14 @@ const styles = StyleSheet.create({
   },
   zonaSectionTitle: { fontSize: 15, fontWeight: '900' },
   zonaSectionMeta: { fontSize: 11.5, fontWeight: '600', marginTop: 2 },
+
+  empresaHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, marginBottom: 4,
+  },
+  empresaChevron: { color: '#fff', fontSize: 13, fontWeight: '700', flexShrink: 0 },
+  empresaTitulo: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '800' },
+  empresaMeta: { color: 'rgba(255,255,255,0.75)', fontSize: 11.5, fontWeight: '600', flexShrink: 0 },
 
   grupo: { marginBottom: 14 },
   grupoHeader: {
