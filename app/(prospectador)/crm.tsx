@@ -98,6 +98,14 @@ function iniciales(nombre: string) {
   return nombre.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 }
 
+// Timestamp ISO → valor local para <input type="datetime-local"> ("YYYY-MM-DDTHH:MM").
+function fechaAInputLocal(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 export function abrirWhatsApp(telefono: string, nombre: string) {
   let phone = telefono.replace(/\D/g, '')
   // Normalizar número mexicano para WhatsApp (formato nuevo: 52 + 10 dígitos = 12 total)
@@ -702,7 +710,7 @@ export default function CRM() {
     } else {
       // nombre, telefono, fecha, notas, presupuesto → edición de texto inline
       const inicial = col === 'fecha'
-        ? (item.proximo_contacto ? item.proximo_contacto.slice(0, 10) : '')
+        ? (item.proximo_contacto ? fechaAInputLocal(item.proximo_contacto) : '')
         : col === 'nombre' ? item.nombre
         : col === 'telefono' ? item.telefono
         : col === 'notas' ? (item.notas ?? '')
@@ -717,11 +725,16 @@ export default function CRM() {
     if (editCell.col === 'fecha') {
       const trimmed = editValue.trim()
       if (!trimmed) {
-        // Campo vacío → no borrar la fecha; solo cerrar el editor
-        setEditCell(null)
+        // Campo vacío → BORRAR el próximo seguimiento (poner en null)
+        guardarCelda(editCell.id, editCell.col, null)
         return
       }
-      guardarCelda(editCell.id, editCell.col, `${trimmed}T12:00:00`)
+      // "YYYY-MM-DDTHH:MM" (hora local, con horario) → ISO. Si por alguna razón
+      // sólo viene la fecha, se asume mediodía.
+      const iso = trimmed.length <= 10
+        ? `${trimmed}T12:00:00`
+        : new Date(trimmed).toISOString()
+      guardarCelda(editCell.id, editCell.col, iso)
     } else {
       guardarCelda(editCell.id, editCell.col, editValue.trim() || null)
     }
@@ -1139,7 +1152,7 @@ export default function CRM() {
                       return (
                         <View key={col.id} style={[s.excelTdCell, cs]}>
                           {createElement('input', {
-                            type: 'date',
+                            type: 'datetime-local',
                             autoFocus: true,
                             value: editValue,
                             onChange: (e: any) => setEditValue(e.target.value),
@@ -1158,8 +1171,12 @@ export default function CRM() {
                             value: editValue,
                             onChange: (e: any) => setEditValue(e.target.value),
                             onBlur: guardarTexto,
-                            onKeyDown: (e: any) => { if (e.key === 'Escape') { guardarTexto(); } },
-                            placeholder: 'Escribe una nota...',
+                            // Enter guarda y cierra; Shift+Enter hace salto de línea.
+                            onKeyDown: (e: any) => {
+                              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); guardarTexto() }
+                              else if (e.key === 'Escape') { guardarTexto() }
+                            },
+                            placeholder: 'Escribe una nota... (Enter guarda, Shift+Enter salta de línea)',
                             rows: 4,
                             style: {
                               width: '100%', minHeight: 80, resize: 'vertical',
@@ -1248,7 +1265,7 @@ export default function CRM() {
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'fecha')} activeOpacity={0.6}>
                           {ts
                             ? <Text style={[s.excelTd, s.excelTdDate, s.cellTxtNoPad, { color: vencido ? '#ef4444' : hoy ? '#d97706' : c.textSub }]} numberOfLines={1}>
-                                {vencido ? '⚠ ' : hoy ? '📌 ' : ''}{ts.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: '2-digit' })}
+                                {vencido ? '⚠ ' : hoy ? '📌 ' : ''}{ts.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} {ts.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                               </Text>
                             : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ agregar</Text>
                           }
