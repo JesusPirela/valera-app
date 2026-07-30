@@ -12,6 +12,11 @@ import { normalizar } from '../../lib/texto'
 import { zonaDetallada } from '../../lib/zonas-interes'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
+type ConstructoraInfo = {
+  nombre: string
+  empresa_matriz: string | null
+}
+
 type Modelo = {
   id: string
   codigo: string | null
@@ -51,15 +56,18 @@ function formatPrecio(precio: number | null) {
   return `$${precio.toLocaleString('es-MX')} MXN`
 }
 
+const ROLES_STAFF = ['admin', 'supervisor', 'asesor']
+
 export default function Constructoras() {
   const c = useColors()
   const { vistaComo } = useVistaComo()
   const [modelos, setModelos] = useState<Modelo[]>([])
+  const [constructorasInfo, setConstructorasInfo] = useState<ConstructoraInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
   const [rol, setRol] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
-  const [zonaSel, setZonaSel] = useState<string | null>(null)  // fraccionamiento seleccionado (null = todas)
+  const [zonaSel, setZonaSel] = useState<string | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
   const { refreshControl } = usePullRefresh(cargar)
@@ -84,6 +92,14 @@ export default function Constructoras() {
     }
     rolActual = vistaComo ?? rolActual  // rol efectivo (admin "viendo como")
     setRol(rolActual)
+
+    // Cargar empresa_matriz para staff
+    if (rolActual && ROLES_STAFF.includes(rolActual)) {
+      const { data: cData } = await supabase
+        .from('constructoras')
+        .select('nombre, empresa_matriz')
+      setConstructorasInfo((cData ?? []) as ConstructoraInfo[])
+    }
 
     let { data, error } = await consultarModelos()
     // En web la sesión puede tardar unos ms en adjuntarse; reintentar una vez.
@@ -175,13 +191,65 @@ export default function Constructoras() {
 
   const hayResultados = zonaGrupos.length > 0
 
+  // ── Vista staff: empresa_matriz → desarrollo → modelos ─────────────────────
+  const esStaff = rol && ROLES_STAFF.includes(rol)
+
+  const empresaMap = useMemo(() => {
+    const m = new Map<string, string | null>()
+    for (const ci of constructorasInfo) m.set(ci.nombre, ci.empresa_matriz)
+    return m
+  }, [constructorasInfo])
+
+  const empresaGrupos = useMemo(() => {
+    if (!esStaff) return []
+    const q = normalizar(busqueda.trim())
+    const lista = enriquecidos.filter(m => {
+      if (!q) return true
+      return (
+        normalizar(m.nombre_constructora ?? '').includes(q) ||
+        normalizar(m.titulo ?? '').includes(q) ||
+        normalizar(m.codigo ?? '').includes(q) ||
+        normalizar(m.zonaDet).includes(q) ||
+        normalizar(m.direccion ?? '').includes(q) ||
+        normalizar(empresaMap.get(m.nombre_constructora?.trim() ?? '') ?? '').includes(q)
+      )
+    })
+
+    const porEmpresa = new Map<string, Map<string, ModeloZona[]>>()
+    const SIN_MATRIZ = 'Otros'
+    for (const m of lista) {
+      const constructora = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA
+      const empresa = empresaMap.get(constructora) ?? SIN_MATRIZ
+      if (!porEmpresa.has(empresa)) porEmpresa.set(empresa, new Map())
+      const porDesarrollo = porEmpresa.get(empresa)!
+      if (!porDesarrollo.has(constructora)) porDesarrollo.set(constructora, [])
+      porDesarrollo.get(constructora)!.push(m)
+    }
+
+    return Array.from(porEmpresa.entries())
+      .map(([empresa, desarrollosMap]) => ({
+        empresa,
+        desarrollos: Array.from(desarrollosMap.entries())
+          .map(([nombre, mods]) => ({ nombre, modelos: mods }))
+          .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+        total: Array.from(desarrollosMap.values()).reduce((s, ms) => s + ms.length, 0),
+      }))
+      .sort((a, b) => {
+        if (a.empresa === SIN_MATRIZ) return 1
+        if (b.empresa === SIN_MATRIZ) return -1
+        return b.total - a.total
+      })
+  }, [esStaff, enriquecidos, busqueda, empresaMap])
+
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
       <View style={styles.intro}>
         <View style={styles.introRow}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.introTitle, { color: c.text }]}>🏗️ Constructoras</Text>
-            <Text style={[styles.introSub, { color: c.textMute }]}>Filtra por fraccionamiento o busca una constructora.</Text>
+            <Text style={[styles.introSub, { color: c.textMute }]}>
+              {esStaff ? 'Vista por empresa matriz → desarrollo → modelos.' : 'Filtra por fraccionamiento o busca una constructora.'}
+            </Text>
           </View>
           <TouchableOpacity
             style={[styles.accionBtn, { borderColor: '#c9a84c' }]}
@@ -212,8 +280,8 @@ export default function Constructoras() {
         )}
       </View>
 
-      {/* Chips de fraccionamiento */}
-      {!loading && zonasDisponibles.length > 0 && (
+      {/* Chips de fraccionamiento — solo vista prospectador */}
+      {!loading && !esStaff && zonasDisponibles.length > 0 && (
         <View style={styles.chipsWrap}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
             <TouchableOpacity
@@ -253,7 +321,80 @@ export default function Constructoras() {
             {busqueda || zonaSel ? 'Sin resultados para ese filtro.' : 'No hay propiedades de constructora aún.'}
           </Text>
         </View>
+      ) : esStaff ? (
+        /* ── Vista staff: empresa_matriz → desarrollo → modelos ── */
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
+          {empresaGrupos.map(eg => {
+            const empKey = `emp_${eg.empresa}`
+            const empAbierta = abiertas[empKey] ?? busqueda.trim().length > 0
+            return (
+              <View key={eg.empresa} style={{ marginBottom: 6 }}>
+                {/* Empresa matriz — nivel 1 */}
+                <TouchableOpacity
+                  style={[styles.empresaHeader, { backgroundColor: '#1a6470', borderColor: '#1a6470' }]}
+                  onPress={() => setAbiertas(s => ({ ...s, [empKey]: !empAbierta }))}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.empresaChevron}>{empAbierta ? '▼' : '▶'}</Text>
+                  <Text style={styles.empresaTitulo} numberOfLines={1}>{eg.empresa}</Text>
+                  <Text style={styles.empresaMeta}>
+                    {eg.desarrollos.length} {eg.desarrollos.length === 1 ? 'desarrollo' : 'desarrollos'} · {eg.total} {eg.total === 1 ? 'modelo' : 'modelos'}
+                  </Text>
+                </TouchableOpacity>
+
+                {empAbierta && eg.desarrollos.map(d => {
+                  const devKey = `dev_${eg.empresa}_${d.nombre}`
+                  const devAbierta = abiertas[devKey] ?? busqueda.trim().length > 0
+                  return (
+                    <View key={devKey} style={styles.desarrolloWrap}>
+                      {/* Desarrollo — nivel 2 */}
+                      <TouchableOpacity
+                        style={[styles.grupoHeader, { backgroundColor: c.card, borderColor: '#c9a84c', borderWidth: 1.4 }]}
+                        onPress={() => setAbiertas(s => ({ ...s, [devKey]: !devAbierta }))}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.grupoTitulo, { color: c.text }]}>{devAbierta ? '▼' : '▶'}  {d.nombre}</Text>
+                        <Text style={[styles.grupoMeta, { color: '#c9a84c' }]}>
+                          {d.modelos.length} {d.modelos.length === 1 ? 'modelo' : 'modelos'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {devAbierta && d.modelos.map(m => {
+                        const img = (m.propiedad_imagenes ?? [])[0]
+                        return (
+                          <TouchableOpacity
+                            key={m.id}
+                            style={[styles.modeloCard, styles.modeloCardIndent, { backgroundColor: c.card, borderColor: c.border }]}
+                            onPress={() => (rol === 'admin' || rol === 'supervisor')
+                              ? router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })
+                              : router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })
+                            }
+                            activeOpacity={0.85}
+                          >
+                            {img?.url ? (
+                              <ThumbImage url={img.thumb_url ?? img.url} style={styles.modeloImg} />
+                            ) : (
+                              <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
+                            )}
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
+                              <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
+                              {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
+                              <Text style={[styles.modeloCodigo, { color: c.textMute }]}>{m.zonaDet}</Text>
+                            </View>
+                            <Text style={styles.modeloChevron}>›</Text>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </View>
+                  )
+                })}
+              </View>
+            )
+          })}
+        </ScrollView>
       ) : (
+        /* ── Vista prospectador: zona → constructora → modelos ── */
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
           {zonaGrupos.map(zg => (
             <View key={zg.zona}>
@@ -265,10 +406,6 @@ export default function Constructoras() {
               </View>
               {zg.grupos.map((g) => {
                 const aKey = `${zg.zona}_${g.nombre}`
-                // Al BUSCAR, los grupos se muestran ABIERTOS por defecto para
-                // que los modelos salgan directos (antes salían colapsados y
-                // parecía que "no salía" la constructora). Sin búsqueda, cerrados.
-                // Si el usuario toca un grupo, su elección manda (abiertas[aKey]).
                 const abierta = abiertas[aKey] ?? busqueda.trim().length > 0
                 const popular = esPopularMercado(g.nombre)
                 const borderColor = popular ? '#e65100' : c.border
@@ -364,6 +501,17 @@ const styles = StyleSheet.create({
   zonaSectionTitle: { fontSize: 15, fontWeight: '900' },
   zonaSectionMeta: { fontSize: 11.5, fontWeight: '600', marginTop: 2 },
 
+  // Vista staff — empresa matriz (nivel 1)
+  empresaHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13,
+    marginBottom: 6, marginTop: 10,
+  },
+  empresaChevron: { fontSize: 12, color: '#fff', fontWeight: '800' },
+  empresaTitulo: { flex: 1, fontSize: 15, fontWeight: '900', color: '#fff' },
+  empresaMeta: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
+  desarrolloWrap: { paddingLeft: 12, marginBottom: 4 },
+
   grupo: { marginBottom: 14 },
   grupoHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -377,6 +525,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
     borderRadius: 12, borderWidth: 1, padding: 10, marginBottom: 8,
   },
+  modeloCardIndent: { marginLeft: 4 },
   modeloImg: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#e8f0f0' },
   modeloImgPh: { alignItems: 'center', justifyContent: 'center' },
   modeloTitulo: { fontSize: 14, fontWeight: '700', marginBottom: 2 },

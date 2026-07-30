@@ -125,6 +125,7 @@ export default function AdminPropiedades() {
   const scrollPublicacionesRef = useScrollHorizontalConRueda()
   const scrollContactoRef = useScrollHorizontalConRueda()
   const [propiedades, setPropiedades] = useState<Propiedad[]>([])
+  const [empresaMatrizMap, setEmpresaMatrizMap] = useState<Map<string, string>>(new Map())
   const [busqueda, setBusqueda] = useState('')
   const [loading, setLoading] = useState(true)
   const yaCargoRef = useRef(false)
@@ -188,6 +189,14 @@ export default function AdminPropiedades() {
       yaCargoRef.current = true
     }
     setLoading(false)
+
+    // Cargar empresa_matriz para el badge en los cards
+    supabase.from('constructoras').select('nombre, empresa_matriz')
+      .then(({ data }) => {
+        const m = new Map<string, string>()
+        for (const row of data ?? []) if (row.nombre && row.empresa_matriz) m.set(row.nombre, row.empresa_matriz)
+        setEmpresaMatrizMap(m)
+      })
   }
 
   async function cargarRolEInmobiliarias() {
@@ -686,9 +695,16 @@ export default function AdminPropiedades() {
             </Text>
           )}
           {item.es_constructora && (
-            <Text style={styles.constructoraBadge}>
-              🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
-            </Text>
+            <View>
+              <Text style={styles.constructoraBadge}>
+                🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
+              </Text>
+              {item.nombre_constructora && empresaMatrizMap.get(item.nombre_constructora) && (
+                <Text style={styles.empresaMatrizBadge}>
+                  🏢 {empresaMatrizMap.get(item.nombre_constructora)}
+                </Text>
+              )}
+            </View>
           )}
           <Text style={[styles.cardTitulo, { color: c.text }]}>{item.titulo}</Text>
           <Text style={[styles.cardDireccion, { color: c.textMute }]} numberOfLines={1}>📍 {item.direccion}</Text>
@@ -1171,9 +1187,21 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    marginBottom: 6,
+    marginBottom: 3,
     fontSize: 12,
     color: '#1a4a6b',
+    fontWeight: '600',
+    overflow: 'hidden',
+  },
+  empresaMatrizBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#f0fdf4',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+    fontSize: 11,
+    color: '#166534',
     fontWeight: '600',
     overflow: 'hidden',
   },

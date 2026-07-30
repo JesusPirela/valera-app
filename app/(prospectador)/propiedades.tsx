@@ -140,11 +140,12 @@ function mezclar<T>(arr: T[]): T[] {
 // (veces publicada, estado de toggle, etc.), no en cada tecla de búsqueda.
 const PropiedadCard = memo(function PropiedadCard({
   item, width, veces, isToggling, destacada, esAdmin, primaryColor,
-  cardBg, cardBorder, isOnline, imgOpts, onOpen, onShare, onPublish, onZoom,
+  cardBg, cardBorder, isOnline, imgOpts, empresaMatriz, onOpen, onShare, onPublish, onZoom,
 }: {
   item: Propiedad; width?: number; veces: number; isToggling: boolean
   destacada: boolean; esAdmin: boolean; primaryColor: string
   cardBg: string; cardBorder: string; isOnline: boolean; imgOpts: ThumbOpts
+  empresaMatriz?: string | null
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
 }) {
@@ -225,9 +226,14 @@ const PropiedadCard = memo(function PropiedadCard({
           )}
         </View>
         {item.es_constructora && (
-          <Text style={styles.constructoraBadge}>
-            🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
-          </Text>
+          <View>
+            <Text style={styles.constructoraBadge}>
+              🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
+            </Text>
+            {empresaMatriz ? (
+              <Text style={styles.empresaMatrizBadge}>🏢 {empresaMatriz}</Text>
+            ) : null}
+          </View>
         )}
         <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
         <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
@@ -321,6 +327,7 @@ export default function ProspectadorPropiedades() {
   const [showHelp, setShowHelp] = useState(false)
   const [mensajeAyuda, setMensajeAyuda] = useState('')
   const [imagenModal, setImagenModal] = useState<string | null>(null)
+  const [empresaMatrizMap, setEmpresaMatrizMap] = useState<Map<string, string>>(new Map())
   const { vistaComo } = useVistaComo()
   const { data: queryData, isLoading, refetch } = useQuery<PropiedadesData>({
     queryKey: ['prospectador-propiedades', vistaComo],
@@ -406,6 +413,14 @@ export default function ProspectadorPropiedades() {
     staleTime: 1000 * 60 * 30,
     refetchOnWindowFocus: false,
   })
+
+  useEffect(() => {
+    supabase.from('constructoras').select('nombre, empresa_matriz').then(({ data }) => {
+      const m = new Map<string, string>()
+      for (const row of data ?? []) if (row.nombre && row.empresa_matriz) m.set(row.nombre, row.empresa_matriz)
+      setEmpresaMatrizMap(m)
+    })
+  }, [])
 
   // Query separado para publicaciones: staleTime=0 y gcTime=0 garantizan que
   // (a) nunca se persiste al disco (no puede quedar un update optimista "pegado"
@@ -907,6 +922,7 @@ export default function ProspectadorPropiedades() {
       cardBorder={c.border}
       isOnline={isOnline}
       imgOpts={imgOpts}
+      empresaMatriz={item.nombre_constructora ? (empresaMatrizMap.get(item.nombre_constructora) ?? null) : null}
       onOpen={onOpenCard}
       onShare={onShareCard}
       onPublish={onPublishCard}
@@ -1678,10 +1694,22 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    marginBottom: 6,
+    marginBottom: 4,
     fontSize: 12,
     color: '#1a4a6b',
     fontWeight: '600',
+    overflow: 'hidden',
+  },
+  empresaMatrizBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#f0fdf4',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+    fontSize: 11,
+    color: '#166534',
+    fontWeight: '500',
     overflow: 'hidden',
   },
   cardTitulo: { fontSize: 16, fontWeight: '700', marginBottom: 3 },
