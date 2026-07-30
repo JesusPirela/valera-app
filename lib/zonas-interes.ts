@@ -7,10 +7,10 @@
 // cae en la misma zona "El Campanario", para poder seccionar/asignar a futuro.
 
 export const ZONAS_INTERES: string[] = [
-  'Milenio', 'El Marqués', 'El Mirador', 'Real Solare', 'Corregidora', 'Sonterra',
-  'Zakia', 'Juriquilla', 'Ciudad del Sol', 'Zibatá', 'Centro', 'El Refugio', 'La Loma',
-  'Ciudad Maderas', 'Centro Sur', 'Capital Sur', 'Valencia', 'Santaluz', 'Cumbres',
-  'Los Héroes', 'Jurica', 'Riscos', 'Loma Dorada', 'El Campanario', 'Altozano',
+  'Altozano', 'Capital Sur', 'Centro', 'Centro Sur', 'Ciudad del Sol', 'Ciudad Maderas',
+  'Corregidora', 'Cumbres', 'El Campanario', 'El Marqués', 'El Mirador', 'El Refugio',
+  'Jurica', 'Juriquilla', 'La Loma', 'Loma Dorada', 'Los Héroes', 'Milenio',
+  'Real Solare', 'Riscos', 'Santaluz', 'Sonterra', 'Valencia', 'Zakia', 'Zibatá',
 ]
 
 // Alias por zona: regex sobre texto normalizado (minúsculas, SIN acentos).

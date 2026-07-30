@@ -107,6 +107,7 @@ export default function ProspectadorLayout() {
         titulo: `Recordatorio: ${r.titulo}`,
         mensaje: `Tienes un seguimiento pendiente con ${nombreCliente} programado para el ${fechaHora}.${r.descripcion ? ` Nota: ${r.descripcion}` : ''}`,
         tipo: 'recordatorio',
+        push_enviado: true, // usuario ya está en la app; procesar-pushes no necesita enviar uno extra
       })
 
       if (!error) {

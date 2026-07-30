@@ -314,6 +314,8 @@ export default function DetalleCliente() {
       if (!old) return old
       return { ...old, recordatorios: old.recordatorios.map(r => r.id === recId ? { ...r, completado: true } : r) }
     })
+    // Invalida el CRM para que el contador "necesitan seguimiento" se actualice al volver
+    queryClient.invalidateQueries({ queryKey: ['clientes'] })
     if (!error) {
       const { data: { user } } = await getUsuarioActual()
       // Completar un recordatorio es seguimiento de ESE cliente (1 vez al día).

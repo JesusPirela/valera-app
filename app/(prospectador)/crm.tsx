@@ -50,20 +50,21 @@ const NIVEL_INTERES_LABEL: Record<string, string> = {
 }
 
 export const ESTADOS: Record<string, { label: string; color: string; bg: string }> = {
-  primer_contacto:    { label: 'Primer contacto',  color: '#0277bd', bg: '#e1f5fe' },
-  por_perfilar:       { label: 'Por perfilar',     color: '#1565c0', bg: '#e3f2fd' },
-  no_contesta:        { label: 'No contesta',       color: '#757575', bg: '#f5f5f5' },
-  cita_por_agendar:   { label: 'Cita por agendar', color: '#e65100', bg: '#fff3e0' },
-  cita_a_futuro:      { label: 'Cita a futuro',    color: '#6d4c41', bg: '#efebe9' },
-  cita_agendada:      { label: 'Cita agendada',     color: '#1a6470', bg: '#e0f4f5' },
-  seguimiento_cierre: { label: 'Seg. de cierre',    color: '#6a1b9a', bg: '#f3e5f5' },
-  compro:             { label: 'Apartó / Compró',   color: '#2e7d32', bg: '#e8f5e9' },
-  descartado:         { label: 'Descartado',         color: '#b91c1c', bg: '#fef2f2' },
+  primer_contacto:    { label: 'Primer contacto',        color: '#0277bd', bg: '#e1f5fe' },
+  por_perfilar:       { label: 'Por perfilar',           color: '#1565c0', bg: '#e3f2fd' },
+  no_contesta:        { label: 'No contesta',            color: '#757575', bg: '#f5f5f5' },
+  cita_por_agendar:   { label: 'Cita por agendar',      color: '#e65100', bg: '#fff3e0' },
+  cita_a_futuro:      { label: 'Cita a futuro',         color: '#b45309', bg: '#fef9c3' },
+  cita_agendada:      { label: 'Cita agendada',         color: '#1a6470', bg: '#e0f4f5' },
+  seguimiento_cierre: { label: 'Seg. de cierre',        color: '#6a1b9a', bg: '#f3e5f5' },
+  compro:             { label: 'Apartó / Compró',       color: '#2e7d32', bg: '#e8f5e9' },
+  compro_externo:     { label: 'Compró/Apartó c/ext.',  color: '#78350f', bg: '#fef3c7' },
+  descartado:         { label: 'Descartado',            color: '#b91c1c', bg: '#fef2f2' },
 }
 
 export const ORDEN_ESTADOS = [
   'primer_contacto', 'por_perfilar', 'no_contesta', 'cita_por_agendar',
-  'cita_a_futuro', 'cita_agendada', 'seguimiento_cierre', 'compro', 'descartado',
+  'cita_a_futuro', 'cita_agendada', 'seguimiento_cierre', 'compro', 'compro_externo', 'descartado',
 ]
 
 // Etapas de venta seleccionables al crear/editar un cliente. Es la lista
@@ -443,12 +444,12 @@ export default function CRM() {
     const now = Date.now()
     return {
       total:    clientesBase.length,
-      activos:  clientesBase.filter(c => c.estado !== 'descartado' && c.estado !== 'compro').length,
+      activos:  clientesBase.filter(c => c.estado !== 'descartado' && c.estado !== 'compro' && c.estado !== 'compro_externo').length,
       citas:    clientesBase.filter(c => c.estado === 'cita_agendada').length,
       vencidos: clientesBase.filter(c =>
         (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
       ).length,
-      cerrados: clientesBase.filter(c => c.estado === 'compro').length,
+      cerrados: clientesBase.filter(c => c.estado === 'compro' || c.estado === 'compro_externo').length,
       conteos:  ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
         acc[e] = clientesBase.filter(c => c.estado === e).length
         return acc
@@ -467,7 +468,11 @@ export default function CRM() {
         normalizar(c.empresa).includes(q)
       )
     }
-    if (estadoFiltro)  result = result.filter(c => c.estado === estadoFiltro)
+    if (estadoFiltro === '__cerrados__') {
+      result = result.filter(c => c.estado === 'compro' || c.estado === 'compro_externo')
+    } else if (estadoFiltro) {
+      result = result.filter(c => c.estado === estadoFiltro)
+    }
     if (filtroVencidos) {
       const now = Date.now()
       result = result.filter(c => (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now))
@@ -943,8 +948,8 @@ export default function CRM() {
           </TouchableOpacity>
           <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
           <TouchableOpacity
-            style={[s.kpiItem, estadoFiltro === 'compro' && s.kpiActivo]}
-            onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'compro' ? null : 'compro') }}
+            style={[s.kpiItem, estadoFiltro === '__cerrados__' && s.kpiActivo]}
+            onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === '__cerrados__' ? null : '__cerrados__') }}
           >
             <Text style={[s.kpiNum, { color: '#10b981' }]}>{cerrados}</Text>
             <Text style={[s.kpiLbl, { color: c.textMute }]}>CERRADOS</Text>
