@@ -66,6 +66,21 @@ type RankEntry = {
 
 const MEDAL = ['🥇', '🥈', '🥉']
 
+// ── Ligas (divisiones del ranking mensual, estilo Duolingo) ──────────────────
+// Se derivan de la POSICIÓN del mes en curso (sin persistencia): al terminar el
+// mes el ranking se reinicia y cada quien cae en su liga según su lugar.
+type Liga = { nombre: string; emoji: string; color: string; maxPos: number }
+const LIGAS: Liga[] = [
+  { nombre: 'Diamante', emoji: '💎', color: '#5aa9f5', maxPos: 3 },
+  { nombre: 'Oro',      emoji: '🥇', color: '#c9a84c', maxPos: 10 },
+  { nombre: 'Plata',    emoji: '🥈', color: '#9fb3c0', maxPos: 25 },
+  { nombre: 'Bronce',   emoji: '🥉', color: '#b0703c', maxPos: Infinity },
+]
+function ligaDeIndice(idx0: number): Liga {
+  const pos = idx0 + 1
+  return LIGAS.find(l => pos <= l.maxPos) ?? LIGAS[LIGAS.length - 1]
+}
+
 export default function Ranking() {
   const queryClient = useQueryClient()
   const [sel, setSel] = useState<RankEntry | null>(null)
@@ -103,6 +118,26 @@ export default function Ranking() {
   }, [queryClient, modo]))
 
   const miEntry = entries.find(e => e.id === userId)
+
+  // Liga del usuario (solo en modo mensual) + cuánto le falta para subir.
+  const miIdx = entries.findIndex(e => e.id === userId)
+  const miLiga = modo === 'mensual' && miIdx >= 0 ? ligaDeIndice(miIdx) : null
+  let ligaSubirTxt: string | null = null
+  if (miLiga && miIdx >= 0) {
+    const idxLiga = LIGAS.indexOf(miLiga)
+    if (idxLiga <= 0) {
+      ligaSubirTxt = '¡Estás en la liga más alta! 🔥'
+    } else {
+      const ligaArriba = LIGAS[idxLiga - 1]
+      const rival = entries[ligaArriba.maxPos - 1]  // último lugar de la liga superior
+      if (rival && rival.id !== userId && rival.xp >= miEntry!.xp) {
+        const falta = rival.xp - miEntry!.xp + 1
+        ligaSubirTxt = `Te faltan ${falta.toLocaleString()} XP para subir a ${ligaArriba.emoji} ${ligaArriba.nombre}`
+      } else {
+        ligaSubirTxt = `¡Estás a un paso de ${ligaArriba.emoji} ${ligaArriba.nombre}!`
+      }
+    }
+  }
 
   if (loading) return (
     <View style={{ flex: 1, backgroundColor: '#0d1b2a', justifyContent: 'center', alignItems: 'center' }}>
@@ -146,6 +181,20 @@ export default function Ranking() {
 
       {modo === 'mensual' && entries.length === 0 && !loading && (
         <Text style={s.emptyHint}>Aún nadie ha ganado XP este mes.</Text>
+      )}
+
+      {/* Tu liga del mes (Duolingo) */}
+      {miLiga && (
+        <View style={[s.ligaBanner, { borderColor: miLiga.color }]}>
+          <Text style={[s.ligaEmoji, { color: miLiga.color }]}>{miLiga.emoji}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.ligaTitulo}>Liga {miLiga.nombre} · <Text style={{ color: miLiga.color }}>#{miIdx + 1} del mes</Text></Text>
+            {ligaSubirTxt && <Text style={s.ligaSub}>{ligaSubirTxt}</Text>}
+          </View>
+        </View>
+      )}
+      {modo === 'mensual' && entries.length > 0 && (
+        <Text style={s.ligaLeyenda}>💎 Top 3 · 🥇 Top 10 · 🥈 Top 25 · 🥉 resto · se reinicia cada mes</Text>
       )}
 
       {/* Mi posición (si no está visible en el top) */}
@@ -319,6 +368,15 @@ const s = StyleSheet.create({
   toggleBtnActivo: { backgroundColor: '#c9a84c22', borderColor: '#c9a84c' },
   toggleTxt: { fontSize: 13, fontWeight: '800', color: '#7a9ab5' },
   toggleTxtActivo: { color: '#c9a84c' },
+  ligaBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginHorizontal: 14, marginTop: 12, padding: 12,
+    backgroundColor: '#122030', borderRadius: 13, borderWidth: 1.5,
+  },
+  ligaEmoji: { fontSize: 30 },
+  ligaTitulo: { fontSize: 15, fontWeight: '900', color: '#fff' },
+  ligaSub: { fontSize: 12.5, color: '#9fb3c0', marginTop: 2, fontWeight: '600' },
+  ligaLeyenda: { fontSize: 11, color: '#5a7085', textAlign: 'center', marginTop: 8, marginHorizontal: 14 },
 
   entryCard: {
     flexDirection: 'row', alignItems: 'center',
