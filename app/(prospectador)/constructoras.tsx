@@ -66,6 +66,7 @@ export default function Constructoras() {
   const [loading, setLoading] = useState(true)
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
   const [rol, setRol] = useState<string | null>(null)
+  const [rolReal, setRolReal] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [zonaSel, setZonaSel] = useState<string | null>(null)
 
@@ -86,15 +87,18 @@ export default function Constructoras() {
     const { data: { session } } = await supabase.auth.getSession()
     const userId = session?.user?.id
     let rolActual: string | null = null
+    let perfilRol: string | null = null
     if (userId) {
       const { data } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle()
+      perfilRol = data?.role ?? null
       rolActual = data?.role ?? null
     }
     rolActual = vistaComo ?? rolActual  // rol efectivo (admin "viendo como")
+    setRolReal(perfilRol)
     setRol(rolActual)
 
-    // Cargar empresa_matriz para staff
-    if (rolActual && ROLES_STAFF.includes(rolActual)) {
+    // Cargar empresa_matriz para staff (usa rol real, no el vistaComo)
+    if (perfilRol && ROLES_STAFF.includes(perfilRol)) {
       const { data: cData } = await supabase
         .from('constructoras')
         .select('nombre, empresa_matriz')
@@ -192,7 +196,9 @@ export default function Constructoras() {
   const hayResultados = zonaGrupos.length > 0
 
   // ── Vista staff: empresa_matriz → desarrollo → modelos ─────────────────────
-  const esStaff = rol && ROLES_STAFF.includes(rol)
+  // Usa el rol real del perfil (no el vistaComo) para mostrar la vista staff.
+  // VistaComo afecta el filtrado de contenido, no la jerarquía de UI de gestión.
+  const esStaff = rolReal && ROLES_STAFF.includes(rolReal)
 
   const empresaMap = useMemo(() => {
     const m = new Map<string, string | null>()
@@ -326,7 +332,7 @@ export default function Constructoras() {
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
           {empresaGrupos.map(eg => {
             const empKey = `emp_${eg.empresa}`
-            const empAbierta = abiertas[empKey] ?? busqueda.trim().length > 0
+            const empAbierta = abiertas[empKey] ?? true
             return (
               <View key={eg.empresa} style={{ marginBottom: 6 }}>
                 {/* Empresa matriz — nivel 1 */}
