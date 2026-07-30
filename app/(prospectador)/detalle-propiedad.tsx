@@ -341,6 +341,22 @@ export default function DetallePropiedad() {
     staleTime: 1000 * 60 * 5,
   })
 
+  // Clientes del agente a los que "les sirve" esta propiedad (matching por
+  // operación, presupuesto y zona). Estilo Idealista/Zillow: "esta casa le
+  // sirve a Juan" — para que el agente la mande de inmediato a quien encaja.
+  const { data: clientesMatch } = useQuery({
+    queryKey: ['clientes-match', propiedad?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('clientes_para_propiedad', {
+        p_propiedad_id: propiedad!.id,
+      })
+      if (error) return [] as { id: string; nombre: string; telefono: string | null }[]
+      return (data ?? []) as { id: string; nombre: string; telefono: string | null }[]
+    },
+    enabled: !!propiedad?.id,
+    staleTime: 1000 * 60 * 2,
+  })
+
   // Sin permiso para ver esta propiedad (inmobiliaria exclusiva) → volver al listado
   useEffect(() => {
     if (detalle?.sinAcceso) {
@@ -2154,6 +2170,26 @@ export default function DetallePropiedad() {
           }
         </TouchableOpacity>
 
+        {/* Matching: clientes del CRM a los que les sirve esta propiedad */}
+        {clientesMatch && clientesMatch.length > 0 && (
+          <View style={styles.matchBox}>
+            <Text style={styles.matchTitulo}>🎯 Le sirve a {clientesMatch.length} de tus clientes</Text>
+            <Text style={styles.matchSub}>Encaja con su zona y presupuesto. Toca para enviarle la ficha por WhatsApp.</Text>
+            <View style={styles.matchChips}>
+              {clientesMatch.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[styles.matchChip, !(c.telefono ?? '').replace(/\D/g, '') && styles.matchChipSinTel]}
+                  onPress={() => enviarACliente(c)}
+                  disabled={!(c.telefono ?? '').replace(/\D/g, '')}
+                >
+                  <Text style={styles.matchChipText}>📲 {c.nombre}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* Enviar la ficha a un cliente por WhatsApp */}
         <TouchableOpacity
           style={[styles.btnEnviarCliente, !propiedad && styles.btnDisabled]}
@@ -3146,6 +3182,20 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginBottom: 10,
   },
   btnEnviarClienteText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  // Matching cliente↔propiedad ("le sirve a Juan")
+  matchBox: {
+    backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0',
+    borderRadius: 12, padding: 12, marginBottom: 10,
+  },
+  matchTitulo: { color: '#15803d', fontSize: 14, fontWeight: '800' },
+  matchSub: { color: '#3f6b52', fontSize: 12, marginTop: 2, marginBottom: 10 },
+  matchChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  matchChip: {
+    backgroundColor: '#25D366', borderRadius: 20, paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  matchChipSinTel: { backgroundColor: '#9aa5ab' },
+  matchChipText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   // Popup "Enviar a mi cliente"
   envOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
   envBox: { backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, paddingBottom: 28, maxHeight: '80%' },
