@@ -180,6 +180,16 @@ const BROWSER_HEADERS = {
   'Accept-Language': 'es-MX,es;q=0.9,en;q=0.5',
 }
 
+// User-Agent de Googlebot. Algunos portales protegidos por AWS WAF (pincali.com)
+// o firewalls que sólo miran el UA dejan pasar a los buscadores con el HTML
+// completo prerenderizado (con JSON-LD, og tags, etc.). Se usa como capa de
+// respaldo cuando el fetch normal choca con un desafío anti-bot.
+const BOT_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'es-MX,es;q=0.9,en;q=0.5',
+}
+
 // Certificados intermedios/raíz que algunos portales NO envían en su cadena TLS,
 // haciendo que Deno los rechace ("UnknownIssuer"). Inmobay (*.inmobay.com) está
 // firmado por "Sectigo Public Server Authentication CA DV R36" pero su servidor
@@ -267,7 +277,7 @@ try {
 // los proxies simples no resuelven; hay que reconocerlo para no extraer basura.
 function esDesafioBot(html: string): boolean {
   const h = html.slice(0, 4000).toLowerCase()
-  return /just a moment|attention required|cf-browser-verification|challenge-platform|_cf_chl|cf_chl_opt|verifying you are human|performing security verification|enable javascript and cookies|datadome|px-captcha/.test(h)
+  return /just a moment|attention required|cf-browser-verification|challenge-platform|_cf_chl|cf_chl_opt|verifying you are human|performing security verification|enable javascript and cookies|datadome|px-captcha|gokuprops|awswafcookie|awswaf|token\.awswaf/.test(h)
 }
 
 // Unblocker con renderizado (ScraperAPI). Solo se usa si está configurada la
@@ -330,6 +340,20 @@ async function fetchHtml(url: string): Promise<string> {
   } catch (_) {
     // Error de red/TLS: caer a las siguientes capas.
   }
+
+  // Capa 1b: reintento con UA de Googlebot. Portales tras AWS WAF (pincali) o
+  // firewalls que sólo filtran por UA sirven el HTML completo a los buscadores.
+  try {
+    const opts: any = { headers: BOT_HEADERS }
+    if (extraCaClient) opts.client = extraCaClient
+    const res = await fetch(url, opts)
+    if (res.ok) {
+      const t = await res.text()
+      if (t && t.length > 500 && !esDesafioBot(t)) return t
+      if (esDesafioBot(t)) huboDesafio = true
+    }
+  } catch (_) { /* el UA de bot tampoco pasó */ }
+
   try {
     const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
     const res2 = await fetch(proxy, { headers: BROWSER_HEADERS })
@@ -817,7 +841,10 @@ serve(async (req) => {
 
     // ── 3. Descripción completa desde markup conocido ─────────────────────────
     // EasyBroker: <p class="text-description">; otros portales: contenedores comunes.
-    if (!descripcion) {
+    // Se ejecuta también cuando ya hay una descripción MUY corta: en pincali/
+    // EasyBroker el JSON-LD trae un resumen pobre ("Casa en condominio en X")
+    // mientras el cuerpo (text-description) tiene la ficha real y más rica.
+    if (!descripcion || descripcion.length < 80) {
       const descSelectors = [
         /<p[^>]+class="[^"]*text-description[^"]*"[^>]*>([\s\S]*?)<\/p>/i,                 // EasyBroker
         /<div[^>]+class="[^"]*listing-description[^"]*"[^>]*>([\s\S]*?)<\/div>/i,          // wpsight (gminmobiliaria)
@@ -825,7 +852,10 @@ serve(async (req) => {
       ]
       for (const sel of descSelectors) {
         const m = html.match(sel)
-        if (m?.[1]) { descripcion = htmlText(m[1]); if (descripcion.length > 30) break }
+        if (m?.[1]) {
+          const cand = htmlText(m[1])
+          if (cand.length > 30 && cand.length > descripcion.length) { descripcion = cand; break }
+        }
       }
     }
 
@@ -983,6 +1013,27 @@ serve(async (req) => {
     }
     imagenes = [...best.values()].map(v => v.url)
     } // end !imagenes.length block
+
+    // ── 10a-eb. EasyBroker (pincali y portales EB): sólo la carpeta de ESTA
+    // propiedad. Las fotos viven en
+    //   assets.easybroker.com/property_images/<carpetaPropiedad>/<foto>/EB-XXXX.jpg
+    // y la página incluye galerías de "propiedades similares" (otras carpetas).
+    // Se conserva la carpeta del og:image/JSON-LD (la principal) o, si no se
+    // puede leer, la carpeta que más fotos aporta.
+    if (imagenes.some(u => /assets\.easybroker\.com\/property_images\//.test(u))) {
+      const folderOf = (u: string) => u.match(/property_images\/(\d+)\//)?.[1] ?? ''
+      let target = folderOf(getMeta(html, 'og:image') || getMeta(html, 'og:image:secure_url'))
+      if (!target) {
+        const count = new Map<string, number>()
+        for (const u of imagenes) { const f = folderOf(u); if (f) count.set(f, (count.get(f) ?? 0) + 1) }
+        let max = 0
+        for (const [f, n] of count) if (n > max) { max = n; target = f }
+      }
+      if (target) {
+        imagenes = imagenes.filter(u =>
+          !/assets\.easybroker\.com\/property_images\//.test(u) || folderOf(u) === target)
+      }
+    }
 
     // ── 10a-navent. inmuebles24 / Navent: fotos del aviso en máxima resolución ─
     // Las fotos viven en img*.naventcdn.com/avisos/<carpeta>/<tamaño>/<id>.jpg.
