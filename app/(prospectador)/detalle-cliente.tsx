@@ -686,6 +686,15 @@ export default function DetalleCliente() {
         )}
       </View>
 
+      {/* ── Armar colección para este cliente ─────────── */}
+      <TouchableOpacity
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 13, marginHorizontal: 16, marginTop: 8 }}
+        onPress={() => cliente && router.push(`/(prospectador)/colecciones?nuevoCliente=${id}&nuevoClienteNombre=${encodeURIComponent(cliente.nombre)}`)}
+      >
+        <Ionicons name="albums-outline" size={17} color="#fff" />
+        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Armar colección de propiedades</Text>
+      </TouchableOpacity>
+
       {/* ── Eliminar ─────────────────────────────────── */}
       <TouchableOpacity style={styles.btnEliminar} onPress={eliminarCliente}>
         <Ionicons name="trash-outline" size={16} color="#c0392b" />

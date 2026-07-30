@@ -1061,6 +1061,11 @@ export default function CRM() {
               }
             </TouchableOpacity>
           </Tooltip>
+          <Tooltip label="Colecciones para clientes">
+            <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => router.push('/(prospectador)/colecciones')}>
+              <Ionicons name="albums-outline" size={15} color="#1a6470" />
+            </TouchableOpacity>
+          </Tooltip>
           <Tooltip label="Nuevo cliente">
             <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
               <Ionicons name="add" size={20} color="#fff" />

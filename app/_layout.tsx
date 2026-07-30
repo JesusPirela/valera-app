@@ -392,6 +392,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (loading) return
     if (pathnameRef.current.startsWith('/ficha')) return  // ruta pública, sin auth
+    if (pathnameRef.current.startsWith('/coleccion')) return  // colección pública, sin auth
     if (!session) {
       if (accountSwitch.pending) return  // cambio de cuenta en progreso — no ir al login
       router.replace('/(auth)/login')
@@ -426,6 +427,7 @@ export default function RootLayout() {
           <Stack.Screen name="(admin)" />
           <Stack.Screen name="(prospectador)" />
           <Stack.Screen name="ficha" />
+          <Stack.Screen name="coleccion" />
         </Stack>
 
         <Modal visible={updateRequerido} transparent animationType="fade" statusBarTranslucent>
