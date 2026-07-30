@@ -983,6 +983,22 @@ export default function CRM() {
         </View>
 
 
+        {/* ── Recordatorio inteligente: clientes con seguimiento vencido ── */}
+        {vencidos > 0 && !filtroVencidos && (
+          <TouchableOpacity
+            style={s.nudgeBanner}
+            onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true) }}
+            activeOpacity={0.85}
+          >
+            <Text style={s.nudgeEmoji}>⏰</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.nudgeTitulo}>{vencidos} cliente{vencidos === 1 ? '' : 's'} necesita{vencidos === 1 ? '' : 'n'} seguimiento</Text>
+              <Text style={s.nudgeSub}>Tienen un recordatorio vencido. Contáctalos hoy para no perderlos.</Text>
+            </View>
+            <Text style={s.nudgeCta}>Ver →</Text>
+          </TouchableOpacity>
+        )}
+
         {/* ── Botón chats de WhatsApp ── */}
         <TouchableOpacity style={s.btnCampana} onPress={() => router.push('/(prospectador)/chats')}>
           <Text style={s.btnCampanaTxt}>💬 Chats de WhatsApp</Text>
@@ -1637,6 +1653,15 @@ const s = StyleSheet.create({
     flexShrink: 0,
   },
   btnCampanaTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  nudgeBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginHorizontal: 12, marginTop: 10, padding: 12,
+    backgroundColor: '#fef2f2', borderRadius: 12, borderWidth: 1.5, borderColor: '#fecaca',
+  },
+  nudgeEmoji: { fontSize: 24 },
+  nudgeTitulo: { fontSize: 14, fontWeight: '800', color: '#b91c1c' },
+  nudgeSub: { fontSize: 12, color: '#9a4b4b', marginTop: 1 },
+  nudgeCta: { fontSize: 13, fontWeight: '800', color: '#b91c1c' },
 
   // ── Search ──────────────────────────────────────────────────────
   searchRow: {
