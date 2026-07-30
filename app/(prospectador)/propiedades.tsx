@@ -191,6 +191,11 @@ const PropiedadCard = memo(function PropiedadCard({
           </TouchableOpacity>
         </View>
       )}
+      {item.estado === 'vendida' && (
+        <View style={styles.vendidaBanner}>
+          <Text style={styles.vendidaBannerText}>🏷️ Vendida</Text>
+        </View>
+      )}
       {item.exclusiva && (
         <View style={styles.exclusivaBanner}>
           <Text style={styles.exclusivaBannerText}>★ Propiedad exclusiva</Text>
@@ -377,7 +382,7 @@ export default function ProspectadorPropiedades() {
         const { data, error } = await supabase
           .from('propiedades')
           .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
-          .eq('estado', 'disponible')
+          .in('estado', ['disponible', 'vendida'])
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
           .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
@@ -1591,6 +1596,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#7a5500',
+  },
+  vendidaBanner: {
+    backgroundColor: '#374151',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  vendidaBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
   },
   exclusivaBanner: {
     backgroundColor: '#c0392b',
