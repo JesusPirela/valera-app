@@ -61,6 +61,17 @@ function formatPrecio(precio: number | null) {
   return `$${precio.toLocaleString('es-MX')} MXN`
 }
 
+// Ubicación de un desarrollo: fraccionamiento(s) de sus modelos + ciudad.
+function ubicacionDesarrollo(mods: ModeloZona[]): string {
+  const fracs = [...new Set(mods.map(m => m.zonaDet).filter(z => z && z !== SIN_ZONA))]
+  const ciudad = mods.find(m => m.ciudad)?.ciudad ?? ''
+  if (fracs.length) {
+    const lista = fracs.slice(0, 2).join(', ') + (fracs.length > 2 ? '…' : '')
+    return ciudad ? `${lista} · ${ciudad}` : lista
+  }
+  return ciudad
+}
+
 function alerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
   else Alert.alert('Aviso', msg)
@@ -222,7 +233,7 @@ export default function AdminConstructoras() {
       .map(([empresa, desarrollosMap]) => ({
         empresa,
         desarrollos: Array.from(desarrollosMap.entries())
-          .map(([nombre, mods]) => ({ nombre, modelos: mods }))
+          .map(([nombre, mods]) => ({ nombre, modelos: mods, ubicacion: ubicacionDesarrollo(mods) }))
           .sort((a, b) => a.nombre.localeCompare(b.nombre)),
         total: Array.from(desarrollosMap.values()).reduce((s, ms) => s + ms.length, 0),
       }))
@@ -395,7 +406,13 @@ export default function AdminConstructoras() {
                             onPress={() => setAbiertas(s => ({ ...s, [devKey]: !devAbierta }))}
                             activeOpacity={0.8}
                           >
-                            <Text style={[styles.grupoTitulo, { color: c.text }]}>{devAbierta ? '▼' : '▶'}  {d.nombre}</Text>
+                            <Text style={[styles.grupoChevron, { color: '#c9a84c' }]}>{devAbierta ? '▼' : '▶'}</Text>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.grupoTitulo, { color: c.text }]} numberOfLines={1}>{d.nombre}</Text>
+                              {d.ubicacion ? (
+                                <Text style={[styles.grupoUbic, { color: c.textSub }]} numberOfLines={1}>📍 {d.ubicacion}</Text>
+                              ) : null}
+                            </View>
                             <Text style={styles.grupoMeta}>{d.modelos.length} {d.modelos.length === 1 ? 'modelo' : 'modelos'}</Text>
                           </TouchableOpacity>
 
@@ -752,10 +769,12 @@ const styles = StyleSheet.create({
 
   grupo: { marginBottom: 14 },
   grupoHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 8,
   },
+  grupoChevron: { fontSize: 12, fontWeight: '800' },
   grupoTitulo: { fontSize: 15, fontWeight: '800' },
+  grupoUbic: { fontSize: 12, fontWeight: '600', marginTop: 2 },
   grupoMeta: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
 
   modeloCard: {
