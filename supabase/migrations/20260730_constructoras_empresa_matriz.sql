@@ -106,4 +106,11 @@ UPDATE public.constructoras SET empresa_matriz = 'Altos del Marqués'  WHERE nom
 UPDATE public.constructoras SET empresa_matriz = 'Inmobiliaria Cordillera' WHERE nombre = 'Villas La Joya';
 UPDATE public.constructoras SET empresa_matriz = 'Grupo Vasco Urbania' WHERE nombre = 'Vitea Gardens';
 
+-- Ciudad Marques va en Ruba
+UPDATE public.constructoras SET empresa_matriz = 'Ruba' WHERE nombre = 'CIUDAD MARQUES';
+
+-- Los que quedaron sin empresa_matriz conocida: empresa_matriz = su propio nombre
+-- (cada uno aparece como su propio grupo, sin caer en "Otros")
+UPDATE public.constructoras SET empresa_matriz = nombre WHERE empresa_matriz IS NULL;
+
 NOTIFY pgrst, 'reload schema';

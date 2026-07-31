@@ -1833,9 +1833,18 @@ export default function DetallePropiedad() {
             </Text>
           )}
           {propiedad.es_constructora && (
-            <Text style={styles.constructoraBadge}>
-              🏗 {propiedad.nombre_constructora ?? 'Constructora'}
-            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                const q = propiedad.nombre_constructora ?? ''
+                if (esStaff) router.push(`/(admin)/constructoras?q=${encodeURIComponent(q)}`)
+                else router.push(`/(prospectador)/constructoras?q=${encodeURIComponent(q)}`)
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.constructoraBadge, { textDecorationLine: 'underline' }]}>
+                🏗 {propiedad.nombre_constructora ?? 'Constructora'}
+              </Text>
+            </TouchableOpacity>
           )}
           {esStaff ? (() => {
             // Staff ve: asesor — empresa (o solo uno si falta el otro)

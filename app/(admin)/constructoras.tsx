@@ -65,7 +65,7 @@ function alerta(msg: string) {
 
 export default function AdminConstructoras() {
   const c = useColors()
-  const params = useLocalSearchParams<{ vista?: string }>()
+  const params = useLocalSearchParams<{ vista?: string; q?: string }>()
   const [vista, setVista] = useState<'catalogo' | 'contactos'>(params.vista === 'contactos' ? 'contactos' : 'catalogo')
   const [rol, setRol] = useState<string | null>(null)
 
@@ -73,7 +73,7 @@ export default function AdminConstructoras() {
   const [modelos, setModelos] = useState<Modelo[]>([])
   const [loadingCatalogo, setLoadingCatalogo] = useState(true)
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useState(params.q ?? '')
   const [zonaSel, setZonaSel] = useState<string | null>(null)
 
   // ── Contactos (coordinadores de constructoras — solo admin) ──────────────

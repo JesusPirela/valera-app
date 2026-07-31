@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
   TouchableOpacity, TextInput,
 } from 'react-native'
-import { useFocusEffect, router } from 'expo-router'
+import { useFocusEffect, router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
@@ -61,13 +61,14 @@ const ROLES_STAFF = ['admin', 'supervisor', 'asesor']
 export default function Constructoras() {
   const c = useColors()
   const { vistaComo } = useVistaComo()
+  const { q } = useLocalSearchParams<{ q?: string }>()
   const [modelos, setModelos] = useState<Modelo[]>([])
   const [constructorasInfo, setConstructorasInfo] = useState<ConstructoraInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
   const [rol, setRol] = useState<string | null>(null)
   const [rolReal, setRolReal] = useState<string | null>(null)
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useState(q ?? '')
   const [zonaSel, setZonaSel] = useState<string | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
