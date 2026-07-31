@@ -20,7 +20,19 @@ type Item = {
 }
 type Detalle = {
   id: string; token: string; titulo: string | null; cliente_nombre: string | null
+  cliente_telefono: string | null
   mensaje: string | null; vistas: number; items: Item[]
+}
+
+// Normaliza un teléfono mexicano para el enlace directo de WhatsApp (52 + 10).
+// Devuelve null si no hay número usable → se cae al selector de contactos.
+function waNumero(tel: string | null | undefined): string | null {
+  if (!tel) return null
+  let p = tel.replace(/\D/g, '')
+  if (p.startsWith('5252')) p = p.slice(2)
+  if (p.startsWith('521') && p.length === 13) p = '52' + p.slice(3)
+  if (p.length === 10) p = '52' + p
+  return p.length >= 12 ? p : null
 }
 type PropBusca = { id: string; codigo: string; titulo: string; precio: number | null; direccion: string; imagen: string | null }
 
@@ -92,7 +104,11 @@ export default function ColeccionDetalle() {
     const link = BASE_LINK + det.token
     if (wa) {
       const msg = `${det.titulo ? det.titulo + '\n\n' : ''}Te preparé una selección de propiedades. Míralas y marca tus favoritas:\n${link}`
-      const url = `https://wa.me/?text=${encodeURIComponent(msg)}`
+      // Con teléfono del cliente → abre DIRECTO su chat; si no, el selector.
+      const num = waNumero(det.cliente_telefono)
+      const url = num
+        ? `https://wa.me/${num}?text=${encodeURIComponent(msg)}`
+        : `https://wa.me/?text=${encodeURIComponent(msg)}`
       Platform.OS === 'web' ? window.open(url, '_blank') : Linking.openURL(url)
     } else {
       Clipboard.setStringAsync(link)

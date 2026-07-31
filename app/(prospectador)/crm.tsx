@@ -1,7 +1,7 @@
 ﻿import { useState, useCallback, useEffect, useMemo, createElement, memo } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking, Alert,
-  ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions, RefreshControl,
+  ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions, RefreshControl, Keyboard,
 } from 'react-native'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -1045,6 +1045,8 @@ export default function CRM() {
               autoCapitalize="none"
               autoCorrect={false}
               clearButtonMode="while-editing"
+              returnKeyType="search"
+              onSubmitEditing={() => Keyboard.dismiss()}
             />
           </View>
           <Tooltip label="Ordenar clientes">
@@ -1367,6 +1369,8 @@ export default function CRM() {
                 renderItem={({ item, index }) => renderExcelRow(item, index)}
                 contentContainerStyle={{ paddingBottom: 100 }}
                 showsVerticalScrollIndicator={false}
+                keyboardDismissMode="on-drag"
+                keyboardShouldPersistTaps="handled"
                 removeClippedSubviews
                 windowSize={7}
                 maxToRenderPerBatch={20}
@@ -1380,6 +1384,8 @@ export default function CRM() {
             keyExtractor={item => item.id}
             contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100, paddingTop: 10 }}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor="#1a6470" colors={['#1a6470']} />}
             removeClippedSubviews
             maxToRenderPerBatch={10}

@@ -14,8 +14,18 @@ const BASE_LINK = 'https://valeraapp.valerarealestate.com/coleccion/'
 
 type Col = {
   id: string; token: string; titulo: string | null; cliente_nombre: string | null
-  cliente_id: string | null; vistas: number; abierta_at: string | null
+  cliente_id: string | null; cliente_telefono: string | null; vistas: number; abierta_at: string | null
   n_props: number; n_favoritos: number; n_vistas_prop: number; created_at: string
+}
+
+// Normaliza un teléfono mexicano para el enlace directo de WhatsApp (52 + 10).
+function waNumero(tel: string | null | undefined): string | null {
+  if (!tel) return null
+  let p = tel.replace(/\D/g, '')
+  if (p.startsWith('5252')) p = p.slice(2)
+  if (p.startsWith('521') && p.length === 13) p = '52' + p.slice(3)
+  if (p.length === 10) p = '52' + p
+  return p.length >= 12 ? p : null
 }
 type ClienteMin = { id: string; nombre: string; telefono: string | null }
 
@@ -84,7 +94,10 @@ export default function Colecciones() {
     const link = BASE_LINK + col.token
     const msg = `${col.titulo ? col.titulo + '\n\n' : ''}Te preparé una selección de propiedades. Míralas aquí y marca tus favoritas:\n${link}`
     if (wa) {
-      const url = `https://wa.me/?text=${encodeURIComponent(msg)}`
+      const num = waNumero(col.cliente_telefono)
+      const url = num
+        ? `https://wa.me/${num}?text=${encodeURIComponent(msg)}`
+        : `https://wa.me/?text=${encodeURIComponent(msg)}`
       Platform.OS === 'web' ? window.open(url, '_blank') : Linking.openURL(url)
     } else {
       Clipboard.setStringAsync(link)
