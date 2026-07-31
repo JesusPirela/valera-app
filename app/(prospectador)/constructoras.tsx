@@ -57,19 +57,7 @@ function formatPrecio(precio: number | null) {
   return `$${precio.toLocaleString('es-MX')} MXN`
 }
 
-// Ubicación de un desarrollo: fraccionamiento(s) de sus modelos + ciudad.
-// Ej: "Zibatá · Querétaro" o "Ciudad Marqués · Querétaro".
-function ubicacionDesarrollo(mods: ModeloZona[]): string {
-  const fracs = [...new Set(mods.map(m => m.zonaDet).filter(z => z && z !== SIN_ZONA))]
-  const ciudad = mods.find(m => m.ciudad)?.ciudad ?? ''
-  if (fracs.length) {
-    const lista = fracs.slice(0, 2).join(', ') + (fracs.length > 2 ? '…' : '')
-    return ciudad ? `${lista} · ${ciudad}` : lista
-  }
-  return ciudad
-}
 
-const ROLES_STAFF = ['admin', 'supervisor', 'asesor']
 
 export default function Constructoras() {
   const c = useColors()
@@ -79,8 +67,6 @@ export default function Constructoras() {
   const [constructorasInfo, setConstructorasInfo] = useState<ConstructoraInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
-  const [rol, setRol] = useState<string | null>(null)
-  const [rolReal, setRolReal] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState(q ?? '')
   const [zonaSel, setZonaSel] = useState<string | null>(null)
 
@@ -108,8 +94,6 @@ export default function Constructoras() {
       rolActual = data?.role ?? null
     }
     rolActual = vistaComo ?? rolActual  // rol efectivo (admin "viendo como")
-    setRolReal(perfilRol)
-    setRol(rolActual)
 
     // Cargar info de constructoras (imagen_portada siempre; empresa_matriz para staff)
     const { data: cData } = await supabase
@@ -130,7 +114,7 @@ export default function Constructoras() {
       inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
     })) as Modelo[]
 
-    if (rolActual !== 'prospectador_plus' && rolActual !== 'admin' && rolActual !== 'supervisor') {
+    if (rolActual !== 'prospectador_plus' && rolActual !== 'admin' && rolActual !== 'supervisor' && rolActual !== 'asesor') {
       lista = lista.filter((p) => !p.exclusiva && !p.inmobiliarias?.exclusiva)
     }
 
@@ -207,17 +191,6 @@ export default function Constructoras() {
 
   const hayResultados = zonaGrupos.length > 0
 
-  // ── Vista staff: empresa_matriz → desarrollo → modelos ─────────────────────
-  // Usa el rol real del perfil (no el vistaComo) para mostrar la vista staff.
-  // VistaComo afecta el filtrado de contenido, no la jerarquía de UI de gestión.
-  const esStaff = rolReal && ROLES_STAFF.includes(rolReal)
-
-  const empresaMap = useMemo(() => {
-    const m = new Map<string, string | null>()
-    for (const ci of constructorasInfo) m.set(ci.nombre, ci.empresa_matriz)
-    return m
-  }, [constructorasInfo])
-
   const portadaMap = useMemo(() => {
     const m = new Map<string, string>()
     for (const ci of constructorasInfo) {
@@ -226,46 +199,6 @@ export default function Constructoras() {
     return m
   }, [constructorasInfo])
 
-  const empresaGrupos = useMemo(() => {
-    if (!esStaff) return []
-    const q = normalizar(busqueda.trim())
-    const lista = enriquecidos.filter(m => {
-      if (!q) return true
-      return (
-        normalizar(m.nombre_constructora ?? '').includes(q) ||
-        normalizar(m.titulo ?? '').includes(q) ||
-        normalizar(m.codigo ?? '').includes(q) ||
-        normalizar(m.zonaDet).includes(q) ||
-        normalizar(m.direccion ?? '').includes(q) ||
-        normalizar(empresaMap.get(m.nombre_constructora?.trim() ?? '') ?? '').includes(q)
-      )
-    })
-
-    const porEmpresa = new Map<string, Map<string, ModeloZona[]>>()
-    const SIN_MATRIZ = 'Otros'
-    for (const m of lista) {
-      const constructora = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA
-      const empresa = empresaMap.get(constructora) ?? SIN_MATRIZ
-      if (!porEmpresa.has(empresa)) porEmpresa.set(empresa, new Map())
-      const porDesarrollo = porEmpresa.get(empresa)!
-      if (!porDesarrollo.has(constructora)) porDesarrollo.set(constructora, [])
-      porDesarrollo.get(constructora)!.push(m)
-    }
-
-    return Array.from(porEmpresa.entries())
-      .map(([empresa, desarrollosMap]) => ({
-        empresa,
-        desarrollos: Array.from(desarrollosMap.entries())
-          .map(([nombre, mods]) => ({ nombre, modelos: mods, ubicacion: ubicacionDesarrollo(mods) }))
-          .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-        total: Array.from(desarrollosMap.values()).reduce((s, ms) => s + ms.length, 0),
-      }))
-      .sort((a, b) => {
-        if (a.empresa === SIN_MATRIZ) return 1
-        if (b.empresa === SIN_MATRIZ) return -1
-        return b.total - a.total
-      })
-  }, [esStaff, enriquecidos, busqueda, empresaMap])
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
@@ -274,7 +207,7 @@ export default function Constructoras() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.introTitle, { color: c.text }]}>🏗️ Constructoras</Text>
             <Text style={[styles.introSub, { color: c.textMute }]}>
-              {esStaff ? 'Vista por empresa matriz → desarrollo → modelos.' : 'Filtra por fraccionamiento o busca una constructora.'}
+              Filtra por fraccionamiento o busca una constructora.
             </Text>
           </View>
           <TouchableOpacity
@@ -306,8 +239,8 @@ export default function Constructoras() {
         )}
       </View>
 
-      {/* Chips de fraccionamiento — solo vista prospectador */}
-      {!loading && !esStaff && zonasDisponibles.length > 0 && (
+      {/* Chips de fraccionamiento */}
+      {!loading && zonasDisponibles.length > 0 && (
         <View style={styles.chipsWrap}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
             <TouchableOpacity
@@ -347,81 +280,6 @@ export default function Constructoras() {
             {busqueda || zonaSel ? 'Sin resultados para ese filtro.' : 'No hay propiedades de constructora aún.'}
           </Text>
         </View>
-      ) : esStaff ? (
-        /* ── Vista staff: empresa_matriz → desarrollo → modelos ── */
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
-          {empresaGrupos.map(eg => {
-            const empKey = `emp_${eg.empresa}`
-            const empAbierta = abiertas[empKey] ?? busqueda.trim().length > 0
-            return (
-              <View key={eg.empresa} style={{ marginBottom: 6 }}>
-                {/* Empresa matriz — nivel 1 */}
-                <TouchableOpacity
-                  style={[styles.empresaHeader, { backgroundColor: '#1a6470', borderColor: '#1a6470' }]}
-                  onPress={() => setAbiertas(s => ({ ...s, [empKey]: !empAbierta }))}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.empresaChevron}>{empAbierta ? '▼' : '▶'}</Text>
-                  <Text style={styles.empresaTitulo} numberOfLines={1}>{eg.empresa}</Text>
-                  <Text style={styles.empresaMeta}>
-                    {eg.desarrollos.length} {eg.desarrollos.length === 1 ? 'desarrollo' : 'desarrollos'} · {eg.total} {eg.total === 1 ? 'modelo' : 'modelos'}
-                  </Text>
-                </TouchableOpacity>
-
-                {empAbierta && eg.desarrollos.map(d => {
-                  const devKey = `dev_${eg.empresa}_${d.nombre}`
-                  const devAbierta = abiertas[devKey] ?? busqueda.trim().length > 0
-                  return (
-                    <View key={devKey} style={styles.desarrolloWrap}>
-                      {/* Desarrollo — nivel 2 */}
-                      <TouchableOpacity
-                        style={[styles.grupoHeader, { backgroundColor: c.card, borderColor: '#c9a84c', borderWidth: 1.4 }]}
-                        onPress={() => setAbiertas(s => ({ ...s, [devKey]: !devAbierta }))}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={[styles.grupoChevron, { color: '#c9a84c' }]}>{devAbierta ? '▼' : '▶'}</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.grupoTitulo, { color: c.text }]} numberOfLines={1}>{d.nombre}</Text>
-                          {d.ubicacion ? (
-                            <Text style={[styles.grupoUbic, { color: c.textSub }]} numberOfLines={1}>📍 {d.ubicacion}</Text>
-                          ) : null}
-                        </View>
-                        <Text style={[styles.grupoMeta, { color: '#c9a84c' }]}>
-                          {d.modelos.length} {d.modelos.length === 1 ? 'modelo' : 'modelos'}
-                        </Text>
-                      </TouchableOpacity>
-
-                      {devAbierta && d.modelos.map(m => {
-                        const img = (m.propiedad_imagenes ?? [])[0]
-                        return (
-                          <TouchableOpacity
-                            key={m.id}
-                            style={[styles.modeloCard, styles.modeloCardIndent, { backgroundColor: c.card, borderColor: c.border }]}
-                            onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })}
-                            activeOpacity={0.85}
-                          >
-                            {img?.url ? (
-                              <ThumbImage url={img.thumb_url ?? img.url} style={styles.modeloImg} />
-                            ) : (
-                              <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
-                            )}
-                            <View style={{ flex: 1 }}>
-                              <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
-                              <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
-                              {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
-                              <Text style={[styles.modeloCodigo, { color: c.textMute }]}>{m.zonaDet}</Text>
-                            </View>
-                            <Text style={styles.modeloChevron}>›</Text>
-                          </TouchableOpacity>
-                        )
-                      })}
-                    </View>
-                  )
-                })}
-              </View>
-            )
-          })}
-        </ScrollView>
       ) : (
         /* ── Vista prospectador: cards visuales por desarrollo ── */
         <ScrollView
@@ -665,32 +523,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  // Vista staff — empresa matriz (nivel 1)
-  empresaHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13,
-    marginBottom: 6, marginTop: 10,
-  },
-  empresaChevron: { fontSize: 12, color: '#fff', fontWeight: '800' },
-  empresaTitulo: { flex: 1, fontSize: 15, fontWeight: '900', color: '#fff' },
-  empresaMeta: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
-  desarrolloWrap: { paddingLeft: 12, marginBottom: 4 },
-
-  // Staff: nivel 2 desarrollo header (reutilizado)
-  grupoHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 8,
-  },
-  grupoChevron: { fontSize: 12, fontWeight: '800' },
-  grupoTitulo: { fontSize: 15, fontWeight: '800' },
-  grupoUbic: { fontSize: 12, fontWeight: '600', marginTop: 2 },
-  grupoMeta: { fontSize: 12, fontWeight: '700' },
-
   modeloCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     borderRadius: 12, borderWidth: 1, padding: 10, marginBottom: 8,
   },
-  modeloCardIndent: { marginLeft: 4 },
+
   modeloImg: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#e8f0f0' },
   modeloImgPh: { alignItems: 'center', justifyContent: 'center' },
   modeloTitulo: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
