@@ -15,6 +15,7 @@ import { usePullRefresh } from '../../hooks/usePullRefresh'
 type ConstructoraInfo = {
   nombre: string
   empresa_matriz: string | null
+  imagen_portada: string | null
 }
 
 type Modelo = {
@@ -98,13 +99,11 @@ export default function Constructoras() {
     setRolReal(perfilRol)
     setRol(rolActual)
 
-    // Cargar empresa_matriz para staff (usa rol real, no el vistaComo)
-    if (perfilRol && ROLES_STAFF.includes(perfilRol)) {
-      const { data: cData } = await supabase
-        .from('constructoras')
-        .select('nombre, empresa_matriz')
-      setConstructorasInfo((cData ?? []) as ConstructoraInfo[])
-    }
+    // Cargar info de constructoras (imagen_portada siempre; empresa_matriz para staff)
+    const { data: cData } = await supabase
+      .from('constructoras')
+      .select('nombre, empresa_matriz, imagen_portada')
+    setConstructorasInfo((cData ?? []) as ConstructoraInfo[])
 
     let { data, error } = await consultarModelos()
     // En web la sesión puede tardar unos ms en adjuntarse; reintentar una vez.
@@ -204,6 +203,14 @@ export default function Constructoras() {
   const empresaMap = useMemo(() => {
     const m = new Map<string, string | null>()
     for (const ci of constructorasInfo) m.set(ci.nombre, ci.empresa_matriz)
+    return m
+  }, [constructorasInfo])
+
+  const portadaMap = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const ci of constructorasInfo) {
+      if (ci.imagen_portada) m.set(ci.nombre, ci.imagen_portada)
+    }
     return m
   }, [constructorasInfo])
 
@@ -409,7 +416,9 @@ export default function Constructoras() {
               const aKey = `${zg.zona}_${g.nombre}`
               const abierta = abiertas[aKey] ?? busqueda.trim().length > 0
               const popular = esPopularMercado(g.nombre)
-              const imgPortada = g.modelos[0]?.propiedad_imagenes?.[0]
+              const portadaUrl = portadaMap.get(g.nombre)
+              const imgPortadaFallback = g.modelos[0]?.propiedad_imagenes?.[0]
+              const imgSrc = portadaUrl ?? imgPortadaFallback?.thumb_url ?? imgPortadaFallback?.url ?? null
               const precios = g.modelos.map(m => m.precio).filter((p): p is number => p != null)
               const precioDesde = precios.length > 0 ? Math.min(...precios) : null
               return (
@@ -426,9 +435,9 @@ export default function Constructoras() {
                   >
                     {/* Imagen portada con overlay */}
                     <View style={styles.desarrolloImgWrap}>
-                      {imgPortada?.url ? (
+                      {imgSrc ? (
                         <ThumbImage
-                          url={imgPortada.thumb_url ?? imgPortada.url}
+                          url={imgSrc}
                           style={styles.desarrolloImg}
                           resizeMode="cover"
                         />

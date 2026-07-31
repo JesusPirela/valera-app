@@ -36,6 +36,7 @@ type Contacto = {
   id: string
   nombre: string
   empresa_matriz: string | null
+  imagen_portada: string | null
   coordinador_nombre: string | null
   telefono_contacto: string | null
   email: string | null
@@ -46,6 +47,8 @@ type Contacto = {
 const SIN_CONSTRUCTORA = 'Sin constructora'
 const EMPTY_CONTACTO: Omit<Contacto, 'id'> = {
   nombre: '',
+  empresa_matriz: null,
+  imagen_portada: null,
   coordinador_nombre: null,
   telefono_contacto: null,
   email: null,
@@ -256,6 +259,7 @@ export default function AdminConstructoras() {
     setEditando(item)
     setForm({
       nombre: item.nombre,
+      imagen_portada: item.imagen_portada,
       coordinador_nombre: item.coordinador_nombre,
       telefono_contacto: item.telefono_contacto,
       email: item.email,
@@ -271,6 +275,7 @@ export default function AdminConstructoras() {
     try {
       const payload = {
         nombre:              form.nombre.trim(),
+        imagen_portada:      form.imagen_portada?.trim() || null,
         coordinador_nombre:  form.coordinador_nombre?.trim() || null,
         telefono_contacto:   form.telefono_contacto?.trim() || null,
         email:               form.email?.trim() || null,
@@ -585,6 +590,18 @@ export default function AdminConstructoras() {
                 placeholder="Ej. Spacio Vitale"
                 placeholderTextColor={c.placeholder}
                 autoCapitalize="words"
+              />
+
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Imagen de portada (URL)</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={form.imagen_portada ?? ''}
+                onChangeText={v => setForm(f => ({ ...f, imagen_portada: v }))}
+                placeholder="https://… (foto del desarrollo)"
+                placeholderTextColor={c.placeholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
               />
 
               {/* Reusar un contacto ya guardado: llena coordinador + teléfono (+
