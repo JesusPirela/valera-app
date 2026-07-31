@@ -14,5 +14,5 @@ export function esAdmin(role?: string | null): boolean {
 }
 
 export function puedeEnviarClienteAChatbot(role?: string | null): boolean {
-  return ['prospectador_plus', 'asesor', 'supervisor', 'admin'].includes(role ?? '')
+  return ['nuevo', 'prospectador', 'prospectador_plus', 'asesor', 'supervisor', 'admin'].includes(role ?? '')
 }
