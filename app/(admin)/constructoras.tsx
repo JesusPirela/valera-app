@@ -365,7 +365,9 @@ export default function AdminConstructoras() {
             <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
               {empresaGrupos.map(eg => {
                 const empKey = `emp_${eg.empresa}`
-                const empAbierta = abiertas[empKey] ?? true
+                // Colapsado por defecto: el usuario despliega lo que quiere ver.
+                // Al buscar se abre automáticamente para mostrar las coincidencias.
+                const empAbierta = abiertas[empKey] ?? busqueda.trim().length > 0
                 return (
                   <View key={eg.empresa} style={{ marginBottom: 6 }}>
                     <TouchableOpacity
