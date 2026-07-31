@@ -333,7 +333,7 @@ export default function Constructoras() {
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
           {empresaGrupos.map(eg => {
             const empKey = `emp_${eg.empresa}`
-            const empAbierta = abiertas[empKey] ?? true
+            const empAbierta = abiertas[empKey] ?? busqueda.trim().length > 0
             return (
               <View key={eg.empresa} style={{ marginBottom: 6 }}>
                 {/* Empresa matriz — nivel 1 */}
