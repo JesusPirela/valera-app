@@ -95,6 +95,20 @@ function proximoRec(recs: Cliente['recordatorios']) {
     .sort((a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime())[0] ?? null
 }
 
+// Un cliente "necesita seguimiento" (vencido) SOLO si tiene un recordatorio
+// vencido y sigue sin resolverse. Se considera resuelto cuando:
+//  · el cliente está descartado o comprado (ya no hay que seguirlo), o
+//  · fue reagendado a futuro (proximo_contacto en el futuro = el asesor ya
+//    definió cuándo lo vuelve a contactar).
+// Antes, un cliente descartado o reagendado seguía apareciendo como vencido y
+// notificando, porque el recordatorio quedaba abierto en paralelo.
+function necesitaSeguimiento(c: Cliente): boolean {
+  if (c.estado === 'descartado' || c.estado === 'compro' || c.estado === 'compro_externo') return false
+  const now = Date.now()
+  if (c.proximo_contacto && new Date(c.proximo_contacto).getTime() > now) return false
+  return (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
+}
+
 function iniciales(nombre: string) {
   return nombre.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 }
@@ -441,14 +455,11 @@ export default function CRM() {
   )
 
   const { total, activos, citas, vencidos, cerrados, conteos } = useMemo(() => {
-    const now = Date.now()
     return {
       total:    clientesBase.length,
       activos:  clientesBase.filter(c => c.estado !== 'descartado' && c.estado !== 'compro' && c.estado !== 'compro_externo').length,
       citas:    clientesBase.filter(c => c.estado === 'cita_agendada').length,
-      vencidos: clientesBase.filter(c =>
-        (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
-      ).length,
+      vencidos: clientesBase.filter(necesitaSeguimiento).length,
       cerrados: clientesBase.filter(c => c.estado === 'compro' || c.estado === 'compro_externo').length,
       conteos:  ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
         acc[e] = clientesBase.filter(c => c.estado === e).length
@@ -474,8 +485,7 @@ export default function CRM() {
       result = result.filter(c => c.estado === estadoFiltro)
     }
     if (filtroVencidos) {
-      const now = Date.now()
-      result = result.filter(c => (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now))
+      result = result.filter(necesitaSeguimiento)
     }
     if (opFiltro)      result = result.filter(c => c.tipo_operacion === opFiltro)
     if (interesFilter) result = result.filter(c => c.nivel_interes === interesFilter)
