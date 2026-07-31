@@ -398,71 +398,111 @@ export default function Constructoras() {
           })}
         </ScrollView>
       ) : (
-        /* ── Vista prospectador: zona → constructora → modelos ── */
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
-          {zonaGrupos.map(zg => (
-            <View key={zg.zona}>
-              <View style={[styles.zonaSectionHeader, { borderBottomColor: c.border }]}>
-                <Text style={[styles.zonaSectionTitle, { color: c.text }]}>📍 {zg.zona}</Text>
-                <Text style={[styles.zonaSectionMeta, { color: c.textMute }]}>
-                  {zg.ciudad ? `${zg.ciudad} · ` : ''}{zg.total} {zg.total === 1 ? 'modelo' : 'modelos'}
-                </Text>
-              </View>
-              {zg.grupos.map((g) => {
-                const aKey = `${zg.zona}_${g.nombre}`
-                const abierta = abiertas[aKey] ?? busqueda.trim().length > 0
-                const popular = esPopularMercado(g.nombre)
-                const borderColor = popular ? '#e65100' : c.border
-                return (
-                  <View key={aKey} style={styles.grupo}>
-                    <TouchableOpacity
-                      style={[
-                        styles.grupoHeader,
-                        { backgroundColor: c.card, borderColor },
-                        popular && { borderWidth: 1.8, backgroundColor: '#e6510008' },
-                      ]}
-                      onPress={() => setAbiertas((s) => ({ ...s, [aKey]: !abierta }))}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.grupoTitulo, { color: c.text }]}>{abierta ? '▼' : '▶'}  {g.nombre}</Text>
-                      {popular && (
-                        <Text style={[styles.popularBadge, { backgroundColor: '#e6510018', color: '#e65100' }]}>
-                          🔥 Popular
-                        </Text>
+        /* ── Vista prospectador: cards visuales por desarrollo ── */
+        <ScrollView
+          contentContainerStyle={styles.cardsGrid}
+          showsVerticalScrollIndicator={false}
+          refreshControl={refreshControl}
+        >
+          {zonaGrupos.flatMap(zg =>
+            zg.grupos.map(g => {
+              const aKey = `${zg.zona}_${g.nombre}`
+              const abierta = abiertas[aKey] ?? busqueda.trim().length > 0
+              const popular = esPopularMercado(g.nombre)
+              const imgPortada = g.modelos[0]?.propiedad_imagenes?.[0]
+              const precios = g.modelos.map(m => m.precio).filter((p): p is number => p != null)
+              const precioDesde = precios.length > 0 ? Math.min(...precios) : null
+              return (
+                <View
+                  key={aKey}
+                  style={[
+                    styles.desarrolloCard,
+                    { backgroundColor: c.card, borderColor: popular ? '#e65100' : c.border },
+                  ]}
+                >
+                  <TouchableOpacity
+                    onPress={() => setAbiertas(s => ({ ...s, [aKey]: !abierta }))}
+                    activeOpacity={0.9}
+                  >
+                    {/* Imagen portada con overlay */}
+                    <View style={styles.desarrolloImgWrap}>
+                      {imgPortada?.url ? (
+                        <ThumbImage
+                          url={imgPortada.thumb_url ?? imgPortada.url}
+                          style={styles.desarrolloImg}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[styles.desarrolloImg, styles.desarrolloImgPh]}>
+                          <Text style={{ fontSize: 44 }}>🏗️</Text>
+                        </View>
                       )}
-                      <Text style={[styles.grupoMeta, { color: popular ? '#e65100' : '#1a6470' }]}>
-                        {g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}
-                      </Text>
-                    </TouchableOpacity>
+                      <View style={styles.desarrolloOverlay} />
+                      {popular && (
+                        <View style={styles.popularPill}>
+                          <Text style={styles.popularPillTxt}>🔥 Popular</Text>
+                        </View>
+                      )}
+                      <View style={styles.desarrolloNombreWrap}>
+                        <Text style={styles.desarrolloNombre} numberOfLines={2}>{g.nombre}</Text>
+                      </View>
+                    </View>
 
-                    {abierta && g.modelos.map((m) => {
-                      const img = (m.propiedad_imagenes ?? [])[0]
-                      return (
-                        <TouchableOpacity
-                          key={m.id}
-                          style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border }]}
-                          onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })}
-                          activeOpacity={0.85}
-                        >
-                          {img?.url ? (
-                            <ThumbImage url={img.thumb_url ?? img.url} style={styles.modeloImg} />
-                          ) : (
-                            <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
-                          )}
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
-                            <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
-                            {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
-                          </View>
-                          <Text style={styles.modeloChevron}>›</Text>
-                        </TouchableOpacity>
-                      )
-                    })}
-                  </View>
-                )
-              })}
-            </View>
-          ))}
+                    {/* Info: zona, precio, conteo */}
+                    <View style={styles.desarrolloInfo}>
+                      <View style={styles.desarrolloInfoRow}>
+                        <View style={[styles.zonaChip, { backgroundColor: '#1a647015' }]}>
+                          <Text style={[styles.zonaChipTxt, { color: '#1a6470' }]}>📍 {zg.zona}</Text>
+                        </View>
+                        <Text style={[styles.desarrolloConteo, { color: c.textMute }]}>
+                          {g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}
+                        </Text>
+                      </View>
+                      <View style={styles.desarrolloFooter}>
+                        <Text style={styles.desarrolloPrecio}>
+                          {precioDesde != null
+                            ? `desde $${precioDesde.toLocaleString('es-MX')}`
+                            : 'Precio a consultar'}
+                        </Text>
+                        <Text style={[styles.desarrolloToggle, { color: '#c9a84c' }]}>
+                          {abierta ? '▲ Ocultar' : '▼ Ver modelos'}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Modelos expandidos */}
+                  {abierta && (
+                    <View style={[styles.modelosWrap, { borderTopColor: c.border }]}>
+                      {g.modelos.map(m => {
+                        const img = (m.propiedad_imagenes ?? [])[0]
+                        return (
+                          <TouchableOpacity
+                            key={m.id}
+                            style={[styles.modeloCard, { backgroundColor: c.bg, borderColor: c.border }]}
+                            onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })}
+                            activeOpacity={0.85}
+                          >
+                            {img?.url ? (
+                              <ThumbImage url={img.thumb_url ?? img.url} style={styles.modeloImg} />
+                            ) : (
+                              <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
+                            )}
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
+                              <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
+                              {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
+                            </View>
+                            <Text style={styles.modeloChevron}>›</Text>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </View>
+                  )}
+                </View>
+              )
+            })
+          )}
         </ScrollView>
       )}
     </View>
@@ -496,11 +536,95 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 60, paddingHorizontal: 20 },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 21 },
 
-  zonaSectionHeader: {
-    paddingVertical: 8, marginTop: 6, marginBottom: 4, borderBottomWidth: 1,
+  // ── Cards de desarrollo (vista prospectador) ──────────────────────────────
+  cardsGrid: {
+    paddingBottom: 40,
+    gap: 16,
   },
-  zonaSectionTitle: { fontSize: 15, fontWeight: '900' },
-  zonaSectionMeta: { fontSize: 11.5, fontWeight: '600', marginTop: 2 },
+  desarrolloCard: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+  },
+  desarrolloImgWrap: {
+    height: 190,
+    position: 'relative',
+  },
+  desarrolloImg: {
+    width: '100%',
+    height: '100%',
+  },
+  desarrolloImgPh: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a647020',
+  },
+  desarrolloOverlay: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    height: '65%',
+    backgroundColor: 'rgba(0,0,0,0.58)',
+  },
+  popularPill: {
+    position: 'absolute',
+    top: 10, left: 10,
+    backgroundColor: 'rgba(230,81,0,0.92)',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  popularPillTxt: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  desarrolloNombreWrap: {
+    position: 'absolute',
+    bottom: 12, left: 14, right: 14,
+  },
+  desarrolloNombre: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  desarrolloInfo: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  desarrolloInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  zonaChip: {
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  zonaChipTxt: { fontSize: 12, fontWeight: '700' },
+  desarrolloConteo: { fontSize: 12, fontWeight: '600' },
+  desarrolloFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  desarrolloPrecio: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1a6470',
+  },
+  desarrolloToggle: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modelosWrap: {
+    borderTopWidth: 1,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+    gap: 8,
+  },
 
   // Vista staff — empresa matriz (nivel 1)
   empresaHeader: {
@@ -513,14 +637,13 @@ const styles = StyleSheet.create({
   empresaMeta: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
   desarrolloWrap: { paddingLeft: 12, marginBottom: 4 },
 
-  grupo: { marginBottom: 14 },
+  // Staff: nivel 2 desarrollo header (reutilizado)
   grupoHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
   },
   grupoTitulo: { flex: 1, fontSize: 15, fontWeight: '800' },
   grupoMeta: { fontSize: 12, fontWeight: '700' },
-  popularBadge: { fontSize: 11, fontWeight: '800', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, marginRight: 4 },
 
   modeloCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
