@@ -110,10 +110,10 @@ export default function ColeccionPublica() {
         <Text style={s.titulo}>{col.titulo || 'Propiedades seleccionadas para ti'}</Text>
         {col.cliente_nombre ? <Text style={s.saludo}>Para {col.cliente_nombre}</Text> : null}
         {col.mensaje ? <Text style={s.mensaje}>{col.mensaje}</Text> : null}
-        {col.agente?.nombre ? (
-          <Text style={s.agente}>Seleccionadas por {col.agente.nombre}</Text>
-        ) : null}
-        <Text style={s.hint}>Toca ♥ para marcar tus favoritas · toca la tarjeta para ver la ficha completa</Text>
+        <View style={s.hintBox}>
+          <Text style={s.hintTxt}>♥  Toca el corazón para marcar tus favoritas</Text>
+          <Text style={s.hintTxt}>👆  Toca una tarjeta para ver todos los detalles</Text>
+        </View>
 
         {(col.items ?? []).map((it) => {
           const fav = !!favs[it.propiedad_id]
@@ -178,8 +178,8 @@ const s = StyleSheet.create({
   titulo: { fontSize: 22, fontWeight: '800', color: '#0f2b30', textAlign: 'center', marginTop: 6 },
   saludo: { fontSize: 15, color: '#0f2b30', textAlign: 'center', marginTop: 4, fontWeight: '600' },
   mensaje: { fontSize: 14, color: '#4a5b60', textAlign: 'center', marginTop: 8, lineHeight: 20 },
-  agente: { fontSize: 12, color: '#78888d', textAlign: 'center', marginTop: 8 },
-  hint: { fontSize: 12, color: '#9aa5ab', textAlign: 'center', marginTop: 14, marginBottom: 8 },
+  hintBox: { backgroundColor: '#e9f4f5', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginTop: 16, marginBottom: 4, gap: 6 },
+  hintTxt: { fontSize: 13.5, color: '#215a64', fontWeight: '600', textAlign: 'center' },
   card: {
     backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', marginTop: 16,
     borderWidth: 1, borderColor: '#e6eaec',

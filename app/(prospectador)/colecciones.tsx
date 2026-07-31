@@ -49,7 +49,7 @@ export default function Colecciones() {
       setCliente(params.nuevoCliente
         ? { id: String(params.nuevoCliente), nombre: String(params.nuevoClienteNombre ?? 'Cliente'), telefono: null }
         : null)
-      setTitulo(params.nuevoClienteNombre ? `Propiedades para ${params.nuevoClienteNombre}` : '')
+      setTitulo('Propiedades seleccionadas')
       setModal(true)
       router.setParams({ nuevoCliente: '', nuevoClienteNombre: '' })
     }
@@ -165,7 +165,7 @@ export default function Colecciones() {
                     <View style={{ maxHeight: 160 }}>
                       {clientesFiltrados.slice(0, 8).map(cl => (
                         <TouchableOpacity key={cl.id} style={[st.clienteRow, { borderColor: c.border }]}
-                          onPress={() => { setCliente(cl); setBusca(''); if (!titulo) setTitulo(`Propiedades para ${cl.nombre}`) }}>
+                          onPress={() => { setCliente(cl); setBusca(''); if (!titulo) setTitulo('Propiedades seleccionadas') }}>
                           <Text style={{ color: c.text }}>{cl.nombre}</Text>
                         </TouchableOpacity>
                       ))}

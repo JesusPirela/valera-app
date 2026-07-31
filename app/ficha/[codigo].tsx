@@ -5,7 +5,7 @@ import {
   useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native'
 import { Image } from 'expo-image'
-import { useLocalSearchParams } from 'expo-router'
+import { useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import PropMapa from '../../components/PropMapa'
 import { thumb } from '../../lib/img'
@@ -146,6 +146,11 @@ export default function FichaPublica() {
     <View style={s.root}>
       {/* Selector de idioma: el visitante cambia ES/EN cuando quiera */}
       <View style={s.langBar}>
+        {router.canGoBack()
+          ? <TouchableOpacity style={s.backBtn} onPress={() => router.back()} accessibilityLabel="Volver">
+              <Text style={s.backTxt}>‹ Volver</Text>
+            </TouchableOpacity>
+          : <View />}
         <View style={s.langToggle}>
           <TouchableOpacity
             style={[s.langBtn, idioma === 'es' && s.langBtnActive]}
@@ -311,10 +316,16 @@ const s = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc', padding: 32 },
 
   langBar: {
-    flexDirection: 'row', justifyContent: 'flex-end',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 12, paddingTop: Platform.OS === 'web' ? 10 : 44, paddingBottom: 6,
     backgroundColor: '#f8fafc',
   },
+  backBtn: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#e7edf0',
+    borderRadius: 9, borderWidth: 1, borderColor: '#dbe3e7',
+    paddingHorizontal: 12, paddingVertical: 6,
+  },
+  backTxt: { color: TEAL, fontWeight: '800', fontSize: 13 },
   langToggle: {
     flexDirection: 'row', backgroundColor: '#e7edf0', borderRadius: 9, padding: 2,
     borderWidth: 1, borderColor: '#dbe3e7',
