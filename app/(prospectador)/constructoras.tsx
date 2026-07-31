@@ -372,10 +372,7 @@ export default function Constructoras() {
                           <TouchableOpacity
                             key={m.id}
                             style={[styles.modeloCard, styles.modeloCardIndent, { backgroundColor: c.card, borderColor: c.border }]}
-                            onPress={() => (rol === 'admin' || rol === 'supervisor')
-                              ? router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })
-                              : router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })
-                            }
+                            onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })}
                             activeOpacity={0.85}
                           >
                             {img?.url ? (
@@ -444,10 +441,7 @@ export default function Constructoras() {
                         <TouchableOpacity
                           key={m.id}
                           style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border }]}
-                          onPress={() => (rol === 'admin' || rol === 'supervisor')
-                            ? router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })
-                            : router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })
-                          }
+                          onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })}
                           activeOpacity={0.85}
                         >
                           {img?.url ? (

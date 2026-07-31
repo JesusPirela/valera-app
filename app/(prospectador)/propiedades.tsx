@@ -216,6 +216,8 @@ const PropiedadCard = memo(function PropiedadCard({
         {esAdmin && destacada && item.destacada_mensaje ? (
           <Text style={styles.destacadaMensaje}>{item.destacada_mensaje}</Text>
         ) : null}
+        {/* Todas las etiquetas en un mismo renglón (con wrap): así se ahorra
+            espacio vertical y la descripción/medidas tienen más lugar. */}
         <View style={styles.cardHeaderRow}>
           <Text style={[styles.codigo, { backgroundColor: primaryColor }]}>{item.codigo ?? '—'}</Text>
           {item.tipo && (
@@ -224,21 +226,19 @@ const PropiedadCard = memo(function PropiedadCard({
               {item.operacion ? ` · ${item.operacion}` : ''}
             </Text>
           )}
-        </View>
-        {item.es_constructora && (
-          <View>
-            <Text style={styles.constructoraBadge}>
+          {item.es_constructora && (
+            <Text style={styles.constructoraBadge} numberOfLines={1}>
               🏗️ {item.nombre_constructora ? item.nombre_constructora : 'Constructora'}
             </Text>
-            {empresaMatriz ? (
-              <Text style={styles.empresaMatrizBadge}>🏢 {empresaMatriz}</Text>
-            ) : null}
-          </View>
-        )}
+          )}
+          {item.es_constructora && empresaMatriz ? (
+            <Text style={styles.empresaMatrizBadge} numberOfLines={1}>🏢 {empresaMatriz}</Text>
+          ) : null}
+        </View>
         <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
         <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
         {item.descripcion ? (
-          <Text style={styles.cardDescripcion} numberOfLines={2}>{item.descripcion}</Text>
+          <Text style={styles.cardDescripcion} numberOfLines={3}>{item.descripcion}</Text>
         ) : null}
         {tieneMeta && (
           <View style={styles.metaRow}>
@@ -1689,28 +1689,26 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   constructoraBadge: {
-    alignSelf: 'flex-start',
     backgroundColor: '#e8f4fd',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    marginBottom: 4,
-    fontSize: 12,
+    fontSize: 11,
     color: '#1a4a6b',
     fontWeight: '600',
     overflow: 'hidden',
+    maxWidth: 180,
   },
   empresaMatrizBadge: {
-    alignSelf: 'flex-start',
     backgroundColor: '#f0fdf4',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    marginBottom: 6,
     fontSize: 11,
     color: '#166534',
     fontWeight: '500',
     overflow: 'hidden',
+    maxWidth: 160,
   },
   cardTitulo: { fontSize: 16, fontWeight: '700', marginBottom: 3 },
   cardDireccion: { fontSize: 13, color: '#888', marginBottom: 6 },

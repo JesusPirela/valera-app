@@ -400,7 +400,9 @@ export default function AdminConstructoras() {
                               <TouchableOpacity
                                 key={m.id}
                                 style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border, marginLeft: 8 }]}
-                                onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })}
+                                onPress={() => m.codigo
+                                  ? router.push(`/ficha/${m.codigo}`)
+                                  : router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })}
                                 activeOpacity={0.85}
                               >
                                 {img?.url ? (
