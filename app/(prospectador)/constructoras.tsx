@@ -425,10 +425,11 @@ export default function Constructoras() {
       ) : (
         /* ── Vista prospectador: cards visuales por desarrollo ── */
         <ScrollView
-          contentContainerStyle={styles.cardsGrid}
           showsVerticalScrollIndicator={false}
           refreshControl={refreshControl}
+          contentContainerStyle={styles.cardsScroll}
         >
+          <View style={styles.cardsGrid}>
           {zonaGrupos.flatMap(zg =>
             zg.grupos.map(g => {
               const aKey = `${zg.zona}_${g.nombre}`
@@ -530,6 +531,7 @@ export default function Constructoras() {
               )
             })
           )}
+          </View>
         </ScrollView>
       )}
     </View>
@@ -564,17 +566,27 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 21 },
 
   // ── Cards de desarrollo (vista prospectador) ──────────────────────────────
-  cardsGrid: {
+  cardsScroll: {
     paddingBottom: 40,
+  },
+  cardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 16,
+    maxWidth: 960,
+    alignSelf: 'center',
+    width: '100%',
   },
   desarrolloCard: {
     borderRadius: 16,
     borderWidth: 1.5,
     overflow: 'hidden',
+    flexBasis: '47%',
+    flexGrow: 1,
+    minWidth: 280,
   },
   desarrolloImgWrap: {
-    height: 190,
+    height: 200,
     position: 'relative',
   },
   desarrolloImg: {
