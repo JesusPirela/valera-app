@@ -71,6 +71,10 @@ export async function enqueueClienteCreate(
 // la cola nunca duplica el conteo aunque la primera llamada sí hubiera llegado.
 export async function enqueuePublicacion(propiedadId: string, idemKey: string): Promise<void> {
   const queue = await getQueue()
+  // Deduplicar por propiedadId: solo UNA publicación pendiente por propiedad.
+  // Sin esto, múltiples clicks offline generan N entradas con idem_keys distintos
+  // y al reconectar se ejecutan todas → el contador salta a N/10 de un golpe.
+  if (queue.some(q => q.type === 'publish_property' && q.propiedadId === propiedadId)) return
   if (queue.some(q => q.type === 'publish_property' && q.idemKey === idemKey)) return
   const op: QueueOp = { id: genUUID(), type: 'publish_property', ts: Date.now(), propiedadId, idemKey, payload: {} }
   await saveQueue([...queue, op])
