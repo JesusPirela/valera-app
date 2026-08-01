@@ -579,8 +579,10 @@ export default function ProspectadorPropiedades() {
     togglingRef.current = newTogglingSet
     setToggling(newTogglingSet)
     const setVeces = (n: number) => {
-      queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old =>
-        old ? { ...old, publicacionesMap: { ...old.publicacionesMap, [propiedadId]: n } } : old)
+      queryClient.setQueryData<PublicacionesData>(['publicaciones-usuario', userId], old => ({
+        publicacionesMap:   { ...(old?.publicacionesMap   ?? {}), [propiedadId]: n },
+        publicacionFechasMap: { ...(old?.publicacionFechasMap ?? {}) },
+      }))
     }
     setVeces(vecesActual + 1)
     recienPublicadosRef.current = new Set([...recienPublicadosRef.current, propiedadId])
