@@ -430,6 +430,7 @@ const styles = StyleSheet.create({
   cardsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'flex-start',
     gap: 16,
     maxWidth: 960,
     alignSelf: 'center',
@@ -446,6 +447,7 @@ const styles = StyleSheet.create({
   desarrolloImgWrap: {
     height: 200,
     position: 'relative',
+    backgroundColor: '#0d1520',
   },
   desarrolloImg: {
     width: '100%',
