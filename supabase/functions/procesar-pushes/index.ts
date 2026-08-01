@@ -15,6 +15,7 @@ interface Notificacion {
   propiedad_id: string | null
   cliente_id: string | null
   chatbot_lead_id: string | null
+  accion_url: string | null
 }
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
@@ -58,7 +59,7 @@ serve(async (_req) => {
   // Notificaciones pendientes de las últimas 24 horas
   const { data: notificaciones, error } = await supabase
     .from('notificaciones')
-    .select('id, user_id, titulo, mensaje, tipo, propiedad_id, cliente_id, chatbot_lead_id')
+    .select('id, user_id, titulo, mensaje, tipo, propiedad_id, cliente_id, chatbot_lead_id, accion_url')
     .eq('push_enviado', false)
     .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
     .order('created_at', { ascending: true })
@@ -107,6 +108,7 @@ serve(async (_req) => {
       if (n.propiedad_id) data.propiedad_id = n.propiedad_id
       if (n.cliente_id) data.cliente_id = n.cliente_id
       if (n.chatbot_lead_id) data.chatbot_lead_id = n.chatbot_lead_id
+      if (n.accion_url) data.accion_url = n.accion_url
       return { to: token, title: n.titulo, body: n.mensaje, sound: 'default', data }
     })
     .filter((m): m is NonNullable<typeof m> => m !== null)

@@ -1027,10 +1027,15 @@ export default function CRM() {
           </TouchableOpacity>
         )}
 
-        {/* ── Botón chats de WhatsApp ── */}
-        <TouchableOpacity style={s.btnCampana} onPress={() => router.push('/(prospectador)/chats')}>
-          <Text style={s.btnCampanaTxt}>💬 Chats de WhatsApp</Text>
-        </TouchableOpacity>
+        {/* ── Botones: chats de WhatsApp + Colecciones ── */}
+        <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 12, marginTop: 8 }}>
+          <TouchableOpacity style={[s.btnCampana, { flex: 1, marginHorizontal: 0, marginTop: 0 }]} onPress={() => router.push('/(prospectador)/chats')}>
+            <Text style={s.btnCampanaTxt}>💬 Chats de WhatsApp</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.btnCampana, { flex: 1, marginHorizontal: 0, marginTop: 0, backgroundColor: '#1a6470' }]} onPress={() => router.push('/(prospectador)/colecciones')}>
+            <Text style={s.btnCampanaTxt}>📁 Colecciones</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* ── Search + sort + nuevo ── */}
         <View style={s.searchRow}>
@@ -1071,11 +1076,6 @@ export default function CRM() {
                 ? <ActivityIndicator size="small" color="#1a6470" />
                 : <Ionicons name="download-outline" size={15} color="#1a6470" />
               }
-            </TouchableOpacity>
-          </Tooltip>
-          <Tooltip label="Colecciones para clientes">
-            <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => router.push('/(prospectador)/colecciones')}>
-              <Ionicons name="albums-outline" size={15} color="#1a6470" />
             </TouchableOpacity>
           </Tooltip>
           <Tooltip label="Nuevo cliente">

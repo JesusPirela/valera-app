@@ -32,6 +32,7 @@ type Notificacion = {
   cliente_id: string | null
   chatbot_lead_id: string | null
   cita_id: string | null
+  accion_url: string | null
   tipo: 'nueva_propiedad' | 'destacada' | 'exclusiva' | 'recordatorio' | 'lead_caliente' | 'cita' | string
 }
 
@@ -88,6 +89,7 @@ function ordenarPorPrioridad(items: Notificacion[]): Notificacion[] {
 }
 
 function esNavegable(n: Notificacion): boolean {
+  if (n.accion_url) return true
   if (n.cita_id) return true
   if (n.tipo === 'recordatorio' && n.cliente_id) return true
   if (n.tipo === 'lead_caliente' && n.chatbot_lead_id) return true
@@ -269,7 +271,7 @@ export default function Notificaciones() {
       if (!uid) return [] as Notificacion[]
       const { data, error } = await supabase
         .from('notificaciones')
-        .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, chatbot_lead_id, cita_id, tipo')
+        .select('id, titulo, mensaje, leida, created_at, propiedad_id, cliente_id, chatbot_lead_id, cita_id, accion_url, tipo')
         .eq('user_id', uid)
         .order('created_at', { ascending: false })
       if (error) throw error
@@ -372,6 +374,9 @@ export default function Notificaciones() {
       const pendiente = citasPorConfirmar.find(c => c.id === item.cita_id)
       if (pendiente) { setCitaAbierta(pendiente); return }
     }
+
+    // Ruta directa (ej. colección) tiene prioridad sobre cliente/propiedad.
+    if (item.accion_url) { router.push(item.accion_url as any); return }
 
     if (item.tipo === 'recordatorio' && item.cliente_id) {
       router.push(`/(prospectador)/detalle-cliente?id=${item.cliente_id}`)
