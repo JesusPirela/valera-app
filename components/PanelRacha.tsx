@@ -60,11 +60,9 @@ export default function PanelRacha() {
   const meta   = r.meta_diaria ?? 1
   const hechas = r.misiones_hoy ?? 0
 
-  // Tener no tiene tope; comprar sí (cupo semanal). Los ?? son por si la app
-  // corre antes de que la migración esté aplicada: mejor degradar que romper.
-  const maxCompras       = r.max_compras_semana ?? 2
-  const comprasRestantes = r.compras_restantes ?? maxCompras
-  const puedeComprar     = comprasRestantes > 0 && r.coins >= r.costo_protector
+  // Ya no hay tope de compras: el precio SUBE con cada compra de la semana y se
+  // reinicia el lunes. Solo se necesita que alcancen las coins.
+  const puedeComprar = r.coins >= r.costo_protector
 
   return (
     <View style={{ gap: 10, marginBottom: 14 }}>
@@ -176,12 +174,10 @@ export default function PanelRacha() {
               >
                 {ocupado === 'comprar'
                   ? <ActivityIndicator size="small" color="#000" />
-                  : <Text style={s.protBtnTxt}>
-                      {comprasRestantes === 0 ? 'Sin cupo' : `${r.costo_protector} 💰`}
-                    </Text>}
+                  : <Text style={s.protBtnTxt}>{r.costo_protector} 💰</Text>}
               </TouchableOpacity>
               <Text style={[s.protCupo, { color: c.textMute }]}>
-                {comprasRestantes}/{maxCompras} esta semana
+                Sube cada compra · se reinicia el lunes
               </Text>
             </View>
           </View>

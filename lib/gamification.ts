@@ -375,10 +375,13 @@ export type EstadoRacha = {
   meta_cumplida_hoy: boolean
   en_riesgo: boolean
   coins: number
+  // El precio del protector SUBE con cada compra de la semana (150 → 300 → 600…)
+  // y se reinicia cada semana (lunes). Ya NO hay tope de compras.
   costo_protector: number
-  // Comprar SÍ tiene tope (cupo semanal), para que nadie se vuelva inmune pagando.
-  compras_restantes: number
-  max_compras_semana: number
+  compras_semana?: number
+  // Compat con app vieja (ahora "sin límite"): se conservan pero no se usan.
+  compras_restantes?: number
+  max_compras_semana?: number
   // Los protectores también se GANAN: 1 cada 5 niveles.
   nivel: number
   proximo_protector_nivel: number
