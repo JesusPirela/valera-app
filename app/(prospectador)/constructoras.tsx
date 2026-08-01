@@ -242,7 +242,7 @@ export default function Constructoras() {
       {/* Chips de fraccionamiento */}
       {!loading && zonasDisponibles.length > 0 && (
         <View style={styles.chipsWrap}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.chipsRow}>
             <TouchableOpacity
               style={[styles.chip, { borderColor: c.border }, zonaSel === null && styles.chipActivo]}
               onPress={() => setZonaSel(null)}
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
   clearBtn: { fontSize: 16, paddingHorizontal: 4 },
 
   chipsWrap: { marginBottom: 10 },
-  chipsRow: { gap: 8, paddingRight: 8 },
+  chipsRow: { gap: 8, paddingRight: 8, paddingBottom: 6 },
   chip: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 7 },
   chipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   chipTxt: { fontSize: 12.5, fontWeight: '700' },
