@@ -220,33 +220,31 @@ export default function BloqueCalendario() {
               <Text style={s.navTxt}>{semana === 0 ? 'Esta semana' : rangoSemTxt}</Text>
               <TouchableOpacity onPress={() => setSemana(x => x + 1)} style={s.navBtn}><Text style={s.navBtnTxt}>›</Text></TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingBottom: 10, paddingHorizontal: 12 }}>
-              <View>
-                <View style={s.gRow}>
-                  <View style={[s.gName, s.gHead]}><Text style={s.gHeadTxt}>Persona</Text></View>
-                  {diasSemana.map((d, i) => (
-                    <View key={i} style={[s.gCell, s.gHead]}>
-                      <Text style={s.gHeadTxt}>{DIAS_CORTOS[i]}</Text>
-                      <Text style={s.gHeadSub}>{d.getDate()}</Text>
-                    </View>
-                  ))}
-                </View>
-                {sem.map(p => (
-                  <View key={p.user_id} style={s.gRow}>
-                    <TouchableOpacity style={s.gName} onPress={() => abrirPersona(p)}>
-                      <Text style={s.gNameTxt} numberOfLines={2}>{p.nombre ?? 'Usuario'}</Text>
-                    </TouchableOpacity>
-                    {diasSemana.map((d, i) => (
-                      <View key={i} style={s.gCell}>
-                        {iconosDe(p.dias?.[fmtISO(d)]).map((ic, k) => (
-                          <Text key={k} style={s.gIcon}>{ic.e}</Text>
-                        ))}
-                      </View>
-                    ))}
+            <View style={{ paddingHorizontal: 12, paddingBottom: 10 }}>
+              <View style={s.gRow}>
+                <View style={[s.gName, s.gHead]}><Text style={s.gHeadTxt}>Persona</Text></View>
+                {diasSemana.map((d, i) => (
+                  <View key={i} style={[s.gCell, s.gHead]}>
+                    <Text style={s.gHeadTxt}>{DIAS_CORTOS[i]}</Text>
+                    <Text style={s.gHeadSub}>{d.getDate()}</Text>
                   </View>
                 ))}
               </View>
-            </ScrollView>
+              {sem.map(p => (
+                <View key={p.user_id} style={s.gRow}>
+                  <TouchableOpacity style={s.gName} onPress={() => abrirPersona(p)}>
+                    <Text style={s.gNameTxt} numberOfLines={2}>{p.nombre ?? 'Usuario'}</Text>
+                  </TouchableOpacity>
+                  {diasSemana.map((d, i) => (
+                    <View key={i} style={s.gCell}>
+                      {iconosDe(p.dias?.[fmtISO(d)]).map((ic, k) => (
+                        <Text key={k} style={s.gIcon}>{ic.e}</Text>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
           </>
         )}
       </ScrollView>
@@ -354,9 +352,9 @@ const s = StyleSheet.create({
   gHead: { backgroundColor: CARD },
   gHeadTxt: { color: SUB, fontSize: 12, fontWeight: '800' },
   gHeadSub: { color: MUTE, fontSize: 11 },
-  gName: { width: 130, paddingHorizontal: 12, paddingVertical: 12, justifyContent: 'center', borderRightWidth: 1, borderRightColor: BORDER },
+  gName: { width: 104, paddingHorizontal: 10, paddingVertical: 12, justifyContent: 'center', borderRightWidth: 1, borderRightColor: BORDER },
   gNameTxt: { color: TEXT, fontSize: 13, fontWeight: '700' },
-  gCell: { width: 62, minHeight: 60, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 2, borderRightWidth: 1, borderRightColor: BORDER, paddingVertical: 6 },
+  gCell: { flex: 1, minWidth: 38, minHeight: 60, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 2, borderRightWidth: 1, borderRightColor: BORDER, paddingVertical: 6 },
   gIcon: { fontSize: 17 },
 
   ov: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
