@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  StyleSheet, Modal, Switch,
+  StyleSheet, Modal,
 } from 'react-native'
 import { useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -183,7 +183,15 @@ export default function BloqueCalendario() {
                 <Text style={s.huboTxt}>¿Hubo reunión este día?</Text>
                 <Text style={s.huboSub}>Actívalo para poder palomear la asistencia 🤝</Text>
               </View>
-              <Switch value={huboReunion} onValueChange={toggleHubo} trackColor={{ true: '#1a6470', false: '#33455a' }} thumbColor={'#fff'} />
+              <TouchableOpacity
+                onPress={() => toggleHubo(!huboReunion)}
+                style={[s.huboToggle, huboReunion && s.huboToggleOn]}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.huboToggleTxt, huboReunion && s.huboToggleTxtOn]}>
+                  {huboReunion ? '✓ Sí' : 'No'}
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Checklist por integrante */}
@@ -338,6 +346,10 @@ const s = StyleSheet.create({
   huboRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 14, marginBottom: 10, backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: 14, padding: 14 },
   huboTxt: { color: TEXT, fontSize: 15, fontWeight: '800' },
   huboSub: { color: MUTE, fontSize: 12, marginTop: 2 },
+  huboToggle: { minWidth: 66, alignItems: 'center', backgroundColor: '#33455a', borderWidth: 1, borderColor: '#4a5f78', borderRadius: 20, paddingVertical: 9, paddingHorizontal: 18 },
+  huboToggleOn: { backgroundColor: ON, borderColor: ON },
+  huboToggleTxt: { color: '#c7d6e4', fontSize: 15, fontWeight: '900' },
+  huboToggleTxtOn: { color: '#06240f' },
 
   miembroCard: { backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: 16, marginHorizontal: 14, marginBottom: 10, padding: 14 },
   miembroHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
