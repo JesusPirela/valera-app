@@ -212,22 +212,18 @@ export default function BloqueCalendario() {
                     <Text style={s.verMes}>ver mes ›</Text>
                   </TouchableOpacity>
 
-                  {/* Reunión: Fue / No fue (o sin reunión) */}
-                  {huboReunion ? (
-                    <View style={s.reuRow}>
-                      <Text style={s.reuLabel}>🤝 Reunión</Text>
-                      <View style={s.reuBtns}>
-                        <TouchableOpacity style={[s.reuBtn, reu === 'fue' && s.reuBtnFue]} onPress={() => setReunion(p, reu === 'fue' ? 'pendiente' : 'fue')} activeOpacity={0.8}>
-                          <Text style={[s.reuBtnTxt, reu === 'fue' && s.reuBtnTxtFue]}>✅ Fue</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[s.reuBtn, reu === 'no_fue' && s.reuBtnNo]} onPress={() => setReunion(p, reu === 'no_fue' ? 'pendiente' : 'no_fue')} activeOpacity={0.8}>
-                          <Text style={[s.reuBtnTxt, reu === 'no_fue' && s.reuBtnTxtNo]}>❌ No fue</Text>
-                        </TouchableOpacity>
-                      </View>
+                  {/* Reunión: rectángulo con Fue / No fue; bloqueado si no hubo reunión */}
+                  <View style={[s.reuBox, !huboReunion && s.reuBoxNa]}>
+                    <Text style={s.reuLabel}>🤝 Reunión{!huboReunion ? ' · sin reunión' : ''}</Text>
+                    <View style={s.reuBtns}>
+                      <TouchableOpacity disabled={!huboReunion} style={[s.reuBtn, reu === 'fue' && s.reuBtnFue]} onPress={() => setReunion(p, reu === 'fue' ? 'pendiente' : 'fue')} activeOpacity={0.8}>
+                        <Text style={[s.reuBtnTxt, reu === 'fue' && s.reuBtnTxtFue]}>✅ Fue</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity disabled={!huboReunion} style={[s.reuBtn, reu === 'no_fue' && s.reuBtnNo]} onPress={() => setReunion(p, reu === 'no_fue' ? 'pendiente' : 'no_fue')} activeOpacity={0.8}>
+                        <Text style={[s.reuBtnTxt, reu === 'no_fue' && s.reuBtnTxtNo]}>❌ No fue</Text>
+                      </TouchableOpacity>
                     </View>
-                  ) : (
-                    <Text style={s.sinReu}>🤝 Sin reunión este día</Text>
-                  )}
+                  </View>
 
                   {/* Automáticas */}
                   <View style={s.pillGrid}>
@@ -376,16 +372,16 @@ const s = StyleSheet.create({
   miembroNom: { flex: 1, color: TEXT, fontSize: 16, fontWeight: '800' },
   miembroScore: { color: GOLD, fontSize: 15, fontWeight: '900' },
   verMes: { color: SUB, fontSize: 12, fontWeight: '700' },
-  reuRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  reuBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: CARD2, borderWidth: 1, borderColor: BORDER, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8 },
+  reuBoxNa: { opacity: 0.45 },
   reuLabel: { color: TEXT, fontSize: 14, fontWeight: '800', flex: 1 },
   reuBtns: { flexDirection: 'row', gap: 8 },
-  reuBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1.5, borderColor: BORDER, backgroundColor: CARD2 },
+  reuBtn: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1.5, borderColor: BORDER, backgroundColor: CARD },
   reuBtnFue: { backgroundColor: ONBG, borderColor: ON },
   reuBtnNo: { backgroundColor: '#2e1113', borderColor: '#ef4444' },
   reuBtnTxt: { color: SUB, fontSize: 14, fontWeight: '800' },
   reuBtnTxtFue: { color: '#7ff0ab' },
   reuBtnTxtNo: { color: '#ff8b8b' },
-  sinReu: { color: MUTE, fontSize: 13, fontWeight: '600', marginBottom: 10 },
   pillGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 
   vacio: { color: MUTE, textAlign: 'center', padding: 30, fontSize: 14 },
