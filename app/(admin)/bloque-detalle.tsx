@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   TextInput,
 } from 'react-native'
-import { useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
@@ -408,6 +408,16 @@ export default function BloqueDetalle() {
         <View style={{ width: 90 }} />
       </View>
 
+      {/* Acceso al calendario de actividad (vive dentro del bloque) */}
+      <TouchableOpacity
+        style={s.btnCalendario}
+        activeOpacity={0.85}
+        onPress={() => router.push(`/(admin)/bloque-calendario?id=${id}&nombre=${encodeURIComponent(String(nombre ?? ''))}`)}
+      >
+        <Text style={s.btnCalendarioTxt}>📅 Calendario de actividad</Text>
+        <Text style={s.btnCalendarioChevron}>›</Text>
+      </TouchableOpacity>
+
       {/* Tabs de período */}
       <View style={s.tabsContainer}>
         {PERIODOS.map((p) => {
@@ -518,6 +528,9 @@ const s = StyleSheet.create({
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0d1b2a', borderBottomWidth: 1, borderBottomColor: '#1e3448', paddingHorizontal: 16, paddingVertical: 12, paddingTop: 16 },
   headerTitle: { color: '#fff', fontSize: 16, fontWeight: '900', flex: 1, textAlign: 'center' },
 
+  btnCalendario: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 12, marginTop: 10, backgroundColor: '#12283b', borderWidth: 1, borderColor: '#1e3448', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 13 },
+  btnCalendarioTxt: { color: '#c9a84c', fontSize: 15, fontWeight: '800' },
+  btnCalendarioChevron: { color: '#c9a84c', fontSize: 20, fontWeight: '800' },
   tabsContainer: { flexDirection: 'row', backgroundColor: '#0d1b2a', borderBottomWidth: 1, borderBottomColor: '#1e3448', paddingHorizontal: 12, paddingTop: 10, gap: 8 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#2a475e', backgroundColor: '#111f2e', marginBottom: 10 },
   tabActivo: { backgroundColor: TEAL, borderColor: TEAL },
