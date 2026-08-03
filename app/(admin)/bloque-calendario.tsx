@@ -11,7 +11,8 @@ const BG = '#0d1b2a', CARD = '#12283b', CARD2 = '#152f45', BORDER = '#1e3448'
 const TEXT = '#e8f0f4', SUB = '#8fb0cc', MUTE = '#5f7690', GOLD = '#c9a84c'
 const ON = '#22c55e', ONBG = '#0f2f1e'
 
-type Metricas = { reunion: boolean | null; cita: boolean; cliente: boolean; uso: boolean; publico: boolean }
+type EstadoReunion = 'fue' | 'no_fue' | 'pendiente' | null
+type Metricas = { reunion: EstadoReunion; cita: boolean; cliente: boolean; uso: boolean; publico: boolean }
 type Persona = { user_id: string; nombre: string | null; role: string; dias: Record<string, Metricas> }
 
 const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -29,8 +30,9 @@ function lunesDeSemana(offset: number): Date {
 function iconosDe(m: Metricas | undefined): { e: string }[] {
   if (!m) return []
   const out: { e: string }[] = []
-  if (m.reunion === true) out.push({ e: '🤝' })
-  else if (m.reunion === false) out.push({ e: '❌' })
+  if (m.reunion === 'fue') out.push({ e: '🤝' })
+  else if (m.reunion === 'no_fue') out.push({ e: '❌' })
+  else if (m.reunion === 'pendiente') out.push({ e: '❔' })
   if (m.cita) out.push({ e: '📅' })
   if (m.cliente) out.push({ e: '👥' })
   if (m.uso || m.publico) out.push({ e: '📱' })
@@ -115,13 +117,12 @@ export default function BloqueCalendario() {
     await supabase.rpc('marcar_reunion_bloque', { p_bloque_id: id, p_fecha: fmtISO(fecha), p_hubo: v })
     if (!v) cargarDia()
   }
-  async function toggleAsistio(p: Persona) {
+  async function setReunion(p: Persona, estado: 'fue' | 'no_fue' | 'pendiente') {
     const isoF = fmtISO(fecha)
-    const actual = p.dias?.[isoF]?.reunion === true
     setDia(prev => prev.map(x => x.user_id === p.user_id
-      ? { ...x, dias: { ...x.dias, [isoF]: { ...(x.dias?.[isoF] ?? {} as Metricas), reunion: !actual } } } : x))
-    if (!huboReunion) setHuboReunion(true)
-    await supabase.rpc('marcar_asistencia_bloque', { p_user_id: p.user_id, p_fecha: isoF, p_asistio: !actual })
+      ? { ...x, dias: { ...x.dias, [isoF]: { ...(x.dias?.[isoF] ?? {} as Metricas), reunion: estado } } } : x))
+    if (estado !== 'pendiente' && !huboReunion) setHuboReunion(true)
+    await supabase.rpc('marcar_asistencia_bloque', { p_user_id: p.user_id, p_fecha: isoF, p_estado: estado })
   }
 
   // ── Mensual por persona ───────────────────────────────────────
@@ -197,20 +198,39 @@ export default function BloqueCalendario() {
             {/* Checklist por integrante */}
             {dia.map(p => {
               const m = p.dias?.[iso]
-              const reuEstado: 'si' | 'no' | 'na' = !huboReunion ? 'na' : (m?.reunion === true ? 'si' : 'no')
+              const reu: EstadoReunion = m?.reunion ?? (huboReunion ? 'pendiente' : null)
               const cita: 'si' | 'no' = m?.cita ? 'si' : 'no'
               const cli: 'si' | 'no' = m?.cliente ? 'si' : 'no'
               const act: 'si' | 'no' = (m?.uso || m?.publico) ? 'si' : 'no'
-              const score = [reuEstado === 'si', cita === 'si', cli === 'si', act === 'si'].filter(Boolean).length
+              const total = huboReunion ? 4 : 3
+              const hechos = [huboReunion && reu === 'fue', cita === 'si', cli === 'si', act === 'si'].filter(Boolean).length
               return (
                 <View key={p.user_id} style={s.miembroCard}>
                   <TouchableOpacity style={s.miembroHead} onPress={() => abrirPersona(p)} activeOpacity={0.7}>
                     <Text style={s.miembroNom} numberOfLines={1}>{p.nombre ?? 'Usuario'}</Text>
-                    <Text style={s.miembroScore}>{score}/4</Text>
+                    <Text style={s.miembroScore}>{hechos}/{total}</Text>
                     <Text style={s.verMes}>ver mes ›</Text>
                   </TouchableOpacity>
+
+                  {/* Reunión: Fue / No fue (o sin reunión) */}
+                  {huboReunion ? (
+                    <View style={s.reuRow}>
+                      <Text style={s.reuLabel}>🤝 Reunión</Text>
+                      <View style={s.reuBtns}>
+                        <TouchableOpacity style={[s.reuBtn, reu === 'fue' && s.reuBtnFue]} onPress={() => setReunion(p, reu === 'fue' ? 'pendiente' : 'fue')} activeOpacity={0.8}>
+                          <Text style={[s.reuBtnTxt, reu === 'fue' && s.reuBtnTxtFue]}>✅ Fue</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[s.reuBtn, reu === 'no_fue' && s.reuBtnNo]} onPress={() => setReunion(p, reu === 'no_fue' ? 'pendiente' : 'no_fue')} activeOpacity={0.8}>
+                          <Text style={[s.reuBtnTxt, reu === 'no_fue' && s.reuBtnTxtNo]}>❌ No fue</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={s.sinReu}>🤝 Sin reunión este día</Text>
+                  )}
+
+                  {/* Automáticas */}
                   <View style={s.pillGrid}>
-                    <Pill icon="🤝" label="Reunión"   estado={reuEstado} onPress={huboReunion ? () => toggleAsistio(p) : undefined} />
                     <Pill icon="📅" label="Cita"      estado={cita} />
                     <Pill icon="👥" label="Cliente"   estado={cli} />
                     <Pill icon="📱" label="Actividad" estado={act} />
@@ -356,6 +376,16 @@ const s = StyleSheet.create({
   miembroNom: { flex: 1, color: TEXT, fontSize: 16, fontWeight: '800' },
   miembroScore: { color: GOLD, fontSize: 15, fontWeight: '900' },
   verMes: { color: SUB, fontSize: 12, fontWeight: '700' },
+  reuRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  reuLabel: { color: TEXT, fontSize: 14, fontWeight: '800', flex: 1 },
+  reuBtns: { flexDirection: 'row', gap: 8 },
+  reuBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1.5, borderColor: BORDER, backgroundColor: CARD2 },
+  reuBtnFue: { backgroundColor: ONBG, borderColor: ON },
+  reuBtnNo: { backgroundColor: '#2e1113', borderColor: '#ef4444' },
+  reuBtnTxt: { color: SUB, fontSize: 14, fontWeight: '800' },
+  reuBtnTxtFue: { color: '#7ff0ab' },
+  reuBtnTxtNo: { color: '#ff8b8b' },
+  sinReu: { color: MUTE, fontSize: 13, fontWeight: '600', marginBottom: 10 },
   pillGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 
   vacio: { color: MUTE, textAlign: 'center', padding: 30, fontSize: 14 },
