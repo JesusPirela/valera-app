@@ -436,17 +436,17 @@ export default function ClienteForm() {
         if (esEdicion) {
           await enqueueClienteUpdate(params.id!, payload)
           // Actualización optimista en cache
-          queryClient.setQueryData<any[]>(['clientes', 'mios', 'v2'], (old) =>
+          queryClient.setQueryData<any[]>(['clientes', 'mios', 'v3'], (old) =>
             (old ?? []).map(cl => cl.id === params.id ? { ...cl, ...payload } : cl))
-          queryClient.setQueryData<any[]>(['clientes', 'all', 'v2'], (old) =>
+          queryClient.setQueryData<any[]>(['clientes', 'all', 'v3'], (old) =>
             (old ?? []).map(cl => cl.id === params.id ? { ...cl, ...payload } : cl))
         } else {
           const tempId = genUUID()
           const fullPayload = { ...payload, responsable_id: idGuardado, id: tempId, created_at: new Date().toISOString() }
           await enqueueClienteCreate(tempId, { ...payload, responsable_id: idGuardado })
           // Insertar optimistamente en cache con el UUID local
-          queryClient.setQueryData<any[]>(['clientes', 'mios', 'v2'], (old) => [fullPayload, ...(old ?? [])])
-          queryClient.setQueryData<any[]>(['clientes', 'all', 'v2'], (old) => [fullPayload, ...(old ?? [])])
+          queryClient.setQueryData<any[]>(['clientes', 'mios', 'v3'], (old) => [fullPayload, ...(old ?? [])])
+          queryClient.setQueryData<any[]>(['clientes', 'all', 'v3'], (old) => [fullPayload, ...(old ?? [])])
         }
         await refreshPending()
         irAtras()
@@ -494,6 +494,7 @@ export default function ClienteForm() {
         }
       }
 
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
       irAtras()
     } catch (e: any) {
       mostrarError('Error inesperado', e?.message ?? 'Intenta de nuevo.')

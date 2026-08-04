@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, Platform, Linking,
@@ -14,6 +14,7 @@ import { registrarAccion , registrarSeguimiento } from '../../lib/gamification'
 import { programarRecordatorios } from '../../lib/notificaciones-locales'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { Ionicons } from '@expo/vector-icons'
+import { puedeEnviarClienteAChatbot } from '../../lib/permisos'
 
 type Cliente = {
   id: string; nombre: string; telefono: string; email: string | null
@@ -252,6 +253,73 @@ export default function DetalleCliente() {
   const [tituloSeguimiento, setTituloSeguimiento] = useState('')
   const [guardandoSeguimiento, setGuardandoSeguimiento] = useState(false)
 
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [modalChatbot, setModalChatbot] = useState(false)
+  const [chatbotTelefono, setChatbotTelefono] = useState('')
+  const [chatbotPresupuesto, setChatbotPresupuesto] = useState('')
+  const [chatbotError, setChatbotError] = useState<string | null>(null)
+  const [chatbotEnviando, setChatbotEnviando] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: s }) => {
+      const uid = s.session?.user?.id
+      if (uid) {
+        supabase.from('profiles').select('role').eq('id', uid).maybeSingle().then(({ data: p }) => {
+          if (p?.role) setUserRole(p.role)
+        })
+      }
+    })
+  }, [])
+
+  function abrirModalChatbot() {
+    if (!cliente) return
+    setChatbotTelefono(cliente.telefono ?? '')
+    setChatbotPresupuesto((cliente.presupuesto ?? '').replace(/\D/g, ''))
+    setChatbotError(null)
+    setModalChatbot(true)
+  }
+
+  async function enviarClienteAChatbot() {
+    if (!cliente) return
+    setChatbotError(null)
+    const presupuestoNum = Number(chatbotPresupuesto)
+    if (!Number.isFinite(presupuestoNum) || presupuestoNum <= 1_800_000) {
+      setChatbotError('El presupuesto debe ser mayor a $1,800,000.')
+      return
+    }
+    setChatbotEnviando(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('agregar-cliente-chatbot', {
+        body: {
+          clienteId: cliente.id,
+          nombre: cliente.nombre,
+          telefono: chatbotTelefono,
+          tipoOperacion: cliente.tipo_operacion,
+          presupuesto: presupuestoNum,
+        },
+      })
+      if (error || data?.error) {
+        let msg = data?.error || 'No se pudo enviar al chatbot.'
+        if (!data?.error && error) {
+          try {
+            const body = await (error as any).context?.json?.()
+            msg = body?.error || error.message || msg
+          } catch { msg = error.message || msg }
+        }
+        setChatbotError(msg)
+        return
+      }
+      setModalChatbot(false)
+      const successMsg = `${cliente.nombre} fue enviado al chatbot.`
+      if (Platform.OS === 'web') window.alert(successMsg)
+      else Alert.alert('Listo', successMsg)
+    } catch (e) {
+      setChatbotError(e instanceof Error ? e.message : 'No se pudo enviar al chatbot.')
+    } finally {
+      setChatbotEnviando(false)
+    }
+  }
+
   async function agregarInteraccion() {
     if (!textoInteraccion.trim()) { Alert.alert('Requerido', 'Escribe una descripción.'); return }
     setGuardandoInteraccion(true)
@@ -284,6 +352,7 @@ export default function DetalleCliente() {
       if (error) { Alert.alert('Error al guardar', error.message); return }
       setTituloRec(''); setDescRec(''); setFechaRec(null); setModalRecordatorio(false)
       refetch()
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
     } catch (e: any) {
       Alert.alert('Error inesperado', e?.message ?? 'Intenta de nuevo.')
     } finally {
@@ -295,7 +364,11 @@ export default function DetalleCliente() {
     const nueva = new Date(new Date(fechaActual).getTime() + 15 * 60 * 1000)
     const { error } = await supabase.from('recordatorios')
       .update({ fecha_hora: nueva.toISOString() }).eq('id', recId)
-    if (!error) { refetch(); programarRecordatorios() }
+    if (!error) {
+      refetch()
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
+      programarRecordatorios()
+    }
   }
 
   async function hacerManana(recId: string, fechaActual: string) {
@@ -305,7 +378,11 @@ export default function DetalleCliente() {
     manana.setHours(base.getHours(), base.getMinutes(), 0, 0)
     const { error } = await supabase.from('recordatorios')
       .update({ fecha_hora: manana.toISOString() }).eq('id', recId)
-    if (!error) { refetch(); programarRecordatorios() }
+    if (!error) {
+      refetch()
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
+      programarRecordatorios()
+    }
   }
 
   async function completarRecordatorio(recId: string) {
@@ -476,6 +553,15 @@ export default function DetalleCliente() {
           <Ionicons name="logo-whatsapp" size={20} color="#fff" />
           <Text style={styles.actionBtnTxt}>WhatsApp</Text>
         </TouchableOpacity>
+        {puedeEnviarClienteAChatbot(userRole) && (
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#7c3aed' }]}
+            onPress={abrirModalChatbot}
+          >
+            <Ionicons name="chatbubbles-outline" size={20} color="#fff" />
+            <Text style={styles.actionBtnTxt}>Chatbot</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* ── Información ─────────────────────────────────── */}
@@ -808,6 +894,70 @@ export default function DetalleCliente() {
           </View>
         </View>
       </Modal>
+      {/* ── Modal: Enviar al chatbot ─────────────────── */}
+      <Modal visible={modalChatbot} transparent animationType="fade" onRequestClose={() => { if (!chatbotEnviando) setModalChatbot(false) }}>
+        <TouchableOpacity style={[modal.overlay, { justifyContent: 'center' }]} activeOpacity={1} onPress={() => { if (!chatbotEnviando) setModalChatbot(false) }}>
+          <View style={modal.chatbotBox} onStartShouldSetResponder={() => true}>
+            <Ionicons name="chatbubbles-outline" size={28} color="#7c3aed" style={{ marginBottom: 8 }} />
+            <Text style={modal.chatbotTitle}>Enviar al chatbot</Text>
+            <Text style={modal.chatbotSub}>{cliente?.nombre}</Text>
+
+            {cliente?.tipo_operacion?.toLowerCase() !== 'venta' ? (
+              <Text style={modal.chatbotInfo}>
+                Solo se pueden enviar al chatbot clientes de venta. Este cliente está marcado como{' '}
+                {cliente?.tipo_operacion || 'sin operación'}.
+              </Text>
+            ) : (
+              <>
+                <Text style={[modal.chatbotInfo, { textAlign: 'left', marginBottom: 8 }]}>
+                  Solo clientes de venta con presupuesto mayor a $1,800,000.
+                  Confirma o corrige los datos antes de enviar.
+                </Text>
+
+                <Text style={modal.fieldLabel}>Teléfono</Text>
+                <TextInput
+                  style={modal.input}
+                  value={chatbotTelefono}
+                  onChangeText={setChatbotTelefono}
+                  placeholder="10 dígitos"
+                  keyboardType="phone-pad"
+                />
+
+                <Text style={modal.fieldLabel}>Presupuesto (MXN)</Text>
+                <TextInput
+                  style={modal.input}
+                  value={chatbotPresupuesto}
+                  onChangeText={(t) => setChatbotPresupuesto(t.replace(/\D/g, ''))}
+                  placeholder="Ej. 2500000"
+                  keyboardType="number-pad"
+                />
+
+                {chatbotError && (
+                  <Text style={modal.chatbotError}>{chatbotError}</Text>
+                )}
+
+                <TouchableOpacity
+                  style={[modal.btnConfirm, { alignSelf: 'stretch', alignItems: 'center', backgroundColor: '#7c3aed', marginTop: 4 }, chatbotEnviando && { opacity: 0.6 }]}
+                  onPress={enviarClienteAChatbot}
+                  disabled={chatbotEnviando}
+                >
+                  {chatbotEnviando
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={modal.btnConfirmText}>Enviar al chatbot</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={[modal.btnCancel, { alignSelf: 'stretch', alignItems: 'center', marginTop: 8 }]}
+              onPress={() => setModalChatbot(false)}
+              disabled={chatbotEnviando}
+            >
+              <Text style={modal.btnCancelText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   )
 }
@@ -1037,4 +1187,13 @@ const modal = StyleSheet.create({
   btnCancelText: { color: '#555', fontWeight: '600', fontSize: 14 },
   btnConfirm: { paddingHorizontal: 22, paddingVertical: 11, borderRadius: 10, backgroundColor: '#1a6470' },
   btnConfirmText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  chatbotBox: {
+    backgroundColor: '#fff', borderRadius: 20, padding: 24, marginHorizontal: 24,
+    alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
+  },
+  chatbotTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a2e', marginBottom: 4 },
+  chatbotSub: { fontSize: 14, color: '#6b8082', marginBottom: 12 },
+  chatbotInfo: { fontSize: 13, color: '#6b8082', textAlign: 'center', marginBottom: 4, lineHeight: 19 },
+  chatbotError: { color: '#c0392b', fontSize: 13, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
 })

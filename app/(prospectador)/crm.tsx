@@ -291,6 +291,14 @@ export default function CRM() {
   const [sortBy, setSortBy]               = useState<SortBy>('reciente')
   const [showSort, setShowSort]           = useState(false)
   const [vistaExcel, setVistaExcel]       = useState(false)
+  // Tick que avanza cada minuto para que el memo de "vencidos" recalcule
+  // aunque los datos del servidor no hayan cambiado (un recordatorio que
+  // vence mientras la app está abierta no implica un nuevo fetch).
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   // Recordar la vista elegida (tabla/lista) hasta que el usuario la cambie
   useEffect(() => {
@@ -466,7 +474,8 @@ export default function CRM() {
         return acc
       }, {}),
     }
-  }, [clientesBase])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientesBase, tick])
 
   // ── Filtros ───────────────────────────────────────────────────
   const filtrados = useMemo(() => {
