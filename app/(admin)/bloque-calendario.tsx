@@ -13,7 +13,14 @@ const TEXT = '#e8f0f4', SUB = '#8fb0cc', MUTE = '#5f7690', GOLD = '#c9a84c'
 const ON = '#22c55e', ONBG = '#0f2f1e'
 
 type EstadoReunion = 'fue' | 'no_fue' | 'pendiente' | null
-type Metricas = { reunion: EstadoReunion; cita: boolean; cliente: boolean; uso: boolean; publico: boolean }
+type Metricas = {
+  reunion: EstadoReunion; cita: boolean; cliente: boolean; uso: boolean; publico: boolean
+  m_cita?: boolean; m_cliente?: boolean; m_actividad?: boolean  // marcas manuales
+}
+// Valores efectivos (automático BD ⋁ marca manual).
+const efCita = (m?: Metricas) => !!(m?.cita || m?.m_cita)
+const efCliente = (m?: Metricas) => !!(m?.cliente || m?.m_cliente)
+const efActividad = (m?: Metricas) => !!(m?.uso || m?.publico || m?.m_actividad)
 type Persona = { user_id: string; nombre: string | null; role: string; dias: Record<string, Metricas> }
 
 const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -35,15 +42,15 @@ function iconosDe(m: Metricas | undefined): { e: string; tip: string }[] {
   if (m.reunion === 'fue') out.push({ e: '🤝', tip: 'Asistió a la reunión' })
   else if (m.reunion === 'no_fue') out.push({ e: '❌', tip: 'No asistió a la reunión' })
   else if (m.reunion === 'pendiente') out.push({ e: '❔', tip: 'Reunión sin marcar' })
-  if (m.cita) out.push({ e: '📅', tip: 'Agendó una cita' })
-  if (m.cliente) out.push({ e: '👥', tip: 'Metió un cliente / pasó un perfil' })
-  if (m.uso || m.publico) out.push({ e: '📱', tip: 'Usó la app o publicó' })
+  if (efCita(m)) out.push({ e: '📅', tip: 'Agendó una cita' })
+  if (efCliente(m)) out.push({ e: '👥', tip: 'Metió un cliente / pasó un perfil' })
+  if (efActividad(m)) out.push({ e: '📱', tip: 'Usó la app o publicó' })
   return out
 }
 
 // ── Pill de una métrica (checklist) ─────────────────────────────
-function Pill({ icon, label, estado, onPress }: {
-  icon: string; label: string; estado: 'si' | 'no' | 'na'; onPress?: () => void
+function Pill({ icon, label, estado, onPress, auto }: {
+  icon: string; label: string; estado: 'si' | 'no' | 'na'; onPress?: () => void; auto?: boolean
 }) {
   const done = estado === 'si', na = estado === 'na'
   return (
@@ -55,6 +62,7 @@ function Pill({ icon, label, estado, onPress }: {
     >
       <Text style={pl.icon}>{icon}</Text>
       <Text style={[pl.label, done && pl.labelOn, na && pl.labelNa]} numberOfLines={1}>{label}</Text>
+      {auto && done ? <Text style={pl.auto}>auto</Text> : null}
       <Text style={[pl.check, done && pl.checkOn]}>{na ? '–' : done ? '✓' : '○'}</Text>
     </TouchableOpacity>
   )
@@ -125,6 +133,13 @@ export default function BloqueCalendario() {
       ? { ...x, dias: { ...x.dias, [isoF]: { ...(x.dias?.[isoF] ?? {} as Metricas), reunion: estado } } } : x))
     if (estado !== 'pendiente' && !huboReunion) setHuboReunion(true)
     await supabase.rpc('marcar_asistencia_bloque', { p_user_id: p.user_id, p_fecha: isoF, p_estado: estado })
+  }
+  async function setMetrica(p: Persona, metrica: 'cita' | 'cliente' | 'actividad', valor: boolean) {
+    const isoF = fmtISO(fecha)
+    const key = metrica === 'cita' ? 'm_cita' : metrica === 'cliente' ? 'm_cliente' : 'm_actividad'
+    setDia(prev => prev.map(x => x.user_id === p.user_id
+      ? { ...x, dias: { ...x.dias, [isoF]: { ...(x.dias?.[isoF] ?? {} as Metricas), [key]: valor } } } : x))
+    await supabase.rpc('marcar_metrica_bloque', { p_user_id: p.user_id, p_fecha: isoF, p_metrica: metrica, p_valor: valor })
   }
 
   // ── Mensual por persona ───────────────────────────────────────
@@ -201,11 +216,9 @@ export default function BloqueCalendario() {
             {dia.map(p => {
               const m = p.dias?.[iso]
               const reu: EstadoReunion = m?.reunion ?? (huboReunion ? 'pendiente' : null)
-              const cita: 'si' | 'no' = m?.cita ? 'si' : 'no'
-              const cli: 'si' | 'no' = m?.cliente ? 'si' : 'no'
-              const act: 'si' | 'no' = (m?.uso || m?.publico) ? 'si' : 'no'
+              const citaEf = efCita(m), cliEf = efCliente(m), actEf = efActividad(m)
               const total = huboReunion ? 4 : 3
-              const hechos = [huboReunion && reu === 'fue', cita === 'si', cli === 'si', act === 'si'].filter(Boolean).length
+              const hechos = [huboReunion && reu === 'fue', citaEf, cliEf, actEf].filter(Boolean).length
               return (
                 <View key={p.user_id} style={s.miembroCard}>
                   <TouchableOpacity style={s.miembroHead} onPress={() => abrirPersona(p)} activeOpacity={0.7}>
@@ -227,11 +240,15 @@ export default function BloqueCalendario() {
                     </View>
                   </View>
 
-                  {/* Automáticas */}
+                  {/* Auto + manual: si ya salió automático queda fijo (auto);
+                      si no, puedes marcarlo a mano. */}
                   <View style={s.pillGrid}>
-                    <Pill icon="📅" label="Cita"      estado={cita} />
-                    <Pill icon="👥" label="Cliente"   estado={cli} />
-                    <Pill icon="📱" label="Actividad" estado={act} />
+                    <Pill icon="📅" label="Cita"      estado={citaEf ? 'si' : 'no'} auto={!!m?.cita}
+                      onPress={m?.cita ? undefined : () => setMetrica(p, 'cita', !m?.m_cita)} />
+                    <Pill icon="👥" label="Cliente"   estado={cliEf ? 'si' : 'no'} auto={!!m?.cliente}
+                      onPress={m?.cliente ? undefined : () => setMetrica(p, 'cliente', !m?.m_cliente)} />
+                    <Pill icon="📱" label="Actividad" estado={actEf ? 'si' : 'no'} auto={!!(m?.uso || m?.publico)}
+                      onPress={(m?.uso || m?.publico) ? undefined : () => setMetrica(p, 'actividad', !m?.m_actividad)} />
                   </View>
                 </View>
               )
@@ -335,6 +352,7 @@ const pl = StyleSheet.create({
   labelNa: { color: MUTE },
   check: { color: MUTE, fontSize: 15, fontWeight: '900' },
   checkOn: { color: ON },
+  auto: { color: GOLD, fontSize: 10, fontWeight: '800', opacity: 0.9 },
 })
 
 const s = StyleSheet.create({
