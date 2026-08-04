@@ -42,11 +42,20 @@ type Cliente = {
   notas: string | null
   zona_busqueda: string | null
   presupuesto: string | null
+  tipo_credito: string | null
   recordatorios: { id: string; titulo: string; fecha_hora: string; completado: boolean }[]
 }
 
 const NIVEL_INTERES_LABEL: Record<string, string> = {
   alto: '🔥 Alto', medio: '🌡️ Medio', bajo: '❄️ Bajo',
+}
+
+const TIPO_CREDITO_LABEL: Record<string, string> = {
+  infonavit: 'Infonavit',
+  fovisste: 'Fovisste',
+  bancario: 'Bancario',
+  contado: 'Contado',
+  otro: 'Otro',
 }
 
 export const ESTADOS: Record<string, { label: string; color: string; bg: string }> = {
@@ -412,7 +421,7 @@ export default function CRM() {
     queryFn: async () => {
       let q = supabase
         .from('clientes')
-        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, nivel_interes, notas, zona_busqueda, presupuesto, recordatorios(id, titulo, fecha_hora, completado)')
+        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, recordatorios(id, titulo, fecha_hora, completado)')
         .is('eliminado_at', null)
         .order('updated_at', { ascending: false })
       if (soloMios) {
@@ -512,7 +521,8 @@ export default function CRM() {
       })
     }
     return result
-  }, [clientes, busqueda, estadoFiltro, filtroVencidos, opFiltro, interesFilter, zonaFilter, sortBy])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientes, busqueda, estadoFiltro, filtroVencidos, opFiltro, interesFilter, zonaFilter, sortBy, tick])
 
   // ── Excel table helpers ───────────────────────────────────────
   const filtradosExcel = useMemo(() => {
@@ -873,27 +883,27 @@ export default function CRM() {
   // ── Excel table columns ───────────────────────────────────────
   type TCol = { id: string; label: string; flex: number; mw: number; sortable?: boolean; filterable?: boolean }
   const TABLE_COLS: TCol[] = isWeb ? [
-    { id: 'nombre',      label: 'Nombre',         flex: 2.2, mw: 0, sortable: true },
+    { id: 'nombre',       label: 'Nombre',         flex: 2.2, mw: 0, sortable: true },
     { id: 'telefono',    label: 'Teléfono',       flex: 1.2, mw: 0 },
     { id: 'estado',      label: 'Estado',         flex: 1.3, mw: 0, sortable: true, filterable: true },
     { id: 'operacion',   label: 'Op.',            flex: 0.8, mw: 0, filterable: true },
-    { id: 'interes',     label: 'Interés',        flex: 0.8, mw: 0, filterable: true },
+    { id: 'tipo_credito', label: 'Método pago',   flex: 0.9, mw: 0 },
     { id: 'zona',        label: 'Zona',           flex: 1.4, mw: 0, filterable: true },
     { id: 'presupuesto', label: 'Presupuesto',    flex: 1.2, mw: 0 },
     { id: 'fecha',       label: 'Prox. seguim.',  flex: 1.5, mw: 0, sortable: true },
     { id: 'notas',       label: 'Notas',          flex: 2.5, mw: 0 },
-    { id: 'acciones',   label: '',               flex: 0.3, mw: 0 },
+    { id: 'acciones',    label: '',               flex: 0.3, mw: 0 },
   ] : [
-    { id: 'nombre',      label: 'Nombre',         flex: 0, mw: 130 },
+    { id: 'nombre',       label: 'Nombre',        flex: 0, mw: 130 },
     { id: 'telefono',    label: 'Teléfono',       flex: 0, mw: 100 },
     { id: 'estado',      label: 'Estado',         flex: 0, mw: 105, sortable: true, filterable: true },
     { id: 'operacion',   label: 'Op.',            flex: 0, mw: 60,  filterable: true },
-    { id: 'interes',     label: 'Interés',        flex: 0, mw: 70,  filterable: true },
+    { id: 'tipo_credito', label: 'Método pago',   flex: 0, mw: 80 },
     { id: 'zona',        label: 'Zona',           flex: 0, mw: 110, filterable: true },
     { id: 'presupuesto', label: 'Presupuesto',    flex: 0, mw: 105 },
     { id: 'fecha',       label: 'Prox. seguim.',  flex: 0, mw: 105, sortable: true },
     { id: 'notas',       label: 'Notas',          flex: 0, mw: 180 },
-    { id: 'acciones',   label: '',               flex: 0, mw: 44 },
+    { id: 'acciones',    label: '',               flex: 0, mw: 44 },
   ]
 
   function cStyle(col: TCol) {
@@ -1169,10 +1179,23 @@ export default function CRM() {
 
           function renderExcelRow(item: Cliente, idx: number) {
             const info = estadoInfo(item.estado)
+            const interesRowBg = item.nivel_interes === 'alto'
+              ? (darkMode ? '#1e0d0d' : '#fff5f5')
+              : item.nivel_interes === 'medio'
+              ? (darkMode ? '#1a1508' : '#fffceb')
+              : item.nivel_interes === 'bajo'
+              ? (darkMode ? '#0d1120' : '#f0f7ff')
+              : null
             return (
               <View
                 key={item.id}
-                style={[s.excelTr, { borderBottomColor: c.border }, idx % 2 !== 0 && { backgroundColor: darkMode ? '#0a1827' : '#f8fafc' }]}
+                style={[
+                  s.excelTr,
+                  { borderBottomColor: c.border },
+                  interesRowBg
+                    ? { backgroundColor: interesRowBg }
+                    : (idx % 2 !== 0 && { backgroundColor: darkMode ? '#0a1827' : '#f8fafc' }),
+                ]}
               >
                 {TABLE_COLS.map(col => {
                   const cs = cStyle(col)
@@ -1245,9 +1268,18 @@ export default function CRM() {
                   switch (col.id) {
                     case 'nombre':
                       return (
-                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'nombre')} activeOpacity={0.6}>
-                          <Text style={[s.excelTd, s.excelTdBold, s.cellTxtNoPad, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
-                        </TouchableOpacity>
+                        <View key={col.id} style={[s.excelTdCell, cs, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                          <TouchableOpacity
+                            onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}` as any)}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 4 }}
+                            style={{ padding: 2 }}
+                          >
+                            <Ionicons name="person-circle-outline" size={17} color="#1a9aaa" />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={{ flex: 1 }} onPress={() => abrirEdicion(item, 'nombre')} activeOpacity={0.6}>
+                            <Text style={[s.excelTd, s.excelTdBold, s.cellTxtNoPad, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
+                          </TouchableOpacity>
+                        </View>
                       )
                     case 'telefono':
                       return (
@@ -1279,14 +1311,16 @@ export default function CRM() {
                           }
                         </TouchableOpacity>
                       )
-                    case 'interes':
+                    case 'tipo_credito':
                       return (
-                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'interes')} activeOpacity={0.6}>
-                          {item.nivel_interes
-                            ? <Text style={[s.excelTd, { color: c.textSub }]} numberOfLines={1}>{NIVEL_INTERES_LABEL[item.nivel_interes]}</Text>
-                            : <Text style={[s.excelNull, { color: c.border }]}>—</Text>
+                        <View key={col.id} style={[s.excelTdCell, cs]}>
+                          {item.tipo_credito
+                            ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub }]} numberOfLines={1}>
+                                {TIPO_CREDITO_LABEL[item.tipo_credito] ?? item.tipo_credito}
+                              </Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>—</Text>
                           }
-                        </TouchableOpacity>
+                        </View>
                       )
                     case 'fecha': {
                       const ts = item.proximo_contacto ? new Date(item.proximo_contacto) : null
