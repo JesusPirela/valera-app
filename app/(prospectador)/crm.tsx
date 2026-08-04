@@ -1186,11 +1186,11 @@ export default function CRM() {
           function renderExcelRow(item: Cliente, idx: number) {
             const info = estadoInfo(item.estado)
             const interesRowBg = item.nivel_interes === 'alto'
-              ? (darkMode ? '#3d1414' : '#fca5a5')
+              ? (darkMode ? '#1f1010' : '#fee2e2')
               : item.nivel_interes === 'medio'
-              ? (darkMode ? '#32260a' : '#fde68a')
+              ? (darkMode ? '#1d1708' : '#fef3c7')
               : item.nivel_interes === 'bajo'
-              ? (darkMode ? '#0e2244' : '#bfdbfe')
+              ? (darkMode ? '#0c1628' : '#dbeafe')
               : null
             return (
               <View
