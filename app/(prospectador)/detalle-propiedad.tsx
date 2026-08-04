@@ -1487,8 +1487,19 @@ export default function DetallePropiedad() {
     Linking.openURL(`https://wa.me/524428251381?text=${encodeURIComponent(mensaje)}`)
   }
 
-  async function abrirModalCita() {
+  async function abrirModalCita(forzar = false) {
     if (!propiedad) return
+    if (propiedad.estado === 'vendida' && !forzar) {
+      Alert.alert(
+        '⚠️ Propiedad no disponible',
+        'Esta propiedad ya fue vendida. ¿Deseas coordinar la cita de todos modos?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Continuar', onPress: () => abrirModalCita(true) },
+        ]
+      )
+      return
+    }
     setBusquedaCliente('')
     setMostrarFormNuevo(false)
     setNuevoNombre('')
@@ -2271,6 +2282,14 @@ export default function DetallePropiedad() {
           </Text>
         </TouchableOpacity>
 
+        {propiedad?.estado === 'vendida' && (
+          <View style={styles.avisoVendida}>
+            <Text style={styles.avisoVendidaText}>
+              ⚠️ Esta propiedad ya fue vendida. Si coordinás la cita, avisa al cliente que puede no estar disponible.
+            </Text>
+          </View>
+        )}
+
         {/* Botón solicitar diseño con André — necesita un token de diseño */}
         {(() => {
           const tokens = disenoTokens ?? 0
@@ -2932,6 +2951,21 @@ const styles = StyleSheet.create({
   estadoVendida: {
     color: '#8b2a2a',
     backgroundColor: '#f5d4d4',
+  },
+  avisoVendida: {
+    backgroundColor: '#fff8e1',
+    borderColor: '#fbc02d',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  avisoVendidaText: {
+    color: '#7c5a00',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
   },
 
   titulo: { fontSize: 22, fontWeight: '800', color: '#1a6470', marginBottom: 6 },
