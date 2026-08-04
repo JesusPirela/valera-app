@@ -104,17 +104,24 @@ function proximoRec(recs: Cliente['recordatorios']) {
     .sort((a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime())[0] ?? null
 }
 
-// Un cliente "necesita seguimiento" (vencido) SOLO si tiene un recordatorio
-// vencido y sigue sin resolverse. Se considera resuelto cuando:
+// Un cliente "necesita seguimiento" (vencido) cuando tiene un contacto pendiente
+// que ya pasó de su fecha y sigue sin resolverse. Se considera vencido si:
+//  · su próximo contacto (proximo_contacto) ya pasó, o
+//  · tiene un recordatorio abierto cuya fecha ya pasó.
+// Se considera resuelto (NO vencido) cuando:
 //  · el cliente está descartado o comprado (ya no hay que seguirlo), o
 //  · fue reagendado a futuro (proximo_contacto en el futuro = el asesor ya
 //    definió cuándo lo vuelve a contactar).
-// Antes, un cliente descartado o reagendado seguía apareciendo como vencido y
-// notificando, porque el recordatorio quedaba abierto en paralelo.
+// Antes solo contaba el recordatorio abierto, así que un cliente con el próximo
+// contacto vencido (⚠ en la columna de fecha) no aparecía al filtrar VENCIDOS.
 function necesitaSeguimiento(c: Cliente): boolean {
   if (c.estado === 'descartado' || c.estado === 'compro' || c.estado === 'compro_externo') return false
   const now = Date.now()
-  if (c.proximo_contacto && new Date(c.proximo_contacto).getTime() > now) return false
+  if (c.proximo_contacto) {
+    const t = new Date(c.proximo_contacto).getTime()
+    if (t > now) return false   // reagendado a futuro → resuelto
+    if (t < now) return true     // próximo contacto vencido → necesita seguimiento
+  }
   return (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
 }
 
