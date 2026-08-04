@@ -7,6 +7,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { normalizar } from '../../lib/texto'
 import { zonaDetallada } from '../../lib/zonas-interes'
+import { PDR_POR_ZONA, pdrDeZona, type PdrRef } from '../../lib/pdr-referencia'
 
 const BG = '#0d1b2a', CARD = '#12283b', BORDER = '#1e3448'
 const TEXT = '#e8f0f4', SUB = '#8fb0cc', MUTE = '#5f7690', GOLD = '#c9a84c'
@@ -29,22 +30,11 @@ const OVERRIDES: [RegExp, string][] = [
   [/jacarandas/, 'El Refugio'],
   [/carriedo/, 'El Refugio'],
   [/vitea/, 'El Refugio'],
+  [/villas? la joya/, 'Jardines de Santiago'],
 ]
 function zonaOverride(desarrollo: string): string | null {
   const n = normalizar(desarrollo)
   for (const [re, z] of OVERRIDES) if (re.test(n)) return z
-  return null
-}
-
-// PDR explícitos del archivo (Precios De Referencia). Clave = zona normalizada.
-// Si una zona no está aquí, se usa el precio más barato real de la BD (precio "desde").
-// Para sobrescribir con el valor exacto del Excel, agrega la entrada aquí.
-const PDR_ARCHIVO: Record<string, number> = {
-  monterrey: 1500000, // PDR Centro Monterrey
-}
-function pdrArchivo(zona: string): number | null {
-  const n = normalizar(zona)
-  for (const k in PDR_ARCHIVO) if (n.includes(k)) return PDR_ARCHIVO[k]
   return null
 }
 
@@ -71,8 +61,20 @@ function caract(p: Prop) {
 }
 const tipoLabel = (t: string | null) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '—')
 
+// Valor comparable por columna (para ordenar ascendente/descendente).
+function valorCol(p: Prop, col: ColId): number | string {
+  switch (col) {
+    case 'precio': return p.precio ?? Number.POSITIVE_INFINITY
+    case 'caract': return p.recamaras ?? -1
+    case 'tipo': return normalizar(tipoLabel(p.tipo))
+    case 'entrega': return normalizar(p.entrega_aprox ?? '')
+    default: return normalizar(p.titulo ?? '')
+  }
+}
+
 // Columnas de la tabla (para los filtros tipo Excel).
 type ColId = 'modelo' | 'precio' | 'caract' | 'tipo' | 'entrega'
+type SortDir = 'asc' | 'desc'
 const COLS: { id: ColId; label: string; flex: number }[] = [
   { id: 'modelo', label: 'Modelo', flex: 2.4 },
   { id: 'precio', label: 'Precio', flex: 1.3 },
@@ -97,6 +99,8 @@ export default function InventarioTabla() {
   const [fRec, setFRec] = useState<number | null>(null)
   const [precioMin, setPrecioMin] = useState('')
   const [precioMax, setPrecioMax] = useState('')
+  const [sortCol, setSortCol] = useState<ColId | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -153,7 +157,17 @@ export default function InventarioTabla() {
       if (!porZona.has(z)) porZona.set(z, [])
       porZona.get(z)!.push(p)
     }
-    return Array.from(porZona.entries())
+    // Filtro para los PDR de referencia (precio + tipo + búsqueda).
+    const refPasa = (r: PdrRef, zona: string) => {
+      if (fTipo && normalizar(r.tipo ?? '') !== normalizar(fTipo)) return false
+      if (r.precio < nMin || r.precio > nMax) return false
+      if (qModelo && !normalizar(r.etiqueta).includes(qModelo)) return false
+      if (qCaract && !normalizar(r.caract).includes(qCaract)) return false
+      if (q && !normalizar(`${r.etiqueta} ${zona}`).includes(q)) return false
+      return true
+    }
+
+    const liveZonas = Array.from(porZona.entries())
       .sort((a, b) => b[1].length - a[1].length)
       .map(([zona, ps]) => {
         const ciudad = CIUDAD[ps.find(x => x.zona)?.zona ?? ''] ?? ''
@@ -168,11 +182,19 @@ export default function InventarioTabla() {
         const desarrollos = Array.from(porDes.entries())
           .map(([nombre, modelos]) => ({ nombre, modelos }))
           .sort((a, b) => a.nombre.localeCompare(b.nombre))
-        // PDR: valor del archivo si existe, si no el más barato real de la zona.
-        const pdrFile = pdrArchivo(zona)
-        const pdr = pdrFile ?? desdeVal
-        return { zona, ciudad, total: ps.length, desde: desdeVal, pdr, pdrEsArchivo: pdrFile != null, color: colorZona(zona), desarrollos }
+        const refs = pdrDeZona(zona).filter(r => refPasa(r, zona)).sort((a, b) => a.precio - b.precio)
+        return { zona, ciudad, total: ps.length, desde: desdeVal, color: colorZona(zona), desarrollos, refs, soloRef: false }
       })
+
+    // Zonas con PDR de referencia que NO tienen inventario en vivo → tarjeta solo-referencia.
+    const usadas = new Set(liveZonas.map(z => normalizar(z.zona)))
+    const refZonas = PDR_POR_ZONA
+      .filter(g => !usadas.has(normalizar(g.zona)))
+      .map(g => ({ zona: g.zona, refs: g.refs.filter(r => refPasa(r, g.zona)).sort((a, b) => a.precio - b.precio) }))
+      .filter(g => g.refs.length > 0)
+      .map(g => ({ zona: g.zona, ciudad: '', total: 0, desde: null as number | null, color: colorZona(g.zona), desarrollos: [] as { nombre: string; modelos: Prop[] }[], refs: g.refs, soloRef: true }))
+
+    return [...liveZonas, ...refZonas]
   }, [props, busqueda, fModelo, fCaract, fEntrega, fTipo, fRec, precioMin, precioMax])
 
   const toggle = (z: string) => setExpandidas(prev => { const n = new Set(prev); n.has(z) ? n.delete(z) : n.add(z); return n })
@@ -187,6 +209,30 @@ export default function InventarioTabla() {
     (id === 'entrega' && !!fEntrega)
   const nFiltros = COLS.filter(c => colActiva(c.id)).length
   const isWeb = Platform.OS === 'web'
+
+  // Orden ascendente/descendente por columna (aplica a todas las tablas).
+  const setSort = (col: ColId, dir: SortDir) => { setSortCol(col); setSortDir(dir) }
+  const ordenar = (m: Prop[]) => {
+    if (!sortCol) return m
+    return [...m].sort((a, b) => {
+      const va = valorCol(a, sortCol), vb = valorCol(b, sortCol)
+      const r = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
+      return sortDir === 'asc' ? r : -r
+    })
+  }
+  const ordenarRefs = (rs: PdrRef[]) => {
+    if (!sortCol) return rs
+    return [...rs].sort((a, b) => {
+      let va: number | string, vb: number | string
+      if (sortCol === 'precio') { va = a.precio; vb = b.precio }
+      else if (sortCol === 'tipo') { va = normalizar(a.tipo ?? ''); vb = normalizar(b.tipo ?? '') }
+      else if (sortCol === 'caract') { va = normalizar(a.caract); vb = normalizar(b.caract) }
+      else { va = normalizar(a.etiqueta); vb = normalizar(b.etiqueta) }
+      const r = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
+      return sortDir === 'asc' ? r : -r
+    })
+  }
+  const sortArrow = (id: ColId) => (sortCol === id ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
 
   return (
     <View style={s.page}>
@@ -217,7 +263,7 @@ export default function InventarioTabla() {
           return (
             <TouchableOpacity key={col.id} style={[{ flex: col.flex }, s.filterCol, openCol === col.id && s.filterColOpen]}
               onPress={() => setOpenCol(openCol === col.id ? null : col.id)} activeOpacity={0.7}>
-              <Text style={[s.filterColTxt, on && { color: GOLD }]} numberOfLines={1}>{col.label}</Text>
+              <Text style={[s.filterColTxt, (on || sortCol === col.id) && { color: GOLD }]} numberOfLines={1}>{col.label}{sortArrow(col.id)}</Text>
               <Text style={[s.filterColArrow, on && { color: GOLD }]}>{on ? '▾●' : '▾'}</Text>
             </TouchableOpacity>
           )
@@ -227,6 +273,20 @@ export default function InventarioTabla() {
       {/* Panel del filtro de la columna abierta */}
       {openCol && (
         <View style={s.colPanel}>
+          <Text style={s.panelLbl}>Ordenar</Text>
+          <View style={[s.chips, { marginBottom: 10 }]}>
+            <TouchableOpacity style={[s.chip, sortCol === openCol && sortDir === 'asc' && s.chipOn]} onPress={() => setSort(openCol, 'asc')}>
+              <Text style={[s.chipTxt, sortCol === openCol && sortDir === 'asc' && s.chipTxtOn]}>▲ Ascendente</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.chip, sortCol === openCol && sortDir === 'desc' && s.chipOn]} onPress={() => setSort(openCol, 'desc')}>
+              <Text style={[s.chipTxt, sortCol === openCol && sortDir === 'desc' && s.chipTxtOn]}>▼ Descendente</Text>
+            </TouchableOpacity>
+            {sortCol === openCol && (
+              <TouchableOpacity style={s.chip} onPress={() => setSortCol(null)}>
+                <Text style={s.chipTxt}>✕ Sin orden</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           {openCol === 'modelo' && (
             <TextInput style={s.panelInput} value={fModelo} onChangeText={setFModelo} autoFocus
               placeholder="Contiene… (modelo o código)" placeholderTextColor={MUTE} />
@@ -285,7 +345,9 @@ export default function InventarioTabla() {
                   <Text style={s.zonaChevron}>{abierta ? '▼' : '▶'}</Text>
                   <Text style={s.zonaTxt} numberOfLines={1}>{z.zona}{z.ciudad ? ` · ${z.ciudad}` : ''}</Text>
                   {z.desde != null ? <Text style={s.zonaDesde}>desde {fmtPrecio(z.desde)}</Text> : null}
-                  <Text style={s.zonaMeta}>{z.total}</Text>
+                  {z.soloRef
+                    ? <Text style={s.zonaRefBadge}>solo PDR</Text>
+                    : <Text style={s.zonaMeta}>{z.total}</Text>}
                 </TouchableOpacity>
 
                 {abierta && (
@@ -303,7 +365,7 @@ export default function InventarioTabla() {
                           <Text style={[s.cTipo, s.colHeadTxt]}>Tipo</Text>
                           <Text style={[s.cEntrega, s.colHeadTxt]}>Entrega</Text>
                         </View>
-                        {d.modelos.map(p => (
+                        {ordenar(d.modelos).map(p => (
                           <View key={p.id} style={s.row}>
                             <TouchableOpacity style={s.cModelo} onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: p.id } })}>
                               <Text style={s.modeloTxt} numberOfLines={2}>{p.titulo}</Text>
@@ -337,13 +399,31 @@ export default function InventarioTabla() {
                       </View>
                     ))}
 
-                    {/* PDR · Precio de referencia (desde) al final de la tabla de la zona */}
-                    <View style={[s.pdrRow, { borderTopColor: z.color }]}>
-                      <Text style={[s.pdrLabel, { color: z.color }]}>
-                        PDR · Precio desde{z.pdrEsArchivo ? ' (ref. archivo)' : ''}
-                      </Text>
-                      <Text style={s.pdrPrecio}>{fmtPrecio(z.pdr)}</Text>
-                    </View>
+                    {/* PDR · Precios de referencia del mercado al final de la tabla de la zona */}
+                    {z.refs.length > 0 && (
+                      <View>
+                        <View style={[s.pdrHead, { backgroundColor: z.color }]}>
+                          <Text style={s.pdrHeadTxt}>PDR · Precios de referencia (mercado)</Text>
+                          <Text style={s.pdrHeadMeta}>{z.refs.length}</Text>
+                        </View>
+                        <View style={[s.row, s.colHead]}>
+                          <Text style={[s.cModelo, s.colHeadTxt]}>Referencia</Text>
+                          <Text style={[s.cPrecio, s.colHeadTxt]}>Precio</Text>
+                          <Text style={[s.cCaract, s.colHeadTxt]}>Características</Text>
+                          <Text style={[s.cTipo, s.colHeadTxt]}>Tipo</Text>
+                          <Text style={[s.cEntrega, s.colHeadTxt]}> </Text>
+                        </View>
+                        {ordenarRefs(z.refs).map((r, i) => (
+                          <View key={r.etiqueta + i} style={[s.row, s.pdrDataRow]}>
+                            <Text style={[s.cModelo, s.modeloTxt]} numberOfLines={2}>{r.etiqueta}</Text>
+                            <Text style={[s.cPrecio, s.pdrRefPrecio]}>{fmtPrecio(r.precio)}</Text>
+                            <Text style={[s.cCaract, s.cellTxt]} numberOfLines={2}>{r.caract}</Text>
+                            <Text style={[s.cTipo, s.cellTxt]} numberOfLines={1}>{r.tipo ?? '—'}</Text>
+                            <Text style={s.cEntrega}> </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
@@ -409,8 +489,11 @@ const s = StyleSheet.create({
   precioTxt: { color: '#4ade80', fontSize: 13, fontWeight: '900' },
   entregaTxt: { color: TEXT, fontSize: 12, fontWeight: '600' },
   entregaInput: { borderWidth: 1, borderColor: GOLD, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4, color: TEXT, fontSize: 12 },
-  pdrRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 2, backgroundColor: 'rgba(0,0,0,0.28)', paddingHorizontal: 12, paddingVertical: 10 },
-  pdrLabel: { fontSize: 12.5, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.3 },
-  pdrPrecio: { color: GOLD, fontSize: 15, fontWeight: '900' },
+  pdrHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, paddingHorizontal: 12, paddingVertical: 8 },
+  pdrHeadTxt: { color: '#fff', fontSize: 12.5, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.3 },
+  pdrHeadMeta: { color: '#fff', fontSize: 12, fontWeight: '900', backgroundColor: 'rgba(0,0,0,0.28)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
+  pdrDataRow: { backgroundColor: 'rgba(0,0,0,0.18)' },
+  pdrRefPrecio: { color: GOLD, fontSize: 13, fontWeight: '900' },
+  zonaRefBadge: { color: '#fff', fontSize: 10.5, fontWeight: '900', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden', textTransform: 'uppercase' },
   vacio: { color: MUTE, textAlign: 'center', padding: 30 },
 })
