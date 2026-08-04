@@ -10,7 +10,7 @@ import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS, ETAPAS_CLIENTE } from './crm'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
-import { registrarAccion , registrarSeguimiento } from '../../lib/gamification'
+import { registrarAccion , registrarSeguimiento, registrarContacto } from '../../lib/gamification'
 import { programarRecordatorios } from '../../lib/notificaciones-locales'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { Ionicons } from '@expo/vector-icons'
@@ -469,6 +469,8 @@ export default function DetalleCliente() {
     const url = `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`
     if (Platform.OS === 'web') window.open(url, '_blank')
     else Linking.openURL(url)
+    // Contactar por WhatsApp cuenta para la misión de interacción.
+    getUsuarioActual().then(({ data: { user } }) => { if (user) registrarContacto(user.id, cliente.id, 'whatsapp').catch(() => {}) })
   }
 
   if (isLoading) return (
@@ -541,7 +543,10 @@ export default function DetalleCliente() {
       <View style={styles.actionBar}>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: info.color }]}
-          onPress={() => Linking.openURL(`tel:${cliente.telefono}`)}
+          onPress={() => {
+            Linking.openURL(`tel:${cliente.telefono}`)
+            getUsuarioActual().then(({ data: { user } }) => { if (user) registrarContacto(user.id, cliente.id, 'llamada').catch(() => {}) })
+          }}
         >
           <Ionicons name="call" size={20} color="#fff" />
           <Text style={styles.actionBtnTxt}>Llamar</Text>

@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { normalizar } from '../../lib/texto'
-import { registrarAccion , registrarSeguimiento } from '../../lib/gamification'
+import { registrarAccion , registrarSeguimiento, registrarContacto } from '../../lib/gamification'
 
 const VISTA_CRM_KEY = '@valera_crm_vista'
 import { useColors, useTheme } from '../../lib/ThemeContext'
@@ -246,14 +246,20 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
         <View style={s.actions}>
           <TouchableOpacity
             style={[s.actionWa, darkMode && { backgroundColor: '#0b2016', borderColor: '#1a6b38' }]}
-            onPress={() => abrirWhatsApp(item.telefono, item.nombre)}
+            onPress={() => {
+              abrirWhatsApp(item.telefono, item.nombre)
+              getUsuarioActual().then(({ data: { user } }) => { if (user) registrarContacto(user.id, item.id, 'whatsapp').catch(() => {}) })
+            }}
           >
             <Ionicons name="logo-whatsapp" size={14} color={darkMode ? '#22c55e' : '#16a34a'} />
             <Text style={[s.actionWaTxt, darkMode && { color: '#22c55e' }]}>WhatsApp</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.actionCall, darkMode && { backgroundColor: '#091929', borderColor: '#0e5282' }]}
-            onPress={() => llamar(item.telefono)}
+            onPress={() => {
+              llamar(item.telefono)
+              getUsuarioActual().then(({ data: { user } }) => { if (user) registrarContacto(user.id, item.id, 'llamada').catch(() => {}) })
+            }}
           >
             <Ionicons name="call-outline" size={14} color={darkMode ? '#38bdf8' : '#0369a1'} />
             <Text style={[s.actionCallTxt, darkMode && { color: '#38bdf8' }]}>Llamar</Text>

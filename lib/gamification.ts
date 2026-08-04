@@ -159,6 +159,26 @@ export async function registrarSeguimiento(userId: string, clienteId: string): P
   }
 }
 
+// ── Contacto a un cliente (WhatsApp / llamada) ────────────────────────────
+// Cuenta para la misión diaria de interacción. Solo el servidor decide (una vez
+// por cliente + canal + día, y solo clientes propios), así que tocar el botón en
+// bucle no farmea. Tras registrarlo, se re-sincronizan las misiones.
+export async function registrarContacto(
+  userId: string, clienteId: string, canal: 'whatsapp' | 'llamada',
+): Promise<void> {
+  try {
+    if (!clienteId) return
+    const { data, error } = await supabase.rpc('registrar_contacto_cliente', {
+      p_cliente_id: clienteId, p_canal: canal,
+    })
+    if (error || !data?.nuevo) return  // ajeno o ya contado hoy
+    await sincronizarMisionesDiarias(userId)
+    await supabase.rpc('sincronizar_racha')
+  } catch (e) {
+    console.warn('[Gamification] registrarContacto:', e)
+  }
+}
+
 // Mapeo categoria → campo en user_stats (fuente de verdad para misiones base)
 const STATS_CAMPO: Partial<Record<string, keyof UserStats>> = {
   propiedad:   'total_propiedades',
