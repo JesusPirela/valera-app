@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { Tooltip } from '../../components/Tooltip'
 
 // Paleta oscura para empatar con el detalle del bloque.
 const BG = '#0d1b2a', CARD = '#12283b', CARD2 = '#152f45', BORDER = '#1e3448'
@@ -26,16 +27,17 @@ function lunesDeSemana(offset: number): Date {
   return d
 }
 
-// Indicadores activos de un día (para el grid semanal / mensual).
-function iconosDe(m: Metricas | undefined): { e: string }[] {
+// Indicadores activos de un día (para el grid semanal / mensual), con su
+// descripción para el tooltip al pasar el cursor.
+function iconosDe(m: Metricas | undefined): { e: string; tip: string }[] {
   if (!m) return []
-  const out: { e: string }[] = []
-  if (m.reunion === 'fue') out.push({ e: '🤝' })
-  else if (m.reunion === 'no_fue') out.push({ e: '❌' })
-  else if (m.reunion === 'pendiente') out.push({ e: '❔' })
-  if (m.cita) out.push({ e: '📅' })
-  if (m.cliente) out.push({ e: '👥' })
-  if (m.uso || m.publico) out.push({ e: '📱' })
+  const out: { e: string; tip: string }[] = []
+  if (m.reunion === 'fue') out.push({ e: '🤝', tip: 'Asistió a la reunión' })
+  else if (m.reunion === 'no_fue') out.push({ e: '❌', tip: 'No asistió a la reunión' })
+  else if (m.reunion === 'pendiente') out.push({ e: '❔', tip: 'Reunión sin marcar' })
+  if (m.cita) out.push({ e: '📅', tip: 'Agendó una cita' })
+  if (m.cliente) out.push({ e: '👥', tip: 'Metió un cliente / pasó un perfil' })
+  if (m.uso || m.publico) out.push({ e: '📱', tip: 'Usó la app o publicó' })
   return out
 }
 
@@ -262,7 +264,7 @@ export default function BloqueCalendario() {
                   {diasSemana.map((d, i) => (
                     <View key={i} style={s.gCell}>
                       {iconosDe(p.dias?.[fmtISO(d)]).map((ic, k) => (
-                        <Text key={k} style={s.gIcon}>{ic.e}</Text>
+                        <Tooltip key={k} label={ic.tip}><Text style={s.gIcon}>{ic.e}</Text></Tooltip>
                       ))}
                     </View>
                   ))}
@@ -296,7 +298,7 @@ export default function BloqueCalendario() {
                     <View key={fmtISO(d)} style={s.mesRow}>
                       <Text style={s.mesDia}>{DIAS_CORTOS[(d.getDay() + 6) % 7]} {d.getDate()}</Text>
                       <View style={{ flexDirection: 'row', gap: 6 }}>
-                        {ic.length ? ic.map((x, k) => <Text key={k} style={s.mesIcon}>{x.e}</Text>) : <Text style={s.mesVacio}>·</Text>}
+                        {ic.length ? ic.map((x, k) => <Tooltip key={k} label={x.tip}><Text style={s.mesIcon}>{x.e}</Text></Tooltip>) : <Text style={s.mesVacio}>·</Text>}
                       </View>
                     </View>
                   )
