@@ -217,10 +217,10 @@ export default function BloqueCalendario() {
                     <Text style={s.reuLabel}>🤝 Reunión{!huboReunion ? ' · sin reunión' : ''}</Text>
                     <View style={s.reuBtns}>
                       <TouchableOpacity disabled={!huboReunion} style={[s.reuBtn, reu === 'fue' && s.reuBtnFue]} onPress={() => setReunion(p, reu === 'fue' ? 'pendiente' : 'fue')} activeOpacity={0.8}>
-                        <Text style={[s.reuBtnTxt, reu === 'fue' && s.reuBtnTxtFue]}>✅ Fue</Text>
+                        <Text style={[s.reuBtnTxt, reu === 'fue' && s.reuBtnTxtFue]}>✅ Asistió</Text>
                       </TouchableOpacity>
                       <TouchableOpacity disabled={!huboReunion} style={[s.reuBtn, reu === 'no_fue' && s.reuBtnNo]} onPress={() => setReunion(p, reu === 'no_fue' ? 'pendiente' : 'no_fue')} activeOpacity={0.8}>
-                        <Text style={[s.reuBtnTxt, reu === 'no_fue' && s.reuBtnTxtNo]}>❌ No fue</Text>
+                        <Text style={[s.reuBtnTxt, reu === 'no_fue' && s.reuBtnTxtNo]}>❌ No asistió</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
