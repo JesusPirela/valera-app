@@ -288,6 +288,7 @@ export default function Dashboard() {
             { icon: '📊', label: 'Estadísticas', route: '/(admin)/estadisticas' },
             { icon: '📋', label: 'Actividad', route: '/(admin)/actividad' },
             { icon: '📦', label: 'Inventario', route: '/(admin)/inventario' },
+            { icon: '🏷️', label: 'Tabla precios', route: '/(admin)/inventario-tabla' },
           ].map(item => (
             <TouchableOpacity
               key={item.route}

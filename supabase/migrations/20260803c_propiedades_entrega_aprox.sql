@@ -1,0 +1,3 @@
+-- Campo "Entrega aprox" para la tabla de inventario (estilo Excel de
+-- constructoras). Texto libre: "INMEDIATA", "JULIO/SEPTIEMBRE", "noviembre 2026"…
+ALTER TABLE public.propiedades ADD COLUMN IF NOT EXISTS entrega_aprox text;
