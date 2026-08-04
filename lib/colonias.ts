@@ -36,6 +36,7 @@ export const COLONIAS: ColoniaSugerida[] = [
   { label: 'Hércules',            zona: 'queretaro', ciudad: 'Querétaro', lat: 20.6050, lng: -100.3950 },
   { label: 'Punta Juriquilla',    zona: 'queretaro', ciudad: 'Querétaro', lat: 20.7200, lng: -100.4650 },
   // ── El Marqués / Zakia ────────────────────────────────────────────────────
+  { label: 'El Mirador',                zona: 'queretaro', ciudad: 'El Marqués', lat: 20.6150, lng: -100.2950 },
   { label: 'Ciudad Maderas',            zona: 'queretaro', ciudad: 'El Marqués', lat: 20.5578, lng: -100.2821 },
   { label: 'Zakia',                     zona: 'queretaro', ciudad: 'El Marqués', lat: 20.6380, lng: -100.2340 },
   { label: 'Punta del Este',            zona: 'queretaro', ciudad: 'El Marqués', lat: 20.6360, lng: -100.2430 },
