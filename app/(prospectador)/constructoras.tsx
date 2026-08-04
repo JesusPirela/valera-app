@@ -7,6 +7,7 @@ import { useFocusEffect, router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar } from '../../lib/texto'
 import { zonaDetallada } from '../../lib/zonas-interes'
@@ -323,7 +324,11 @@ export default function Constructoras() {
                           <Text style={{ fontSize: 44 }}>🏗️</Text>
                         </View>
                       )}
-                      <View style={styles.desarrolloOverlay} />
+                      <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.18)', 'rgba(0,0,0,0.72)']}
+                        locations={[0, 0.45, 1]}
+                        style={styles.desarrolloOverlay}
+                      />
                       {popular && (
                         <View style={styles.popularPill}>
                           <Text style={styles.popularPillTxt}>🔥 Popular</Text>
@@ -460,9 +465,7 @@ const styles = StyleSheet.create({
   },
   desarrolloOverlay: {
     position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    height: '65%',
-    backgroundColor: 'rgba(0,0,0,0.58)',
+    top: 0, bottom: 0, left: 0, right: 0,
   },
   popularPill: {
     position: 'absolute',
