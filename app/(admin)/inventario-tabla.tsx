@@ -36,6 +36,18 @@ function zonaOverride(desarrollo: string): string | null {
   return null
 }
 
+// PDR explícitos del archivo (Precios De Referencia). Clave = zona normalizada.
+// Si una zona no está aquí, se usa el precio más barato real de la BD (precio "desde").
+// Para sobrescribir con el valor exacto del Excel, agrega la entrada aquí.
+const PDR_ARCHIVO: Record<string, number> = {
+  monterrey: 1500000, // PDR Centro Monterrey
+}
+function pdrArchivo(zona: string): number | null {
+  const n = normalizar(zona)
+  for (const k in PDR_ARCHIVO) if (n.includes(k)) return PDR_ARCHIVO[k]
+  return null
+}
+
 // Color estable por zona (cada zona su color).
 const PALETA = ['#2563eb', '#059669', '#7c3aed', '#db2777', '#d97706', '#0891b2', '#dc2626', '#4f46e5', '#16a34a', '#c026d3', '#ea580c', '#0d9488', '#9333ea', '#65a30d', '#e11d48']
 function colorZona(z: string): string {
@@ -59,19 +71,32 @@ function caract(p: Prop) {
 }
 const tipoLabel = (t: string | null) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '—')
 
+// Columnas de la tabla (para los filtros tipo Excel).
+type ColId = 'modelo' | 'precio' | 'caract' | 'tipo' | 'entrega'
+const COLS: { id: ColId; label: string; flex: number }[] = [
+  { id: 'modelo', label: 'Modelo', flex: 2.4 },
+  { id: 'precio', label: 'Precio', flex: 1.3 },
+  { id: 'caract', label: 'Características', flex: 1.6 },
+  { id: 'tipo', label: 'Tipo', flex: 1 },
+  { id: 'entrega', label: 'Entrega', flex: 1.5 },
+]
+
 export default function InventarioTabla() {
   const [props, setProps] = useState<Prop[]>([])
   const [loading, setLoading] = useState(true)
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set())  // zonas abiertas (colapsadas por defecto)
   const [editEntrega, setEditEntrega] = useState<{ id: string; val: string } | null>(null)
 
-  // Filtros (por columna)
+  // Buscador global + filtros por columna (tipo Excel, aplican a todas las tablas)
   const [busqueda, setBusqueda] = useState('')
-  const [tipoF, setTipoF] = useState<string | null>(null)
-  const [recF, setRecF] = useState<number | null>(null)
+  const [openCol, setOpenCol] = useState<ColId | null>(null)
+  const [fModelo, setFModelo] = useState('')
+  const [fCaract, setFCaract] = useState('')
+  const [fEntrega, setFEntrega] = useState('')
+  const [fTipo, setFTipo] = useState<string | null>(null)
+  const [fRec, setFRec] = useState<number | null>(null)
   const [precioMin, setPrecioMin] = useState('')
   const [precioMax, setPrecioMax] = useState('')
-  const [filtrosOpen, setFiltrosOpen] = useState(false)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -91,17 +116,30 @@ export default function InventarioTabla() {
     await supabase.from('propiedades').update({ entrega_aprox: val.trim() || null }).eq('id', id)
   }
 
+  // Tipos presentes en los datos (para el filtro de la columna Tipo).
+  const tiposDisponibles = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of props) if (p.tipo) set.add(p.tipo)
+    return Array.from(set).sort()
+  }, [props])
+
   const zonas = useMemo(() => {
     const q = normalizar(busqueda.trim())
+    const qModelo = normalizar(fModelo.trim())
+    const qCaract = normalizar(fCaract.trim())
+    const qEntrega = normalizar(fEntrega.trim())
     const nMin = Number(precioMin.replace(/\D/g, '')) || 0
     const nMax = Number(precioMax.replace(/\D/g, '')) || Infinity
 
     const zonaDe = (p: Prop) => zonaOverride(p.nombre_constructora ?? '') ?? zonaDetallada(`${p.direccion ?? ''} ${p.titulo ?? ''}`) ?? 'Otras zonas'
 
     const filtradas = props.filter(p => {
-      if (tipoF && p.tipo !== tipoF) return false
-      if (recF != null && (p.recamaras ?? 0) < recF) return false
+      if (fTipo && p.tipo !== fTipo) return false
+      if (fRec != null && (p.recamaras ?? 0) < fRec) return false
       if (p.precio != null && (p.precio < nMin || p.precio > nMax)) return false
+      if (qModelo && !normalizar(`${p.titulo ?? ''} ${p.codigo ?? ''}`).includes(qModelo)) return false
+      if (qCaract && !normalizar(caract(p)).includes(qCaract)) return false
+      if (qEntrega && !normalizar(p.entrega_aprox ?? '').includes(qEntrega)) return false
       if (q) {
         const hay = normalizar(`${p.nombre_constructora ?? ''} ${p.titulo ?? ''} ${p.codigo ?? ''} ${zonaDe(p)}`)
         if (!hay.includes(q)) return false
@@ -120,6 +158,7 @@ export default function InventarioTabla() {
       .map(([zona, ps]) => {
         const ciudad = CIUDAD[ps.find(x => x.zona)?.zona ?? ''] ?? ''
         const desde = ps.reduce((m, p) => (p.precio != null && p.precio < m ? p.precio : m), Infinity)
+        const desdeVal = isFinite(desde) ? desde : null
         const porDes = new Map<string, Prop[]>()
         for (const p of ps) {
           const d = p.nombre_constructora?.trim() || 'Sin desarrollo'
@@ -129,14 +168,24 @@ export default function InventarioTabla() {
         const desarrollos = Array.from(porDes.entries())
           .map(([nombre, modelos]) => ({ nombre, modelos }))
           .sort((a, b) => a.nombre.localeCompare(b.nombre))
-        return { zona, ciudad, total: ps.length, desde: isFinite(desde) ? desde : null, color: colorZona(zona), desarrollos }
+        // PDR: valor del archivo si existe, si no el más barato real de la zona.
+        const pdrFile = pdrArchivo(zona)
+        const pdr = pdrFile ?? desdeVal
+        return { zona, ciudad, total: ps.length, desde: desdeVal, pdr, pdrEsArchivo: pdrFile != null, color: colorZona(zona), desarrollos }
       })
-  }, [props, busqueda, tipoF, recF, precioMin, precioMax])
+  }, [props, busqueda, fModelo, fCaract, fEntrega, fTipo, fRec, precioMin, precioMax])
 
   const toggle = (z: string) => setExpandidas(prev => { const n = new Set(prev); n.has(z) ? n.delete(z) : n.add(z); return n })
   const expandirTodo = () => setExpandidas(new Set(zonas.map(z => z.zona)))
   const colapsarTodo = () => setExpandidas(new Set())
-  const nFiltros = (tipoF ? 1 : 0) + (recF != null ? 1 : 0) + (precioMin ? 1 : 0) + (precioMax ? 1 : 0)
+  const limpiarFiltros = () => { setFModelo(''); setFCaract(''); setFEntrega(''); setFTipo(null); setFRec(null); setPrecioMin(''); setPrecioMax(''); setOpenCol(null) }
+  const colActiva = (id: ColId) =>
+    (id === 'modelo' && !!fModelo) ||
+    (id === 'precio' && (!!precioMin || !!precioMax)) ||
+    (id === 'caract' && (!!fCaract || fRec != null)) ||
+    (id === 'tipo' && !!fTipo) ||
+    (id === 'entrega' && !!fEntrega)
+  const nFiltros = COLS.filter(c => colActiva(c.id)).length
   const isWeb = Platform.OS === 'web'
 
   return (
@@ -146,43 +195,83 @@ export default function InventarioTabla() {
         <Text style={s.sub}>Precios en vivo de la app ({props.length} modelos) · toca una zona para expandir</Text>
       </View>
 
-      {/* Buscador + filtros + expandir/colapsar */}
+      {/* Buscador + expandir/colapsar */}
       <View style={s.toolbar}>
         <TextInput style={s.search} value={busqueda} onChangeText={setBusqueda}
           placeholder="Buscar zona, desarrollo, modelo…" placeholderTextColor={MUTE} />
-        <TouchableOpacity style={[s.toolBtn, nFiltros > 0 && s.toolBtnOn]} onPress={() => setFiltrosOpen(v => !v)}>
-          <Text style={[s.toolBtnTxt, nFiltros > 0 && { color: '#fff' }]}>⚙ Filtros{nFiltros ? ` (${nFiltros})` : ''}</Text>
-        </TouchableOpacity>
+        {nFiltros > 0 && (
+          <TouchableOpacity style={s.clearBtn} onPress={limpiarFiltros}>
+            <Text style={s.clearTxt}>✕ Filtros ({nFiltros})</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <View style={s.expandRow}>
         <TouchableOpacity onPress={expandirTodo}><Text style={s.expandLink}>▼ Expandir todo</Text></TouchableOpacity>
         <TouchableOpacity onPress={colapsarTodo}><Text style={s.expandLink}>▶ Colapsar todo</Text></TouchableOpacity>
       </View>
 
-      {filtrosOpen && (
-        <View style={s.filtros}>
-          <Text style={s.filtroLbl}>Tipo</Text>
-          <View style={s.chips}>
-            {[null, 'casa', 'departamento', 'terreno'].map(t => (
-              <TouchableOpacity key={t ?? 'all'} style={[s.chip, tipoF === t && s.chipOn]} onPress={() => setTipoF(t)}>
-                <Text style={[s.chipTxt, tipoF === t && s.chipTxtOn]}>{t ? tipoLabel(t) : 'Todos'}</Text>
+      {/* Encabezado de columnas con filtro tipo Excel (aplica a todas las tablas) */}
+      <View style={s.filterHead}>
+        {COLS.map(col => {
+          const on = colActiva(col.id)
+          return (
+            <TouchableOpacity key={col.id} style={[{ flex: col.flex }, s.filterCol, openCol === col.id && s.filterColOpen]}
+              onPress={() => setOpenCol(openCol === col.id ? null : col.id)} activeOpacity={0.7}>
+              <Text style={[s.filterColTxt, on && { color: GOLD }]} numberOfLines={1}>{col.label}</Text>
+              <Text style={[s.filterColArrow, on && { color: GOLD }]}>{on ? '▾●' : '▾'}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+
+      {/* Panel del filtro de la columna abierta */}
+      {openCol && (
+        <View style={s.colPanel}>
+          {openCol === 'modelo' && (
+            <TextInput style={s.panelInput} value={fModelo} onChangeText={setFModelo} autoFocus
+              placeholder="Contiene… (modelo o código)" placeholderTextColor={MUTE} />
+          )}
+          {openCol === 'entrega' && (
+            <TextInput style={s.panelInput} value={fEntrega} onChangeText={setFEntrega} autoFocus
+              placeholder="Contiene… (entrega)" placeholderTextColor={MUTE} />
+          )}
+          {openCol === 'precio' && (
+            <View style={s.precioRow}>
+              <TextInput style={s.precioInput} value={precioMin} onChangeText={setPrecioMin} placeholder="Mínimo" placeholderTextColor={MUTE} keyboardType="numeric" />
+              <Text style={{ color: MUTE }}>—</Text>
+              <TextInput style={s.precioInput} value={precioMax} onChangeText={setPrecioMax} placeholder="Máximo" placeholderTextColor={MUTE} keyboardType="numeric" />
+            </View>
+          )}
+          {openCol === 'caract' && (
+            <View>
+              <Text style={s.panelLbl}>Recámaras (mínimo)</Text>
+              <View style={s.chips}>
+                {[null, 1, 2, 3, 4].map(r => (
+                  <TouchableOpacity key={r ?? 'all'} style={[s.chip, fRec === r && s.chipOn]} onPress={() => setFRec(r)}>
+                    <Text style={[s.chipTxt, fRec === r && s.chipTxtOn]}>{r == null ? 'Todas' : `${r}+`}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={[s.panelLbl, { marginTop: 10 }]}>Texto</Text>
+              <TextInput style={s.panelInput} value={fCaract} onChangeText={setFCaract}
+                placeholder="Contiene… (ej. 3 rec, 2 baños)" placeholderTextColor={MUTE} />
+            </View>
+          )}
+          {openCol === 'tipo' && (
+            <View style={s.chips}>
+              <TouchableOpacity style={[s.chip, fTipo == null && s.chipOn]} onPress={() => setFTipo(null)}>
+                <Text style={[s.chipTxt, fTipo == null && s.chipTxtOn]}>Todos</Text>
               </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={s.filtroLbl}>Recámaras (mínimo)</Text>
-          <View style={s.chips}>
-            {[null, 1, 2, 3, 4].map(r => (
-              <TouchableOpacity key={r ?? 'all'} style={[s.chip, recF === r && s.chipOn]} onPress={() => setRecF(r)}>
-                <Text style={[s.chipTxt, recF === r && s.chipTxtOn]}>{r == null ? 'Todas' : `${r}+`}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={s.filtroLbl}>Precio</Text>
-          <View style={s.precioRow}>
-            <TextInput style={s.precioInput} value={precioMin} onChangeText={setPrecioMin} placeholder="Mínimo" placeholderTextColor={MUTE} keyboardType="numeric" />
-            <Text style={{ color: MUTE }}>—</Text>
-            <TextInput style={s.precioInput} value={precioMax} onChangeText={setPrecioMax} placeholder="Máximo" placeholderTextColor={MUTE} keyboardType="numeric" />
-          </View>
+              {tiposDisponibles.map(t => (
+                <TouchableOpacity key={t} style={[s.chip, fTipo === t && s.chipOn]} onPress={() => setFTipo(t)}>
+                  <Text style={[s.chipTxt, fTipo === t && s.chipTxtOn]}>{tipoLabel(t)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity style={s.panelClose} onPress={() => setOpenCol(null)}>
+            <Text style={s.panelCloseTxt}>Listo</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -247,6 +336,14 @@ export default function InventarioTabla() {
                         ))}
                       </View>
                     ))}
+
+                    {/* PDR · Precio de referencia (desde) al final de la tabla de la zona */}
+                    <View style={[s.pdrRow, { borderTopColor: z.color }]}>
+                      <Text style={[s.pdrLabel, { color: z.color }]}>
+                        PDR · Precio desde{z.pdrEsArchivo ? ' (ref. archivo)' : ''}
+                      </Text>
+                      <Text style={s.pdrPrecio}>{fmtPrecio(z.pdr)}</Text>
+                    </View>
                   </View>
                 )}
               </View>
@@ -266,13 +363,21 @@ const s = StyleSheet.create({
   sub: { color: MUTE, fontSize: 12, marginTop: 3 },
   toolbar: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 10 },
   search: { flex: 1, backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, color: TEXT, fontSize: 14 },
-  toolBtn: { justifyContent: 'center', backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: 10, paddingHorizontal: 14 },
-  toolBtnOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  toolBtnTxt: { color: SUB, fontSize: 13, fontWeight: '800' },
+  clearBtn: { justifyContent: 'center', backgroundColor: '#5a1f1f', borderWidth: 1, borderColor: '#8a3030', borderRadius: 10, paddingHorizontal: 12 },
+  clearTxt: { color: '#ffb4b4', fontSize: 12.5, fontWeight: '800' },
   expandRow: { flexDirection: 'row', gap: 18, paddingHorizontal: 14, paddingVertical: 8 },
   expandLink: { color: GOLD, fontSize: 12.5, fontWeight: '800' },
-  filtros: { backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: 12, marginHorizontal: 12, padding: 12, marginBottom: 4 },
-  filtroLbl: { color: SUB, fontSize: 12, fontWeight: '800', marginTop: 8, marginBottom: 6 },
+
+  filterHead: { flexDirection: 'row', marginHorizontal: 10, backgroundColor: '#0a1622', borderWidth: 1, borderColor: BORDER, borderRadius: 8, paddingHorizontal: 12, gap: 6 },
+  filterCol: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, gap: 2 },
+  filterColOpen: { backgroundColor: 'rgba(201,168,76,0.1)' },
+  filterColTxt: { color: SUB, fontSize: 10.5, fontWeight: '800', textTransform: 'uppercase', flexShrink: 1 },
+  filterColArrow: { color: MUTE, fontSize: 10, fontWeight: '900' },
+  colPanel: { backgroundColor: CARD, borderWidth: 1, borderColor: GOLD, borderRadius: 12, marginHorizontal: 10, marginTop: 6, padding: 12 },
+  panelLbl: { color: SUB, fontSize: 12, fontWeight: '800', marginBottom: 6 },
+  panelInput: { backgroundColor: '#152f45', borderWidth: 1, borderColor: BORDER, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: TEXT, fontSize: 13 },
+  panelClose: { alignSelf: 'flex-end', marginTop: 10, backgroundColor: GOLD, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 6 },
+  panelCloseTxt: { color: '#1a1200', fontSize: 12.5, fontWeight: '900' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { backgroundColor: '#152f45', borderWidth: 1, borderColor: BORDER, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
   chipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
@@ -304,5 +409,8 @@ const s = StyleSheet.create({
   precioTxt: { color: '#4ade80', fontSize: 13, fontWeight: '900' },
   entregaTxt: { color: TEXT, fontSize: 12, fontWeight: '600' },
   entregaInput: { borderWidth: 1, borderColor: GOLD, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4, color: TEXT, fontSize: 12 },
+  pdrRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 2, backgroundColor: 'rgba(0,0,0,0.28)', paddingHorizontal: 12, paddingVertical: 10 },
+  pdrLabel: { fontSize: 12.5, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.3 },
+  pdrPrecio: { color: GOLD, fontSize: 15, fontWeight: '900' },
   vacio: { color: MUTE, textAlign: 'center', padding: 30 },
 })

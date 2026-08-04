@@ -8,6 +8,7 @@ const ITEMS = [
   { label: 'Citas', desc: 'Coordinación de citas y visitas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32' },
   { label: 'Actividad', desc: 'Actividad reciente de los prospectadores', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2' },
   { label: 'Estadísticas', desc: 'Métricas y desempeño general', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F' },
+  { label: 'Tabla de precios', desc: 'Inventario por zona con precios en vivo', icon: '🏷️', route: '/(admin)/inventario-tabla', color: '#c9a84c' },
 ]
 
 export default function Supervision() {
