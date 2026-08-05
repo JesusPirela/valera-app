@@ -105,34 +105,45 @@ serve(async (req) => {
   }
 })
 
-// Busca en el catálogo de EasyBroker la mejor coincidencia de ubicación para la
-// dirección/zona de la propiedad. Devuelve el full_name (lo que EB espera en
-// location.name) o null si no hay match razonable.
+// Municipios candidatos por estado. El endpoint /locations de EB NO acepta buscar
+// por fraccionamiento (da 404): hay que consultar por MUNICIPIO y buscar el
+// fraccionamiento entre sus `localities`.
+const MUNICIPIOS: Record<string, string[]> = {
+  queretaro: ['El Marqués, Querétaro', 'Querétaro, Querétaro', 'Corregidora, Querétaro', 'Huimilpan, Querétaro'],
+  monterrey: ['Monterrey, Nuevo León', 'San Pedro Garza García, Nuevo León', 'Apodaca, Nuevo León', 'General Escobedo, Nuevo León', 'Guadalupe, Nuevo León', 'García, Nuevo León'],
+  puebla: ['Puebla, Puebla', 'San Andrés Cholula, Puebla', 'San Pedro Cholula, Puebla'],
+}
+
+// Resuelve el location.name (full_name del catálogo de EB). Estrategia: tomar el
+// fraccionamiento de la dirección, recorrer los municipios del estado y buscar
+// una localidad que coincida. Si no hay match, usar la ciudad principal.
 async function resolverUbicacion(H: Record<string, string>, direccion: string, zona: string): Promise<string | null> {
-  const ciudad = CIUDAD[norm(zona)] ?? 'Querétaro'
-  const consulta = `${direccion} ${ciudad}`.trim()
-  const r = await fetch(`${EB}/locations?query=${encodeURIComponent(consulta)}`, { headers: H })
-  if (!r.ok) return null
-  const j = await r.json()
-  const raw: any[] = j.locations ?? j.content ?? []
+  const fracc = norm((direccion.split(',')[0] ?? '').trim())
+  const fraccToks = new Set(fracc.split(/[^a-z0-9]+/).filter(w => w.length > 2))
+  const munis = MUNICIPIOS[norm(zona)] ?? MUNICIPIOS.queretaro
 
-  // Aplanar ciudades + colonias con su full_name.
-  const cands: { full: string; tipo: string }[] = []
-  for (const loc of raw) {
-    if (loc.full_name || loc.name) cands.push({ full: loc.full_name ?? loc.name, tipo: loc.type ?? 'City' })
-    for (const l of loc.localities ?? []) if (l.full_name || l.name) cands.push({ full: l.full_name ?? l.name, tipo: l.type ?? 'Neighborhood' })
-  }
-  if (!cands.length) return null
-
-  // Elegir por solapamiento de palabras con la dirección + zona.
-  const objetivo = new Set(norm(`${direccion} ${ciudad}`).split(/[^a-z0-9]+/).filter(w => w.length > 2))
   let mejor: { full: string; score: number } | null = null
-  for (const c of cands) {
-    const toks = norm(c.full).split(/[^a-z0-9]+/).filter(w => w.length > 2)
-    let score = toks.reduce((n, t) => n + (objetivo.has(t) ? 1 : 0), 0)
-    if (c.tipo === 'Neighborhood') score += 0.5   // preferir colonia sobre ciudad
-    if (!mejor || score > mejor.score) mejor = { full: c.full, score }
+  let ciudadRespaldo: string | null = null
+
+  for (const muni of munis) {
+    const r = await fetch(`${EB}/locations?query=${encodeURIComponent(muni)}`, { headers: H })
+    if (!r.ok) continue
+    const j = await r.json()
+    const locs: any[] = Array.isArray(j) ? j : (j?.name ? [j] : (j?.locations ?? []))
+    for (const loc of locs) {
+      if (!ciudadRespaldo && loc.full_name) ciudadRespaldo = loc.full_name
+      for (const l of loc.localities ?? []) {
+        const nm = norm(l.name)
+        let score = 0
+        if (fracc && (nm.includes(fracc) || fracc.includes(nm))) score = 10
+        else {
+          const lt = nm.split(/[^a-z0-9]+/).filter(w => w.length > 2)
+          score = lt.reduce((n, t) => n + (fraccToks.has(t) ? 1 : 0), 0)
+        }
+        if (score > 0 && (!mejor || score > mejor.score)) mejor = { full: l.full_name ?? l.name, score }
+      }
+    }
+    if (mejor && mejor.score >= 10) break   // coincidencia exacta: no seguir buscando
   }
-  // Si nada coincidió más allá de la ciudad, usar la primera ciudad como respaldo.
-  return mejor && mejor.score > 0 ? mejor.full : (cands[0]?.full ?? null)
+  return mejor ? mejor.full : ciudadRespaldo
 }
