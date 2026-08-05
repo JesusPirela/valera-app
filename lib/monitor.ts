@@ -38,7 +38,14 @@ const MENSAJES_RUIDO = [
   'Non-Error promise rejection captured',
   'Load failed',                       // fetch abortado por el navegador (cambio de página)
   'The operation was aborted',         // AbortController al navegar
+  'timeout exceeded',                  // timeout benigno en 2º plano; la app se recupera
 ]
+
+// ¿Hay una sesión iniciada? Los errores GLOBALES de la web sin sesión provienen
+// casi siempre de BOTS de previsualización de enlaces (Facebook/WhatsApp/Google)
+// que ejecutan mal la ficha pública /ficha y ensucian el panel con basura
+// minificada ("fa", "a.J", "Maximum call stack"). No los registramos.
+let haySesion = false
 
 export function captureError(error: unknown, contexto?: string): void {
   try {
@@ -72,10 +79,12 @@ export function initMonitoreo(): void {
   iniciado = true
 
   if (Platform.OS === 'web') {
+    // Mantener actualizado si hay sesión para descartar el ruido anónimo (bots).
+    supabase.auth.getSession().then(({ data }) => { haySesion = !!data.session }, () => {})
+    supabase.auth.onAuthStateChange((_e, session) => { haySesion = !!session })
     if (typeof window !== 'undefined') {
-      window.addEventListener('error', (e) => captureError(e.error ?? e.message, 'window.onerror'))
-      window.addEventListener('unhandledrejection', (e) =>
-        captureError(e.reason ?? 'unhandledrejection', 'promesa sin manejar'))
+      window.addEventListener('error', (e) => { if (haySesion) captureError(e.error ?? e.message, 'window.onerror') })
+      window.addEventListener('unhandledrejection', (e) => { if (haySesion) captureError(e.reason ?? 'unhandledrejection', 'promesa sin manejar') })
     }
     return
   }
