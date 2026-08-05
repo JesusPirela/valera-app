@@ -135,7 +135,12 @@ export default function InventarioTabla() {
     const nMin = Number(precioMin.replace(/\D/g, '')) || 0
     const nMax = Number(precioMax.replace(/\D/g, '')) || Infinity
 
-    const zonaDe = (p: Prop) => zonaOverride(p.nombre_constructora ?? '') ?? zonaDetallada(`${p.direccion ?? ''} ${p.titulo ?? ''}`) ?? 'Otras zonas'
+    const zonaDe = (p: Prop) => {
+      const z = zonaOverride(p.nombre_constructora ?? '') ?? zonaDetallada(`${p.direccion ?? ''} ${p.titulo ?? ''}`) ?? 'Otras zonas'
+      // Unificar todo lo de Monterrey (incluye "Cumbres Monterrey") en una sola zona.
+      if (normalizar(z).includes('monterrey')) return 'Monterrey'
+      return z
+    }
 
     const filtradas = props.filter(p => {
       if (fTipo && p.tipo !== fTipo) return false
@@ -194,7 +199,10 @@ export default function InventarioTabla() {
       .filter(g => g.refs.length > 0)
       .map(g => ({ zona: g.zona, ciudad: '', total: 0, desde: null as number | null, color: colorZona(g.zona), desarrollos: [] as { nombre: string; modelos: Prop[] }[], refs: g.refs, soloRef: true }))
 
-    return [...liveZonas, ...refZonas]
+    // Monterrey y Puebla siempre hasta el fondo.
+    const result = [...liveZonas, ...refZonas]
+    const alFondo = (zona: string) => { const n = normalizar(zona); return n.includes('monterrey') || n.includes('puebla') }
+    return [...result.filter(z => !alFondo(z.zona)), ...result.filter(z => alFondo(z.zona))]
   }, [props, busqueda, fModelo, fCaract, fEntrega, fTipo, fRec, precioMin, precioMax])
 
   const toggle = (z: string) => setExpandidas(prev => { const n = new Set(prev); n.has(z) ? n.delete(z) : n.add(z); return n })
