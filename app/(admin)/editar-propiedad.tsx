@@ -185,6 +185,24 @@ export default function EditarPropiedad() {
   const [mejorandoMsg, setMejorandoMsg] = useState('')
   const [verImagen, setVerImagen] = useState<string | null>(null)
   const [borrando, setBorrando] = useState(false)
+  const [publicandoEb, setPublicandoEb] = useState(false)
+  const [ebMsg, setEbMsg] = useState('')
+
+  // Publica (o actualiza) la propiedad en EasyBroker vía edge function. EasyBroker
+  // la replica a los portales conectados. La key vive en el servidor, no aquí.
+  async function publicarEasyBroker() {
+    setPublicandoEb(true); setEbMsg('')
+    try {
+      const { data, error } = await supabase.functions.invoke('easybroker-publicar', { body: { propiedad_id: id } })
+      if (error) { setEbMsg('⚠️ ' + (error.message ?? 'No se pudo publicar.')); return }
+      if (data?.ok === false) { setEbMsg('⚠️ ' + data.error); return }
+      setEbMsg(data?.actualizado ? '✅ Actualizada en EasyBroker.' : '✅ Publicada en EasyBroker.')
+    } catch (e: any) {
+      setEbMsg('⚠️ ' + (e?.message ?? 'Error de conexión.'))
+    } finally {
+      setPublicandoEb(false)
+    }
+  }
   const [censurando, setCensurando] = useState<ImgItem | null>(null)
   const [mejorandoKey, setMejorandoKey] = useState<string | null>(null)
 
@@ -1304,6 +1322,17 @@ export default function EditarPropiedad() {
           {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Guardar cambios</Text>}
         </TouchableOpacity>
 
+        {/* Publicar en EasyBroker → se replica a los portales conectados */}
+        <TouchableOpacity
+          style={[styles.ebButton, publicandoEb && styles.buttonDisabled]}
+          onPress={publicarEasyBroker}
+          disabled={publicandoEb || guardando}
+        >
+          {publicandoEb ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>📢  Publicar en EasyBroker</Text>}
+        </TouchableOpacity>
+        {ebMsg ? <Text style={styles.ebMsg}>{ebMsg}</Text> : null}
+        <Text style={styles.ebHint}>Guarda tus cambios primero. Publica/actualiza esta propiedad en EasyBroker y sus portales conectados.</Text>
+
         <TouchableOpacity
           style={styles.cancelButton}
           onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}
@@ -1428,6 +1457,9 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  ebButton: { backgroundColor: '#2e7d32', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 12 },
+  ebMsg: { fontSize: 13.5, fontWeight: '700', textAlign: 'center', marginTop: 10, color: '#1a6470' },
+  ebHint: { fontSize: 11.5, color: '#8a8a8a', textAlign: 'center', marginTop: 6, paddingHorizontal: 10, lineHeight: 16 },
   cancelButton: {
     borderWidth: 1,
     borderColor: '#ccc',
