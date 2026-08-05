@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useState, createElement } from 'react'
+import { useCallback, useEffect, useMemo, useState, createElement } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator,
   StyleSheet, Platform,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { normalizar } from '../../lib/texto'
 import { zonaDetallada } from '../../lib/zonas-interes'
@@ -89,8 +89,35 @@ function valorCol(p: Prop, col: ColId): number | string {
     default: return normalizar(p.titulo ?? '')
   }
 }
+function valorRef(r: PdrRow, col: ColId): number | string {
+  switch (col) {
+    case 'precio': return r.precio ?? Number.POSITIVE_INFINITY
+    case 'tipo': return normalizar(r.tipo ?? '')
+    case 'caract': return normalizar(r.caract ?? '')
+    case 'entrega': return ''
+    default: return normalizar(r.etiqueta)
+  }
+}
+function cmp(va: number | string, vb: number | string, dir: SortDir): number {
+  const r = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
+  return dir === 'asc' ? r : -r
+}
+function cmpProp(a: Prop, b: Prop, col: ColId, dir: SortDir) { return cmp(valorCol(a, col), valorCol(b, col), dir) }
+function cmpRef(a: PdrRow, b: PdrRow, col: ColId, dir: SortDir) { return cmp(valorRef(a, col), valorRef(b, col), dir) }
 
 type EditState = { tabla: 'prop' | 'pdr'; id: string; campo: string; val: string } | null
+
+// Filtro + orden de UNA tabla (zona). Cada zona tiene el suyo.
+type ZF = {
+  modelo: string; caract: string; entrega: string; tipo: string | null; rec: number | null
+  pmin: string; pmax: string; sortCol: ColId | null; sortDir: SortDir; openCol: ColId | null
+}
+const ZF0: ZF = { modelo: '', caract: '', entrega: '', tipo: null, rec: null, pmin: '', pmax: '', sortCol: null, sortDir: 'asc', openCol: null }
+
+type ZonaData = {
+  zona: string; ciudad: string; total: number; desde: number | null; color: string
+  desarrollos: { nombre: string; modelos: Prop[] }[]; refs: PdrRow[]; soloRef: boolean
+}
 
 export default function InventarioTabla() {
   const [props, setProps] = useState<Prop[]>([])
@@ -98,19 +125,33 @@ export default function InventarioTabla() {
   const [loading, setLoading] = useState(true)
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set())  // zonas abiertas (colapsadas por defecto)
   const [edit, setEdit] = useState<EditState>(null)
-
-  // Buscador global + filtros por columna (tipo Excel, aplican a todas las tablas)
   const [busqueda, setBusqueda] = useState('')
-  const [openCol, setOpenCol] = useState<ColId | null>(null)
-  const [fModelo, setFModelo] = useState('')
-  const [fCaract, setFCaract] = useState('')
-  const [fEntrega, setFEntrega] = useState('')
-  const [fTipo, setFTipo] = useState<string | null>(null)
-  const [fRec, setFRec] = useState<number | null>(null)
-  const [precioMin, setPrecioMin] = useState('')
-  const [precioMax, setPrecioMax] = useState('')
-  const [sortCol, setSortCol] = useState<ColId | null>(null)
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [zf, setZf] = useState<Record<string, ZF>>({})   // filtros por zona
+  const [esAdmin, setEsAdmin] = useState(false)           // solo admin edita; supervisor ve
+
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const uid = session?.user?.id
+      if (!uid) return
+      const { data } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle()
+      setEsAdmin(data?.role === 'admin')
+    })()
+  }, [])
+
+  // Navegación al tocar una propiedad: admin → edición; supervisor → ficha (prospecto).
+  const abrirEdicion = (id: string) => router.push({ pathname: '/(admin)/editar-propiedad', params: { id } })
+  const abrirProspecto = (id: string) => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id } })
+
+  const getZf = (z: string): ZF => zf[z] ?? ZF0
+  const patchZf = (z: string, patch: Partial<ZF>) => setZf(prev => ({ ...prev, [z]: { ...(prev[z] ?? ZF0), ...patch } }))
+  const zfActiva = (f: ZF, id: ColId) =>
+    (id === 'modelo' && !!f.modelo) ||
+    (id === 'precio' && (!!f.pmin || !!f.pmax)) ||
+    (id === 'caract' && (!!f.caract || f.rec != null)) ||
+    (id === 'tipo' && !!f.tipo) ||
+    (id === 'entrega' && !!f.entrega)
+  const zfNfiltros = (f: ZF) => COLS.filter(c => zfActiva(f, c.id)).length
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -123,7 +164,6 @@ export default function InventarioTabla() {
         supabase.from('pdr_referencia').select('*').order('orden', { ascending: true }),
       ])
       setProps((propData ?? []) as Prop[])
-      // Sembrar la tabla de PDR desde el dataset estático la primera vez que está vacía.
       if (!pdrData || pdrData.length === 0) {
         const seed = PDR_POR_ZONA.flatMap((g, gi) => g.refs.map((r, i) => ({
           zona: g.zona, etiqueta: r.etiqueta, precio: r.precio, caract: r.caract, tipo: r.tipo, orden: gi * 100 + i,
@@ -169,51 +209,18 @@ export default function InventarioTabla() {
     await supabase.from('pdr_referencia').delete().eq('id', id)
   }
 
-  // Tipos presentes en los datos (para el filtro de la columna Tipo).
-  const tiposDisponibles = useMemo(() => {
-    const set = new Set<string>()
-    for (const p of props) if (p.tipo) set.add(p.tipo)
-    return Array.from(set).sort()
-  }, [props])
-
-  const zonas = useMemo(() => {
+  // Zonas con TODOS sus datos (solo aplica la búsqueda global). El filtro/orden
+  // por columna se aplica por-zona en el render (aplicarZF).
+  const zonas = useMemo<ZonaData[]>(() => {
     const q = normalizar(busqueda.trim())
-    const qModelo = normalizar(fModelo.trim())
-    const qCaract = normalizar(fCaract.trim())
-    const qEntrega = normalizar(fEntrega.trim())
-    const nMin = Number(precioMin.replace(/\D/g, '')) || 0
-    const nMax = Number(precioMax.replace(/\D/g, '')) || Infinity
-
     const zonaDe = (p: Prop) => {
       const z = zonaOverride(p.nombre_constructora ?? '') ?? zonaDetallada(`${p.direccion ?? ''} ${p.titulo ?? ''}`) ?? 'Otras zonas'
       if (normalizar(z).includes('monterrey')) return 'Monterrey'
       return z
     }
-
-    const filtradas = props.filter(p => {
-      if (fTipo && p.tipo !== fTipo) return false
-      if (fRec != null && (p.recamaras ?? 0) < fRec) return false
-      if (p.precio != null && (p.precio < nMin || p.precio > nMax)) return false
-      if (qModelo && !normalizar(`${p.titulo ?? ''} ${p.codigo ?? ''}`).includes(qModelo)) return false
-      if (qCaract && !normalizar(caract(p)).includes(qCaract)) return false
-      if (qEntrega && !normalizar(p.entrega_aprox ?? '').includes(qEntrega)) return false
-      if (q) {
-        const hay = normalizar(`${p.nombre_constructora ?? ''} ${p.titulo ?? ''} ${p.codigo ?? ''} ${zonaDe(p)}`)
-        if (!hay.includes(q)) return false
-      }
-      return true
-    })
-
-    // Filtro para los PDR de referencia (precio + tipo + búsqueda).
-    const refPasa = (r: PdrRow, zona: string) => {
-      if (fTipo && normalizar(r.tipo ?? '') !== normalizar(fTipo)) return false
-      if (r.precio != null && (r.precio < nMin || r.precio > nMax)) return false
-      if (qModelo && !normalizar(r.etiqueta).includes(qModelo)) return false
-      if (qCaract && !normalizar(r.caract ?? '').includes(qCaract)) return false
-      if (q && !normalizar(`${r.etiqueta} ${zona}`).includes(q)) return false
-      return true
-    }
-    const pdrDe = (zona: string) => pdrRows.filter(r => normalizar(r.zona) === normalizar(zona) && refPasa(r, zona))
+    const filtradas = q
+      ? props.filter(p => normalizar(`${p.nombre_constructora ?? ''} ${p.titulo ?? ''} ${p.codigo ?? ''} ${zonaDe(p)}`).includes(q))
+      : props
 
     const porZona = new Map<string, Prop[]>()
     for (const p of filtradas) {
@@ -221,78 +228,81 @@ export default function InventarioTabla() {
       if (!porZona.has(z)) porZona.set(z, [])
       porZona.get(z)!.push(p)
     }
+    const pdrDe = (zona: string) => pdrRows.filter(r => normalizar(r.zona) === normalizar(zona))
 
-    const liveZonas = Array.from(porZona.entries())
+    const liveZonas: ZonaData[] = Array.from(porZona.entries())
       .sort((a, b) => b[1].length - a[1].length)
       .map(([zona, ps]) => {
         const ciudad = CIUDAD[ps.find(x => x.zona)?.zona ?? ''] ?? ''
         const desde = ps.reduce((m, p) => (p.precio != null && p.precio < m ? p.precio : m), Infinity)
-        const desdeVal = isFinite(desde) ? desde : null
         const porDes = new Map<string, Prop[]>()
         for (const p of ps) {
           const d = p.nombre_constructora?.trim() || 'Sin desarrollo'
           if (!porDes.has(d)) porDes.set(d, [])
           porDes.get(d)!.push(p)
         }
-        const desarrollos = Array.from(porDes.entries())
-          .map(([nombre, modelos]) => ({ nombre, modelos }))
-          .sort((a, b) => a.nombre.localeCompare(b.nombre))
-        return { zona, ciudad, total: ps.length, desde: desdeVal, color: colorZona(zona), desarrollos, refs: pdrDe(zona), soloRef: false }
+        const desarrollos = Array.from(porDes.entries()).map(([nombre, modelos]) => ({ nombre, modelos }))
+        return { zona, ciudad, total: ps.length, desde: isFinite(desde) ? desde : null, color: colorZona(zona), desarrollos, refs: pdrDe(zona), soloRef: false }
       })
 
     // Zonas con PDR que NO tienen inventario en vivo → tarjeta solo-referencia.
     const usadas = new Set(liveZonas.map(z => normalizar(z.zona)))
-    const zonasPdr = Array.from(new Set(pdrRows.map(r => r.zona)))
-    const refZonas = zonasPdr
+    const refZonas: ZonaData[] = Array.from(new Set(pdrRows.map(r => r.zona)))
       .filter(zona => !usadas.has(normalizar(zona)))
-      .map(zona => ({ zona, ciudad: '', total: 0, desde: null as number | null, color: colorZona(zona), desarrollos: [] as { nombre: string; modelos: Prop[] }[], refs: pdrDe(zona), soloRef: true }))
-      .filter(z => z.refs.length > 0)
+      .map(zona => ({ zona, ciudad: '', total: 0, desde: null, color: colorZona(zona), desarrollos: [], refs: pdrDe(zona), soloRef: true }))
+      .filter(z => z.refs.length > 0 && (!q || normalizar(z.zona).includes(q) || z.refs.some(r => normalizar(r.etiqueta).includes(q))))
 
-    // Monterrey y Puebla siempre hasta el fondo.
     const result = [...liveZonas, ...refZonas]
     const alFondo = (zona: string) => { const n = normalizar(zona); return n.includes('monterrey') || n.includes('puebla') }
     return [...result.filter(z => !alFondo(z.zona)), ...result.filter(z => alFondo(z.zona))]
-  }, [props, pdrRows, busqueda, fModelo, fCaract, fEntrega, fTipo, fRec, precioMin, precioMax])
+  }, [props, pdrRows, busqueda])
+
+  // Aplica el filtro/orden de una zona a sus desarrollos y PDR.
+  function aplicarZF(z: ZonaData, f: ZF) {
+    const qm = normalizar(f.modelo.trim()), qc = normalizar(f.caract.trim()), qe = normalizar(f.entrega.trim())
+    const nMin = Number(f.pmin.replace(/\D/g, '')) || 0
+    const nMax = Number(f.pmax.replace(/\D/g, '')) || Infinity
+    const propPasa = (p: Prop) => {
+      if (f.tipo && p.tipo !== f.tipo) return false
+      if (f.rec != null && (p.recamaras ?? 0) < f.rec) return false
+      if (p.precio != null && (p.precio < nMin || p.precio > nMax)) return false
+      if (qm && !normalizar(`${p.titulo ?? ''} ${p.codigo ?? ''}`).includes(qm)) return false
+      if (qc && !normalizar(caract(p)).includes(qc)) return false
+      if (qe && !normalizar(p.entrega_aprox ?? '').includes(qe)) return false
+      return true
+    }
+    let desarrollos = z.desarrollos
+      .map(d => ({ nombre: d.nombre, modelos: d.modelos.filter(propPasa) }))
+      .filter(d => d.modelos.length > 0)
+    if (f.sortCol) {
+      for (const d of desarrollos) d.modelos = [...d.modelos].sort((a, b) => cmpProp(a, b, f.sortCol!, f.sortDir))
+      desarrollos = [...desarrollos].sort((a, b) => cmpProp(a.modelos[0], b.modelos[0], f.sortCol!, f.sortDir))
+    } else {
+      desarrollos = [...desarrollos].sort((a, b) => a.nombre.localeCompare(b.nombre))
+    }
+    const refPasa = (r: PdrRow) => {
+      if (f.tipo && normalizar(r.tipo ?? '') !== normalizar(f.tipo)) return false
+      if (r.precio != null && (r.precio < nMin || r.precio > nMax)) return false
+      if (qm && !normalizar(r.etiqueta).includes(qm)) return false
+      if (qc && !normalizar(r.caract ?? '').includes(qc)) return false
+      return true
+    }
+    let refs = z.refs.filter(refPasa)
+    if (f.sortCol) refs = [...refs].sort((a, b) => cmpRef(a, b, f.sortCol!, f.sortDir))
+    return { desarrollos, refs }
+  }
 
   const toggle = (z: string) => setExpandidas(prev => { const n = new Set(prev); n.has(z) ? n.delete(z) : n.add(z); return n })
   const expandirTodo = () => setExpandidas(new Set(zonas.map(z => z.zona)))
   const colapsarTodo = () => setExpandidas(new Set())
-  const limpiarFiltros = () => { setFModelo(''); setFCaract(''); setFEntrega(''); setFTipo(null); setFRec(null); setPrecioMin(''); setPrecioMax(''); setOpenCol(null) }
-  const colActiva = (id: ColId) =>
-    (id === 'modelo' && !!fModelo) ||
-    (id === 'precio' && (!!precioMin || !!precioMax)) ||
-    (id === 'caract' && (!!fCaract || fRec != null)) ||
-    (id === 'tipo' && !!fTipo) ||
-    (id === 'entrega' && !!fEntrega)
-  const nFiltros = COLS.filter(c => colActiva(c.id)).length
   const isWeb = Platform.OS === 'web'
 
-  // Orden ascendente/descendente por columna (aplica a todas las tablas).
-  const setSort = (col: ColId, dir: SortDir) => { setSortCol(col); setSortDir(dir) }
-  const ordenar = (m: Prop[]) => {
-    if (!sortCol) return m
-    return [...m].sort((a, b) => {
-      const va = valorCol(a, sortCol), vb = valorCol(b, sortCol)
-      const r = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
-      return sortDir === 'asc' ? r : -r
-    })
-  }
-  const ordenarRefs = (rs: PdrRow[]) => {
-    if (!sortCol) return rs
-    return [...rs].sort((a, b) => {
-      let va: number | string, vb: number | string
-      if (sortCol === 'precio') { va = a.precio ?? Infinity; vb = b.precio ?? Infinity }
-      else if (sortCol === 'tipo') { va = normalizar(a.tipo ?? ''); vb = normalizar(b.tipo ?? '') }
-      else if (sortCol === 'caract') { va = normalizar(a.caract ?? ''); vb = normalizar(b.caract ?? '') }
-      else { va = normalizar(a.etiqueta); vb = normalizar(b.etiqueta) }
-      const r = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
-      return sortDir === 'asc' ? r : -r
-    })
-  }
-  const sortArrow = (id: ColId) => (sortCol === id ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
-
-  // Celda editable inline (click → input; Enter/blur guarda; Escape cancela).
-  const celda = (tabla: 'prop' | 'pdr', id: string, campo: string, valorEdit: string, contenido: React.ReactNode, wrapStyle: any, numerico = false) => {
+  // Celda editable inline (admin). Supervisor: no edita; si hay onView, navega.
+  const celda = (tabla: 'prop' | 'pdr', id: string, campo: string, valorEdit: string, contenido: React.ReactNode, wrapStyle: any, numerico = false, onView?: () => void) => {
+    if (!esAdmin) {
+      if (onView) return <TouchableOpacity style={wrapStyle} onPress={onView} activeOpacity={0.6}>{contenido}</TouchableOpacity>
+      return <View style={wrapStyle}>{contenido}</View>
+    }
     const activo = edit && edit.tabla === tabla && edit.id === id && edit.campo === campo
     if (activo) {
       return (
@@ -317,116 +327,149 @@ export default function InventarioTabla() {
     )
   }
 
+  // Barra de filtro/orden de UNA zona (con su propio estado).
+  const filtroZona = (z: ZonaData, f: ZF) => {
+    const tipos = Array.from(new Set(z.desarrollos.flatMap(d => d.modelos.map(m => m.tipo)).filter(Boolean))) as string[]
+    const nf = zfNfiltros(f)
+    const setSort = (col: ColId, dir: SortDir) => patchZf(z.zona, { sortCol: col, sortDir: dir })
+    return (
+      <View style={s.zfBar}>
+        <View style={s.zfHead}>
+          {COLS.map(col => {
+            const on = zfActiva(f, col.id)
+            const sorted = f.sortCol === col.id
+            return (
+              <TouchableOpacity key={col.id} style={[{ flex: col.flex }, s.zfCol, f.openCol === col.id && s.zfColOpen]}
+                onPress={() => patchZf(z.zona, { openCol: f.openCol === col.id ? null : col.id })} activeOpacity={0.7}>
+                <Text style={[s.zfColTxt, (on || sorted) && { color: GOLD }]} numberOfLines={1}>
+                  {col.label}{sorted ? (f.sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                </Text>
+                <Text style={[s.zfArrow, on && { color: GOLD }]}>{on ? '▾●' : '▾'}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
+        {f.openCol && (
+          <View style={s.zfPanel}>
+            <Text style={s.panelLbl}>Ordenar</Text>
+            <View style={[s.chips, { marginBottom: 10 }]}>
+              <TouchableOpacity style={[s.chip, f.sortCol === f.openCol && f.sortDir === 'asc' && s.chipOn]} onPress={() => setSort(f.openCol!, 'asc')}>
+                <Text style={[s.chipTxt, f.sortCol === f.openCol && f.sortDir === 'asc' && s.chipTxtOn]}>▲ Ascendente</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.chip, f.sortCol === f.openCol && f.sortDir === 'desc' && s.chipOn]} onPress={() => setSort(f.openCol!, 'desc')}>
+                <Text style={[s.chipTxt, f.sortCol === f.openCol && f.sortDir === 'desc' && s.chipTxtOn]}>▼ Descendente</Text>
+              </TouchableOpacity>
+              {f.sortCol === f.openCol && (
+                <TouchableOpacity style={s.chip} onPress={() => patchZf(z.zona, { sortCol: null })}>
+                  <Text style={s.chipTxt}>✕ Sin orden</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {f.openCol === 'modelo' && (
+              <TextInput style={s.panelInput} value={f.modelo} onChangeText={v => patchZf(z.zona, { modelo: v })} autoFocus
+                placeholder="Contiene… (modelo o código)" placeholderTextColor={MUTE} />
+            )}
+            {f.openCol === 'entrega' && (
+              <View>
+                {(() => {
+                  const entregas = Array.from(new Set(z.desarrollos.flatMap(d => d.modelos.map(m => m.entrega_aprox)).filter(Boolean))) as string[]
+                  return entregas.length > 0 ? (
+                    <View style={[s.chips, { marginBottom: 8 }]}>
+                      {entregas.map(e => (
+                        <TouchableOpacity key={e} style={[s.chip, normalizar(f.entrega) === normalizar(e) && s.chipOn]}
+                          onPress={() => patchZf(z.zona, { entrega: normalizar(f.entrega) === normalizar(e) ? '' : e })}>
+                          <Text style={[s.chipTxt, normalizar(f.entrega) === normalizar(e) && s.chipTxtOn]}>{e}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null
+                })()}
+                <TextInput style={s.panelInput} value={f.entrega} onChangeText={v => patchZf(z.zona, { entrega: v })}
+                  placeholder="Contiene… (entrega)" placeholderTextColor={MUTE} />
+              </View>
+            )}
+            {f.openCol === 'precio' && (
+              <View style={s.precioRow}>
+                <TextInput style={s.precioInput} value={f.pmin} onChangeText={v => patchZf(z.zona, { pmin: v })} placeholder="Mínimo" placeholderTextColor={MUTE} keyboardType="numeric" />
+                <Text style={{ color: MUTE }}>—</Text>
+                <TextInput style={s.precioInput} value={f.pmax} onChangeText={v => patchZf(z.zona, { pmax: v })} placeholder="Máximo" placeholderTextColor={MUTE} keyboardType="numeric" />
+              </View>
+            )}
+            {f.openCol === 'caract' && (
+              <View>
+                <Text style={s.panelLbl}>Recámaras (mínimo)</Text>
+                <View style={s.chips}>
+                  {[null, 1, 2, 3, 4].map(r => (
+                    <TouchableOpacity key={r ?? 'all'} style={[s.chip, f.rec === r && s.chipOn]} onPress={() => patchZf(z.zona, { rec: r })}>
+                      <Text style={[s.chipTxt, f.rec === r && s.chipTxtOn]}>{r == null ? 'Todas' : `${r}+`}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={[s.panelLbl, { marginTop: 10 }]}>Texto</Text>
+                <TextInput style={s.panelInput} value={f.caract} onChangeText={v => patchZf(z.zona, { caract: v })}
+                  placeholder="Contiene… (ej. 3 rec, 2 baños)" placeholderTextColor={MUTE} />
+              </View>
+            )}
+            {f.openCol === 'tipo' && (
+              <View style={s.chips}>
+                <TouchableOpacity style={[s.chip, f.tipo == null && s.chipOn]} onPress={() => patchZf(z.zona, { tipo: null })}>
+                  <Text style={[s.chipTxt, f.tipo == null && s.chipTxtOn]}>Todos</Text>
+                </TouchableOpacity>
+                {tipos.map(t => (
+                  <TouchableOpacity key={t} style={[s.chip, f.tipo === t && s.chipOn]} onPress={() => patchZf(z.zona, { tipo: t })}>
+                    <Text style={[s.chipTxt, f.tipo === t && s.chipTxtOn]}>{tipoLabel(t)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <View style={s.zfPanelBtns}>
+              {nf > 0 && (
+                <TouchableOpacity onPress={() => setZf(prev => ({ ...prev, [z.zona]: { ...ZF0, sortCol: f.sortCol, sortDir: f.sortDir } }))}>
+                  <Text style={s.zfClearTxt}>✕ Limpiar filtros ({nf})</Text>
+                </TouchableOpacity>
+              )}
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity style={s.panelClose} onPress={() => patchZf(z.zona, { openCol: null })}>
+                <Text style={s.panelCloseTxt}>Listo</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+    )
+  }
+
   return (
     <View style={s.page}>
       <View style={s.head}>
         <Text style={s.title}>🏷️ Tabla de precios</Text>
-        <Text style={s.sub}>Toca cualquier celda para editarla · {props.length} modelos</Text>
+        <Text style={s.sub}>{esAdmin ? 'Toca una celda para editarla' : 'Toca una propiedad para ver su ficha'} · filtra cada zona por separado · {props.length} modelos</Text>
       </View>
 
-      {/* Buscador + expandir/colapsar */}
       <View style={s.toolbar}>
         <TextInput style={s.search} value={busqueda} onChangeText={setBusqueda}
           placeholder="Buscar zona, desarrollo, modelo…" placeholderTextColor={MUTE} />
-        {nFiltros > 0 && (
-          <TouchableOpacity style={s.clearBtn} onPress={limpiarFiltros}>
-            <Text style={s.clearTxt}>✕ Filtros ({nFiltros})</Text>
-          </TouchableOpacity>
-        )}
       </View>
       <View style={s.expandRow}>
         <TouchableOpacity onPress={expandirTodo}><Text style={s.expandLink}>▼ Expandir todo</Text></TouchableOpacity>
         <TouchableOpacity onPress={colapsarTodo}><Text style={s.expandLink}>▶ Colapsar todo</Text></TouchableOpacity>
       </View>
 
-      {/* Encabezado de columnas con filtro tipo Excel (aplica a todas las tablas) */}
-      <View style={s.filterHead}>
-        {COLS.map(col => {
-          const on = colActiva(col.id)
-          return (
-            <TouchableOpacity key={col.id} style={[{ flex: col.flex }, s.filterCol, openCol === col.id && s.filterColOpen]}
-              onPress={() => setOpenCol(openCol === col.id ? null : col.id)} activeOpacity={0.7}>
-              <Text style={[s.filterColTxt, (on || sortCol === col.id) && { color: GOLD }]} numberOfLines={1}>{col.label}{sortArrow(col.id)}</Text>
-              <Text style={[s.filterColArrow, on && { color: GOLD }]}>{on ? '▾●' : '▾'}</Text>
-            </TouchableOpacity>
-          )
-        })}
-      </View>
-
-      {/* Panel del filtro de la columna abierta */}
-      {openCol && (
-        <View style={s.colPanel}>
-          <Text style={s.panelLbl}>Ordenar</Text>
-          <View style={[s.chips, { marginBottom: 10 }]}>
-            <TouchableOpacity style={[s.chip, sortCol === openCol && sortDir === 'asc' && s.chipOn]} onPress={() => setSort(openCol, 'asc')}>
-              <Text style={[s.chipTxt, sortCol === openCol && sortDir === 'asc' && s.chipTxtOn]}>▲ Ascendente</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.chip, sortCol === openCol && sortDir === 'desc' && s.chipOn]} onPress={() => setSort(openCol, 'desc')}>
-              <Text style={[s.chipTxt, sortCol === openCol && sortDir === 'desc' && s.chipTxtOn]}>▼ Descendente</Text>
-            </TouchableOpacity>
-            {sortCol === openCol && (
-              <TouchableOpacity style={s.chip} onPress={() => setSortCol(null)}>
-                <Text style={s.chipTxt}>✕ Sin orden</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          {openCol === 'modelo' && (
-            <TextInput style={s.panelInput} value={fModelo} onChangeText={setFModelo} autoFocus
-              placeholder="Contiene… (modelo o código)" placeholderTextColor={MUTE} />
-          )}
-          {openCol === 'entrega' && (
-            <TextInput style={s.panelInput} value={fEntrega} onChangeText={setFEntrega} autoFocus
-              placeholder="Contiene… (entrega)" placeholderTextColor={MUTE} />
-          )}
-          {openCol === 'precio' && (
-            <View style={s.precioRow}>
-              <TextInput style={s.precioInput} value={precioMin} onChangeText={setPrecioMin} placeholder="Mínimo" placeholderTextColor={MUTE} keyboardType="numeric" />
-              <Text style={{ color: MUTE }}>—</Text>
-              <TextInput style={s.precioInput} value={precioMax} onChangeText={setPrecioMax} placeholder="Máximo" placeholderTextColor={MUTE} keyboardType="numeric" />
-            </View>
-          )}
-          {openCol === 'caract' && (
-            <View>
-              <Text style={s.panelLbl}>Recámaras (mínimo)</Text>
-              <View style={s.chips}>
-                {[null, 1, 2, 3, 4].map(r => (
-                  <TouchableOpacity key={r ?? 'all'} style={[s.chip, fRec === r && s.chipOn]} onPress={() => setFRec(r)}>
-                    <Text style={[s.chipTxt, fRec === r && s.chipTxtOn]}>{r == null ? 'Todas' : `${r}+`}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={[s.panelLbl, { marginTop: 10 }]}>Texto</Text>
-              <TextInput style={s.panelInput} value={fCaract} onChangeText={setFCaract}
-                placeholder="Contiene… (ej. 3 rec, 2 baños)" placeholderTextColor={MUTE} />
-            </View>
-          )}
-          {openCol === 'tipo' && (
-            <View style={s.chips}>
-              <TouchableOpacity style={[s.chip, fTipo == null && s.chipOn]} onPress={() => setFTipo(null)}>
-                <Text style={[s.chipTxt, fTipo == null && s.chipTxtOn]}>Todos</Text>
-              </TouchableOpacity>
-              {tiposDisponibles.map(t => (
-                <TouchableOpacity key={t} style={[s.chip, fTipo === t && s.chipOn]} onPress={() => setFTipo(t)}>
-                  <Text style={[s.chipTxt, fTipo === t && s.chipTxtOn]}>{tipoLabel(t)}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          <TouchableOpacity style={s.panelClose} onPress={() => setOpenCol(null)}>
-            <Text style={s.panelCloseTxt}>Listo</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {loading ? <ActivityIndicator color={GOLD} size="large" style={{ marginTop: 40 }} /> : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60, paddingHorizontal: 10 }} keyboardShouldPersistTaps="handled">
           {zonas.map(z => {
             const abierta = expandidas.has(z.zona)
+            const f = getZf(z.zona)
+            const { desarrollos, refs } = abierta ? aplicarZF(z, f) : { desarrollos: [], refs: [] }
+            const nf = zfNfiltros(f)
             return (
               <View key={z.zona} style={[s.zonaCard, { borderColor: z.color }]}>
                 <TouchableOpacity style={[s.zonaHead, { backgroundColor: z.color }]} onPress={() => toggle(z.zona)} activeOpacity={0.85}>
                   <Text style={s.zonaChevron}>{abierta ? '▼' : '▶'}</Text>
                   <Text style={s.zonaTxt} numberOfLines={1}>{z.zona}{z.ciudad && normalizar(z.ciudad) !== normalizar(z.zona) ? ` · ${z.ciudad}` : ''}</Text>
+                  {(nf > 0 || f.sortCol) && <Text style={s.zonaFiltroTag}>filtrado</Text>}
                   {z.desde != null ? <Text style={s.zonaDesde}>desde {fmtPrecio(z.desde)}</Text> : null}
                   {z.soloRef
                     ? <Text style={s.zonaRefBadge}>solo PDR</Text>
@@ -435,7 +478,9 @@ export default function InventarioTabla() {
 
                 {abierta && (
                   <View style={{ backgroundColor: z.color + '14' }}>
-                    {z.desarrollos.map(d => (
+                    {filtroZona(z, f)}
+
+                    {desarrollos.map(d => (
                       <View key={d.nombre}>
                         <View style={[s.desHead, { borderLeftColor: z.color }]}>
                           <Text style={[s.desTxt, { color: z.color }]}>{d.nombre}</Text>
@@ -448,30 +493,41 @@ export default function InventarioTabla() {
                           <Text style={[s.cTipo, s.colHeadTxt]}>Tipo</Text>
                           <Text style={[s.cEntrega, s.colHeadTxt]}>Entrega</Text>
                         </View>
-                        {ordenar(d.modelos).map(p => (
+                        {d.modelos.map(p => (
                           <View key={p.id} style={s.row}>
-                            {celda('prop', p.id, 'modelo', p.titulo ?? '',
-                              <><Text style={s.modeloTxt} numberOfLines={2}>{p.titulo}</Text>{p.codigo ? <Text style={s.codigoTxt}>{p.codigo}</Text> : null}</>,
-                              s.cModelo)}
+                            <View style={s.cModelo}>
+                              {celda('prop', p.id, 'modelo', p.titulo ?? '',
+                                <Text style={s.modeloTxt} numberOfLines={2}>{p.titulo}</Text>, s.cellFull, false, () => abrirProspecto(p.id))}
+                              {p.codigo ? (
+                                <TouchableOpacity onPress={() => (esAdmin ? abrirEdicion(p.id) : abrirProspecto(p.id))} activeOpacity={0.6}>
+                                  <Text style={esAdmin ? s.codigoLink : s.codigoTxt}>#{p.codigo}{esAdmin ? ' · editar ↗' : ' ↗'}</Text>
+                                </TouchableOpacity>
+                              ) : (
+                                <TouchableOpacity onPress={() => (esAdmin ? abrirEdicion(p.id) : abrirProspecto(p.id))} activeOpacity={0.6}>
+                                  <Text style={s.codigoLink}>{esAdmin ? 'editar ↗' : 'ver ↗'}</Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
                             {celda('prop', p.id, 'precio', String(p.precio ?? ''),
-                              <Text style={s.precioTxt}>{fmtPrecio(p.precio)}</Text>, s.cPrecio, true)}
+                              <Text style={s.precioTxt}>{fmtPrecio(p.precio)}</Text>, s.cPrecio, true, () => abrirProspecto(p.id))}
                             {celda('prop', p.id, 'caract', caract(p) === '—' ? '' : caract(p),
-                              <Text style={[s.cellTxt]} numberOfLines={2}>{caract(p)}</Text>, s.cCaract)}
+                              <Text style={[s.cellTxt]} numberOfLines={2}>{caract(p)}</Text>, s.cCaract, false, () => abrirProspecto(p.id))}
                             {celda('prop', p.id, 'tipo', p.tipo ?? '',
-                              <Text style={[s.cellTxt]} numberOfLines={1}>{tipoLabel(p.tipo)}</Text>, s.cTipo)}
+                              <Text style={[s.cellTxt]} numberOfLines={1}>{tipoLabel(p.tipo)}</Text>, s.cTipo, false, () => abrirProspecto(p.id))}
                             {celda('prop', p.id, 'entrega', p.entrega_aprox ?? '',
-                              <Text style={[s.entregaTxt, !p.entrega_aprox && { color: MUTE }]} numberOfLines={1}>{p.entrega_aprox || '+ agregar'}</Text>, s.cEntrega)}
+                              <Text style={[s.entregaTxt, !p.entrega_aprox && { color: MUTE }]} numberOfLines={1}>{p.entrega_aprox || (esAdmin ? '+ agregar' : '—')}</Text>, s.cEntrega, false, () => abrirProspecto(p.id))}
                           </View>
                         ))}
                       </View>
                     ))}
+                    {!z.soloRef && desarrollos.length === 0 && <Text style={s.zonaVacia}>Ningún modelo con estos filtros.</Text>}
 
-                    {/* PDR · Precios de referencia (editable) al final de la zona */}
+                    {/* PDR · Precios de referencia (editable) */}
                     <View style={[s.pdrHead, { backgroundColor: z.color }]}>
                       <Text style={s.pdrHeadTxt}>PDR · Precios de referencia</Text>
-                      <Text style={s.pdrHeadMeta}>{z.refs.length}</Text>
+                      <Text style={s.pdrHeadMeta}>{refs.length}</Text>
                     </View>
-                    {z.refs.length > 0 && (
+                    {refs.length > 0 && (
                       <View style={[s.row, s.colHead]}>
                         <Text style={[s.cModelo, s.colHeadTxt]}>Referencia</Text>
                         <Text style={[s.cPrecio, s.colHeadTxt]}>Precio</Text>
@@ -480,7 +536,7 @@ export default function InventarioTabla() {
                         <Text style={[s.cEntrega, s.colHeadTxt]}> </Text>
                       </View>
                     )}
-                    {ordenarRefs(z.refs).map(r => (
+                    {refs.map(r => (
                       <View key={r.id} style={[s.row, s.pdrDataRow]}>
                         {celda('pdr', r.id, 'etiqueta', r.etiqueta,
                           <Text style={s.modeloTxt} numberOfLines={2}>{r.etiqueta}</Text>, s.cModelo)}
@@ -490,14 +546,18 @@ export default function InventarioTabla() {
                           <Text style={[s.cellTxt]} numberOfLines={2}>{r.caract || '—'}</Text>, s.cCaract)}
                         {celda('pdr', r.id, 'tipo', r.tipo ?? '',
                           <Text style={[s.cellTxt]} numberOfLines={1}>{r.tipo ?? '—'}</Text>, s.cTipo)}
-                        <TouchableOpacity style={[s.cEntrega, { alignItems: 'flex-end' }]} onPress={() => borrarPdr(r.id)}>
-                          <Text style={s.pdrDelTxt}>🗑</Text>
-                        </TouchableOpacity>
+                        {esAdmin
+                          ? <TouchableOpacity style={[s.cEntrega, { alignItems: 'flex-end' }]} onPress={() => borrarPdr(r.id)}>
+                              <Text style={s.pdrDelTxt}>🗑</Text>
+                            </TouchableOpacity>
+                          : <View style={s.cEntrega} />}
                       </View>
                     ))}
-                    <TouchableOpacity style={s.pdrAddBtn} onPress={() => agregarPdr(z.zona)}>
-                      <Text style={s.pdrAddTxt}>＋ Agregar referencia</Text>
-                    </TouchableOpacity>
+                    {esAdmin && (
+                      <TouchableOpacity style={s.pdrAddBtn} onPress={() => agregarPdr(z.zona)}>
+                        <Text style={s.pdrAddTxt}>＋ Agregar referencia</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
               </View>
@@ -517,20 +577,22 @@ const s = StyleSheet.create({
   sub: { color: MUTE, fontSize: 12, marginTop: 3 },
   toolbar: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 10 },
   search: { flex: 1, backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, color: TEXT, fontSize: 14 },
-  clearBtn: { justifyContent: 'center', backgroundColor: '#5a1f1f', borderWidth: 1, borderColor: '#8a3030', borderRadius: 10, paddingHorizontal: 12 },
-  clearTxt: { color: '#ffb4b4', fontSize: 12.5, fontWeight: '800' },
   expandRow: { flexDirection: 'row', gap: 18, paddingHorizontal: 14, paddingVertical: 8 },
   expandLink: { color: GOLD, fontSize: 12.5, fontWeight: '800' },
 
-  filterHead: { flexDirection: 'row', marginHorizontal: 10, backgroundColor: '#0a1622', borderWidth: 1, borderColor: BORDER, borderRadius: 8, paddingHorizontal: 12, gap: 6 },
-  filterCol: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, gap: 2 },
-  filterColOpen: { backgroundColor: 'rgba(201,168,76,0.1)' },
-  filterColTxt: { color: SUB, fontSize: 10.5, fontWeight: '800', textTransform: 'uppercase', flexShrink: 1 },
-  filterColArrow: { color: MUTE, fontSize: 10, fontWeight: '900' },
-  colPanel: { backgroundColor: CARD, borderWidth: 1, borderColor: GOLD, borderRadius: 12, marginHorizontal: 10, marginTop: 6, padding: 12 },
+  // Filtro por zona
+  zfBar: { paddingHorizontal: 8, paddingTop: 6 },
+  zfHead: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.28)', borderWidth: 1, borderColor: BORDER, borderRadius: 8, paddingHorizontal: 10, gap: 6 },
+  zfCol: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 7, gap: 2 },
+  zfColOpen: { backgroundColor: 'rgba(201,168,76,0.12)' },
+  zfColTxt: { color: SUB, fontSize: 10.5, fontWeight: '800', textTransform: 'uppercase', flexShrink: 1 },
+  zfArrow: { color: MUTE, fontSize: 10, fontWeight: '900' },
+  zfPanel: { backgroundColor: CARD, borderWidth: 1, borderColor: GOLD, borderRadius: 12, marginTop: 6, padding: 12 },
+  zfPanelBtns: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
+  zfClearTxt: { color: '#ffb4b4', fontSize: 12.5, fontWeight: '800' },
   panelLbl: { color: SUB, fontSize: 12, fontWeight: '800', marginBottom: 6 },
   panelInput: { backgroundColor: '#152f45', borderWidth: 1, borderColor: BORDER, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: TEXT, fontSize: 13 },
-  panelClose: { alignSelf: 'flex-end', marginTop: 10, backgroundColor: GOLD, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 6 },
+  panelClose: { backgroundColor: GOLD, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 6 },
   panelCloseTxt: { color: '#1a1200', fontSize: 12.5, fontWeight: '900' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { backgroundColor: '#152f45', borderWidth: 1, borderColor: BORDER, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
@@ -544,9 +606,11 @@ const s = StyleSheet.create({
   zonaHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 11 },
   zonaChevron: { color: '#fff', fontSize: 13, fontWeight: '900' },
   zonaTxt: { color: '#fff', fontSize: 15, fontWeight: '900', flex: 1 },
+  zonaFiltroTag: { color: '#1a1200', fontSize: 9.5, fontWeight: '900', backgroundColor: GOLD, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, overflow: 'hidden', textTransform: 'uppercase' },
   zonaDesde: { color: 'rgba(255,255,255,0.92)', fontSize: 12, fontWeight: '800' },
   zonaMeta: { color: '#fff', fontSize: 12, fontWeight: '900', backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
   zonaRefBadge: { color: '#fff', fontSize: 10.5, fontWeight: '900', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden', textTransform: 'uppercase' },
+  zonaVacia: { color: MUTE, fontSize: 12, fontStyle: 'italic', paddingHorizontal: 14, paddingVertical: 12 },
   desHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.04)', borderLeftWidth: 3, paddingHorizontal: 12, paddingVertical: 7, marginTop: 2 },
   desTxt: { fontSize: 13.5, fontWeight: '800' },
   desMeta: { color: MUTE, fontSize: 11, fontWeight: '700' },
@@ -560,8 +624,10 @@ const s = StyleSheet.create({
   cEntrega: { flex: 1.5 },
   cellTxt: { color: SUB, fontSize: 12 },
   cellInput: { borderWidth: 1, borderColor: GOLD, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4, color: TEXT, fontSize: 12 },
+  cellFull: { alignSelf: 'stretch' },
   modeloTxt: { color: TEXT, fontSize: 12.5, fontWeight: '700' },
   codigoTxt: { color: MUTE, fontSize: 10, marginTop: 1 },
+  codigoLink: { color: GOLD, fontSize: 10, fontWeight: '800', marginTop: 2 },
   precioTxt: { color: '#4ade80', fontSize: 13, fontWeight: '900' },
   entregaTxt: { color: TEXT, fontSize: 12, fontWeight: '600' },
   pdrHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, paddingHorizontal: 12, paddingVertical: 8 },
