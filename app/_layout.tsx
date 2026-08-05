@@ -11,6 +11,7 @@ import { VistaComoProvider } from '../lib/VistaComo'
 import { CargaDatosProvider } from '../lib/CargaDatos'
 import { actualizarNombreRole, guardarTokensSesion, accountSwitch, userSignOut } from '../lib/cuentas'
 import { initMonitoreo, track } from '../lib/monitor'
+import { useCuentaActiva } from '../hooks/useCuentaActiva'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
 import { Ionicons } from '@expo/vector-icons'
@@ -121,6 +122,9 @@ export default function RootLayout() {
   const pathnameRef = useRef('')
   pathnameRef.current = pathname
   const ultimaRevisionUpdateRef = useRef(0)
+
+  // Cierra la sesión si un admin inhabilita la cuenta (o expira por inactividad).
+  useCuentaActiva(!!session)
 
   // ── Actualizaciones OTA ──────────────────────────────────────────────────
   // useUpdates() escucha eventos nativos: cubre tanto el check manual como el

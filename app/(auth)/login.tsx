@@ -78,7 +78,7 @@ export default function LoginScreen() {
         )
         if (!accErr && puede === false) {
           await supabase.auth.signOut()
-          const msg = 'Tu cuenta está inhabilitada por inactividad. Contacta a un administrador para reactivarla.'
+          const msg = 'Tu cuenta está inhabilitada temporalmente. Contacta a un administrador para reactivarla.'
           if (Platform.OS === 'web') window.alert(msg); else Alert.alert('Cuenta inhabilitada', msg)
           return
         }
