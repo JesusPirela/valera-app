@@ -69,6 +69,21 @@ export default function LoginScreen() {
         if (profile) { role = profile.role ?? role; nombre = profile.nombre ?? null }
       } catch { /* usar role de metadata / default */ }
 
+      // Gate de cuenta inhabilitada: por inactividad (>30 días) o inhabilitada por
+      // un admin. verificar_acceso lee el last_seen ANTERIOR (aún no lo actualizamos)
+      // para poder auto-inhabilitar. Si falla la verificación, no bloqueamos (fail-open).
+      try {
+        const { data: puede, error: accErr } = await conTimeout(
+          supabase.rpc('verificar_acceso'), 8_000,
+        )
+        if (!accErr && puede === false) {
+          await supabase.auth.signOut()
+          const msg = 'Tu cuenta está inhabilitada por inactividad. Contacta a un administrador para reactivarla.'
+          if (Platform.OS === 'web') window.alert(msg); else Alert.alert('Cuenta inhabilitada', msg)
+          return
+        }
+      } catch { /* fail-open */ }
+
       supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', uid).then(() => {}, () => {})
       actualizarNombreRole(uid, { nombre, role }).catch(() => {})
 

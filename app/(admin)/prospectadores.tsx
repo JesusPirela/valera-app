@@ -33,6 +33,8 @@ type Prospectador = {
   valera_coins: number
   app_version: string | null
   app_platform: string | null
+  activo: boolean | null
+  inhabilitada_en: string | null
 }
 
 const PLATAFORMA_BADGE: Record<string, { label: string; bg: string; color: string }> = {
@@ -158,6 +160,7 @@ export default function Prospectadores() {
   const [editandoRolId, setEditandoRolId] = useState<string | null>(null)
   const [cambiandoRol, setCambiandoRol] = useState(false)
   const [eliminandoId, setEliminandoId] = useState<string | null>(null)
+  const [inhabilitandoId, setInhabilitandoId] = useState<string | null>(null)
 
   // Modal crear
   const [modalVisible, setModalVisible] = useState(false)
@@ -266,6 +269,38 @@ export default function Prospectadores() {
     }
 
     setLista(prev => prev.filter(p => p.id !== item.id))
+  }
+
+  async function toggleActivoConfirmado(item: Prospectador, nuevoActivo: boolean) {
+    setInhabilitandoId(item.id)
+    const { data, error } = await supabase.rpc('admin_set_cuenta_activa', {
+      p_user_id: item.id, p_activo: nuevoActivo,
+    })
+    setInhabilitandoId(null)
+    if (error) {
+      mostrarError(error.message ?? 'No se pudo cambiar el estado de la cuenta.')
+      return
+    }
+    setLista(prev => prev.map(p => p.id === item.id
+      ? { ...p, activo: nuevoActivo, inhabilitada_en: nuevoActivo ? null : new Date().toISOString() }
+      : p))
+  }
+
+  function toggleActivo(item: Prospectador) {
+    const nombre = item.nombre || item.email
+    const nuevoActivo = item.activo === false ? true : false
+    const titulo = nuevoActivo ? 'Habilitar cuenta' : 'Inhabilitar cuenta'
+    const mensaje = nuevoActivo
+      ? `${nombre} podrá volver a iniciar sesión.`
+      : `${nombre} no podrá iniciar sesión hasta que un admin la habilite de nuevo.`
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${titulo}\n\n${mensaje}`)) toggleActivoConfirmado(item, nuevoActivo)
+    } else {
+      Alert.alert(titulo, mensaje, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: nuevoActivo ? 'Habilitar' : 'Inhabilitar', style: nuevoActivo ? 'default' : 'destructive', onPress: () => toggleActivoConfirmado(item, nuevoActivo) },
+      ])
+    }
   }
 
   function eliminarUsuario(item: Prospectador) {
@@ -462,6 +497,11 @@ export default function Prospectadores() {
                         </View>
                       )
                     })()}
+                    {item.activo === false && (
+                      <View style={styles.inhabPill}>
+                        <Text style={styles.inhabPillTxt}>🚫 Inhabilitada</Text>
+                      </View>
+                    )}
                   </View>
                   {item.nombre ? <Text style={[styles.cardEmail, { color: c.textMute }]}>{item.email}</Text> : null}
 
@@ -529,6 +569,20 @@ export default function Prospectadores() {
                 >
                   <Text style={styles.graficaBtnSmallText}>📈 Gráfica</Text>
                 </TouchableOpacity>
+                {item.role !== 'admin' && (
+                  <TouchableOpacity
+                    style={[item.activo === false ? styles.habilitarBtnSmall : styles.inhabilitarBtnSmall, inhabilitandoId === item.id && styles.btnDisabled]}
+                    onPress={() => toggleActivo(item)}
+                    disabled={inhabilitandoId === item.id}
+                  >
+                    {inhabilitandoId === item.id
+                      ? <ActivityIndicator size="small" color="#b45309" />
+                      : <Text style={item.activo === false ? styles.habilitarBtnSmallText : styles.inhabilitarBtnSmallText}>
+                          {item.activo === false ? '✓ Habilitar' : '🚫 Inhabilitar'}
+                        </Text>
+                    }
+                  </TouchableOpacity>
+                )}
                 {item.role !== 'admin' && (
                   <TouchableOpacity
                     style={[styles.eliminarBtnSmall, eliminandoId === item.id && styles.btnDisabled]}
@@ -1172,6 +1226,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   eliminarBtnSmallText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  inhabilitarBtnSmall: {
+    backgroundColor: '#b45309', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, minWidth: 84, alignItems: 'center',
+  },
+  inhabilitarBtnSmallText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  habilitarBtnSmall: {
+    backgroundColor: '#15803d', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, minWidth: 84, alignItems: 'center',
+  },
+  habilitarBtnSmallText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  inhabPill: {
+    backgroundColor: '#fde68a', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
+  },
+  inhabPillTxt: { color: '#92400e', fontSize: 11, fontWeight: '800' },
   btnDisabled: { opacity: 0.5 },
 
   crmModalBox: { padding: 0, overflow: 'hidden' },
