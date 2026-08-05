@@ -17,6 +17,9 @@ import { useFonts } from 'expo-font'
 import { Ionicons } from '@expo/vector-icons'
 import Constants from 'expo-constants'
 import * as Notifications from 'expo-notifications'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+const OTA_FORCE_KEY = '@valera_ota_force_ts'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -186,6 +189,32 @@ export default function RootLayout() {
       })
       // .then(undefined, ...): el builder de supabase es PromiseLike (sin .catch)
       .then(undefined, () => {})
+  }, [])
+
+  // Force-OTA: cuando el admin actualiza `ota_force_ts` en app_config, la app
+  // bypasea el throttle de 10 min y fuerza un check de OTA inmediato.
+  // El timestamp procesado se guarda en AsyncStorage para no re-chequear en
+  // cada apertura si ya se obtuvo el último OTA con esa clave.
+  useEffect(() => {
+    if (Platform.OS === 'web' || __DEV__) return
+    async function checkForceOTA() {
+      try {
+        const { data } = await supabase
+          .from('app_config').select('value').eq('key', 'ota_force_ts').maybeSingle()
+        const remoteTs = data?.value as string | null
+        if (!remoteTs) return
+        const localTs = await AsyncStorage.getItem(OTA_FORCE_KEY).catch(() => null)
+        if (localTs === remoteTs) return
+        // Nuevo timestamp detectado: forzar un check ahora, ignorando el throttle.
+        await AsyncStorage.setItem(OTA_FORCE_KEY, remoteTs).catch(() => {})
+        ultimaRevisionUpdateRef.current = 0
+        dispararCheckUpdate()
+      } catch { /* sin red: se reintentará en la próxima apertura */ }
+    }
+    checkForceOTA()
+    // Repetir cada 5 minutos mientras la app está en primer plano.
+    const timer = setInterval(checkForceOTA, 5 * 60 * 1000)
+    return () => clearInterval(timer)
   }, [])
 
   useEffect(() => {

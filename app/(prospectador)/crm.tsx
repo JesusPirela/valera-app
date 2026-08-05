@@ -104,6 +104,22 @@ function proximoRec(recs: Cliente['recordatorios']) {
     .sort((a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime())[0] ?? null
 }
 
+// Cuántos días lleva vencido un cliente (días desde su proximo_contacto o
+// recordatorio más antiguo sin completar que ya pasó).
+function diasVencido(c: Cliente): number {
+  const now = Date.now()
+  let vencioEn = now
+  if (c.proximo_contacto) {
+    const t = new Date(c.proximo_contacto).getTime()
+    if (t < now) vencioEn = Math.min(vencioEn, t)
+  }
+  const recMin = (c.recordatorios ?? [])
+    .filter(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
+    .reduce((min, r) => Math.min(min, new Date(r.fecha_hora).getTime()), Infinity)
+  if (Number.isFinite(recMin)) vencioEn = Math.min(vencioEn, recMin)
+  return Math.max(0, Math.floor((now - vencioEn) / 86400000))
+}
+
 // Un cliente "necesita seguimiento" (vencido) cuando tiene un contacto pendiente
 // que ya pasó de su fecha y sigue sin resolverse. Se considera vencido si:
 //  · su próximo contacto (proximo_contacto) ya pasó, o
@@ -498,6 +514,14 @@ export default function CRM() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientesBase, tick])
+
+  // Clientes vencidos ordenados por urgencia (más días sin contacto primero).
+  // Alimenta el banner de Oportunidades en riesgo.
+  const clientesEnRiesgo = useMemo(
+    () => clientes.filter(necesitaSeguimiento).sort((a, b) => diasVencido(b) - diasVencido(a)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [clientes, tick]
+  )
 
   // ── Filtros ───────────────────────────────────────────────────
   const filtrados = useMemo(() => {
@@ -1061,20 +1085,43 @@ export default function CRM() {
         </View>
 
 
-        {/* ── Recordatorio inteligente: clientes con seguimiento vencido ── */}
-        {vencidos > 0 && !filtroVencidos && (
-          <TouchableOpacity
-            style={s.nudgeBanner}
-            onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true) }}
-            activeOpacity={0.85}
-          >
-            <Text style={s.nudgeEmoji}>⏰</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.nudgeTitulo}>{vencidos} cliente{vencidos === 1 ? '' : 's'} necesita{vencidos === 1 ? '' : 'n'} seguimiento</Text>
-              <Text style={s.nudgeSub}>Tienen un recordatorio vencido. Contáctalos hoy para no perderlos.</Text>
-            </View>
-            <Text style={s.nudgeCta}>Ver →</Text>
-          </TouchableOpacity>
+        {/* ── Oportunidades en riesgo ── */}
+        {clientesEnRiesgo.length > 0 && !filtroVencidos && (
+          <View style={s.opBanner}>
+            <TouchableOpacity
+              style={s.opHeader}
+              onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true) }}
+              activeOpacity={0.85}
+            >
+              <Text style={s.opEmoji}>⚠️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.opTitulo}>
+                  {clientesEnRiesgo.length} oportunidad{clientesEnRiesgo.length === 1 ? '' : 'es'} en riesgo
+                </Text>
+                <Text style={s.opSub}>Contáctalos antes de que se enfríen</Text>
+              </View>
+              <Text style={s.opCta}>Ver todos →</Text>
+            </TouchableOpacity>
+            {!vistaExcel && clientesEnRiesgo.slice(0, 3).map(cl => {
+              const dias = diasVencido(cl)
+              return (
+                <TouchableOpacity
+                  key={cl.id}
+                  style={s.opCliente}
+                  onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${cl.id}` as any)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.opClienteNombre} numberOfLines={1}>{cl.nombre}</Text>
+                  <View style={[s.opDiasBadge, dias >= 7 && s.opDiasBadgeAlta]}>
+                    <Text style={[s.opDiasTxt, dias >= 7 && s.opDiasTxtAlta]}>{dias}d</Text>
+                  </View>
+                </TouchableOpacity>
+              )
+            })}
+            {!vistaExcel && clientesEnRiesgo.length > 3 && (
+              <Text style={s.opMas}>+{clientesEnRiesgo.length - 3} más — toca "Ver todos" para verlos</Text>
+            )}
+          </View>
         )}
 
         {/* ── Botones: chats de WhatsApp + Colecciones ── */}
@@ -1771,15 +1818,26 @@ const s = StyleSheet.create({
     flexShrink: 0,
   },
   btnCampanaTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
-  nudgeBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    marginHorizontal: 12, marginTop: 10, padding: 12,
-    backgroundColor: '#fef2f2', borderRadius: 12, borderWidth: 1.5, borderColor: '#fecaca',
+  opBanner: {
+    marginHorizontal: 12, marginTop: 10, borderRadius: 12,
+    borderWidth: 1.5, borderColor: '#fecaca', backgroundColor: '#fef2f2', overflow: 'hidden',
   },
-  nudgeEmoji: { fontSize: 24 },
-  nudgeTitulo: { fontSize: 14, fontWeight: '800', color: '#b91c1c' },
-  nudgeSub: { fontSize: 12, color: '#9a4b4b', marginTop: 1 },
-  nudgeCta: { fontSize: 13, fontWeight: '800', color: '#b91c1c' },
+  opHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, paddingBottom: 8 },
+  opEmoji: { fontSize: 22 },
+  opTitulo: { fontSize: 14, fontWeight: '800', color: '#b91c1c' },
+  opSub: { fontSize: 12, color: '#9a4b4b', marginTop: 1 },
+  opCta: { fontSize: 12, fontWeight: '800', color: '#b91c1c' },
+  opCliente: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderTopWidth: 1, borderTopColor: '#fecaca',
+  },
+  opClienteNombre: { flex: 1, fontSize: 13, fontWeight: '600', color: '#7f1d1d' },
+  opDiasBadge: { backgroundColor: '#fee2e2', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  opDiasBadgeAlta: { backgroundColor: '#ef4444' },
+  opDiasTxt: { fontSize: 12, fontWeight: '700', color: '#b91c1c' },
+  opDiasTxtAlta: { color: '#fff' },
+  opMas: { fontSize: 12, color: '#9a4b4b', textAlign: 'center', paddingVertical: 8 },
 
   // ── Search ──────────────────────────────────────────────────────
   searchRow: {

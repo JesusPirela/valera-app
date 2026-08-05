@@ -73,6 +73,8 @@ type Propiedad = {
   estacionamientos: number | null
   descripcion: string | null
   created_at: string
+  precio_anterior: number | null
+  precio_actualizado_at: string | null
   inmobiliaria_id: string | null
   inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
   propiedad_imagenes: { url: string; thumb_url: string | null; orden: number }[]
@@ -141,18 +143,23 @@ function mezclar<T>(arr: T[]): T[] {
 const PropiedadCard = memo(function PropiedadCard({
   item, width, veces, isToggling, destacada, esAdmin, primaryColor,
   cardBg, cardBorder, isOnline, imgOpts, empresaMatriz, totalPublicadores,
-  onOpen, onShare, onPublish, onZoom,
+  isNuevaParaTi, onOpen, onShare, onPublish, onZoom,
 }: {
   item: Propiedad; width?: number; veces: number; isToggling: boolean
   destacada: boolean; esAdmin: boolean; primaryColor: string
   cardBg: string; cardBorder: string; isOnline: boolean; imgOpts: ThumbOpts
   empresaMatriz?: string | null
   totalPublicadores: number
+  isNuevaParaTi: boolean
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
 }) {
   const primera = (item.propiedad_imagenes ?? [])[0]
   const tieneMeta = item.recamaras != null || item.banos != null || item.medios_banos != null || item.m2 != null || item.estacionamientos != null
+  const precioBajo = item.precio != null && item.precio_anterior != null
+    && item.precio < item.precio_anterior
+    && item.precio_actualizado_at != null
+    && Date.now() - new Date(item.precio_actualizado_at).getTime() < 30 * 86400000
 
   return (
     <TouchableOpacity
@@ -250,6 +257,18 @@ const PropiedadCard = memo(function PropiedadCard({
             {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m² const.</Text>}
             {item.m2_terreno != null && <Text style={styles.metaItem}>{item.m2_terreno}m² terr.</Text>}
             {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
+          </View>
+        )}
+        {isNuevaParaTi && item.estado !== 'vendida' && (
+          <View style={styles.nuevaBadge}>
+            <Text style={styles.nuevaText}>✨ Nueva para ti</Text>
+          </View>
+        )}
+        {precioBajo && (
+          <View style={styles.precioBajoBadge}>
+            <Text style={styles.precioBajoText}>
+              ↓ Precio reducido desde ${item.precio_anterior!.toLocaleString('es-MX')}
+            </Text>
           </View>
         )}
         {totalPublicadores < 3 && veces === 0 && item.estado !== 'vendida' && (
@@ -399,7 +418,7 @@ export default function ProspectadorPropiedades() {
         const size = i === 0 ? PRIMERA : PAGE
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
+          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
           .in('estado', ['disponible', 'vendida'])
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -991,6 +1010,7 @@ export default function ProspectadorPropiedades() {
       imgOpts={imgOpts}
       empresaMatriz={item.nombre_constructora ? (empresaMatrizMap.get(item.nombre_constructora) ?? null) : null}
       totalPublicadores={conteoPubs?.get(item.id) ?? 0}
+      isNuevaParaTi={!esAdmin && !viewsData?.get(item.id)}
       onOpen={onOpenCard}
       onShare={onShareCard}
       onPublish={onPublishCard}
@@ -1691,6 +1711,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  nuevaBadge: {
+    backgroundColor: '#eff6ff', borderLeftWidth: 3, borderLeftColor: '#3b82f6',
+    marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,
+  },
+  nuevaText: { fontSize: 11, fontWeight: '700', color: '#1d4ed8' },
+  precioBajoBadge: {
+    backgroundColor: '#f0fdf4', borderLeftWidth: 3, borderLeftColor: '#16a34a',
+    marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,
+  },
+  precioBajoText: { fontSize: 11, fontWeight: '700', color: '#15803d' },
   primeraVezBadge: {
     backgroundColor: '#fef9c3',
     borderLeftWidth: 3,

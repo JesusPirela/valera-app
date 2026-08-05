@@ -26,6 +26,14 @@ type ClienteDormido = {
   updated_at: string
 }
 
+type ClienteSeguimientoHoy = {
+  id: string
+  nombre: string
+  estado: string
+  proximo_contacto: string
+  tipo_operacion: string | null
+}
+
 type Mision = {
   id: string
   nombre: string
@@ -61,6 +69,7 @@ export default function MiDia() {
   const [refreshing, setRefreshing] = useState(false)
   const [recordatorios, setRecordatorios] = useState<Recordatorio[]>([])
   const [dormidos, setDormidos] = useState<ClienteDormido[]>([])
+  const [seguimientosHoy, setSeguimientosHoy] = useState<ClienteSeguimientoHoy[]>([])
   const [misiones, setMisiones] = useState<Mision[]>([])
   const [pubsHoy, setPubsHoy] = useState(0)
   const [nombreUsuario, setNombreUsuario] = useState('')
@@ -75,7 +84,7 @@ export default function MiDia() {
     const manana = new Date(hoy); manana.setDate(hoy.getDate() + 1)
     const hace7dias = new Date(Date.now() - 7 * 86_400_000)
 
-    const [perfilRes, recsRes, dormidosRes, misionesRes, pubsRes] = await Promise.all([
+    const [perfilRes, recsRes, dormidosRes, segHoyRes, misionesRes, pubsRes] = await Promise.all([
       supabase.from('profiles').select('nombre').eq('id', user.id).maybeSingle(),
       supabase.from('recordatorios')
         .select('id, titulo, descripcion, fecha_hora, cliente_id, clientes(nombre)')
@@ -88,10 +97,20 @@ export default function MiDia() {
         .select('id, nombre, estado, updated_at')
         .eq('responsable_id', user.id)
         .is('eliminado_at', null)
-        .not('estado', 'in', '("compro","descartado")')
+        .not('estado', 'in', '("compro","compro_externo","descartado")')
         .lte('updated_at', hace7dias.toISOString())
         .order('updated_at', { ascending: true })
         .limit(10),
+      // Clientes con seguimiento programado para HOY (proximo_contacto = hoy).
+      supabase.from('clientes')
+        .select('id, nombre, estado, proximo_contacto, tipo_operacion')
+        .eq('responsable_id', user.id)
+        .is('eliminado_at', null)
+        .not('estado', 'in', '("compro","compro_externo","descartado")')
+        .gte('proximo_contacto', hoy.toISOString())
+        .lt('proximo_contacto', manana.toISOString())
+        .order('proximo_contacto', { ascending: true })
+        .limit(15),
       supabase.from('user_misiones')
         .select('id, nombre, descripcion, progreso, meta, tipo')
         .eq('user_id', user.id)
@@ -106,6 +125,7 @@ export default function MiDia() {
     setNombreUsuario((perfilRes.data as any)?.nombre?.split(' ')[0] ?? '')
     setRecordatorios((recsRes.data ?? []) as unknown as Recordatorio[])
     setDormidos((dormidosRes.data ?? []) as ClienteDormido[])
+    setSeguimientosHoy((segHoyRes.data ?? []) as ClienteSeguimientoHoy[])
     setMisiones((misionesRes.data ?? []) as unknown as Mision[])
     setPubsHoy(pubsRes.count ?? 0)
     setLoading(false)
@@ -198,6 +218,48 @@ export default function MiDia() {
           ))
         )}
       </View>
+
+      {/* Seguimiento programado hoy */}
+      {seguimientosHoy.length > 0 && (
+        <View style={[st.section, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={st.sectionHead}>
+            <Text style={[st.sectionTitle, { color: c.text }]}>
+              📅 Seguimiento programado hoy ({seguimientosHoy.length})
+            </Text>
+            <TouchableOpacity onPress={() => router.push('/(prospectador)/crm')}>
+              <Text style={st.verTodas}>Ver CRM ›</Text>
+            </TouchableOpacity>
+          </View>
+          {seguimientosHoy.map(cl => {
+            const colorEstado = ESTADO_COLOR[cl.estado] ?? '#64748b'
+            const hora = new Date(cl.proximo_contacto)
+              .toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+            return (
+              <TouchableOpacity
+                key={cl.id}
+                style={st.dormidoRow}
+                onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${cl.id}` as any)}
+                activeOpacity={0.8}
+              >
+                <View style={[st.dormidoAvatar, { backgroundColor: colorEstado + '20' }]}>
+                  <Text style={[st.dormidoIniciales, { color: colorEstado }]}>
+                    {cl.nombre.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[st.dormidoNombre, { color: c.text }]} numberOfLines={1}>{cl.nombre}</Text>
+                  <Text style={[st.dormidoEstado, { color: colorEstado }]}>
+                    {ESTADO_LABEL[cl.estado] ?? cl.estado}
+                  </Text>
+                </View>
+                <View style={[st.diasBadge, { backgroundColor: TEAL + '18' }]}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: TEAL }}>{hora}</Text>
+                </View>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+      )}
 
       {/* Misiones pendientes */}
       {misiones.length > 0 && (

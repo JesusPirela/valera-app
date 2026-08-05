@@ -45,6 +45,8 @@ type Propiedad = {
   codigo: string
   titulo: string
   precio: number | null
+  precio_anterior: number | null
+  precio_actualizado_at: string | null
   direccion: string
   operacion: string | null
   tipo: string | null
@@ -216,7 +218,7 @@ export default function DetallePropiedad() {
 
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)')
         .eq('id', id)
         .single()
 
@@ -291,6 +293,14 @@ export default function DetallePropiedad() {
   const rol = detalle?.rol ?? null
   const { refreshControl } = usePullRefresh(refetch)
   const esStaff = esStaffSupervision(rol)
+
+  // Registra la vista de la propiedad para el algoritmo de "nunca vistas primero".
+  // Se dispara una vez por montaje (cuando la propiedad carga).
+  useEffect(() => {
+    if (!id || !propiedad) return
+    supabase.rpc('registrar_vista_propiedad', { p_propiedad_id: id }).then(() => {}, () => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!propiedad])
 
   // Lista COMPLETA de fotos, pedida directo a la base al momento de usarla.
   // El detalle se siembra desde el listado con SOLO la portada (para abrir al
@@ -1905,6 +1915,16 @@ export default function DetallePropiedad() {
         {/* Título y precio */}
         <Text style={styles.titulo}>{propiedad.titulo}</Text>
         <Text style={styles.precio}>{formatPrecio(propiedad.precio)}</Text>
+        {propiedad.precio != null && propiedad.precio_anterior != null
+          && propiedad.precio < propiedad.precio_anterior
+          && propiedad.precio_actualizado_at != null
+          && Date.now() - new Date(propiedad.precio_actualizado_at).getTime() < 30 * 86400000 && (
+          <View style={styles.precioBajoBadge}>
+            <Text style={styles.precioBajoText}>
+              ↓ Precio reducido desde ${propiedad.precio_anterior.toLocaleString('es-MX')} MXN
+            </Text>
+          </View>
+        )}
         <Text style={styles.direccion}>{propiedad.direccion}</Text>
         {publicadaHace((propiedad as any).created_at) && (
           <Text style={styles.publicadaHace}>🗓️ Publicada {publicadaHace((propiedad as any).created_at)}</Text>
@@ -3000,7 +3020,12 @@ const styles = StyleSheet.create({
   },
 
   titulo: { fontSize: 22, fontWeight: '800', color: '#1a6470', marginBottom: 6 },
-  precio: { fontSize: 20, fontWeight: '700', color: '#1a6470', marginBottom: 6 },
+  precio: { fontSize: 20, fontWeight: '700', color: '#1a6470', marginBottom: 4 },
+  precioBajoBadge: {
+    backgroundColor: '#f0fdf4', borderLeftWidth: 3, borderLeftColor: '#16a34a',
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5, marginBottom: 6, alignSelf: 'flex-start',
+  },
+  precioBajoText: { fontSize: 12, fontWeight: '700', color: '#15803d' },
   direccion: { fontSize: 14, color: '#888', marginBottom: 4 },
   publicadaHace: { fontSize: 12.5, color: '#9aa5ab', marginBottom: 20 },
 
