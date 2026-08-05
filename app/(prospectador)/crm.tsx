@@ -790,10 +790,15 @@ export default function CRM() {
         return
       }
       // "YYYY-MM-DDTHH:MM" (hora local, con horario) → ISO. Si por alguna razón
-      // sólo viene la fecha, se asume mediodía.
-      const iso = trimmed.length <= 10
-        ? `${trimmed}T12:00:00`
-        : new Date(trimmed).toISOString()
+      // sólo viene la fecha, se asume mediodía. Validar antes de toISOString():
+      // una fecha mal escrita reventaba con "Date value out of bounds".
+      const base = trimmed.length <= 10 ? `${trimmed}T12:00:00` : trimmed
+      const d = new Date(base)
+      if (isNaN(d.getTime())) {
+        Alert.alert('Fecha inválida', 'Revisa el formato de la fecha (ej. 2026-08-15 14:30).')
+        return
+      }
+      const iso = trimmed.length <= 10 ? base : d.toISOString()
       guardarCelda(editCell.id, editCell.col, iso)
     } else {
       guardarCelda(editCell.id, editCell.col, editValue.trim() || null)

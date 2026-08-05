@@ -28,7 +28,17 @@ function repetido(clave: string): boolean {
 // sola y solo ensucian el panel). "auth lock timeout" es la red de seguridad
 // del lock de auth: si un refresco tarda demasiado se aborta y se reintenta; con
 // el timeout por petición del fetch ya casi nunca ocurre y nunca rompe nada.
-const MENSAJES_RUIDO = ['auth lock timeout']
+// El resto son errores de NAVEGADOR/EXTENSIONES (Firefox Reader, scripts de
+// terceros con CORS, ResizeObserver) que NO son de nuestro código.
+const MENSAJES_RUIDO = [
+  'auth lock timeout',
+  '__firefox__',                       // Firefox Reader / extensiones
+  'Script error.',                     // error cross-origin sin detalle (script externo)
+  'ResizeObserver loop',               // benigno del navegador
+  'Non-Error promise rejection captured',
+  'Load failed',                       // fetch abortado por el navegador (cambio de página)
+  'The operation was aborted',         // AbortController al navegar
+]
 
 export function captureError(error: unknown, contexto?: string): void {
   try {

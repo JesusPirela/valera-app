@@ -123,13 +123,16 @@ export async function flushQueue(): Promise<{ success: number; failed: number }>
           .insert(op.payload)
         if (error) throw error
       } else if (op.type === 'publish_property') {
-        const { data, error } = await supabase.rpc('publicar_propiedad_atomico', {
+        const { error } = await supabase.rpc('publicar_propiedad_atomico', {
           p_propiedad_id: op.propiedadId,
           p_idem_key: op.idemKey,
         })
+        // Solo los errores de TRANSPORTE (red/timeout, sin respuesta) se reintentan.
+        // Si el servidor RESPONDIÓ —sea ok:true o ok:false (limite, no autorizada,
+        // ya publicada…)— la respuesta es DEFINITIVA: reintentar jamás la cambia.
+        // Antes, cualquier ok:false != 'limite' se relanzaba y la operación quedaba
+        // atorada para siempre, mostrando "N cambios no se pudieron enviar" sin fin.
         if (error) throw error
-        // "limite" también cuenta como resuelta: reintentar jamás va a funcionar.
-        if (data && data.ok === false && data.error !== 'limite') throw new Error(String(data.error))
       }
       success++
     } catch {

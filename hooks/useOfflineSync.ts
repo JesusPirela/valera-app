@@ -39,7 +39,7 @@ export function useOfflineSync(): OfflineSyncState {
         queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
       }
       if (failed > 0) {
-        setSyncError(`${failed} cambio${failed > 1 ? 's' : ''} no se pudo${failed > 1 ? 'eron' : ''} enviar`)
+        setSyncError(`${failed} ${failed > 1 ? 'cambios no se pudieron' : 'cambio no se pudo'} enviar`)
       }
       await refreshPending()
     } catch (e: any) {
