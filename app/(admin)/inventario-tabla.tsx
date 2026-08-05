@@ -32,6 +32,8 @@ const OVERRIDES: [RegExp, string][] = [
   [/vitea/, 'El Refugio'],
   [/villas? la joya/, 'Jardines de Santiago'],
   [/peninsula|península/, 'Monterrey'],
+  [/riscos condesa|condesa/, 'Zibatá'],
+  [/zaru|zarú/, 'Zarú'],
 ]
 function zonaOverride(desarrollo: string): string | null {
   const n = normalizar(desarrollo)
