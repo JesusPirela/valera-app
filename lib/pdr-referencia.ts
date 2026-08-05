@@ -83,7 +83,7 @@ export const PDR_POR_ZONA: { zona: string; refs: PdrRef[] }[] = [
     { etiqueta: 'Casa Cumbres de Cimatario', precio: 5900000, caract: '3 rec · 3 baños', tipo: 'Casa' },
     { etiqueta: 'Casa usada Centro Sur (Claustros)', precio: 5900000, caract: '3 rec · 3 baños', tipo: 'Casa' },
   ]},
-  { zona: 'La Vista', refs: [
+  { zona: 'El Refugio', refs: [
     { etiqueta: 'La Vista', precio: 3550000, caract: '3 rec · 3 baños', tipo: null },
   ]},
   { zona: 'Monterrey', refs: [
