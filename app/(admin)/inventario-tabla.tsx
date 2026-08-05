@@ -31,6 +31,7 @@ const OVERRIDES: [RegExp, string][] = [
   [/carriedo/, 'El Refugio'],
   [/vitea/, 'El Refugio'],
   [/villas? la joya/, 'Jardines de Santiago'],
+  [/peninsula|península/, 'Monterrey'],
 ]
 function zonaOverride(desarrollo: string): string | null {
   const n = normalizar(desarrollo)
@@ -351,7 +352,7 @@ export default function InventarioTabla() {
               <View key={z.zona} style={[s.zonaCard, { borderColor: z.color }]}>
                 <TouchableOpacity style={[s.zonaHead, { backgroundColor: z.color }]} onPress={() => toggle(z.zona)} activeOpacity={0.85}>
                   <Text style={s.zonaChevron}>{abierta ? '▼' : '▶'}</Text>
-                  <Text style={s.zonaTxt} numberOfLines={1}>{z.zona}{z.ciudad ? ` · ${z.ciudad}` : ''}</Text>
+                  <Text style={s.zonaTxt} numberOfLines={1}>{z.zona}{z.ciudad && normalizar(z.ciudad) !== normalizar(z.zona) ? ` · ${z.ciudad}` : ''}</Text>
                   {z.desde != null ? <Text style={s.zonaDesde}>desde {fmtPrecio(z.desde)}</Text> : null}
                   {z.soloRef
                     ? <Text style={s.zonaRefBadge}>solo PDR</Text>
