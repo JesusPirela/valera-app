@@ -70,6 +70,7 @@ export default function Constructoras() {
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
   const [busqueda, setBusqueda] = useState(q ?? '')
   const [zonaSel, setZonaSel] = useState<string | null>(null)
+  const [viewsMap, setViewsMap] = useState<Map<string, { count: number; lastViewed: number }>>(new Map())
 
   useFocusEffect(useCallback(() => { cargar() }, []))
   const { refreshControl } = usePullRefresh(cargar)
@@ -121,6 +122,24 @@ export default function Constructoras() {
 
     setModelos(lista)
     setLoading(false)
+
+    // Cargar historial de vistas del usuario para el orden personalizado.
+    if (userId) {
+      supabase
+        .from('property_views')
+        .select('propiedad_id, view_count, last_viewed_at')
+        .eq('user_id', userId)
+        .then(({ data: vData }) => {
+          const m = new Map<string, { count: number; lastViewed: number }>()
+          for (const r of vData ?? []) {
+            m.set(r.propiedad_id, {
+              count: r.view_count,
+              lastViewed: new Date(r.last_viewed_at).getTime(),
+            })
+          }
+          setViewsMap(m)
+        })
+    }
   }
 
   // Cada modelo con su fraccionamiento/colonia (derivado de dirección + título).
@@ -179,7 +198,18 @@ export default function Constructoras() {
           constMap.get(nombre)!.push(m)
         }
         const grupos = Array.from(constMap.entries())
-          .map(([nombre, ms]) => ({ nombre, modelos: ms }))
+          .map(([nombre, ms]) => ({
+            nombre,
+            modelos: [...ms].sort((a, b) => {
+              const va = viewsMap.get(a.id)
+              const vb = viewsMap.get(b.id)
+              if (!va && !vb) return 0
+              if (!va) return -1
+              if (!vb) return 1
+              if (va.count !== vb.count) return va.count - vb.count
+              return va.lastViewed - vb.lastViewed
+            }),
+          }))
           .sort((a, b) => {
             const aPop = esPopularMercado(a.nombre) ? 1 : 0
             const bPop = esPopularMercado(b.nombre) ? 1 : 0
@@ -188,7 +218,7 @@ export default function Constructoras() {
           })
         return { zona, ciudad, total: mods.length, grupos }
       })
-  }, [filtrados, zonasDisponibles])
+  }, [filtrados, zonasDisponibles, viewsMap])
 
   const hayResultados = zonaGrupos.length > 0
 

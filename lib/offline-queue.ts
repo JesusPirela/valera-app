@@ -7,6 +7,7 @@ export type QueueOp = {
   id: string
   type: 'update_client' | 'create_client' | 'publish_property'
   ts: number
+  userId?: string            // quien creó la operación; evita que otro usuario la ejecute
   clienteId?: string         // para update: id real; para create: UUID generado localmente
   propiedadId?: string       // para publish_property
   idemKey?: string           // para publish_property: MISMO key en cada reintento → nunca duplica
@@ -69,14 +70,16 @@ export async function enqueueClienteCreate(
 // red inestable). Guarda el idem_key ORIGINAL de la pulsación: la RPC
 // publicar_propiedad_atomico es idempotente por ese key, así que reintentar desde
 // la cola nunca duplica el conteo aunque la primera llamada sí hubiera llegado.
-export async function enqueuePublicacion(propiedadId: string, idemKey: string): Promise<void> {
+// userId es obligatorio: evita que la operación se ejecute con la sesión de otro
+// usuario si cambian de cuenta en el mismo dispositivo antes de reconectar.
+export async function enqueuePublicacion(propiedadId: string, idemKey: string, userId: string): Promise<void> {
   const queue = await getQueue()
-  // Deduplicar por propiedadId: solo UNA publicación pendiente por propiedad.
+  // Deduplicar por propiedadId+usuario: solo UNA publicación pendiente por propiedad/usuario.
   // Sin esto, múltiples clicks offline generan N entradas con idem_keys distintos
   // y al reconectar se ejecutan todas → el contador salta a N/10 de un golpe.
-  if (queue.some(q => q.type === 'publish_property' && q.propiedadId === propiedadId)) return
+  if (queue.some(q => q.type === 'publish_property' && q.propiedadId === propiedadId && q.userId === userId)) return
   if (queue.some(q => q.type === 'publish_property' && q.idemKey === idemKey)) return
-  const op: QueueOp = { id: genUUID(), type: 'publish_property', ts: Date.now(), propiedadId, idemKey, payload: {} }
+  const op: QueueOp = { id: genUUID(), type: 'publish_property', ts: Date.now(), userId, propiedadId, idemKey, payload: {} }
   await saveQueue([...queue, op])
 }
 
@@ -85,16 +88,28 @@ export async function getPendingCount(): Promise<number> {
 }
 
 // Envía todas las operaciones pendientes a Supabase en orden cronológico.
+// Solo ejecuta operaciones que pertenecen al usuario actualmente autenticado;
+// las de otros usuarios quedan en cola hasta que ese usuario vuelva a iniciar sesión.
 // Devuelve cuántas tuvieron éxito y cuántas fallaron.
 export async function flushQueue(): Promise<{ success: number; failed: number }> {
   const queue = await getQueue()
   if (queue.length === 0) return { success: 0, failed: 0 }
 
+  const { data: { session } } = await supabase.auth.getSession()
+  const currentUserId = session?.user?.id
+
   let success = 0
   let failed = 0
+  // Ops de otros usuarios se preservan intactas en la cola.
+  const skippedOps: QueueOp[] = []
   const failedOps: QueueOp[] = []
 
   for (const op of queue) {
+    // Si la op tiene userId y no coincide con el usuario actual, no ejecutar.
+    if (op.userId && op.userId !== currentUserId) {
+      skippedOps.push(op)
+      continue
+    }
     try {
       if (op.type === 'update_client') {
         const { error } = await supabase
@@ -123,7 +138,7 @@ export async function flushQueue(): Promise<{ success: number; failed: number }>
     }
   }
 
-  // Solo conservar las que fallaron para reintentarlas después
-  await saveQueue(failedOps)
+  // Conservar: las que fallaron (para reintentar) + las de otros usuarios (para su sesión)
+  await saveQueue([...skippedOps, ...failedOps])
   return { success, failed }
 }

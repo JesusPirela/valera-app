@@ -433,6 +433,13 @@ export default function DetallePropiedad() {
     return () => clearTimeout(timer)
   }, [id, isOnline])
 
+  // Registrar vista para el algoritmo de propiedades personalizadas.
+  // Fire-and-forget: no bloquea la UI ni muestra error al usuario.
+  useEffect(() => {
+    if (!id || !isOnline) return
+    supabase.rpc('registrar_vista_propiedad', { p_propiedad_id: id }).then(() => {})
+  }, [id])
+
   // Resetear estado de carga al cambiar de imagen en el lightbox
   useEffect(() => {
     if (lightboxVisible) setLightboxLoading(true)
@@ -494,10 +501,21 @@ export default function DetallePropiedad() {
       setVecesPublicada(veces)
       actualizarMisionesPorCategoria(user.id, 'propiedad').catch(() => {})
       actualizarProgresoTareasPublicar(user.id)
-      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
+      // Actualización optimista exacta: igual que publicarPropiedad() en propiedades.tsx.
+      // Solo toca ESTA propiedad en el mapa; no depende de que el refetch llegue
+      // con la sesión en buen estado (en iOS el refresh de token puede solaparse).
+      queryClient.setQueryData<{ publicacionesMap: Record<string, number>; publicacionFechasMap: Record<string, string> }>(
+        ['publicaciones-usuario', user.id],
+        (old) => ({
+          publicacionesMap: { ...(old?.publicacionesMap ?? {}), [id as string]: veces },
+          publicacionFechasMap: { ...(old?.publicacionFechasMap ?? {}), ...(fecha ? { [id as string]: fecha } : {}) },
+        })
+      )
+      // Refetch eventual para confirmar el estado real del servidor.
+      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', user.id], exact: true })
     }
     const encolar = async () => {
-      await enqueuePublicacion(id as string, idemKey).catch(() => {})
+      await enqueuePublicacion(id as string, idemKey, user.id).catch(() => {})
       // Optimista: se refleja ya; la cola lo hace real al reconectar.
       setPublicada(true)
       setVecesPublicada(vecesPublicada + 1)
@@ -623,10 +641,23 @@ export default function DetallePropiedad() {
 
     if (!error && resp?.ok) {
       const nuevas = resp.veces_publicada ?? 0
+      const { data: { session: sesActual } } = await supabase.auth.getSession()
+      const uidActual = sesActual?.user?.id
       setVecesPublicada(nuevas)
       setPublicada(nuevas > 0)
       setFechaPublicacion(resp.fecha_publicacion ?? null)
-      queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
+      if (uidActual) {
+        queryClient.setQueryData<{ publicacionesMap: Record<string, number>; publicacionFechasMap: Record<string, string> }>(
+          ['publicaciones-usuario', uidActual],
+          (old) => {
+            const mapa = { ...(old?.publicacionesMap ?? {}) }
+            if (nuevas > 0) mapa[id as string] = nuevas
+            else delete mapa[id as string]
+            return { publicacionesMap: mapa, publicacionFechasMap: { ...(old?.publicacionFechasMap ?? {}) } }
+          }
+        )
+        queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', uidActual], exact: true })
+      }
     } else {
       const errMsg = 'No se pudo deshacer la publicación. Intenta de nuevo.'
       if (Platform.OS === 'web') window.alert(errMsg)

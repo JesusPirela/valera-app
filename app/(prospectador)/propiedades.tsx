@@ -455,13 +455,40 @@ export default function ProspectadorPropiedades() {
     refetchOnWindowFocus: false,
   })
 
+  // Historial de vistas del usuario actual: propiedad_id → { count, lastViewed }.
+  // Alimenta el orden personalizado del listado (menos vistas primero).
+  const { data: viewsData, refetch: refetchViews } = useQuery<Map<string, { count: number; lastViewed: number }>>({
+    queryKey: ['property-views', queryData?.userId ?? null],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const uid = session?.user?.id
+      if (!uid) return new Map()
+      const { data } = await supabase
+        .from('property_views')
+        .select('propiedad_id, view_count, last_viewed_at')
+        .eq('user_id', uid)
+      const map = new Map<string, { count: number; lastViewed: number }>()
+      for (const r of data ?? []) {
+        map.set(r.propiedad_id, {
+          count: r.view_count,
+          lastViewed: new Date(r.last_viewed_at).getTime(),
+        })
+      }
+      return map
+    },
+    enabled: !!queryData?.userId,
+    staleTime: 1000 * 60 * 5,
+    networkMode: 'offlineFirst',
+    refetchOnWindowFocus: false,
+  })
+
   // Jalar para actualizar: fuerza traer propiedades y publicaciones frescas.
   const [refreshing, setRefreshing] = useState(false)
   const onPull = useCallback(async () => {
     setRefreshing(true)
-    try { await Promise.all([refetch(), refetchPub()]) } catch {}
+    try { await Promise.all([refetch(), refetchPub(), refetchViews()]) } catch {}
     finally { setRefreshing(false) }
-  }, [refetch, refetchPub])
+  }, [refetch, refetchPub, refetchViews])
 
   useFocusEffect(useCallback(() => {
     // Solo rebotar al admin a su app si NO está "viendo como" otro rol.
@@ -595,7 +622,7 @@ export default function ProspectadorPropiedades() {
       actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
     }
     const encolar = async () => {
-      await enqueuePublicacion(propiedadId, idemKey).catch(() => {})
+      await enqueuePublicacion(propiedadId, idemKey, userId).catch(() => {})
       avisar('Publicación pendiente', 'La conexión está inestable. Tu publicación quedó guardada y se registrará sola en cuanto haya señal — no necesitas volver a intentar.')
     }
 
@@ -839,12 +866,19 @@ export default function ProspectadorPropiedades() {
       (destacadaPendiente(b) ? 1 : 0) - (destacadaPendiente(a) ? 1 : 0)
     )
   } else if (!ordenPrecio && !filtroNueva) {
-    // Usuarios: destacadas pendientes primero, resto en orden aleatorio por sesión.
+    // Usuarios: destacadas pendientes primero, luego por vistas personalizadas.
+    // Nunca vistas → menos vistas → hace más tiempo no visitadas.
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
       const aD = destacadaPendiente(a) ? 1 : 0
       const bD = destacadaPendiente(b) ? 1 : 0
       if (aD !== bD) return bD - aD
-      return (shuffleMapRef.current.get(a.id) ?? 0) - (shuffleMapRef.current.get(b.id) ?? 0)
+      const va = viewsData?.get(a.id)
+      const vb = viewsData?.get(b.id)
+      if (!va && !vb) return 0
+      if (!va) return -1
+      if (!vb) return 1
+      if (va.count !== vb.count) return va.count - vb.count
+      return va.lastViewed - vb.lastViewed
     })
   }
 
@@ -854,7 +888,7 @@ export default function ProspectadorPropiedades() {
     propiedades, busqueda, filtroPublicadas, publicaciones, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
-    shuffleTick,
+    viewsData,
   ])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
