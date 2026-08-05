@@ -3,11 +3,11 @@ import {
   View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator,
   StyleSheet, Platform,
 } from 'react-native'
-import { router, useFocusEffect } from 'expo-router'
+import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { normalizar } from '../../lib/texto'
 import { zonaDetallada } from '../../lib/zonas-interes'
-import { PDR_POR_ZONA, pdrDeZona, type PdrRef } from '../../lib/pdr-referencia'
+import { PDR_POR_ZONA } from '../../lib/pdr-referencia'
 
 const BG = '#0d1b2a', CARD = '#12283b', BORDER = '#1e3448'
 const TEXT = '#e8f0f4', SUB = '#8fb0cc', MUTE = '#5f7690', GOLD = '#c9a84c'
@@ -52,28 +52,21 @@ function colorZona(z: string): string {
 type Prop = {
   id: string; codigo: string | null; titulo: string; precio: number | null
   tipo: string | null; recamaras: number | null; banos: number | null; medios_banos: number | null
-  nombre_constructora: string | null; zona: string | null; direccion: string | null; entrega_aprox: string | null
+  nombre_constructora: string | null; zona: string | null; direccion: string | null
+  entrega_aprox: string | null; caracteristicas_texto: string | null
 }
+
+type PdrRow = { id: string; zona: string; etiqueta: string; precio: number | null; caract: string | null; tipo: string | null; orden: number }
 
 function fmtPrecio(p: number | null) { return p == null ? '—' : '$' + p.toLocaleString('es-MX') }
 function caract(p: Prop) {
+  if (p.caracteristicas_texto && p.caracteristicas_texto.trim()) return p.caracteristicas_texto
   const parts: string[] = []
   if (p.recamaras != null) parts.push(`${p.recamaras} rec`)
   if (p.banos != null) parts.push(`${p.banos}${p.medios_banos ? '.' + p.medios_banos : ''} baños`)
   return parts.join(' · ') || '—'
 }
 const tipoLabel = (t: string | null) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '—')
-
-// Valor comparable por columna (para ordenar ascendente/descendente).
-function valorCol(p: Prop, col: ColId): number | string {
-  switch (col) {
-    case 'precio': return p.precio ?? Number.POSITIVE_INFINITY
-    case 'caract': return p.recamaras ?? -1
-    case 'tipo': return normalizar(tipoLabel(p.tipo))
-    case 'entrega': return normalizar(p.entrega_aprox ?? '')
-    default: return normalizar(p.titulo ?? '')
-  }
-}
 
 // Columnas de la tabla (para los filtros tipo Excel).
 type ColId = 'modelo' | 'precio' | 'caract' | 'tipo' | 'entrega'
@@ -86,11 +79,25 @@ const COLS: { id: ColId; label: string; flex: number }[] = [
   { id: 'entrega', label: 'Entrega', flex: 1.5 },
 ]
 
+// Valor comparable por columna (para ordenar ascendente/descendente).
+function valorCol(p: Prop, col: ColId): number | string {
+  switch (col) {
+    case 'precio': return p.precio ?? Number.POSITIVE_INFINITY
+    case 'caract': return p.recamaras ?? -1
+    case 'tipo': return normalizar(tipoLabel(p.tipo))
+    case 'entrega': return normalizar(p.entrega_aprox ?? '')
+    default: return normalizar(p.titulo ?? '')
+  }
+}
+
+type EditState = { tabla: 'prop' | 'pdr'; id: string; campo: string; val: string } | null
+
 export default function InventarioTabla() {
   const [props, setProps] = useState<Prop[]>([])
+  const [pdrRows, setPdrRows] = useState<PdrRow[]>([])
   const [loading, setLoading] = useState(true)
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set())  // zonas abiertas (colapsadas por defecto)
-  const [editEntrega, setEditEntrega] = useState<{ id: string; val: string } | null>(null)
+  const [edit, setEdit] = useState<EditState>(null)
 
   // Buscador global + filtros por columna (tipo Excel, aplican a todas las tablas)
   const [busqueda, setBusqueda] = useState('')
@@ -108,19 +115,58 @@ export default function InventarioTabla() {
   const cargar = useCallback(async () => {
     setLoading(true)
     try {
-      const { data } = await supabase.from('propiedades')
-        .select('id, codigo, titulo, precio, tipo, recamaras, banos, medios_banos, nombre_constructora, zona, direccion, entrega_aprox')
-        .eq('es_constructora', true).eq('es_inventario', false)
-        .order('precio', { ascending: true, nullsFirst: false })
-      setProps((data ?? []) as Prop[])
+      const [{ data: propData }, { data: pdrData }] = await Promise.all([
+        supabase.from('propiedades')
+          .select('id, codigo, titulo, precio, tipo, recamaras, banos, medios_banos, nombre_constructora, zona, direccion, entrega_aprox, caracteristicas_texto')
+          .eq('es_constructora', true).eq('es_inventario', false)
+          .order('precio', { ascending: true, nullsFirst: false }),
+        supabase.from('pdr_referencia').select('*').order('orden', { ascending: true }),
+      ])
+      setProps((propData ?? []) as Prop[])
+      // Sembrar la tabla de PDR desde el dataset estático la primera vez que está vacía.
+      if (!pdrData || pdrData.length === 0) {
+        const seed = PDR_POR_ZONA.flatMap((g, gi) => g.refs.map((r, i) => ({
+          zona: g.zona, etiqueta: r.etiqueta, precio: r.precio, caract: r.caract, tipo: r.tipo, orden: gi * 100 + i,
+        })))
+        const { data: inserted } = await supabase.from('pdr_referencia').insert(seed).select()
+        setPdrRows((inserted ?? []) as PdrRow[])
+      } else {
+        setPdrRows(pdrData as PdrRow[])
+      }
     } finally { setLoading(false) }
   }, [])
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
 
-  async function guardarEntrega(id: string, val: string) {
-    setEditEntrega(null)
-    setProps(prev => prev.map(p => p.id === id ? { ...p, entrega_aprox: val.trim() || null } : p))
-    await supabase.from('propiedades').update({ entrega_aprox: val.trim() || null }).eq('id', id)
+  // ── Edición inline (como Excel) ────────────────────────────────
+  const PROP_COL: Record<string, string> = { modelo: 'titulo', precio: 'precio', caract: 'caracteristicas_texto', tipo: 'tipo', entrega: 'entrega_aprox' }
+  async function commitEdit() {
+    if (!edit) return
+    const { tabla, id, campo, val } = edit
+    setEdit(null)
+    if (tabla === 'prop') {
+      const col = PROP_COL[campo]
+      const value: any = campo === 'precio' ? (Number(val.replace(/\D/g, '')) || null) : (val.trim() || null)
+      setProps(prev => prev.map(p => p.id === id ? { ...p, [col]: value } : p))
+      await supabase.from('propiedades').update({ [col]: value }).eq('id', id)
+    } else {
+      const value: any = campo === 'precio' ? (Number(val.replace(/\D/g, '')) || null) : (campo === 'etiqueta' ? val.trim() : (val.trim() || null))
+      setPdrRows(prev => prev.map(r => r.id === id ? { ...r, [campo]: value } : r))
+      await supabase.from('pdr_referencia').update({ [campo]: value }).eq('id', id)
+    }
+  }
+  async function agregarPdr(zona: string) {
+    const ordenMax = pdrRows.filter(r => r.zona === zona).reduce((m, r) => Math.max(m, r.orden), 0)
+    const { data } = await supabase.from('pdr_referencia')
+      .insert({ zona, etiqueta: 'Nueva referencia', precio: null, caract: null, tipo: null, orden: ordenMax + 1 })
+      .select().single()
+    if (data) {
+      setPdrRows(prev => [...prev, data as PdrRow])
+      setEdit({ tabla: 'pdr', id: (data as PdrRow).id, campo: 'etiqueta', val: 'Nueva referencia' })
+    }
+  }
+  async function borrarPdr(id: string) {
+    setPdrRows(prev => prev.filter(r => r.id !== id))
+    await supabase.from('pdr_referencia').delete().eq('id', id)
   }
 
   // Tipos presentes en los datos (para el filtro de la columna Tipo).
@@ -140,7 +186,6 @@ export default function InventarioTabla() {
 
     const zonaDe = (p: Prop) => {
       const z = zonaOverride(p.nombre_constructora ?? '') ?? zonaDetallada(`${p.direccion ?? ''} ${p.titulo ?? ''}`) ?? 'Otras zonas'
-      // Unificar todo lo de Monterrey (incluye "Cumbres Monterrey") en una sola zona.
       if (normalizar(z).includes('monterrey')) return 'Monterrey'
       return z
     }
@@ -159,20 +204,22 @@ export default function InventarioTabla() {
       return true
     })
 
+    // Filtro para los PDR de referencia (precio + tipo + búsqueda).
+    const refPasa = (r: PdrRow, zona: string) => {
+      if (fTipo && normalizar(r.tipo ?? '') !== normalizar(fTipo)) return false
+      if (r.precio != null && (r.precio < nMin || r.precio > nMax)) return false
+      if (qModelo && !normalizar(r.etiqueta).includes(qModelo)) return false
+      if (qCaract && !normalizar(r.caract ?? '').includes(qCaract)) return false
+      if (q && !normalizar(`${r.etiqueta} ${zona}`).includes(q)) return false
+      return true
+    }
+    const pdrDe = (zona: string) => pdrRows.filter(r => normalizar(r.zona) === normalizar(zona) && refPasa(r, zona))
+
     const porZona = new Map<string, Prop[]>()
     for (const p of filtradas) {
       const z = zonaDe(p)
       if (!porZona.has(z)) porZona.set(z, [])
       porZona.get(z)!.push(p)
-    }
-    // Filtro para los PDR de referencia (precio + tipo + búsqueda).
-    const refPasa = (r: PdrRef, zona: string) => {
-      if (fTipo && normalizar(r.tipo ?? '') !== normalizar(fTipo)) return false
-      if (r.precio < nMin || r.precio > nMax) return false
-      if (qModelo && !normalizar(r.etiqueta).includes(qModelo)) return false
-      if (qCaract && !normalizar(r.caract).includes(qCaract)) return false
-      if (q && !normalizar(`${r.etiqueta} ${zona}`).includes(q)) return false
-      return true
     }
 
     const liveZonas = Array.from(porZona.entries())
@@ -190,23 +237,22 @@ export default function InventarioTabla() {
         const desarrollos = Array.from(porDes.entries())
           .map(([nombre, modelos]) => ({ nombre, modelos }))
           .sort((a, b) => a.nombre.localeCompare(b.nombre))
-        const refs = pdrDeZona(zona).filter(r => refPasa(r, zona)).sort((a, b) => a.precio - b.precio)
-        return { zona, ciudad, total: ps.length, desde: desdeVal, color: colorZona(zona), desarrollos, refs, soloRef: false }
+        return { zona, ciudad, total: ps.length, desde: desdeVal, color: colorZona(zona), desarrollos, refs: pdrDe(zona), soloRef: false }
       })
 
-    // Zonas con PDR de referencia que NO tienen inventario en vivo → tarjeta solo-referencia.
+    // Zonas con PDR que NO tienen inventario en vivo → tarjeta solo-referencia.
     const usadas = new Set(liveZonas.map(z => normalizar(z.zona)))
-    const refZonas = PDR_POR_ZONA
-      .filter(g => !usadas.has(normalizar(g.zona)))
-      .map(g => ({ zona: g.zona, refs: g.refs.filter(r => refPasa(r, g.zona)).sort((a, b) => a.precio - b.precio) }))
-      .filter(g => g.refs.length > 0)
-      .map(g => ({ zona: g.zona, ciudad: '', total: 0, desde: null as number | null, color: colorZona(g.zona), desarrollos: [] as { nombre: string; modelos: Prop[] }[], refs: g.refs, soloRef: true }))
+    const zonasPdr = Array.from(new Set(pdrRows.map(r => r.zona)))
+    const refZonas = zonasPdr
+      .filter(zona => !usadas.has(normalizar(zona)))
+      .map(zona => ({ zona, ciudad: '', total: 0, desde: null as number | null, color: colorZona(zona), desarrollos: [] as { nombre: string; modelos: Prop[] }[], refs: pdrDe(zona), soloRef: true }))
+      .filter(z => z.refs.length > 0)
 
     // Monterrey y Puebla siempre hasta el fondo.
     const result = [...liveZonas, ...refZonas]
     const alFondo = (zona: string) => { const n = normalizar(zona); return n.includes('monterrey') || n.includes('puebla') }
     return [...result.filter(z => !alFondo(z.zona)), ...result.filter(z => alFondo(z.zona))]
-  }, [props, busqueda, fModelo, fCaract, fEntrega, fTipo, fRec, precioMin, precioMax])
+  }, [props, pdrRows, busqueda, fModelo, fCaract, fEntrega, fTipo, fRec, precioMin, precioMax])
 
   const toggle = (z: string) => setExpandidas(prev => { const n = new Set(prev); n.has(z) ? n.delete(z) : n.add(z); return n })
   const expandirTodo = () => setExpandidas(new Set(zonas.map(z => z.zona)))
@@ -231,13 +277,13 @@ export default function InventarioTabla() {
       return sortDir === 'asc' ? r : -r
     })
   }
-  const ordenarRefs = (rs: PdrRef[]) => {
+  const ordenarRefs = (rs: PdrRow[]) => {
     if (!sortCol) return rs
     return [...rs].sort((a, b) => {
       let va: number | string, vb: number | string
-      if (sortCol === 'precio') { va = a.precio; vb = b.precio }
+      if (sortCol === 'precio') { va = a.precio ?? Infinity; vb = b.precio ?? Infinity }
       else if (sortCol === 'tipo') { va = normalizar(a.tipo ?? ''); vb = normalizar(b.tipo ?? '') }
-      else if (sortCol === 'caract') { va = normalizar(a.caract); vb = normalizar(b.caract) }
+      else if (sortCol === 'caract') { va = normalizar(a.caract ?? ''); vb = normalizar(b.caract ?? '') }
       else { va = normalizar(a.etiqueta); vb = normalizar(b.etiqueta) }
       const r = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
       return sortDir === 'asc' ? r : -r
@@ -245,11 +291,37 @@ export default function InventarioTabla() {
   }
   const sortArrow = (id: ColId) => (sortCol === id ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
 
+  // Celda editable inline (click → input; Enter/blur guarda; Escape cancela).
+  const celda = (tabla: 'prop' | 'pdr', id: string, campo: string, valorEdit: string, contenido: React.ReactNode, wrapStyle: any, numerico = false) => {
+    const activo = edit && edit.tabla === tabla && edit.id === id && edit.campo === campo
+    if (activo) {
+      return (
+        <View style={wrapStyle}>
+          {isWeb
+            ? createElement('input', {
+                autoFocus: true, value: edit!.val, inputMode: numerico ? 'numeric' : undefined,
+                onChange: (e: any) => setEdit({ ...edit!, val: e.target.value }),
+                onBlur: commitEdit,
+                onKeyDown: (e: any) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEdit(null) },
+                style: { width: '100%', boxSizing: 'border-box', padding: '4px 6px', borderRadius: 6, border: `1px solid ${GOLD}`, background: BG, color: TEXT, fontSize: 12 },
+              })
+            : <TextInput autoFocus value={edit!.val} keyboardType={numerico ? 'numeric' : 'default'}
+                onChangeText={v => setEdit({ ...edit!, val: v })} onBlur={commitEdit} style={s.cellInput} />}
+        </View>
+      )
+    }
+    return (
+      <TouchableOpacity style={wrapStyle} onPress={() => setEdit({ tabla, id, campo, val: valorEdit })} activeOpacity={0.6}>
+        {contenido}
+      </TouchableOpacity>
+    )
+  }
+
   return (
     <View style={s.page}>
       <View style={s.head}>
         <Text style={s.title}>🏷️ Tabla de precios</Text>
-        <Text style={s.sub}>Precios en vivo de la app ({props.length} modelos) · toca una zona para expandir</Text>
+        <Text style={s.sub}>Toca cualquier celda para editarla · {props.length} modelos</Text>
       </View>
 
       {/* Buscador + expandir/colapsar */}
@@ -347,7 +419,7 @@ export default function InventarioTabla() {
       )}
 
       {loading ? <ActivityIndicator color={GOLD} size="large" style={{ marginTop: 40 }} /> : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 60, paddingHorizontal: 10 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 60, paddingHorizontal: 10 }} keyboardShouldPersistTaps="handled">
           {zonas.map(z => {
             const abierta = expandidas.has(z.zona)
             return (
@@ -378,63 +450,54 @@ export default function InventarioTabla() {
                         </View>
                         {ordenar(d.modelos).map(p => (
                           <View key={p.id} style={s.row}>
-                            <TouchableOpacity style={s.cModelo} onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: p.id } })}>
-                              <Text style={s.modeloTxt} numberOfLines={2}>{p.titulo}</Text>
-                              {p.codigo ? <Text style={s.codigoTxt}>{p.codigo}</Text> : null}
-                            </TouchableOpacity>
-                            <TouchableOpacity style={s.cPrecio} onPress={() => router.push({ pathname: '/(admin)/editar-propiedad', params: { id: p.id } })}>
-                              <Text style={s.precioTxt}>{fmtPrecio(p.precio)}</Text>
-                            </TouchableOpacity>
-                            <Text style={[s.cCaract, s.cellTxt]} numberOfLines={2}>{caract(p)}</Text>
-                            <Text style={[s.cTipo, s.cellTxt]} numberOfLines={1}>{tipoLabel(p.tipo)}</Text>
-                            {editEntrega?.id === p.id ? (
-                              <View style={s.cEntrega}>
-                                {isWeb
-                                  ? createElement('input', {
-                                      autoFocus: true, value: editEntrega.val,
-                                      onChange: (e: any) => setEditEntrega({ id: p.id, val: e.target.value }),
-                                      onBlur: () => guardarEntrega(p.id, editEntrega.val),
-                                      onKeyDown: (e: any) => { if (e.key === 'Enter') guardarEntrega(p.id, editEntrega.val); if (e.key === 'Escape') setEditEntrega(null) },
-                                      style: { width: '100%', padding: '4px 6px', borderRadius: 6, border: `1px solid ${GOLD}`, background: BG, color: TEXT, fontSize: 12 },
-                                    })
-                                  : <TextInput autoFocus value={editEntrega.val} onChangeText={v => setEditEntrega({ id: p.id, val: v })}
-                                      onBlur={() => guardarEntrega(p.id, editEntrega.val)} style={s.entregaInput} />}
-                              </View>
-                            ) : (
-                              <TouchableOpacity style={s.cEntrega} onPress={() => setEditEntrega({ id: p.id, val: p.entrega_aprox ?? '' })}>
-                                <Text style={[s.entregaTxt, !p.entrega_aprox && { color: MUTE }]} numberOfLines={1}>{p.entrega_aprox || '+ agregar'}</Text>
-                              </TouchableOpacity>
-                            )}
+                            {celda('prop', p.id, 'modelo', p.titulo ?? '',
+                              <><Text style={s.modeloTxt} numberOfLines={2}>{p.titulo}</Text>{p.codigo ? <Text style={s.codigoTxt}>{p.codigo}</Text> : null}</>,
+                              s.cModelo)}
+                            {celda('prop', p.id, 'precio', String(p.precio ?? ''),
+                              <Text style={s.precioTxt}>{fmtPrecio(p.precio)}</Text>, s.cPrecio, true)}
+                            {celda('prop', p.id, 'caract', caract(p) === '—' ? '' : caract(p),
+                              <Text style={[s.cellTxt]} numberOfLines={2}>{caract(p)}</Text>, s.cCaract)}
+                            {celda('prop', p.id, 'tipo', p.tipo ?? '',
+                              <Text style={[s.cellTxt]} numberOfLines={1}>{tipoLabel(p.tipo)}</Text>, s.cTipo)}
+                            {celda('prop', p.id, 'entrega', p.entrega_aprox ?? '',
+                              <Text style={[s.entregaTxt, !p.entrega_aprox && { color: MUTE }]} numberOfLines={1}>{p.entrega_aprox || '+ agregar'}</Text>, s.cEntrega)}
                           </View>
                         ))}
                       </View>
                     ))}
 
-                    {/* PDR · Precios de referencia del mercado al final de la tabla de la zona */}
+                    {/* PDR · Precios de referencia (editable) al final de la zona */}
+                    <View style={[s.pdrHead, { backgroundColor: z.color }]}>
+                      <Text style={s.pdrHeadTxt}>PDR · Precios de referencia</Text>
+                      <Text style={s.pdrHeadMeta}>{z.refs.length}</Text>
+                    </View>
                     {z.refs.length > 0 && (
-                      <View>
-                        <View style={[s.pdrHead, { backgroundColor: z.color }]}>
-                          <Text style={s.pdrHeadTxt}>PDR · Precios de referencia (mercado)</Text>
-                          <Text style={s.pdrHeadMeta}>{z.refs.length}</Text>
-                        </View>
-                        <View style={[s.row, s.colHead]}>
-                          <Text style={[s.cModelo, s.colHeadTxt]}>Referencia</Text>
-                          <Text style={[s.cPrecio, s.colHeadTxt]}>Precio</Text>
-                          <Text style={[s.cCaract, s.colHeadTxt]}>Características</Text>
-                          <Text style={[s.cTipo, s.colHeadTxt]}>Tipo</Text>
-                          <Text style={[s.cEntrega, s.colHeadTxt]}> </Text>
-                        </View>
-                        {ordenarRefs(z.refs).map((r, i) => (
-                          <View key={r.etiqueta + i} style={[s.row, s.pdrDataRow]}>
-                            <Text style={[s.cModelo, s.modeloTxt]} numberOfLines={2}>{r.etiqueta}</Text>
-                            <Text style={[s.cPrecio, s.pdrRefPrecio]}>{fmtPrecio(r.precio)}</Text>
-                            <Text style={[s.cCaract, s.cellTxt]} numberOfLines={2}>{r.caract}</Text>
-                            <Text style={[s.cTipo, s.cellTxt]} numberOfLines={1}>{r.tipo ?? '—'}</Text>
-                            <Text style={s.cEntrega}> </Text>
-                          </View>
-                        ))}
+                      <View style={[s.row, s.colHead]}>
+                        <Text style={[s.cModelo, s.colHeadTxt]}>Referencia</Text>
+                        <Text style={[s.cPrecio, s.colHeadTxt]}>Precio</Text>
+                        <Text style={[s.cCaract, s.colHeadTxt]}>Características</Text>
+                        <Text style={[s.cTipo, s.colHeadTxt]}>Tipo</Text>
+                        <Text style={[s.cEntrega, s.colHeadTxt]}> </Text>
                       </View>
                     )}
+                    {ordenarRefs(z.refs).map(r => (
+                      <View key={r.id} style={[s.row, s.pdrDataRow]}>
+                        {celda('pdr', r.id, 'etiqueta', r.etiqueta,
+                          <Text style={s.modeloTxt} numberOfLines={2}>{r.etiqueta}</Text>, s.cModelo)}
+                        {celda('pdr', r.id, 'precio', String(r.precio ?? ''),
+                          <Text style={s.pdrRefPrecio}>{fmtPrecio(r.precio)}</Text>, s.cPrecio, true)}
+                        {celda('pdr', r.id, 'caract', r.caract ?? '',
+                          <Text style={[s.cellTxt]} numberOfLines={2}>{r.caract || '—'}</Text>, s.cCaract)}
+                        {celda('pdr', r.id, 'tipo', r.tipo ?? '',
+                          <Text style={[s.cellTxt]} numberOfLines={1}>{r.tipo ?? '—'}</Text>, s.cTipo)}
+                        <TouchableOpacity style={[s.cEntrega, { alignItems: 'flex-end' }]} onPress={() => borrarPdr(r.id)}>
+                          <Text style={s.pdrDelTxt}>🗑</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                    <TouchableOpacity style={s.pdrAddBtn} onPress={() => agregarPdr(z.zona)}>
+                      <Text style={s.pdrAddTxt}>＋ Agregar referencia</Text>
+                    </TouchableOpacity>
                   </View>
                 )}
               </View>
@@ -483,6 +546,7 @@ const s = StyleSheet.create({
   zonaTxt: { color: '#fff', fontSize: 15, fontWeight: '900', flex: 1 },
   zonaDesde: { color: 'rgba(255,255,255,0.92)', fontSize: 12, fontWeight: '800' },
   zonaMeta: { color: '#fff', fontSize: 12, fontWeight: '900', backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
+  zonaRefBadge: { color: '#fff', fontSize: 10.5, fontWeight: '900', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden', textTransform: 'uppercase' },
   desHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.04)', borderLeftWidth: 3, paddingHorizontal: 12, paddingVertical: 7, marginTop: 2 },
   desTxt: { fontSize: 13.5, fontWeight: '800' },
   desMeta: { color: MUTE, fontSize: 11, fontWeight: '700' },
@@ -495,16 +559,18 @@ const s = StyleSheet.create({
   cTipo: { flex: 1 },
   cEntrega: { flex: 1.5 },
   cellTxt: { color: SUB, fontSize: 12 },
+  cellInput: { borderWidth: 1, borderColor: GOLD, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4, color: TEXT, fontSize: 12 },
   modeloTxt: { color: TEXT, fontSize: 12.5, fontWeight: '700' },
   codigoTxt: { color: MUTE, fontSize: 10, marginTop: 1 },
   precioTxt: { color: '#4ade80', fontSize: 13, fontWeight: '900' },
   entregaTxt: { color: TEXT, fontSize: 12, fontWeight: '600' },
-  entregaInput: { borderWidth: 1, borderColor: GOLD, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4, color: TEXT, fontSize: 12 },
   pdrHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, paddingHorizontal: 12, paddingVertical: 8 },
   pdrHeadTxt: { color: '#fff', fontSize: 12.5, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.3 },
   pdrHeadMeta: { color: '#fff', fontSize: 12, fontWeight: '900', backgroundColor: 'rgba(0,0,0,0.28)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
   pdrDataRow: { backgroundColor: 'rgba(0,0,0,0.18)' },
   pdrRefPrecio: { color: GOLD, fontSize: 13, fontWeight: '900' },
-  zonaRefBadge: { color: '#fff', fontSize: 10.5, fontWeight: '900', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden', textTransform: 'uppercase' },
+  pdrDelTxt: { fontSize: 13 },
+  pdrAddBtn: { paddingHorizontal: 12, paddingVertical: 9, backgroundColor: 'rgba(255,255,255,0.05)' },
+  pdrAddTxt: { color: GOLD, fontSize: 12.5, fontWeight: '800' },
   vacio: { color: MUTE, textAlign: 'center', padding: 30 },
 })
