@@ -140,12 +140,14 @@ function mezclar<T>(arr: T[]): T[] {
 // (veces publicada, estado de toggle, etc.), no en cada tecla de búsqueda.
 const PropiedadCard = memo(function PropiedadCard({
   item, width, veces, isToggling, destacada, esAdmin, primaryColor,
-  cardBg, cardBorder, isOnline, imgOpts, empresaMatriz, onOpen, onShare, onPublish, onZoom,
+  cardBg, cardBorder, isOnline, imgOpts, empresaMatriz, totalPublicadores,
+  onOpen, onShare, onPublish, onZoom,
 }: {
   item: Propiedad; width?: number; veces: number; isToggling: boolean
   destacada: boolean; esAdmin: boolean; primaryColor: string
   cardBg: string; cardBorder: string; isOnline: boolean; imgOpts: ThumbOpts
   empresaMatriz?: string | null
+  totalPublicadores: number
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
 }) {
@@ -248,6 +250,15 @@ const PropiedadCard = memo(function PropiedadCard({
             {item.m2 != null && <Text style={styles.metaItem}>{item.m2}m² const.</Text>}
             {item.m2_terreno != null && <Text style={styles.metaItem}>{item.m2_terreno}m² terr.</Text>}
             {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
+          </View>
+        )}
+        {totalPublicadores < 3 && veces === 0 && item.estado !== 'vendida' && (
+          <View style={styles.primeraVezBadge}>
+            <Text style={styles.primeraVezText}>
+              {totalPublicadores === 0
+                ? '⭐ ¡Nadie la ha publicado aún!'
+                : `⭐ Solo ${totalPublicadores} la ${totalPublicadores === 1 ? 'ha' : 'han'} publicado — ¡sé de los primeros!`}
+            </Text>
           </View>
         )}
         <View style={styles.cardFooter}>
@@ -478,6 +489,21 @@ export default function ProspectadorPropiedades() {
     },
     enabled: !!queryData?.userId,
     staleTime: 1000 * 60 * 5,
+    networkMode: 'offlineFirst',
+    refetchOnWindowFocus: false,
+  })
+
+  // Conteo de usuarios distintos que han publicado cada propiedad.
+  // Alimenta el badge "¡Sé de los primeros!" en propiedades poco publicadas.
+  const { data: conteoPubs } = useQuery<Map<string, number>>({
+    queryKey: ['publicaciones-conteo'],
+    queryFn: async () => {
+      const { data } = await supabase.rpc('get_conteo_publicadores_propiedad')
+      const m = new Map<string, number>()
+      for (const r of data ?? []) m.set(r.propiedad_id, r.total_usuarios)
+      return m
+    },
+    staleTime: 1000 * 60 * 15,
     networkMode: 'offlineFirst',
     refetchOnWindowFocus: false,
   })
@@ -964,6 +990,7 @@ export default function ProspectadorPropiedades() {
       isOnline={isOnline}
       imgOpts={imgOpts}
       empresaMatriz={item.nombre_constructora ? (empresaMatrizMap.get(item.nombre_constructora) ?? null) : null}
+      totalPublicadores={conteoPubs?.get(item.id) ?? 0}
       onOpen={onOpenCard}
       onShare={onShareCard}
       onPublish={onPublishCard}
@@ -1663,6 +1690,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#fff',
+  },
+  primeraVezBadge: {
+    backgroundColor: '#fef9c3',
+    borderLeftWidth: 3,
+    borderLeftColor: '#ca8a04',
+    marginHorizontal: 12,
+    marginBottom: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 4,
+  },
+  primeraVezText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#92400e',
   },
   exclusivaBanner: {
     backgroundColor: '#c0392b',

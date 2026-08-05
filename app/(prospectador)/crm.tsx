@@ -642,6 +642,7 @@ export default function CRM() {
     nombre: 'nombre', telefono: 'telefono', estado: 'estado',
     operacion: 'tipo_operacion', interes: 'nivel_interes', fecha: 'proximo_contacto',
     notas: 'notas', zona: 'zona_busqueda', presupuesto: 'presupuesto',
+    tipo_credito: 'tipo_credito',
   }
 
   function mostrarGuardado(t: 'ok' | 'pendiente') {
@@ -739,6 +740,18 @@ export default function CRM() {
           { value: null, label: '— Sin operación' },
           { value: 'venta', label: '🏠 Venta' },
           { value: 'renta', label: '🔑 Renta' },
+        ],
+      })
+    } else if (col === 'tipo_credito') {
+      setCellPicker({
+        id: item.id, col, label: 'Método de pago',
+        options: [
+          { value: null,         label: '— Sin definir' },
+          { value: 'infonavit',  label: '🏦 Infonavit' },
+          { value: 'fovisste',   label: '🏛️ Fovisste' },
+          { value: 'bancario',   label: '💳 Bancario' },
+          { value: 'contado',    label: '💵 Contado' },
+          { value: 'otro',       label: '🔖 Otro' },
         ],
       })
     } else if (col === 'interes') {
@@ -1326,14 +1339,14 @@ export default function CRM() {
                       )
                     case 'tipo_credito':
                       return (
-                        <View key={col.id} style={[s.excelTdCell, cs]}>
+                        <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'tipo_credito')} activeOpacity={0.6}>
                           {item.tipo_credito
                             ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub }]} numberOfLines={1}>
                                 {TIPO_CREDITO_LABEL[item.tipo_credito] ?? item.tipo_credito}
                               </Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>—</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ pago</Text>
                           }
-                        </View>
+                        </TouchableOpacity>
                       )
                     case 'fecha': {
                       const ts = item.proximo_contacto ? new Date(item.proximo_contacto) : null
@@ -1583,8 +1596,9 @@ export default function CRM() {
               {cellPicker?.options.map(opt => {
                 const cl = clientes.find(x => x.id === cellPicker.id)
                 const actualVal = cl
-                  ? (cellPicker.col === 'estado' ? cl.estado
-                    : cellPicker.col === 'operacion' ? cl.tipo_operacion
+                  ? (cellPicker.col === 'estado'       ? cl.estado
+                    : cellPicker.col === 'operacion'   ? cl.tipo_operacion
+                    : cellPicker.col === 'tipo_credito' ? cl.tipo_credito
                     : cl.nivel_interes)
                   : null
                 const active = actualVal === opt.value
