@@ -1193,7 +1193,7 @@ export default function CRM() {
           function renderExcelRow(item: Cliente, idx: number) {
             const info = estadoInfo(item.estado)
             const interesRowBg = item.nivel_interes === 'alto'
-              ? (darkMode ? '#1f1010' : '#fee2e2')
+              ? (darkMode ? '#2a1010' : '#fecaca')
               : item.nivel_interes === 'medio'
               ? (darkMode ? '#1d1708' : '#fef3c7')
               : item.nivel_interes === 'bajo'
@@ -1320,7 +1320,7 @@ export default function CRM() {
                                   {item.tipo_operacion === 'venta' ? '🏠 Venta' : '🔑 Renta'}
                                 </Text>
                               </View>
-                            : <Text style={[s.excelNull, { color: c.border }]}>—</Text>
+                            : <Text style={[s.excelNull, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>—</Text>
                           }
                         </TouchableOpacity>
                       )
@@ -1331,7 +1331,7 @@ export default function CRM() {
                             ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub }]} numberOfLines={1}>
                                 {TIPO_CREDITO_LABEL[item.tipo_credito] ?? item.tipo_credito}
                               </Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>—</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>—</Text>
                           }
                         </View>
                       )
@@ -1345,7 +1345,7 @@ export default function CRM() {
                             ? <Text style={[s.excelTd, s.excelTdDate, s.cellTxtNoPad, { color: vencido ? '#ef4444' : hoy ? '#d97706' : c.textSub }]} numberOfLines={1}>
                                 {vencido ? '⚠ ' : hoy ? '📌 ' : ''}{ts.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} {ts.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                               </Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ agregar</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ agregar</Text>
                           }
                         </TouchableOpacity>
                       )
@@ -1355,7 +1355,7 @@ export default function CRM() {
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'zona')} activeOpacity={0.6}>
                           {item.zona_busqueda
                             ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub }]} numberOfLines={1}>{item.zona_busqueda}</Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ zona</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ zona</Text>
                           }
                         </TouchableOpacity>
                       )
@@ -1364,7 +1364,7 @@ export default function CRM() {
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'presupuesto')} activeOpacity={0.6}>
                           {item.presupuesto
                             ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: '#2e7d32', fontWeight: '700' }]} numberOfLines={1}>{item.presupuesto}</Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ presup.</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ presup.</Text>
                           }
                         </TouchableOpacity>
                       )
@@ -1373,7 +1373,7 @@ export default function CRM() {
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs, { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 8 }]} onPress={() => abrirEdicion(item, 'notas')} activeOpacity={0.6}>
                           {item.notas
                             ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub, fontSize: 12, lineHeight: 17 }]} numberOfLines={3}>{item.notas}</Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: c.border }]}>+ agregar</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ agregar</Text>
                           }
                         </TouchableOpacity>
                       )
