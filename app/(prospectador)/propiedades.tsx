@@ -882,6 +882,11 @@ export default function ProspectadorPropiedades() {
     })
   }
 
+  // Vendidas siempre al fondo, por debajo de cualquier otro criterio de orden.
+  propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
+    (a.estado === 'vendida' ? 1 : 0) - (b.estado === 'vendida' ? 1 : 0)
+  )
+
   return propiedadesFiltradas
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [

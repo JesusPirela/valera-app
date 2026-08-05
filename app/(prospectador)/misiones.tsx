@@ -83,17 +83,22 @@ async function getConteosDiarios(uid: string): Promise<Map<string, number>> {
         .eq('user_id', uid).gte('fecha_publicacion', start).lt('fecha_publicacion', end),
       supabase.from('clientes').select('id')
         .eq('responsable_id', uid).gte('created_at', start).lt('created_at', end),
-      supabase.from('recordatorios').select('id')
-        .eq('user_id', uid).eq('completado', true).gte('completado_at', start).lt('completado_at', end),
-      supabase.from('interacciones').select('id')
-        .eq('user_id', uid).gte('created_at', start).lt('created_at', end),
+      // seguimientos_dia es la fuente de verdad desde el rework del 20260723;
+      // cada fila = un cliente trabajado hoy (deduplicado por cliente+día).
+      supabase.from('seguimientos_dia').select('cliente_id')
+        .eq('user_id', uid).eq('fecha', hoy),
+      // La misión de interacción solo cuenta WhatsApp/llamada, igual que el SQL.
+      supabase.from('interacciones').select('cliente_id')
+        .eq('user_id', uid).in('tipo', ['mensaje', 'llamada'])
+        .gte('created_at', start).lt('created_at', end),
       supabase.from('vu_progreso').select('id')
         .eq('user_id', uid).gte('completada_at', start).lt('completada_at', end),
     ])
+    const intClientesUnicos = new Set((intRes.data ?? []).map(r => r.cliente_id)).size
     m.set('propiedad',   propRes.data?.length  ?? 0)
     m.set('crm',         crmRes.data?.length   ?? 0)
     m.set('seguimiento', segRes.data?.length   ?? 0)
-    m.set('interaccion', intRes.data?.length   ?? 0)
+    m.set('interaccion', intClientesUnicos)
     m.set('curso',       cursoRes.data?.length ?? 0)
   } catch (e) {
     console.warn('[Misiones] getConteosDiarios error:', e)
