@@ -33,6 +33,7 @@ type Cita = {
   coordinado_por: string | null
   asesor_id: string | null
   propiedad_id: string | null
+  propiedad_externa: string | null
   estado: EstadoCita
   fecha_cita: string | null
   notas: string | null
@@ -223,6 +224,55 @@ function DropdownSelector({
   )
 }
 
+// ─── SelectorPropiedad ────────────────────────────────────────────────────────
+// Elige la propiedad de la cita: busca una de la app, o escribe/pega el link de
+// una que no esté en la app.
+function SelectorPropiedad({ propiedadId, propiedadTitulo, externa, onSelectApp, onClearApp, onChangeExterna }: {
+  propiedadId: string | null; propiedadTitulo: string | null; externa: string
+  onSelectApp: (id: string, titulo: string) => void; onClearApp: () => void; onChangeExterna: (v: string) => void
+}) {
+  const [q, setQ] = useState('')
+  const [resultados, setResultados] = useState<{ id: string; titulo: string; codigo: string | null }[]>([])
+  const deb = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function buscar(txt: string) {
+    setQ(txt)
+    if (deb.current) clearTimeout(deb.current)
+    if (txt.trim().length < 2) { setResultados([]); return }
+    deb.current = setTimeout(async () => {
+      const { data } = await supabase.from('propiedades')
+        .select('id, titulo, codigo')
+        .or(`titulo.ilike.%${txt}%,codigo.ilike.%${txt}%`)
+        .limit(8)
+      setResultados((data ?? []) as any)
+    }, 300)
+  }
+  return (
+    <>
+      <Text style={s.fieldLabel}>Propiedad de la cita</Text>
+      {propiedadId ? (
+        <View style={s.clienteSeleccionado}>
+          <Text style={s.clienteSelNombre}>🏠 {propiedadTitulo ?? 'Propiedad seleccionada'}</Text>
+          <TouchableOpacity onPress={onClearApp}><Ionicons name="close-circle" size={18} color="#94a3b8" /></TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          <TextInput style={[s.input, { marginBottom: 6 }]} placeholder="Buscar propiedad de la app (título o código)…"
+            value={q} onChangeText={buscar} autoCapitalize="none" />
+          {resultados.map(p => (
+            <TouchableOpacity key={p.id} style={s.clienteRow} onPress={() => { onSelectApp(p.id, p.titulo); setResultados([]); setQ('') }}>
+              <Text style={s.clienteRowNombre}>{p.titulo}</Text>
+              {p.codigo ? <Text style={s.clienteRowTel}>{p.codigo}</Text> : null}
+            </TouchableOpacity>
+          ))}
+          <Text style={[s.fieldLabel, { marginTop: 8 }]}>¿No está en la app? Pega el link o escríbela</Text>
+          <TextInput style={[s.input, { marginBottom: 14 }]} placeholder="https://… o descripción de la propiedad"
+            value={externa} onChangeText={onChangeExterna} autoCapitalize="none" />
+        </>
+      )}
+    </>
+  )
+}
+
 // ─── ModalEdicion ─────────────────────────────────────────────────────────────
 
 function ModalEdicion({
@@ -236,6 +286,9 @@ function ModalEdicion({
   const [coordinadorId, setCoordinadorId] = useState(cita?.coordinado_por ?? '')
   const [asesorId, setAsesorId]           = useState(cita?.asesor_id ?? '')
   const [telefono, setTelefono]           = useState(cita?.clientes?.telefono ?? '')
+  const [propiedadId, setPropiedadId]     = useState<string | null>(cita?.propiedad_id ?? null)
+  const [propiedadTitulo, setPropTitulo]  = useState<string | null>(cita?.propiedad?.titulo ?? null)
+  const [propExterna, setPropExterna]     = useState(cita?.propiedad_externa ?? '')
   const [guardando, setGuardando]         = useState(false)
 
   async function guardar() {
@@ -250,6 +303,8 @@ function ModalEdicion({
       notas: notas.trim() || null,
       coordinado_por: coordinadorId || null,
       asesor_id: asesorId || null,
+      propiedad_id: propiedadId,
+      propiedad_externa: propiedadId ? null : (propExterna.trim() || null),
       fecha_cita: fechaTexto ? new Date(fechaTexto).toISOString() : null,
     }).eq('id', cita.id).select('id')
     setGuardando(false)
@@ -317,6 +372,12 @@ function ModalEdicion({
             <DropdownSelector label="Atiende / Atendido por" value={asesorId}
               options={asesores} onSelect={setAsesorId} searchable />
 
+            <SelectorPropiedad
+              propiedadId={propiedadId} propiedadTitulo={propiedadTitulo} externa={propExterna}
+              onSelectApp={(id, tit) => { setPropiedadId(id); setPropTitulo(tit); setPropExterna('') }}
+              onClearApp={() => { setPropiedadId(null); setPropTitulo(null) }}
+              onChangeExterna={setPropExterna} />
+
             <Text style={s.fieldLabel}>Notas de coordinación</Text>
             <TextInput style={[s.input, { height: 90, textAlignVertical: 'top', paddingTop: 10, marginBottom: 16 }]}
               placeholder="Detalles, condiciones, observaciones..."
@@ -325,9 +386,6 @@ function ModalEdicion({
             <View style={s.infoBox}>
               {cita.prospectador && (
                 <Text style={s.infoRow}><Text style={s.infoLabel}>Prospectador: </Text>{cita.prospectador.nombre}</Text>
-              )}
-              {cita.propiedad && (
-                <Text style={s.infoRow}><Text style={s.infoLabel}>Proyecto: </Text>{cita.propiedad.titulo}</Text>
               )}
               <Text style={s.infoRow}><Text style={s.infoLabel}>Agregada: </Text>{formatFecha(cita.created_at)}</Text>
               <Text style={s.infoRow}><Text style={s.infoLabel}>Actualizada: </Text>{tiempoRelativo(cita.updated_at)}</Text>
@@ -365,6 +423,9 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
   const [tipoOperacion, setTipoOperacion]     = useState<'venta' | 'renta'>('venta')
   const [estado, setEstado]                   = useState<EstadoCita>(vistaAsesor ? 'aparto' : 'por_contactar')
   const [notas, setNotas]                     = useState('')
+  const [propiedadId, setPropiedadId]         = useState<string | null>(null)
+  const [propiedadTitulo, setPropTitulo]      = useState<string | null>(null)
+  const [propExterna, setPropExterna]         = useState('')
   const [fechaTexto, setFechaTexto]           = useState('')
   const [coordinadorId, setCoordinadorId]     = useState('')
   const [asesorId, setAsesorId]               = useState('')
@@ -438,6 +499,8 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
         coordinado_por: coordinadorId || null,
         asesor_id: asesorId || null,
         estado, notas: notas.trim() || null,
+        propiedad_id: propiedadId,
+        propiedad_externa: propiedadId ? null : (propExterna.trim() || null),
         fecha_cita: fechaTexto ? new Date(fechaTexto).toISOString() : null,
       })
       if (error) { alerta(error.message); setGuardando(false); return }
@@ -570,6 +633,12 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
               options={asesores} onSelect={setAsesorId} searchable />
             <DropdownSelector label="Prospectador" value={prospectadorId}
               options={prospectadores} onSelect={setProspectadorId} searchable />
+
+            <SelectorPropiedad
+              propiedadId={propiedadId} propiedadTitulo={propiedadTitulo} externa={propExterna}
+              onSelectApp={(id, tit) => { setPropiedadId(id); setPropTitulo(tit); setPropExterna('') }}
+              onClearApp={() => { setPropiedadId(null); setPropTitulo(null) }}
+              onChangeExterna={setPropExterna} />
 
             <Text style={s.fieldLabel}>Notas</Text>
             <TextInput style={[s.input, { height: 80, textAlignVertical: 'top', paddingTop: 10, marginBottom: 24 }]}
@@ -776,13 +845,18 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
           <Text style={kc.notas} numberOfLines={2}>{cita.notas}</Text>
         )}
 
-        {/* Proyecto */}
-        {cita.propiedad && (
+        {/* Proyecto (propiedad de la app o externa) */}
+        {cita.propiedad ? (
           <View style={kc.proyectoRow}>
             <Ionicons name="business-outline" size={10} color="#0d9488" />
             <Text style={kc.proyectoTxt} numberOfLines={1}>{cita.propiedad.titulo}</Text>
           </View>
-        )}
+        ) : cita.propiedad_externa ? (
+          <View style={kc.proyectoRow}>
+            <Ionicons name="link-outline" size={10} color="#0d9488" />
+            <Text style={kc.proyectoTxt} numberOfLines={1}>{cita.propiedad_externa}</Text>
+          </View>
+        ) : null}
 
         {/* Meta: asesor / coordinador / tiempo */}
         <View style={kc.metaRow}>
