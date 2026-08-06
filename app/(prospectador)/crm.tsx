@@ -479,8 +479,10 @@ export default function CRM() {
   // vuelve a pedir si pasaron >5 min.
   useFocusEffect(useCallback(() => {
     const st = queryClient.getQueryState(['clientes', soloMios ? 'mios' : 'all', 'v3'])
+    // Refetch si pasaron >5 min O si detalle-cliente invalidó el caché
+    // (ej. el usuario actualizó proximo_contacto y el banner debe quitarlo).
     const viejo = !st?.dataUpdatedAt || (Date.now() - st.dataUpdatedAt) > 1000 * 60 * 5
-    if (viejo) refetch()
+    if (viejo || st?.isInvalidated) refetch()
   }, [refetch, soloMios, queryClient]))
 
   useEffect(() => {

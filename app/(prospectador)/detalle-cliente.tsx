@@ -391,8 +391,18 @@ export default function DetalleCliente() {
       if (!old) return old
       return { ...old, recordatorios: old.recordatorios.map(r => r.id === recId ? { ...r, completado: true } : r) }
     })
-    // Invalida el CRM para que el contador "necesitan seguimiento" se actualice al volver
-    queryClient.invalidateQueries({ queryKey: ['clientes'] })
+    // Actualizar la lista del CRM al instante: marcar el recordatorio como
+    // completado dentro del cliente cacheado → el banner de Oportunidades
+    // recalcula inmediatamente sin esperar refetch.
+    const patchRec = (old: any[] | undefined) =>
+      (old ?? []).map(cl => cl.id !== id ? cl : {
+        ...cl,
+        recordatorios: (cl.recordatorios ?? []).map((r: any) =>
+          r.id === recId ? { ...r, completado: true } : r
+        ),
+      })
+    queryClient.setQueryData<any[]>(['clientes', 'mios', 'v3'], patchRec)
+    queryClient.setQueryData<any[]>(['clientes', 'all',  'v3'], patchRec)
     if (!error) {
       const { data: { user } } = await getUsuarioActual()
       // Completar un recordatorio es seguimiento de ESE cliente (1 vez al día).

@@ -471,6 +471,12 @@ export default function ClienteForm() {
           if (estado === 'cita_agendada') registrarAccion(idGuardado, 'agendar_cita').catch(() => {})
           else if (estado === 'compro')   registrarAccion(idGuardado, 'cerrar_venta').catch(() => {})
         }
+        // Actualizar la lista del CRM al instante para que el banner de
+        // Oportunidades refleje el cambio sin esperar focus ni refetch.
+        const patchLista = (old: any[] | undefined) =>
+          (old ?? []).map(cl => cl.id === params.id ? { ...cl, ...payload } : cl)
+        queryClient.setQueryData<any[]>(['clientes', 'mios', 'v3'], patchLista)
+        queryClient.setQueryData<any[]>(['clientes', 'all',  'v3'], patchLista)
       } else {
         const { data, error } = await supabase
           .from('clientes')
