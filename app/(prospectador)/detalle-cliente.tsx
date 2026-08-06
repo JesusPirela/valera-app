@@ -320,6 +320,17 @@ export default function DetalleCliente() {
     }
   }
 
+  // Toca la fila de clientes en el servidor para que updated_at quede en "ahora".
+  // Esto evita que el refetch posterior devuelva el valor viejo y reaparezcas en el banner.
+  function tocarCliente() {
+    const ahora = new Date().toISOString()
+    supabase.from('clientes').update({ updated_at: ahora }).eq('id', id as string).then()
+    const patch = (old: any[] | undefined) =>
+      (old ?? []).map(cl => cl.id !== id ? cl : { ...cl, updated_at: ahora })
+    queryClient.setQueryData<any[]>(['clientes', 'mios', 'v3'], patch)
+    queryClient.setQueryData<any[]>(['clientes', 'all',  'v3'], patch)
+  }
+
   async function agregarInteraccion() {
     if (!textoInteraccion.trim()) { Alert.alert('Requerido', 'Escribe una descripción.'); return }
     setGuardandoInteraccion(true)
@@ -351,8 +362,8 @@ export default function DetalleCliente() {
       })
       if (error) { Alert.alert('Error al guardar', error.message); return }
       setTituloRec(''); setDescRec(''); setFechaRec(null); setModalRecordatorio(false)
+      tocarCliente()
       refetch()
-      queryClient.invalidateQueries({ queryKey: ['clientes'] })
     } catch (e: any) {
       Alert.alert('Error inesperado', e?.message ?? 'Intenta de nuevo.')
     } finally {
@@ -365,8 +376,8 @@ export default function DetalleCliente() {
     const { error } = await supabase.from('recordatorios')
       .update({ fecha_hora: nueva.toISOString() }).eq('id', recId)
     if (!error) {
+      tocarCliente()
       refetch()
-      queryClient.invalidateQueries({ queryKey: ['clientes'] })
       programarRecordatorios()
     }
   }
@@ -379,8 +390,8 @@ export default function DetalleCliente() {
     const { error } = await supabase.from('recordatorios')
       .update({ fecha_hora: manana.toISOString() }).eq('id', recId)
     if (!error) {
+      tocarCliente()
       refetch()
-      queryClient.invalidateQueries({ queryKey: ['clientes'] })
       programarRecordatorios()
     }
   }
@@ -391,21 +402,9 @@ export default function DetalleCliente() {
       if (!old) return old
       return { ...old, recordatorios: old.recordatorios.map(r => r.id === recId ? { ...r, completado: true } : r) }
     })
-    // Actualizar la lista del CRM al instante: marcar el recordatorio como
-    // completado dentro del cliente cacheado → el banner de Oportunidades
-    // recalcula inmediatamente sin esperar refetch.
-    const patchRec = (old: any[] | undefined) =>
-      (old ?? []).map(cl => cl.id !== id ? cl : {
-        ...cl,
-        recordatorios: (cl.recordatorios ?? []).map((r: any) =>
-          r.id === recId ? { ...r, completado: true } : r
-        ),
-      })
-    queryClient.setQueryData<any[]>(['clientes', 'mios', 'v3'], patchRec)
-    queryClient.setQueryData<any[]>(['clientes', 'all',  'v3'], patchRec)
+    tocarCliente()
     if (!error) {
       const { data: { user } } = await getUsuarioActual()
-      // Completar un recordatorio es seguimiento de ESE cliente (1 vez al día).
       if (user) registrarSeguimiento(user.id, id as string).catch(() => {})
     }
   }
@@ -426,6 +425,7 @@ export default function DetalleCliente() {
       registrarSeguimiento(uid, id as string).catch(() => {})
       setTituloSeguimiento('')
       setModalSeguimientoRapido(false)
+      tocarCliente()
       refetch()
     } catch (e: any) {
       Alert.alert('Error inesperado', e?.message ?? 'Intenta de nuevo.')

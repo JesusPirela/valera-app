@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useMemo, createElement, memo } from 'react'
+﻿import React, { useState, useCallback, useEffect, useMemo, createElement, memo } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking, Alert,
   ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions, RefreshControl, Keyboard,
@@ -38,6 +38,7 @@ type Cliente = {
   tipo_operacion: string | null
   proximo_contacto: string | null
   created_at: string
+  updated_at: string
   nivel_interes: 'alto' | 'medio' | 'bajo' | null
   notas: string | null
   zona_busqueda: string | null
@@ -130,13 +131,20 @@ function diasVencido(c: Cliente): number {
 //    definió cuándo lo vuelve a contactar).
 // Antes solo contaba el recordatorio abierto, así que un cliente con el próximo
 // contacto vencido (⚠ en la columna de fecha) no aparecía al filtrar VENCIDOS.
+function fueActualizadoReciente(ts: string | undefined): boolean {
+  if (!ts) return false
+  return Date.now() - new Date(ts).getTime() < 3 * 24 * 60 * 60 * 1000
+}
+
 function necesitaSeguimiento(c: Cliente): boolean {
   if (c.estado === 'descartado' || c.estado === 'compro' || c.estado === 'compro_externo') return false
+  // 3 días de margen tras cualquier movimiento: el asesor ya lo atendió
+  if (fueActualizadoReciente(c.updated_at)) return false
   const now = Date.now()
   if (c.proximo_contacto) {
     const t = new Date(c.proximo_contacto).getTime()
-    if (t > now) return false   // reagendado a futuro → resuelto
-    if (t < now) return true     // próximo contacto vencido → necesita seguimiento
+    if (t > now) return false
+    if (t < now) return true
   }
   return (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
 }
@@ -325,6 +333,7 @@ export default function CRM() {
   const [busqueda, setBusqueda]           = useState('')
   const [estadoFiltro, setEstadoFiltro]   = useState<string | null>(null)
   const [filtroVencidos, setFiltroVencidos] = useState(false)
+  const [bannerCerrado, setBannerCerrado]   = useState(false)
   const [opFiltro, setOpFiltro]           = useState<'venta' | 'renta' | null>(null)
   const [sortBy, setSortBy]               = useState<SortBy>('reciente')
   const [showSort, setShowSort]           = useState(false)
@@ -450,7 +459,7 @@ export default function CRM() {
     queryFn: async () => {
       let q = supabase
         .from('clientes')
-        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, recordatorios(id, titulo, fecha_hora, completado)')
+        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, recordatorios(id, titulo, fecha_hora, completado)')
         .is('eliminado_at', null)
         .order('updated_at', { ascending: false })
       if (soloMios) {
@@ -524,6 +533,13 @@ export default function CRM() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [clientes, tick]
   )
+
+  // Reabre el banner si aparece un cliente nuevo en riesgo después de cerrarlo
+  const prevRiesgoLen = React.useRef(0)
+  React.useEffect(() => {
+    if (clientesEnRiesgo.length > prevRiesgoLen.current) setBannerCerrado(false)
+    prevRiesgoLen.current = clientesEnRiesgo.length
+  }, [clientesEnRiesgo.length])
 
   // ── Filtros ───────────────────────────────────────────────────
   const filtrados = useMemo(() => {
@@ -1087,6 +1103,50 @@ export default function CRM() {
         </View>
 
 
+        {/* ── Oportunidades en riesgo ── */}
+        {clientesEnRiesgo.length > 0 && !filtroVencidos && !bannerCerrado && (
+          <View style={s.opBanner}>
+            <View style={s.opHeader}>
+              <TouchableOpacity
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true) }}
+                activeOpacity={0.85}
+              >
+                <Text style={s.opEmoji}>⚠️</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.opTitulo}>
+                    {clientesEnRiesgo.length} oportunidad{clientesEnRiesgo.length === 1 ? '' : 'es'} en riesgo
+                  </Text>
+                  <Text style={s.opSub}>Contáctalos antes de que se enfríen</Text>
+                </View>
+                <Text style={s.opCta}>Ver todos →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setBannerCerrado(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingLeft: 8 }}>
+                <Ionicons name="close" size={18} color="#ef4444" />
+              </TouchableOpacity>
+            </View>
+            {!vistaExcel && clientesEnRiesgo.slice(0, 3).map(cl => {
+              const dias = diasVencido(cl)
+              return (
+                <TouchableOpacity
+                  key={cl.id}
+                  style={s.opCliente}
+                  onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${cl.id}` as any)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.opClienteNombre} numberOfLines={1}>{cl.nombre}</Text>
+                  <View style={[s.opDiasBadge, dias >= 7 && s.opDiasBadgeAlta]}>
+                    <Text style={[s.opDiasTxt, dias >= 7 && s.opDiasTxtAlta]}>{dias}d</Text>
+                  </View>
+                </TouchableOpacity>
+              )
+            })}
+            {!vistaExcel && clientesEnRiesgo.length > 3 && (
+              <Text style={s.opMas}>+{clientesEnRiesgo.length - 3} más — toca "Ver todos" para verlos</Text>
+            )}
+          </View>
+        )}
+
         {/* ── Botones: chats de WhatsApp + Colecciones ── */}
         <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 12, marginTop: 8 }}>
           <TouchableOpacity style={[s.btnCampana, { flex: 1, marginHorizontal: 0, marginTop: 0 }]} onPress={() => router.push('/(prospectador)/chats')}>
@@ -1466,6 +1526,7 @@ export default function CRM() {
           <FlatList
             data={filtrados}
             keyExtractor={item => item.id}
+            style={{ flex: 1 }}
             contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100, paddingTop: 10 }}
             showsVerticalScrollIndicator={false}
             keyboardDismissMode="on-drag"
@@ -1476,43 +1537,6 @@ export default function CRM() {
             windowSize={7}
             initialNumToRender={15}
             renderItem={renderCliente}
-            ListHeaderComponent={clientesEnRiesgo.length > 0 && !filtroVencidos ? (
-              <View style={[s.opBanner, { marginHorizontal: 0, marginBottom: 10 }]}>
-                <TouchableOpacity
-                  style={s.opHeader}
-                  onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true) }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={s.opEmoji}>⚠️</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.opTitulo}>
-                      {clientesEnRiesgo.length} oportunidad{clientesEnRiesgo.length === 1 ? '' : 'es'} en riesgo
-                    </Text>
-                    <Text style={s.opSub}>Contáctalos antes de que se enfríen</Text>
-                  </View>
-                  <Text style={s.opCta}>Ver todos →</Text>
-                </TouchableOpacity>
-                {clientesEnRiesgo.slice(0, 3).map(cl => {
-                  const dias = diasVencido(cl)
-                  return (
-                    <TouchableOpacity
-                      key={cl.id}
-                      style={s.opCliente}
-                      onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${cl.id}` as any)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={s.opClienteNombre} numberOfLines={1}>{cl.nombre}</Text>
-                      <View style={[s.opDiasBadge, dias >= 7 && s.opDiasBadgeAlta]}>
-                        <Text style={[s.opDiasTxt, dias >= 7 && s.opDiasTxtAlta]}>{dias}d</Text>
-                      </View>
-                    </TouchableOpacity>
-                  )
-                })}
-                {clientesEnRiesgo.length > 3 && (
-                  <Text style={s.opMas}>+{clientesEnRiesgo.length - 3} más — toca "Ver todos" para verlos</Text>
-                )}
-              </View>
-            ) : null}
           />
         )}
       </View>
