@@ -190,6 +190,9 @@ export default function EditarPropiedad() {
   const [publicandoMl, setPublicandoMl] = useState(false)
   const [mlMsg, setMlMsg] = useState('')
   const [esAdmin, setEsAdmin] = useState(false)
+  // Botón de Mercado Libre bloqueado temporalmente (por petición). Poner en true
+  // para reactivarlo cuando el usuario lo indique.
+  const ML_HABILITADO = false
 
   useEffect(() => {
     (async () => {
@@ -1366,15 +1369,19 @@ export default function EditarPropiedad() {
             </TouchableOpacity>
             {ebMsg ? <Text style={styles.ebMsg}>{ebMsg}</Text> : null}
 
-            <TouchableOpacity
-              style={[styles.mlButton, publicandoMl && styles.buttonDisabled]}
-              onPress={publicarMercadoLibre}
-              disabled={publicandoMl || guardando}
-            >
-              {publicandoMl ? <ActivityIndicator color="#333" /> : <Text style={styles.mlButtonText}>🛒  Publicar en Mercado Libre</Text>}
-            </TouchableOpacity>
-            {mlMsg ? <Text style={styles.ebMsg}>{mlMsg}</Text> : null}
-            <Text style={styles.ebHint}>Guarda tus cambios primero. Publica/actualiza esta propiedad en EasyBroker (y sus portales) o directamente en Mercado Libre.</Text>
+            {ML_HABILITADO && (
+              <>
+                <TouchableOpacity
+                  style={[styles.mlButton, publicandoMl && styles.buttonDisabled]}
+                  onPress={publicarMercadoLibre}
+                  disabled={publicandoMl || guardando}
+                >
+                  {publicandoMl ? <ActivityIndicator color="#333" /> : <Text style={styles.mlButtonText}>🛒  Publicar en Mercado Libre</Text>}
+                </TouchableOpacity>
+                {mlMsg ? <Text style={styles.ebMsg}>{mlMsg}</Text> : null}
+              </>
+            )}
+            <Text style={styles.ebHint}>Guarda tus cambios primero. Publica/actualiza esta propiedad en EasyBroker y sus portales conectados.</Text>
           </>
         )}
 
