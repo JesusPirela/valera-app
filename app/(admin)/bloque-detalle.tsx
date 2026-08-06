@@ -247,12 +247,20 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo,
             <Text style={[uS.scoreLbl, { color: st.color }]}>Puntaje de productividad</Text>
             <Text style={[uS.scoreVal, { color: st.color }]}>{u.actividad_total} pts</Text>
           </View>
+          <TouchableOpacity
+            style={uS.graficaBtn}
+            onPress={() => router.push({ pathname: '/(admin)/usuario-actividad', params: { id: u.id, nombre: u.nombre ?? '' } })}
+          >
+            <Text style={uS.graficaBtnTxt}>📈  Ver gráfica de actividad</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
   )
 }
 const uS = StyleSheet.create({
+  graficaBtn: { marginTop: 10, backgroundColor: '#12283b', borderWidth: 1, borderColor: '#2a475e', borderRadius: 10, paddingVertical: 11, alignItems: 'center' },
+  graficaBtnTxt: { color: '#c9a84c', fontSize: 13.5, fontWeight: '800' },
   card:       { backgroundColor: '#111f2e', borderRadius: 14, marginBottom: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#1e3448' },
   header:     { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
   rankBadge:  { width: 30, height: 30, borderRadius: 15, backgroundColor: '#1e3448', alignItems: 'center', justifyContent: 'center' },
