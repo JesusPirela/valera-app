@@ -60,16 +60,16 @@ const TIPO_CREDITO_LABEL: Record<string, string> = {
 }
 
 export const ESTADOS: Record<string, { label: string; color: string; bg: string }> = {
-  primer_contacto:    { label: 'Primer contacto',        color: '#0277bd', bg: '#e1f5fe' },
-  por_perfilar:       { label: 'Por perfilar',           color: '#1565c0', bg: '#e3f2fd' },
-  no_contesta:        { label: 'No contesta',            color: '#757575', bg: '#f5f5f5' },
-  cita_por_agendar:   { label: 'Cita por agendar',      color: '#e65100', bg: '#fff3e0' },
-  cita_a_futuro:      { label: 'Cita a futuro',         color: '#b45309', bg: '#fef9c3' },
-  cita_agendada:      { label: 'Cita agendada',         color: '#1a6470', bg: '#e0f4f5' },
-  seguimiento_cierre: { label: 'Seg. de cierre',        color: '#6a1b9a', bg: '#f3e5f5' },
-  compro:             { label: 'Apartó / Compró',       color: '#2e7d32', bg: '#e8f5e9' },
-  compro_externo:     { label: 'Compró/Apartó c/ext.',  color: '#78350f', bg: '#fef3c7' },
-  descartado:         { label: 'Descartado',            color: '#b91c1c', bg: '#fef2f2' },
+  primer_contacto:    { label: 'Primer contacto',        color: '#9a7018', bg: '#fdf8e6' }, // trigo dorado
+  por_perfilar:       { label: 'Por perfilar',           color: '#7a5230', bg: '#f8ede0' }, // caoba
+  no_contesta:        { label: 'No contesta',            color: '#6b7280', bg: '#f2f3f5' }, // pizarra
+  cita_por_agendar:   { label: 'Cita por agendar',      color: '#bf4e1a', bg: '#fef2e8' }, // teja
+  cita_a_futuro:      { label: 'Cita a futuro',         color: '#a07020', bg: '#fefae6' }, // ámbar
+  cita_agendada:      { label: 'Cita agendada',         color: '#1a6855', bg: '#e4f5ef' }, // esmeralda
+  seguimiento_cierre: { label: 'Seg. de cierre',        color: '#8b2252', bg: '#fdf0f7' }, // burdeos
+  compro:             { label: 'Apartó / Compró',       color: '#1a5e32', bg: '#e5f5ea' }, // verde bosque
+  compro_externo:     { label: 'Compró/Apartó c/ext.',  color: '#8b5e2a', bg: '#fef6ec' }, // bronce
+  descartado:         { label: 'Descartado',            color: '#9b2020', bg: '#fff1f2' }, // rojo opaco
 }
 
 export const ORDEN_ESTADOS = [
@@ -213,17 +213,17 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
               {item.nivel_interes ? (
                 <View style={[s.fuenteTag, {
                   backgroundColor: item.nivel_interes === 'alto'
-                    ? (darkMode ? '#2d0f0f' : '#fee2e2')
+                    ? (darkMode ? '#2d1208' : '#fdeee6')
                     : item.nivel_interes === 'medio'
-                    ? (darkMode ? '#271c07' : '#fef3c7')
-                    : (darkMode ? '#0d1e3d' : '#dbeafe'),
+                    ? (darkMode ? '#27200a' : '#fdf6e3')
+                    : (darkMode ? '#0d1e18' : '#eaf4ef'),
                 }]}>
                   <Text style={[s.fuenteTagTxt, {
                     color: item.nivel_interes === 'alto'
-                      ? (darkMode ? '#f87171' : '#b91c1c')
+                      ? (darkMode ? '#f4956a' : '#bf4e1a')
                       : item.nivel_interes === 'medio'
-                      ? (darkMode ? '#fbbf24' : '#92400e')
-                      : (darkMode ? '#93c5fd' : '#1e40af'),
+                      ? (darkMode ? '#e8c84a' : '#9a7018')
+                      : (darkMode ? '#6dbf9a' : '#2d7a56'),
                   }]}>{NIVEL_INTERES_LABEL[item.nivel_interes]}</Text>
                 </View>
               ) : null}
@@ -700,8 +700,10 @@ export default function CRM() {
     const proximoPrevio = clientePrev?.proximo_contacto ?? null
     setSavingCell(true)
     // Actualización optimista inmediata en la cache activa (v3).
+    // Se incluye updated_at para que necesitaSeguimiento() lo saque del banner.
+    const ahoraInline = new Date().toISOString()
     queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v3'], (old) =>
-      (old ?? []).map(cl => cl.id === id ? { ...cl, [campo]: value } as Cliente : cl)
+      (old ?? []).map(cl => cl.id === id ? { ...cl, [campo]: value, updated_at: ahoraInline } as Cliente : cl)
     )
 
     const encolar = async () => {
@@ -1281,11 +1283,11 @@ export default function CRM() {
           function renderExcelRow(item: Cliente, idx: number) {
             const info = estadoInfo(item.estado)
             const interesRowBg = item.nivel_interes === 'alto'
-              ? (darkMode ? '#2a1010' : '#fecaca')
+              ? (darkMode ? '#2d1208' : '#fdeee6')
               : item.nivel_interes === 'medio'
-              ? (darkMode ? '#1d1708' : '#fef3c7')
+              ? (darkMode ? '#27200a' : '#fdf6e3')
               : item.nivel_interes === 'bajo'
-              ? (darkMode ? '#0c1628' : '#dbeafe')
+              ? (darkMode ? '#0d1e18' : '#eaf4ef')
               : null
             return (
               <View
