@@ -208,7 +208,11 @@ export default function EditarPropiedad() {
       const { data, error } = await supabase.functions.invoke('mercadolibre-publicar', { body: { propiedad_id: id } })
       if (error) { setMlMsg('⚠️ ' + (error.message ?? 'No se pudo publicar.')); return }
       if (data?.ok === false) { setMlMsg('⚠️ ' + data.error); return }
-      setMlMsg(data?.actualizado ? '✅ Actualizada en Mercado Libre.' : '✅ Publicada en Mercado Libre.')
+      if (data?.estado === 'payment_required') {
+        setMlMsg('✅ Creada en Mercado Libre. Falta activarla/pagar el plan de inmuebles en tu cuenta de ML para que salga publicada.')
+      } else {
+        setMlMsg(data?.actualizado ? '✅ Actualizada en Mercado Libre.' : '✅ Publicada en Mercado Libre.')
+      }
     } catch (e: any) {
       setMlMsg('⚠️ ' + (e?.message ?? 'Error de conexión.'))
     } finally {

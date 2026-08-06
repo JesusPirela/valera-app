@@ -83,6 +83,14 @@ serve(async (req) => {
       .sort((a: any, b: any) => (a.orden ?? 0) - (b.orden ?? 0))
       .slice(0, 12).map((i: any) => ({ source: i.url }))
 
+    // ML exige ubicación hasta nivel ciudad (país/estado/ciudad). Geocodificamos
+    // las coordenadas para obtener estado+ciudad exactos; si falla, usamos el
+    // estado según la zona.
+    const ESTADO: Record<string, string> = { queretaro: 'Querétaro', monterrey: 'Nuevo León', puebla: 'Puebla' }
+    const g = await geocodificar(p.lat, p.lng)
+    const estado = g.state ?? ESTADO[norm(p.zona)] ?? 'Querétaro'
+    const ciudad = g.city ?? estado
+
     const item: Record<string, any> = {
       title: p.titulo.slice(0, 60),
       category_id,
@@ -92,7 +100,14 @@ serve(async (req) => {
       buying_mode: 'classified',
       listing_type_id,
       condition: p.es_constructora ? 'new' : 'used',
-      location: { latitude: p.lat, longitude: p.lng, address_line: p.direccion ?? undefined },
+      location: {
+        latitude: p.lat, longitude: p.lng,
+        address_line: p.direccion ?? undefined,
+        country: { name: 'México' },
+        state: { name: estado },
+        city: { name: ciudad },
+        ...(g.neighborhood ? { neighborhood: { name: g.neighborhood } } : {}),
+      },
       attributes,
       pictures,
     }
@@ -100,18 +115,30 @@ serve(async (req) => {
     const esActualizar = !!p.mercadolibre_id
     let itemId = p.mercadolibre_id as string | null
     let permalink: string | null = null
+    let estadoMl: string | null = null
 
     if (esActualizar) {
       const r = await fetch(`${ML}/items/${itemId}`, { method: 'PUT', headers: H, body: JSON.stringify({ price: item.price, pictures: item.pictures, attributes: item.attributes, title: item.title }) })
       const j = await r.json()
-      if (!r.ok) return err(`Mercado Libre rechazó la actualización: ${JSON.stringify(j).slice(0, 300)}`, 502)
+      // Si el cuerpo trae id, la operación se aplicó (ML puede devolver status no-2xx).
+      if (!j.id) {
+        const errs = JSON.stringify(j)
+        if (errs.includes('not_modifiable') || errs.includes('payment_required') || errs.includes('field_not_updatable')) {
+          return err('El anuncio ya existe en Mercado Libre pero aún NO está activo (requiere pagar/activar el plan de inmuebles en tu cuenta ML). Actívalo y luego podrás actualizarlo.', 409)
+        }
+        return err(`Mercado Libre rechazó la actualización: ${errs.slice(0, 400)}`, 502)
+      }
       permalink = j.permalink ?? null
+      estadoMl = j.status ?? null
     } else {
       const r = await fetch(`${ML}/items`, { method: 'POST', headers: H, body: JSON.stringify(item) })
       const j = await r.json()
-      if (!r.ok || !j.id) return err(`Mercado Libre rechazó la propiedad: ${JSON.stringify(j.cause ?? j.message ?? j).slice(0, 400)}`, 502)
+      // ML crea el anuncio aunque devuelva 'payment_required' (plan de inmuebles):
+      // si el cuerpo trae id, se creó. Solo es error real si NO hay id.
+      if (!j.id) return err(`Mercado Libre rechazó la propiedad: ${JSON.stringify(j.cause ?? j.message ?? j).slice(0, 400)}`, 502)
       itemId = j.id
       permalink = j.permalink ?? null
+      estadoMl = j.status ?? null
     }
 
     // Descripción (recurso aparte en ML).
@@ -121,11 +148,26 @@ serve(async (req) => {
 
     await db.from('propiedades').update({ mercadolibre_id: itemId, mercadolibre_url: permalink }).eq('id', p.id)
 
-    return new Response(JSON.stringify({ ok: true, actualizado: esActualizar, item_id: itemId, permalink }), { headers: CORS })
+    return new Response(JSON.stringify({ ok: true, actualizado: esActualizar, item_id: itemId, permalink, estado: estadoMl }), { headers: CORS })
   } catch (e) {
     return err(`Error inesperado: ${String((e as any)?.message ?? e)}`, 500)
   }
 })
+
+// Geocodificación inversa (OpenStreetMap) para obtener estado/ciudad de lat/lng.
+async function geocodificar(lat: number, lng: number): Promise<{ state?: string; city?: string; neighborhood?: string }> {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=es&zoom=12`,
+      { headers: { 'User-Agent': 'ValeraApp/1.0 (bienes raíces)' } })
+    if (!r.ok) return {}
+    const a = (await r.json())?.address ?? {}
+    return {
+      state: a.state,
+      city: a.city ?? a.town ?? a.municipality ?? a.county,
+      neighborhood: a.suburb ?? a.neighbourhood ?? a.quarter,
+    }
+  } catch { return {} }
+}
 
 // Devuelve un access_token válido, refrescándolo si está por vencer.
 async function obtenerToken(db: any): Promise<string | null> {
