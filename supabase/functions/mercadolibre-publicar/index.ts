@@ -57,14 +57,10 @@ serve(async (req) => {
     const category_id = Array.isArray(catJson) && catJson[0]?.category_id
     if (!category_id) return err('No se pudo determinar la categoría de Mercado Libre para esta propiedad.')
 
-    // ── Tipo de publicación disponible ────────────────────────────
-    let listing_type_id = 'silver'
-    try {
-      const { data: integ } = await db.from('ml_integracion').select('ml_user_id').eq('id', 1).single()
-      const lt = await fetch(`${ML}/users/${integ!.ml_user_id}/available_listing_types?category_id=${category_id}`, { headers: H })
-      const ltj = await lt.json()
-      if (Array.isArray(ltj) && ltj[0]?.id) listing_type_id = ltj[0].id
-    } catch { /* usar 'silver' */ }
+    // Publicar GRATIS. ML tiene cupo limitado de anuncios de inmuebles gratis por
+    // cuenta; si se agota, ML devuelve el error y el usuario decide (pagar o
+    // liberar cupo). Los tipos de paga son gold/gold_premium/silver.
+    const listing_type_id = 'free'
 
     // ── Atributos requeridos ──────────────────────────────────────
     const totalM2 = p.m2_terreno ?? p.m2
@@ -135,7 +131,13 @@ serve(async (req) => {
       const j = await r.json()
       // ML crea el anuncio aunque devuelva 'payment_required' (plan de inmuebles):
       // si el cuerpo trae id, se creó. Solo es error real si NO hay id.
-      if (!j.id) return err(`Mercado Libre rechazó la propiedad: ${JSON.stringify(j.cause ?? j.message ?? j).slice(0, 400)}`, 502)
+      if (!j.id) {
+        const errs = JSON.stringify(j)
+        if (errs.includes('listing_type_id.unavailable') || errs.includes('run out of this listing type')) {
+          return err('Se agotó tu cupo de anuncios GRATIS de inmuebles en Mercado Libre (ML da un número limitado por cuenta). Para publicar otra gratis, cierra o pausa una publicación gratuita existente en tu cuenta de ML y vuelve a intentar.', 409)
+        }
+        return err(`Mercado Libre rechazó la propiedad: ${JSON.stringify(j.cause ?? j.message ?? j).slice(0, 400)}`, 502)
+      }
       itemId = j.id
       permalink = j.permalink ?? null
       estadoMl = j.status ?? null
