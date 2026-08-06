@@ -166,7 +166,10 @@ export default function ProspectadorLayout() {
       const clienteId = data?.cliente_id as string | undefined
       const propiedadId = data?.propiedad_id as string | undefined
       const chatbotLeadId = data?.chatbot_lead_id as string | undefined
-      if (clienteId) {
+      const accionUrl = data?.accion_url as string | undefined
+      if (accionUrl) {
+        router.push(accionUrl as any)
+      } else if (clienteId) {
         router.push(`/(prospectador)/detalle-cliente?id=${clienteId}`)
       } else if (chatbotLeadId) {
         const { data: lead } = await supabase
