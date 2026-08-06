@@ -1087,45 +1087,6 @@ export default function CRM() {
         </View>
 
 
-        {/* ── Oportunidades en riesgo ── */}
-        {clientesEnRiesgo.length > 0 && !filtroVencidos && (
-          <View style={s.opBanner}>
-            <TouchableOpacity
-              style={s.opHeader}
-              onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true) }}
-              activeOpacity={0.85}
-            >
-              <Text style={s.opEmoji}>⚠️</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={s.opTitulo}>
-                  {clientesEnRiesgo.length} oportunidad{clientesEnRiesgo.length === 1 ? '' : 'es'} en riesgo
-                </Text>
-                <Text style={s.opSub}>Contáctalos antes de que se enfríen</Text>
-              </View>
-              <Text style={s.opCta}>Ver todos →</Text>
-            </TouchableOpacity>
-            {!vistaExcel && clientesEnRiesgo.slice(0, 3).map(cl => {
-              const dias = diasVencido(cl)
-              return (
-                <TouchableOpacity
-                  key={cl.id}
-                  style={s.opCliente}
-                  onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${cl.id}` as any)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={s.opClienteNombre} numberOfLines={1}>{cl.nombre}</Text>
-                  <View style={[s.opDiasBadge, dias >= 7 && s.opDiasBadgeAlta]}>
-                    <Text style={[s.opDiasTxt, dias >= 7 && s.opDiasTxtAlta]}>{dias}d</Text>
-                  </View>
-                </TouchableOpacity>
-              )
-            })}
-            {!vistaExcel && clientesEnRiesgo.length > 3 && (
-              <Text style={s.opMas}>+{clientesEnRiesgo.length - 3} más — toca "Ver todos" para verlos</Text>
-            )}
-          </View>
-        )}
-
         {/* ── Botones: chats de WhatsApp + Colecciones ── */}
         <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 12, marginTop: 8 }}>
           <TouchableOpacity style={[s.btnCampana, { flex: 1, marginHorizontal: 0, marginTop: 0 }]} onPress={() => router.push('/(prospectador)/chats')}>
@@ -1515,6 +1476,43 @@ export default function CRM() {
             windowSize={7}
             initialNumToRender={15}
             renderItem={renderCliente}
+            ListHeaderComponent={clientesEnRiesgo.length > 0 && !filtroVencidos ? (
+              <View style={[s.opBanner, { marginHorizontal: 0, marginBottom: 10 }]}>
+                <TouchableOpacity
+                  style={s.opHeader}
+                  onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true) }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={s.opEmoji}>⚠️</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.opTitulo}>
+                      {clientesEnRiesgo.length} oportunidad{clientesEnRiesgo.length === 1 ? '' : 'es'} en riesgo
+                    </Text>
+                    <Text style={s.opSub}>Contáctalos antes de que se enfríen</Text>
+                  </View>
+                  <Text style={s.opCta}>Ver todos →</Text>
+                </TouchableOpacity>
+                {clientesEnRiesgo.slice(0, 3).map(cl => {
+                  const dias = diasVencido(cl)
+                  return (
+                    <TouchableOpacity
+                      key={cl.id}
+                      style={s.opCliente}
+                      onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${cl.id}` as any)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={s.opClienteNombre} numberOfLines={1}>{cl.nombre}</Text>
+                      <View style={[s.opDiasBadge, dias >= 7 && s.opDiasBadgeAlta]}>
+                        <Text style={[s.opDiasTxt, dias >= 7 && s.opDiasTxtAlta]}>{dias}d</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )
+                })}
+                {clientesEnRiesgo.length > 3 && (
+                  <Text style={s.opMas}>+{clientesEnRiesgo.length - 3} más — toca "Ver todos" para verlos</Text>
+                )}
+              </View>
+            ) : null}
           />
         )}
       </View>
