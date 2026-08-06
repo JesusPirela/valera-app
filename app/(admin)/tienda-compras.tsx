@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Alert, Platform, Image,
@@ -27,6 +28,9 @@ const AVATARES_PREMIUM = [
 // Antes eran hex sueltos que se guardaban pero NO se veían en el perfil.
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+// Misma query key que InventarioPerfilUsuario → datos ya cacheados cuando el
+// componente los renderizó justo arriba en el modal.
+const INVENTARIO_QUERY_KEY = (uid: string) => ['inventario-perfil', uid]
 import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
@@ -89,6 +93,26 @@ export default function TiendaCompras() {
   // Mini-form de lead
   const [nombreLead, setNombreLead] = useState('')
   const [telLead, setTelLead]       = useState('')
+
+  // Inventario del usuario seleccionado: avatares y colores/patrones que ya tiene.
+  // Usa la misma query key que <InventarioPerfilUsuario> → no hace un fetch extra,
+  // solo lee el caché que ese componente ya llenó al montarse en el modal.
+  const { data: inventario } = useQuery({
+    queryKey: INVENTARIO_QUERY_KEY(seleccionada?.user_id ?? ''),
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('avatares_desbloqueados, colores_desbloqueados')
+        .eq('id', seleccionada!.user_id)
+        .maybeSingle()
+      return {
+        avatares: ((data as any)?.avatares_desbloqueados ?? []) as string[],
+        colores:  ((data as any)?.colores_desbloqueados  ?? []) as string[],
+      }
+    },
+    enabled: !!seleccionada,
+    staleTime: 1000 * 30,
+  })
 
   // Rechazo
   const [modalRechazo, setModalRechazo] = useState(false)
@@ -394,23 +418,42 @@ export default function TiendaCompras() {
                   <View style={s.seccion}>
                     <Text style={[s.seccionTitle, { color: c.text }]}>✨ Elige el avatar a desbloquear *</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
-                      {AVATARES_PREMIUM.map(av => (
-                        <TouchableOpacity
-                          key={av.emoji}
-                          onPress={() => setValorItem(av.emoji)}
-                          style={{
-                            width: 54, height: 54, borderRadius: 12,
-                            borderWidth: valorItem === av.emoji ? 3 : 1.5,
-                            borderColor: valorItem === av.emoji ? '#c9a84c' : '#ccc',
-                            alignItems: 'center', justifyContent: 'center',
-                            backgroundColor: valorItem === av.emoji ? '#fff8e1' : '#f5f5f5',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <Image source={{ uri: av.gif }} style={{ width: 40, height: 40 }} />
-                        </TouchableOpacity>
-                      ))}
+                      {AVATARES_PREMIUM.map(av => {
+                        const yaLoTiene = inventario?.avatares.includes(av.emoji) ?? false
+                        return (
+                          <TouchableOpacity
+                            key={av.emoji}
+                            onPress={() => !yaLoTiene && setValorItem(av.emoji)}
+                            activeOpacity={yaLoTiene ? 1 : 0.7}
+                            style={{
+                              width: 54, height: 54, borderRadius: 12,
+                              borderWidth: valorItem === av.emoji ? 3 : 1.5,
+                              borderColor: yaLoTiene ? '#4caf50' : valorItem === av.emoji ? '#c9a84c' : '#ccc',
+                              alignItems: 'center', justifyContent: 'center',
+                              backgroundColor: yaLoTiene ? '#e8f5e9' : valorItem === av.emoji ? '#fff8e1' : '#f5f5f5',
+                              overflow: 'hidden',
+                              opacity: yaLoTiene ? 0.55 : 1,
+                            }}
+                          >
+                            <Image source={{ uri: av.gif }} style={{ width: 40, height: 40 }} />
+                            {yaLoTiene && (
+                              <View style={{
+                                position: 'absolute', bottom: 0, right: 0,
+                                backgroundColor: '#4caf50', borderRadius: 6,
+                                paddingHorizontal: 3, paddingVertical: 1,
+                              }}>
+                                <Text style={{ fontSize: 8, color: '#fff', fontWeight: '800' }}>✓</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        )
+                      })}
                     </View>
+                    {inventario && (
+                      <Text style={{ marginTop: 4, fontSize: 11, color: c.textSub }}>
+                        Los marcados con ✓ ya los tiene — no los dupliques.
+                      </Text>
+                    )}
                     {valorItem ? <Text style={{ marginTop: 8, color: '#1a6470', fontWeight: '700' }}>Seleccionado: {valorItem}</Text> : null}
                   </View>
                 )}
@@ -420,23 +463,41 @@ export default function TiendaCompras() {
                   <View style={s.seccion}>
                     <Text style={[s.seccionTitle, { color: c.text }]}>🎨 Elige el patrón animado a desbloquear *</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 }}>
-                      {PATRONES_ANIMADOS.map(patron => (
-                        <TouchableOpacity
-                          key={patron.id}
-                          onPress={() => setValorItem(patron.id)}
-                          style={{ alignItems: 'center', gap: 3, width: 56 }}
-                        >
-                          <View style={{
-                            width: 48, height: 48, borderRadius: 24, overflow: 'hidden',
-                            borderWidth: valorItem === patron.id ? 4 : 1.5,
-                            borderColor: valorItem === patron.id ? '#c9a84c' : '#ccc',
-                          }}>
-                            <AnimatedGradientView patron={patron} animate={false} style={{ flex: 1 }} />
-                          </View>
-                          <Text style={{ fontSize: 9, color: c.textSub, textAlign: 'center' }} numberOfLines={1}>{patron.nombre}</Text>
-                        </TouchableOpacity>
-                      ))}
+                      {PATRONES_ANIMADOS.map(patron => {
+                        const yaLoTiene = inventario?.colores.includes(patron.id) ?? false
+                        return (
+                          <TouchableOpacity
+                            key={patron.id}
+                            onPress={() => !yaLoTiene && setValorItem(patron.id)}
+                            activeOpacity={yaLoTiene ? 1 : 0.7}
+                            style={{ alignItems: 'center', gap: 3, width: 56, opacity: yaLoTiene ? 0.55 : 1 }}
+                          >
+                            <View style={{
+                              width: 48, height: 48, borderRadius: 24, overflow: 'hidden',
+                              borderWidth: valorItem === patron.id ? 4 : 1.5,
+                              borderColor: yaLoTiene ? '#4caf50' : valorItem === patron.id ? '#c9a84c' : '#ccc',
+                            }}>
+                              <AnimatedGradientView patron={patron} animate={false} style={{ flex: 1 }} />
+                              {yaLoTiene && (
+                                <View style={{
+                                  position: 'absolute', bottom: 2, right: 2,
+                                  backgroundColor: '#4caf50', borderRadius: 8,
+                                  paddingHorizontal: 3, paddingVertical: 1,
+                                }}>
+                                  <Text style={{ fontSize: 8, color: '#fff', fontWeight: '800' }}>✓</Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text style={{ fontSize: 9, color: c.textSub, textAlign: 'center' }} numberOfLines={1}>{patron.nombre}</Text>
+                          </TouchableOpacity>
+                        )
+                      })}
                     </View>
+                    {inventario && (
+                      <Text style={{ marginTop: 4, fontSize: 11, color: c.textSub }}>
+                        Los marcados con ✓ ya los tiene — no los dupliques.
+                      </Text>
+                    )}
                     {valorItem ? <Text style={{ marginTop: 8, color: '#1a6470', fontWeight: '700' }}>Seleccionado: {valorItem}</Text> : null}
                   </View>
                 )}
