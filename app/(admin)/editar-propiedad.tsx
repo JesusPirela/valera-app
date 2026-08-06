@@ -187,6 +187,34 @@ export default function EditarPropiedad() {
   const [borrando, setBorrando] = useState(false)
   const [publicandoEb, setPublicandoEb] = useState(false)
   const [ebMsg, setEbMsg] = useState('')
+  const [publicandoMl, setPublicandoMl] = useState(false)
+  const [mlMsg, setMlMsg] = useState('')
+  const [esAdmin, setEsAdmin] = useState(false)
+
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const uid = session?.user?.id
+      if (!uid) return
+      const { data } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle()
+      setEsAdmin(data?.role === 'admin')
+    })()
+  }, [])
+
+  // Publica (o actualiza) la propiedad directamente en Mercado Libre.
+  async function publicarMercadoLibre() {
+    setPublicandoMl(true); setMlMsg('')
+    try {
+      const { data, error } = await supabase.functions.invoke('mercadolibre-publicar', { body: { propiedad_id: id } })
+      if (error) { setMlMsg('⚠️ ' + (error.message ?? 'No se pudo publicar.')); return }
+      if (data?.ok === false) { setMlMsg('⚠️ ' + data.error); return }
+      setMlMsg(data?.actualizado ? '✅ Actualizada en Mercado Libre.' : '✅ Publicada en Mercado Libre.')
+    } catch (e: any) {
+      setMlMsg('⚠️ ' + (e?.message ?? 'Error de conexión.'))
+    } finally {
+      setPublicandoMl(false)
+    }
+  }
 
   // Publica (o actualiza) la propiedad en EasyBroker vía edge function. EasyBroker
   // la replica a los portales conectados. La key vive en el servidor, no aquí.
@@ -1322,16 +1350,29 @@ export default function EditarPropiedad() {
           {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Guardar cambios</Text>}
         </TouchableOpacity>
 
-        {/* Publicar en EasyBroker → se replica a los portales conectados */}
-        <TouchableOpacity
-          style={[styles.ebButton, publicandoEb && styles.buttonDisabled]}
-          onPress={publicarEasyBroker}
-          disabled={publicandoEb || guardando}
-        >
-          {publicandoEb ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>📢  Publicar en EasyBroker</Text>}
-        </TouchableOpacity>
-        {ebMsg ? <Text style={styles.ebMsg}>{ebMsg}</Text> : null}
-        <Text style={styles.ebHint}>Guarda tus cambios primero. Publica/actualiza esta propiedad en EasyBroker y sus portales conectados.</Text>
+        {/* Publicar en portales (solo admin). Guarda tus cambios primero. */}
+        {esAdmin && (
+          <>
+            <TouchableOpacity
+              style={[styles.ebButton, publicandoEb && styles.buttonDisabled]}
+              onPress={publicarEasyBroker}
+              disabled={publicandoEb || guardando}
+            >
+              {publicandoEb ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>📢  Publicar en EasyBroker</Text>}
+            </TouchableOpacity>
+            {ebMsg ? <Text style={styles.ebMsg}>{ebMsg}</Text> : null}
+
+            <TouchableOpacity
+              style={[styles.mlButton, publicandoMl && styles.buttonDisabled]}
+              onPress={publicarMercadoLibre}
+              disabled={publicandoMl || guardando}
+            >
+              {publicandoMl ? <ActivityIndicator color="#333" /> : <Text style={styles.mlButtonText}>🛒  Publicar en Mercado Libre</Text>}
+            </TouchableOpacity>
+            {mlMsg ? <Text style={styles.ebMsg}>{mlMsg}</Text> : null}
+            <Text style={styles.ebHint}>Guarda tus cambios primero. Publica/actualiza esta propiedad en EasyBroker (y sus portales) o directamente en Mercado Libre.</Text>
+          </>
+        )}
 
         <TouchableOpacity
           style={styles.cancelButton}
@@ -1458,6 +1499,8 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   ebButton: { backgroundColor: '#2e7d32', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 12 },
+  mlButton: { backgroundColor: '#ffe600', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 12 },
+  mlButtonText: { color: '#2d3277', fontSize: 16, fontWeight: '700' },
   ebMsg: { fontSize: 13.5, fontWeight: '700', textAlign: 'center', marginTop: 10, color: '#1a6470' },
   ebHint: { fontSize: 11.5, color: '#8a8a8a', textAlign: 'center', marginTop: 6, paddingHorizontal: 10, lineHeight: 16 },
   cancelButton: {
