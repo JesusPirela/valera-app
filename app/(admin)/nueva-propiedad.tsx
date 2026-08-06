@@ -197,6 +197,9 @@ export default function NuevaPropiedad() {
   const [mejorando, setMejorando] = useState(false)
   const [mejorandoMsg, setMejorandoMsg] = useState('')
   const [guardado, setGuardado] = useState(false)
+  const [creadaId, setCreadaId] = useState<string | null>(null)   // id de la propiedad recién creada
+  const [publicandoEb, setPublicandoEb] = useState(false)
+  const [ebMsg, setEbMsg] = useState('')
   const [verImagen, setVerImagen] = useState<string | null>(null)
   const [censurando, setCensurando] = useState<string | null>(null)
 
@@ -623,6 +626,22 @@ export default function NuevaPropiedad() {
     throw ultimoError
   }
 
+  // Publica en EasyBroker la propiedad recién creada (se replica a los portales).
+  async function publicarEasyBroker() {
+    if (!creadaId) return
+    setPublicandoEb(true); setEbMsg('')
+    try {
+      const { data, error } = await supabase.functions.invoke('easybroker-publicar', { body: { propiedad_id: creadaId } })
+      if (error) { setEbMsg('⚠️ ' + (error.message ?? 'No se pudo publicar.')); return }
+      if (data?.ok === false) { setEbMsg('⚠️ ' + data.error); return }
+      setEbMsg(data?.actualizado ? '✅ Actualizada en EasyBroker.' : '✅ Publicada en EasyBroker.')
+    } catch (e: any) {
+      setEbMsg('⚠️ ' + (e?.message ?? 'Error de conexión.'))
+    } finally {
+      setPublicandoEb(false)
+    }
+  }
+
   async function handleGuardar(ignorarDup = false) {
     if (!titulo.trim() || !direccion.trim()) {
       Alert.alert('Error', 'El título y la dirección son obligatorios.')
@@ -762,7 +781,7 @@ export default function NuevaPropiedad() {
       }
 
       setGuardado(true)
-      setTimeout(() => { router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades') }, 1500)
+      setCreadaId(propiedadId)   // habilita el botón de publicar en EasyBroker; no redirige solo
     } catch (err: any) {
       console.error('[nueva-propiedad] error completo:', err)
       const raw = err?.message || ''
@@ -1208,17 +1227,41 @@ export default function NuevaPropiedad() {
           </View>
         )}
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={() => handleGuardar()}
-          disabled={loading}
-        >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Guardar propiedad</Text>}
-        </TouchableOpacity>
+        {creadaId ? (
+          <>
+            {/* Ya creada: publicar en EasyBroker (solo admin) y volver */}
+            <TouchableOpacity
+              style={[styles.ebButton, publicandoEb && styles.buttonDisabled]}
+              onPress={publicarEasyBroker}
+              disabled={publicandoEb}
+            >
+              {publicandoEb ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>📢  Publicar en EasyBroker</Text>}
+            </TouchableOpacity>
+            {ebMsg ? <Text style={styles.ebMsg}>{ebMsg}</Text> : null}
+            <Text style={styles.ebHint}>Publica esta propiedad en EasyBroker y sus portales conectados.</Text>
 
-        <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()} disabled={loading}>
-          <Text style={styles.cancelText}>Cancelar</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}
+            >
+              <Text style={styles.cancelText}>Volver a propiedades</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={() => handleGuardar()}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Guardar propiedad</Text>}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()} disabled={loading}>
+              <Text style={styles.cancelText}>Cancelar</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
 
       {/* Visor de imagen ampliada */}
@@ -1367,6 +1410,9 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  ebButton: { backgroundColor: '#2e7d32', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 12 },
+  ebMsg: { fontSize: 13.5, fontWeight: '700', textAlign: 'center', marginTop: 10, color: '#1a6470' },
+  ebHint: { fontSize: 11.5, color: '#8a8a8a', textAlign: 'center', marginTop: 6, paddingHorizontal: 10, lineHeight: 16 },
   cancelButton: {
     borderWidth: 1,
     borderColor: '#ccc',
