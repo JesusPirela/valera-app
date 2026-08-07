@@ -37,6 +37,7 @@ type Cita = {
   estado: EstadoCita
   fecha_cita: string | null
   notas: string | null
+  razon_cancelacion: string | null
   created_at: string
   updated_at: string
   clientes: { nombre: string; telefono: string; tipo_operacion: string | null; estado: string }
@@ -95,6 +96,15 @@ function ordenPorOperacion(tipoOperacion: string | null): EstadoCita[] {
 }
 
 const COL_W = 240  // ancho de cada columna kanban
+
+const RAZONES_CANCELACION = [
+  { value: 'no_show',        label: 'No asistió a la cita' },
+  { value: 'precio',         label: 'Precio fuera de presupuesto' },
+  { value: 'competencia',    label: 'Eligió otra propiedad/agencia' },
+  { value: 'timing',         label: 'No es el momento' },
+  { value: 'sin_interes',    label: 'Perdió interés' },
+  { value: 'otro',           label: 'Otro motivo' },
+]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -281,16 +291,17 @@ function ModalEdicion({
 }: {
   cita: Cita | null; admins: Profile[]; asesores: Profile[]; vistaAsesor?: boolean; onClose: () => void; onGuardar: () => void; onEliminar: (cita: Cita) => void
 }) {
-  const [estado, setEstado]               = useState<EstadoCita>(cita?.estado ?? 'por_contactar')
-  const [notas, setNotas]                 = useState(cita?.notas ?? '')
-  const [fechaTexto, setFechaTexto]       = useState(aFechaLocalInput(cita?.fecha_cita ?? null))
-  const [coordinadorId, setCoordinadorId] = useState(cita?.coordinado_por ?? '')
-  const [asesorId, setAsesorId]           = useState(cita?.asesor_id ?? '')
-  const [telefono, setTelefono]           = useState(cita?.clientes?.telefono ?? '')
-  const [propiedadId, setPropiedadId]     = useState<string | null>(cita?.propiedad_id ?? null)
-  const [propiedadTitulo, setPropTitulo]  = useState<string | null>(cita?.propiedad?.titulo ?? null)
-  const [propExterna, setPropExterna]     = useState(cita?.propiedad_externa ?? '')
-  const [guardando, setGuardando]         = useState(false)
+  const [estado, setEstado]                   = useState<EstadoCita>(cita?.estado ?? 'por_contactar')
+  const [notas, setNotas]                     = useState(cita?.notas ?? '')
+  const [fechaTexto, setFechaTexto]           = useState(aFechaLocalInput(cita?.fecha_cita ?? null))
+  const [coordinadorId, setCoordinadorId]     = useState(cita?.coordinado_por ?? '')
+  const [asesorId, setAsesorId]               = useState(cita?.asesor_id ?? '')
+  const [telefono, setTelefono]               = useState(cita?.clientes?.telefono ?? '')
+  const [propiedadId, setPropiedadId]         = useState<string | null>(cita?.propiedad_id ?? null)
+  const [propiedadTitulo, setPropTitulo]      = useState<string | null>(cita?.propiedad?.titulo ?? null)
+  const [propExterna, setPropExterna]         = useState(cita?.propiedad_externa ?? '')
+  const [razonCancelacion, setRazonCancel]    = useState(cita?.razon_cancelacion ?? '')
+  const [guardando, setGuardando]             = useState(false)
 
   async function guardar() {
     if (!cita) return
@@ -307,6 +318,7 @@ function ModalEdicion({
       propiedad_id: propiedadId,
       propiedad_externa: propiedadId ? null : (propExterna.trim() || null),
       fecha_cita: fechaTexto ? new Date(fechaTexto).toISOString() : null,
+      ...(estado === 'cancelada' ? { razon_cancelacion: razonCancelacion || null } : {}),
     }).eq('id', cita.id).select('id')
     setGuardando(false)
     if (error) { alerta(error.message); return }
@@ -354,6 +366,26 @@ function ModalEdicion({
                 })}
               </View>
             </ScrollView>
+
+            {estado === 'cancelada' && (
+              <>
+                <Text style={s.fieldLabel}>Razón de cancelación</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                  <View style={{ flexDirection: 'row', gap: 8, paddingRight: 8 }}>
+                    {RAZONES_CANCELACION.map(r => {
+                      const sel = razonCancelacion === r.value
+                      return (
+                        <TouchableOpacity key={r.value}
+                          style={[s.estadoChip, sel && { backgroundColor: '#dc2626', borderColor: '#dc2626' }]}
+                          onPress={() => setRazonCancel(sel ? '' : r.value)}>
+                          <Text style={[s.estadoChipTxt, sel && { color: '#fff', fontWeight: '700' }]}>{r.label}</Text>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+                </ScrollView>
+              </>
+            )}
 
             <Text style={s.fieldLabel}>Fecha de cita</Text>
             {Platform.OS === 'web' ? (
@@ -703,6 +735,92 @@ function ModalMover({ cita, vistaAsesor, onClose, onMover }: {
   )
 }
 
+// ─── ModalCancelacion ────────────────────────────────────────────────────────
+
+function ModalCancelacion({ cita, onConfirmar, onClose }: {
+  cita: Cita; onConfirmar: (razon: string) => void; onClose: () => void
+}) {
+  const [razon, setRazon] = useState('')
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={[s.sheet, { paddingBottom: 32 }]} onPress={e => e.stopPropagation()}>
+          <View style={s.sheetHandle} />
+          <Text style={[s.sheetTitulo, { marginBottom: 4 }]}>¿Por qué se canceló?</Text>
+          <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 18 }} numberOfLines={1}>
+            Cita de {cita.clientes.nombre}
+          </Text>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {RAZONES_CANCELACION.map(r => {
+              const sel = razon === r.value
+              return (
+                <TouchableOpacity
+                  key={r.value}
+                  style={[s.moverRow, sel && { backgroundColor: '#fef2f2', borderRadius: 10 }]}
+                  onPress={() => setRazon(r.value)}
+                >
+                  <View style={[s.moverDot, { backgroundColor: sel ? '#dc2626' : '#e2e8f0' }]} />
+                  <Text style={{ fontSize: 14, color: sel ? '#dc2626' : '#1e293b', fontWeight: sel ? '800' : '500', flex: 1 }}>
+                    {r.label}
+                  </Text>
+                  {sel && <Ionicons name="checkmark-circle" size={18} color="#dc2626" />}
+                </TouchableOpacity>
+              )
+            })}
+          </ScrollView>
+          <TouchableOpacity
+            style={[s.btnGuardar, { backgroundColor: '#dc2626', marginTop: 20 }]}
+            onPress={() => onConfirmar(razon || 'sin_especificar')}
+          >
+            <Text style={s.btnGuardarTxt}>Confirmar cancelación</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={{ alignItems: 'center', paddingVertical: 14 }}>
+            <Text style={{ fontSize: 13, color: '#94a3b8' }}>Volver sin cancelar</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  )
+}
+
+// ─── ModalPostCita ────────────────────────────────────────────────────────────
+
+function ModalPostCita({ cita, onClose, onTratoCerrado }: {
+  cita: Cita; onClose: () => void; onTratoCerrado: () => void
+}) {
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={[s.sheet, { paddingBottom: 36, alignItems: 'center' }]} onPress={e => e.stopPropagation()}>
+          <View style={s.sheetHandle} />
+          <Text style={{ fontSize: 40, marginBottom: 10 }}>🎉</Text>
+          <Text style={[s.sheetTitulo, { textAlign: 'center', marginBottom: 6 }]}>¡Cita realizada!</Text>
+          <Text style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 28 }}>
+            {cita.clientes.nombre} · ¿Cuál es el siguiente paso?
+          </Text>
+          <View style={{ width: '100%', gap: 10 }}>
+            <TouchableOpacity
+              style={[s.btnGuardar, { backgroundColor: '#c87f0a' }]}
+              onPress={onTratoCerrado}
+            >
+              <Text style={s.btnGuardarTxt}>🏆  Mover a Apartó / Trato cerrado</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.btnGuardar, { backgroundColor: '#0369a1' }]}
+              onPress={onClose}
+            >
+              <Text style={s.btnGuardarTxt}>📅  Seguimiento pendiente</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ alignItems: 'center', paddingVertical: 12 }}>
+              <Text style={{ fontSize: 13, color: '#94a3b8' }}>Dejar así por ahora</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  )
+}
+
 // ─── MensajeRapidoBtn ────────────────────────────────────────────────────────
 
 const MENSAJES_RAPIDOS = [
@@ -981,7 +1099,7 @@ const kc = StyleSheet.create({
 
 // ─── KanbanColumn ─────────────────────────────────────────────────────────────
 
-function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCita, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, labelOverride, colorOverride, highlight }: {
+function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCita, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, labelOverride, colorOverride, highlight, pct }: {
   estado: EstadoCita
   citas: Cita[]
   onCardPress: (c: Cita) => void
@@ -995,6 +1113,7 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
   labelOverride?: string
   colorOverride?: string
   highlight?: boolean
+  pct?: number
 }) {
   const base = ESTADOS_CITA[estado]
   const inf = { ...base, label: labelOverride ?? base.label, color: colorOverride ?? base.color }
@@ -1006,8 +1125,13 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
       <View style={[col.header, { borderTopColor: inf.color }, highlight && col.headerHighlight, isDragOver && { borderTopWidth: 4, borderTopColor: inf.color }]}>
         <View style={[col.headerDot, { backgroundColor: inf.color }]} />
         <Text style={col.headerTxt} numberOfLines={1}>{inf.label}</Text>
-        <View style={[col.headerCnt, { backgroundColor: inf.color + '22' }]}>
-          <Text style={[col.headerCntTxt, { color: inf.color }]}>{citas.length}</Text>
+        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+          <View style={[col.headerCnt, { backgroundColor: inf.color + '22' }]}>
+            <Text style={[col.headerCntTxt, { color: inf.color }]}>{citas.length}</Text>
+          </View>
+          {pct !== undefined && pct > 0 && (
+            <Text style={[col.headerPct, { color: inf.color }]}>{pct}%</Text>
+          )}
         </View>
       </View>
 
@@ -1064,6 +1188,7 @@ const col = StyleSheet.create({
   headerTxt:    { flex: 1, fontSize: 12, fontWeight: '800', color: '#1e293b' },
   headerCnt:    { borderRadius: 12, paddingHorizontal: 7, paddingVertical: 2 },
   headerCntTxt: { fontSize: 12, fontWeight: '900' },
+  headerPct:    { fontSize: 9, fontWeight: '700', opacity: 0.7, letterSpacing: 0.2 },
   list:         { paddingBottom: 120 },
   empty:        { alignItems: 'center', paddingVertical: 20 },
   emptyTxt:     { fontSize: 12, color: '#cbd5e1' },
@@ -1087,6 +1212,8 @@ export default function CoordinacionCitas() {
   const [showSearch, setShowSearch]         = useState(false)
   const [draggingCita, setDraggingCita] = useState<Cita | null>(null)
   const [dragOverEstado, setDragOverEstado] = useState<EstadoCita | null>(null)
+  const [cancelModal, setCancelModal] = useState<Cita | null>(null)
+  const [postCitaModal, setPostCitaModal] = useState<Cita | null>(null)
   const mountedRef = useRef(true)
   const defaultFiltroAplicado = useRef(false)
 
@@ -1149,15 +1276,26 @@ export default function CoordinacionCitas() {
     }
   }, [miRole, miId])
 
-  async function moverCita(cita: Cita, nuevoEstado: EstadoCita) {
+  async function moverCita(cita: Cita, nuevoEstado: EstadoCita, razonCancelacion?: string) {
     setCitas(prev => prev.map(c => c.id === cita.id ? { ...c, estado: nuevoEstado, updated_at: new Date().toISOString() } : c))
+    const payload: Record<string, unknown> = { estado: nuevoEstado }
+    if (razonCancelacion) payload.razon_cancelacion = razonCancelacion
     const { data, error } = await supabase
       .from('citas_coordinacion')
-      .update({ estado: nuevoEstado })
+      .update(payload)
       .eq('id', cita.id)
       .select('id, estado')
     if (error) { alerta(error.message); cargar(); return }
     if (!data || data.length === 0) { alerta('No se pudo cambiar el estado. Intenta de nuevo.'); cargar() }
+  }
+
+  function moverCitaSeguro(cita: Cita, nuevoEstado: EstadoCita) {
+    if (nuevoEstado === 'cancelada') {
+      setCancelModal(cita)
+      return
+    }
+    moverCita(cita, nuevoEstado)
+    if (nuevoEstado === 'realizada') setPostCitaModal(cita)
   }
 
   function confirmarEliminarCita(cita: Cita) {
@@ -1180,7 +1318,7 @@ export default function CoordinacionCitas() {
   }
 
   // ── Filtros + conteos (todos en un solo useMemo para evitar 5 recálculos) ──
-  const { citasFiltradas, conteos, urgentes, citasVenta, citasRenta } = useMemo(() => {
+  const { citasFiltradas, conteos, pcts, urgentes, citasVenta, citasRenta } = useMemo(() => {
     const filtradas = citas.filter(c => {
       if (filtroAdmin) {
         if (filtroAdmin === 'sin_asignar' && c.coordinado_por) return false
@@ -1206,6 +1344,15 @@ export default function CoordinacionCitas() {
         acc[e] = filtradas.filter(c => c.estado === e).length
         return acc
       }, {}),
+      pcts: (() => {
+        const activas = filtradas.filter(c => c.estado !== 'cancelada').length
+        return ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
+          acc[e] = activas > 0 && e !== 'cancelada'
+            ? Math.round(filtradas.filter(c => c.estado === e).length / activas * 100)
+            : 0
+          return acc
+        }, {})
+      })(),
       urgentes: citas.filter(c =>
         c.estado === 'coordinada' && c.fecha_cita &&
         new Date(c.fecha_cita).getTime() - ahora < 48 * 3600 * 1000 &&
@@ -1344,7 +1491,7 @@ export default function CoordinacionCitas() {
                   onDragOver={() => setDragOverEstado(estado)}
                   onDragLeave={() => setDragOverEstado(null)}
                   onDrop={() => {
-                    if (draggingCita && draggingCita.estado !== estado) moverCita(draggingCita, estado)
+                    if (draggingCita && draggingCita.estado !== estado) moverCitaSeguro(draggingCita, estado)
                     setDraggingCita(null); setDragOverEstado(null)
                   }}
                 />
@@ -1370,7 +1517,7 @@ export default function CoordinacionCitas() {
                   onDragOver={() => setDragOverEstado(estado)}
                   onDragLeave={() => setDragOverEstado(null)}
                   onDrop={() => {
-                    if (draggingCita && draggingCita.estado !== estado) moverCita(draggingCita, estado)
+                    if (draggingCita && draggingCita.estado !== estado) moverCitaSeguro(draggingCita, estado)
                     setDraggingCita(null); setDragOverEstado(null)
                   }}
                 />
@@ -1421,6 +1568,7 @@ export default function CoordinacionCitas() {
                   key={estado}
                   estado={estado}
                   highlight={estado === 'aparto'}
+                  pct={pcts[estado]}
                   citas={citasFiltradas.filter(c => c.estado === estado)}
                   onCardPress={setCitaEditando}
                   onCardLongPress={setCitaMoviendo}
@@ -1431,7 +1579,7 @@ export default function CoordinacionCitas() {
                   onDragLeave={() => setDragOverEstado(null)}
                   onDrop={() => {
                     if (draggingCita && draggingCita.estado !== estado) {
-                      moverCita(draggingCita, estado)
+                      moverCitaSeguro(draggingCita, estado)
                     }
                     setDraggingCita(null)
                     setDragOverEstado(null)
@@ -1461,7 +1609,27 @@ export default function CoordinacionCitas() {
           cita={citaMoviendo}
           vistaAsesor={vistaAsesor}
           onClose={() => setCitaMoviendo(null)}
-          onMover={moverCita}
+          onMover={moverCitaSeguro}
+        />
+      )}
+      {cancelModal && (
+        <ModalCancelacion
+          cita={cancelModal}
+          onConfirmar={(razon) => {
+            moverCita(cancelModal, 'cancelada', razon)
+            setCancelModal(null)
+          }}
+          onClose={() => setCancelModal(null)}
+        />
+      )}
+      {postCitaModal && (
+        <ModalPostCita
+          cita={postCitaModal}
+          onClose={() => setPostCitaModal(null)}
+          onTratoCerrado={() => {
+            moverCita(postCitaModal, 'aparto')
+            setPostCitaModal(null)
+          }}
         />
       )}
       {modalNueva && (

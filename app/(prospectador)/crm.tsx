@@ -77,6 +77,29 @@ export const ORDEN_ESTADOS = [
   'cita_a_futuro', 'cita_agendada', 'seguimiento_cierre', 'compro', 'compro_externo', 'descartado',
 ]
 
+const FUENTE_LEAD_LABELS: Record<string, string> = {
+  sheets:           'Sheets',
+  meta_ads:         'Meta Ads',
+  google_ads:       'Google Ads',
+  referido:         'Referido',
+  web:              'Web',
+  llamada_en_frio:  'Llamada fría',
+  whatsapp:         'WhatsApp',
+  portal:           'Portal',
+  tiktok:           'TikTok',
+  otro:             'Otro',
+}
+
+const RAZONES_DESCARTE = [
+  { value: 'precio',          label: 'Precio fuera de rango' },
+  { value: 'sin_respuesta',   label: 'Sin respuesta' },
+  { value: 'competencia',     label: 'Eligió otra agencia' },
+  { value: 'cambio_opinion',  label: 'Cambió de opinión' },
+  { value: 'sin_interes',     label: 'Sin interés real' },
+  { value: 'timing',          label: 'No es el momento' },
+  { value: 'otro',            label: 'Otro' },
+]
+
 // Etapas de venta seleccionables al crear/editar un cliente. Es la lista
 // canónica usada en el formulario y en la pantalla de detalle: incluye TODAS
 // las etapas (primer contacto, cita a futuro, etc.) para que coincidan.
@@ -229,7 +252,9 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
               ) : null}
               {item.fuente_lead ? (
                 <View style={[s.fuenteTag, { backgroundColor: darkMode ? c.bg : '#f1f5f9' }]}>
-                  <Text style={[s.fuenteTagTxt, { color: c.textSub }]}>{item.fuente_lead}</Text>
+                  <Text style={[s.fuenteTagTxt, { color: c.textSub }]}>
+                    {FUENTE_LEAD_LABELS[item.fuente_lead] ?? item.fuente_lead}
+                  </Text>
                 </View>
               ) : null}
             </View>
@@ -447,6 +472,7 @@ export default function CRM() {
   // Selector de Zonas de interés (multi-selección + "Otra"). `draft` es el valor
   // en edición hasta que se guarda.
   const [zonaPicker, setZonaPicker] = useState<{ id: string; draft: string } | null>(null)
+  const [descarteModal, setDescarteModal] = useState<{ id: string } | null>(null)
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
 
@@ -1700,6 +1726,8 @@ export default function CRM() {
                             { text: 'Sí, enviar', onPress: () => guardarCelda(p.id, p.col, opt.value) },
                           ])
                         }
+                      } else if (p.col === 'estado' && opt.value === 'descartado') {
+                        setDescarteModal({ id: p.id })
                       } else {
                         guardarCelda(p.id, p.col, opt.value)
                       }
@@ -1716,6 +1744,43 @@ export default function CRM() {
               })}
             </ScrollView>
           </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Modal: razón de descarte ── */}
+      <Modal visible={descarteModal !== null} transparent animationType="slide" onRequestClose={() => setDescarteModal(null)}>
+        <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setDescarteModal(null)}>
+          <TouchableOpacity activeOpacity={1} style={[s.sortSheet, { backgroundColor: c.card }]} onPress={e => e.stopPropagation()}>
+            <View style={[s.sortHandle, { backgroundColor: c.border }]} />
+            <Text style={[s.sortTitle, { color: c.text }]}>¿Por qué se descarta este lead?</Text>
+            <Text style={{ fontSize: 12, color: c.textSub, marginBottom: 14 }}>Opcional — ayuda a entender qué mejorar</Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {RAZONES_DESCARTE.map(r => (
+                <TouchableOpacity
+                  key={r.value}
+                  style={[s.sortOpt, { borderBottomColor: c.border }]}
+                  onPress={async () => {
+                    const dm = descarteModal!
+                    setDescarteModal(null)
+                    await guardarCelda(dm.id, 'estado', 'descartado')
+                    supabase.from('clientes').update({ razon_descarte: r.value }).eq('id', dm.id).then()
+                  }}
+                >
+                  <Text style={[s.sortOptTxt, { color: c.textSub }]}>{r.label}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[s.sortOpt, { borderBottomColor: 'transparent' }]}
+                onPress={() => {
+                  const dm = descarteModal!
+                  setDescarteModal(null)
+                  guardarCelda(dm.id, 'estado', 'descartado')
+                }}
+              >
+                <Text style={{ fontSize: 13, color: c.textMute, paddingVertical: 4 }}>Saltar — no especificar</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
