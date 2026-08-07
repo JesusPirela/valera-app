@@ -98,7 +98,26 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, nuevos: nuevosTotal, clientes: clientesCreados }), { headers: CORS })
+    // ── 3) Relay de WhatsApp: leads ya convertidos a cliente y sin enviar ──
+    // Cubre tanto los leads nuevos del sync como los del lote de asignación.
+    let waEnviados = 0
+    const { data: pend } = await db.from('leads_campania')
+      .select('id, nombre, telefono, extra, campanias!inner(asignado_a)')
+      .not('cliente_id', 'is', null).eq('whatsapp_enviado', false).limit(50)
+    if (pend && pend.length) {
+      const ids = [...new Set(pend.map((p: any) => p.campanias?.asignado_a).filter(Boolean))]
+      const { data: profs } = ids.length ? await db.from('profiles').select('id, telefono').in('id', ids) : { data: [] }
+      const telDe = new Map((profs ?? []).map((p: any) => [p.id, p.telefono]))
+      for (const p of pend as any[]) {
+        const asesor = p.campanias?.asignado_a
+        const tel = asesor ? telDe.get(asesor) : null
+        let marcar = true
+        if (tel) marcar = await enviarWhatsApp(tel, cuerpoLead(p.nombre, p.telefono, p.extra))
+        if (marcar) { await db.from('leads_campania').update({ whatsapp_enviado: true }).eq('id', p.id); if (tel) waEnviados++ }
+      }
+    }
+
+    return new Response(JSON.stringify({ ok: true, nuevos: nuevosTotal, clientes: clientesCreados, whatsapp: waEnviados }), { headers: CORS })
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String((e as any)?.message ?? e) }), { status: 500, headers: CORS })
   }
@@ -152,14 +171,31 @@ async function gAll(url: string): Promise<any[]> {
   return out
 }
 
-async function enviarWhatsApp(to: string, cuerpo: string): Promise<void> {
+async function enviarWhatsApp(to: string, cuerpo: string): Promise<boolean> {
   const sid = Deno.env.get('TWILIO_SID'), tok = Deno.env.get('TWILIO_TOKEN'), from = Deno.env.get('TWILIO_FROM')
-  if (!sid || !tok || !from || !to) return
+  if (!sid || !tok || !from || !to) return false
   try {
     const auth = btoa(`${sid}:${tok}`)
     const body = new URLSearchParams({ From: `whatsapp:${from}`, To: `whatsapp:${to.startsWith('+') ? to : '+' + to}`, Body: cuerpo })
-    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
       method: 'POST', headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString(),
     })
-  } catch { /* best-effort */ }
+    return r.ok
+  } catch { return false }
+}
+
+// Limpia los nombres de campo del formulario de Facebook (¿que_zona? → que zona).
+function limpiar(s: string): string { return String(s ?? '').replace(/[¿?]/g, '').replace(/_/g, ' ').trim() }
+
+// Mensaje de WhatsApp al asesor con el formato pedido.
+function cuerpoLead(nombre: string | null, telefono: string | null, extra: Record<string, string> | null): string {
+  let msg = 'Tienes un nuevo cliente en tu CRM de campaña\n'
+  msg += `Nombre: ${nombre || 'Sin nombre'}\n`
+  msg += `Número: ${telefono || 's/n'}`
+  const preguntas = Object.entries(extra || {})
+  if (preguntas.length) {
+    msg += '\n\nRespuestas del formulario:'
+    for (const [k, v] of preguntas) msg += `\n• ${limpiar(k)}: ${limpiar(String(v))}`
+  }
+  return msg
 }
