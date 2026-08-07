@@ -958,7 +958,10 @@ export default function CRM() {
     queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v3'], (old) =>
       (old ?? []).filter(cl => cl.id !== item.id)
     )
-    const { error } = await supabase.from('clientes').delete().eq('id', item.id)
+    const { error } = await supabase
+      .from('clientes')
+      .update({ eliminado_at: new Date().toISOString() })
+      .eq('id', item.id)
     if (error) {
       queryClient.invalidateQueries({ queryKey: ['clientes'] })
       if (Platform.OS === 'web') window.alert('No se pudo eliminar el cliente.')
