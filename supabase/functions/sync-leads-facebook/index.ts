@@ -35,11 +35,23 @@ serve(async (req) => {
 
     // ── 1) Campañas → upsert ──────────────────────────────────────
     const campaigns = await gAll(`${GRAPH}/${ACC}/campaigns?fields=id,name,effective_status&limit=100&access_token=${TOKEN}`)
+    // Detectar campañas NUEVAS activas (para avisar a los admins una sola vez).
+    const { data: existentes } = await db.from('campanias').select('meta_id')
+    const yaExistian = new Set((existentes ?? []).map((c: any) => c.meta_id))
     if (campaigns.length) {
       await db.from('campanias').upsert(
         campaigns.map((c: any) => ({ meta_id: c.id, nombre: c.name, estado: c.effective_status, updated_at: new Date().toISOString() })),
         { onConflict: 'meta_id' },
       )
+    }
+    const nuevasActivas = campaigns.filter((c: any) => !yaExistian.has(c.id) && c.effective_status === 'ACTIVE')
+    if (nuevasActivas.length) {
+      const { data: admins } = await db.from('profiles').select('id').eq('role', 'admin')
+      const notifs: any[] = []
+      for (const na of nuevasActivas) for (const a of (admins ?? [])) {
+        notifs.push({ user_id: a.id, tipo: 'campania', titulo: '📢 Nueva campaña detectada', mensaje: na.name, accion_url: '/(admin)/leads-campanias' })
+      }
+      if (notifs.length) await db.from('notificaciones').insert(notifs)
     }
     // Mapa meta_id → {id, asignado_a}
     const { data: camps } = await db.from('campanias').select('id, meta_id, nombre, asignado_a')

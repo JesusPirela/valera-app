@@ -43,11 +43,12 @@ CREATE INDEX IF NOT EXISTS idx_leads_campania_camp ON public.leads_campania(camp
 CREATE OR REPLACE FUNCTION public.asignar_campania(p_campania_id uuid, p_user_id uuid)
 RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_role text; v_n int := 0; r record; v_cid uuid;
+DECLARE v_role text; v_n int := 0; r record; v_cid uuid; v_camp text;
 BEGIN
   SELECT role INTO v_role FROM public.profiles WHERE id = auth.uid();
   IF v_role IS DISTINCT FROM 'admin' THEN RAISE EXCEPTION 'Solo un administrador puede asignar campañas'; END IF;
 
+  SELECT nombre INTO v_camp FROM public.campanias WHERE id = p_campania_id;
   UPDATE public.campanias SET asignado_a = p_user_id, updated_at = now() WHERE id = p_campania_id;
 
   FOR r IN SELECT * FROM public.leads_campania WHERE campania_id = p_campania_id AND cliente_id IS NULL LOOP
@@ -57,6 +58,11 @@ BEGIN
               'facebook', 'por_perfilar', p_user_id)
       RETURNING id INTO v_cid;
     UPDATE public.leads_campania SET cliente_id = v_cid WHERE id = r.id;
+    -- Una notificación por CADA lead al asesor asignado.
+    INSERT INTO public.notificaciones (user_id, tipo, cliente_id, titulo, mensaje, accion_url)
+      VALUES (p_user_id, 'lead', v_cid, '📢 Nuevo lead de campaña',
+              COALESCE(NULLIF(TRIM(r.nombre), ''), 'Lead') || ' · ' || COALESCE(r.telefono, '') || ' — ' || COALESCE(v_camp, ''),
+              '/(prospectador)/detalle-cliente?id=' || v_cid::text);
     v_n := v_n + 1;
   END LOOP;
   RETURN v_n;

@@ -140,6 +140,7 @@ export default function AdminPropiedades() {
   const [ordenPublicaciones, setOrdenPublicaciones] = useState<OrdenPublicaciones>(null)
   const [publicacionesMap, setPublicacionesMap] = useState<Record<string, number>>({})
   const [comprasPendientes, setComprasPendientes] = useState(0)
+  const [campanasPendientes, setCampanasPendientes] = useState(0)
   const [busquedaContacto, setBusquedaContacto] = useState('')
 
   const [modalVisible, setModalVisible] = useState(false)
@@ -204,10 +205,11 @@ export default function AdminPropiedades() {
   async function cargarRolEInmobiliarias() {
     const { data: { session } } = await supabase.auth.getSession()
     const uid = session?.user?.id ?? null
-    const [perfilRes, conteoRes, pendRes] = await Promise.all([
+    const [perfilRes, conteoRes, pendRes, campRes] = await Promise.all([
       uid ? supabase.from('profiles').select('role').eq('id', uid).maybeSingle() : Promise.resolve({ data: null }),
       supabase.rpc('get_publicaciones_conteo'),
       supabase.rpc('get_compras_pendientes_count'),
+      supabase.from('campanias').select('id, asignado_a, leads_campania(count)'),
     ])
     setRole((perfilRes as any).data?.role ?? null)
     const conteo = (conteoRes as any).data
@@ -217,6 +219,9 @@ export default function AdminPropiedades() {
       ))
     }
     setComprasPendientes(typeof (pendRes as any).data === 'number' ? (pendRes as any).data : 0)
+    // Campañas sin asignar y con leads = "pendientes de repartir" → badge.
+    const campanias = (campRes as any).data ?? []
+    setCampanasPendientes(campanias.filter((c: any) => !c.asignado_a && (c.leads_campania?.[0]?.count ?? 0) > 0).length)
   }
 
   useFocusEffect(useCallback(() => { cargarPropiedades(); cargarRolEInmobiliarias() }, []))
@@ -468,7 +473,8 @@ export default function AdminPropiedades() {
             <Text style={[styles.navGroupTitle, { color: c.textMute }]}>{grupo.toUpperCase()}</Text>
             <View style={styles.navGrid}>
               {items.map((item) => {
-                const badge = item.route === '/(admin)/tienda-compras' ? comprasPendientes : 0
+                const badge = item.route === '/(admin)/tienda-compras' ? comprasPendientes
+                  : item.route === '/(admin)/leads-campanias' ? campanasPendientes : 0
                 return (
                   <TouchableOpacity
                     key={item.route}
