@@ -112,7 +112,7 @@ serve(async (req) => {
         const asesor = p.campanias?.asignado_a
         const tel = asesor ? telDe.get(asesor) : null
         let marcar = true
-        if (tel) marcar = await enviarWhatsApp(tel, cuerpoLead(p.nombre, p.telefono, p.extra))
+        if (tel) marcar = await enviarWhatsApp(tel, p.nombre, p.telefono, respuestasStr(p.extra))
         if (marcar) { await db.from('leads_campania').update({ whatsapp_enviado: true }).eq('id', p.id); if (tel) waEnviados++ }
       }
     }
@@ -171,14 +171,23 @@ async function gAll(url: string): Promise<any[]> {
   return out
 }
 
-async function enviarWhatsApp(to: string, cuerpo: string): Promise<boolean> {
+// Envía la notificación al asesor por WhatsApp usando la PLANTILLA aprobada
+// (obligatoria para mensajes de negocio) desde el número de producción del bot.
+async function enviarWhatsApp(to: string, nombre: string | null, numero: string | null, respuestas: string): Promise<boolean> {
   const sid = Deno.env.get('TWILIO_SID'), tok = Deno.env.get('TWILIO_TOKEN'), from = Deno.env.get('TWILIO_FROM')
+  const contentSid = Deno.env.get('TWILIO_CONTENT_SID')
   if (!sid || !tok || !from || !to) return false
   try {
     const auth = btoa(`${sid}:${tok}`)
-    const body = new URLSearchParams({ From: `whatsapp:${from}`, To: `whatsapp:${to.startsWith('+') ? to : '+' + to}`, Body: cuerpo })
+    const params: Record<string, string> = { From: `whatsapp:${from}`, To: `whatsapp:${to.startsWith('+') ? to : '+' + to}` }
+    if (contentSid) {
+      params.ContentSid = contentSid
+      params.ContentVariables = JSON.stringify({ '1': nombre || 'Sin nombre', '2': numero || 's/n', '3': respuestas || 'Sin datos' })
+    } else {
+      params.Body = `Tienes un nuevo cliente en tu CRM de campaña\nNombre: ${nombre || 'Sin nombre'}\nNúmero: ${numero || 's/n'}\nRespuestas: ${respuestas}`
+    }
     const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-      method: 'POST', headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString(),
+      method: 'POST', headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params).toString(),
     })
     return r.ok
   } catch { return false }
@@ -187,15 +196,9 @@ async function enviarWhatsApp(to: string, cuerpo: string): Promise<boolean> {
 // Limpia los nombres de campo del formulario de Facebook (¿que_zona? → que zona).
 function limpiar(s: string): string { return String(s ?? '').replace(/[¿?]/g, '').replace(/_/g, ' ').trim() }
 
-// Mensaje de WhatsApp al asesor con el formato pedido.
-function cuerpoLead(nombre: string | null, telefono: string | null, extra: Record<string, string> | null): string {
-  let msg = 'Tienes un nuevo cliente en tu CRM de campaña\n'
-  msg += `Nombre: ${nombre || 'Sin nombre'}\n`
-  msg += `Número: ${telefono || 's/n'}`
-  const preguntas = Object.entries(extra || {})
-  if (preguntas.length) {
-    msg += '\n\nRespuestas del formulario:'
-    for (const [k, v] of preguntas) msg += `\n• ${limpiar(k)}: ${limpiar(String(v))}`
-  }
-  return msg
+// Junta las preguntas/respuestas del formulario en una sola línea para la plantilla.
+function respuestasStr(extra: Record<string, string> | null): string {
+  const ps = Object.entries(extra || {})
+  if (!ps.length) return 'Sin datos adicionales'
+  return ps.map(([k, v]) => `${limpiar(k)}: ${limpiar(String(v))}`).join(' · ')
 }
