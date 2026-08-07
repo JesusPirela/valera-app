@@ -1345,11 +1345,15 @@ export default function CoordinacionCitas() {
         return acc
       }, {}),
       pcts: (() => {
+        const total = filtradas.length
         const activas = filtradas.filter(c => c.estado !== 'cancelada').length
         return ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
-          acc[e] = activas > 0 && e !== 'cancelada'
-            ? Math.round(filtradas.filter(c => c.estado === e).length / activas * 100)
-            : 0
+          if (total === 0) { acc[e] = 0; return acc }
+          acc[e] = e === 'cancelada'
+            ? Math.round(filtradas.filter(c => c.estado === e).length / total * 100)
+            : activas > 0
+              ? Math.round(filtradas.filter(c => c.estado === e).length / activas * 100)
+              : 0
           return acc
         }, {})
       })(),
