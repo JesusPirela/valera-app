@@ -61,7 +61,7 @@ export const ESTADOS_CITA: Record<EstadoCita, {
   reagendada:               { label: 'Reagendada',                 color: '#b45309', bg: '#fef3c7', dark: '#92400e', icon: 'refresh-outline',             emoji: '🟤' },
   no_responde_asesor:       { label: 'No responde el asesor',      color: '#dc2626', bg: '#fef2f2', dark: '#b91c1c', icon: 'notifications-off-outline',   emoji: '🔴' },
   realizada:                { label: 'Realizada',                  color: '#0d9488', bg: '#f0fdfa', dark: '#0f766e', icon: 'checkmark-circle-outline',    emoji: '✅' },
-  aparto:                   { label: 'Apartó',                     color: '#7c3aed', bg: '#f5f3ff', dark: '#5b21b6', icon: 'key-outline',                 emoji: '🔑' },
+  aparto:                   { label: 'Apartó / Trato cerrado',      color: '#c87f0a', bg: '#fef9eb', dark: '#92400e', icon: 'trophy-outline',              emoji: '🏆' },
   recaudando_documentacion: { label: 'Recaudando documentación',   color: '#0369a1', bg: '#e0f2fe', dark: '#075985', icon: 'document-text-outline',       emoji: '📄' },
   aprobando_credito:        { label: 'Aprobando crédito',          color: '#d97706', bg: '#fef3c7', dark: '#b45309', icon: 'card-outline',                emoji: '💳' },
   firma_contrato:           { label: 'Firma de contrato',          color: '#059669', bg: '#ecfdf5', dark: '#047857', icon: 'pencil-outline',              emoji: '✍️' },
@@ -77,6 +77,7 @@ const ORDEN_ESTADOS: EstadoCita[] = [
   'por_contactar', 'primer_contacto', 'buscando_opciones',
   'en_coordinacion', 'coordinada', 'reagendada',
   'no_responde_asesor', 'realizada',
+  'aparto',
   'cancelada',
 ]
 
@@ -778,6 +779,7 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
 }) {
   const inf     = ESTADOS_CITA[cita.estado]
   const ahora   = Date.now()
+  const esTratoCerrado = cita.estado === 'aparto'
   const esPasada  = cita.fecha_cita && new Date(cita.fecha_cita) < new Date()
   const esUrgente = cita.estado === 'coordinada' && cita.fecha_cita &&
     new Date(cita.fecha_cita).getTime() - ahora < 48 * 3600 * 1000 &&
@@ -797,7 +799,7 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
 
   const card = (
     <TouchableOpacity
-      style={[kc.card, esUrgente && kc.cardUrgente, esInerte && !inerciaCritica && kc.cardInerte, inerciaCritica && kc.cardInerteCritica, !isWebDrag && isDragging && kc.cardDragging, isWebDrag && { marginBottom: 0 }]}
+      style={[kc.card, esTratoCerrado && kc.cardTratoCerrado, esUrgente && kc.cardUrgente, esInerte && !inerciaCritica && kc.cardInerte, inerciaCritica && kc.cardInerteCritica, !isWebDrag && isDragging && kc.cardDragging, isWebDrag && { marginBottom: 0 }]}
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={400}
@@ -807,6 +809,11 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
       <View style={[kc.colorBar, { backgroundColor: inf.color }]} />
 
       <View style={kc.body}>
+        {esTratoCerrado && (
+          <View style={kc.tratoBanner}>
+            <Text style={kc.tratoBannerTxt}>🏆 Apartó · Trato cerrado</Text>
+          </View>
+        )}
         {/* Nombre + avatar */}
         <View style={kc.headRow}>
           <View style={[kc.avatar, { backgroundColor: inf.bg }]}>
@@ -919,9 +926,16 @@ const kc = StyleSheet.create({
     shadowColor: '#0f172a', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
   },
+  cardTratoCerrado:  { borderWidth: 2, borderColor: '#c87f0a', backgroundColor: '#fffdf5' },
   cardUrgente:       { borderWidth: 1.5, borderColor: '#fbbf24' },
   cardInerte:        { borderWidth: 1.5, borderColor: '#f59e0b' },
   cardInerteCritica: { borderWidth: 1.5, borderColor: '#ef4444' },
+  tratoBanner: {
+    flexDirection: 'row' as const, alignItems: 'center' as const,
+    backgroundColor: '#fef3c7', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start' as const,
+  },
+  tratoBannerTxt: { fontSize: 11, fontWeight: '800' as const, color: '#92400e' },
   inerciaBadge: {
     marginTop: 5, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 5,
     backgroundColor: '#fef9c3', alignSelf: 'flex-start' as const,
@@ -967,7 +981,7 @@ const kc = StyleSheet.create({
 
 // ─── KanbanColumn ─────────────────────────────────────────────────────────────
 
-function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCita, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, labelOverride, colorOverride }: {
+function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCita, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, labelOverride, colorOverride, highlight }: {
   estado: EstadoCita
   citas: Cita[]
   onCardPress: (c: Cita) => void
@@ -980,6 +994,7 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
   onDrop?: () => void
   labelOverride?: string
   colorOverride?: string
+  highlight?: boolean
 }) {
   const base = ESTADOS_CITA[estado]
   const inf = { ...base, label: labelOverride ?? base.label, color: colorOverride ?? base.color }
@@ -988,7 +1003,7 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
   const inner = (
     <View style={[col.wrap, { width: COL_W }, Platform.OS === 'web' && { marginRight: 0 }]}>
       {/* Cabecera de columna */}
-      <View style={[col.header, { borderTopColor: inf.color }, isDragOver && { borderTopWidth: 4, borderTopColor: inf.color }]}>
+      <View style={[col.header, { borderTopColor: inf.color }, highlight && col.headerHighlight, isDragOver && { borderTopWidth: 4, borderTopColor: inf.color }]}>
         <View style={[col.headerDot, { backgroundColor: inf.color }]} />
         <Text style={col.headerTxt} numberOfLines={1}>{inf.label}</Text>
         <View style={[col.headerCnt, { backgroundColor: inf.color + '22' }]}>
@@ -1044,6 +1059,7 @@ const col = StyleSheet.create({
     shadowColor: '#0f172a', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
   },
+  headerHighlight: { backgroundColor: '#fef9eb', borderTopWidth: 4 },
   headerDot:    { width: 8, height: 8, borderRadius: 4 },
   headerTxt:    { flex: 1, fontSize: 12, fontWeight: '800', color: '#1e293b' },
   headerCnt:    { borderRadius: 12, paddingHorizontal: 7, paddingVertical: 2 },
@@ -1318,6 +1334,7 @@ export default function CoordinacionCitas() {
                 <KanbanColumn
                   key={estado}
                   estado={estado}
+                  highlight={estado === 'aparto'}
                   citas={citasVenta.filter(c => c.estado === estado)}
                   onCardPress={setCitaEditando}
                   onCardLongPress={setCitaMoviendo}
@@ -1343,6 +1360,7 @@ export default function CoordinacionCitas() {
                 <KanbanColumn
                   key={estado}
                   estado={estado}
+                  highlight={estado === 'aparto'}
                   citas={citasRenta.filter(c => c.estado === estado)}
                   onCardPress={setCitaEditando}
                   onCardLongPress={setCitaMoviendo}
@@ -1402,6 +1420,7 @@ export default function CoordinacionCitas() {
                 <KanbanColumn
                   key={estado}
                   estado={estado}
+                  highlight={estado === 'aparto'}
                   citas={citasFiltradas.filter(c => c.estado === estado)}
                   onCardPress={setCitaEditando}
                   onCardLongPress={setCitaMoviendo}
@@ -1419,31 +1438,6 @@ export default function CoordinacionCitas() {
                   }}
                 />
               ))}
-              {/* Columna de rescate: citas que quedaron en "Apartó" tras la
-                  migración al pipeline nuevo (exclusivo de asesor) y ya no
-                  tienen columna propia aquí — se muestran para reclasificarlas
-                  manualmente a su estado real. */}
-              <KanbanColumn
-                key="aparto"
-                estado="aparto"
-                labelOverride="Sin clasificar (revisar)"
-                colorOverride="#64748b"
-                citas={citasFiltradas.filter(c => c.estado === 'aparto')}
-                onCardPress={setCitaEditando}
-                onCardLongPress={setCitaMoviendo}
-                draggingCita={draggingCita}
-                isDragOver={dragOverEstado === 'aparto'}
-                onDragStart={setDraggingCita}
-                onDragOver={() => setDragOverEstado('aparto')}
-                onDragLeave={() => setDragOverEstado(null)}
-                onDrop={() => {
-                  if (draggingCita && draggingCita.estado !== 'aparto') {
-                    moverCita(draggingCita, 'aparto')
-                  }
-                  setDraggingCita(null)
-                  setDragOverEstado(null)
-                }}
-              />
             </ScrollView>
           )}
         </>
