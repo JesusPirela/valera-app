@@ -69,6 +69,7 @@ const NAV_ITEMS = [
   { label: 'Colores ficha', icon: '🎨', route: '/(admin)/colores-ficha', color: '#6A1B9A', grupo: 'Propiedades' },
   { label: 'CRM', icon: '📒', route: '/(admin)/crm', color: '#D84315', grupo: 'Gestión' },
   { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32', grupo: 'Gestión' },
+  { label: 'Leads campañas', icon: '📢', route: '/(admin)/leads-campanias', color: '#1565C0', grupo: 'Gestión' },
   { label: 'Proyectos', icon: '💼', route: '/(admin)/proyectos', color: '#c9a84c', grupo: 'Gestión' },
   { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828', grupo: 'Gestión' },
   { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F', grupo: 'Gestión' },
