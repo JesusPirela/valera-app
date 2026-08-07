@@ -179,7 +179,7 @@ async function enviarWhatsApp(to: string, nombre: string | null, numero: string 
   if (!sid || !tok || !from || !to) return false
   try {
     const auth = btoa(`${sid}:${tok}`)
-    const params: Record<string, string> = { From: `whatsapp:${from}`, To: `whatsapp:${to.startsWith('+') ? to : '+' + to}` }
+    const params: Record<string, string> = { From: `whatsapp:${from}`, To: `whatsapp:${normalizarTel(to)}` }
     if (contentSid) {
       params.ContentSid = contentSid
       params.ContentVariables = JSON.stringify({ '1': nombre || 'Sin nombre', '2': numero || 's/n', '3': respuestas || 'Sin datos' })
@@ -191,6 +191,15 @@ async function enviarWhatsApp(to: string, nombre: string | null, numero: string 
     })
     return r.ok
   } catch { return false }
+}
+
+// Normaliza un teléfono mexicano a formato internacional (+52…) para WhatsApp.
+function normalizarTel(tel: string): string {
+  let p = String(tel ?? '').replace(/\D/g, '')
+  if (p.startsWith('5252')) p = p.slice(2)
+  if (p.startsWith('521') && p.length === 13) p = '52' + p.slice(3)
+  if (p.length === 10) p = '52' + p
+  return '+' + p
 }
 
 // Limpia los nombres de campo del formulario de Facebook (¿que_zona? → que zona).
