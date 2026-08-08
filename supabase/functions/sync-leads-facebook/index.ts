@@ -82,7 +82,7 @@ serve(async (req) => {
           const { data: cli } = await db.from('clientes').insert({
             nombre: (n.nombre || '').trim() || 'Lead Facebook',
             telefono: n.telefono || '', email: n.email || null,
-            fuente_lead: 'facebook', estado: 'por_perfilar', responsable_id: camp.asignado_a,
+            fuente_lead: 'campana_fb', estado: 'por_perfilar', responsable_id: camp.asignado_a,
           }).select('id').single()
           if (cli) {
             clientesCreados++

@@ -55,7 +55,7 @@ BEGIN
     INSERT INTO public.clientes (nombre, telefono, email, fuente_lead, estado, responsable_id)
       VALUES (COALESCE(NULLIF(TRIM(r.nombre), ''), 'Lead Facebook'),
               COALESCE(r.telefono, ''), NULLIF(r.email, ''),
-              'facebook', 'por_perfilar', p_user_id)
+              'campana_fb', 'por_perfilar', p_user_id)
       RETURNING id INTO v_cid;
     UPDATE public.leads_campania SET cliente_id = v_cid WHERE id = r.id;
     -- Una notificación por CADA lead al asesor asignado.
