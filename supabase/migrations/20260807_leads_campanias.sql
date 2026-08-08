@@ -60,7 +60,7 @@ BEGIN
     UPDATE public.leads_campania SET cliente_id = v_cid WHERE id = r.id;
     -- Una notificación por CADA lead al asesor asignado.
     INSERT INTO public.notificaciones (user_id, tipo, cliente_id, titulo, mensaje, accion_url)
-      VALUES (p_user_id, 'lead', v_cid, '📢 Nuevo lead de campaña',
+      VALUES (p_user_id, 'nuevo_cliente', v_cid, '📢 Nuevo lead de campaña',
               COALESCE(NULLIF(TRIM(r.nombre), ''), 'Lead') || ' · ' || COALESCE(r.telefono, '') || ' — ' || COALESCE(v_camp, ''),
               '/(prospectador)/detalle-cliente?id=' || v_cid::text);
     v_n := v_n + 1;

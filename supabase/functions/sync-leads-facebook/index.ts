@@ -49,7 +49,7 @@ serve(async (req) => {
       const { data: admins } = await db.from('profiles').select('id').eq('role', 'admin')
       const notifs: any[] = []
       for (const na of nuevasActivas) for (const a of (admins ?? [])) {
-        notifs.push({ user_id: a.id, tipo: 'campania', titulo: '📢 Nueva campaña detectada', mensaje: na.name, accion_url: '/(admin)/leads-campanias' })
+        notifs.push({ user_id: a.id, tipo: 'sistema', titulo: '📢 Nueva campaña detectada', mensaje: na.name, accion_url: '/(admin)/leads-campanias' })
       }
       if (notifs.length) await db.from('notificaciones').insert(notifs)
     }
@@ -88,7 +88,7 @@ serve(async (req) => {
             clientesCreados++
             await db.from('leads_campania').update({ cliente_id: cli.id }).eq('id', n.id)
             await db.from('notificaciones').insert({
-              user_id: camp.asignado_a, tipo: 'lead', cliente_id: cli.id,
+              user_id: camp.asignado_a, tipo: 'nuevo_cliente', cliente_id: cli.id,
               titulo: '📢 Nuevo lead de campaña',
               mensaje: `${n.nombre || 'Lead'} · ${n.telefono || ''} — ${camp.nombre}`,
               accion_url: `/(prospectador)/detalle-cliente?id=${cli.id}`,
