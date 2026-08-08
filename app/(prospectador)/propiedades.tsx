@@ -716,7 +716,7 @@ export default function ProspectadorPropiedades() {
       if (ok && data?.ok) {
         exito(data.veces_publicada ?? vecesActual + 1)
       } else if (data?.error === 'limite') {
-        setVeces(vecesActual)
+        setVeces(data.veces_publicada ?? 10)
         avisar('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
       } else if (ok && data && data.ok === false) {
         // Error de negocio del servidor distinto de límite: reintentar no ayuda.
