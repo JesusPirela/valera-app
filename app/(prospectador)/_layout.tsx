@@ -381,6 +381,7 @@ export default function ProspectadorLayout() {
       <Tabs.Screen name="mi-publicaciones"   options={{ href: null, title: 'Mis Publicaciones' }} />
       <Tabs.Screen name="chats"              options={{ href: null, title: 'Chats' }} />
       <Tabs.Screen name="chat-cliente"       options={{ href: null, title: 'Chat' }} />
+      <Tabs.Screen name="videos-marketing"   options={{ href: null, title: 'Videos' }} />
     </Tabs>
     </>
   )

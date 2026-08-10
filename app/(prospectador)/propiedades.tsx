@@ -1094,6 +1094,14 @@ export default function ProspectadorPropiedades() {
             </TouchableOpacity>
           )}
           <TouchableOpacity
+            style={[styles.zonasToggle, { borderColor: '#C2185B' }]}
+            onPress={() => router.push('/(prospectador)/videos-marketing')}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="videocam-outline" size={14} color="#C2185B" />
+            <Text style={[styles.zonasToggleText, { color: '#C2185B' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Videos</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.zonasToggle, { borderColor: '#7b5ea7', paddingHorizontal: 9 }]}
             onPress={() => router.push('/(prospectador)/historial-publicaciones')}
             activeOpacity={0.85}

@@ -80,6 +80,7 @@ const NAV_ITEMS = [
   { label: 'Pool Leads', icon: '🔥', route: '/(admin)/leads-pool', color: '#B71C1C', grupo: 'Crecimiento' },
   { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#AD1457', grupo: 'Crecimiento' },
   { label: 'Cofres', icon: '🎁', route: '/(admin)/gestion-cofres', color: '#2e7d32', grupo: 'Crecimiento' },
+  { label: 'Videos', icon: '🎬', route: '/(admin)/videos-marketing', color: '#C2185B', grupo: 'Crecimiento' },
   { label: 'Cuenta', icon: '👤', route: '/(admin)/cuenta', color: '#37474F', grupo: 'Gestión' },
 ]
 
