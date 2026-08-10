@@ -16,6 +16,7 @@ import {
 } from 'react-native'
 import { router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
+import * as DocumentPicker from 'expo-document-picker'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
@@ -182,6 +183,8 @@ export default function NuevaPropiedad() {
   const [inventarioSeccion, setInventarioSeccion] = useState('')
   const [seccionesExistentes, setSeccionesExistentes] = useState<string[]>([])
   const [imagenes, setImagenes] = useState<string[]>([])
+  const [videoFile, setVideoFile] = useState<{ uri: string; name: string; mimeType: string } | null>(null)
+  const [subiendoVideo, setSubiendoVideo] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const dragIdxRef = useRef<number | null>(null)
@@ -626,6 +629,31 @@ export default function NuevaPropiedad() {
     throw ultimoError
   }
 
+  async function pickVideo() {
+    const result = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true })
+    if (result.canceled || !result.assets?.[0]) return
+    const a = result.assets[0]
+    setVideoFile({ uri: a.uri, name: a.name, mimeType: a.mimeType ?? 'video/mp4' })
+  }
+
+  async function subirVideoPropiedad(propiedadId: string): Promise<string | null> {
+    if (!videoFile) return null
+    setSubiendoVideo(true)
+    try {
+      const ext = videoFile.name.split('.').pop() ?? 'mp4'
+      const filePath = `${propiedadId}/video.${ext}`
+      const blob = await fetch(videoFile.uri).then(r => r.blob())
+      const { error } = await supabase.storage
+        .from('propiedades-videos')
+        .upload(filePath, blob, { contentType: videoFile.mimeType, upsert: true })
+      if (error) throw error
+      const { data } = supabase.storage.from('propiedades-videos').getPublicUrl(filePath)
+      return data.publicUrl
+    } finally {
+      setSubiendoVideo(false)
+    }
+  }
+
   // Publica en EasyBroker la propiedad recién creada (se replica a los portales).
   async function publicarEasyBroker() {
     if (!creadaId) return
@@ -732,6 +760,13 @@ export default function NuevaPropiedad() {
         created_by: user.id,
         lat: lat ?? null,
         lng: lng ?? null,
+        video_url: null as string | null,
+      }
+
+      // Subir video si el admin seleccionó uno
+      if (videoFile) {
+        const url = await subirVideoPropiedad(propiedadId)
+        if (url) datosPropiedad.video_url = url
       }
 
       console.log('[nueva-propiedad] insertando con asesor_id:', asesorId)
@@ -928,6 +963,23 @@ export default function NuevaPropiedad() {
         ) : (
           <TouchableOpacity style={[styles.imagenPicker, { backgroundColor: c.card, borderColor: c.border }]} onPress={seleccionarImagenes}>
             <Text style={[styles.imagenPickerText, { color: c.textMute }]}>+ Agregar fotos</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Video de la propiedad */}
+        <Text style={[styles.label, { marginTop: 8 }]}>Video de la propiedad</Text>
+        <TouchableOpacity
+          style={[styles.imagenPicker, { backgroundColor: c.card, borderColor: videoFile ? '#1a6470' : c.border, minHeight: 52 }]}
+          onPress={pickVideo}
+          disabled={subiendoVideo}
+        >
+          <Text style={[styles.imagenPickerText, { color: videoFile ? '#1a6470' : c.textMute }]}>
+            {subiendoVideo ? '⏳ Subiendo video…' : videoFile ? `🎬 ${videoFile.name}` : '🎬 Agregar video (opcional)'}
+          </Text>
+        </TouchableOpacity>
+        {videoFile && (
+          <TouchableOpacity onPress={() => setVideoFile(null)} style={{ alignSelf: 'flex-end', marginTop: 4, marginBottom: 4 }}>
+            <Text style={{ fontSize: 12, color: '#ef4444' }}>✕ Quitar video</Text>
           </TouchableOpacity>
         )}
 

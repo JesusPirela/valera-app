@@ -68,6 +68,7 @@ type Propiedad = {
   asesores: { nombre: string; inmobiliaria: string | null; telefono: string | null } | null
   lat: number | null
   lng: number | null
+  video_url: string | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
@@ -132,6 +133,10 @@ function construirInfoCliente(cliente: ClienteCRM): string {
 
 const GMAPS_KEY = 'AIzaSyCPML-wonbnHif1HswVfTk-ypInP1u94sE'
 
+// Número centralizado de contacto Valera (WhatsApp + llamadas)
+const VALERA_PHONE = '4428679083'
+const VALERA_WA    = `52${VALERA_PHONE}` // formato internacional sin +
+
 const ESTADOS_LABEL: Record<string, string> = {
   por_perfilar: 'Por perfilar',
   no_contesta: 'No contesta',
@@ -183,6 +188,7 @@ export default function DetallePropiedad() {
   const queryClient = useQueryClient()
   const [imagenActual, setImagenActual] = useState(0)
   const [descargando, setDescargando] = useState(false)
+  const [descargandoVideo, setDescargandoVideo] = useState(false)
   const [modalSeleccion, setModalSeleccion] = useState(false)
   const [seleccionadas, setSeleccionadas] = useState<Set<number>>(new Set())
   const [nota, setNota] = useState('')
@@ -218,7 +224,7 @@ export default function DetallePropiedad() {
 
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, video_url, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)')
         .eq('id', id)
         .single()
 
@@ -756,6 +762,57 @@ export default function DetallePropiedad() {
       const { data: { user } } = await getUsuarioActual()
       if (user) registrarAccion(user.id, 'descargar_propiedad').catch(() => {})
     } catch { /* no-op */ }
+  }
+
+  async function guardarVideoEnGaleria() {
+    if (!propiedad?.video_url) return
+    if (Platform.OS === 'web') { Linking.openURL(propiedad.video_url); return }
+    const { status } = await MediaLibrary.requestPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Sin permiso', 'Activa el acceso a la galería para guardar el video.')
+      return
+    }
+    setDescargandoVideo(true)
+    try {
+      const ext = propiedad.video_url.split('?')[0].split('.').pop() ?? 'mp4'
+      const localUri = `${FileSystem.cacheDirectory}valera_prop_${propiedad.id}.${ext}`
+      const dl = FileSystem.createDownloadResumable(propiedad.video_url, localUri)
+      const result = await dl.downloadAsync()
+      if (!result?.uri) throw new Error('Descarga fallida')
+      await MediaLibrary.saveToLibraryAsync(result.uri)
+      Alert.alert('¡Guardado!', 'El video se guardó en tu galería.')
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'No se pudo descargar el video.')
+    } finally {
+      setDescargandoVideo(false)
+    }
+  }
+
+  async function compartirVideo() {
+    if (!propiedad?.video_url) return
+    if (Platform.OS === 'web') { Linking.openURL(propiedad.video_url); return }
+    setDescargandoVideo(true)
+    try {
+      const ext = propiedad.video_url.split('?')[0].split('.').pop() ?? 'mp4'
+      const localUri = `${FileSystem.cacheDirectory}valera_share_${propiedad.id}.${ext}`
+      const info = await FileSystem.getInfoAsync(localUri)
+      if (!info.exists) {
+        const dl = FileSystem.createDownloadResumable(propiedad.video_url, localUri)
+        const result = await dl.downloadAsync()
+        if (!result?.uri) throw new Error('Descarga fallida')
+      }
+      const ShareLib = await import('expo-sharing')
+      const ok = await ShareLib.isAvailableAsync()
+      if (ok) {
+        await ShareLib.shareAsync(localUri, { mimeType: 'video/mp4', dialogTitle: propiedad.titulo ?? 'Video' })
+      } else {
+        Linking.openURL(propiedad.video_url)
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'No se pudo compartir el video.')
+    } finally {
+      setDescargandoVideo(false)
+    }
   }
 
   async function copiarDescripcion() {
@@ -1525,7 +1582,7 @@ export default function DetallePropiedad() {
     if (!propiedad) return
     const nombre = nombreUsuario ?? 'Un prospectador'
     const mensaje = `Hola, ${nombre} quiere agendar una cita para la propiedad *${propiedad.codigo}* con Valera Estudios.`
-    Linking.openURL(`https://wa.me/524428251381?text=${encodeURIComponent(mensaje)}`)
+    Linking.openURL(`https://wa.me/${VALERA_WA}?text=${encodeURIComponent(mensaje)}`)
   }
 
   async function abrirModalCita(forzar = false) {
@@ -1641,15 +1698,7 @@ export default function DetallePropiedad() {
       : ''
     const infoCliente = construirInfoCliente(clienteParaCita)
     const mensaje = `Hola, quiero coordinar una cita para *${clienteParaCita.nombre}* (${clienteParaCita.telefono}) para la propiedad *${propiedad.codigo}*${constructoraStr} el *${fechaStr}*.${infoCliente}`
-    if (subidoPor?.telefono) {
-      let phone = subidoPor.telefono.replace(/\D/g, '')
-      if (phone.startsWith('5252')) phone = phone.slice(2)
-      if (phone.startsWith('521') && phone.length === 13) phone = '52' + phone.slice(3)
-      const tel = phone.length === 10 ? `52${phone}` : phone
-      Linking.openURL(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`)
-    } else {
-      Linking.openURL(`https://wa.me/?text=${encodeURIComponent(mensaje)}`)
-    }
+    Linking.openURL(`https://wa.me/${VALERA_WA}?text=${encodeURIComponent(mensaje)}`)
   }
 
 
@@ -1855,6 +1904,46 @@ export default function DetallePropiedad() {
         </View>
       )}
 
+      {/* Video de la propiedad */}
+      {propiedad.video_url ? (
+        <View style={styles.videoSection}>
+          <TouchableOpacity
+            style={styles.videoThumb}
+            onPress={() => Linking.openURL(propiedad.video_url!)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.videoPlayOverlay}>
+              <View style={styles.videoPlayBtn}>
+                <Text style={styles.videoPlayIcon}>▶</Text>
+              </View>
+              <Text style={styles.videoPlayLabel}>Ver video</Text>
+            </View>
+          </TouchableOpacity>
+          <View style={styles.videoBtns}>
+            <TouchableOpacity
+              style={[styles.videoBtn, { backgroundColor: '#1a6470' }]}
+              onPress={guardarVideoEnGaleria}
+              disabled={descargandoVideo}
+            >
+              {descargandoVideo
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.videoBtnTxt}>⬇ Guardar</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.videoBtn, { backgroundColor: '#25D366' }]}
+              onPress={compartirVideo}
+              disabled={descargandoVideo}
+            >
+              {descargandoVideo
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.videoBtnTxt}>↗ Compartir</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+
       {/* Contenido */}
       <View style={styles.content}>
         {/* Logo de la inmobiliaria — solo staff */}
@@ -1930,32 +2019,24 @@ export default function DetallePropiedad() {
           <Text style={styles.publicadaHace}>🗓️ Publicada {publicadaHace((propiedad as any).created_at)}</Text>
         )}
 
-        {/* Contactar asesor */}
+        {/* Contactar Valera */}
         <View style={styles.accionesRapidas}>
-          {subidoPor?.telefono && (
-            <>
-              <TouchableOpacity
-                style={[styles.accionBtn, { backgroundColor: '#25d366' }]}
-                onPress={() => {
-                  let phone = subidoPor.telefono!.replace(/\D/g, '')
-                  if (phone.startsWith('5252')) phone = phone.slice(2)
-                  if (phone.startsWith('521') && phone.length === 13) phone = '52' + phone.slice(3)
-                  const tel = phone.length === 10 ? `52${phone}` : phone
-                  const url = `https://wa.me/${tel}?text=${encodeURIComponent(`Hola, te contacto sobre la propiedad ${propiedad.codigo}: ${propiedad.titulo}`)}`
-                  if (Platform.OS === 'web') window.open(url, '_blank')
-                  else Linking.openURL(url)
-                }}
-              >
-                <Text style={styles.accionBtnText}>📱 WhatsApp asesor</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.accionBtn, { backgroundColor: '#1a6470' }]}
-                onPress={() => Linking.openURL(`tel:${subidoPor.telefono}`)}
-              >
-                <Text style={styles.accionBtnText}>📞 Llamar</Text>
-              </TouchableOpacity>
-            </>
-          )}
+          <TouchableOpacity
+            style={[styles.accionBtn, { backgroundColor: '#25d366' }]}
+            onPress={() => {
+              const url = `https://wa.me/${VALERA_WA}?text=${encodeURIComponent(`Hola, me interesa la propiedad ${propiedad.codigo}: ${propiedad.titulo}`)}`
+              if (Platform.OS === 'web') window.open(url, '_blank')
+              else Linking.openURL(url)
+            }}
+          >
+            <Text style={styles.accionBtnText}>📱 WhatsApp Valera</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.accionBtn, { backgroundColor: '#1a6470' }]}
+            onPress={() => Linking.openURL(`tel:${VALERA_PHONE}`)}
+          >
+            <Text style={styles.accionBtnText}>📞 Llamar</Text>
+          </TouchableOpacity>
           {propiedad.es_constructora && (
             <TouchableOpacity
               style={[styles.accionBtn, { backgroundColor: '#c9a84c' }]}
@@ -2329,7 +2410,7 @@ export default function DetallePropiedad() {
           disabled={!propiedad}
         >
           <Text style={styles.btnCitaText}>
-            📅 Coordinar cita{subidoPor ? ` con ${subidoPor.nombre}` : ''}
+            📅 Coordinar cita con Valera
           </Text>
         </TouchableOpacity>
 
@@ -3653,5 +3734,60 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderColor: '#fff',
     borderRadius: 8,
+  },
+
+  // Sección de video de la propiedad
+  videoSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#0d1b2a',
+  },
+  videoThumb: {
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0d1b2a',
+  },
+  videoPlayOverlay: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  videoPlayBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoPlayIcon: {
+    color: '#fff',
+    fontSize: 26,
+    marginLeft: 4,
+  },
+  videoPlayLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  videoBtns: {
+    flexDirection: 'row',
+    gap: 0,
+  },
+  videoBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoBtnTxt: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 })
