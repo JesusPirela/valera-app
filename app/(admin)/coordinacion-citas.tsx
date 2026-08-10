@@ -164,6 +164,25 @@ function normalizarTel(tel: string): string {
   return p || tel
 }
 
+// ¿El texto de una propiedad externa parece un link abrible?
+function esLinkPropiedad(txt: string | null): boolean {
+  const t = (txt ?? '').trim()
+  return /^https?:\/\//i.test(t) || /^[^\s]+\.[^\s/]{2,}(\/|$)/.test(t)
+}
+// Abre el link de una propiedad externa (agrega https:// si falta).
+function abrirLinkPropiedad(txt: string | null) {
+  let url = (txt ?? '').trim()
+  if (!url) return
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url
+  if (Platform.OS === 'web') window.open(url, '_blank')
+  else Linking.openURL(url)
+}
+// Abre la ficha de una propiedad de la app dentro de la app.
+function abrirFichaPropiedad(propiedadId: string | null) {
+  if (!propiedadId) return
+  router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: propiedadId } })
+}
+
 function alerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
   else Alert.alert('Error', msg)
@@ -970,17 +989,26 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
           <Text style={kc.notas} numberOfLines={2}>{cita.notas}</Text>
         )}
 
-        {/* Proyecto (propiedad de la app o externa) */}
+        {/* Proyecto (propiedad de la app o externa) — clickeable */}
         {cita.propiedad ? (
-          <View style={kc.proyectoRow}>
+          <TouchableOpacity style={kc.proyectoRow} activeOpacity={0.6} onPress={() => abrirFichaPropiedad(cita.propiedad_id)}>
             <Ionicons name="business-outline" size={10} color="#0d9488" />
-            <Text style={kc.proyectoTxt} numberOfLines={1}>{cita.propiedad.titulo}</Text>
-          </View>
+            <Text style={[kc.proyectoTxt, kc.proyectoLink]} numberOfLines={1}>{cita.propiedad.titulo}</Text>
+            <Ionicons name="open-outline" size={9} color="#0d9488" />
+          </TouchableOpacity>
         ) : cita.propiedad_externa ? (
-          <View style={kc.proyectoRow}>
-            <Ionicons name="link-outline" size={10} color="#0d9488" />
-            <Text style={kc.proyectoTxt} numberOfLines={1}>{cita.propiedad_externa}</Text>
-          </View>
+          esLinkPropiedad(cita.propiedad_externa) ? (
+            <TouchableOpacity style={kc.proyectoRow} activeOpacity={0.6} onPress={() => abrirLinkPropiedad(cita.propiedad_externa)}>
+              <Ionicons name="link-outline" size={10} color="#0d9488" />
+              <Text style={[kc.proyectoTxt, kc.proyectoLink]} numberOfLines={1}>{cita.propiedad_externa}</Text>
+              <Ionicons name="open-outline" size={9} color="#0d9488" />
+            </TouchableOpacity>
+          ) : (
+            <View style={kc.proyectoRow}>
+              <Ionicons name="document-text-outline" size={10} color="#0d9488" />
+              <Text style={kc.proyectoTxt} numberOfLines={1}>{cita.propiedad_externa}</Text>
+            </View>
+          )
         ) : null}
 
         {/* Meta: asesor / coordinador / tiempo */}
@@ -1075,7 +1103,8 @@ const kc = StyleSheet.create({
   fechaTxt:    { fontSize: 11, color: '#1a6470', fontWeight: '600' },
   notas:       { fontSize: 11, color: '#64748b', lineHeight: 15 },
   proyectoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  proyectoTxt: { fontSize: 10, color: '#0d9488', fontWeight: '600' },
+  proyectoTxt: { fontSize: 10, color: '#0d9488', fontWeight: '600', flexShrink: 1 },
+  proyectoLink: { textDecorationLine: 'underline' },
   metaRow:     { flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
   metaTxt:     { fontSize: 10, color: '#94a3b8' },
   waBtn: {
