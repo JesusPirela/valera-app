@@ -201,8 +201,12 @@ export default function LeadsCampania() {
           <Text style={[styles.emptyTxt, { color: c.textMute }]}>Aún no tienes leads de campaña asignados.</Text>
         </View>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: '100%' }}>
-          <View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator
+          contentContainerStyle={styles.hScrollContent}
+        >
+          <View style={[styles.tableCard, { borderColor: c.border, backgroundColor: c.card }]}>
             {/* Encabezado — orden: Nombre · Teléfono · Zona · Presupuesto */}
             <View style={styles.headRow}>
               <HeaderCell col="nombre" label="Nombre" w={200} />
@@ -293,12 +297,17 @@ export default function LeadsCampania() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerBar: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  headerBar: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, width: '100%', maxWidth: 1052, alignSelf: 'center' },
   title: { fontSize: 20, fontWeight: '800' },
   subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, gap: 10, flexWrap: 'wrap' },
   sub: { fontSize: 12, flex: 1 },
   limpiarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f3e8ff', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6 },
   limpiarTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  hScrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 16, paddingBottom: 24 },
+  tableCard: {
+    alignSelf: 'center', marginTop: 4, borderRadius: 14, overflow: 'hidden', borderWidth: 1,
+    ...Platform.select({ web: { boxShadow: '0 4px 18px rgba(0,0,0,0.10)' } as any, default: { elevation: 3 } }),
+  },
   headRow: { flexDirection: 'row', backgroundColor: '#7c3aed' },
   th: { paddingVertical: 15, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center' },
   thTxt: { fontSize: 13.5, fontWeight: '800' },
