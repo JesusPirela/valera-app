@@ -71,7 +71,7 @@ serve(async (req) => {
       // Insertar solo los nuevos (dedup por meta_lead_id).
       const { data: insertados } = await db.from('leads_campania')
         .upsert(rows.map((r: any) => ({ ...r, campania_id: camp.id })), { onConflict: 'meta_lead_id', ignoreDuplicates: true })
-        .select('id, meta_lead_id, nombre, telefono, email')
+        .select('id, meta_lead_id, nombre, telefono, email, extra')
       const nuevos = insertados ?? []
       nuevosTotal += nuevos.length
 
@@ -83,6 +83,9 @@ serve(async (req) => {
             nombre: (n.nombre || '').trim() || 'Lead Facebook',
             telefono: n.telefono || '', email: n.email || null,
             fuente_lead: 'campana_fb', estado: 'por_perfilar', responsable_id: camp.asignado_a,
+            es_lead_campania: true,
+            zona_busqueda: n.extra?.['¿que_zona_prefieres?'] ?? null,
+            presupuesto: n.extra?.['¿cuál_es_tu_presupuesto_para_tu_nuevo_hogar?'] ?? null,
           }).select('id').single()
           if (cli) {
             clientesCreados++

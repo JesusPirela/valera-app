@@ -44,6 +44,7 @@ type Cliente = {
   zona_busqueda: string | null
   presupuesto: string | null
   tipo_credito: string | null
+  es_lead_campania?: boolean
   recordatorios: { id: string; titulo: string; fecha_hora: string; completado: boolean }[]
 }
 
@@ -507,11 +508,11 @@ export default function CRM() {
     // (30/jun/2026) porque algunos usuarios quedaron con una lista VACÍA cacheada
     // que no se reemplazaba, viendo su CRM en blanco pese a tener sus clientes
     // intactos en el servidor. Cambiar la clave fuerza una recarga fresca.
-    queryKey: ['clientes', soloMios ? 'mios' : 'all', 'v3'],
+    queryKey: ['clientes', soloMios ? 'mios' : 'all', 'v4'],
     queryFn: async () => {
       let q = supabase
         .from('clientes')
-        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, recordatorios(id, titulo, fecha_hora, completado)')
+        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, es_lead_campania, recordatorios(id, titulo, fecha_hora, completado)')
         .is('eliminado_at', null)
         .order('updated_at', { ascending: false })
       if (soloMios) {
@@ -539,7 +540,7 @@ export default function CRM() {
   // lento sin necesidad. Ahora la lista cacheada aparece al instante y solo se
   // vuelve a pedir si pasaron >5 min.
   useFocusEffect(useCallback(() => {
-    const st = queryClient.getQueryState(['clientes', soloMios ? 'mios' : 'all', 'v3'])
+    const st = queryClient.getQueryState(['clientes', soloMios ? 'mios' : 'all', 'v4'])
     // Refetch si pasaron >5 min O si detalle-cliente invalidó el caché
     // (ej. el usuario actualizó proximo_contacto y el banner debe quitarlo).
     const viejo = !st?.dataUpdatedAt || (Date.now() - st.dataUpdatedAt) > 1000 * 60 * 5
@@ -561,11 +562,11 @@ export default function CRM() {
   // Leads de campaña) tienen su PROPIA tabla-apartado y se sacan del CRM normal
   // para no mezclarlos: esa tabla es su CRM.
   const leadsCampania = useMemo(
-    () => clientes.filter(c => c.fuente_lead === 'campana_fb'),
+    () => clientes.filter(c => c.es_lead_campania),
     [clientes]
   )
   const clientesCrm = useMemo(
-    () => clientes.filter(c => c.fuente_lead !== 'campana_fb'),
+    () => clientes.filter(c => !c.es_lead_campania),
     [clientes]
   )
 
@@ -790,7 +791,7 @@ export default function CRM() {
     // Actualización optimista inmediata en la cache activa (v3).
     // Se incluye updated_at para que necesitaSeguimiento() lo saque del banner.
     const ahoraInline = new Date().toISOString()
-    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v3'], (old) =>
+    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v4'], (old) =>
       (old ?? []).map(cl => cl.id === id ? { ...cl, [campo]: value, updated_at: ahoraInline } as Cliente : cl)
     )
 
@@ -1017,7 +1018,7 @@ export default function CRM() {
         )
     if (!confirmar) return
     // Actualización optimista
-    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v3'], (old) =>
+    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v4'], (old) =>
       (old ?? []).filter(cl => cl.id !== item.id)
     )
     const { error } = await supabase

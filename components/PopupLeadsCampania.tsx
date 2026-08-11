@@ -36,7 +36,7 @@ export default function PopupLeadsCampania() {
       const { data } = await supabase
         .from('clientes')
         .select('id, nombre, zona_busqueda, presupuesto')
-        .eq('fuente_lead', 'campana_fb')
+        .eq('es_lead_campania', true)
         .eq('responsable_id', user.id)
         .is('eliminado_at', null)
         .gte('created_at', desde)
@@ -64,8 +64,8 @@ export default function PopupLeadsCampania() {
     const ch = supabase
       .channel('lc-popup')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'clientes' }, payload => {
-        const row = payload.new as { fuente_lead?: string }
-        if (row?.fuente_lead === 'campana_fb') setTimeout(revisar, 500)
+        const row = payload.new as { es_lead_campania?: boolean }
+        if (row?.es_lead_campania) setTimeout(revisar, 500)
       })
       .subscribe()
     return () => { sub.remove(); supabase.removeChannel(ch) }

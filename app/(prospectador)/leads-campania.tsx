@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform,
-  Linking, ActivityIndicator, RefreshControl,
+  Linking, ActivityIndicator, RefreshControl, Modal, TextInput,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useFocusEffect, router } from 'expo-router'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../../lib/supabase'
@@ -16,6 +16,7 @@ import { abrirWhatsApp } from './crm'
 // Marca de "ya vistos" para el popup que molesta: al abrir esta tabla se
 // registran todos los ids actuales como vistos, así el popup deja de insistir.
 const SEEN_KEY = 'lc_seen_v1'
+const META = 5 // meta de contactos (cadencia de 5 toques)
 
 type Lead = {
   id: string
@@ -24,6 +25,9 @@ type Lead = {
   zona_busqueda: string | null
   presupuesto: string | null
   estado: string | null
+  notas: string | null
+  wa_count: number | null
+  call_count: number | null
   created_at: string
 }
 
@@ -31,7 +35,6 @@ type SortCol = 'nombre' | 'telefono' | 'zona' | 'presupuesto'
 type Sort = { col: SortCol; dir: 'asc' | 'desc' }
 
 // Parseo heurístico del presupuesto en texto libre → número, para ordenar.
-// "2.9m", "$2,9m a $3.2m", "3M", "8000" → millones/pesos aproximados.
 function parsePresu(txt: string | null): number {
   if (!txt) return -1
   const limpio = txt.replace(/[,$]/g, ' ').toLowerCase()
@@ -43,11 +46,27 @@ function parsePresu(txt: string | null): number {
   return n
 }
 
+// Las respuestas de la campaña vienen con guiones bajos y prefijos; se limpian
+// para mostrarlas legibles ("zona_zona_sur_(milenio,...)" → "Zona sur (milenio,...)").
+function prettyZona(z: string | null): string {
+  if (!z) return '—'
+  return z.split('|').map(part =>
+    part.replace(/^zona_/, '').replace(/_/g, ' ').trim()
+  ).filter(Boolean).map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ')
+}
+function prettyPresu(p: string | null): string {
+  if (!p) return '—'
+  return p.replace(/_/g, ' ').trim()
+}
+
 function llamar(tel: string) { Linking.openURL(`tel:${tel}`) }
 
 export default function LeadsCampania() {
   const c = useColors()
+  const qc = useQueryClient()
   const [sort, setSort] = useState<Sort>({ col: 'nombre', dir: 'asc' })
+  const [notaModal, setNotaModal] = useState<{ id: string; nombre: string; value: string } | null>(null)
+  const [guardandoNota, setGuardandoNota] = useState(false)
 
   const { data: leads = [], isLoading, refetch } = useQuery<Lead[]>({
     queryKey: ['leads-campania'],
@@ -56,8 +75,8 @@ export default function LeadsCampania() {
       if (!user) return []
       const { data, error } = await supabase
         .from('clientes')
-        .select('id, nombre, telefono, zona_busqueda, presupuesto, estado, created_at')
-        .eq('fuente_lead', 'campana_fb')
+        .select('id, nombre, telefono, zona_busqueda, presupuesto, estado, notas, wa_count, call_count, created_at')
+        .eq('es_lead_campania', true)
         .eq('responsable_id', user.id)
         .is('eliminado_at', null)
         .order('created_at', { ascending: false })
@@ -73,8 +92,7 @@ export default function LeadsCampania() {
     try { await refetch() } catch {} finally { setRefreshing(false) }
   }, [refetch])
 
-  // Al entrar, marca todos los leads actuales como "vistos" para que el popup
-  // deje de insistir con estos.
+  // Al entrar, marca todos los leads actuales como "vistos" para el popup.
   useFocusEffect(useCallback(() => {
     if (!leads.length) return
     AsyncStorage.getItem(SEEN_KEY).then(raw => {
@@ -90,7 +108,7 @@ export default function LeadsCampania() {
       let cmp = 0
       if (sort.col === 'nombre') cmp = a.nombre.localeCompare(b.nombre, 'es')
       else if (sort.col === 'telefono') cmp = (a.telefono || '').localeCompare(b.telefono || '')
-      else if (sort.col === 'zona') cmp = (a.zona_busqueda || '~').localeCompare(b.zona_busqueda || '~', 'es')
+      else if (sort.col === 'zona') cmp = prettyZona(a.zona_busqueda).localeCompare(prettyZona(b.zona_busqueda), 'es')
       else if (sort.col === 'presupuesto') cmp = parsePresu(a.presupuesto) - parsePresu(b.presupuesto)
       return sort.dir === 'asc' ? cmp : -cmp
     })
@@ -103,17 +121,35 @@ export default function LeadsCampania() {
       : { col, dir: 'asc' })
   }
 
+  // Actualiza un campo del lead en el caché (optimista) y en la BD.
+  function patchLead(id: string, patch: Partial<Lead>) {
+    qc.setQueryData<Lead[]>(['leads-campania'], old =>
+      (old ?? []).map(l => l.id === id ? { ...l, ...patch } : l))
+    supabase.from('clientes').update(patch).eq('id', id).then(undefined, () => {})
+  }
+
   function contactarWhatsApp(l: Lead) {
+    patchLead(l.id, { wa_count: (l.wa_count ?? 0) + 1 })
     abrirWhatsApp(l.telefono, l.nombre)
     getUsuarioActual().then(({ data: { user } }) => {
       if (user) registrarContacto(user.id, l.id, 'whatsapp').catch(() => {})
     })
   }
   function contactarLlamada(l: Lead) {
+    patchLead(l.id, { call_count: (l.call_count ?? 0) + 1 })
     llamar(l.telefono)
     getUsuarioActual().then(({ data: { user } }) => {
       if (user) registrarContacto(user.id, l.id, 'llamada').catch(() => {})
     })
+  }
+
+  async function guardarNota() {
+    if (!notaModal) return
+    setGuardandoNota(true)
+    const { id, value } = notaModal
+    patchLead(id, { notas: value })
+    setGuardandoNota(false)
+    setNotaModal(null)
   }
 
   const HeaderCell = ({ col, label, w }: { col: SortCol; label: string; w: number }) => (
@@ -124,6 +160,21 @@ export default function LeadsCampania() {
       )}
     </TouchableOpacity>
   )
+
+  // Botón de acción con contador n/5.
+  const AccionBtn = ({ icon, color, count, onPress }: {
+    icon: any; color: string; count: number; onPress: () => void
+  }) => {
+    const done = count >= META
+    return (
+      <TouchableOpacity style={styles.actBtn} onPress={onPress} activeOpacity={0.7}>
+        <Ionicons name={icon} size={24} color={color} />
+        <View style={[styles.contador, done && styles.contadorDone]}>
+          <Text style={[styles.contadorTxt, done && { color: '#fff' }]}>{count}/{META}</Text>
+        </View>
+      </TouchableOpacity>
+    )
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
@@ -150,11 +201,7 @@ export default function LeadsCampania() {
           <Text style={[styles.emptyTxt, { color: c.textMute }]}>Aún no tienes leads de campaña asignados.</Text>
         </View>
       ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator
-          contentContainerStyle={{ minWidth: '100%' }}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: '100%' }}>
           <View>
             {/* Encabezado — orden: Nombre · Teléfono · Zona · Presupuesto */}
             <View style={styles.headRow}>
@@ -162,8 +209,9 @@ export default function LeadsCampania() {
               <HeaderCell col="telefono" label="Teléfono" w={150} />
               <HeaderCell col="zona" label="Zona" w={190} />
               <HeaderCell col="presupuesto" label="Presupuesto" w={150} />
-              <View style={[styles.th, { width: 78 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>WhatsApp</Text></View>
-              <View style={[styles.th, { width: 74 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Llamar</Text></View>
+              <View style={[styles.th, { width: 92 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>WhatsApp</Text></View>
+              <View style={[styles.th, { width: 88 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Llamar</Text></View>
+              <View style={[styles.th, { width: 150 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Notas</Text></View>
             </View>
 
             {/* Filas */}
@@ -180,19 +228,31 @@ export default function LeadsCampania() {
                     <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={1}>{l.telefono}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.td, { width: 190 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
-                    <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{l.zona_busqueda || '—'}</Text>
+                    <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{prettyZona(l.zona_busqueda)}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.td, { width: 150 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
-                    <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{l.presupuesto || '—'}</Text>
+                    <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{prettyPresu(l.presupuesto)}</Text>
                   </TouchableOpacity>
-                  <View style={[styles.td, { width: 78, alignItems: 'center' }]}>
-                    <TouchableOpacity style={styles.actBtn} onPress={() => contactarWhatsApp(l)}>
-                      <Ionicons name="logo-whatsapp" size={24} color="#16a34a" />
-                    </TouchableOpacity>
+                  <View style={[styles.td, { width: 92, alignItems: 'center' }]}>
+                    <AccionBtn icon="logo-whatsapp" color="#16a34a" count={l.wa_count ?? 0} onPress={() => contactarWhatsApp(l)} />
                   </View>
-                  <View style={[styles.td, { width: 74, alignItems: 'center' }]}>
-                    <TouchableOpacity style={styles.actBtn} onPress={() => contactarLlamada(l)}>
-                      <Ionicons name="call" size={22} color="#2563eb" />
+                  <View style={[styles.td, { width: 88, alignItems: 'center' }]}>
+                    <AccionBtn icon="call" color="#2563eb" count={l.call_count ?? 0} onPress={() => contactarLlamada(l)} />
+                  </View>
+                  <View style={[styles.td, { width: 150 }]}>
+                    <TouchableOpacity
+                      style={[styles.notaBtn, { borderColor: c.border, backgroundColor: c.bg }]}
+                      onPress={() => setNotaModal({ id: l.id, nombre: l.nombre, value: l.notas ?? '' })}
+                      activeOpacity={0.7}
+                    >
+                      {l.notas ? (
+                        <Text style={[styles.notaTxt, { color: c.textSub }]} numberOfLines={2}>{l.notas}</Text>
+                      ) : (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Ionicons name="create-outline" size={15} color="#7c3aed" />
+                          <Text style={styles.notaAdd}>Agregar nota</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -201,6 +261,32 @@ export default function LeadsCampania() {
           </View>
         </ScrollView>
       )}
+
+      {/* Modal de notas */}
+      <Modal visible={!!notaModal} transparent animationType="fade" onRequestClose={() => setNotaModal(null)}>
+        <View style={styles.modalBg}>
+          <View style={[styles.modalCard, { backgroundColor: c.card }]}>
+            <Text style={[styles.modalTit, { color: c.text }]}>Nota — {notaModal?.nombre}</Text>
+            <TextInput
+              style={[styles.modalInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
+              value={notaModal?.value ?? ''}
+              onChangeText={t => setNotaModal(m => m ? { ...m, value: t } : m)}
+              placeholder="Escribe una nota sobre este lead…"
+              placeholderTextColor={c.textMute}
+              multiline
+              autoFocus
+            />
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: c.border, flex: 1 }]} onPress={() => setNotaModal(null)}>
+                <Text style={[styles.modalBtnTxt, { color: c.text }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#7c3aed', flex: 1 }]} onPress={guardarNota} disabled={guardandoNota}>
+                {guardandoNota ? <ActivityIndicator color="#fff" /> : <Text style={[styles.modalBtnTxt, { color: '#fff' }]}>Guardar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -216,10 +302,22 @@ const styles = StyleSheet.create({
   headRow: { flexDirection: 'row', backgroundColor: '#7c3aed' },
   th: { paddingVertical: 15, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center' },
   thTxt: { fontSize: 13.5, fontWeight: '800' },
-  tr: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'stretch', minHeight: 58 },
+  tr: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'stretch', minHeight: 64 },
   td: { paddingVertical: 14, paddingHorizontal: 11, justifyContent: 'center' },
   tdTxt: { fontSize: 15, lineHeight: 20 },
-  actBtn: { padding: 8 },
+  actBtn: { alignItems: 'center', gap: 4, paddingVertical: 4 },
+  contador: { backgroundColor: '#ede9fe', borderRadius: 9, paddingHorizontal: 7, paddingVertical: 2, minWidth: 34, alignItems: 'center' },
+  contadorDone: { backgroundColor: '#16a34a' },
+  contadorTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  notaBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 8, minHeight: 40, justifyContent: 'center' },
+  notaTxt: { fontSize: 13, lineHeight: 17 },
+  notaAdd: { fontSize: 13, fontWeight: '700', color: '#7c3aed' },
   empty: { alignItems: 'center', justifyContent: 'center', marginTop: 60, gap: 10, paddingHorizontal: 30 },
   emptyTxt: { fontSize: 14, textAlign: 'center' },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  modalCard: { width: '100%', maxWidth: 420, borderRadius: 18, padding: 20 },
+  modalTit: { fontSize: 16, fontWeight: '800', marginBottom: 12 },
+  modalInput: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 15, minHeight: 110, textAlignVertical: 'top' },
+  modalBtn: { borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
+  modalBtnTxt: { fontSize: 15, fontWeight: '800' },
 })
