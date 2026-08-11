@@ -20,6 +20,7 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
+import CompartirFormulario from '../../components/CompartirFormulario'
 import { esPlusOMejor, esStaffSupervision } from '../../lib/permisos'
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb, proxyImagen } from '../../lib/img'
@@ -705,6 +706,7 @@ export default function DetallePropiedad() {
   // adjuntar archivos desde un link, solo texto. El enlace se ve con preview,
   // siempre está actualizado y no ocupa almacenamiento.
   const [modalEnviar, setModalEnviar] = useState(false)
+  const [modalFormulario, setModalFormulario] = useState(false)
   const [clientesEnviar, setClientesEnviar] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
   const [cargandoClientes, setCargandoClientes] = useState(false)
   const [buscaCliente, setBuscaCliente] = useState('')
@@ -1903,6 +1905,10 @@ export default function DetallePropiedad() {
             <TouchableOpacity style={styles.shareCirc} onPress={compartirLinkFicha} activeOpacity={0.8}>
               <Text style={styles.shareCircTxt}>🔗</Text>
             </TouchableOpacity>
+            {/* Compartir con formulario de captura */}
+            <TouchableOpacity style={[styles.shareCirc, { right: 60 }]} onPress={() => setModalFormulario(true)} activeOpacity={0.8}>
+              <Text style={styles.shareCircTxt}>📝</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Puntos solo cuando son pocos; con muchas fotos el contador basta. */}
@@ -2376,6 +2382,10 @@ export default function DetallePropiedad() {
         </TouchableOpacity>
 
         {/* Popup: elegir a qué cliente enviarle la ficha por WhatsApp */}
+        {modalFormulario && propiedad && (
+          <CompartirFormulario tipo="ficha" refId={propiedad.codigo} titulo={propiedad.titulo} onClose={() => setModalFormulario(false)} />
+        )}
+
         <Modal visible={modalEnviar} transparent animationType="slide" onRequestClose={() => setModalEnviar(false)}>
           <View style={styles.envOverlay}>
             <View style={styles.envBox}>

@@ -40,6 +40,7 @@ const TIPOS_INTERACCION = [
 
 const FUENTE_LABELS: Record<string, string> = {
   marketplace: 'Marketplace', tokko: 'Tokko', campana_fb: 'Campaña FB',
+  ficha_compartida: 'Ficha compartida', coleccion_compartida: 'Colección',
   grupo_fb: 'Grupo FB', otro: 'Otro', referido: 'Referido',
   redes_sociales: 'Redes sociales', sitio_web: 'Sitio web',
   llamada_fria: 'Llamada fría', evento: 'Evento',

@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { thumb } from '../../lib/img'
 import { useColors } from '../../lib/ThemeContext'
+import CompartirFormulario from '../../components/CompartirFormulario'
 
 const BASE_LINK = 'https://valeraapp.valerarealestate.com/coleccion/'
 
@@ -51,6 +52,7 @@ export default function ColeccionDetalle() {
   const [busca, setBusca] = useState('')
   const [resultados, setResultados] = useState<PropBusca[]>([])
   const [buscando, setBuscando] = useState(false)
+  const [modalForm, setModalForm] = useState(false)
 
   const cargar = useCallback(async () => {
     try {
@@ -151,6 +153,10 @@ export default function ColeccionDetalle() {
             <Ionicons name="link-outline" size={18} color={c.textSub} />
             <Text style={[st.shareTxt, { color: c.textSub }]}>Copiar link</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={[st.shareBtn, { backgroundColor: '#e0f4f5' }]} onPress={() => setModalForm(true)}>
+            <Ionicons name="clipboard-outline" size={18} color="#1a6470" />
+            <Text style={[st.shareTxt, { color: '#1a6470' }]}>Con formulario</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={st.btnAdd} onPress={() => { setBusca(''); setResultados([]); setAddModal(true) }}>
@@ -186,6 +192,10 @@ export default function ColeccionDetalle() {
       </ScrollView>
 
       {/* Modal agregar propiedades */}
+      {modalForm && det && (
+        <CompartirFormulario tipo="coleccion" refId={det.token} titulo={det.titulo || 'Selección de propiedades'} onClose={() => setModalForm(false)} />
+      )}
+
       <Modal visible={addModal} transparent animationType="slide" onRequestClose={() => setAddModal(false)}>
         <View style={st.ov}>
           <View style={[st.box, { backgroundColor: c.card }]}>

@@ -59,6 +59,7 @@ type Recordatorio = {
 
 const FUENTE_LABELS: Record<string, string> = {
   marketplace: 'Marketplace', tokko: 'Tokko',
+  ficha_compartida: 'Ficha compartida', coleccion_compartida: 'Colección',
   campana_fb: 'Campaña FB', grupo_fb: 'Grupo FB', otro: 'Otro',
   // legacy
   referido: 'Referido', redes_sociales: 'Redes sociales', sitio_web: 'Sitio web',
