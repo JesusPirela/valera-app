@@ -148,14 +148,14 @@ export default function LeadsCampania() {
           contentContainerStyle={{ minWidth: '100%' }}
         >
           <View>
-            {/* Encabezado */}
+            {/* Encabezado — orden: Nombre · Teléfono · Zona · Presupuesto */}
             <View style={styles.headRow}>
-              <HeaderCell col="zona" label="Zona" w={150} />
-              <HeaderCell col="presupuesto" label="Presupuesto" w={130} />
-              <HeaderCell col="nombre" label="Nombre" w={170} />
-              <HeaderCell col="telefono" label="Teléfono" w={130} />
-              <View style={[styles.th, { width: 64 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>WA</Text></View>
-              <View style={[styles.th, { width: 64 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Llamar</Text></View>
+              <HeaderCell col="nombre" label="Nombre" w={200} />
+              <HeaderCell col="telefono" label="Teléfono" w={150} />
+              <HeaderCell col="zona" label="Zona" w={190} />
+              <HeaderCell col="presupuesto" label="Presupuesto" w={150} />
+              <View style={[styles.th, { width: 78 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>WhatsApp</Text></View>
+              <View style={[styles.th, { width: 74 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Llamar</Text></View>
             </View>
 
             {/* Filas */}
@@ -165,26 +165,26 @@ export default function LeadsCampania() {
             >
               {ordenados.map((l, i) => (
                 <View key={l.id} style={[styles.tr, { backgroundColor: i % 2 === 0 ? c.card : c.bg2, borderColor: c.border }]}>
-                  <TouchableOpacity style={[styles.td, { width: 150 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
-                    <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{l.zona_busqueda || '—'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.td, { width: 130 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
-                    <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{l.presupuesto || '—'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.td, { width: 170 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
+                  <TouchableOpacity style={[styles.td, { width: 200 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
                     <Text style={[styles.tdTxt, { color: c.text, fontWeight: '700' }]} numberOfLines={2}>{l.nombre}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.td, { width: 130 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
+                  <TouchableOpacity style={[styles.td, { width: 150 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
                     <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={1}>{l.telefono}</Text>
                   </TouchableOpacity>
-                  <View style={[styles.td, { width: 64, alignItems: 'center' }]}>
+                  <TouchableOpacity style={[styles.td, { width: 190 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
+                    <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{l.zona_busqueda || '—'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.td, { width: 150 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
+                    <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{l.presupuesto || '—'}</Text>
+                  </TouchableOpacity>
+                  <View style={[styles.td, { width: 78, alignItems: 'center' }]}>
                     <TouchableOpacity style={styles.actBtn} onPress={() => contactarWhatsApp(l)}>
-                      <Ionicons name="logo-whatsapp" size={20} color="#16a34a" />
+                      <Ionicons name="logo-whatsapp" size={24} color="#16a34a" />
                     </TouchableOpacity>
                   </View>
-                  <View style={[styles.td, { width: 64, alignItems: 'center' }]}>
+                  <View style={[styles.td, { width: 74, alignItems: 'center' }]}>
                     <TouchableOpacity style={styles.actBtn} onPress={() => contactarLlamada(l)}>
-                      <Ionicons name="call" size={18} color="#2563eb" />
+                      <Ionicons name="call" size={22} color="#2563eb" />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -203,12 +203,12 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '800' },
   sub: { fontSize: 12, marginTop: 2 },
   headRow: { flexDirection: 'row', backgroundColor: '#7c3aed' },
-  th: { paddingVertical: 11, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
-  thTxt: { fontSize: 12, fontWeight: '800' },
-  tr: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'stretch' },
-  td: { paddingVertical: 10, paddingHorizontal: 8, justifyContent: 'center' },
-  tdTxt: { fontSize: 13 },
-  actBtn: { padding: 6 },
+  th: { paddingVertical: 15, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center' },
+  thTxt: { fontSize: 13.5, fontWeight: '800' },
+  tr: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'stretch', minHeight: 58 },
+  td: { paddingVertical: 14, paddingHorizontal: 11, justifyContent: 'center' },
+  tdTxt: { fontSize: 15, lineHeight: 20 },
+  actBtn: { padding: 8 },
   empty: { alignItems: 'center', justifyContent: 'center', marginTop: 60, gap: 10, paddingHorizontal: 30 },
   emptyTxt: { fontSize: 14, textAlign: 'center' },
 })
