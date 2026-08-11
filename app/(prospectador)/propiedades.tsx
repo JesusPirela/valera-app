@@ -1065,7 +1065,7 @@ export default function ProspectadorPropiedades() {
             {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
           </Text>
         </TouchableOpacity>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', flexGrow: 1 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 4 }} style={{ flexShrink: 1 }}>
           <TouchableOpacity
             style={[styles.constructorasBtn, { borderColor: primaryColor }]}
             onPress={() => router.push('/(prospectador)/constructoras')}
@@ -1116,7 +1116,7 @@ export default function ProspectadorPropiedades() {
             <Ionicons name="locate-outline" size={14} color="#1976D2" />
             <Text style={[styles.zonasToggleText, { color: '#1976D2' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Zonas</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </View>
       {mostrarFiltros && (
         <FiltrosPanelWrapper
