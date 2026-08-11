@@ -762,11 +762,14 @@ export default function DetallePropiedad() {
     const link = `https://valeraapp.valerarealestate.com/ficha/${propiedad.codigo}`
     const msg = `${propiedad.titulo}\n${formatPrecio(propiedad.precio)}\n\n${link}`
     if (Platform.OS === 'web') {
+      // En web/PC: copiar el link directo (sin el diálogo del sistema con la
+      // vista previa/imagen, que no gusta en escritorio).
       try {
-        if ((navigator as any).share) { await (navigator as any).share({ title: propiedad.titulo, text: msg, url: link }); return }
         await navigator.clipboard.writeText(link)
         Alert.alert('Link copiado', 'El link de la propiedad se copió al portapapeles.')
-      } catch { /* cancelado */ }
+      } catch {
+        try { (window as any).prompt('Copia el link de la propiedad:', link) } catch { /* no-op */ }
+      }
     } else {
       try { await Share.share({ message: msg, url: link }) } catch { /* cancelado */ }
     }
