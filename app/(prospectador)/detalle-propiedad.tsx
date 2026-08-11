@@ -13,6 +13,7 @@ import {
   Modal,
   FlatList,
   useWindowDimensions,
+  Share,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -753,6 +754,22 @@ export default function DetallePropiedad() {
       : `Hola, te comparto esta propiedad:\n\n${tituloTxt}\n${formatPrecio(propiedad.precio)}\n\n${link}`
     Linking.openURL(`https://wa.me/52${tel}?text=${encodeURIComponent(msg)}`)
     setModalEnviar(false)
+  }
+
+  // Compartir el link de la propiedad (share nativo o copiar en web).
+  async function compartirLinkFicha() {
+    if (!propiedad) return
+    const link = `https://valeraapp.valerarealestate.com/ficha/${propiedad.codigo}`
+    const msg = `${propiedad.titulo}\n${formatPrecio(propiedad.precio)}\n\n${link}`
+    if (Platform.OS === 'web') {
+      try {
+        if ((navigator as any).share) { await (navigator as any).share({ title: propiedad.titulo, text: msg, url: link }); return }
+        await navigator.clipboard.writeText(link)
+        Alert.alert('Link copiado', 'El link de la propiedad se copió al portapapeles.')
+      } catch { /* cancelado */ }
+    } else {
+      try { await Share.share({ message: msg, url: link }) } catch { /* cancelado */ }
+    }
   }
 
   // XP por descargar: se otorga UNA sola vez cuando la descarga se completó,
@@ -1879,6 +1896,10 @@ export default function DetallePropiedad() {
                 <Text style={styles.galContadorTxt}>{imagenActual + 1} / {imagenes.length}</Text>
               </View>
             )}
+            {/* Compartir link — ícono circular flotante */}
+            <TouchableOpacity style={styles.shareCirc} onPress={compartirLinkFicha} activeOpacity={0.8}>
+              <Text style={styles.shareCircTxt}>🔗</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Puntos solo cuando son pocos; con muchas fotos el contador basta. */}
@@ -3016,6 +3037,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4, zIndex: 5,
   },
   galContadorTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  shareCirc: {
+    position: 'absolute', top: 12, right: 12, zIndex: 6,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center',
+  },
+  shareCircTxt: { fontSize: 18 },
 
   paginador: {
     flexDirection: 'row',
