@@ -1252,12 +1252,16 @@ export default function CRM() {
 
         {/* ── Botón: Leads de campaña (solo si hay clientes asignados de campaña) ── */}
         {leadsCampania.length > 0 && (
-          <TouchableOpacity
-            style={[s.btnCampana, { marginHorizontal: 12, marginTop: 8, backgroundColor: '#7c3aed', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]}
-            onPress={() => router.push('/(prospectador)/leads-campania')}
-          >
-            <Text style={s.btnCampanaTxt}>📣 Leads de campaña</Text>
-            <View style={s.badgeCampania}><Text style={s.badgeCampaniaTxt}>{leadsCampania.length}</Text></View>
+          <TouchableOpacity style={s.btnLeadsCamp} onPress={() => router.push('/(prospectador)/leads-campania')} activeOpacity={0.88}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+              <Text style={{ fontSize: 28 }}>📣</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.btnLeadsCampTit}>Leads de campaña</Text>
+                <Text style={s.btnLeadsCampSub}>Tu CRM de clientes de campaña</Text>
+              </View>
+            </View>
+            <View style={s.badgeCampaniaBig}><Text style={s.badgeCampaniaBigTxt}>{leadsCampania.length}</Text></View>
+            <Ionicons name="chevron-forward" size={22} color="rgba(255,255,255,0.9)" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
         )}
 
@@ -2004,6 +2008,15 @@ const s = StyleSheet.create({
   btnCampanaTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
   badgeCampania: { backgroundColor: 'rgba(255,255,255,0.9)', minWidth: 22, height: 20, borderRadius: 10, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
   badgeCampaniaTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  btnLeadsCamp: {
+    marginHorizontal: 12, marginTop: 10, backgroundColor: '#7c3aed', borderRadius: 16,
+    paddingVertical: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center',
+    ...Platform.select({ web: { boxShadow: '0 4px 14px rgba(124,58,237,0.35)' } as any, default: { elevation: 4 } }),
+  },
+  btnLeadsCampTit: { color: '#fff', fontSize: 17, fontWeight: '900' },
+  btnLeadsCampSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12.5, fontWeight: '600', marginTop: 1 },
+  badgeCampaniaBig: { backgroundColor: '#fff', minWidth: 30, height: 30, borderRadius: 15, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
+  badgeCampaniaBigTxt: { fontSize: 15, fontWeight: '900', color: '#7c3aed' },
   opBanner: {
     marginHorizontal: 12, marginTop: 10, borderRadius: 12,
     borderWidth: 1.5, borderColor: '#fecaca', backgroundColor: '#fef2f2', overflow: 'hidden',
