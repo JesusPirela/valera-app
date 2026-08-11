@@ -281,7 +281,10 @@ function SelectorPropiedad({ propiedadId, propiedadTitulo, externa, onSelectApp,
       <Text style={s.fieldLabel}>Propiedad de la cita</Text>
       {propiedadId ? (
         <View style={s.clienteSeleccionado}>
-          <Text style={s.clienteSelNombre}>🏠 {propiedadTitulo ?? 'Propiedad seleccionada'}</Text>
+          <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5 }} activeOpacity={0.6} onPress={() => abrirFichaPropiedad(propiedadId)}>
+            <Text style={[s.clienteSelNombre, { textDecorationLine: 'underline' }]} numberOfLines={1}>🏠 {propiedadTitulo ?? 'Propiedad seleccionada'}</Text>
+            <Ionicons name="open-outline" size={14} color="#1a6470" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={onClearApp}><Ionicons name="close-circle" size={18} color="#94a3b8" /></TouchableOpacity>
         </View>
       ) : (
