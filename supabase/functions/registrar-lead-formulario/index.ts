@@ -23,8 +23,14 @@ function normalizarTel(tel: string): string {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   try {
-    const { token, respuestas } = await req.json().catch(() => ({}))
+    const { token, respuestas, favoritos } = await req.json().catch(() => ({}))
     if (!token || !respuestas) return err('Faltan datos.')
+
+    // Propiedades que el cliente marcó como favoritas (solo colecciones).
+    const favLista: { codigo?: string; titulo?: string }[] = Array.isArray(favoritos) ? favoritos : []
+    const favTexto = favLista.length
+      ? `❤️ Le gustaron: ${favLista.map(f => f.codigo || f.titulo).filter(Boolean).join(', ')}`
+      : ''
 
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
@@ -46,6 +52,8 @@ serve(async (req) => {
       if (k === 'tipo_operacion' && !['venta', 'renta'].includes(String(v))) continue
       cli[k] = String(v).trim()
     }
+    // Anexar las propiedades favoritas a las notas para que el asesor las vea.
+    if (favTexto) cli.notas = [cli.notas, favTexto].filter(Boolean).join('\n')
 
     // ── Dedup: ya existe ese teléfono para ese asesor ─────────────
     const telNorm = normalizarTel(telefono)
@@ -60,14 +68,17 @@ serve(async (req) => {
     await db.from('notificaciones').insert({
       user_id: form.owner_id, tipo: 'nuevo_cliente', cliente_id: nuevo.id,
       titulo: '📝 Nuevo registro desde tu link',
-      mensaje: `${nombre} · ${telefono}${form.titulo ? ` — ${form.titulo}` : ''}`,
+      mensaje: `${nombre} · ${telefono}${form.titulo ? ` — ${form.titulo}` : ''}${favTexto ? `\n${favTexto}` : ''}`,
       accion_url: `/(prospectador)/detalle-cliente?id=${nuevo.id}`,
     })
     try {
       const { data: asesor } = await db.from('profiles').select('telefono').eq('id', form.owner_id).maybeSingle()
       if (asesor?.telefono) {
-        const resumen = PERMITIDOS.filter(k => k !== 'nombre' && k !== 'telefono' && cli[k])
-          .map(k => `${k.replace(/_/g, ' ')}: ${cli[k]}`).join(' · ') || 'Sin datos adicionales'
+        const resumen = [
+          PERMITIDOS.filter(k => k !== 'nombre' && k !== 'telefono' && cli[k] && !(k === 'notas' && favTexto))
+            .map(k => `${k.replace(/_/g, ' ')}: ${cli[k]}`).join(' · '),
+          favTexto,
+        ].filter(Boolean).join(' · ') || 'Sin datos adicionales'
         await enviarWhatsApp(asesor.telefono, nombre, telefono, resumen)
       }
     } catch { /* best-effort */ }

@@ -1,14 +1,15 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator,
-  StyleSheet, Platform, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
+  StyleSheet, Platform, Linking, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native'
 import { Image } from 'expo-image'
-import { useLocalSearchParams } from 'expo-router'
+import { useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { CAMPOS_FORM } from '../../lib/formulario-campos'
 import { thumb } from '../../lib/img'
 import { formatPrecioLang, tipoLabel } from '../../lib/ficha-i18n'
+import PropMapa from '../../components/PropMapa'
 
 const TEAL = '#1a6470'
 const TEAL_D = '#123c44'
@@ -20,6 +21,7 @@ type Prop = {
   operacion: string | null; tipo: string | null; recamaras: number | null; banos: number | null
   medios_banos: number | null; m2: number | null; m2_terreno: number | null
   estacionamientos: number | null; descripcion: string | null
+  lat: number | null; lng: number | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 type ColItem = {
@@ -41,6 +43,7 @@ export default function FormularioCaptura() {
   const [loading, setLoading] = useState(true)
   const [imgIdx, setImgIdx] = useState(0)
   const [valores, setValores] = useState<Record<string, string>>({})
+  const [favs, setFavs] = useState<Record<string, boolean>>({})
   const [enviando, setEnviando] = useState(false)
   const [enviado, setEnviado] = useState(false)
   const [error, setError] = useState('')
@@ -59,7 +62,7 @@ export default function FormularioCaptura() {
       try {
         if (f.tipo === 'ficha') {
           const { data: p } = await supabase.from('propiedades')
-            .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, propiedad_imagenes(url, orden)')
+            .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, lat, lng, propiedad_imagenes(url, orden)')
             .eq('codigo', f.ref).maybeSingle()
           if (p) setProp({ ...p, propiedad_imagenes: [...(p.propiedad_imagenes ?? [])].sort((a: any, b: any) => a.orden - b.orden) } as Prop)
         } else if (f.tipo === 'coleccion') {
@@ -76,6 +79,15 @@ export default function FormularioCaptura() {
 
   function irAlFormulario() {
     scrollRef.current?.scrollTo({ y: Math.max(0, formY.current - 12), animated: true })
+  }
+  // Abrir la ficha completa de una propiedad de la colección. En web se abre en
+  // otra pestaña para no perder lo que ya escribió en el formulario.
+  function abrirFicha(codigo: string) {
+    if (Platform.OS === 'web') window.open(`/ficha/${codigo}`, '_blank')
+    else router.push(`/ficha/${codigo}` as any)
+  }
+  function toggleFav(id: string) {
+    setFavs(f => ({ ...f, [id]: !f[id] }))
   }
   function onScrollImg(e: NativeSyntheticEvent<NativeScrollEvent>) {
     setImgIdx(Math.round(e.nativeEvent.contentOffset.x / imgW))
@@ -94,7 +106,10 @@ export default function FormularioCaptura() {
     }
     setEnviando(true)
     try {
-      const { data, error: e } = await supabase.functions.invoke('registrar-lead-formulario', { body: { token, respuestas: valores } })
+      const favoritos = (col?.items ?? [])
+        .filter(it => favs[it.propiedad_id])
+        .map(it => ({ codigo: it.codigo, titulo: it.titulo }))
+      const { data, error: e } = await supabase.functions.invoke('registrar-lead-formulario', { body: { token, respuestas: valores, favoritos } })
       if (e) { setError('No se pudo enviar. Intenta de nuevo.'); return }
       if ((data as any)?.ok === false) { setError((data as any).error ?? 'No se pudo enviar.'); return }
       setEnviado(true)
@@ -191,6 +206,25 @@ export default function FormularioCaptura() {
                   <Text style={s.descTxt}>{prop.descripcion}</Text>
                 </View>
               ) : null}
+
+              {prop.lat != null && prop.lng != null && (
+                <View style={s.mapBox}>
+                  <Text style={[s.descTitle, { marginBottom: 8 }]}>Ubicación</Text>
+                  <View style={s.mapWrapper}>
+                    <PropMapa key={prop.id} lat={prop.lat} lng={prop.lng} titulo={prop.titulo} height={280} />
+                    <TouchableOpacity
+                      style={s.mapBtn}
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        const url = `https://www.google.com/maps/search/?api=1&query=${prop.lat},${prop.lng}`
+                        if (Platform.OS === 'web') window.open(url, '_blank'); else Linking.openURL(url)
+                      }}
+                    >
+                      <Text style={s.mapBtnTxt}>Abrir en Maps</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -201,28 +235,45 @@ export default function FormularioCaptura() {
             <View style={[s.propBody, { width: cardW, paddingTop: 4 }]}>
               <Text style={s.colTitulo}>{col.titulo || 'Propiedades seleccionadas para ti'}</Text>
               {col.mensaje ? <Text style={s.colMsg}>{col.mensaje}</Text> : null}
-              <Text style={s.colHint}>{(col.items ?? []).length} propiedades elegidas para ti 👇</Text>
+              <View style={s.colHintBox}>
+                <Text style={s.colHintTxt}>👆  Toca una propiedad para verla completa</Text>
+                <Text style={s.colHintTxt}>♥  Marca las que te gusten para avisarle a tu asesor</Text>
+              </View>
             </View>
             <View style={{ width: cardW, gap: 14 }}>
-              {(col.items ?? []).map(it => (
-                <View key={it.propiedad_id} style={s.colCard}>
-                  {it.imagen ? (
-                    <Image source={{ uri: thumb(it.imagen, { width: Math.round(cardW * 2), quality: 72 }) ?? it.imagen }} style={s.colImg} contentFit="cover" transition={150} />
-                  ) : <View style={[s.colImg, s.colImgPh]}><Text style={{ color: '#9aa5ab' }}>Sin foto</Text></View>}
-                  <View style={{ padding: 12 }}>
-                    <View style={s.badgeRow}>
-                      <View style={s.badge}><Text style={s.badgeTxt}>{it.codigo}</Text></View>
+              {(col.items ?? []).map(it => {
+                const fav = !!favs[it.propiedad_id]
+                return (
+                  <TouchableOpacity key={it.propiedad_id} style={s.colCard} activeOpacity={0.9} onPress={() => abrirFicha(it.codigo)}>
+                    <View>
+                      {it.imagen ? (
+                        <Image source={{ uri: thumb(it.imagen, { width: Math.round(cardW * 2), quality: 72 }) ?? it.imagen }} style={s.colImg} contentFit="cover" transition={150} />
+                      ) : <View style={[s.colImg, s.colImgPh]}><Text style={{ color: '#9aa5ab' }}>Sin foto</Text></View>}
+                      <TouchableOpacity
+                        style={[s.heart, fav && s.heartOn]}
+                        onPress={(e) => { e.stopPropagation(); toggleFav(it.propiedad_id) }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={{ fontSize: 20 }}>{fav ? '❤️' : '🤍'}</Text>
+                      </TouchableOpacity>
                     </View>
-                    <Text style={s.colCardTit} numberOfLines={2}>{it.titulo}</Text>
-                    <Text style={s.colCardPrecio}>{formatPrecioLang(it.precio, 'es')}</Text>
-                    <View style={s.colCardMeta}>
-                      {it.recamaras != null ? <Text style={s.colCardMetaTxt}>🛏️ {it.recamaras}</Text> : null}
-                      {it.banos != null ? <Text style={s.colCardMetaTxt}>🚿 {it.banos}</Text> : null}
-                      {it.m2 != null ? <Text style={s.colCardMetaTxt}>📐 {it.m2} m²</Text> : null}
+                    <View style={{ padding: 12 }}>
+                      <View style={s.badgeRow}>
+                        <View style={s.badge}><Text style={s.badgeTxt}>{it.codigo}</Text></View>
+                        <View style={s.verBadge}><Text style={s.verBadgeTxt}>Ver detalles ›</Text></View>
+                      </View>
+                      <Text style={s.colCardTit} numberOfLines={2}>{it.titulo}</Text>
+                      <Text style={s.colCardPrecio}>{formatPrecioLang(it.precio, 'es')}</Text>
+                      <View style={s.colCardMeta}>
+                        {it.recamaras != null ? <Text style={s.colCardMetaTxt}>🛏️ {it.recamaras}</Text> : null}
+                        {it.banos != null ? <Text style={s.colCardMetaTxt}>🚿 {it.banos}</Text> : null}
+                        {it.m2 != null ? <Text style={s.colCardMetaTxt}>📐 {it.m2} m²</Text> : null}
+                      </View>
                     </View>
-                  </View>
-                </View>
-              ))}
+                  </TouchableOpacity>
+                )
+              })}
             </View>
           </View>
         )}
@@ -321,13 +372,23 @@ const s = StyleSheet.create({
   descTitle: { fontSize: 13, fontWeight: '800', color: '#1e293b', marginBottom: 8 },
   descTxt: { fontSize: 14, color: '#475569', lineHeight: 22 },
 
+  mapBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginTop: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  mapWrapper: { position: 'relative', borderRadius: 12, overflow: 'hidden' },
+  mapBtn: { position: 'absolute', top: 10, right: 10, zIndex: 1000, backgroundColor: TEAL, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, ...Platform.select({ web: { boxShadow: '0 2px 6px rgba(0,0,0,0.3)' } as any, default: { elevation: 6 } }) },
+  mapBtnTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
+
   // Colección
   colTitulo: { fontSize: 22, fontWeight: '900', color: '#1e293b', lineHeight: 28 },
   colMsg: { fontSize: 14, color: '#475569', marginTop: 8, lineHeight: 21 },
-  colHint: { fontSize: 13, color: TEAL, fontWeight: '700', marginTop: 12, marginBottom: 4 },
+  colHintBox: { backgroundColor: '#eef7f8', borderRadius: 12, padding: 12, marginTop: 14, marginBottom: 2, gap: 4 },
+  colHintTxt: { fontSize: 13, color: TEAL, fontWeight: '700' },
   colCard: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0', ...Platform.select({ web: { boxShadow: '0 2px 10px rgba(0,0,0,0.06)' } as any, default: { elevation: 2 } }) },
   colImg: { width: '100%', height: 190, backgroundColor: '#dfe6ea' },
   colImgPh: { alignItems: 'center', justifyContent: 'center' },
+  heart: { position: 'absolute', top: 10, right: 10, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center', ...Platform.select({ web: { boxShadow: '0 2px 6px rgba(0,0,0,0.2)' } as any, default: { elevation: 3 } }) },
+  heartOn: { backgroundColor: '#fff' },
+  verBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: TEAL + '15' },
+  verBadgeTxt: { color: TEAL, fontSize: 12, fontWeight: '800' },
   colCardTit: { fontSize: 16, fontWeight: '800', color: '#1e293b', marginBottom: 4 },
   colCardPrecio: { fontSize: 18, fontWeight: '900', color: TEAL, marginBottom: 8 },
   colCardMeta: { flexDirection: 'row', gap: 14 },

@@ -129,9 +129,17 @@ export default function LeadsCampania() {
     <View style={[styles.container, { backgroundColor: c.bg }]}>
       <View style={styles.headerBar}>
         <Text style={[styles.title, { color: c.text }]}>📣 Leads de campaña</Text>
-        <Text style={[styles.sub, { color: c.textMute }]}>
-          {leads.length} {leads.length === 1 ? 'cliente' : 'clientes'} · toca un encabezado para ordenar
-        </Text>
+        <View style={styles.subRow}>
+          <Text style={[styles.sub, { color: c.textMute }]}>
+            {leads.length} {leads.length === 1 ? 'cliente' : 'clientes'} · toca un encabezado para ordenar
+          </Text>
+          {!(sort.col === 'nombre' && sort.dir === 'asc') && (
+            <TouchableOpacity style={styles.limpiarBtn} onPress={() => setSort({ col: 'nombre', dir: 'asc' })} activeOpacity={0.8}>
+              <Ionicons name="refresh" size={13} color="#7c3aed" />
+              <Text style={styles.limpiarTxt}>Limpiar orden</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {isLoading ? (
@@ -201,7 +209,10 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   headerBar: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
   title: { fontSize: 20, fontWeight: '800' },
-  sub: { fontSize: 12, marginTop: 2 },
+  subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, gap: 10, flexWrap: 'wrap' },
+  sub: { fontSize: 12, flex: 1 },
+  limpiarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f3e8ff', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6 },
+  limpiarTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
   headRow: { flexDirection: 'row', backgroundColor: '#7c3aed' },
   th: { paddingVertical: 15, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center' },
   thTxt: { fontSize: 13.5, fontWeight: '800' },
