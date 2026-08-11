@@ -86,7 +86,16 @@ export default function VideosProspectador() {
   }
 
   async function guardarEnGaleria(id: string, url: string, titulo: string) {
-    if (Platform.OS === 'web') { Linking.openURL(url); return }
+    if (Platform.OS === 'web') {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${titulo.replace(/[^a-z0-9]/gi, '_')}.mp4`
+      a.target = '_blank'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      return
+    }
     const { status } = await MediaLibrary.requestPermissionsAsync()
     if (status !== 'granted') {
       Alert.alert('Sin permiso', 'Activa el acceso a la galería en ajustes.')
@@ -109,7 +118,21 @@ export default function VideosProspectador() {
   }
 
   async function compartir(id: string, url: string, titulo: string) {
-    if (Platform.OS === 'web') { Linking.openURL(url); return }
+    if (Platform.OS === 'web') {
+      // Intentar Web Share API (funciona en Chrome móvil y Safari)
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        try { await navigator.share({ title: titulo, url }); return } catch { /* cancelado */ }
+      }
+      // Fallback: descarga directa en vez de abrir pestaña
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${titulo.replace(/[^a-z0-9]/gi, '_')}.mp4`
+      a.target = '_blank'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      return
+    }
     setDescargando(prev => ({ ...prev, [id]: true }))
     try {
       const ext = url.split('?')[0].split('.').pop() ?? 'mp4'

@@ -16,6 +16,7 @@ import {
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
+import * as DocumentPicker from 'expo-document-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import { supabase } from '../../lib/supabase'
 import { thumb } from '../../lib/img'
@@ -168,6 +169,9 @@ export default function EditarPropiedad() {
   const [seccionesExistentes, setSeccionesExistentes] = useState<string[]>([])
   const [imagenes, setImagenes] = useState<ImgItem[]>([])
   const [imagenesEliminar, setImagenesEliminar] = useState<string[]>([])
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [videoFile, setVideoFile] = useState<{ uri: string; name: string; mimeType: string } | null>(null)
+  const [subiendoVideo, setSubiendoVideo] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const imagenesRef = useRef<ImgItem[]>([])
@@ -248,7 +252,7 @@ export default function EditarPropiedad() {
     const [{ data, error }, { data: constrData }] = await Promise.all([
       supabase
         .from('propiedades')
-        .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, lona_contactada, es_constructora, nombre_constructora, es_inventario, inventario_seccion, propiedad_imagenes(id, url, orden)')
+        .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, lona_contactada, es_constructora, nombre_constructora, es_inventario, inventario_seccion, video_url, propiedad_imagenes(id, url, orden)')
         .eq('id', id)
         .single(),
       supabase
@@ -300,6 +304,7 @@ export default function EditarPropiedad() {
     }
     setEsInventario((data as any).es_inventario ?? false)
     setInventarioSeccion((data as any).inventario_seccion ?? '')
+    setVideoUrl((data as any).video_url ?? null)
     setImagenes(
       ((data.propiedad_imagenes as ImagenExistente[]) ?? [])
         .sort((a, b) => a.orden - b.orden)
@@ -690,6 +695,31 @@ export default function EditarPropiedad() {
     try { await mejorarConDatos() } catch { /* error ya visible en mejorandoMsg */ }
   }
 
+  async function pickVideo() {
+    const result = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true })
+    if (result.canceled || !result.assets?.[0]) return
+    const a = result.assets[0]
+    setVideoFile({ uri: a.uri, name: a.name, mimeType: a.mimeType ?? 'video/mp4' })
+  }
+
+  async function subirVideoPropiedad(): Promise<string | null> {
+    if (!videoFile) return null
+    setSubiendoVideo(true)
+    try {
+      const ext = videoFile.name.split('.').pop() ?? 'mp4'
+      const filePath = `${id}/video.${ext}`
+      const blob = await fetch(videoFile.uri).then(r => r.blob())
+      const { error } = await supabase.storage
+        .from('propiedades-videos')
+        .upload(filePath, blob, { contentType: videoFile.mimeType, upsert: true })
+      if (error) throw error
+      const { data } = supabase.storage.from('propiedades-videos').getPublicUrl(filePath)
+      return data.publicUrl
+    } finally {
+      setSubiendoVideo(false)
+    }
+  }
+
   async function subirImagen(
     uri: string, propiedadId: string, orden: number,
   ): Promise<{ url: string; thumbUrl: string | null }> {
@@ -784,6 +814,7 @@ export default function EditarPropiedad() {
           inventario_seccion: esInventario ? (inventarioSeccion.trim() || null) : null,
           lat: lat ?? null,
           lng: lng ?? null,
+          video_url: videoFile ? await subirVideoPropiedad() : videoUrl,
         })
         .eq('id', id)
         .select('id')
@@ -1019,6 +1050,31 @@ export default function EditarPropiedad() {
             />
           )
         )}
+        {/* Video de la propiedad */}
+        <Text style={[styles.label, { marginTop: 8 }]}>Video de la propiedad</Text>
+        {videoUrl && !videoFile && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <Text style={{ fontSize: 13, color: '#1a6470', flex: 1 }} numberOfLines={1}>🎬 Video actual guardado</Text>
+            <TouchableOpacity onPress={() => setVideoUrl(null)}>
+              <Text style={{ fontSize: 12, color: '#ef4444' }}>✕ Quitar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        <TouchableOpacity
+          style={[styles.imagenPicker, { backgroundColor: c.card, borderColor: videoFile ? '#1a6470' : c.border, minHeight: 52 }]}
+          onPress={pickVideo}
+          disabled={subiendoVideo}
+        >
+          <Text style={[styles.imagenPickerText, { color: videoFile ? '#1a6470' : c.textMute }]}>
+            {subiendoVideo ? '⏳ Subiendo video…' : videoFile ? `🎬 ${videoFile.name}` : videoUrl ? '🎬 Reemplazar video' : '🎬 Agregar video (opcional)'}
+          </Text>
+        </TouchableOpacity>
+        {videoFile && (
+          <TouchableOpacity onPress={() => setVideoFile(null)} style={{ alignSelf: 'flex-end', marginTop: 4, marginBottom: 4 }}>
+            <Text style={{ fontSize: 12, color: '#ef4444' }}>✕ Quitar video nuevo</Text>
+          </TouchableOpacity>
+        )}
+
         {Platform.OS === 'web' ? (
           <View nativeID="dropzone-editar" style={[styles.imagenPicker, { backgroundColor: c.card, borderColor: isDragging ? '#1a6470' : c.border }, isDragging && styles.imagenPickerDragging]}>
             {/* @ts-ignore */}
