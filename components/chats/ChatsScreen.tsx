@@ -72,9 +72,9 @@ export default function ChatsScreen({ volverHref, chatClienteBase }: ChatsScreen
     })
 
     if (err) {
-      setError('No se pudieron cargar los chats. Intenta de nuevo.')
+      setError(`Error: ${err.message ?? JSON.stringify(err)}`)
     } else if (data?.error) {
-      setError(data.error)
+      setError(`Error del servidor: ${data.error}`)
     } else {
       setHilos(data?.hilos ?? [])
     }

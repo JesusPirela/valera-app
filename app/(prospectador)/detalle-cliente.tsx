@@ -942,7 +942,7 @@ export default function DetalleCliente() {
                 <Text style={modal.fieldLabel}>Presupuesto (MXN)</Text>
                 <TextInput
                   style={modal.input}
-                  value={chatbotPresupuesto}
+                  value={chatbotPresupuesto ? Number(chatbotPresupuesto).toLocaleString('es-MX') : ''}
                   onChangeText={(t) => setChatbotPresupuesto(t.replace(/\D/g, ''))}
                   placeholder="Ej. 2500000"
                   keyboardType="number-pad"

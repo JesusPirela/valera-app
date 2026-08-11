@@ -1686,7 +1686,7 @@ export default function CRM() {
                 <Text style={[s.chatbotFieldLabel, { color: c.textMute }]}>Presupuesto (MXN)</Text>
                 <TextInput
                   style={[s.chatbotInput, { color: c.text, borderColor: c.border }]}
-                  value={chatbotPresupuesto}
+                  value={chatbotPresupuesto ? Number(chatbotPresupuesto).toLocaleString('es-MX') : ''}
                   onChangeText={(t) => setChatbotPresupuesto(t.replace(/\D/g, ''))}
                   placeholder="Ej. 2500000"
                   placeholderTextColor={c.textMute}
