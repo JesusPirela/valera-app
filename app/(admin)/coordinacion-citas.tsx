@@ -183,6 +183,12 @@ function abrirFichaPropiedad(propiedadId: string | null) {
   router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: propiedadId } })
 }
 
+// Abre la ficha completa del cliente en el CRM (toda su info como está registrada).
+function abrirFichaCliente(clienteId: string | null) {
+  if (!clienteId) return
+  router.push({ pathname: '/(admin)/detalle-cliente', params: { id: clienteId } })
+}
+
 function alerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
   else Alert.alert('Error', msg)
@@ -365,6 +371,15 @@ function ModalEdicion({
               <Text style={s.clienteNombre}>{cita.clientes.nombre}</Text>
               <TextInput style={s.telInput} value={telefono} onChangeText={setTelefono}
                 keyboardType="phone-pad" placeholder="Teléfono" placeholderTextColor="#94a3b8" />
+              <TouchableOpacity
+                style={s.verFichaBtn}
+                activeOpacity={0.7}
+                onPress={() => { onClose(); abrirFichaCliente(cita.cliente_id) }}
+              >
+                <Ionicons name="person-circle-outline" size={15} color="#1a6470" />
+                <Text style={s.verFichaTxt}>Ver ficha del cliente</Text>
+                <Ionicons name="open-outline" size={12} color="#1a6470" />
+              </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={22} color="#94a3b8" />
@@ -954,16 +969,19 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
             <Text style={kc.tratoBannerTxt}>🏆 Apartó · Trato cerrado</Text>
           </View>
         )}
-        {/* Nombre + avatar */}
-        <View style={kc.headRow}>
+        {/* Nombre + avatar — toca para ver la ficha completa del cliente */}
+        <TouchableOpacity style={kc.headRow} activeOpacity={0.6} onPress={() => abrirFichaCliente(cita.cliente_id)}>
           <View style={[kc.avatar, { backgroundColor: inf.bg }]}>
             <Text style={[kc.avatarTxt, { color: inf.color }]}>{iniciales(cita.clientes.nombre)}</Text>
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={kc.nombre} numberOfLines={1}>{cita.clientes.nombre}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={[kc.nombre, kc.nombreLink]} numberOfLines={1}>{cita.clientes.nombre}</Text>
+              <Ionicons name="open-outline" size={11} color="#1a6470" />
+            </View>
             <Text style={kc.tel}>{normalizarTel(cita.clientes.telefono)}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Fecha de cita */}
         {cita.fecha_cita && (
@@ -1099,6 +1117,7 @@ const kc = StyleSheet.create({
   avatar:      { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   avatarTxt:   { fontSize: 11, fontWeight: '800' },
   nombre:      { fontSize: 13, fontWeight: '700', color: '#0f172a' },
+  nombreLink:  { color: '#1a6470', textDecorationLine: 'underline' },
   tel:         { fontSize: 11, color: '#64748b' },
   fechaRow:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f0fdfa', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
   fechaPasada: { backgroundColor: '#fef2f2' },
@@ -1756,6 +1775,11 @@ const s = StyleSheet.create({
     fontSize: 13, color: '#64748b', marginTop: 2,
     borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingVertical: 2,
   },
+  verFichaBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, alignSelf: 'flex-start',
+    backgroundColor: '#e0f4f5', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6,
+  },
+  verFichaTxt: { fontSize: 12.5, fontWeight: '800', color: '#1a6470' },
   avatar:    { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   avatarTxt: { fontSize: 14, fontWeight: '800' },
 
