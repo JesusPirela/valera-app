@@ -172,6 +172,27 @@ function necesitaSeguimiento(c: Cliente): boolean {
   return (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
 }
 
+// Parsea un presupuesto en texto libre a un número aproximado (para filtrar por rango).
+function parsePresu(txt: string | null | undefined): number | null {
+  if (!txt) return null
+  const s = String(txt).toLowerCase().replace(/[, $]/g, '')
+  const m = s.match(/(\d+(\.\d+)?)\s*(m|k)?/)
+  if (!m) return null
+  let n = parseFloat(m[1])
+  if (isNaN(n)) return null
+  const suf = m[3]
+  if (suf === 'm') n *= 1_000_000
+  else if (suf === 'k') n *= 1_000
+  else if (n < 100) n *= 1_000_000   // "1.6", "2.5" → millones (heurística)
+  return n
+}
+const FUENTE_LABEL_CRM: Record<string, string> = {
+  marketplace: 'Marketplace', tokko: 'Tokko', campana_fb: 'Campaña FB', grupo_fb: 'Grupo FB',
+  ficha_compartida: 'Ficha compartida', coleccion_compartida: 'Colección', sheets: 'Sheets',
+  otro: 'Otro', referido: 'Referido', admin: 'Admin', constructora: 'Constructora',
+}
+const fuenteLabel = (f: string) => FUENTE_LABEL_CRM[f] ?? f
+
 function iniciales(nombre: string) {
   return nombre.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 }
@@ -453,10 +474,15 @@ export default function CRM() {
   }
   const [interesFilter, setInteresFilter] = useState<string | null>(null)
   const [zonaFilter, setZonaFilter]       = useState<string | null>(null)
+  const [fuenteFilter, setFuenteFilter]   = useState<string | null>(null)
+  const [creditoFilter, setCreditoFilter] = useState<string | null>(null)
+  const [presMin, setPresMin]             = useState('')
+  const [presMax, setPresMax]             = useState('')
   const [excelSort, setExcelSort]         = useState<{ col: string; dir: 'asc' | 'desc' } | null>(null)
   const [excelFilterModal, setExcelFilterModal] = useState<{
     col: string; label: string
-    options: { value: string | null; label: string; color?: string }[]
+    tipo?: 'opciones' | 'rango'
+    options?: { value: string | null; label: string; color?: string }[]
   } | null>(null)
   // Edición inline en la tabla Excel
   const [editCell, setEditCell] = useState<{ id: string; col: string } | null>(null)
@@ -592,6 +618,13 @@ export default function CRM() {
       const { zonas, otra } = parseZonasGuardadas(c.zona_busqueda)
       return zonas.includes(zonaFilter) || (otra !== '' && zonaFilter === '__otra__')
     })
+    if (fuenteFilter)  result = result.filter(c => (c.fuente_lead ?? 'otro') === fuenteFilter)
+    if (creditoFilter) result = result.filter(c => c.tipo_credito === creditoFilter)
+    if (presMin || presMax) {
+      const min = parsePresu(presMin) ?? 0
+      const max = parsePresu(presMax) ?? Infinity
+      result = result.filter(c => { const v = parsePresu(c.presupuesto); return v != null && v >= min && v <= max })
+    }
     if (sortBy === 'nombre') {
       result = [...result].sort((a, b) => a.nombre.localeCompare(b.nombre))
     } else if (sortBy === 'contacto') {
@@ -603,7 +636,7 @@ export default function CRM() {
     }
     return result
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientes, busqueda, estadoFiltro, filtroVencidos, opFiltro, interesFilter, zonaFilter, sortBy, tick])
+  }, [clientes, busqueda, estadoFiltro, filtroVencidos, opFiltro, interesFilter, zonaFilter, fuenteFilter, creditoFilter, presMin, presMax, sortBy, tick])
 
   // ── Excel table helpers ───────────────────────────────────────
   const filtradosExcel = useMemo(() => {
@@ -636,12 +669,17 @@ export default function CRM() {
     if (colId === 'operacion') return opFiltro !== null
     if (colId === 'interes') return interesFilter !== null
     if (colId === 'zona') return zonaFilter !== null
+    if (colId === 'fuente') return fuenteFilter !== null
+    if (colId === 'tipo_credito') return creditoFilter !== null
+    if (colId === 'presupuesto') return !!presMin || !!presMax
     return false
   }
 
   function getColFilterValue(colId: string): string | null {
     if (colId === 'estado') return estadoFiltro
     if (colId === 'operacion') return opFiltro
+    if (colId === 'fuente') return fuenteFilter
+    if (colId === 'tipo_credito') return creditoFilter
     if (colId === 'interes') return interesFilter
     if (colId === 'zona') return zonaFilter
     return null
@@ -652,6 +690,8 @@ export default function CRM() {
     else if (col === 'operacion') setOpFiltro(value as any)
     else if (col === 'interes') setInteresFilter(value)
     else if (col === 'zona') setZonaFilter(value)
+    else if (col === 'fuente') setFuenteFilter(value)
+    else if (col === 'tipo_credito') setCreditoFilter(value)
     setExcelFilterModal(null)
   }
 
@@ -701,6 +741,15 @@ export default function CRM() {
           ...(hayOtra ? [{ value: '__otra__', label: 'Otra (texto libre)' }] : []),
         ],
       })
+    } else if (colId === 'tipo_credito') {
+      const set = new Set<string>()
+      for (const cl of clientes) if (cl.tipo_credito) set.add(cl.tipo_credito)
+      setExcelFilterModal({
+        col: 'tipo_credito', label: 'Filtrar por Método de pago',
+        options: [{ value: null, label: 'Todos' }, ...[...set].sort().map(v => ({ value: v, label: v.charAt(0).toUpperCase() + v.slice(1) }))],
+      })
+    } else if (colId === 'presupuesto') {
+      setExcelFilterModal({ col: 'presupuesto', label: 'Filtrar por Presupuesto', tipo: 'rango' })
     }
   }
 
@@ -991,9 +1040,9 @@ export default function CRM() {
     { id: 'telefono',    label: 'Teléfono',       flex: 1.2, mw: 0 },
     { id: 'estado',      label: 'Estado',         flex: 1.3, mw: 0, sortable: true, filterable: true },
     { id: 'operacion',   label: 'Op.',            flex: 0.8, mw: 0, filterable: true },
-    { id: 'tipo_credito', label: 'Método pago',   flex: 0.9, mw: 0 },
+    { id: 'tipo_credito', label: 'Método pago',   flex: 0.9, mw: 0, filterable: true },
     { id: 'zona',        label: 'Zona',           flex: 1.4, mw: 0, filterable: true },
-    { id: 'presupuesto', label: 'Presupuesto',    flex: 1.2, mw: 0 },
+    { id: 'presupuesto', label: 'Presupuesto',    flex: 1.2, mw: 0, filterable: true },
     { id: 'fecha',       label: 'Prox. seguim.',  flex: 1.5, mw: 0, sortable: true },
     { id: 'notas',       label: 'Notas',          flex: 2.5, mw: 0 },
     { id: 'acciones',    label: '',               flex: 0.3, mw: 0 },
@@ -1002,9 +1051,9 @@ export default function CRM() {
     { id: 'telefono',    label: 'Teléfono',       flex: 0, mw: 100 },
     { id: 'estado',      label: 'Estado',         flex: 0, mw: 105, sortable: true, filterable: true },
     { id: 'operacion',   label: 'Op.',            flex: 0, mw: 60,  filterable: true },
-    { id: 'tipo_credito', label: 'Método pago',   flex: 0, mw: 80 },
+    { id: 'tipo_credito', label: 'Método pago',   flex: 0, mw: 80, filterable: true },
     { id: 'zona',        label: 'Zona',           flex: 0, mw: 110, filterable: true },
-    { id: 'presupuesto', label: 'Presupuesto',    flex: 0, mw: 105 },
+    { id: 'presupuesto', label: 'Presupuesto',    flex: 0, mw: 105, filterable: true },
     { id: 'fecha',       label: 'Prox. seguim.',  flex: 0, mw: 105, sortable: true },
     { id: 'notas',       label: 'Notas',          flex: 0, mw: 180 },
     { id: 'acciones',    label: '',               flex: 0, mw: 44 },
@@ -1673,7 +1722,24 @@ export default function CRM() {
           <View style={[s.sortSheet, { backgroundColor: c.card }]}>
             <View style={[s.sortHandle, { backgroundColor: c.border }]} />
             <Text style={[s.sortTitle, { color: c.text }]}>{excelFilterModal?.label ?? ''}</Text>
-            {excelFilterModal?.options.map(opt => {
+            {excelFilterModal?.tipo === 'rango' ? (
+              <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
+                <Text style={{ color: c.textSub, fontSize: 12, marginBottom: 8 }}>Filtra por monto aproximado (ej. 1.5M, 2000000, 8000).</Text>
+                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 14 }}>
+                  <TextInput style={[s.presInput, { color: c.text, borderColor: c.border }]} value={presMin} onChangeText={setPresMin} placeholder="Mínimo" placeholderTextColor={c.textMute} />
+                  <Text style={{ color: c.textMute }}>—</Text>
+                  <TextInput style={[s.presInput, { color: c.text, borderColor: c.border }]} value={presMax} onChangeText={setPresMax} placeholder="Máximo" placeholderTextColor={c.textMute} />
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity style={[s.presBtn, { borderColor: c.border }]} onPress={() => { setPresMin(''); setPresMax('') }}>
+                    <Text style={{ color: c.textSub, fontWeight: '700' }}>Limpiar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.presBtn, { backgroundColor: '#1a6470' }]} onPress={() => setExcelFilterModal(null)}>
+                    <Text style={{ color: '#fff', fontWeight: '800' }}>Aplicar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : excelFilterModal?.options?.map(opt => {
               const active = getColFilterValue(excelFilterModal!.col) === opt.value
               return (
                 <TouchableOpacity
@@ -2096,6 +2162,8 @@ const s = StyleSheet.create({
   },
   sortOptLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   sortOptTxt:  { fontSize: 15, color: '#334155', fontWeight: '500' },
+  presInput:   { flex: 1, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
+  presBtn:     { flex: 1, borderWidth: 1, borderColor: 'transparent', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
 
   // ── Vista Tabla Monday.com ───────────────────────────────────────
   excelTableWrap: {
