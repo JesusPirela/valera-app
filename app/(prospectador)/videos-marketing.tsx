@@ -309,11 +309,14 @@ export default function VideosProspectador() {
 
   // ── Header del FlatList de marketing ─────────────────────────
   const MktHeader = () => {
-    if (filtro === 'todos' && videos.length === 0 && propVideos.length === 0) return null
+    const esTodos = filtro === 'todos'
+    if (esTodos && videos.length === 0 && propVideos.length === 0) return null
     return (
       <>
-        <PropVideosSection />
-        {(filtro === 'todos' ? videos.length > 0 : filtrados.length > 0 || videos.length > 0) && (
+        {/* Propiedades con video solo aparecen en "Todos" */}
+        {esTodos && <PropVideosSection />}
+
+        {(esTodos ? videos.length > 0 : filtrados.length > 0) && (
           <View style={[s.seccionHeader, { backgroundColor: c.card, borderColor: c.border, marginBottom: 0 }]}>
             <Text style={s.seccionEmoji}>🎬</Text>
             <View>

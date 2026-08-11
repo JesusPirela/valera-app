@@ -1652,7 +1652,7 @@ export default function CRM() {
       {/* ── Enviar al chatbot ── */}
       <Modal visible={!!clienteChatbot} transparent animationType="fade" onRequestClose={cerrarModalChatbot}>
         <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={cerrarModalChatbot}>
-          <View style={[s.chatbotModalBox, { backgroundColor: c.card }]} onStartShouldSetResponder={() => true}>
+          <TouchableOpacity activeOpacity={1} style={[s.chatbotModalBox, { backgroundColor: c.card }]} onPress={e => e.stopPropagation()}>
             <Ionicons name="chatbubbles-outline" size={28} color="#7c3aed" style={{ marginBottom: 8 }} />
             <Text style={[s.chatbotModalTitle, { color: c.text }]}>Enviar al chatbot</Text>
             <Text style={[s.chatbotModalSub, { color: c.textMute }]}>
@@ -1711,7 +1711,7 @@ export default function CRM() {
             <TouchableOpacity style={s.chatbotModalCerrar} onPress={cerrarModalChatbot} disabled={chatbotEnviando}>
               <Text style={s.chatbotModalCerrarTxt}>Cerrar</Text>
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
