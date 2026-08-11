@@ -14,6 +14,7 @@ import ClienteFormBack from '../../components/ClienteFormBack'
 import { useVistaComo } from '../../lib/VistaComo'
 import VistaComoBanner from '../../components/VistaComoBanner'
 import AscensoRolModal from '../../components/AscensoRolModal'
+import PopupLeadsCampania from '../../components/PopupLeadsCampania'
 
 const LOGO = require('../../assets/logo-recortado.png')
 
@@ -231,6 +232,7 @@ export default function ProspectadorLayout() {
     <>
     <VistaComoBanner />
     <AscensoRolModal rol={ascensoRol} onClose={() => setAscensoRol(null)} />
+    <PopupLeadsCampania />
     <Tabs
       // "atrás" vuelve a la pantalla ANTERIOR de verdad, no al inicio.
       //
@@ -371,6 +373,7 @@ export default function ProspectadorLayout() {
       <Tabs.Screen name="cliente-form"       options={{ href: null, title: 'Cliente', headerLeft: () => <ClienteFormBack /> }} />
       <Tabs.Screen name="detalle-cliente"    options={{ href: null, title: 'Cliente', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
       <Tabs.Screen name="colecciones"        options={{ href: null, title: 'Colecciones', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
+      <Tabs.Screen name="leads-campania"     options={{ href: null, title: 'Leads de campaña', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
       <Tabs.Screen name="coleccion-detalle"  options={{ href: null, title: 'Colección', headerLeft: () => <HeaderBack to="/(prospectador)/colecciones" /> }} />
       <Tabs.Screen name="university-curso"   options={{ href: null, title: 'Curso', headerLeft: () => <HeaderBack to="/(prospectador)/university" /> }} />
       <Tabs.Screen name="university-leccion" options={{ href: null, title: 'Lección' }} />

@@ -556,11 +556,24 @@ export default function CRM() {
     }
   }, [clientes])
 
+  // ── Leads de campaña ──────────────────────────────────────────
+  // Los clientes con origen "Campaña FB" (asignados desde el apartado admin de
+  // Leads de campaña) tienen su PROPIA tabla-apartado y se sacan del CRM normal
+  // para no mezclarlos: esa tabla es su CRM.
+  const leadsCampania = useMemo(
+    () => clientes.filter(c => c.fuente_lead === 'campana_fb'),
+    [clientes]
+  )
+  const clientesCrm = useMemo(
+    () => clientes.filter(c => c.fuente_lead !== 'campana_fb'),
+    [clientes]
+  )
+
   // ── KPIs ──────────────────────────────────────────────────────
   // Base filtrada por operación para que KPIs y chips sean consistentes con la lista
   const clientesBase = useMemo(
-    () => opFiltro ? clientes.filter(c => c.tipo_operacion === opFiltro) : clientes,
-    [clientes, opFiltro]
+    () => opFiltro ? clientesCrm.filter(c => c.tipo_operacion === opFiltro) : clientesCrm,
+    [clientesCrm, opFiltro]
   )
 
   const { total, activos, citas, vencidos, cerrados, conteos } = useMemo(() => {
@@ -581,9 +594,9 @@ export default function CRM() {
   // Clientes vencidos ordenados por urgencia (más días sin contacto primero).
   // Alimenta el banner de Oportunidades en riesgo.
   const clientesEnRiesgo = useMemo(
-    () => clientes.filter(necesitaSeguimiento).sort((a, b) => diasVencido(b) - diasVencido(a)),
+    () => clientesCrm.filter(necesitaSeguimiento).sort((a, b) => diasVencido(b) - diasVencido(a)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clientes, tick]
+    [clientesCrm, tick]
   )
 
   // Reabre el banner si aparece un cliente nuevo en riesgo después de cerrarlo
@@ -595,7 +608,7 @@ export default function CRM() {
 
   // ── Filtros ───────────────────────────────────────────────────
   const filtrados = useMemo(() => {
-    let result = clientes
+    let result = clientesCrm
     if (busqueda.trim()) {
       const q = normalizar(busqueda)
       result = result.filter(c =>
@@ -636,7 +649,7 @@ export default function CRM() {
     }
     return result
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientes, busqueda, estadoFiltro, filtroVencidos, opFiltro, interesFilter, zonaFilter, fuenteFilter, creditoFilter, presMin, presMax, sortBy, tick])
+  }, [clientesCrm, busqueda, estadoFiltro, filtroVencidos, opFiltro, interesFilter, zonaFilter, fuenteFilter, creditoFilter, presMin, presMax, sortBy, tick])
 
   // ── Excel table helpers ───────────────────────────────────────
   const filtradosExcel = useMemo(() => {
@@ -1236,6 +1249,17 @@ export default function CRM() {
             <Text style={s.btnCampanaTxt}>📁 Colecciones</Text>
           </TouchableOpacity>
         </View>
+
+        {/* ── Botón: Leads de campaña (solo si hay clientes asignados de campaña) ── */}
+        {leadsCampania.length > 0 && (
+          <TouchableOpacity
+            style={[s.btnCampana, { marginHorizontal: 12, marginTop: 8, backgroundColor: '#7c3aed', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]}
+            onPress={() => router.push('/(prospectador)/leads-campania')}
+          >
+            <Text style={s.btnCampanaTxt}>📣 Leads de campaña</Text>
+            <View style={s.badgeCampania}><Text style={s.badgeCampaniaTxt}>{leadsCampania.length}</Text></View>
+          </TouchableOpacity>
+        )}
 
         {/* ── Search + sort + nuevo ── */}
         <View style={s.searchRow}>
@@ -1978,6 +2002,8 @@ const s = StyleSheet.create({
     flexShrink: 0,
   },
   btnCampanaTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  badgeCampania: { backgroundColor: 'rgba(255,255,255,0.9)', minWidth: 22, height: 20, borderRadius: 10, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
+  badgeCampaniaTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
   opBanner: {
     marginHorizontal: 12, marginTop: 10, borderRadius: 12,
     borderWidth: 1.5, borderColor: '#fecaca', backgroundColor: '#fef2f2', overflow: 'hidden',
