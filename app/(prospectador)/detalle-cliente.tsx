@@ -913,7 +913,7 @@ export default function DetalleCliente() {
       {/* ── Modal: Enviar al chatbot ─────────────────── */}
       <Modal visible={modalChatbot} transparent animationType="fade" onRequestClose={() => { if (!chatbotEnviando) setModalChatbot(false) }}>
         <TouchableOpacity style={[modal.overlay, { justifyContent: 'center' }]} activeOpacity={1} onPress={() => { if (!chatbotEnviando) setModalChatbot(false) }}>
-          <View style={modal.chatbotBox} onStartShouldSetResponder={() => true}>
+          <TouchableOpacity activeOpacity={1} style={modal.chatbotBox} onPress={e => e.stopPropagation()}>
             <Ionicons name="chatbubbles-outline" size={28} color="#7c3aed" style={{ marginBottom: 8 }} />
             <Text style={modal.chatbotTitle}>Enviar al chatbot</Text>
             <Text style={modal.chatbotSub}>{cliente?.nombre}</Text>
@@ -971,7 +971,7 @@ export default function DetalleCliente() {
             >
               <Text style={modal.btnCancelText}>Cerrar</Text>
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
     </ScrollView>
