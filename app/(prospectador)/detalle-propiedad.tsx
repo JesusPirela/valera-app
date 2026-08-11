@@ -1905,10 +1905,6 @@ export default function DetallePropiedad() {
             <TouchableOpacity style={styles.shareCirc} onPress={compartirLinkFicha} activeOpacity={0.8}>
               <Text style={styles.shareCircTxt}>🔗</Text>
             </TouchableOpacity>
-            {/* Compartir con formulario de captura */}
-            <TouchableOpacity style={[styles.shareCirc, { right: 60 }]} onPress={() => setModalFormulario(true)} activeOpacity={0.8}>
-              <Text style={styles.shareCircTxt}>📝</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Puntos solo cuando son pocos; con muchas fotos el contador basta. */}
@@ -2455,6 +2451,11 @@ export default function DetallePropiedad() {
             </Text>
           </View>
         )}
+
+        {/* Compartir con formulario de registro */}
+        <TouchableOpacity style={styles.btnFormulario} onPress={() => setModalFormulario(true)} disabled={!propiedad}>
+          <Text style={styles.btnFormularioText}>📝  Compartir con formulario</Text>
+        </TouchableOpacity>
 
         {/* Botón solicitar diseño con André — necesita un token de diseño */}
         {(() => {
@@ -3672,6 +3673,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   btnDisenoText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  btnFormulario: { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 10 },
+  btnFormularioText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   btnDisenoHint: {
     textAlign: 'center',
     fontSize: 12,
