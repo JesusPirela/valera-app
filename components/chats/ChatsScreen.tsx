@@ -72,7 +72,16 @@ export default function ChatsScreen({ volverHref, chatClienteBase }: ChatsScreen
     })
 
     if (err) {
-      setError(`Error: ${err.message ?? JSON.stringify(err)}`)
+      // Intentar extraer el cuerpo real del error (el SDK solo expone mensaje genérico)
+      let mensajeError = err.message ?? JSON.stringify(err)
+      try {
+        const ctx = (err as any).context
+        if (ctx && typeof ctx.json === 'function') {
+          const body = await ctx.json()
+          if (body?.error) mensajeError = body.error
+        }
+      } catch {}
+      setError(`Error: ${mensajeError}`)
     } else if (data?.error) {
       setError(`Error del servidor: ${data.error}`)
     } else {

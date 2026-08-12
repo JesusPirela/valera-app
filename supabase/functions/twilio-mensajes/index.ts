@@ -52,7 +52,10 @@ async function fetchTwilioMessages(
 
   while (url) {
     const res = await fetch(url, { headers: { Authorization: authHeader } })
-    if (!res.ok) throw new Error(`Twilio respondió ${res.status}`)
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`Twilio respondió ${res.status}: ${body}`)
+    }
     const data = await res.json()
     const mensajes: TwilioMessage[] = data.messages ?? []
 
@@ -112,6 +115,7 @@ serve(async (req) => {
 
     const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')!
     const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')!
+    console.log(`[twilio-mensajes] SID: ${accountSid?.slice(0,6)}... (len=${accountSid?.length}) | Token len=${authToken?.length}`)
     const twilioAuth = 'Basic ' + btoa(`${accountSid}:${authToken}`)
 
     const supabaseAdmin = createClient(
@@ -303,6 +307,7 @@ serve(async (req) => {
     return json({ error: 'action inválida. Usa "hilos" o "mensajes"' }, 400)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    console.error('[twilio-mensajes] Error:', msg)
     return json({ error: msg }, 500)
   }
 })
