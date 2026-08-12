@@ -65,6 +65,7 @@ const NAV_ITEMS = [
   { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2', grupo: 'Propiedades' },
   { label: 'Constructoras', icon: '🏗️', route: '/(admin)/constructoras', color: '#455A64', grupo: 'Propiedades' },
   { label: 'Tabla precios', icon: '🏷️', route: '/(admin)/inventario-tabla', color: '#00838F', grupo: 'Propiedades' },
+  { label: 'Publicaciones', icon: '📊', route: '/(admin)/estadisticas-propiedades', color: '#0277BD', grupo: 'Propiedades' },
   { label: 'Bloques', icon: '🧩', route: '/(admin)/bloques', color: '#5e35b1', grupo: 'Propiedades' },
   { label: 'Colores ficha', icon: '🎨', route: '/(admin)/colores-ficha', color: '#6A1B9A', grupo: 'Propiedades' },
   { label: 'CRM', icon: '📒', route: '/(admin)/crm', color: '#D84315', grupo: 'Gestión' },
