@@ -22,6 +22,7 @@ export const COLONIAS: ColoniaSugerida[] = [
   { label: 'La Vista Residencial',    zona: 'queretaro', ciudad: 'Querétaro', lat: 20.6180, lng: -100.4280 },
   { label: 'Altozano',                zona: 'queretaro', ciudad: 'Querétaro', lat: 20.5230, lng: -100.3380 },
   { label: 'Ciudad del Sol',          zona: 'queretaro', ciudad: 'Querétaro', lat: 20.5650, lng: -100.4100 },
+  { label: 'Ciudad Meseta',           zona: 'queretaro', ciudad: 'Querétaro', lat: 20.6136, lng: -100.5019 },
   { label: 'Candiles',            zona: 'queretaro', ciudad: 'Querétaro', lat: 20.6100, lng: -100.4200 },
   { label: 'Constituyentes',      zona: 'queretaro', ciudad: 'Querétaro', lat: 20.5950, lng: -100.4100 },
   { label: 'Cumbres',             zona: 'queretaro', ciudad: 'Querétaro', lat: 20.6500, lng: -100.4300 },
