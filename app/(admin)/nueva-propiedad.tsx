@@ -94,17 +94,16 @@ function parsearFicha(texto: string) {
   const mPrecio = texto.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:MXN)?/i)
   if (mPrecio) precio = mPrecio[1].replace(/,/g, '')
 
-  // M2 construcción y terreno
+  // M2 construcción y terreno — acepta AMBOS órdenes:
+  //   "construcción: 295 m²"  y  "295 m² de construcción"
   let m2 = ''
   let m2Terreno = ''
   const mConst = texto.match(/construcci[oó]n\s*[:.]?\s*([\d,.]+)\s*m[²2]/i)
+    ?? texto.match(/([\d,.]+)\s*m[²2]\s*(?:de\s+)?(?:construcci[oó]n|const\.?)/i)
   const mTerr = texto.match(/terreno\s*[:.]?\s*([\d,.]+)\s*m[²2]/i)
+    ?? texto.match(/([\d,.]+)\s*m[²2]\s*(?:de\s+)?terreno/i)
+  if (mConst) m2 = mConst[1].replace(/,/g, '')
   if (mTerr) m2Terreno = mTerr[1].replace(/,/g, '')
-  if (mConst) {
-    m2 = mConst[1].replace(/,/g, '')
-  } else if (mTerr) {
-    m2 = mTerr[1].replace(/,/g, '')
-  }
 
   // Recámaras
   let recamaras: number | null = null
