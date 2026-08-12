@@ -14,14 +14,26 @@ export type CajaCensura = { x: number; y: number; w: number; h: number }
 export async function prepararFuenteImagen(uri: string): Promise<string> {
   if (uri.startsWith('data:')) return uri
   if (Platform.OS === 'web') {
-    const res = await fetch(uri)
-    const blob = await res.blob()
-    return await new Promise<string>((resolve, reject) => {
+    const aDataUri = (blob: Blob) => new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result as string)
       reader.onerror = () => reject(new Error('No se pudo leer la imagen'))
       reader.readAsDataURL(blob)
     })
+    try {
+      const res = await fetch(uri)
+      if (!res.ok) throw new Error('http ' + res.status)
+      return await aDataUri(await res.blob())
+    } catch {
+      // El fetch directo falla si la imagen viene de un CDN externo (portal) que
+      // no permite CORS. Se reintenta a través del proxy del servidor.
+      const base = process.env.EXPO_PUBLIC_SUPABASE_URL
+      if (!base) throw new Error('No se pudo descargar la imagen')
+      const proxied = `${base}/functions/v1/proxy-imagen?url=${encodeURIComponent(uri)}`
+      const res2 = await fetch(proxied)
+      if (!res2.ok) throw new Error('No se pudo descargar la imagen')
+      return await aDataUri(await res2.blob())
+    }
   }
   let localUri = uri
   if (uri.startsWith('http')) {
