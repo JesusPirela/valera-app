@@ -66,6 +66,17 @@ function fechaCorta(iso: string): string {
   try { return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) } catch { return '' }
 }
 
+// Semáforo por lead: verde = atendido o recién llegado; amarillo = +20 min sin
+// atender; rojo = +1 h sin atender. "Sin atender" = WhatsApp y Llamar en 0.
+function semaforo(l: { wa_count: number | null; call_count: number | null; created_at: string }): { color: string; label: string } {
+  const atendido = (l.wa_count ?? 0) > 0 || (l.call_count ?? 0) > 0
+  if (atendido) return { color: '#16a34a', label: 'Atendido' }
+  const mins = (Date.now() - new Date(l.created_at).getTime()) / 60000
+  if (mins < 20) return { color: '#22c55e', label: 'Nuevo' }
+  if (mins < 60) return { color: '#f59e0b', label: 'Apúrate (+20 min)' }
+  return { color: '#ef4444', label: 'Urgente (+1 h sin atender)' }
+}
+
 // Normaliza para buscar sin importar acentos ni mayúsculas.
 function normalizar(s: string | null): string {
   const acentos = new RegExp('[\\u0300-\\u036f]', 'g')
@@ -260,6 +271,14 @@ export default function LeadsCampania() {
             )}
           </View>
         )}
+
+        {leads.length > 0 && tab === 'activos' && (
+          <View style={styles.legend}>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#22c55e' }]} /><Text style={[styles.legendTxt, { color: c.textMute }]}>Nuevo / atendido</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} /><Text style={[styles.legendTxt, { color: c.textMute }]}>+20 min sin atender</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} /><Text style={[styles.legendTxt, { color: c.textMute }]}>+1 h sin atender</Text></View>
+          </View>
+        )}
       </View>
 
       {isLoading ? (
@@ -305,7 +324,10 @@ export default function LeadsCampania() {
               {ordenados.map((l, i) => (
                 <View key={l.id} style={[styles.tr, { backgroundColor: i % 2 === 0 ? c.card : c.bg2, borderColor: c.border }]}>
                   <TouchableOpacity style={[styles.td, { width: 200 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
-                    <Text style={[styles.tdTxt, { color: c.text, fontWeight: '700' }]} numberOfLines={2}>{l.nombre}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View style={[styles.semDot, { backgroundColor: semaforo(l).color }]} />
+                      <Text style={[styles.tdTxt, { color: c.text, fontWeight: '700', flex: 1 }]} numberOfLines={2}>{l.nombre}</Text>
+                    </View>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.td, { width: 150 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
                     <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={1}>{l.telefono}</Text>
@@ -421,6 +443,11 @@ const styles = StyleSheet.create({
   tr: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'stretch', minHeight: 64 },
   td: { paddingVertical: 14, paddingHorizontal: 11, justifyContent: 'center' },
   tdTxt: { fontSize: 15, lineHeight: 20 },
+  semDot: { width: 13, height: 13, borderRadius: 7 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginTop: 10 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 11, height: 11, borderRadius: 6 },
+  legendTxt: { fontSize: 12, fontWeight: '600' },
   actBtn: { alignItems: 'center', gap: 4, paddingVertical: 4 },
   contador: { backgroundColor: '#ede9fe', borderRadius: 9, paddingHorizontal: 7, paddingVertical: 2, minWidth: 34, alignItems: 'center' },
   contadorDone: { backgroundColor: '#16a34a' },
