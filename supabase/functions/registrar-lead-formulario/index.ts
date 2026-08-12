@@ -45,6 +45,8 @@ serve(async (req) => {
     // ── Armar el cliente (solo campos permitidos + configurados) ──
     const cli: Record<string, any> = { nombre, telefono, responsable_id: form.owner_id, estado: 'por_perfilar' }
     cli.fuente_lead = form.tipo === 'coleccion' ? 'coleccion_compartida' : 'ficha_compartida'
+    // Guardar de QUÉ colección vino el registro (para el historial de la colección).
+    if (form.tipo === 'coleccion') cli.coleccion_token = form.ref
     for (const k of PERMITIDOS) {
       if (k === 'nombre' || k === 'telefono') continue
       const v = respuestas[k]

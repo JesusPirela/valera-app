@@ -47,6 +47,7 @@ export default function ColeccionDetalle() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [det, setDet] = useState<Detalle | null>(null)
   const [loading, setLoading] = useState(true)
+  const [registrados, setRegistrados] = useState<{ id: string; nombre: string; telefono: string; created_at: string }[]>([])
 
   const [addModal, setAddModal] = useState(false)
   const [busca, setBusca] = useState('')
@@ -58,6 +59,16 @@ export default function ColeccionDetalle() {
     try {
       const { data } = await supabase.rpc('coleccion_detalle', { p_id: id })
       setDet(data as Detalle)
+      const token = (data as Detalle)?.token
+      if (token) {
+        // Clientes que se registraron desde el formulario de ESTA colección.
+        const { data: regs } = await supabase.from('clientes')
+          .select('id, nombre, telefono, created_at')
+          .eq('coleccion_token', token)
+          .is('eliminado_at', null)
+          .order('created_at', { ascending: false })
+        setRegistrados(regs ?? [])
+      }
     } catch { /* sin red */ } finally { setLoading(false) }
   }, [id])
 
@@ -142,7 +153,29 @@ export default function ColeccionDetalle() {
           <View style={st.rItem}><Text style={st.rNum}>{det.items.length}</Text><Text style={[st.rLbl, { color: c.textSub }]}>propiedades</Text></View>
           <View style={st.rItem}><Text style={[st.rNum, { color: '#0369a1' }]}>{det.vistas}</Text><Text style={[st.rLbl, { color: c.textSub }]}>aperturas</Text></View>
           <View style={st.rItem}><Text style={[st.rNum, { color: '#e11d48' }]}>{totalFav}</Text><Text style={[st.rLbl, { color: c.textSub }]}>favoritas</Text></View>
+          <View style={st.rItem}><Text style={[st.rNum, { color: '#16a34a' }]}>{registrados.length}</Text><Text style={[st.rLbl, { color: c.textSub }]}>registrados</Text></View>
         </View>
+
+        {/* Historial: clientes que se registraron desde el formulario de esta colección */}
+        {registrados.length > 0 && (
+          <View style={[st.histBox, { borderColor: c.border, backgroundColor: c.card }]}>
+            <Text style={[st.histTit, { color: c.text }]}>📋 Se registraron aquí ({registrados.length})</Text>
+            {registrados.map(r => (
+              <TouchableOpacity
+                key={r.id}
+                style={[st.histRow, { borderColor: c.border }]}
+                onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${r.id}` as any)}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[st.histNombre, { color: c.text }]} numberOfLines={1}>{r.nombre}</Text>
+                  <Text style={[st.histTel, { color: c.textSub }]} numberOfLines={1}>{r.telefono} · {new Date(r.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={c.textMute} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <View style={st.share}>
           <TouchableOpacity style={[st.shareBtn, st.shareWa]} onPress={() => compartir(true)}>
@@ -240,6 +273,11 @@ const st = StyleSheet.create({
   rItem: { flex: 1, alignItems: 'center' },
   rNum: { fontSize: 22, fontWeight: '800', color: '#17323a' },
   rLbl: { fontSize: 12, marginTop: 2 },
+  histBox: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 12 },
+  histTit: { fontSize: 15, fontWeight: '800', marginBottom: 8 },
+  histRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  histNombre: { fontSize: 15, fontWeight: '700' },
+  histTel: { fontSize: 12.5, marginTop: 1 },
   share: { flexDirection: 'row', gap: 10, marginTop: 14 },
   shareBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 11, paddingVertical: 12 },
   shareWa: { backgroundColor: '#25D366' },
