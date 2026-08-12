@@ -201,28 +201,28 @@ export default function LeadsCampania() {
           <Text style={[styles.emptyTxt, { color: c.textMute }]}>Aún no tienes leads de campaña asignados.</Text>
         </View>
       ) : (
+        // Scroll VERTICAL por fuera y HORIZONTAL por dentro. Antes estaba al
+        // revés (vertical anidado dentro del horizontal), y los gestos se
+        // peleaban: la tabla no subía ni bajaba.
         <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator
-          contentContainerStyle={styles.hScrollContent}
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.vScrollContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} />}
         >
-          <View style={[styles.tableCard, { borderColor: c.border, backgroundColor: c.card }]}>
-            {/* Encabezado — orden: Nombre · Teléfono · Zona · Presupuesto */}
-            <View style={styles.headRow}>
-              <HeaderCell col="nombre" label="Nombre" w={200} />
-              <HeaderCell col="telefono" label="Teléfono" w={150} />
-              <HeaderCell col="zona" label="Zona" w={190} />
-              <HeaderCell col="presupuesto" label="Presupuesto" w={150} />
-              <View style={[styles.th, { width: 92 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>WhatsApp</Text></View>
-              <View style={[styles.th, { width: 88 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Llamar</Text></View>
-              <View style={[styles.th, { width: 150 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Notas</Text></View>
-            </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.hScrollContent}>
+            <View style={[styles.tableCard, { borderColor: c.border, backgroundColor: c.card }]}>
+              {/* Encabezado — orden: Nombre · Teléfono · Zona · Presupuesto */}
+              <View style={styles.headRow}>
+                <HeaderCell col="nombre" label="Nombre" w={200} />
+                <HeaderCell col="telefono" label="Teléfono" w={150} />
+                <HeaderCell col="zona" label="Zona" w={190} />
+                <HeaderCell col="presupuesto" label="Presupuesto" w={150} />
+                <View style={[styles.th, { width: 92 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>WhatsApp</Text></View>
+                <View style={[styles.th, { width: 88 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Llamar</Text></View>
+                <View style={[styles.th, { width: 150 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Notas</Text></View>
+              </View>
 
-            {/* Filas */}
-            <ScrollView
-              style={{ maxHeight: Platform.OS === 'web' ? undefined : 9999 }}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} />}
-            >
+              {/* Filas */}
               {ordenados.map((l, i) => (
                 <View key={l.id} style={[styles.tr, { backgroundColor: i % 2 === 0 ? c.card : c.bg2, borderColor: c.border }]}>
                   <TouchableOpacity style={[styles.td, { width: 200 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
@@ -261,8 +261,8 @@ export default function LeadsCampania() {
                   </View>
                 </View>
               ))}
-            </ScrollView>
-          </View>
+            </View>
+          </ScrollView>
         </ScrollView>
       )}
 
@@ -303,6 +303,7 @@ const styles = StyleSheet.create({
   sub: { fontSize: 12, flex: 1 },
   limpiarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f3e8ff', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6 },
   limpiarTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  vScrollContent: { paddingBottom: 40 },
   hScrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 16, paddingBottom: 24 },
   tableCard: {
     alignSelf: 'center', marginTop: 4, borderRadius: 14, overflow: 'hidden', borderWidth: 1,
