@@ -61,10 +61,17 @@ function prettyPresu(p: string | null): string {
 
 function llamar(tel: string) { Linking.openURL(`tel:${tel}`) }
 
+// Normaliza para buscar sin importar acentos ni mayúsculas.
+function normalizar(s: string | null): string {
+  const acentos = new RegExp('[\\u0300-\\u036f]', 'g')
+  return (s ?? '').toLowerCase().normalize('NFD').replace(acentos, '')
+}
+
 export default function LeadsCampania() {
   const c = useColors()
   const qc = useQueryClient()
   const [sort, setSort] = useState<Sort>({ col: 'nombre', dir: 'asc' })
+  const [busqueda, setBusqueda] = useState('')
   const [notaModal, setNotaModal] = useState<{ id: string; nombre: string; value: string } | null>(null)
   const [guardandoNota, setGuardandoNota] = useState(false)
 
@@ -103,7 +110,14 @@ export default function LeadsCampania() {
   }, [leads]))
 
   const ordenados = useMemo(() => {
-    const arr = [...leads]
+    const q = normalizar(busqueda.trim())
+    const arr = q
+      ? leads.filter(l =>
+          normalizar(l.nombre).includes(q) ||
+          (l.telefono || '').includes(q) ||
+          normalizar(prettyZona(l.zona_busqueda)).includes(q) ||
+          normalizar(prettyPresu(l.presupuesto)).includes(q))
+      : [...leads]
     arr.sort((a, b) => {
       let cmp = 0
       if (sort.col === 'nombre') cmp = a.nombre.localeCompare(b.nombre, 'es')
@@ -113,7 +127,7 @@ export default function LeadsCampania() {
       return sort.dir === 'asc' ? cmp : -cmp
     })
     return arr
-  }, [leads, sort])
+  }, [leads, sort, busqueda])
 
   function toggleSort(col: SortCol) {
     setSort(prev => prev.col === col
@@ -191,6 +205,27 @@ export default function LeadsCampania() {
             </TouchableOpacity>
           )}
         </View>
+
+        {leads.length > 0 && (
+          <View style={[styles.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
+            <Ionicons name="search-outline" size={16} color={c.textMute} style={{ marginRight: 8 }} />
+            <TextInput
+              style={[styles.searchInput, { color: c.text }]}
+              placeholder="Buscar por nombre, teléfono, zona o presupuesto…"
+              placeholderTextColor={c.textMute}
+              value={busqueda}
+              onChangeText={setBusqueda}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {busqueda.length > 0 && (
+              <TouchableOpacity onPress={() => setBusqueda('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close-circle" size={17} color={c.textMute} />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
 
       {isLoading ? (
@@ -223,6 +258,11 @@ export default function LeadsCampania() {
               </View>
 
               {/* Filas */}
+              {ordenados.length === 0 && (
+                <View style={{ padding: 24, alignItems: 'center' }}>
+                  <Text style={[styles.emptyTxt, { color: c.textMute }]}>Sin resultados para “{busqueda}”.</Text>
+                </View>
+              )}
               {ordenados.map((l, i) => (
                 <View key={l.id} style={[styles.tr, { backgroundColor: i % 2 === 0 ? c.card : c.bg2, borderColor: c.border }]}>
                   <TouchableOpacity style={[styles.td, { width: 200 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
@@ -303,6 +343,8 @@ const styles = StyleSheet.create({
   sub: { fontSize: 12, flex: 1 },
   limpiarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f3e8ff', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6 },
   limpiarTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: Platform.OS === 'web' ? 10 : 8 },
+  searchInput: { flex: 1, fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}) },
   vScrollContent: { paddingBottom: 40 },
   hScrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 16, paddingBottom: 24 },
   tableCard: {
