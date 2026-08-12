@@ -156,15 +156,8 @@ function diasVencido(c: Cliente): number {
 //    definió cuándo lo vuelve a contactar).
 // Antes solo contaba el recordatorio abierto, así que un cliente con el próximo
 // contacto vencido (⚠ en la columna de fecha) no aparecía al filtrar VENCIDOS.
-function fueActualizadoReciente(ts: string | undefined): boolean {
-  if (!ts) return false
-  return Date.now() - new Date(ts).getTime() < 3 * 24 * 60 * 60 * 1000
-}
-
 function necesitaSeguimiento(c: Cliente): boolean {
   if (c.estado === 'descartado' || c.estado === 'compro' || c.estado === 'compro_externo') return false
-  // 3 días de margen tras cualquier movimiento: el asesor ya lo atendió
-  if (fueActualizadoReciente(c.updated_at)) return false
   const now = Date.now()
   if (c.proximo_contacto) {
     const t = new Date(c.proximo_contacto).getTime()
