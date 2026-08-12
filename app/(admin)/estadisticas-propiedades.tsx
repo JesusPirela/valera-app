@@ -13,6 +13,7 @@ type Stats = {
   nunca_publicadas: number
   top: Row[]
   menos: Row[]
+  nunca: { codigo: string; titulo: string; dev: string | null }[]
   por_desarrollo: Dev[]
 }
 
@@ -83,12 +84,23 @@ export default function EstadisticasPropiedades() {
         <Tabla c={c} rows={data.menos} max={maxTop} barColor="#f59e0b" />
       </Section>
 
+      {/* Nunca publicadas — lista */}
       {data.nunca_publicadas > 0 && (
-        <View style={[s.aviso, { borderColor: '#ef4444', backgroundColor: c.card }]}>
-          <Text style={[s.avisoTxt, { color: c.text }]}>
-            ⚠️ Hay <Text style={{ fontWeight: '900', color: '#ef4444' }}>{data.nunca_publicadas}</Text> propiedades que nunca se han publicado. Buen lugar para empezar a mover inventario.
-          </Text>
-        </View>
+        <Section c={c} title="🚫 Nunca publicadas" hint={`${data.nunca_publicadas} propiedades sin una sola publicación — aquí empieza a mover inventario`}>
+          {(data.nunca ?? []).map((r, i) => (
+            <View key={r.codigo + i} style={[s.trow, { borderColor: c.border }]}>
+              <Text style={[s.tCodigo, { color: '#ef4444' }]}>{r.codigo}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[s.tTitulo, { color: c.text }]} numberOfLines={1}>{r.titulo}</Text>
+                {r.dev ? <Text style={[s.tDev, { color: c.textMute }]} numberOfLines={1}>{r.dev}</Text> : null}
+              </View>
+              <Text style={[s.tVeces, { color: '#ef4444' }]}>0</Text>
+            </View>
+          ))}
+          {data.nunca_publicadas > (data.nunca?.length ?? 0) && (
+            <Text style={[s.muted, { color: c.textMute, marginTop: 8 }]}>…y {data.nunca_publicadas - (data.nunca?.length ?? 0)} más.</Text>
+          )}
+        </Section>
       )}
     </ScrollView>
   )

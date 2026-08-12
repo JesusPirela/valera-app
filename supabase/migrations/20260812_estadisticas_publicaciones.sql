@@ -27,6 +27,8 @@ BEGIN
                 SELECT codigo, titulo, dev, veces FROM base WHERE veces > 0 ORDER BY veces DESC LIMIT 20) t),
     'menos', (SELECT coalesce(jsonb_agg(t), '[]'::jsonb) FROM (
                 SELECT codigo, titulo, dev, veces FROM base WHERE veces > 0 ORDER BY veces ASC, titulo LIMIT 20) t),
+    'nunca', (SELECT coalesce(jsonb_agg(t), '[]'::jsonb) FROM (
+                SELECT codigo, titulo, dev FROM base WHERE veces = 0 ORDER BY titulo LIMIT 200) t),
     'por_desarrollo', (SELECT coalesce(jsonb_agg(d), '[]'::jsonb) FROM (
                 SELECT dev desarrollo, count(*) propiedades, coalesce(sum(veces), 0) veces
                 FROM base WHERE dev IS NOT NULL GROUP BY dev ORDER BY veces DESC LIMIT 15) d)
