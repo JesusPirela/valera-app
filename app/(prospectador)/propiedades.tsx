@@ -30,6 +30,10 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { conReintentoData, generarIdemKey, conTimeout } from '../../lib/redIntentos'
 import { enqueuePublicacion } from '../../lib/offline-queue'
+import {
+  leerHistorial, guardarBusqueda, borrarBusqueda,
+  etiquetaBusqueda, type BusquedaGuardada,
+} from '../../lib/busqueda-historial'
 
 // Versión recortada: el logo.png original es 1024x1024 con un margen enorme
 // alrededor del dibujo, así que al escalarlo el logo real quedaba diminuto.
@@ -347,6 +351,9 @@ export default function ProspectadorPropiedades() {
   const [fechaDesdeCustom, setFechaDesdeCustom] = useState('')
   const [fechaHastaCustom, setFechaHastaCustom] = useState('')
   const [vistaZonas, setVistaZonas] = useState(false)
+  // Historial de búsquedas (tipo EasyBroker): últimas combinaciones de filtros.
+  const [recientes, setRecientes] = useState<BusquedaGuardada[]>([])
+  useEffect(() => { leerHistorial().then(setRecientes) }, [])
   // Orden aleatorio estable por sesión para usuarios no-admin
   const shuffleMapRef = useRef<Map<string, number>>(new Map())
   const [shuffleTick, setShuffleTick] = useState(0)
@@ -985,6 +992,34 @@ export default function ProspectadorPropiedades() {
     setFechaHastaCustom('')
   }
 
+  // Snapshot de los filtros actuales para el historial.
+  const filtrosSnapshot = useMemo(() => ({
+    busqueda, operacion: filtroOperacion, tipo: filtroTipo, recamaras: filtroRecamaras,
+    precioMin, precioMax, nueva: filtroNueva, exclusiva: filtroExclusiva, destacada: filtroDestacada,
+  }), [busqueda, filtroOperacion, filtroTipo, filtroRecamaras, precioMin, precioMax, filtroNueva, filtroExclusiva, filtroDestacada])
+
+  // Auto-guardar la búsqueda cuando el usuario deja de teclear/ajustar (1.6 s).
+  useEffect(() => {
+    const t = setTimeout(() => { guardarBusqueda(filtrosSnapshot).then(setRecientes) }, 1600)
+    return () => clearTimeout(t)
+  }, [filtrosSnapshot])
+
+  // Retomar una búsqueda guardada: reaplica todos sus filtros.
+  function aplicarBusqueda(b: BusquedaGuardada) {
+    setBusqueda(b.busqueda ?? '')
+    setFiltroOperacion((b.operacion ?? null) as FiltroOperacion)
+    setFiltroTipo((b.tipo ?? null) as FiltroTipo)
+    setFiltroRecamaras(b.recamaras ?? null)
+    setPrecioMin(b.precioMin ?? '')
+    setPrecioMax(b.precioMax ?? '')
+    setFiltroNueva(!!b.nueva)
+    setFiltroExclusiva(!!b.exclusiva)
+    setFiltroDestacada(!!b.destacada)
+  }
+  async function quitarReciente(id: string) {
+    setRecientes(await borrarBusqueda(id))
+  }
+
   // Callbacks estables: evitan que PropiedadCard (memo) se re-renderice al
   // teclear/filtrar. Los refs apuntan siempre a la última versión de la lógica.
   const publicarRef = useRef(publicarPropiedad); publicarRef.current = publicarPropiedad
@@ -1278,6 +1313,26 @@ export default function ProspectadorPropiedades() {
                 maxFontSizeMultiplier={1.2}
               />
             </View>
+
+            {/* Búsquedas recientes (historial): toca para retomar */}
+            {recientes.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }} contentContainerStyle={{ gap: 8, alignItems: 'center', paddingRight: 8 }}>
+                <View style={styles.recienteHint}>
+                  <Ionicons name="time-outline" size={13} color="#fff" />
+                  <Text style={styles.recienteHintTxt}>Recientes</Text>
+                </View>
+                {recientes.map(b => (
+                  <View key={b.id} style={styles.recienteChip}>
+                    <TouchableOpacity onPress={() => aplicarBusqueda(b)} activeOpacity={0.8} style={{ maxWidth: 200 }}>
+                      <Text style={styles.recienteChipTxt} numberOfLines={1}>{etiquetaBusqueda(b)}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => quitarReciente(b.id)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                      <Ionicons name="close" size={13} color="rgba(255,255,255,0.85)" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
           </View>
         </AccentBackground>
 
@@ -1515,6 +1570,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   searchIcon: { fontSize: 15, marginRight: 8, color: '#aaa' },
+  recienteHint: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingRight: 2 },
+  recienteHintTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  recienteChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    backgroundColor: 'rgba(255,255,255,0.20)', borderRadius: 16,
+    paddingLeft: 12, paddingRight: 9, paddingVertical: 7,
+  },
+  recienteChipTxt: { color: '#fff', fontSize: 13, fontWeight: '600' },
   searchInput: {
     flex: 1,
     height: '100%',
