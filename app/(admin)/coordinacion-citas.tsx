@@ -1266,6 +1266,9 @@ export default function CoordinacionCitas() {
   const [cancelModal, setCancelModal] = useState<Cita | null>(null)
   const [postCitaModal, setPostCitaModal] = useState<Cita | null>(null)
   const [expandirHoy, setExpandirHoy]     = useState(true)
+  const [filtroFecha, setFiltroFecha]     = useState<null | 'semana' | 'mes' | 'personalizado'>(null)
+  const [fechaDesde, setFechaDesde]       = useState('')
+  const [fechaHasta, setFechaHasta]       = useState('')
   const mountedRef = useRef(true)
   const defaultFiltroAplicado = useRef(false)
 
@@ -1387,6 +1390,24 @@ export default function CoordinacionCitas() {
           false
         )
       }
+      if (filtroFecha) {
+        if (!c.fecha_cita) return false
+        const f = new Date(c.fecha_cita)
+        const now = new Date()
+        if (filtroFecha === 'semana') {
+          const lun = new Date(now); lun.setDate(now.getDate() - ((now.getDay() + 6) % 7)); lun.setHours(0, 0, 0, 0)
+          const dom = new Date(lun); dom.setDate(lun.getDate() + 7)
+          if (f < lun || f >= dom) return false
+        } else if (filtroFecha === 'mes') {
+          const ini = new Date(now.getFullYear(), now.getMonth(), 1)
+          const fin = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+          if (f < ini || f >= fin) return false
+        } else if (filtroFecha === 'personalizado' && fechaDesde && fechaHasta) {
+          const desde = new Date(fechaDesde)
+          const hasta = new Date(fechaHasta); hasta.setHours(23, 59, 59, 999)
+          if (f < desde || f > hasta) return false
+        }
+      }
       return true
     })
     const ahora = Date.now()
@@ -1424,23 +1445,27 @@ export default function CoordinacionCitas() {
             new Date(c.fecha_cita) >= ini && new Date(c.fecha_cita) < fin)
           .sort((a, b) => new Date(a.fecha_cita!).getTime() - new Date(b.fecha_cita!).getTime())
       })(),
-      kpiActivas: filtradas.filter(c => c.estado !== 'cancelada').length,
+      kpiActivas: (() => {
+        const asig = filtradas.filter(c => c.coordinado_por && c.estado !== 'cancelada')
+        return asig.length
+      })(),
       kpiRealizadasHoy: (() => {
         const ini = new Date(); ini.setHours(0, 0, 0, 0)
         const fin = new Date(ini); fin.setDate(fin.getDate() + 1)
-        return filtradas.filter(c => c.estado === 'realizada' && c.fecha_cita &&
+        return filtradas.filter(c => c.coordinado_por && c.estado === 'realizada' && c.fecha_cita &&
           new Date(c.fecha_cita) >= ini && new Date(c.fecha_cita) < fin).length
       })(),
       kpiConversion: (() => {
-        const activas = filtradas.filter(c => c.estado !== 'cancelada').length
-        return activas > 0 ? Math.round(filtradas.filter(c => c.estado === 'realizada').length / activas * 100) : 0
+        const asig = filtradas.filter(c => c.coordinado_por)
+        const activas = asig.filter(c => c.estado !== 'cancelada').length
+        return activas > 0 ? Math.round(asig.filter(c => c.estado === 'realizada').length / activas * 100) : 0
       })(),
       kpiCanceladasMes: (() => {
         const ini = new Date(); ini.setDate(1); ini.setHours(0, 0, 0, 0)
-        return filtradas.filter(c => c.estado === 'cancelada' && new Date(c.updated_at) >= ini).length
+        return filtradas.filter(c => c.coordinado_por && c.estado === 'cancelada' && new Date(c.updated_at) >= ini).length
       })(),
     }
-  }, [citas, filtroAdmin, filtroOperacion, busqueda])
+  }, [citas, filtroAdmin, filtroOperacion, busqueda, filtroFecha, fechaDesde, fechaHasta])
 
   // El rol "asesor" usa una vista simplificada (solo etapas posteriores al
   // cierre, separadas en dos tableros Venta/Renta) — admin sigue viendo el
@@ -1473,13 +1498,58 @@ export default function CoordinacionCitas() {
         </View>
       </View>
 
+      {/* ── Filtro de fechas ── */}
+      <View style={ff.wrap}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ff.row}>
+          {([
+            { id: null as null,                  label: 'Todas' },
+            { id: 'semana' as const,             label: 'Esta semana' },
+            { id: 'mes' as const,                label: 'Este mes' },
+            { id: 'personalizado' as const,      label: '📅 Personalizado' },
+          ]).map(opt => {
+            const activo = filtroFecha === opt.id
+            return (
+              <TouchableOpacity key={String(opt.id)}
+                style={[ff.chip, activo && ff.chipActivo]}
+                onPress={() => {
+                  setFiltroFecha(activo && opt.id !== null ? null : opt.id)
+                  if (opt.id !== 'personalizado') { setFechaDesde(''); setFechaHasta('') }
+                }}>
+                <Text style={[ff.chipTxt, activo && ff.chipTxtActivo]}>{opt.label}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
+        {filtroFecha === 'personalizado' && (
+          <View style={ff.inputs}>
+            {Platform.OS === 'web' ? (
+              <>
+                <input type="date" value={fechaDesde}
+                  onChange={(e: any) => setFechaDesde(e.target.value)}
+                  style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#1e293b', backgroundColor: '#f8fafc' } as any} />
+                <Text style={ff.inputSep}>–</Text>
+                <input type="date" value={fechaHasta}
+                  onChange={(e: any) => setFechaHasta(e.target.value)}
+                  style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#1e293b', backgroundColor: '#f8fafc' } as any} />
+              </>
+            ) : (
+              <>
+                <TextInput style={ff.inputDate} placeholder="Desde (AAAA-MM-DD)" value={fechaDesde} onChangeText={setFechaDesde} />
+                <Text style={ff.inputSep}>–</Text>
+                <TextInput style={ff.inputDate} placeholder="Hasta (AAAA-MM-DD)" value={fechaHasta} onChangeText={setFechaHasta} />
+              </>
+            )}
+          </View>
+        )}
+      </View>
+
       {/* ── Search bar ── */}
       {showSearch && (
         <View style={s.searchBar}>
           <Ionicons name="search-outline" size={16} color="#94a3b8" />
           <TextInput
             style={s.searchInput}
-            placeholder="Buscar por nombre, teléfono, asesor..."
+            placeholder="Buscar cliente..."
             value={busqueda}
             onChangeText={setBusqueda}
             autoFocus
@@ -1717,7 +1787,14 @@ export default function CoordinacionCitas() {
                     if (!a.fecha_cita && !b.fecha_cita) return 0
                     if (!a.fecha_cita) return 1
                     if (!b.fecha_cita) return -1
-                    return new Date(a.fecha_cita).getTime() - new Date(b.fecha_cita).getTime()
+                    const now = Date.now()
+                    const ta = new Date(a.fecha_cita).getTime()
+                    const tb = new Date(b.fecha_cita).getTime()
+                    const aFut = ta >= now, bFut = tb >= now
+                    if (aFut && !bFut) return -1
+                    if (!aFut && bFut) return 1
+                    if (aFut && bFut) return ta - tb  // futuras: más próxima primero
+                    return tb - ta                    // pasadas: más reciente primero
                   })}
                   onCardPress={setCitaEditando}
                   onCardLongPress={setCitaMoviendo}
@@ -1950,6 +2027,19 @@ const ag = StyleSheet.create({
   nombre:     { fontSize: 12, fontWeight: '700', color: '#0f172a', marginBottom: 3 },
   estado:     { fontSize: 10, color: '#64748b', marginBottom: 2 },
   sub:        { fontSize: 10, color: '#94a3b8' },
+})
+
+// ─── Filtro de fechas ────────────────────────────────────────────────────────
+const ff = StyleSheet.create({
+  wrap:          { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  row:           { paddingHorizontal: 12, paddingVertical: 8, gap: 6, flexDirection: 'row', alignItems: 'center' },
+  chip:          { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  chipActivo:    { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  chipTxt:       { fontSize: 12, color: '#64748b', fontWeight: '500' },
+  chipTxtActivo: { color: '#fff', fontWeight: '700' },
+  inputs:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
+  inputDate:     { flex: 1, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#1e293b' },
+  inputSep:      { fontSize: 14, color: '#94a3b8', fontWeight: '700' },
 })
 
 // ─── KPI resumen ──────────────────────────────────────────────────────────────
