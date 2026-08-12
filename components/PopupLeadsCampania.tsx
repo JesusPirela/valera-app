@@ -37,6 +37,7 @@ export default function PopupLeadsCampania() {
         .from('clientes')
         .select('id, nombre, zona_busqueda, presupuesto')
         .eq('es_lead_campania', true)
+        .eq('enviado_crm', false)
         .eq('responsable_id', user.id)
         .is('eliminado_at', null)
         .gte('created_at', desde)

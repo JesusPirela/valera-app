@@ -28,6 +28,8 @@ type Lead = {
   notas: string | null
   wa_count: number | null
   call_count: number | null
+  enviado_crm: boolean | null
+  enviado_crm_at: string | null
   created_at: string
 }
 
@@ -60,6 +62,9 @@ function prettyPresu(p: string | null): string {
 }
 
 function llamar(tel: string) { Linking.openURL(`tel:${tel}`) }
+function fechaCorta(iso: string): string {
+  try { return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) } catch { return '' }
+}
 
 // Normaliza para buscar sin importar acentos ni mayúsculas.
 function normalizar(s: string | null): string {
@@ -72,6 +77,7 @@ export default function LeadsCampania() {
   const qc = useQueryClient()
   const [sort, setSort] = useState<Sort>({ col: 'nombre', dir: 'asc' })
   const [busqueda, setBusqueda] = useState('')
+  const [tab, setTab] = useState<'activos' | 'historial'>('activos')
   const [notaModal, setNotaModal] = useState<{ id: string; nombre: string; value: string } | null>(null)
   const [guardandoNota, setGuardandoNota] = useState(false)
 
@@ -82,7 +88,7 @@ export default function LeadsCampania() {
       if (!user) return []
       const { data, error } = await supabase
         .from('clientes')
-        .select('id, nombre, telefono, zona_busqueda, presupuesto, estado, notas, wa_count, call_count, created_at')
+        .select('id, nombre, telefono, zona_busqueda, presupuesto, estado, notas, wa_count, call_count, enviado_crm, enviado_crm_at, created_at')
         .eq('es_lead_campania', true)
         .eq('responsable_id', user.id)
         .is('eliminado_at', null)
@@ -109,15 +115,19 @@ export default function LeadsCampania() {
     }).catch(() => {})
   }, [leads]))
 
+  const activos = useMemo(() => leads.filter(l => !l.enviado_crm), [leads])
+  const historial = useMemo(() => leads.filter(l => l.enviado_crm), [leads])
+
   const ordenados = useMemo(() => {
+    const base = tab === 'activos' ? activos : historial
     const q = normalizar(busqueda.trim())
     const arr = q
-      ? leads.filter(l =>
+      ? base.filter(l =>
           normalizar(l.nombre).includes(q) ||
           (l.telefono || '').includes(q) ||
           normalizar(prettyZona(l.zona_busqueda)).includes(q) ||
           normalizar(prettyPresu(l.presupuesto)).includes(q))
-      : [...leads]
+      : [...base]
     arr.sort((a, b) => {
       let cmp = 0
       if (sort.col === 'nombre') cmp = a.nombre.localeCompare(b.nombre, 'es')
@@ -127,7 +137,7 @@ export default function LeadsCampania() {
       return sort.dir === 'asc' ? cmp : -cmp
     })
     return arr
-  }, [leads, sort, busqueda])
+  }, [activos, historial, tab, sort, busqueda])
 
   function toggleSort(col: SortCol) {
     setSort(prev => prev.col === col
@@ -166,6 +176,18 @@ export default function LeadsCampania() {
     setNotaModal(null)
   }
 
+  // Mandar un lead al CRM normal: aparece allá, sale de "Activos" y queda en
+  // "Historial". El cliente NO se borra; solo se marca enviado_crm.
+  function enviarACrm(l: Lead) {
+    patchLead(l.id, { enviado_crm: true, enviado_crm_at: new Date().toISOString() })
+    qc.invalidateQueries({ queryKey: ['clientes'] }) // que el CRM normal lo tome
+  }
+  // Deshacer: regresarlo al apartado de campaña (sale del CRM normal).
+  function regresarACampania(l: Lead) {
+    patchLead(l.id, { enviado_crm: false, enviado_crm_at: null })
+    qc.invalidateQueries({ queryKey: ['clientes'] })
+  }
+
   const HeaderCell = ({ col, label, w }: { col: SortCol; label: string; w: number }) => (
     <TouchableOpacity style={[styles.th, { width: w }]} onPress={() => toggleSort(col)} activeOpacity={0.7}>
       <Text style={[styles.thTxt, { color: '#fff' }]} numberOfLines={1}>{label}</Text>
@@ -196,7 +218,9 @@ export default function LeadsCampania() {
         <Text style={[styles.title, { color: c.text }]}>📣 Leads de campaña</Text>
         <View style={styles.subRow}>
           <Text style={[styles.sub, { color: c.textMute }]}>
-            {leads.length} {leads.length === 1 ? 'cliente' : 'clientes'} · toca un encabezado para ordenar
+            {tab === 'activos'
+              ? `${activos.length} por atender · toca un encabezado para ordenar`
+              : `${historial.length} enviados a tu CRM normal`}
           </Text>
           {!(sort.col === 'nombre' && sort.dir === 'asc') && (
             <TouchableOpacity style={styles.limpiarBtn} onPress={() => setSort({ col: 'nombre', dir: 'asc' })} activeOpacity={0.8}>
@@ -204,6 +228,16 @@ export default function LeadsCampania() {
               <Text style={styles.limpiarTxt}>Limpiar orden</Text>
             </TouchableOpacity>
           )}
+        </View>
+
+        {/* Pestañas: activos (por atender) / historial (ya enviados al CRM) */}
+        <View style={styles.tabs}>
+          <TouchableOpacity style={[styles.tabBtn, tab === 'activos' && styles.tabBtnOn]} onPress={() => setTab('activos')} activeOpacity={0.8}>
+            <Text style={[styles.tabTxt, { color: tab === 'activos' ? '#fff' : c.textMute }]}>Por atender ({activos.length})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.tabBtn, tab === 'historial' && styles.tabBtnOn]} onPress={() => setTab('historial')} activeOpacity={0.8}>
+            <Text style={[styles.tabTxt, { color: tab === 'historial' ? '#fff' : c.textMute }]}>Enviados al CRM ({historial.length})</Text>
+          </TouchableOpacity>
         </View>
 
         {leads.length > 0 && (
@@ -255,12 +289,17 @@ export default function LeadsCampania() {
                 <View style={[styles.th, { width: 92 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>WhatsApp</Text></View>
                 <View style={[styles.th, { width: 88 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Llamar</Text></View>
                 <View style={[styles.th, { width: 150 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Notas</Text></View>
+                <View style={[styles.th, { width: 160 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>{tab === 'activos' ? 'Mandar al CRM' : 'Enviado'}</Text></View>
               </View>
 
               {/* Filas */}
               {ordenados.length === 0 && (
                 <View style={{ padding: 24, alignItems: 'center' }}>
-                  <Text style={[styles.emptyTxt, { color: c.textMute }]}>Sin resultados para “{busqueda}”.</Text>
+                  <Text style={[styles.emptyTxt, { color: c.textMute }]}>
+                    {busqueda ? `Sin resultados para “${busqueda}”.`
+                      : tab === 'activos' ? 'No tienes leads por atender 🎉'
+                      : 'Aún no has enviado ninguno a tu CRM normal.'}
+                  </Text>
                 </View>
               )}
               {ordenados.map((l, i) => (
@@ -298,6 +337,22 @@ export default function LeadsCampania() {
                         </View>
                       )}
                     </TouchableOpacity>
+                  </View>
+                  <View style={[styles.td, { width: 160, alignItems: 'center' }]}>
+                    {tab === 'activos' ? (
+                      <TouchableOpacity style={styles.enviarBtn} onPress={() => enviarACrm(l)} activeOpacity={0.85}>
+                        <Ionicons name="arrow-redo" size={15} color="#fff" />
+                        <Text style={styles.enviarTxt}>A mi CRM</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={{ alignItems: 'center', gap: 3 }}>
+                        <Text style={styles.enviadoTxt}>✓ En tu CRM</Text>
+                        {l.enviado_crm_at ? <Text style={[styles.enviadoFecha, { color: c.textMute }]}>{fechaCorta(l.enviado_crm_at)}</Text> : null}
+                        <TouchableOpacity onPress={() => regresarACampania(l)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                          <Text style={styles.deshacerTxt}>Deshacer</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 </View>
               ))}
@@ -343,6 +398,15 @@ const styles = StyleSheet.create({
   sub: { fontSize: 12, flex: 1 },
   limpiarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f3e8ff', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6 },
   limpiarTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  tabs: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  tabBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center', backgroundColor: 'rgba(124,58,237,0.10)' },
+  tabBtnOn: { backgroundColor: '#7c3aed' },
+  tabTxt: { fontSize: 13, fontWeight: '800' },
+  enviarBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#7c3aed', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  enviarTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  enviadoTxt: { fontSize: 13, fontWeight: '800', color: '#16a34a' },
+  enviadoFecha: { fontSize: 11 },
+  deshacerTxt: { fontSize: 12, fontWeight: '700', color: '#7c3aed', textDecorationLine: 'underline' },
   searchWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: Platform.OS === 'web' ? 10 : 8 },
   searchInput: { flex: 1, fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}) },
   vScrollContent: { paddingBottom: 40 },
