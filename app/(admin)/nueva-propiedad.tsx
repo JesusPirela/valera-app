@@ -816,7 +816,11 @@ export default function NuevaPropiedad() {
       }
 
       setGuardado(true)
-      setCreadaId(propiedadId)   // habilita el botón de publicar en EasyBroker; no redirige solo
+      setCreadaId(propiedadId)
+      // Regresar solo a la lista tras guardar (como pidió el usuario).
+      setTimeout(() => {
+        router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')
+      }, 1500)
     } catch (err: any) {
       console.error('[nueva-propiedad] error completo:', err)
       const raw = err?.message || ''
