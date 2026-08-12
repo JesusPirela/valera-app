@@ -1265,6 +1265,7 @@ export default function CoordinacionCitas() {
   const [dragOverEstado, setDragOverEstado] = useState<EstadoCita | null>(null)
   const [cancelModal, setCancelModal] = useState<Cita | null>(null)
   const [postCitaModal, setPostCitaModal] = useState<Cita | null>(null)
+  const [expandirHoy, setExpandirHoy]     = useState(true)
   const mountedRef = useRef(true)
   const defaultFiltroAplicado = useRef(false)
 
@@ -1369,7 +1370,7 @@ export default function CoordinacionCitas() {
   }
 
   // ── Filtros + conteos (todos en un solo useMemo para evitar 5 recálculos) ──
-  const { citasFiltradas, conteos, pcts, urgentes, citasVenta, citasRenta } = useMemo(() => {
+  const { citasFiltradas, conteos, pcts, urgentes, citasVenta, citasRenta, citasHoyManana, kpiActivas, kpiRealizadasHoy, kpiConversion, kpiCanceladasMes } = useMemo(() => {
     const filtradas = citas.filter(c => {
       if (filtroAdmin) {
         if (filtroAdmin === 'sin_asignar' && c.coordinado_por) return false
@@ -1415,6 +1416,29 @@ export default function CoordinacionCitas() {
       ).length,
       citasVenta: filtradas.filter(c => c.clientes.tipo_operacion !== 'renta'),
       citasRenta: filtradas.filter(c => c.clientes.tipo_operacion === 'renta'),
+      citasHoyManana: (() => {
+        const ini = new Date(); ini.setHours(0, 0, 0, 0)
+        const fin = new Date(ini); fin.setDate(fin.getDate() + 2)
+        return filtradas
+          .filter(c => c.fecha_cita && c.estado !== 'cancelada' && c.estado !== 'realizada' &&
+            new Date(c.fecha_cita) >= ini && new Date(c.fecha_cita) < fin)
+          .sort((a, b) => new Date(a.fecha_cita!).getTime() - new Date(b.fecha_cita!).getTime())
+      })(),
+      kpiActivas: filtradas.filter(c => c.estado !== 'cancelada').length,
+      kpiRealizadasHoy: (() => {
+        const ini = new Date(); ini.setHours(0, 0, 0, 0)
+        const fin = new Date(ini); fin.setDate(fin.getDate() + 1)
+        return filtradas.filter(c => c.estado === 'realizada' && c.fecha_cita &&
+          new Date(c.fecha_cita) >= ini && new Date(c.fecha_cita) < fin).length
+      })(),
+      kpiConversion: (() => {
+        const activas = filtradas.filter(c => c.estado !== 'cancelada').length
+        return activas > 0 ? Math.round(filtradas.filter(c => c.estado === 'realizada').length / activas * 100) : 0
+      })(),
+      kpiCanceladasMes: (() => {
+        const ini = new Date(); ini.setDate(1); ini.setHours(0, 0, 0, 0)
+        return filtradas.filter(c => c.estado === 'cancelada' && new Date(c.updated_at) >= ini).length
+      })(),
     }
   }, [citas, filtroAdmin, filtroOperacion, busqueda])
 
@@ -1466,6 +1490,71 @@ export default function CoordinacionCitas() {
               <Ionicons name="close-circle" size={16} color="#94a3b8" />
             </TouchableOpacity>
           ) : null}
+        </View>
+      )}
+
+      {/* ── Agenda: Hoy y Mañana ── */}
+      {!loading && citasHoyManana.length > 0 && (
+        <View style={ag.wrap}>
+          <TouchableOpacity style={ag.header} onPress={() => setExpandirHoy(v => !v)} activeOpacity={0.85}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ fontSize: 16 }}>📅</Text>
+              <Text style={ag.titulo}>Agenda próxima</Text>
+              <View style={ag.cnt}><Text style={ag.cntTxt}>{citasHoyManana.length}</Text></View>
+            </View>
+            <Ionicons name={expandirHoy ? 'chevron-up' : 'chevron-down'} size={16} color="rgba(255,255,255,0.8)" />
+          </TouchableOpacity>
+          {expandirHoy && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ag.lista}>
+              {citasHoyManana.map(c => {
+                const inf = ESTADOS_CITA[c.estado]
+                const esHoy = c.fecha_cita
+                  ? new Date(c.fecha_cita).toDateString() === new Date().toDateString()
+                  : false
+                return (
+                  <TouchableOpacity key={c.id} style={[ag.card, { borderTopColor: inf.color }]}
+                    onPress={() => setCitaEditando(c)} activeOpacity={0.85}>
+                    <View style={ag.cardTop}>
+                      <View style={[ag.diaChip, { backgroundColor: esHoy ? '#dc2626' : '#475569' }]}>
+                        <Text style={ag.diaChipTxt}>{esHoy ? 'HOY' : 'MAÑANA'}</Text>
+                      </View>
+                      <Text style={ag.hora}>{formatHora(c.fecha_cita) ?? '–'}</Text>
+                    </View>
+                    <Text style={ag.nombre} numberOfLines={1}>{c.clientes.nombre}</Text>
+                    <Text style={ag.estado}>{inf.emoji} {inf.label}</Text>
+                    {c.prospectador && (
+                      <Text style={ag.sub} numberOfLines={1}>👤 {c.prospectador.nombre.split(' ')[0]}</Text>
+                    )}
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+          )}
+        </View>
+      )}
+
+      {/* ── KPI resumen ── */}
+      {!loading && !vistaAsesor && (
+        <View style={kr.row}>
+          <View style={kr.card}>
+            <Text style={[kr.num, { color: '#1a6470' }]}>{kpiActivas}</Text>
+            <Text style={kr.lbl}>Activas</Text>
+          </View>
+          <View style={kr.sep} />
+          <View style={kr.card}>
+            <Text style={[kr.num, { color: '#0d9488' }]}>{kpiRealizadasHoy}</Text>
+            <Text style={kr.lbl}>Realizadas hoy</Text>
+          </View>
+          <View style={kr.sep} />
+          <View style={kr.card}>
+            <Text style={[kr.num, { color: '#7c3aed' }]}>{kpiConversion}%</Text>
+            <Text style={kr.lbl}>Conversión</Text>
+          </View>
+          <View style={kr.sep} />
+          <View style={kr.card}>
+            <Text style={[kr.num, { color: '#dc2626' }]}>{kpiCanceladasMes}</Text>
+            <Text style={kr.lbl}>Cancel. mes</Text>
+          </View>
         </View>
       )}
 
@@ -1624,7 +1713,12 @@ export default function CoordinacionCitas() {
                   estado={estado}
                   highlight={estado === 'aparto'}
                   pct={pcts[estado]}
-                  citas={citasFiltradas.filter(c => c.estado === estado)}
+                  citas={citasFiltradas.filter(c => c.estado === estado).sort((a, b) => {
+                    if (!a.fecha_cita && !b.fecha_cita) return 0
+                    if (!a.fecha_cita) return 1
+                    if (!b.fecha_cita) return -1
+                    return new Date(a.fecha_cita).getTime() - new Date(b.fecha_cita).getTime()
+                  })}
                   onCardPress={setCitaEditando}
                   onCardLongPress={setCitaMoviendo}
                   draggingCita={draggingCita}
@@ -1831,4 +1925,41 @@ const s = StyleSheet.create({
   moverDot:   { width: 12, height: 12, borderRadius: 6 },
   actualBadge:{ borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   actualBadgeTxt: { fontSize: 10, color: '#fff', fontWeight: '800' },
+})
+
+// ─── Agenda hoy/mañana ────────────────────────────────────────────────────────
+const ag = StyleSheet.create({
+  wrap:       { backgroundColor: '#0f3d45', borderBottomWidth: 1, borderBottomColor: '#0a2d33' },
+  header:     {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingVertical: 10,
+  },
+  titulo:     { fontSize: 13, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
+  cnt:        { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  cntTxt:     { fontSize: 11, fontWeight: '900', color: '#fff' },
+  lista:      { paddingHorizontal: 12, paddingBottom: 12, gap: 8, flexDirection: 'row' },
+  card: {
+    backgroundColor: '#fff', borderRadius: 10, padding: 10, width: 140,
+    borderTopWidth: 3, flexShrink: 0,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 3,
+  },
+  cardTop:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  diaChip:    { borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
+  diaChipTxt: { fontSize: 9, fontWeight: '900', color: '#fff', letterSpacing: 0.5 },
+  hora:       { fontSize: 12, fontWeight: '800', color: '#1e293b' },
+  nombre:     { fontSize: 12, fontWeight: '700', color: '#0f172a', marginBottom: 3 },
+  estado:     { fontSize: 10, color: '#64748b', marginBottom: 2 },
+  sub:        { fontSize: 10, color: '#94a3b8' },
+})
+
+// ─── KPI resumen ──────────────────────────────────────────────────────────────
+const kr = StyleSheet.create({
+  row: {
+    flexDirection: 'row', backgroundColor: '#fff',
+    borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+  },
+  card:  { flex: 1, alignItems: 'center', paddingVertical: 10 },
+  num:   { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
+  lbl:   { fontSize: 9, color: '#94a3b8', fontWeight: '700', letterSpacing: 0.3, marginTop: 2, textAlign: 'center' },
+  sep:   { width: 1, backgroundColor: '#e2e8f0', marginVertical: 8 },
 })
