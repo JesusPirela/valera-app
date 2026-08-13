@@ -192,12 +192,18 @@ function iniciales(nombre: string) {
   return nombre.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 }
 
-// Timestamp ISO → valor local para <input type="datetime-local"> ("YYYY-MM-DDTHH:MM").
-function fechaAInputLocal(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return ''
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+// Un campo del selector de fecha (Día/Mes/Año/Hora/Min): flechas + valor, orden fijo.
+function FechaSpin({ label, value, onUp, onDown, c }: {
+  label: string; value: string | number; onUp: () => void; onDown: () => void; c: ColoresCard
+}) {
+  return (
+    <View style={{ alignItems: 'center', minWidth: 60 }}>
+      <Text style={{ fontSize: 10, color: c.textMute, marginBottom: 4, fontWeight: '600' }}>{label}</Text>
+      <TouchableOpacity onPress={onUp} style={{ padding: 8 }}><Text style={{ fontSize: 16, color: '#1a6470' }}>▲</Text></TouchableOpacity>
+      <Text style={{ fontSize: 20, fontWeight: '700', color: c.text, marginVertical: 2 }}>{value}</Text>
+      <TouchableOpacity onPress={onDown} style={{ padding: 8 }}><Text style={{ fontSize: 16, color: '#1a6470' }}>▼</Text></TouchableOpacity>
+    </View>
+  )
 }
 
 export function abrirWhatsApp(telefono: string, nombre: string) {
@@ -494,6 +500,11 @@ export default function CRM() {
   // en edición hasta que se guarda.
   const [zonaPicker, setZonaPicker] = useState<{ id: string; draft: string } | null>(null)
   const [descarteModal, setDescarteModal] = useState<{ id: string } | null>(null)
+  // Selector de "Próximo contacto": Día/Mes/Año fijo (no usa <input type="datetime-local">
+  // porque su formato de despliegue depende del idioma del navegador/SO — en algunos
+  // quedaba en mes/día/año en vez de día/mes/año). Mismo patrón que detalle-cliente.tsx.
+  const [fechaModal, setFechaModal] = useState<{ id: string } | null>(null)
+  const [fechaTemp, setFechaTemp] = useState<Date>(new Date())
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
 
@@ -895,11 +906,20 @@ export default function CRM() {
     } else if (col === 'zona') {
       // Zonas de interés → selector multi-selección + "Otra"
       setZonaPicker({ id: item.id, draft: item.zona_busqueda ?? '' })
+    } else if (col === 'fecha') {
+      let b: Date
+      if (item.proximo_contacto) {
+        b = new Date(item.proximo_contacto)
+      } else {
+        // Sin fecha previa: arrancar a las 7:00 am (mañana si las 7 de hoy ya pasaron).
+        b = new Date(); b.setHours(7, 0, 0, 0)
+        if (b.getTime() < Date.now()) b.setDate(b.getDate() + 1)
+      }
+      setFechaTemp(b)
+      setFechaModal({ id: item.id })
     } else {
-      // nombre, telefono, fecha, notas, presupuesto → edición de texto inline
-      const inicial = col === 'fecha'
-        ? (item.proximo_contacto ? fechaAInputLocal(item.proximo_contacto) : '')
-        : col === 'nombre' ? item.nombre
+      // nombre, telefono, notas, presupuesto → edición de texto inline
+      const inicial = col === 'nombre' ? item.nombre
         : col === 'telefono' ? item.telefono
         : col === 'notas' ? (item.notas ?? '')
         : col === 'presupuesto' ? (item.presupuesto ?? '') : ''
@@ -910,27 +930,35 @@ export default function CRM() {
 
   function guardarTexto() {
     if (!editCell) return
-    if (editCell.col === 'fecha') {
-      const trimmed = editValue.trim()
-      if (!trimmed) {
-        // Campo vacío → BORRAR el próximo seguimiento (poner en null)
-        guardarCelda(editCell.id, editCell.col, null)
-        return
-      }
-      // "YYYY-MM-DDTHH:MM" (hora local, con horario) → ISO. Si por alguna razón
-      // sólo viene la fecha, se asume mediodía. Validar antes de toISOString():
-      // una fecha mal escrita reventaba con "Date value out of bounds".
-      const base = trimmed.length <= 10 ? `${trimmed}T12:00:00` : trimmed
-      const d = new Date(base)
-      if (isNaN(d.getTime())) {
-        Alert.alert('Fecha inválida', 'Revisa el formato de la fecha (ej. 2026-08-15 14:30).')
-        return
-      }
-      const iso = trimmed.length <= 10 ? base : d.toISOString()
-      guardarCelda(editCell.id, editCell.col, iso)
-    } else {
-      guardarCelda(editCell.id, editCell.col, editValue.trim() || null)
-    }
+    guardarCelda(editCell.id, editCell.col, editValue.trim() || null)
+  }
+
+  // Spinner del selector de fecha (Día/Mes/Año/Hora/Min) — mismo criterio que
+  // detalle-cliente.tsx: nunca antes de ahora.
+  function ajustarFechaTemp(campo: 'date' | 'month' | 'year' | 'hour' | 'minute', delta: number) {
+    setFechaTemp((prev) => {
+      const d = new Date(prev)
+      if (campo === 'date')   d.setDate(d.getDate() + delta)
+      if (campo === 'month')  d.setMonth(d.getMonth() + delta)
+      if (campo === 'year')   d.setFullYear(d.getFullYear() + delta)
+      if (campo === 'hour')   d.setHours((d.getHours() + delta + 24) % 24)
+      if (campo === 'minute') d.setMinutes((d.getMinutes() + delta + 60) % 60)
+      const ahora = new Date()
+      if (d.getTime() < ahora.getTime()) return ahora
+      return d
+    })
+  }
+
+  function guardarFechaModal() {
+    if (!fechaModal) return
+    guardarCelda(fechaModal.id, 'fecha', fechaTemp.toISOString())
+    setFechaModal(null)
+  }
+
+  function quitarFechaModal() {
+    if (!fechaModal) return
+    guardarCelda(fechaModal.id, 'fecha', null)
+    setFechaModal(null)
   }
 
   // ── Importar CSV ──────────────────────────────────────────────
@@ -1405,23 +1433,9 @@ export default function CRM() {
                 {TABLE_COLS.map(col => {
                   const cs = cStyle(col)
                   const editando = editCell?.id === item.id && editCell?.col === col.id
-                  // Editor de texto inline (nombre, teléfono, fecha, notas, zona, presupuesto)
-                  if (editando && (col.id === 'nombre' || col.id === 'telefono' || col.id === 'fecha' || col.id === 'notas' || col.id === 'zona' || col.id === 'presupuesto')) {
-                    if (col.id === 'fecha' && isWeb) {
-                      return (
-                        <View key={col.id} style={[s.excelTdCell, cs]}>
-                          {createElement('input', {
-                            type: 'datetime-local',
-                            autoFocus: true,
-                            value: editValue,
-                            onChange: (e: any) => setEditValue(e.target.value),
-                            onBlur: guardarTexto,
-                            onKeyDown: (e: any) => { if (e.key === 'Enter') guardarTexto(); if (e.key === 'Escape') setEditCell(null) },
-                            style: { width: '100%', padding: '4px 6px', borderRadius: 6, border: '1px solid #1a9aaa', fontSize: 12, fontFamily: 'inherit', color: darkMode ? '#fff' : '#111', background: darkMode ? '#0a1827' : '#fff' },
-                          })}
-                        </View>
-                      )
-                    }
+                  // Editor de texto inline (nombre, teléfono, notas, zona, presupuesto). "fecha" usa
+                  // su propio modal (fechaModal, más abajo) en vez de este editor de celda.
+                  if (editando && (col.id === 'nombre' || col.id === 'telefono' || col.id === 'notas' || col.id === 'zona' || col.id === 'presupuesto')) {
                     if (col.id === 'notas' && isWeb) {
                       return (
                         <View key={col.id} style={[s.excelTdCell, cs, { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 6 }]}>
@@ -1458,7 +1472,7 @@ export default function CRM() {
                           onChangeText={setEditValue}
                           onBlur={guardarTexto}
                           onSubmitEditing={col.id !== 'notas' ? guardarTexto : undefined}
-                          placeholder={col.id === 'fecha' ? 'AAAA-MM-DD' : col.id === 'notas' ? 'Escribe una nota...' : ''}
+                          placeholder={col.id === 'notas' ? 'Escribe una nota...' : ''}
                           placeholderTextColor={c.textMute}
                           keyboardType={col.id === 'telefono' ? 'phone-pad' : 'default'}
                           multiline={col.id === 'notas'}
@@ -1840,6 +1854,38 @@ export default function CRM() {
         </TouchableOpacity>
       </Modal>
 
+      {/* ── Modal: Próximo contacto (Día/Mes/Año/Hora/Min) ── */}
+      <Modal visible={fechaModal !== null} transparent animationType="fade" onRequestClose={() => setFechaModal(null)}>
+        <View style={s.dpOverlay}>
+          <View style={[s.dpModal, { backgroundColor: c.card }]}>
+            <Text style={[s.dpTitle, { color: c.text }]}>Próximo contacto</Text>
+            <Text style={[s.dpSecLabel, { color: c.textMute }]}>Fecha</Text>
+            <View style={s.dpRow}>
+              <FechaSpin label="Día" value={fechaTemp.getDate()} onUp={() => ajustarFechaTemp('date', 1)} onDown={() => ajustarFechaTemp('date', -1)} c={c} />
+              <FechaSpin label="Mes" value={fechaTemp.toLocaleString('es-MX', { month: 'short' })} onUp={() => ajustarFechaTemp('month', 1)} onDown={() => ajustarFechaTemp('month', -1)} c={c} />
+              <FechaSpin label="Año" value={fechaTemp.getFullYear()} onUp={() => ajustarFechaTemp('year', 1)} onDown={() => ajustarFechaTemp('year', -1)} c={c} />
+            </View>
+            <Text style={[s.dpSecLabel, { color: c.textMute }]}>Hora</Text>
+            <View style={s.dpRow}>
+              <FechaSpin label="Hora" value={String(fechaTemp.getHours()).padStart(2, '0')} onUp={() => ajustarFechaTemp('hour', 1)} onDown={() => ajustarFechaTemp('hour', -1)} c={c} />
+              <FechaSpin label="Min" value={String(fechaTemp.getMinutes()).padStart(2, '0')} onUp={() => ajustarFechaTemp('minute', 5)} onDown={() => ajustarFechaTemp('minute', -5)} c={c} />
+            </View>
+            <View style={s.dpActions}>
+              <TouchableOpacity style={s.dpBtnQuitar} onPress={quitarFechaModal}>
+                <Text style={s.dpBtnQuitarText}>Quitar fecha</Text>
+              </TouchableOpacity>
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity style={s.dpBtnCancel} onPress={() => setFechaModal(null)}>
+                <Text style={[s.dpBtnCancelText, { color: c.textSub }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.dpBtnConfirm} onPress={guardarFechaModal}>
+                <Text style={s.dpBtnConfirmText}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Modal: razón de descarte ── */}
       <Modal visible={descarteModal !== null} transparent animationType="slide" onRequestClose={() => setDescarteModal(null)}>
         <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setDescarteModal(null)}>
@@ -1929,6 +1975,21 @@ export default function CRM() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f1f5f9' },
+  dpOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
+  dpModal: {
+    borderRadius: 20, padding: 24, width: '88%', maxWidth: 360,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
+  },
+  dpTitle: { fontSize: 16, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
+  dpSecLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 },
+  dpRow: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginBottom: 16 },
+  dpActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  dpBtnQuitar: { paddingHorizontal: 10, paddingVertical: 9 },
+  dpBtnQuitarText: { color: '#c0392b', fontWeight: '600', fontSize: 13 },
+  dpBtnCancel: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8, backgroundColor: '#f0f0f0' },
+  dpBtnCancelText: { fontWeight: '600', fontSize: 13 },
+  dpBtnConfirm: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 8, backgroundColor: '#1a6470' },
+  dpBtnConfirmText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   savedToast: {
     position: 'absolute', bottom: 28, alignSelf: 'center', zIndex: 999,
     paddingHorizontal: 18, paddingVertical: 10, borderRadius: 24,
