@@ -1438,8 +1438,9 @@ export default function DetallePropiedad() {
       // por ficha generada (y sujeto al tope diario de descargas).
       premiarDescarga()
     } catch (e: any) {
+      console.error('[PDF] generarFichaPDF error:', e)
       if (Platform.OS === 'web') {
-        window.alert('No se pudo generar el PDF.')
+        window.alert(`No se pudo generar el PDF.\n\n${e?.message ?? e ?? ''}`)
       } else {
         Alert.alert('Error', `No se pudo generar la ficha PDF.\n\n${e?.message ?? ''}`)
       }
