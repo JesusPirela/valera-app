@@ -19,6 +19,7 @@ import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
+import { useScrollHorizontalConRueda } from '../../hooks/useScrollHorizontalConRueda'
 
 type Propiedad = {
   id: string
@@ -95,24 +96,6 @@ const NAV_GRUPOS = ['Propiedades', 'Gestión', 'Crecimiento']
 // Se usa un listener nativo (no el prop onWheel de React) con passive:false,
 // porque React adjunta "wheel" como passive por defecto y ahí preventDefault()
 // no funciona — por eso el scroll seguía "filtrando" hacia la página completa.
-function useScrollHorizontalConRueda() {
-  const ref = useRef<any>(null)
-  useEffect(() => {
-    if (Platform.OS !== 'web') return
-    const node = ref.current?.getScrollableNode?.() ?? ref.current
-    if (!node) return
-    const handler = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
-      node.scrollLeft += e.deltaY
-      e.preventDefault()
-      e.stopPropagation()
-    }
-    node.addEventListener('wheel', handler, { passive: false })
-    return () => node.removeEventListener('wheel', handler)
-  }, [])
-  return ref
-}
-
 function FiltroChip({ label, active, onPress, textSubColor }: { label: string; active: boolean; onPress: () => void; textSubColor: string }) {
   return (
     <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
