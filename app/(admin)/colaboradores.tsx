@@ -176,7 +176,12 @@ export default function AdminColaboradores() {
         />
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipsRow} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={s.chipsRow}
+        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16 }}
+      >
         {([
           { value: 'todos', label: `Todos (${lista.length})` },
           { value: 'SI', label: 'En app' },
