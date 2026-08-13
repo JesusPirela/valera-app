@@ -31,6 +31,7 @@ export default function EstadisticasPropiedades() {
   const [filtro, setFiltro] = useState<Filtro>('todas')
   const [busqueda, setBusqueda] = useState('')
   const [ordenDesc, setOrdenDesc] = useState(true)
+  const [devAbierto, setDevAbierto] = useState<string | null>(null)
 
   const { data, isLoading, error, refetch, isRefetching } = useQuery<Stats>({
     queryKey: ['estadisticas-publicaciones'],
@@ -79,16 +80,25 @@ export default function EstadisticasPropiedades() {
       <View style={[s.section, { backgroundColor: c.card, borderColor: c.border }]}>
         <Text style={[s.secTitle, { color: c.text }]}>Por desarrollo / zona</Text>
         <Text style={[s.secHint, { color: c.textMute }]}>Desarrollos con nombre, por total de publicaciones</Text>
+        <Text style={[s.secHint, { color: c.textMute, marginTop: 2 }]}>👆 Toca un desarrollo para ver sus propiedades</Text>
         <View style={{ marginTop: 10 }}>
-          {data.por_desarrollo.map((d, i) => (
-            <View key={i} style={s.barRow}>
-              <Text style={[s.barLabel, { color: c.text }]} numberOfLines={1}>{d.desarrollo}</Text>
-              <View style={[s.barTrack, { backgroundColor: c.border }]}>
-                <View style={[s.barFill, { width: `${(d.veces / maxDev) * 100}%`, backgroundColor: TEAL }]} />
+          {data.por_desarrollo.map((d, i) => {
+            const abierto = devAbierto === d.desarrollo
+            return (
+              <View key={i}>
+                <TouchableOpacity style={s.barRow} activeOpacity={0.7} onPress={() => setDevAbierto(abierto ? null : d.desarrollo)}>
+                  <Text style={[s.barLabel, { color: abierto ? TEAL : c.text, fontWeight: abierto ? '800' : '600' }]} numberOfLines={1}>{d.desarrollo}</Text>
+                  <View style={[s.barTrack, { backgroundColor: c.border }]}>
+                    <View style={[s.barFill, { width: `${(d.veces / maxDev) * 100}%`, backgroundColor: TEAL }]} />
+                  </View>
+                  <Text style={[s.barVal, { color: c.textSub }]}>{d.veces}</Text>
+                </TouchableOpacity>
+                {abierto && (
+                  <DetalleDesarrollo c={c} props={data.todas.filter(t => t.dev === d.desarrollo)} />
+                )}
               </View>
-              <Text style={[s.barVal, { color: c.textSub }]}>{d.veces}</Text>
-            </View>
-          ))}
+            )
+          })}
         </View>
       </View>
 
@@ -162,6 +172,38 @@ function Kpi({ c, label, value, sub, color }: any) {
   )
 }
 
+// Detalle de un desarrollo al tocar su barra: separa sus propiedades en
+// Más publicadas / Publicación media / Nunca publicadas.
+function DetalleDesarrollo({ c, props }: { c: any; props: Row[] }) {
+  const publicadas = props.filter(p => p.veces > 0)
+  const nunca = props.filter(p => p.veces === 0).sort((a, b) => a.titulo.localeCompare(b.titulo))
+  const max = Math.max(1, ...publicadas.map(p => p.veces))
+  const mas = publicadas.filter(p => p.veces >= max * 0.66).sort((a, b) => b.veces - a.veces)
+  const medias = publicadas.filter(p => p.veces < max * 0.66).sort((a, b) => b.veces - a.veces)
+
+  const Grupo = ({ titulo, color, items }: { titulo: string; color: string; items: Row[] }) =>
+    items.length ? (
+      <View style={{ marginTop: 8 }}>
+        <Text style={[s.grpTit, { color }]}>{titulo} ({items.length})</Text>
+        {items.map((p, i) => (
+          <View key={p.codigo + i} style={s.detRow}>
+            <Text style={[s.detCod, { color }]}>{p.codigo}</Text>
+            <Text style={[s.detTit, { color: c.textSub }]} numberOfLines={1}>{p.titulo}</Text>
+            <Text style={[s.detVal, { color }]}>{p.veces}</Text>
+          </View>
+        ))}
+      </View>
+    ) : null
+
+  return (
+    <View style={[s.detalle, { backgroundColor: c.bg, borderColor: c.border }]}>
+      <Grupo titulo="🔝 Más publicadas" color="#16a34a" items={mas} />
+      <Grupo titulo="🟡 Publicación media" color="#f59e0b" items={medias} />
+      <Grupo titulo="🚫 Nunca publicadas" color="#ef4444" items={nunca} />
+    </View>
+  )
+}
+
 const s = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 30 },
   muted: { fontSize: 14, textAlign: 'center' },
@@ -180,6 +222,12 @@ const s = StyleSheet.create({
   barTrack: { flex: 1, height: 14, borderRadius: 7, overflow: 'hidden' },
   barFill: { height: 14, borderRadius: 7 },
   barVal: { width: 42, textAlign: 'right', fontSize: 13, fontWeight: '800' },
+  detalle: { borderWidth: 1, borderRadius: 10, padding: 12, marginTop: 4, marginBottom: 8 },
+  grpTit: { fontSize: 13, fontWeight: '800', marginBottom: 4 },
+  detRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  detCod: { width: 70, fontSize: 12, fontWeight: '800' },
+  detTit: { flex: 1, fontSize: 13 },
+  detVal: { width: 32, textAlign: 'right', fontSize: 13, fontWeight: '800' },
   chips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 10 },
   chip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7 },
   chipTxt: { fontSize: 13, fontWeight: '700' },
