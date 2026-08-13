@@ -1189,6 +1189,7 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
 
       {/* Tarjetas */}
       <ScrollView
+        style={col.scroll}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[col.list, isDragOver && { backgroundColor: inf.color + '11', borderRadius: 8 }]}
         nestedScrollEnabled
@@ -1218,7 +1219,7 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
   if (Platform.OS !== 'web') return inner
 
   return createElement('div', {
-    style: { width: COL_W, marginRight: 10, display: 'flex', flexDirection: 'column', flexShrink: 0 },
+    style: { width: COL_W, height: '100%', marginRight: 10, display: 'flex', flexDirection: 'column', flexShrink: 0 },
     onDragEnter: (e: any) => { e.preventDefault(); dragCounter.current++; if (dragCounter.current === 1) onDragOver?.() },
     onDragOver: (e: any) => { e.preventDefault() },
     onDragLeave: () => { dragCounter.current--; if (dragCounter.current === 0) onDragLeave?.() },
@@ -1241,6 +1242,10 @@ const col = StyleSheet.create({
   headerCnt:    { borderRadius: 12, paddingHorizontal: 7, paddingVertical: 2 },
   headerCntTxt: { fontSize: 12, fontWeight: '900' },
   headerPct:    { fontSize: 9, fontWeight: '700', opacity: 0.7, letterSpacing: 0.2 },
+  // Sin flex:1 aquí, el ScrollView de tarjetas no reclama el espacio restante
+  // de la columna (debajo del header) y no puede recortar/scrollear su
+  // contenido — crecía con las tarjetas y arrastraba a toda la página.
+  scroll:       { flex: 1 },
   list:         { paddingBottom: 120 },
   empty:        { alignItems: 'center', paddingVertical: 20 },
   emptyTxt:     { fontSize: 12, color: '#cbd5e1' },
@@ -1480,7 +1485,7 @@ export default function CoordinacionCitas() {
   const vistaAsesor = miRole === 'asesor'
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f1f5f9' }}>
+    <View style={{ flex: 1, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
 
       {/* ── Header ── */}
       <View style={s.header}>
@@ -1928,7 +1933,10 @@ const s = StyleSheet.create({
 
   // Board
   board:        { flex: 1, backgroundColor: '#f1f5f9' },
-  boardContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 40, flexDirection: 'row' },
+  // height 100% explícito (no solo flexDirection:row): cada columna necesita una
+  // altura real de la que heredar para poder scrollear su propia lista de tarjetas
+  // sin depender del scroll general de la página — flex:1 solo no basta aquí.
+  boardContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 40, flexDirection: 'row', height: '100%' },
   // Vista asesor: altura fija porque va dentro de un ScrollView vertical que
   // apila Venta y Renta (flex:1 no funciona dentro de un scroll de contenido).
   boardAsesor:  { height: 440, backgroundColor: '#f1f5f9' },
