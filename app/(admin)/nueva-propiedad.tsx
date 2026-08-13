@@ -162,7 +162,10 @@ export default function NuevaPropiedad() {
   const [m2, setM2] = useState('')
   const [m2Terreno, setM2Terreno] = useState('')
   const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
-  const [zona, setZona] = useState<'queretaro' | 'monterrey' | 'puebla' | null>(null)
+  const [zona, setZona] = useState<string | null>(null)
+  // "Otra…" en el picker: cualquier valor de zona que no sea una de las 3
+  // ciudades conocidas se trata como zona libre (incluye '' recién elegida).
+  const zonaEsOtra = zona !== null && zona !== 'queretaro' && zona !== 'monterrey' && zona !== 'puebla'
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
   // Posibles propiedades duplicadas detectadas al intentar guardar.
@@ -1074,10 +1077,24 @@ export default function NuevaPropiedad() {
             { value: 'queretaro', label: 'Querétaro' },
             { value: 'monterrey', label: 'Monterrey' },
             { value: 'puebla', label: 'Puebla' },
+            { value: 'otra', label: 'Otra…' },
           ]}
-          value={zona}
-          onChange={(v) => setZona(zona === v ? null : v)}
+          value={zonaEsOtra ? 'otra' : zona}
+          onChange={(v) => {
+            if (v === 'otra') setZona('')
+            else setZona(zona === v ? null : v)
+          }}
         />
+        {zonaEsOtra && (
+          <TextInput
+            style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+            value={zona ?? ''}
+            onChangeText={setZona}
+            placeholder="Escribe la zona (ej. Guadalajara, CDMX...)"
+            placeholderTextColor={c.placeholder}
+            autoCapitalize="words"
+          />
+        )}
 
         <View style={styles.dosColumnas}>
           <View style={{ flex: 1 }}>
