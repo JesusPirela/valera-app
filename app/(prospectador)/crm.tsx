@@ -220,6 +220,24 @@ export function abrirWhatsApp(telefono: string, nombre: string) {
 
 function llamar(tel: string) { Linking.openURL(`tel:${tel}`) }
 
+// Semáforo de urgencia para leads que llegan de formulario o de recompensas
+// (ruleta/tienda/cofre): un punto de color junto al nombre para atenderlos
+// rápido. Verde = atendido o recién llegado; amarillo = +20 min; rojo = +1 h.
+// "Atendido" = ya tiene próximo contacto agendado o cambió de estado inicial.
+const FUENTES_SEMAFORO = new Set([
+  'ficha_compartida', 'coleccion_compartida',
+  'tienda_lead_premium', 'cofre_lead_premium', 'tienda_lead_meta', 'cofre_lead_meta',
+])
+function semaforoCrm(item: { fuente_lead: string; estado: string; proximo_contacto: string | null; created_at: string }): string | null {
+  if (!FUENTES_SEMAFORO.has(item.fuente_lead)) return null
+  const atendido = !!item.proximo_contacto || (!!item.estado && item.estado !== 'por_perfilar' && item.estado !== 'nuevo')
+  if (atendido) return '#16a34a'
+  const mins = (Date.now() - new Date(item.created_at).getTime()) / 60000
+  if (mins < 20) return '#22c55e'
+  if (mins < 60) return '#f59e0b'
+  return '#ef4444'
+}
+
 type SortBy = 'reciente' | 'nombre' | 'contacto'
 const SORT_LABELS: Record<SortBy, string> = {
   reciente: 'Más reciente',
@@ -253,7 +271,10 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
             <Text style={[s.avatarTxt, { color: info.color }]}>{inits}</Text>
           </View>
           <View style={s.cardHeadInfo}>
-            <Text style={[s.cardNombre, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+              {semaforoCrm(item) ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: semaforoCrm(item)! }} /> : null}
+              <Text style={[s.cardNombre, { color: c.text, flex: 1 }]} numberOfLines={1}>{item.nombre}</Text>
+            </View>
             <View style={s.cardSubRow}>
               {item.nivel_interes ? (
                 <View style={[s.fuenteTag, {
@@ -1485,9 +1506,11 @@ export default function CRM() {
 
                   // Celdas (click → editar)
                   switch (col.id) {
-                    case 'nombre':
+                    case 'nombre': {
+                      const sem = semaforoCrm(item)
                       return (
                         <View key={col.id} style={[s.excelTdCell, cs, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                          {sem ? <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: sem }} /> : null}
                           <TouchableOpacity
                             onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}` as any)}
                             hitSlop={{ top: 6, bottom: 6, left: 6, right: 4 }}
@@ -1500,6 +1523,7 @@ export default function CRM() {
                           </TouchableOpacity>
                         </View>
                       )
+                    }
                     case 'telefono':
                       return (
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'telefono')} activeOpacity={0.6}>
