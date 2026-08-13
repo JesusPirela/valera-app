@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, createElement, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
-  TextInput, ActivityIndicator, ScrollView, Platform, Alert, Linking,
+  TextInput, ActivityIndicator, ScrollView, Platform, Alert, Linking, useWindowDimensions,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect, router } from 'expo-router'
@@ -1484,8 +1484,20 @@ export default function CoordinacionCitas() {
   // pipeline completo de siempre, sin ningún cambio.
   const vistaAsesor = miRole === 'asesor'
 
+  // Altura EXPLÍCITA del tablero (no flex:1): dentro de este anidamiento de
+  // scrolls, flex:1 no se resuelve de forma confiable en web — mismo motivo
+  // por el que boardAsesor (abajo) ya usa una altura fija. Se mide en vivo
+  // (onLayout) todo lo que va ARRIBA del tablero (header, filtros, agenda,
+  // stats…), en vez de adivinar un número fijo, porque esas secciones son
+  // condicionales y cambian de alto.
+  const { height: winHeight } = useWindowDimensions()
+  const [altoEncabezado, setAltoEncabezado] = useState(0)
+  const [altoFiltroOp, setAltoFiltroOp] = useState(0)
+  const altoTablero = Math.max(240, winHeight - altoEncabezado - altoFiltroOp)
+
   return (
     <View style={{ flex: 1, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
+      <View onLayout={e => setAltoEncabezado(e.nativeEvent.layout.height)}>
 
       {/* ── Header ── */}
       <View style={s.header}>
@@ -1688,6 +1700,7 @@ export default function CoordinacionCitas() {
           })}
         </ScrollView>
       )}
+      </View>
 
       {vistaAsesor ? (
         /* ── Vista asesor: Venta arriba, Renta abajo, siempre ambos visibles ── */
@@ -1754,7 +1767,7 @@ export default function CoordinacionCitas() {
       ) : (
         <>
           {/* ── Filtro venta / renta (solo admin/supervisor, tal cual estaba) ── */}
-          <View style={s.opRow}>
+          <View style={s.opRow} onLayout={e => setAltoFiltroOp(e.nativeEvent.layout.height)}>
             {([null, 'venta', 'renta'] as const).map(op => {
               const activo = filtroOperacion === op
               const label = op === null ? 'Todos' : op.charAt(0).toUpperCase() + op.slice(1)
@@ -1787,7 +1800,7 @@ export default function CoordinacionCitas() {
               horizontal
               showsHorizontalScrollIndicator
               contentContainerStyle={s.boardContent}
-              style={s.board}
+              style={{ height: altoTablero, backgroundColor: '#f1f5f9' }}
               decelerationRate="fast"
             >
               {ORDEN_ESTADOS.map(estado => (
