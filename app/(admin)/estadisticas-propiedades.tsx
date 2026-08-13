@@ -7,9 +7,16 @@ import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { zonaDetallada } from '../../lib/zonas-interes'
 
-type Row = { codigo: string; titulo: string; dev: string | null; veces: number }
+type Row = { codigo: string; titulo: string; direccion: string | null; dev: string | null; veces: number }
 type Dev = { desarrollo: string; propiedades: number; veces: number }
+
+// Zona (colonia) detectada de la dirección/título — misma lógica que la tabla
+// de precios. Cae a "(Sin zona)" si no se reconoce ninguna.
+function zonaDe(r: { direccion: string | null; titulo: string }): string {
+  return zonaDetallada(`${r.direccion ?? ''} ${r.titulo ?? ''}`) ?? '(Sin zona)'
+}
 type Stats = {
   total_publicaciones: number
   propiedades_totales: number
@@ -33,6 +40,8 @@ export default function EstadisticasPropiedades() {
   const [ordenDesc, setOrdenDesc] = useState(true)
   const [devAbierto, setDevAbierto] = useState<string | null>(null)
   const [devOrden, setDevOrden] = useState<'desc' | 'asc'>('desc')
+  const [zonaAbierta, setZonaAbierta] = useState<string | null>(null)
+  const [zonaOrden, setZonaOrden] = useState<'desc' | 'asc'>('desc')
 
   const { data, isLoading, error, refetch, isRefetching } = useQuery<Stats>({
     queryKey: ['estadisticas-publicaciones'],
@@ -68,6 +77,17 @@ export default function EstadisticasPropiedades() {
 
   const maxDev = Math.max(1, ...data.por_desarrollo.map(d => d.veces))
   const maxVeces = Math.max(1, ...data.todas.map(r => r.veces))
+  // Agrupación por ZONA (colonia detectada de la dirección), en el cliente.
+  const porZona: Dev[] = (() => {
+    const map = new Map<string, { propiedades: number; veces: number }>()
+    for (const p of data.todas) {
+      const z = zonaDe(p)
+      const cur = map.get(z) ?? { propiedades: 0, veces: 0 }
+      cur.propiedades++; cur.veces += p.veces
+      map.set(z, cur)
+    }
+    return [...map.entries()].map(([desarrollo, v]) => ({ desarrollo, propiedades: v.propiedades, veces: v.veces }))
+  })()
   // Conteo por número de publicaciones (para los filtros y sus etiquetas).
   const cnt = {
     todas: data.todas.length,
@@ -77,11 +97,7 @@ export default function EstadisticasPropiedades() {
     dos: data.todas.filter(r => r.veces === 2).length,
     tresmas: data.todas.filter(r => r.veces >= 3).length,
   }
-  // Top 15 del orden elegido: "desc" = más publicadas; "asc" = las que casi no
-  // publican (incluye desarrollos con 0 publicaciones).
-  const devsMostrar = [...data.por_desarrollo]
-    .sort((a, b) => devOrden === 'desc' ? b.veces - a.veces : a.veces - b.veces)
-    .slice(0, 15)
+  const maxZona = Math.max(1, ...porZona.map(z => z.veces))
 
   const header = (
     <View>
@@ -94,41 +110,21 @@ export default function EstadisticasPropiedades() {
         <Kpi c={c} label="Nunca publicadas" value={`${data.nunca_publicadas}`} color="#ef4444" />
       </View>
 
-      {/* Por desarrollo */}
-      <View style={[s.section, { backgroundColor: c.card, borderColor: c.border }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <Text style={[s.secTitle, { color: c.text }]}>Por desarrollo / zona</Text>
-          <TouchableOpacity
-            style={[s.chip, { borderColor: c.border, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
-            onPress={() => setDevOrden(o => o === 'desc' ? 'asc' : 'desc')}
-          >
-            <Ionicons name={devOrden === 'desc' ? 'arrow-down' : 'arrow-up'} size={13} color={c.textSub} />
-            <Text style={[s.chipTxt, { color: c.textSub }]}>{devOrden === 'desc' ? 'Más publican' : 'Casi no publican'}</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={[s.secHint, { color: c.textMute }]}>
-          {devOrden === 'desc' ? 'Desarrollos que MÁS publican' : 'Zonas que CASI NO publican (incluye 0)'} · 👆 toca uno para ver sus propiedades
-        </Text>
-        <View style={{ marginTop: 10 }}>
-          {devsMostrar.map((d, i) => {
-            const abierto = devAbierto === d.desarrollo
-            return (
-              <View key={i}>
-                <TouchableOpacity style={s.barRow} activeOpacity={0.7} onPress={() => setDevAbierto(abierto ? null : d.desarrollo)}>
-                  <Text style={[s.barLabel, { color: abierto ? TEAL : c.text, fontWeight: abierto ? '800' : '600' }]} numberOfLines={1}>{d.desarrollo}</Text>
-                  <View style={[s.barTrack, { backgroundColor: c.border }]}>
-                    <View style={[s.barFill, { width: `${(d.veces / maxDev) * 100}%`, backgroundColor: TEAL }]} />
-                  </View>
-                  <Text style={[s.barVal, { color: c.textSub }]}>{d.veces}</Text>
-                </TouchableOpacity>
-                {abierto && (
-                  <DetalleDesarrollo c={c} props={data.todas.filter(t => t.dev === d.desarrollo)} />
-                )}
-              </View>
-            )
-          })}
-        </View>
-      </View>
+      {/* Por desarrollo (constructora) */}
+      <GraficaGrupo
+        c={c} titulo="Por desarrollo" maxV={maxDev}
+        grupos={data.por_desarrollo} orden={devOrden} setOrden={setDevOrden}
+        abierto={devAbierto} setAbierto={setDevAbierto}
+        getProps={(name) => data.todas.filter(t => t.dev === name)}
+      />
+
+      {/* Por zona (colonia detectada de la dirección) */}
+      <GraficaGrupo
+        c={c} titulo="Por zona" maxV={maxZona}
+        grupos={porZona} orden={zonaOrden} setOrden={setZonaOrden}
+        abierto={zonaAbierta} setAbierto={setZonaAbierta}
+        getProps={(name) => data.todas.filter(t => zonaDe(t) === name)}
+      />
 
       {/* Controles del listado completo */}
       <Text style={[s.secTitle, { color: c.text, marginBottom: 8 }]}>Todas las propiedades ({lista.length})</Text>
@@ -213,7 +209,54 @@ function Kpi({ c, label, value, sub, color }: any) {
   )
 }
 
-// Detalle de un desarrollo al tocar su barra: separa sus propiedades en
+// Gráfica de barras agrupada (por desarrollo o por zona), con toggle de orden y
+// barras clickeables que despliegan el detalle del grupo.
+function GraficaGrupo({ c, titulo, maxV, grupos, orden, setOrden, abierto, setAbierto, getProps }: {
+  c: any; titulo: string; maxV: number; grupos: Dev[]
+  orden: 'desc' | 'asc'; setOrden: React.Dispatch<React.SetStateAction<'desc' | 'asc'>>
+  abierto: string | null; setAbierto: (v: string | null) => void
+  getProps: (nombre: string) => Row[]
+}) {
+  const mostrar = [...grupos]
+    .sort((a, b) => orden === 'desc' ? b.veces - a.veces : a.veces - b.veces)
+    .slice(0, 15)
+  return (
+    <View style={[s.section, { backgroundColor: c.card, borderColor: c.border }]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Text style={[s.secTitle, { color: c.text }]}>{titulo}</Text>
+        <TouchableOpacity
+          style={[s.chip, { borderColor: c.border, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+          onPress={() => setOrden(o => o === 'desc' ? 'asc' : 'desc')}
+        >
+          <Ionicons name={orden === 'desc' ? 'arrow-down' : 'arrow-up'} size={13} color={c.textSub} />
+          <Text style={[s.chipTxt, { color: c.textSub }]}>{orden === 'desc' ? 'Más publican' : 'Casi no publican'}</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={[s.secHint, { color: c.textMute }]}>
+        {orden === 'desc' ? 'Los que MÁS publican' : 'Los que CASI NO publican (incluye 0)'} · 👆 toca uno para ver sus propiedades
+      </Text>
+      <View style={{ marginTop: 10 }}>
+        {mostrar.map((d, i) => {
+          const ab = abierto === d.desarrollo
+          return (
+            <View key={i}>
+              <TouchableOpacity style={s.barRow} activeOpacity={0.7} onPress={() => setAbierto(ab ? null : d.desarrollo)}>
+                <Text style={[s.barLabel, { color: ab ? TEAL : c.text, fontWeight: ab ? '800' : '600' }]} numberOfLines={1}>{d.desarrollo}</Text>
+                <View style={[s.barTrack, { backgroundColor: c.border }]}>
+                  <View style={[s.barFill, { width: `${(d.veces / maxV) * 100}%`, backgroundColor: TEAL }]} />
+                </View>
+                <Text style={[s.barVal, { color: c.textSub }]}>{d.veces}</Text>
+              </TouchableOpacity>
+              {ab && <DetalleDesarrollo c={c} props={getProps(d.desarrollo)} />}
+            </View>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
+
+// Detalle de un grupo al tocar su barra: separa sus propiedades en
 // Más publicadas / Publicación media / Nunca publicadas.
 function DetalleDesarrollo({ c, props }: { c: any; props: Row[] }) {
   const publicadas = props.filter(p => p.veces > 0)
