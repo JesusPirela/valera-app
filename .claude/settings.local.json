@@ -95,7 +95,13 @@
       "Bash(grep -rln \"passive\" node_modules/react-dom/cjs/*.js)",
       "Bash(grep -rln \"passive\" node_modules/scheduler/cjs/*.js)",
       "WebFetch(domain:docs.google.com)",
-      "WebFetch(domain:doc-0g-ac-sheets.googleusercontent.com)"
+      "WebFetch(domain:doc-0g-ac-sheets.googleusercontent.com)",
+      "Bash(python -c \"import pptx; print\\('python-pptx OK', pptx.__version__\\)\")",
+      "Bash(where python *)",
+      "Bash(python -m pip install python-pptx --quiet)",
+      "Bash(python -c \"import pptx; print\\('OK', pptx.__version__\\)\")",
+      "Bash(python gen_pptx.py)",
+      "Bash(git commit -q -m ' *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\carbe\\OneDrive\\Escritorio\\valera_app\\supabase\\_tmp_pending"

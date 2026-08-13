@@ -57,21 +57,32 @@ serve(async (req) => {
     // Anexar las propiedades favoritas a las notas para que el asesor las vea.
     if (favTexto) cli.notas = [cli.notas, favTexto].filter(Boolean).join('\n')
 
-    // ── Dedup: ya existe ese teléfono para ese asesor ─────────────
+    // ── ¿Ya existe ese teléfono para ese asesor? ─────────────────
+    // Si ya existía NO se duplica, PERO igual se avisa (antes se descartaba en
+    // silencio y por eso a veces "no notificaba").
     const telNorm = normalizarTel(telefono)
-    const { data: existentes } = await db.from('clientes').select('id, telefono').eq('responsable_id', form.owner_id)
-    const yaExiste = (existentes ?? []).some((c: any) => normalizarTel(c.telefono ?? '') === telNorm)
-    if (yaExiste) return new Response(JSON.stringify({ ok: true, duplicado: true }), { headers: CORS })
+    const { data: existentes } = await db.from('clientes').select('id, telefono, notas').eq('responsable_id', form.owner_id).is('eliminado_at', null)
+    const existente = (existentes ?? []).find((c: any) => normalizarTel(c.telefono ?? '') === telNorm)
 
-    const { data: nuevo, error: eIns } = await db.from('clientes').insert(cli).select('id').single()
-    if (eIns || !nuevo) return err('No se pudo registrar. Intenta de nuevo.', 500)
+    let clienteId: string
+    const esDuplicado = !!existente
+    if (existente) {
+      clienteId = existente.id
+      if (favTexto) {
+        await db.from('clientes').update({ notas: [existente.notas, favTexto].filter(Boolean).join('\n') }).eq('id', clienteId)
+      }
+    } else {
+      const { data: nuevo, error: eIns } = await db.from('clientes').insert(cli).select('id').single()
+      if (eIns || !nuevo) return err('No se pudo registrar. Intenta de nuevo.', 500)
+      clienteId = nuevo.id
+    }
 
     // ── Notificar al asesor: push in-app + WhatsApp ───────────────
     await db.from('notificaciones').insert({
-      user_id: form.owner_id, tipo: 'nuevo_cliente', cliente_id: nuevo.id,
-      titulo: '📝 Nuevo registro desde tu link',
+      user_id: form.owner_id, tipo: 'nuevo_cliente', cliente_id: clienteId,
+      titulo: esDuplicado ? '🔁 Un cliente volvió a registrarse' : '📝 Nuevo registro desde tu link',
       mensaje: `${nombre} · ${telefono}${form.titulo ? ` — ${form.titulo}` : ''}${favTexto ? `\n${favTexto}` : ''}`,
-      accion_url: `/(prospectador)/detalle-cliente?id=${nuevo.id}`,
+      accion_url: `/(prospectador)/detalle-cliente?id=${clienteId}`,
     })
     try {
       const { data: asesor } = await db.from('profiles').select('telefono').eq('id', form.owner_id).maybeSingle()
@@ -85,7 +96,7 @@ serve(async (req) => {
       }
     } catch { /* best-effort */ }
 
-    return new Response(JSON.stringify({ ok: true }), { headers: CORS })
+    return new Response(JSON.stringify({ ok: true, duplicado: esDuplicado }), { headers: CORS })
   } catch (e) {
     return err(`Error: ${String((e as any)?.message ?? e)}`, 500)
   }

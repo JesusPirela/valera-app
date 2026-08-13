@@ -14,7 +14,7 @@ BEGIN
     SELECT propiedad_id, count(*) veces FROM publicacion_log GROUP BY propiedad_id
   ),
   base AS (
-    SELECT p.id, p.codigo, p.titulo, p.zona, nullif(trim(p.nombre_constructora), '') dev,
+    SELECT p.id, p.codigo, p.titulo, p.direccion, p.zona, nullif(trim(p.nombre_constructora), '') dev,
            coalesce(c.veces, 0) veces
     FROM propiedades p LEFT JOIN counts c ON c.propiedad_id = p.id
   )
@@ -30,7 +30,7 @@ BEGIN
                 FROM base WHERE dev IS NOT NULL GROUP BY dev ORDER BY veces DESC) d),
     -- Listado COMPLETO de todas las propiedades con su conteo (para tabla filtrable).
     'todas', (SELECT coalesce(jsonb_agg(t), '[]'::jsonb) FROM (
-                SELECT codigo, titulo, dev, veces FROM base ORDER BY veces DESC, titulo) t)
+                SELECT codigo, titulo, direccion, dev, veces FROM base ORDER BY veces DESC, titulo) t)
   ) INTO res;
   RETURN res;
 END $func$;
