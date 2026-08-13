@@ -73,6 +73,7 @@ const NAV_ITEMS = [
   { label: 'Leads campañas', icon: '📢', route: '/(admin)/leads-campanias', color: '#1565C0', grupo: 'Gestión' },
   { label: 'Proyectos', icon: '💼', route: '/(admin)/proyectos', color: '#c9a84c', grupo: 'Gestión' },
   { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828', grupo: 'Gestión' },
+  { label: 'Agenda', icon: '📇', route: '/(admin)/agenda', color: '#00838F', grupo: 'Gestión' },
   { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F', grupo: 'Gestión' },
   { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2', grupo: 'Gestión' },
   { label: 'Monitoreo', icon: '🩺', route: '/(admin)/monitoreo', color: '#00695C', grupo: 'Gestión' },
