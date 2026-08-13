@@ -33,7 +33,7 @@ type Lead = {
   created_at: string
 }
 
-type SortCol = 'nombre' | 'telefono' | 'zona' | 'presupuesto'
+type SortCol = 'nombre' | 'telefono' | 'zona' | 'presupuesto' | 'ingreso'
 type Sort = { col: SortCol; dir: 'asc' | 'desc' }
 
 // Parseo heurístico del presupuesto en texto libre → número, para ordenar.
@@ -65,6 +65,18 @@ function llamar(tel: string) { Linking.openURL(`tel:${tel}`) }
 function fechaCorta(iso: string): string {
   try { return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) } catch { return '' }
 }
+// Fecha de ingreso legible: "hoy 14:30", "ayer 09:12" o "12 ago 14:30".
+function fechaIngreso(iso: string): string {
+  try {
+    const d = new Date(iso)
+    const hora = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    const hoy = new Date(); const ayer = new Date(Date.now() - 86400000)
+    const mismoDia = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+    if (mismoDia(d, hoy)) return `hoy ${hora}`
+    if (mismoDia(d, ayer)) return `ayer ${hora}`
+    return `${d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} ${hora}`
+  } catch { return '' }
+}
 
 // Semáforo por lead: verde = atendido o recién llegado; amarillo = +20 min sin
 // atender; rojo = +1 h sin atender. "Sin atender" = WhatsApp y Llamar en 0.
@@ -86,7 +98,7 @@ function normalizar(s: string | null): string {
 export default function LeadsCampania() {
   const c = useColors()
   const qc = useQueryClient()
-  const [sort, setSort] = useState<Sort>({ col: 'nombre', dir: 'asc' })
+  const [sort, setSort] = useState<Sort>({ col: 'ingreso', dir: 'desc' })
   const [busqueda, setBusqueda] = useState('')
   const [tab, setTab] = useState<'activos' | 'historial'>('activos')
   const [notaModal, setNotaModal] = useState<{ id: string; nombre: string; value: string } | null>(null)
@@ -145,6 +157,7 @@ export default function LeadsCampania() {
       else if (sort.col === 'telefono') cmp = (a.telefono || '').localeCompare(b.telefono || '')
       else if (sort.col === 'zona') cmp = prettyZona(a.zona_busqueda).localeCompare(prettyZona(b.zona_busqueda), 'es')
       else if (sort.col === 'presupuesto') cmp = parsePresu(a.presupuesto) - parsePresu(b.presupuesto)
+      else if (sort.col === 'ingreso') cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       return sort.dir === 'asc' ? cmp : -cmp
     })
     return arr
@@ -233,8 +246,8 @@ export default function LeadsCampania() {
               ? `${activos.length} por atender · toca un encabezado para ordenar`
               : `${historial.length} enviados a tu CRM normal`}
           </Text>
-          {!(sort.col === 'nombre' && sort.dir === 'asc') && (
-            <TouchableOpacity style={styles.limpiarBtn} onPress={() => setSort({ col: 'nombre', dir: 'asc' })} activeOpacity={0.8}>
+          {!(sort.col === 'ingreso' && sort.dir === 'desc') && (
+            <TouchableOpacity style={styles.limpiarBtn} onPress={() => setSort({ col: 'ingreso', dir: 'desc' })} activeOpacity={0.8}>
               <Ionicons name="refresh" size={13} color="#7c3aed" />
               <Text style={styles.limpiarTxt}>Limpiar orden</Text>
             </TouchableOpacity>
@@ -305,6 +318,7 @@ export default function LeadsCampania() {
                 <HeaderCell col="telefono" label="Teléfono" w={150} />
                 <HeaderCell col="zona" label="Zona" w={190} />
                 <HeaderCell col="presupuesto" label="Presupuesto" w={150} />
+                <HeaderCell col="ingreso" label="Ingresó" w={140} />
                 <View style={[styles.th, { width: 92 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>WhatsApp</Text></View>
                 <View style={[styles.th, { width: 88 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Llamar</Text></View>
                 <View style={[styles.th, { width: 150 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Notas</Text></View>
@@ -337,6 +351,9 @@ export default function LeadsCampania() {
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.td, { width: 150 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
                     <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{prettyPresu(l.presupuesto)}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.td, { width: 140 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
+                    <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={1}>{fechaIngreso(l.created_at)}</Text>
                   </TouchableOpacity>
                   <View style={[styles.td, { width: 92, alignItems: 'center' }]}>
                     <AccionBtn icon="logo-whatsapp" color="#16a34a" count={l.wa_count ?? 0} onPress={() => contactarWhatsApp(l)} />
