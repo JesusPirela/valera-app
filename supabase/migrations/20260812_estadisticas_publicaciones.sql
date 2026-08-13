@@ -23,9 +23,11 @@ BEGIN
     'propiedades_totales',    (SELECT count(*) FROM propiedades),
     'propiedades_publicadas', (SELECT count(*) FROM counts),
     'nunca_publicadas',       (SELECT count(*) FROM base WHERE veces = 0),
+    -- TODOS los desarrollos (incluye los de 0 publicaciones) para poder ver
+    -- también las zonas que casi no publican. El cliente ordena y recorta.
     'por_desarrollo', (SELECT coalesce(jsonb_agg(d), '[]'::jsonb) FROM (
                 SELECT dev desarrollo, count(*) propiedades, coalesce(sum(veces), 0) veces
-                FROM base WHERE dev IS NOT NULL GROUP BY dev ORDER BY veces DESC LIMIT 15) d),
+                FROM base WHERE dev IS NOT NULL GROUP BY dev ORDER BY veces DESC) d),
     -- Listado COMPLETO de todas las propiedades con su conteo (para tabla filtrable).
     'todas', (SELECT coalesce(jsonb_agg(t), '[]'::jsonb) FROM (
                 SELECT codigo, titulo, dev, veces FROM base ORDER BY veces DESC, titulo) t)

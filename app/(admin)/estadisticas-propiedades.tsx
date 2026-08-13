@@ -32,6 +32,7 @@ export default function EstadisticasPropiedades() {
   const [busqueda, setBusqueda] = useState('')
   const [ordenDesc, setOrdenDesc] = useState(true)
   const [devAbierto, setDevAbierto] = useState<string | null>(null)
+  const [devOrden, setDevOrden] = useState<'desc' | 'asc'>('desc')
 
   const { data, isLoading, error, refetch, isRefetching } = useQuery<Stats>({
     queryKey: ['estadisticas-publicaciones'],
@@ -64,6 +65,11 @@ export default function EstadisticasPropiedades() {
 
   const maxDev = Math.max(1, ...data.por_desarrollo.map(d => d.veces))
   const maxVeces = Math.max(1, ...data.todas.map(r => r.veces))
+  // Top 15 del orden elegido: "desc" = más publicadas; "asc" = las que casi no
+  // publican (incluye desarrollos con 0 publicaciones).
+  const devsMostrar = [...data.por_desarrollo]
+    .sort((a, b) => devOrden === 'desc' ? b.veces - a.veces : a.veces - b.veces)
+    .slice(0, 15)
 
   const header = (
     <View>
@@ -78,11 +84,21 @@ export default function EstadisticasPropiedades() {
 
       {/* Por desarrollo */}
       <View style={[s.section, { backgroundColor: c.card, borderColor: c.border }]}>
-        <Text style={[s.secTitle, { color: c.text }]}>Por desarrollo / zona</Text>
-        <Text style={[s.secHint, { color: c.textMute }]}>Desarrollos con nombre, por total de publicaciones</Text>
-        <Text style={[s.secHint, { color: c.textMute, marginTop: 2 }]}>👆 Toca un desarrollo para ver sus propiedades</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <Text style={[s.secTitle, { color: c.text }]}>Por desarrollo / zona</Text>
+          <TouchableOpacity
+            style={[s.chip, { borderColor: c.border, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+            onPress={() => setDevOrden(o => o === 'desc' ? 'asc' : 'desc')}
+          >
+            <Ionicons name={devOrden === 'desc' ? 'arrow-down' : 'arrow-up'} size={13} color={c.textSub} />
+            <Text style={[s.chipTxt, { color: c.textSub }]}>{devOrden === 'desc' ? 'Más publican' : 'Casi no publican'}</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={[s.secHint, { color: c.textMute }]}>
+          {devOrden === 'desc' ? 'Desarrollos que MÁS publican' : 'Zonas que CASI NO publican (incluye 0)'} · 👆 toca uno para ver sus propiedades
+        </Text>
         <View style={{ marginTop: 10 }}>
-          {data.por_desarrollo.map((d, i) => {
+          {devsMostrar.map((d, i) => {
             const abierto = devAbierto === d.desarrollo
             return (
               <View key={i}>
