@@ -21,6 +21,21 @@ export function useScrollHorizontalConRueda() {
     if (!node?.addEventListener) return
     const handler = (e: WheelEvent) => {
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+      // Si el cursor está sobre un contenedor que SÍ puede scrollear vertical en
+      // esa dirección (ej. una columna del kanban con más tarjetas de las que
+      // caben), déjalo scrollear vertical y no lo conviertas a horizontal. Solo
+      // se redirige a horizontal cuando ya no hay nada que bajar/subir ahí.
+      let el = e.target as HTMLElement | null
+      while (el && el !== node) {
+        const oy = getComputedStyle(el).overflowY
+        if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
+          const alTope  = e.deltaY < 0 && el.scrollTop <= 0
+          const alFondo = e.deltaY > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight - 1
+          if (!alTope && !alFondo) return // la columna consume el scroll vertical
+          break
+        }
+        el = el.parentElement
+      }
       node.scrollLeft += e.deltaY
       e.preventDefault()
       e.stopPropagation()
