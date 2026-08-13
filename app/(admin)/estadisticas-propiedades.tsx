@@ -20,7 +20,7 @@ type Stats = {
 }
 
 const TEAL = '#0277BD'
-type Filtro = 'todas' | 'publicadas' | 'nunca'
+type Filtro = 'todas' | 'publicadas' | 'nunca' | 'una' | 'dos' | 'tresmas'
 
 function norm(s: string | null): string {
   return (s ?? '').toLowerCase().normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]', 'g'), '')
@@ -49,6 +49,9 @@ export default function EstadisticasPropiedades() {
     let arr = data.todas
     if (filtro === 'publicadas') arr = arr.filter(r => r.veces > 0)
     else if (filtro === 'nunca') arr = arr.filter(r => r.veces === 0)
+    else if (filtro === 'una') arr = arr.filter(r => r.veces === 1)
+    else if (filtro === 'dos') arr = arr.filter(r => r.veces === 2)
+    else if (filtro === 'tresmas') arr = arr.filter(r => r.veces >= 3)
     const q = norm(busqueda.trim())
     if (q) arr = arr.filter(r => norm(r.codigo).includes(q) || norm(r.titulo).includes(q) || norm(r.dev).includes(q))
     arr = [...arr].sort((a, b) => ordenDesc ? b.veces - a.veces : a.veces - b.veces)
@@ -65,6 +68,15 @@ export default function EstadisticasPropiedades() {
 
   const maxDev = Math.max(1, ...data.por_desarrollo.map(d => d.veces))
   const maxVeces = Math.max(1, ...data.todas.map(r => r.veces))
+  // Conteo por número de publicaciones (para los filtros y sus etiquetas).
+  const cnt = {
+    todas: data.todas.length,
+    publicadas: data.todas.filter(r => r.veces > 0).length,
+    nunca: data.nunca_publicadas,
+    una: data.todas.filter(r => r.veces === 1).length,
+    dos: data.todas.filter(r => r.veces === 2).length,
+    tresmas: data.todas.filter(r => r.veces >= 3).length,
+  }
   // Top 15 del orden elegido: "desc" = más publicadas; "asc" = las que casi no
   // publican (incluye desarrollos con 0 publicaciones).
   const devsMostrar = [...data.por_desarrollo]
@@ -121,14 +133,27 @@ export default function EstadisticasPropiedades() {
       {/* Controles del listado completo */}
       <Text style={[s.secTitle, { color: c.text, marginBottom: 8 }]}>Todas las propiedades ({lista.length})</Text>
       <View style={s.chips}>
-        {([['todas', 'Todas'], ['publicadas', 'Publicadas'], ['nunca', 'Nunca']] as [Filtro, string][]).map(([k, lbl]) => (
+        {([
+          ['todas', `Todas (${cnt.todas})`],
+          ['publicadas', `Publicadas (${cnt.publicadas})`],
+          ['una', `1 vez (${cnt.una})`],
+          ['dos', `2 veces (${cnt.dos})`],
+          ['tresmas', `3+ (${cnt.tresmas})`],
+          ['nunca', `Nunca (${cnt.nunca})`],
+        ] as [Filtro, string][]).map(([k, lbl]) => (
           <TouchableOpacity key={k} style={[s.chip, { borderColor: c.border }, filtro === k && { backgroundColor: TEAL, borderColor: TEAL }]} onPress={() => setFiltro(k)}>
             <Text style={[s.chipTxt, { color: filtro === k ? '#fff' : c.textSub }]}>{lbl}</Text>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity style={[s.chip, { borderColor: c.border, flexDirection: 'row', alignItems: 'center', gap: 4 }]} onPress={() => setOrdenDesc(o => !o)}>
-          <Ionicons name={ordenDesc ? 'arrow-down' : 'arrow-up'} size={13} color={c.textSub} />
-          <Text style={[s.chipTxt, { color: c.textSub }]}>{ordenDesc ? 'Más' : 'Menos'}</Text>
+      </View>
+      {/* Orden explícito: dos botones, para que sea obvio */}
+      <View style={[s.chips, { marginTop: -2 }]}>
+        <Text style={[s.chipTxt, { color: c.textMute, alignSelf: 'center', marginRight: 2 }]}>Ordenar:</Text>
+        <TouchableOpacity style={[s.chip, { borderColor: c.border }, !ordenDesc && { backgroundColor: '#f59e0b', borderColor: '#f59e0b' }]} onPress={() => setOrdenDesc(false)}>
+          <Text style={[s.chipTxt, { color: !ordenDesc ? '#fff' : c.textSub }]}>↑ Menos publicadas primero</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.chip, { borderColor: c.border }, ordenDesc && { backgroundColor: '#16a34a', borderColor: '#16a34a' }]} onPress={() => setOrdenDesc(true)}>
+          <Text style={[s.chipTxt, { color: ordenDesc ? '#fff' : c.textSub }]}>↓ Más publicadas primero</Text>
         </TouchableOpacity>
       </View>
       <View style={[s.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
