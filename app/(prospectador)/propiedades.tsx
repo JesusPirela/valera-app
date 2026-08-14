@@ -298,18 +298,29 @@ const PropiedadCard = memo(function PropiedadCard({
           <TouchableOpacity
             style={[
               styles.publicadaBtn,
-              { borderColor: isUnlocked ? primaryColor : '#aaa' },
-              veces > 0 && isUnlocked && { backgroundColor: primaryColor, borderColor: primaryColor },
-              (!isUnlocked || isToggling || veces >= 10) && styles.publicadaBtnDisabled,
+              { borderColor: primaryColor },
+              veces > 0 && { backgroundColor: primaryColor, borderColor: primaryColor },
+              (isToggling || veces >= 10) && styles.publicadaBtnDisabled,
             ]}
-            onPress={(e) => { e.stopPropagation(); if (isUnlocked) onPublish(item.id) }}
-            disabled={!isUnlocked || isToggling || veces >= 10}
+            onPress={(e) => {
+              e.stopPropagation()
+              if (!isUnlocked) {
+                Alert.alert(
+                  'Primero prepara la propiedad',
+                  'Para marcarla como publicada, entra al detalle de la propiedad y copia la descripción o descarga las imágenes.',
+                  [{ text: 'Entendido' }]
+                )
+                return
+              }
+              onPublish(item.id)
+            }}
+            disabled={isToggling || veces >= 10}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             {isToggling ? (
               <ActivityIndicator size="small" color={veces > 0 ? '#fff' : primaryColor} />
             ) : (
-              <Text style={[styles.publicadaBtnText, { color: !isUnlocked ? '#aaa' : veces > 0 ? '#fff' : primaryColor }]} maxFontSizeMultiplier={1.2} numberOfLines={1}>
+              <Text style={[styles.publicadaBtnText, { color: veces > 0 ? '#fff' : primaryColor }]} maxFontSizeMultiplier={1.2} numberOfLines={1}>
                 {veces >= 10 ? '10/10 ✅' : veces > 0 ? `${veces}/10` : 'Marcar como publicada'}
               </Text>
             )}
