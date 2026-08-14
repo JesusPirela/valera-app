@@ -146,6 +146,14 @@ function diasVencido(c: Cliente): number {
   return Math.max(0, Math.floor((now - vencioEn) / 86400000))
 }
 
+// Normaliza un teléfono para comparar duplicados (quita no-dígitos y el prefijo MX).
+function normalizarTel(tel: string): string {
+  const d = (tel ?? '').replace(/\D/g, '')
+  if (d.length === 12 && d.startsWith('52')) return d.slice(2)
+  if (d.length === 13 && d.startsWith('521')) return d.slice(3)
+  return d
+}
+
 // Un cliente "necesita seguimiento" (vencido) cuando tiene un contacto pendiente
 // que ya pasó de su fecha y sigue sin resolverse. Se considera vencido si:
 //  · su próximo contacto (proximo_contacto) ya pasó, o
@@ -407,7 +415,9 @@ export default function CRM() {
   const [busqueda, setBusqueda]           = useState('')
   const [estadoFiltro, setEstadoFiltro]   = useState<string | null>(null)
   const [filtroVencidos, setFiltroVencidos] = useState(false)
-  const [bannerCerrado, setBannerCerrado]   = useState(false)
+  const [bannerCerrado, setBannerCerrado]       = useState(false)
+  const [bannerDupCerrado, setBannerDupCerrado] = useState(false)
+  const [showDuplicadosModal, setShowDuplicadosModal] = useState(false)
   const [opFiltro, setOpFiltro]           = useState<'venta' | 'renta' | null>(null)
   const [sortBy, setSortBy]               = useState<SortBy>('reciente')
   const [showSort, setShowSort]           = useState(false)
@@ -640,6 +650,25 @@ export default function CRM() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [clientesCrm, tick]
   )
+
+  // Grupos de clientes con el mismo teléfono (duplicados). Cada grupo ≥ 2 clientes.
+  // El primero de cada grupo es el más reciente (sugerido para conservar).
+  const gruposDuplicados = useMemo(() => {
+    const mapa = new Map<string, Cliente[]>()
+    for (const cl of clientesCrm) {
+      const tel = normalizarTel(cl.telefono)
+      if (!tel || tel.length < 7) continue
+      if (!mapa.has(tel)) mapa.set(tel, [])
+      mapa.get(tel)!.push(cl)
+    }
+    const grupos: Cliente[][] = []
+    for (const [, arr] of mapa) {
+      if (arr.length > 1) {
+        grupos.push([...arr].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
+      }
+    }
+    return grupos
+  }, [clientesCrm])
 
   // Reabre el banner si aparece un cliente nuevo en riesgo después de cerrarlo
   const prevRiesgoLen = React.useRef(0)
@@ -1105,6 +1134,22 @@ export default function CRM() {
     queryClient.invalidateQueries({ queryKey: ['clientes'] })
   }
 
+  async function eliminarDuplicado(item: Cliente) {
+    // Actualización optimista — el grupo desaparece de inmediato en el modal
+    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v5'], (old) =>
+      (old ?? []).filter(cl => cl.id !== item.id)
+    )
+    const { error } = await supabase
+      .from('clientes')
+      .update({ eliminado_at: new Date().toISOString() })
+      .eq('id', item.id)
+    if (error) {
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
+      if (Platform.OS === 'web') window.alert('No se pudo eliminar el cliente.')
+      else Alert.alert('Error', 'No se pudo eliminar el cliente.')
+    }
+  }
+
   // ── Excel table columns ───────────────────────────────────────
   type TCol = { id: string; label: string; flex: number; mw: number; sortable?: boolean; filterable?: boolean }
   const TABLE_COLS: TCol[] = isWeb ? [
@@ -1308,6 +1353,29 @@ export default function CRM() {
             {!vistaExcel && clientesEnRiesgo.length > 3 && (
               <Text style={s.opMas}>+{clientesEnRiesgo.length - 3} más — toca "Ver todos" para verlos</Text>
             )}
+          </View>
+        )}
+
+        {/* ── Clientes duplicados ── */}
+        {gruposDuplicados.length > 0 && !bannerDupCerrado && (
+          <View style={s.dupBanner}>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
+              onPress={() => setShowDuplicadosModal(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={{ fontSize: 18 }}>🔁</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.dupBannerTitulo}>
+                  {gruposDuplicados.reduce((sum, g) => sum + g.length, 0)} clientes con número repetido
+                </Text>
+                <Text style={s.dupBannerSub}>Toca para revisar y limpiar duplicados</Text>
+              </View>
+              <Text style={s.dupBannerCta}>Ver →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setBannerDupCerrado(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingLeft: 8 }}>
+              <Ionicons name="close" size={18} color="#d97706" />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -2019,12 +2087,129 @@ export default function CRM() {
         onClose={() => setImportModal(false)}
         onConfirm={handleImportConfirm}
       />
+
+      {/* ── Modal: clientes duplicados ── */}
+      <Modal visible={showDuplicadosModal} transparent animationType="slide" onRequestClose={() => setShowDuplicadosModal(false)}>
+        <View style={s.dupModalBg}>
+          <View style={[s.dupModalSheet, { backgroundColor: c.bg }]}>
+            {/* Header */}
+            <View style={[s.dupModalHeader, { borderBottomColor: c.border }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.dupModalTitulo, { color: c.text }]}>🔁 Clientes duplicados</Text>
+                <Text style={[s.dupModalSub, { color: c.textMute }]}>
+                  {gruposDuplicados.length} grupo{gruposDuplicados.length !== 1 ? 's' : ''} con número repetido
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowDuplicadosModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={24} color={c.textMute} />
+              </TouchableOpacity>
+            </View>
+
+            {gruposDuplicados.length === 0 ? (
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                <Text style={{ fontSize: 40 }}>✅</Text>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: c.text }}>¡Sin duplicados!</Text>
+                <TouchableOpacity style={s.dupBtnCerrar} onPress={() => setShowDuplicadosModal(false)}>
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Cerrar</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <FlatList
+                data={gruposDuplicados}
+                keyExtractor={(_, i) => String(i)}
+                contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: 40 }}
+                renderItem={({ item: grupo }) => (
+                  <View style={[s.dupGrupo, { backgroundColor: c.card, borderColor: c.border }]}>
+                    <Text style={[s.dupGrupoTel, { color: c.textMute }]}>📱 {grupo[0].telefono}</Text>
+                    {grupo.map((cl, idx) => (
+                      <View key={cl.id} style={[s.dupClienteRow, { borderTopColor: c.border }]}>
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={[s.dupClienteNombre, { color: c.text }]} numberOfLines={1}>{cl.nombre}</Text>
+                            {idx === 0 && (
+                              <View style={s.dupBadgeReciente}>
+                                <Text style={s.dupBadgeRecienteTxt}>Más reciente</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={[s.dupClienteInfo, { color: c.textMute }]}>
+                            {ESTADOS[cl.estado]?.label ?? cl.estado} · {new Date(cl.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={s.dupBtnElim}
+                          onPress={() => {
+                            const confirmar = Platform.OS === 'web'
+                              ? window.confirm(`¿Eliminar a "${cl.nombre}"? Esta acción no se puede deshacer.`)
+                              : undefined
+                            if (Platform.OS === 'web') {
+                              if (confirmar) eliminarDuplicado(cl)
+                            } else {
+                              Alert.alert('Eliminar duplicado', `¿Eliminar a "${cl.nombre}"?`, [
+                                { text: 'Cancelar', style: 'cancel' },
+                                { text: 'Eliminar', style: 'destructive', onPress: () => eliminarDuplicado(cl) },
+                              ])
+                            }
+                          }}
+                        >
+                          <Ionicons name="trash-outline" size={13} color="#fff" />
+                          <Text style={s.dupBtnElimTxt}>Eliminar</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </>
   )
 }
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f1f5f9' },
+
+  // Banner duplicados
+  dupBanner: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fffbeb', borderLeftWidth: 4, borderLeftColor: '#f59e0b',
+    marginHorizontal: 12, marginTop: 8, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+  },
+  dupBannerTitulo: { fontSize: 13, fontWeight: '700', color: '#92400e' },
+  dupBannerSub:    { fontSize: 11, color: '#b45309', marginTop: 1 },
+  dupBannerCta:    { fontSize: 12, fontWeight: '700', color: '#d97706', marginRight: 4 },
+
+  // Modal duplicados
+  dupModalBg:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  dupModalSheet:  { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%', flex: 0 },
+  dupModalHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 18, paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  dupModalTitulo: { fontSize: 16, fontWeight: '800' },
+  dupModalSub:    { fontSize: 12, marginTop: 2 },
+
+  // Grupos
+  dupGrupo:       { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
+  dupGrupoTel:    { fontSize: 12, fontWeight: '600', paddingHorizontal: 14, paddingVertical: 8 },
+  dupClienteRow:  {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1,
+  },
+  dupClienteNombre: { fontSize: 13, fontWeight: '700' },
+  dupClienteInfo:   { fontSize: 11, marginTop: 2 },
+  dupBadgeReciente: { backgroundColor: '#d1fae5', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  dupBadgeRecienteTxt: { fontSize: 9, fontWeight: '800', color: '#065f46' },
+  dupBtnElim:     {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#ef4444', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
+  },
+  dupBtnElimTxt:  { fontSize: 11, fontWeight: '700', color: '#fff' },
+  dupBtnCerrar:   { backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 24, paddingVertical: 10 },
   dpOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
   dpModal: {
     borderRadius: 20, padding: 24, width: '88%', maxWidth: 360,
