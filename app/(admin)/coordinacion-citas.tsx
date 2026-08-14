@@ -1186,13 +1186,8 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
         </View>
       </View>
 
-      {/* Tarjetas */}
-      <ScrollView
-        style={col.scroll}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[col.list, isDragOver && { backgroundColor: inf.color + '11', borderRadius: 8 }]}
-        nestedScrollEnabled
-      >
+      {/* Tarjetas — altura natural; la página entera scrollea vertical */}
+      <View style={[col.list, isDragOver && { backgroundColor: inf.color + '11', borderRadius: 8 }]}>
         {citas.length === 0 ? (
           <View style={[col.empty, isDragOver && { borderWidth: 2, borderColor: inf.color + '44', borderStyle: 'dashed', borderRadius: 8 }]}>
             <Text style={[col.emptyTxt, isDragOver && { color: inf.color }]}>
@@ -1211,14 +1206,14 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
             />
           ))
         )}
-      </ScrollView>
+      </View>
     </View>
   )
 
   if (Platform.OS !== 'web') return inner
 
   return createElement('div', {
-    style: { width: COL_W, height: '100%', marginRight: 10, display: 'flex', flexDirection: 'column', flexShrink: 0 },
+    style: { width: COL_W, marginRight: 10, display: 'flex', flexDirection: 'column', flexShrink: 0, alignSelf: 'flex-start' },
     onDragEnter: (e: any) => { e.preventDefault(); dragCounter.current++; if (dragCounter.current === 1) onDragOver?.() },
     onDragOver: (e: any) => { e.preventDefault() },
     onDragLeave: () => { dragCounter.current--; if (dragCounter.current === 0) onDragLeave?.() },
@@ -1227,7 +1222,7 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
 }
 
 const col = StyleSheet.create({
-  wrap:       { marginRight: 10, flex: 1 },
+  wrap:       { marginRight: 10, alignSelf: 'flex-start' },
   header:     {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 8,
@@ -1245,7 +1240,7 @@ const col = StyleSheet.create({
   // de la columna (debajo del header) y no puede recortar/scrollear su
   // contenido — crecía con las tarjetas y arrastraba a toda la página.
   scroll:       { flex: 1 },
-  list:         { paddingBottom: 120 },
+  list:         { paddingBottom: 8 },
   empty:        { alignItems: 'center', paddingVertical: 20 },
   emptyTxt:     { fontSize: 12, color: '#cbd5e1' },
 })
@@ -1494,8 +1489,9 @@ export default function CoordinacionCitas() {
   const altoTablero = Math.max(240, winHeight - altoEncabezado - altoFiltroOp)
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
-      <View onLayout={e => setAltoEncabezado(e.nativeEvent.layout.height)}>
+    <View style={{ flex: 1, backgroundColor: '#f1f5f9' }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator>
+      <View>
 
       {/* ── Header ── */}
       <View style={s.header}>
@@ -1708,7 +1704,7 @@ export default function CoordinacionCitas() {
             <Text style={{ color: '#94a3b8', fontSize: 13 }}>Cargando pipeline…</Text>
           </View>
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+          <View>
             <View style={s.seccionHead}>
               <Text style={s.seccionTitulo}>🏠 Venta</Text>
               <Text style={s.seccionCnt}>{citasVenta.length}</Text>
@@ -1760,7 +1756,7 @@ export default function CoordinacionCitas() {
                 />
               ))}
             </ScrollView>
-          </ScrollView>
+          </View>
         )
       ) : (
         <>
@@ -1797,8 +1793,9 @@ export default function CoordinacionCitas() {
               horizontal
               showsHorizontalScrollIndicator
               contentContainerStyle={s.boardContent}
-              style={{ height: altoTablero, backgroundColor: '#f1f5f9' }}
+              style={{ backgroundColor: '#f1f5f9' }}
               decelerationRate="fast"
+              nestedScrollEnabled
             >
               {ORDEN_ESTADOS.map(estado => (
                 <KanbanColumn
@@ -1839,6 +1836,7 @@ export default function CoordinacionCitas() {
           )}
         </>
       )}
+      </ScrollView>
 
       {/* ── Modales — renderizado condicional para que el estado local
            se inicialice fresco con los datos reales de cada cita ── */}
@@ -1946,10 +1944,10 @@ const s = StyleSheet.create({
   // height 100% explícito (no solo flexDirection:row): cada columna necesita una
   // altura real de la que heredar para poder scrollear su propia lista de tarjetas
   // sin depender del scroll general de la página — flex:1 solo no basta aquí.
-  boardContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 40, flexDirection: 'row', height: '100%' },
+  boardContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 20, flexDirection: 'row', alignItems: 'flex-start' },
   // Vista asesor: altura fija porque va dentro de un ScrollView vertical que
   // apila Venta y Renta (flex:1 no funciona dentro de un scroll de contenido).
-  boardAsesor:  { height: 440, backgroundColor: '#f1f5f9' },
+  boardAsesor:  { backgroundColor: '#f1f5f9' },
   seccionHead:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingTop: 16, paddingBottom: 6 },
   seccionTitulo:{ fontSize: 15, fontWeight: '800', color: '#0f172a' },
   seccionCnt:   { fontSize: 12, fontWeight: '700', color: '#64748b', backgroundColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },

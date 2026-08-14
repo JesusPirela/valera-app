@@ -2158,6 +2158,7 @@ export default function CRM() {
                 ))}
               </ScrollView>
             )}
+          </View>
         </View>
       </Modal>
     </>
