@@ -50,6 +50,7 @@ import RachaHeader from '../../components/RachaHeader'
 import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import MiniMapa from '../../components/MiniMapa'
+import { getDesbloqueadas } from '../../lib/publicarUnlock'
 
 type Propiedad = {
   id: string
@@ -147,7 +148,7 @@ function mezclar<T>(arr: T[]): T[] {
 const PropiedadCard = memo(function PropiedadCard({
   item, width, veces, isToggling, destacada, esAdmin, primaryColor,
   cardBg, cardBorder, isOnline, imgOpts, empresaMatriz, totalPublicadores,
-  isNuevaParaTi, onOpen, onShare, onPublish, onZoom,
+  isNuevaParaTi, isUnlocked, onOpen, onShare, onPublish, onZoom,
 }: {
   item: Propiedad; width?: number; veces: number; isToggling: boolean
   destacada: boolean; esAdmin: boolean; primaryColor: string
@@ -155,6 +156,7 @@ const PropiedadCard = memo(function PropiedadCard({
   empresaMatriz?: string | null
   totalPublicadores: number
   isNuevaParaTi: boolean
+  isUnlocked: boolean
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
 }) {
@@ -296,21 +298,19 @@ const PropiedadCard = memo(function PropiedadCard({
           <TouchableOpacity
             style={[
               styles.publicadaBtn,
-              { borderColor: primaryColor },
-              veces > 0 && { backgroundColor: primaryColor, borderColor: primaryColor },
-              (isToggling || veces >= 10) && styles.publicadaBtnDisabled,
+              { borderColor: isUnlocked ? primaryColor : '#aaa' },
+              veces > 0 && isUnlocked && { backgroundColor: primaryColor, borderColor: primaryColor },
+              (!isUnlocked || isToggling || veces >= 10) && styles.publicadaBtnDisabled,
             ]}
-            // Offline el botón SIGUE activo: la publicación se encola y se envía
-            // sola al reconectar (antes quedaba deshabilitado/mudo sin conexión).
-            onPress={(e) => { e.stopPropagation(); onPublish(item.id) }}
-            disabled={isToggling || veces >= 10}
+            onPress={(e) => { e.stopPropagation(); if (isUnlocked) onPublish(item.id) }}
+            disabled={!isUnlocked || isToggling || veces >= 10}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             {isToggling ? (
               <ActivityIndicator size="small" color={veces > 0 ? '#fff' : primaryColor} />
             ) : (
-              <Text style={[styles.publicadaBtnText, { color: veces > 0 ? '#fff' : primaryColor }]} maxFontSizeMultiplier={1.2} numberOfLines={1}>
-                {veces === 0 ? 'Publicar' : veces >= 10 ? '10/10 ✅' : `${veces}/10`}
+              <Text style={[styles.publicadaBtnText, { color: !isUnlocked ? '#aaa' : veces > 0 ? '#fff' : primaryColor }]} maxFontSizeMultiplier={1.2} numberOfLines={1}>
+                {veces >= 10 ? '10/10 ✅' : veces > 0 ? `${veces}/10` : 'Marcar como publicada'}
               </Text>
             )}
           </TouchableOpacity>
@@ -358,6 +358,13 @@ export default function ProspectadorPropiedades() {
   const shuffleMapRef = useRef<Map<string, number>>(new Map())
   const [shuffleTick, setShuffleTick] = useState(0)
   const [, setZonasExpandidas] = useState<Set<string>>(new Set())
+  // Propiedades desbloqueadas para publicar (copiaron desc. o descargaron fotos)
+  const [desbloqueadas, setDesbloqueadas] = useState<Set<string>>(new Set())
+  useFocusEffect(useCallback(() => {
+    const ids = getDesbloqueadas()
+    if (ids.size > 0) setDesbloqueadas(new Set(ids))
+  }, []))
+
   // Web: renderizado incremental para no montar 1000+ tarjetas/imágenes de golpe
   const PAGE_WEB = 24
   const [visibleCount, setVisibleCount] = useState(PAGE_WEB)
@@ -1046,6 +1053,7 @@ export default function ProspectadorPropiedades() {
       empresaMatriz={item.nombre_constructora ? (empresaMatrizMap.get(item.nombre_constructora) ?? null) : null}
       totalPublicadores={conteoPubs?.get(item.id) ?? 0}
       isNuevaParaTi={!esAdmin && !viewsData?.get(item.id)}
+      isUnlocked={esAdmin || desbloqueadas.has(item.id)}
       onOpen={onOpenCard}
       onShare={onShareCard}
       onPublish={onPublishCard}

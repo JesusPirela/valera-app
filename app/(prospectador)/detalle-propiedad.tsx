@@ -40,6 +40,7 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 import { conReintentoData, generarIdemKey, conTimeout } from '../../lib/redIntentos'
 import PropMapa from '../../components/PropMapa'
 import { actualizarMisionesPorCategoria, registrarAccion } from '../../lib/gamification'
+import { marcarDesbloqueada } from '../../lib/publicarUnlock'
 
 
 type Propiedad = {
@@ -845,6 +846,7 @@ export default function DetallePropiedad() {
     } else {
       await Clipboard.setStringAsync(texto)
     }
+    marcarDesbloqueada(propiedad.id)
     setDescripcionCopiada(true)
     setTimeout(() => setDescripcionCopiada(false), 2000)
   }
@@ -1763,7 +1765,7 @@ export default function DetallePropiedad() {
           // Pausa mínima entre descargas para que el navegador no las bloquee.
           if (i < objectUrls.length - 1) await new Promise<void>(r => setTimeout(r, 120))
         }
-        if (objectUrls.some(Boolean)) premiarDescarga()
+        if (objectUrls.some(Boolean)) { premiarDescarga(); marcarDesbloqueada(propiedad.id) }
       } finally {
         setDescargando(false)
       }
@@ -1806,7 +1808,7 @@ export default function DetallePropiedad() {
         }
       }
       setDescargando(false)
-      if (guardadas > 0) premiarDescarga()
+      if (guardadas > 0) { premiarDescarga(); marcarDesbloqueada(propiedad.id) }
       Alert.alert(
         guardadas > 0 ? 'Listo' : 'Error',
         guardadas > 0

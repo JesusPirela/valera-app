@@ -28,6 +28,7 @@ import ToggleSwitch from '../../components/ToggleSwitch'
 import { COLONIAS } from '../../lib/colonias'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import CensorEditorModal from '../../components/CensorEditorModal'
+import * as Clipboard from 'expo-clipboard'
 
 type ImagenExistente = { id: string; url: string; orden: number }
 // Lista unificada de imágenes (existentes + nuevas) en su orden final de visualización.
