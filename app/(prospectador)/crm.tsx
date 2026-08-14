@@ -2114,12 +2114,9 @@ export default function CRM() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <FlatList
-                data={gruposDuplicados}
-                keyExtractor={(_, i) => String(i)}
-                contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: 40 }}
-                renderItem={({ item: grupo }) => (
-                  <View style={[s.dupGrupo, { backgroundColor: c.card, borderColor: c.border }]}>
+              <ScrollView contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: 40 }}>
+                {gruposDuplicados.map((grupo, gi) => (
+                  <View key={gi} style={[s.dupGrupo, { backgroundColor: c.card, borderColor: c.border }]}>
                     <Text style={[s.dupGrupoTel, { color: c.textMute }]}>📱 {grupo[0].telefono}</Text>
                     {grupo.map((cl, idx) => (
                       <View key={cl.id} style={[s.dupClienteRow, { borderTopColor: c.border }]}>
@@ -2158,10 +2155,9 @@ export default function CRM() {
                       </View>
                     ))}
                   </View>
-                )}
-              />
+                ))}
+              </ScrollView>
             )}
-          </View>
         </View>
       </Modal>
     </>
