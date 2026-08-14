@@ -1356,26 +1356,32 @@ export default function ProspectadorPropiedades() {
         {/* Contenido centrado en web */}
         <View style={isWeb ? styles.webBody : { flex: 1 }}>
 
-        {/* Filtros visibles encima del estado de carga / vacío / mapa;
-            en la lista normal van dentro de ListHeaderComponent para que scrolleen */}
-        {(isLoading || vistaZonas || propiedadesFiltradas.length === 0) && filtrosHeader}
+        {/* Filtros visibles encima del estado de carga / mapa; en la lista y en
+            el estado vacío van DENTRO de un scroll para poder bajar y ajustarlos */}
+        {(isLoading || vistaZonas) && filtrosHeader}
 
         {isLoading ? (
           <SkeletonListaPropiedades n={4} />
         ) : propiedadesFiltradas.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>🔍</Text>
-            <Text style={styles.emptyTitle}>
-              {busqueda.trim() || filtrosActivos > 0
-                ? 'Sin opciones disponibles'
-                : 'Sin propiedades por el momento'}
-            </Text>
-            <Text style={styles.emptyText}>
-              {busqueda.trim() || filtrosActivos > 0
-                ? 'En este momento no hay opciones que coincidan con tus filtros de búsqueda. Intenta con otros criterios.'
-                : 'No hay propiedades disponibles en este momento.'}
-            </Text>
-          </View>
+          // Antes esto era un View sin scroll: al dejar 0 resultados (ej. "sin
+          // publicar" o una fecha) no se podía bajar para volver a tocar/quitar
+          // los filtros. Ahora va en un ScrollView.
+          <ScrollView contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {filtrosHeader}
+            <View style={[styles.emptyContainer, { flex: 0 }]}>
+              <Text style={styles.emptyIcon}>🔍</Text>
+              <Text style={styles.emptyTitle}>
+                {busqueda.trim() || filtrosActivos > 0
+                  ? 'Sin opciones disponibles'
+                  : 'Sin propiedades por el momento'}
+              </Text>
+              <Text style={styles.emptyText}>
+                {busqueda.trim() || filtrosActivos > 0
+                  ? 'En este momento no hay opciones que coincidan con tus filtros de búsqueda. Intenta con otros criterios.'
+                  : 'No hay propiedades disponibles en este momento.'}
+              </Text>
+            </View>
+          </ScrollView>
         ) : vistaZonas ? (
           <View style={{ flex: 1 }}>
             <MiniMapa
