@@ -181,6 +181,12 @@ function parsePresu(txt: string | null | undefined): number | null {
   else if (n < 100) n *= 1_000_000   // "1.6", "2.5" → millones (heurística)
   return n
 }
+// Formato compacto de dinero para el total del pipeline: $28.5M, $850k, $500.
+function formatDineroCompacto(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`
+  if (n >= 1_000) return `$${Math.round(n / 1_000)}k`
+  return `$${Math.round(n)}`
+}
 const FUENTE_LABEL_CRM: Record<string, string> = {
   marketplace: 'Marketplace', tokko: 'Tokko', campana_fb: 'Campaña FB', grupo_fb: 'Grupo FB',
   ficha_compartida: 'Ficha compartida', coleccion_compartida: 'Colección', sheets: 'Sheets',
@@ -604,10 +610,17 @@ export default function CRM() {
     [clientesCrm, opFiltro]
   )
 
-  const { total, activos, citas, vencidos, cerrados, conteos } = useMemo(() => {
+  const { total, activos, citas, vencidos, cerrados, conteos, presupuestoActivo, presupuestoConteo } = useMemo(() => {
+    const activosArr = clientesBase.filter(c => c.estado !== 'descartado' && c.estado !== 'compro' && c.estado !== 'compro_externo')
+    // Suma aproximada del presupuesto (texto libre) de los clientes activos.
+    let presupuestoActivo = 0, presupuestoConteo = 0
+    for (const c of activosArr) {
+      const v = parsePresu(c.presupuesto)
+      if (v != null && v > 0) { presupuestoActivo += v; presupuestoConteo++ }
+    }
     return {
       total:    clientesBase.length,
-      activos:  clientesBase.filter(c => c.estado !== 'descartado' && c.estado !== 'compro' && c.estado !== 'compro_externo').length,
+      activos:  activosArr.length,
       citas:    clientesBase.filter(c => c.estado === 'cita_agendada').length,
       vencidos: clientesBase.filter(necesitaSeguimiento).length,
       cerrados: clientesBase.filter(c => c.estado === 'compro' || c.estado === 'compro_externo').length,
@@ -615,6 +628,7 @@ export default function CRM() {
         acc[e] = clientesBase.filter(c => c.estado === e).length
         return acc
       }, {}),
+      presupuestoActivo, presupuestoConteo,
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientesBase, tick])
@@ -1159,6 +1173,18 @@ export default function CRM() {
               {isSyncing ? 'Guardando…' : `Guardar${pendingCount > 1 ? ` (${pendingCount})` : ''}`}
             </Text>
           </TouchableOpacity>
+        )}
+
+        {/* ── Presupuesto total activo (aprox.) ── */}
+        {presupuestoConteo > 0 && (
+          <View style={s.presuBanner}>
+            <Text style={{ fontSize: 22 }}>💰</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.presuBannerLbl}>Presupuesto activo (aprox.)</Text>
+              <Text style={s.presuBannerNum}>{formatDineroCompacto(presupuestoActivo)}</Text>
+            </View>
+            <Text style={s.presuBannerSub}>de {presupuestoConteo} {presupuestoConteo === 1 ? 'cliente' : 'clientes'}</Text>
+          </View>
         )}
 
         {/* ── KPI strip (todos clickeables) ── */}
@@ -2045,6 +2071,15 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
   },
+  presuBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginHorizontal: 12, marginTop: 10, borderRadius: 14,
+    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: '#1a6470',
+  },
+  presuBannerLbl: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '700' },
+  presuBannerNum: { color: '#fff', fontSize: 24, fontWeight: '900', marginTop: 1 },
+  presuBannerSub: { color: 'rgba(255,255,255,0.9)', fontSize: 12.5, fontWeight: '700', textAlign: 'right', maxWidth: 90 },
   kpiItem: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 4, borderRadius: 10 },
   kpiActivo: { backgroundColor: 'rgba(26,100,112,0.12)' },
   kpiNum:  { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },

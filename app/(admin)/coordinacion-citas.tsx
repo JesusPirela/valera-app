@@ -8,7 +8,6 @@ import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 
 import { getUsuarioActual } from '../../lib/sesion'
-import { useScrollHorizontalConRueda } from '../../hooks/useScrollHorizontalConRueda'
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 type EstadoCita =
@@ -1257,9 +1256,8 @@ export default function CoordinacionCitas() {
   // Tableros kanban horizontales: en web la rueda del mouse por default solo
   // hace scroll vertical, así que sin esto era imposible llegar a las columnas
   // de la derecha (Realizada, Apartó, Cancelada…) sin arrastrar la barra fina.
-  const scrollBoardRef = useScrollHorizontalConRueda()
-  const scrollBoardVentaRef = useScrollHorizontalConRueda()
-  const scrollBoardRentaRef = useScrollHorizontalConRueda()
+  // Los tableros usan scroll vertical normal con la rueda; el horizontal se mueve
+  // con la barra de abajo (por eso ya no se redirige la rueda a horizontal).
   const [citas, setCitas]               = useState<Cita[]>([])
   const [admins, setAdmins]             = useState<Profile[]>([])
   const [asesores, setAsesores]         = useState<Profile[]>([])
@@ -1715,7 +1713,7 @@ export default function CoordinacionCitas() {
               <Text style={s.seccionTitulo}>🏠 Venta</Text>
               <Text style={s.seccionCnt}>{citasVenta.length}</Text>
             </View>
-            <ScrollView ref={scrollBoardVentaRef} horizontal showsHorizontalScrollIndicator contentContainerStyle={s.boardContent} style={s.boardAsesor} decelerationRate="fast">
+            <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={s.boardContent} style={s.boardAsesor} decelerationRate="fast">
               {ORDEN_ESTADOS_VENTA.map(estado => (
                 <KanbanColumn
                   key={estado}
@@ -1741,7 +1739,7 @@ export default function CoordinacionCitas() {
               <Text style={s.seccionTitulo}>🔑 Renta</Text>
               <Text style={s.seccionCnt}>{citasRenta.length}</Text>
             </View>
-            <ScrollView ref={scrollBoardRentaRef} horizontal showsHorizontalScrollIndicator contentContainerStyle={s.boardContent} style={s.boardAsesor} decelerationRate="fast">
+            <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={s.boardContent} style={s.boardAsesor} decelerationRate="fast">
               {ORDEN_ESTADOS_RENTA.map(estado => (
                 <KanbanColumn
                   key={estado}
@@ -1796,7 +1794,6 @@ export default function CoordinacionCitas() {
             </View>
           ) : (
             <ScrollView
-              ref={scrollBoardRef}
               horizontal
               showsHorizontalScrollIndicator
               contentContainerStyle={s.boardContent}
