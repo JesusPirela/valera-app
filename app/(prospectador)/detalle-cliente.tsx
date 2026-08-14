@@ -89,6 +89,7 @@ function DateTimePicker({ value, onChange, label }: {
 }) {
   const [open, setOpen] = useState(false)
   const [temp, setTemp] = useState<Date>(value ?? new Date())
+  const [mesVista, setMesVista] = useState<Date>(value ?? new Date())
 
   function adj(field: 'date' | 'month' | 'year' | 'hour' | 'minute', delta: number) {
     setTemp((prev) => {
@@ -124,7 +125,7 @@ function DateTimePicker({ value, onChange, label }: {
           b = new Date(); b.setHours(7, 0, 0, 0)
           if (b.getTime() < Date.now()) b.setDate(b.getDate() + 1)
         }
-        setTemp(b); setOpen(true)
+        setTemp(b); setMesVista(new Date(b.getFullYear(), b.getMonth(), 1)); setOpen(true)
       }}>
         <Text style={[dpStyles.triggerText, !value && dpStyles.placeholder]}>{displayStr}</Text>
         <Text style={dpStyles.icon}>▾</Text>
@@ -134,11 +135,51 @@ function DateTimePicker({ value, onChange, label }: {
           <View style={dpStyles.modal}>
             <Text style={dpStyles.modalTitle}>Fecha y hora</Text>
             <Text style={dpStyles.secLabel}>Fecha</Text>
-            <View style={dpStyles.row}>
-              <Spin label="Día"  value={temp.getDate()} onUp={() => adj('date', 1)}  onDown={() => adj('date', -1)} />
-              <Spin label="Mes"  value={temp.toLocaleString('es-MX', { month: 'short' })} onUp={() => adj('month', 1)} onDown={() => adj('month', -1)} />
-              <Spin label="Año"  value={temp.getFullYear()} onUp={() => adj('year', 1)}  onDown={() => adj('year', -1)} />
-            </View>
+            {(() => {
+              const y = mesVista.getFullYear(), m = mesVista.getMonth()
+              const diasMes = new Date(y, m + 1, 0).getDate()
+              const primerDia = new Date(y, m, 1).getDay() // 0=Dom
+              const hoy0 = new Date(); hoy0.setHours(0, 0, 0, 0)
+              const celdas: (number | null)[] = [
+                ...Array(primerDia).fill(null),
+                ...Array.from({ length: diasMes }, (_, i) => i + 1),
+              ]
+              const seleccionar = (d: number) => {
+                const nuevo = new Date(temp)
+                nuevo.setFullYear(y, m, d)
+                setTemp(nuevo)
+              }
+              return (
+                <View style={dpStyles.cal}>
+                  <View style={dpStyles.calHead}>
+                    <TouchableOpacity onPress={() => setMesVista(new Date(y, m - 1, 1))} style={dpStyles.calNav}><Text style={dpStyles.calNavTxt}>‹</Text></TouchableOpacity>
+                    <Text style={dpStyles.calMes}>{mesVista.toLocaleString('es-MX', { month: 'long', year: 'numeric' })}</Text>
+                    <TouchableOpacity onPress={() => setMesVista(new Date(y, m + 1, 1))} style={dpStyles.calNav}><Text style={dpStyles.calNavTxt}>›</Text></TouchableOpacity>
+                  </View>
+                  <View style={dpStyles.calSemana}>
+                    {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((w, i) => (
+                      <Text key={i} style={dpStyles.calDow}>{w}</Text>
+                    ))}
+                  </View>
+                  <View style={dpStyles.calGrid}>
+                    {celdas.map((d, i) => {
+                      if (d == null) return <View key={i} style={dpStyles.calCell} />
+                      const fecha = new Date(y, m, d)
+                      const pasado = fecha < hoy0
+                      const sel = temp.getFullYear() === y && temp.getMonth() === m && temp.getDate() === d
+                      const esHoy = fecha.getTime() === hoy0.getTime()
+                      return (
+                        <TouchableOpacity key={i} style={dpStyles.calCell} disabled={pasado} onPress={() => seleccionar(d)}>
+                          <View style={[dpStyles.calDia, sel && dpStyles.calDiaSel, esHoy && !sel && dpStyles.calDiaHoy]}>
+                            <Text style={[dpStyles.calDiaTxt, sel && dpStyles.calDiaTxtSel, pasado && dpStyles.calDiaTxtOff]}>{d}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+                </View>
+              )
+            })()}
             <Text style={dpStyles.secLabel}>Hora</Text>
             <View style={dpStyles.row}>
               <Spin label="Hora" value={String(temp.getHours()).padStart(2, '0')}   onUp={() => adj('hour', 1)}   onDown={() => adj('hour', -1)} />
@@ -997,6 +1038,21 @@ const dpStyles = StyleSheet.create({
   modalTitle: { fontSize: 16, fontWeight: '700', color: '#1a6470', marginBottom: 16, textAlign: 'center' },
   secLabel: { fontSize: 11, fontWeight: '700', color: '#aaa', letterSpacing: 0.5, marginBottom: 8 },
   row: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginBottom: 16 },
+  cal: { marginBottom: 16 },
+  calHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  calNav: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9' },
+  calNavTxt: { fontSize: 22, color: '#1a6470', fontWeight: '800', marginTop: -2 },
+  calMes: { fontSize: 15, fontWeight: '800', color: '#1a1a2e', textTransform: 'capitalize' },
+  calSemana: { flexDirection: 'row' },
+  calDow: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#9eafb2', paddingVertical: 4 },
+  calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calCell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', padding: 2 },
+  calDia: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  calDiaSel: { backgroundColor: '#1a6470' },
+  calDiaHoy: { borderWidth: 1.5, borderColor: '#1a6470' },
+  calDiaTxt: { fontSize: 14, fontWeight: '600', color: '#1a1a2e' },
+  calDiaTxtSel: { color: '#fff', fontWeight: '800' },
+  calDiaTxtOff: { color: '#cbd5e1' },
   spin: { alignItems: 'center', minWidth: 60 },
   spinLabel: { fontSize: 10, color: '#aaa', marginBottom: 4, fontWeight: '600' },
   spinBtn: { padding: 8 },

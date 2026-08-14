@@ -1226,7 +1226,7 @@ export default function CRM() {
             <Text style={{ fontSize: 22 }}>💰</Text>
             <View style={{ flex: 1 }}>
               <Text style={s.presuBannerLbl}>Presupuesto activo (aprox.)</Text>
-              <Text style={s.presuBannerNum}>{formatDineroCompacto(presupuestoActivo)}</Text>
+              <Text style={s.presuBannerNum}>${Math.round(presupuestoActivo).toLocaleString('es-MX')}</Text>
             </View>
             <Text style={s.presuBannerSub}>de {presupuestoConteo} {presupuestoConteo === 1 ? 'cliente' : 'clientes'}</Text>
           </View>
