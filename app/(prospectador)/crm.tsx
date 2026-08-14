@@ -2184,7 +2184,7 @@ const s = StyleSheet.create({
 
   // Modal duplicados
   dupModalBg:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  dupModalSheet:  { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%', flex: 0 },
+  dupModalSheet:  { borderTopLeftRadius: 20, borderTopRightRadius: 20, height: '85%' },
   dupModalHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 18, paddingVertical: 14,
