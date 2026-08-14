@@ -12,6 +12,7 @@ import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueClienteUpdate, enqueueClienteCreate, genUUID } from '../../lib/offline-queue'
 import { useQueryClient } from '@tanstack/react-query'
 import { ZonasInteresField } from '../../components/ZonasInteresField'
+import { normalizarTelefono } from '../../lib/telefono'
 
 function mostrarError(titulo: string, msg: string) {
   if (Platform.OS === 'web') window.alert(`${titulo}: ${msg}`)
@@ -232,20 +233,19 @@ export default function ClienteForm() {
   const [loading, setLoading] = useState(esEdicion)
   const [guardando, setGuardando] = useState(false)
   const [telefonoDuplicado, setTelefonoDuplicado] = useState<string | null>(null)
-  const duplicadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Teléfonos (normalizados) de los clientes propios de ESTE usuario, precargados
+  // una sola vez al abrir la pantalla — evita una consulta por cada tecla y hace
+  // que la detección sea instantánea. Un cliente de OTRO prospectador con el
+  // mismo número no cuenta como duplicado (RLS ya limita "clientes" a los
+  // propios; aquí además se filtra explícito por responsable_id).
+  const telefonosPropiosRef = useRef<Map<string, string> | null>(null)
 
   function onCambioTelefono(val: string) {
     setTelefono(val)
-    setTelefonoDuplicado(null)
     if (esEdicion) return  // en edición no checar (es el propio cliente)
-    if (duplicadoTimer.current) clearTimeout(duplicadoTimer.current)
-    const digits = val.replace(/\D/g, '')
-    if (digits.length < 8) return
-    duplicadoTimer.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('clientes').select('nombre').eq('telefono', val.trim()).maybeSingle()
-      if (data?.nombre) setTelefonoDuplicado(data.nombre)
-    }, 600)
+    const norm = normalizarTelefono(val)
+    if (norm.length < 12) { setTelefonoDuplicado(null); return }  // "52" + 10 dígitos
+    setTelefonoDuplicado(telefonosPropiosRef.current?.get(norm) ?? null)
   }
 
   // Se guarda el id del usuario en cuanto la pantalla abre, con la sesión sana.
@@ -254,10 +254,27 @@ export default function ClienteForm() {
   // cliente se puede encolar sin perder nada de lo escrito.
   const usuarioIdRef = useRef<string | null>(null)
   useFocusEffect(useCallback(() => {
+    let activo = true
     supabase.auth.getSession()
-      .then(({ data }) => { if (data.session?.user?.id) usuarioIdRef.current = data.session.user.id })
+      .then(({ data }) => {
+        const uid = data.session?.user?.id
+        if (uid) usuarioIdRef.current = uid
+        if (!uid || esEdicion) return
+        // Identificador de duplicado = teléfono normalizado, propios de este usuario.
+        return supabase.from('clientes').select('nombre, telefono')
+          .eq('responsable_id', uid).is('eliminado_at', null)
+          .then(({ data: propios }) => {
+            if (!activo) return
+            const map = new Map<string, string>()
+            for (const r of propios ?? []) {
+              if (r.telefono) map.set(normalizarTelefono(r.telefono), r.nombre)
+            }
+            telefonosPropiosRef.current = map
+          })
+      })
       .catch(() => {})
-  }, []))
+    return () => { activo = false }
+  }, [esEdicion]))
 
   // Común
   const [tipoOperacion, setTipoOperacion] = useState<'venta' | 'renta' | null>(null)
