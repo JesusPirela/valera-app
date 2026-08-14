@@ -305,11 +305,9 @@ const PropiedadCard = memo(function PropiedadCard({
             onPress={(e) => {
               e.stopPropagation()
               if (!isUnlocked) {
-                Alert.alert(
-                  'Primero prepara la propiedad',
-                  'Para marcarla como publicada, entra al detalle de la propiedad y copia la descripción o descarga las imágenes.',
-                  [{ text: 'Entendido' }]
-                )
+                const msg = 'Para marcarla como publicada, entra al detalle de la propiedad y copia la descripción o descarga las imágenes.'
+                if (Platform.OS === 'web') window.alert(msg)
+                else Alert.alert('Primero prepara la propiedad', msg, [{ text: 'Entendido' }])
                 return
               }
               onPublish(item.id)
