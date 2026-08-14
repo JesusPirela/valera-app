@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, RefreshControl, Platform,
+  ActivityIndicator, RefreshControl, Platform, Modal, ScrollView,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
@@ -41,6 +41,8 @@ export default function EstadisticasPropiedades() {
   const [ordenDesc, setOrdenDesc] = useState(true)
   const [devAbierto, setDevAbierto] = useState<string | null>(null)
   const [devOrden, setDevOrden] = useState<'desc' | 'asc'>('desc')
+  const [pasoIdx, setPasoIdx] = useState(0)     // posición en el selector de "N veces"
+  const [pickerVeces, setPickerVeces] = useState(false)
   const [zonaAbierta, setZonaAbierta] = useState<string | null>(null)
   const [zonaOrden, setZonaOrden] = useState<'desc' | 'asc'>('desc')
 
@@ -138,18 +140,29 @@ export default function EstadisticasPropiedades() {
           </TouchableOpacity>
         ))}
       </View>
-      {/* Un chip por cada número exacto de publicaciones: 1, 2, 3, 4, 5, 6… */}
-      <Text style={[s.chipTxt, { color: c.textMute, marginTop: 2, marginBottom: 6 }]}>Por número de publicaciones:</Text>
-      <View style={s.chips}>
-        {vecesPresentes.map(v => {
-          const k = String(v)
-          return (
-            <TouchableOpacity key={k} style={[s.chip, { borderColor: c.border }, filtro === k && { backgroundColor: TEAL, borderColor: TEAL }]} onPress={() => setFiltro(k)}>
-              <Text style={[s.chipTxt, { color: filtro === k ? '#fff' : c.textSub }]}>{v} {v === 1 ? 'vez' : 'veces'} ({dist.get(v)})</Text>
+      {/* Selector "N veces" con flechas (1 por 1); el centro abre la lista completa */}
+      {(() => {
+        const idx = Math.min(pasoIdx, Math.max(0, vecesPresentes.length - 1))
+        const vAct = vecesPresentes[idx] ?? null
+        const activo = vAct != null && filtro === String(vAct)
+        const ir = (i: number) => { const j = Math.max(0, Math.min(vecesPresentes.length - 1, i)); setPasoIdx(j); setFiltro(String(vecesPresentes[j])) }
+        if (vAct == null) return null
+        return (
+          <View style={s.stepRow}>
+            <Text style={[s.chipTxt, { color: c.textMute }]}>Por cantidad:</Text>
+            <TouchableOpacity style={[s.stepArrow, { borderColor: c.border }, idx <= 0 && { opacity: 0.4 }]} disabled={idx <= 0} onPress={() => ir(idx - 1)}>
+              <Ionicons name="chevron-back" size={18} color={c.textSub} />
             </TouchableOpacity>
-          )
-        })}
-      </View>
+            <TouchableOpacity style={[s.stepCenter, { borderColor: c.border }, activo && { backgroundColor: TEAL, borderColor: TEAL }]} onPress={() => { setFiltro(String(vAct)); setPickerVeces(true) }}>
+              <Text style={[s.stepCenterTxt, { color: activo ? '#fff' : c.text }]}>{vAct} {vAct === 1 ? 'vez' : 'veces'} · {dist.get(vAct)} props</Text>
+              <Ionicons name="chevron-down" size={14} color={activo ? '#fff' : c.textMute} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.stepArrow, { borderColor: c.border }, idx >= vecesPresentes.length - 1 && { opacity: 0.4 }]} disabled={idx >= vecesPresentes.length - 1} onPress={() => ir(idx + 1)}>
+              <Ionicons name="chevron-forward" size={18} color={c.textSub} />
+            </TouchableOpacity>
+          </View>
+        )
+      })()}
       {/* Orden explícito: dos botones, para que sea obvio */}
       <View style={[s.chips, { marginTop: -2 }]}>
         <Text style={[s.chipTxt, { color: c.textMute, alignSelf: 'center', marginRight: 2 }]}>Ordenar:</Text>
@@ -177,6 +190,7 @@ export default function EstadisticasPropiedades() {
   )
 
   return (
+    <>
     <FlatList
       style={{ flex: 1, backgroundColor: c.bg }}
       contentContainerStyle={{ padding: 16, paddingBottom: 48, maxWidth: 1000, width: '100%', alignSelf: 'center' }}
@@ -204,6 +218,27 @@ export default function EstadisticasPropiedades() {
         )
       }}
     />
+
+    {/* Lista completa de cantidades para saltar directo */}
+    <Modal visible={pickerVeces} transparent animationType="fade" onRequestClose={() => setPickerVeces(false)}>
+      <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setPickerVeces(false)}>
+        <TouchableOpacity activeOpacity={1} style={[s.modalCard, { backgroundColor: c.card }]} onPress={e => e.stopPropagation()}>
+          <Text style={[s.modalTit, { color: c.text }]}>Filtrar por nº de publicaciones</Text>
+          <ScrollView style={{ maxHeight: 360 }}>
+            {vecesPresentes.map(v => {
+              const sel = filtro === String(v)
+              return (
+                <TouchableOpacity key={v} style={[s.modalRow, { borderColor: c.border }]} onPress={() => { setPasoIdx(vecesPresentes.indexOf(v)); setFiltro(String(v)); setPickerVeces(false) }}>
+                  <Text style={[s.modalRowTxt, { color: sel ? TEAL : c.text, fontWeight: sel ? '900' : '600' }]}>{v} {v === 1 ? 'vez' : 'veces'}</Text>
+                  <Text style={[s.modalRowCnt, { color: c.textMute }]}>{dist.get(v)} props</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </ScrollView>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+    </>
   )
 }
 
@@ -323,6 +358,16 @@ const s = StyleSheet.create({
   chips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 10 },
   chip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7 },
   chipTxt: { fontSize: 13, fontWeight: '700' },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  stepArrow: { borderWidth: 1, borderRadius: 10, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  stepCenter: { flex: 1, maxWidth: 260, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  stepCenterTxt: { fontSize: 14, fontWeight: '800' },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  modalCard: { width: '100%', maxWidth: 380, borderRadius: 16, padding: 16 },
+  modalTit: { fontSize: 15, fontWeight: '800', marginBottom: 8 },
+  modalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
+  modalRowTxt: { fontSize: 15 },
+  modalRowCnt: { fontSize: 13, fontWeight: '700' },
   searchWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: Platform.OS === 'web' ? 10 : 8, marginBottom: 8 },
   searchInput: { flex: 1, fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}) },
   trow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth },
