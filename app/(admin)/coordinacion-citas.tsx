@@ -1253,6 +1253,12 @@ export default function CoordinacionCitas() {
   // de la derecha (Realizada, Apartó, Cancelada…) sin arrastrar la barra fina.
   // Los tableros usan scroll vertical normal con la rueda; el horizontal se mueve
   // con la barra de abajo (por eso ya no se redirige la rueda a horizontal).
+  // Ref del tablero para mover las columnas de lado con las flechas flotantes.
+  const boardRef = useRef<ScrollView>(null)
+  const boardX = useRef(0)
+  const scrollBoard = (dir: number) => {
+    boardRef.current?.scrollTo({ x: Math.max(0, boardX.current + dir * (COL_W + 10) * 2), animated: true })
+  }
   const [citas, setCitas]               = useState<Cita[]>([])
   const [admins, setAdmins]             = useState<Profile[]>([])
   const [asesores, setAsesores]         = useState<Profile[]>([])
@@ -1790,12 +1796,15 @@ export default function CoordinacionCitas() {
             </View>
           ) : (
             <ScrollView
+              ref={boardRef}
               horizontal
               showsHorizontalScrollIndicator
               contentContainerStyle={s.boardContent}
               style={{ backgroundColor: '#f1f5f9' }}
               decelerationRate="fast"
               nestedScrollEnabled
+              onScroll={e => { boardX.current = e.nativeEvent.contentOffset.x }}
+              scrollEventThrottle={16}
             >
               {ORDEN_ESTADOS.map(estado => (
                 <KanbanColumn
@@ -1888,6 +1897,18 @@ export default function CoordinacionCitas() {
           onGuardar={cargar}
         />
       )}
+
+      {/* Flechas flotantes para mover las columnas de lado sin buscar la barra. */}
+      {!vistaAsesor && !loading && (
+        <View style={s.hNav} pointerEvents="box-none">
+          <TouchableOpacity style={s.hNavBtn} onPress={() => scrollBoard(-1)} activeOpacity={0.85}>
+            <Ionicons name="chevron-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.hNavBtn} onPress={() => scrollBoard(1)} activeOpacity={0.85}>
+            <Ionicons name="chevron-forward" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   )
 }
@@ -1945,6 +1966,12 @@ const s = StyleSheet.create({
   // altura real de la que heredar para poder scrollear su propia lista de tarjetas
   // sin depender del scroll general de la página — flex:1 solo no basta aquí.
   boardContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 20, flexDirection: 'row', alignItems: 'flex-start' },
+  hNav: { position: 'absolute', right: 16, bottom: 20, flexDirection: 'row', gap: 10 },
+  hNavBtn: {
+    width: 46, height: 46, borderRadius: 23, backgroundColor: '#1a6470',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 6,
+  },
   // Vista asesor: altura fija porque va dentro de un ScrollView vertical que
   // apila Venta y Renta (flex:1 no funciona dentro de un scroll de contenido).
   boardAsesor:  { backgroundColor: '#f1f5f9' },
