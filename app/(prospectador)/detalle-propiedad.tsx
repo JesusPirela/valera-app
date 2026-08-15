@@ -40,7 +40,7 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 import { conReintentoData, generarIdemKey, conTimeout } from '../../lib/redIntentos'
 import PropMapa from '../../components/PropMapa'
 import { actualizarMisionesPorCategoria, registrarAccion } from '../../lib/gamification'
-import { marcarDesbloqueada } from '../../lib/publicarUnlock'
+import { marcarDesbloqueada, estaDesbloqueada } from '../../lib/publicarUnlock'
 
 
 type Propiedad = {
@@ -500,6 +500,13 @@ export default function DetallePropiedad() {
     const { data: { session } } = await supabase.auth.getSession()
     const user = session?.user
     if (!user) return
+
+    if (!estaDesbloqueada(id as string)) {
+      const msg = 'Para marcarla como publicada, primero copia la descripción o descarga las imágenes de esta propiedad.'
+      if (Platform.OS === 'web') window.alert(msg)
+      else Alert.alert('Primero prepara la propiedad', msg, [{ text: 'Entendido' }])
+      return
+    }
 
     if (vecesPublicada >= 10) {
       if (Platform.OS === 'web') window.alert('Esta propiedad alcanzó el límite de 10 publicaciones.')
