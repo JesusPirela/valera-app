@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar } from '../../lib/texto'
 import { zonaDetallada } from '../../lib/zonas-interes'
+import { detectarEstadoMexico } from '../../lib/estados-mexico'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type ConstructoraInfo = {
@@ -38,7 +39,19 @@ type ModeloZona = Modelo & { zonaDet: string; ciudad: string }
 const CIUDAD_LABELS: Record<string, string> = {
   queretaro: 'Querétaro', monterrey: 'Monterrey', puebla: 'Puebla',
 }
+const ESTADO_LABELS: Record<string, string> = {
+  queretaro: 'Querétaro', monterrey: 'Nuevo León', puebla: 'Puebla',
+}
 const SIN_ZONA = 'Otras zonas'
+
+// Estado de una propiedad: detectado de la dirección/título; si no, del campo
+// `zona`; por defecto Querétaro (la mayoría del inventario).
+function estadoDePropiedad(m: { direccion: string | null; titulo: string; zona: string | null }): string {
+  const det = detectarEstadoMexico(`${m.direccion ?? ''} ${m.titulo ?? ''}`)
+  if (det) return det
+  if (m.zona && ESTADO_LABELS[m.zona]) return ESTADO_LABELS[m.zona]
+  return 'Querétaro'
+}
 const SIN_CONSTRUCTORA = 'Sin constructora'
 
 // ─── Constructoras reconocidas en el mercado (investigación QRO/MTY/PUE) ─────
@@ -70,6 +83,7 @@ export default function Constructoras() {
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
   const [busqueda, setBusqueda] = useState(q ?? '')
   const [zonaSel, setZonaSel] = useState<string | null>(null)
+  const [scope, setScope] = useState<'queretaro' | 'nacional'>('queretaro')
   const [viewsMap, setViewsMap] = useState<Map<string, { count: number; lastViewed: number }>>(new Map())
 
   useFocusEffect(useCallback(() => { cargar() }, []))
@@ -149,10 +163,16 @@ export default function Constructoras() {
     ciudad: m.zona ? (CIUDAD_LABELS[m.zona] ?? m.zona) : '',
   })), [modelos])
 
+  // Alcance: Querétaro vs Nacional (otros estados; NO incluye ningún dev de Qro).
+  const enriquecidosScope = useMemo(() => enriquecidos.filter(m => {
+    const esQro = estadoDePropiedad(m) === 'Querétaro'
+    return scope === 'nacional' ? !esQro : esQro
+  }), [enriquecidos, scope])
+
   // Fraccionamientos disponibles + conteo, ordenados por cantidad de modelos.
   const zonasDisponibles = useMemo(() => {
     const cont = new Map<string, number>()
-    for (const m of enriquecidos) cont.set(m.zonaDet, (cont.get(m.zonaDet) ?? 0) + 1)
+    for (const m of enriquecidosScope) cont.set(m.zonaDet, (cont.get(m.zonaDet) ?? 0) + 1)
     return Array.from(cont.entries())
       .sort((a, b) => {
         if (a[0] === SIN_ZONA) return 1       // "Otras zonas" siempre al final
@@ -160,12 +180,12 @@ export default function Constructoras() {
         return b[1] - a[1]
       })
       .map(([nombre, n]) => ({ nombre, n }))
-  }, [enriquecidos])
+  }, [enriquecidosScope])
 
   // Aplicar búsqueda de texto + fraccionamiento seleccionado.
   const filtrados = useMemo(() => {
     const q = normalizar(busqueda.trim())
-    return enriquecidos.filter(m => {
+    return enriquecidosScope.filter(m => {
       if (zonaSel && m.zonaDet !== zonaSel) return false
       if (!q) return true
       return (
@@ -176,7 +196,7 @@ export default function Constructoras() {
         normalizar(m.direccion ?? '').includes(q)
       )
     })
-  }, [enriquecidos, busqueda, zonaSel])
+  }, [enriquecidosScope, busqueda, zonaSel])
 
   // Agrupar: fraccionamiento → constructora.
   const zonaGrupos = useMemo(() => {
@@ -216,9 +236,22 @@ export default function Constructoras() {
             if (aPop !== bPop) return bPop - aPop
             return b.modelos.length - a.modelos.length
           })
-        return { zona, ciudad, total: mods.length, grupos }
+        return { zona, ciudad, estado: mods[0] ? estadoDePropiedad(mods[0]) : '', total: mods.length, grupos }
       })
   }, [filtrados, zonasDisponibles, viewsMap])
+
+  // Para el catálogo NACIONAL: agrupar las zonas por estado.
+  const estadoSecciones = useMemo(() => {
+    const porEstado = new Map<string, typeof zonaGrupos>()
+    for (const zg of zonaGrupos) {
+      const e = zg.estado || 'Otros'
+      if (!porEstado.has(e)) porEstado.set(e, [])
+      porEstado.get(e)!.push(zg)
+    }
+    return Array.from(porEstado.entries())
+      .map(([estado, zonas]) => ({ estado, zonas, total: zonas.reduce((s, z) => s + z.total, 0) }))
+      .sort((a, b) => b.total - a.total)
+  }, [zonaGrupos])
 
   const hayResultados = zonaGrupos.length > 0
 
@@ -236,9 +269,11 @@ export default function Constructoras() {
       <View style={styles.intro}>
         <View style={styles.introRow}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.introTitle, { color: c.text }]}>🏗️ Constructoras</Text>
+            <Text style={[styles.introTitle, { color: c.text }]}>
+              {scope === 'nacional' ? '🌎 Constructoras Nacionales' : '🏗️ Constructoras de Querétaro'}
+            </Text>
             <Text style={[styles.introSub, { color: c.textMute }]}>
-              Filtra por fraccionamiento o busca una constructora.
+              {scope === 'nacional' ? 'Desarrollos de otros estados, por estado y zona.' : 'Filtra por fraccionamiento o busca una constructora.'}
             </Text>
           </View>
           <TouchableOpacity
@@ -249,6 +284,24 @@ export default function Constructoras() {
             <Text style={[styles.accionBtnTxt, { color: '#c9a84c' }]}>📊 Ver tabla</Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Toggle Querétaro / Nacional */}
+      <View style={styles.scopeRow}>
+        <TouchableOpacity
+          style={[styles.scopeChip, { borderColor: c.border }, scope === 'queretaro' && styles.scopeChipOn]}
+          onPress={() => { setScope('queretaro'); setZonaSel(null) }}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.scopeChipTxt, { color: scope === 'queretaro' ? '#fff' : c.textSub }]}>🏗️ Querétaro</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.scopeChip, { borderColor: c.border }, scope === 'nacional' && styles.scopeChipOn]}
+          onPress={() => { setScope('nacional'); setZonaSel(null) }}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.scopeChipTxt, { color: scope === 'nacional' ? '#fff' : c.textSub }]}>🌎 Nacional</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Buscador */}
@@ -373,7 +426,9 @@ export default function Constructoras() {
                     <View style={styles.desarrolloInfo}>
                       <View style={styles.desarrolloInfoRow}>
                         <View style={[styles.zonaChip, { backgroundColor: '#1a647015' }]}>
-                          <Text style={[styles.zonaChipTxt, { color: '#1a6470' }]}>📍 {zg.zona}</Text>
+                          <Text style={[styles.zonaChipTxt, { color: '#1a6470' }]} numberOfLines={1}>
+                            📍 {zg.zona}{scope === 'nacional' && zg.estado ? ` · ${zg.estado}` : ''}
+                          </Text>
                         </View>
                         <Text style={[styles.desarrolloConteo, { color: c.textMute }]}>
                           {g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}
@@ -440,6 +495,10 @@ const styles = StyleSheet.create({
   introSub: { fontSize: 12, marginTop: 3 },
   accionBtn: { borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   accionBtnTxt: { fontSize: 12, fontWeight: '800' },
+  scopeRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  scopeChip: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 9, alignItems: 'center' },
+  scopeChipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  scopeChipTxt: { fontSize: 13.5, fontWeight: '800' },
 
   searchBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

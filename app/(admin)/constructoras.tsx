@@ -10,6 +10,7 @@ import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar } from '../../lib/texto'
 import { zonaDetallada } from '../../lib/zonas-interes'
+import { detectarEstadoMexico } from '../../lib/estados-mexico'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Modelo = {
@@ -63,6 +64,15 @@ const EMPTY_CONTACTO: Omit<Contacto, 'id'> = {
 function formatPrecio(precio: number | null) {
   if (precio == null) return 'Precio a consultar'
   return `$${precio.toLocaleString('es-MX')} MXN`
+}
+
+// Estado de una propiedad: se detecta de la dirección/título; si no, cae al
+// campo `zona` (ciudad); por defecto Querétaro (la mayoría del inventario).
+function estadoDePropiedad(m: { direccion: string | null; titulo: string; zona: string | null }): string {
+  const det = detectarEstadoMexico(`${m.direccion ?? ''} ${m.titulo ?? ''}`)
+  if (det) return det
+  if (m.zona && ESTADO_LABELS[m.zona]) return ESTADO_LABELS[m.zona]
+  return 'Querétaro'
 }
 
 // Ubicación de un desarrollo: fraccionamiento(s) de sus modelos + ciudad.
@@ -156,7 +166,7 @@ export default function AdminConstructoras() {
   // Filtrado por alcance: Querétaro (zona 'queretaro' o sin zona) vs Nacional
   // (cualquier otro estado). El nacional NO incluye ningún desarrollo de Qro.
   const enriquecidosScope = useMemo(() => enriquecidos.filter(m => {
-    const esQro = m.zona === 'queretaro' || m.zona == null
+    const esQro = estadoDePropiedad(m) === 'Querétaro'
     return scope === 'nacional' ? !esQro : esQro
   }), [enriquecidos, scope])
 
@@ -271,10 +281,9 @@ export default function AdminConstructoras() {
         normalizar(m.direccion ?? '').includes(q)
       )
     })
-    const estadoDe = (m: ModeloZona) => m.zona ? (ESTADO_LABELS[m.zona] ?? CIUDAD_LABELS[m.zona] ?? m.zona) : 'Sin estado'
     const porEstado = new Map<string, ModeloZona[]>()
     for (const m of lista) {
-      const e = estadoDe(m)
+      const e = estadoDePropiedad(m)
       if (!porEstado.has(e)) porEstado.set(e, [])
       porEstado.get(e)!.push(m)
     }
