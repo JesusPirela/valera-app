@@ -44,10 +44,11 @@ const ESTADO_LABELS: Record<string, string> = {
 }
 const SIN_ZONA = 'Otras zonas'
 
-// Estado de una propiedad: detectado de la dirección/título; si no, del campo
-// `zona`; por defecto Querétaro (la mayoría del inventario).
+// Estado de una propiedad. La ubicación real vive en el campo `zona` (texto
+// libre: "queretaro", "monterrey", "Cancun", "Coahuila"…), así que se detecta
+// primero de ahí; luego de dirección/título; por defecto Querétaro.
 function estadoDePropiedad(m: { direccion: string | null; titulo: string; zona: string | null }): string {
-  const det = detectarEstadoMexico(`${m.direccion ?? ''} ${m.titulo ?? ''}`)
+  const det = detectarEstadoMexico(`${m.zona ?? ''} ${m.direccion ?? ''} ${m.titulo ?? ''}`)
   if (det) return det
   if (m.zona && ESTADO_LABELS[m.zona]) return ESTADO_LABELS[m.zona]
   return 'Querétaro'
@@ -83,7 +84,8 @@ export default function Constructoras() {
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
   const [busqueda, setBusqueda] = useState(q ?? '')
   const [zonaSel, setZonaSel] = useState<string | null>(null)
-  const [scope, setScope] = useState<'queretaro' | 'nacional'>(scopeParam === 'nacional' ? 'nacional' : 'queretaro')
+  const [estadoSel, setEstadoSel] = useState<string | null>(null)
+  const scope: 'queretaro' | 'nacional' = scopeParam === 'nacional' ? 'nacional' : 'queretaro'
   const [viewsMap, setViewsMap] = useState<Map<string, { count: number; lastViewed: number }>>(new Map())
 
   useFocusEffect(useCallback(() => { cargar() }, []))
@@ -182,11 +184,25 @@ export default function Constructoras() {
       .map(([nombre, n]) => ({ nombre, n }))
   }, [enriquecidosScope])
 
-  // Aplicar búsqueda de texto + fraccionamiento seleccionado.
+  // Estados disponibles (para las chips del catálogo Nacional), por cantidad.
+  const estadosDisponibles = useMemo(() => {
+    const cont = new Map<string, number>()
+    for (const m of enriquecidosScope) {
+      const e = estadoDePropiedad(m)
+      cont.set(e, (cont.get(e) ?? 0) + 1)
+    }
+    return Array.from(cont.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([nombre, n]) => ({ nombre, n }))
+  }, [enriquecidosScope])
+
+  // Aplicar búsqueda de texto + filtro seleccionado (colonia en QRO, estado en Nacional).
   const filtrados = useMemo(() => {
     const q = normalizar(busqueda.trim())
     return enriquecidosScope.filter(m => {
-      if (zonaSel && m.zonaDet !== zonaSel) return false
+      if (scope === 'nacional') {
+        if (estadoSel && estadoDePropiedad(m) !== estadoSel) return false
+      } else if (zonaSel && m.zonaDet !== zonaSel) return false
       if (!q) return true
       return (
         normalizar(m.nombre_constructora ?? '').includes(q) ||
@@ -196,7 +212,7 @@ export default function Constructoras() {
         normalizar(m.direccion ?? '').includes(q)
       )
     })
-  }, [enriquecidosScope, busqueda, zonaSel])
+  }, [enriquecidosScope, busqueda, zonaSel, estadoSel, scope])
 
   // Agrupar: fraccionamiento → constructora.
   const zonaGrupos = useMemo(() => {
@@ -393,24 +409,6 @@ export default function Constructoras() {
         </View>
       </View>
 
-      {/* Toggle Querétaro / Nacional */}
-      <View style={styles.scopeRow}>
-        <TouchableOpacity
-          style={[styles.scopeChip, { borderColor: c.border }, scope === 'queretaro' && styles.scopeChipOn]}
-          onPress={() => { setScope('queretaro'); setZonaSel(null) }}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.scopeChipTxt, { color: scope === 'queretaro' ? '#fff' : c.textSub }]}>🏗️ Querétaro</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.scopeChip, { borderColor: c.border }, scope === 'nacional' && styles.scopeChipOn]}
-          onPress={() => { setScope('nacional'); setZonaSel(null) }}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.scopeChipTxt, { color: scope === 'nacional' ? '#fff' : c.textSub }]}>🌎 Nacional</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Buscador */}
       <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
         <Text style={styles.searchIcon}>🔍</Text>
@@ -430,8 +428,40 @@ export default function Constructoras() {
         )}
       </View>
 
-      {/* Chips de fraccionamiento */}
-      {!loading && zonasDisponibles.length > 0 && (
+      {/* Chips: por ESTADO en Nacional, por fraccionamiento en Querétaro */}
+      {scope === 'nacional' ? (
+        !loading && estadosDisponibles.length > 0 && (
+          <View style={styles.chipsWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.chipsRow}>
+              <TouchableOpacity
+                style={[styles.chip, { borderColor: c.border }, estadoSel === null && styles.chipActivo]}
+                onPress={() => setEstadoSel(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.chipTxt, { color: estadoSel === null ? '#fff' : c.textSub }]}>
+                  Todos ({enriquecidosScope.length})
+                </Text>
+              </TouchableOpacity>
+              {estadosDisponibles.map(e => {
+                const activo = estadoSel === e.nombre
+                return (
+                  <TouchableOpacity
+                    key={e.nombre}
+                    style={[styles.chip, { borderColor: c.border }, activo && styles.chipActivo]}
+                    onPress={() => setEstadoSel(activo ? null : e.nombre)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.chipTxt, { color: activo ? '#fff' : c.textSub }]}>
+                      📍 {e.nombre} ({e.n})
+                    </Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+          </View>
+        )
+      ) : (
+        !loading && zonasDisponibles.length > 0 && (
         <View style={styles.chipsWrap}>
           <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.chipsRow}>
             <TouchableOpacity
@@ -440,7 +470,7 @@ export default function Constructoras() {
               activeOpacity={0.8}
             >
               <Text style={[styles.chipTxt, { color: zonaSel === null ? '#fff' : c.textSub }]}>
-                Todas ({enriquecidos.length})
+                Todas ({enriquecidosScope.length})
               </Text>
             </TouchableOpacity>
             {zonasDisponibles.map(z => {
@@ -460,6 +490,7 @@ export default function Constructoras() {
             })}
           </ScrollView>
         </View>
+        )
       )}
 
       {loading ? (
@@ -468,7 +499,7 @@ export default function Constructoras() {
         <View style={styles.empty}>
           <Text style={{ fontSize: 46, marginBottom: 10 }}>🏗️</Text>
           <Text style={[styles.emptyText, { color: c.textMute }]}>
-            {busqueda || zonaSel ? 'Sin resultados para ese filtro.' : 'No hay propiedades de constructora aún.'}
+            {busqueda || zonaSel || estadoSel ? 'Sin resultados para ese filtro.' : 'No hay propiedades de constructora aún.'}
           </Text>
         </View>
       ) : (

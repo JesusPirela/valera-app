@@ -66,10 +66,11 @@ function formatPrecio(precio: number | null) {
   return `$${precio.toLocaleString('es-MX')} MXN`
 }
 
-// Estado de una propiedad: se detecta de la dirección/título; si no, cae al
-// campo `zona` (ciudad); por defecto Querétaro (la mayoría del inventario).
+// Estado de una propiedad. La ubicación real vive en el campo `zona` (texto
+// libre: "queretaro", "monterrey", "Cancun", "Coahuila"…), así que se detecta
+// primero de ahí; luego de dirección/título; por defecto Querétaro.
 function estadoDePropiedad(m: { direccion: string | null; titulo: string; zona: string | null }): string {
-  const det = detectarEstadoMexico(`${m.direccion ?? ''} ${m.titulo ?? ''}`)
+  const det = detectarEstadoMexico(`${m.zona ?? ''} ${m.direccion ?? ''} ${m.titulo ?? ''}`)
   if (det) return det
   if (m.zona && ESTADO_LABELS[m.zona]) return ESTADO_LABELS[m.zona]
   return 'Querétaro'
