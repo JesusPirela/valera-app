@@ -465,10 +465,12 @@ export default function AdminConstructoras() {
                     </View>
                     {est.zonas.map(z => (
                       <View key={`${est.estado}_${z.zona}`} style={{ paddingLeft: 10, marginTop: 6 }}>
-                        <View style={[styles.zonaBanner, { backgroundColor: c.card, borderColor: c.border }]}>
-                          <Text style={[styles.zonaBannerTxt, { color: c.textSub }]} numberOfLines={1}>🏘️ {z.zona}</Text>
-                          <Text style={styles.grupoMeta}>{z.total}</Text>
-                        </View>
+                        {z.zona !== SIN_ZONA && (
+                          <View style={[styles.zonaBanner, { backgroundColor: c.card, borderColor: c.border }]}>
+                            <Text style={[styles.zonaBannerTxt, { color: c.textSub }]} numberOfLines={1}>🏘️ {z.zona}</Text>
+                            <Text style={styles.grupoMeta}>{z.total}</Text>
+                          </View>
+                        )}
                         {z.constructoras.map(ct => {
                           const key = `nac_${est.estado}_${z.zona}_${ct.nombre}`
                           const abierta = abiertas[key] ?? busqueda.trim().length > 0

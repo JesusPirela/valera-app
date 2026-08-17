@@ -1120,11 +1120,19 @@ export default function ProspectadorPropiedades() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 4 }} style={{ flexShrink: 1 }}>
           <TouchableOpacity
             style={[styles.constructorasBtn, { borderColor: primaryColor }]}
-            onPress={() => router.push('/(prospectador)/constructoras')}
+            onPress={() => router.push('/(prospectador)/constructoras?scope=queretaro')}
             activeOpacity={0.85}
           >
             <Text style={styles.constructorasIcon}>🏗️</Text>
-            <Text style={[styles.constructorasTxt, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Constructoras</Text>
+            <Text style={[styles.constructorasTxt, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Constructoras QRO</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.constructorasBtn, { borderColor: '#0f4c81' }]}
+            onPress={() => router.push('/(prospectador)/constructoras?scope=nacional')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.constructorasIcon}>🌎</Text>
+            <Text style={[styles.constructorasTxt, { color: '#0f4c81' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Nacionales</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.zonasToggle, { borderColor: primaryColor }, vistaZonas && { backgroundColor: primaryColor }]}

@@ -76,14 +76,14 @@ function formatPrecio(precio: number | null) {
 export default function Constructoras() {
   const c = useColors()
   const { vistaComo } = useVistaComo()
-  const { q } = useLocalSearchParams<{ q?: string }>()
+  const { q, scope: scopeParam } = useLocalSearchParams<{ q?: string; scope?: string }>()
   const [modelos, setModelos] = useState<Modelo[]>([])
   const [constructorasInfo, setConstructorasInfo] = useState<ConstructoraInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [abiertas, setAbiertas] = useState<Record<string, boolean>>({})
   const [busqueda, setBusqueda] = useState(q ?? '')
   const [zonaSel, setZonaSel] = useState<string | null>(null)
-  const [scope, setScope] = useState<'queretaro' | 'nacional'>('queretaro')
+  const [scope, setScope] = useState<'queretaro' | 'nacional'>(scopeParam === 'nacional' ? 'nacional' : 'queretaro')
   const [viewsMap, setViewsMap] = useState<Map<string, { count: number; lastViewed: number }>>(new Map())
 
   useFocusEffect(useCallback(() => { cargar() }, []))
@@ -263,6 +263,113 @@ export default function Constructoras() {
     return m
   }, [constructorasInfo])
 
+  // Tarjeta de un desarrollo (constructora dentro de una zona). Se reutiliza en la
+  // rejilla de Querétaro y en las secciones por estado del catálogo Nacional.
+  const renderCard = (zg: typeof zonaGrupos[number], g: typeof zonaGrupos[number]['grupos'][number]) => {
+    const aKey = `${zg.zona}_${g.nombre}`
+    const abierta = abiertas[aKey] ?? busqueda.trim().length > 0
+    const popular = esPopularMercado(g.nombre)
+    const portadaUrl = portadaMap.get(g.nombre)
+    const imgPortadaFallback = g.modelos[0]?.propiedad_imagenes?.[0]
+    const imgSrc = portadaUrl ?? imgPortadaFallback?.thumb_url ?? imgPortadaFallback?.url ?? null
+    const precios = g.modelos.map(m => m.precio).filter((p): p is number => p != null)
+    const precioDesde = precios.length > 0 ? Math.min(...precios) : null
+    return (
+      <View
+        key={aKey}
+        style={[
+          styles.desarrolloCard,
+          { backgroundColor: c.card, borderColor: popular ? '#e65100' : c.border },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={() => setAbiertas(s => ({ ...s, [aKey]: !abierta }))}
+          activeOpacity={0.9}
+        >
+          {/* Imagen portada con overlay */}
+          <View style={styles.desarrolloImgWrap}>
+            {imgSrc ? (
+              <ThumbImage
+                url={imgSrc}
+                style={styles.desarrolloImg}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.desarrolloImg, styles.desarrolloImgPh]}>
+                <Text style={{ fontSize: 44 }}>🏗️</Text>
+              </View>
+            )}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.18)', 'rgba(0,0,0,0.72)']}
+              locations={[0, 0.45, 1]}
+              style={styles.desarrolloOverlay}
+            />
+            {popular && (
+              <View style={styles.popularPill}>
+                <Text style={styles.popularPillTxt}>🔥 Popular</Text>
+              </View>
+            )}
+            <View style={styles.desarrolloNombreWrap}>
+              <Text style={styles.desarrolloNombre} numberOfLines={2}>{g.nombre}</Text>
+            </View>
+          </View>
+
+          {/* Info: zona, precio, conteo */}
+          <View style={styles.desarrolloInfo}>
+            <View style={styles.desarrolloInfoRow}>
+              <View style={[styles.zonaChip, { backgroundColor: '#1a647015' }]}>
+                <Text style={[styles.zonaChipTxt, { color: '#1a6470' }]} numberOfLines={1}>
+                  📍 {zg.zona}
+                </Text>
+              </View>
+              <Text style={[styles.desarrolloConteo, { color: c.textMute }]}>
+                {g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}
+              </Text>
+            </View>
+            <View style={styles.desarrolloFooter}>
+              <Text style={styles.desarrolloPrecio}>
+                {precioDesde != null
+                  ? `desde $${precioDesde.toLocaleString('es-MX')}`
+                  : 'Precio a consultar'}
+              </Text>
+              <Text style={[styles.desarrolloToggle, { color: '#c9a84c' }]}>
+                {abierta ? '▲ Ocultar' : '▼ Ver modelos'}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Modelos expandidos */}
+        {abierta && (
+          <View style={[styles.modelosWrap, { borderTopColor: c.border }]}>
+            {g.modelos.map(m => {
+              const img = (m.propiedad_imagenes ?? [])[0]
+              return (
+                <TouchableOpacity
+                  key={m.id}
+                  style={[styles.modeloCard, { backgroundColor: c.bg, borderColor: c.border }]}
+                  onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })}
+                  activeOpacity={0.85}
+                >
+                  {img?.url ? (
+                    <ThumbImage url={img.thumb_url ?? img.url} style={styles.modeloImg} />
+                  ) : (
+                    <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
+                    <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
+                    {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
+                  </View>
+                  <Text style={styles.modeloChevron}>›</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        )}
+      </View>
+    )
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
@@ -371,115 +478,32 @@ export default function Constructoras() {
           refreshControl={refreshControl}
           contentContainerStyle={styles.cardsScroll}
         >
-          <View style={styles.cardsGrid}>
-          {zonaGrupos.flatMap(zg =>
-            zg.grupos.map(g => {
-              const aKey = `${zg.zona}_${g.nombre}`
-              const abierta = abiertas[aKey] ?? busqueda.trim().length > 0
-              const popular = esPopularMercado(g.nombre)
-              const portadaUrl = portadaMap.get(g.nombre)
-              const imgPortadaFallback = g.modelos[0]?.propiedad_imagenes?.[0]
-              const imgSrc = portadaUrl ?? imgPortadaFallback?.thumb_url ?? imgPortadaFallback?.url ?? null
-              const precios = g.modelos.map(m => m.precio).filter((p): p is number => p != null)
-              const precioDesde = precios.length > 0 ? Math.min(...precios) : null
-              return (
-                <View
-                  key={aKey}
-                  style={[
-                    styles.desarrolloCard,
-                    { backgroundColor: c.card, borderColor: popular ? '#e65100' : c.border },
-                  ]}
-                >
-                  <TouchableOpacity
-                    onPress={() => setAbiertas(s => ({ ...s, [aKey]: !abierta }))}
-                    activeOpacity={0.9}
-                  >
-                    {/* Imagen portada con overlay */}
-                    <View style={styles.desarrolloImgWrap}>
-                      {imgSrc ? (
-                        <ThumbImage
-                          url={imgSrc}
-                          style={styles.desarrolloImg}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={[styles.desarrolloImg, styles.desarrolloImgPh]}>
-                          <Text style={{ fontSize: 44 }}>🏗️</Text>
-                        </View>
-                      )}
-                      <LinearGradient
-                        colors={['transparent', 'rgba(0,0,0,0.18)', 'rgba(0,0,0,0.72)']}
-                        locations={[0, 0.45, 1]}
-                        style={styles.desarrolloOverlay}
-                      />
-                      {popular && (
-                        <View style={styles.popularPill}>
-                          <Text style={styles.popularPillTxt}>🔥 Popular</Text>
-                        </View>
-                      )}
-                      <View style={styles.desarrolloNombreWrap}>
-                        <Text style={styles.desarrolloNombre} numberOfLines={2}>{g.nombre}</Text>
-                      </View>
-                    </View>
-
-                    {/* Info: zona, precio, conteo */}
-                    <View style={styles.desarrolloInfo}>
-                      <View style={styles.desarrolloInfoRow}>
-                        <View style={[styles.zonaChip, { backgroundColor: '#1a647015' }]}>
-                          <Text style={[styles.zonaChipTxt, { color: '#1a6470' }]} numberOfLines={1}>
-                            📍 {zg.zona}{scope === 'nacional' && zg.estado ? ` · ${zg.estado}` : ''}
-                          </Text>
-                        </View>
-                        <Text style={[styles.desarrolloConteo, { color: c.textMute }]}>
-                          {g.modelos.length} {g.modelos.length === 1 ? 'modelo' : 'modelos'}
-                        </Text>
-                      </View>
-                      <View style={styles.desarrolloFooter}>
-                        <Text style={styles.desarrolloPrecio}>
-                          {precioDesde != null
-                            ? `desde $${precioDesde.toLocaleString('es-MX')}`
-                            : 'Precio a consultar'}
-                        </Text>
-                        <Text style={[styles.desarrolloToggle, { color: '#c9a84c' }]}>
-                          {abierta ? '▲ Ocultar' : '▼ Ver modelos'}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* Modelos expandidos */}
-                  {abierta && (
-                    <View style={[styles.modelosWrap, { borderTopColor: c.border }]}>
-                      {g.modelos.map(m => {
-                        const img = (m.propiedad_imagenes ?? [])[0]
-                        return (
-                          <TouchableOpacity
-                            key={m.id}
-                            style={[styles.modeloCard, { backgroundColor: c.bg, borderColor: c.border }]}
-                            onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })}
-                            activeOpacity={0.85}
-                          >
-                            {img?.url ? (
-                              <ThumbImage url={img.thumb_url ?? img.url} style={styles.modeloImg} />
-                            ) : (
-                              <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
-                            )}
-                            <View style={{ flex: 1 }}>
-                              <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
-                              <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
-                              {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
-                            </View>
-                            <Text style={styles.modeloChevron}>›</Text>
-                          </TouchableOpacity>
-                        )
-                      })}
-                    </View>
-                  )}
+          {scope === 'nacional' ? (
+            /* Nacional: seccionado por ESTADO → dentro, sus zonas y desarrollos */
+            estadoSecciones.map(sec => (
+              <View key={sec.estado} style={styles.estadoSeccion}>
+                <View style={styles.estadoHeader}>
+                  <Text style={styles.estadoHeaderTxt} numberOfLines={1}>📍 {sec.estado}</Text>
+                  <Text style={styles.estadoHeaderMeta}>{sec.total} {sec.total === 1 ? 'desarrollo' : 'desarrollos'}</Text>
                 </View>
-              )
-            })
+                {sec.zonas.map(zg => (
+                  <View key={`${sec.estado}_${zg.zona}`} style={{ marginBottom: 6 }}>
+                    {zg.zona !== SIN_ZONA && (
+                      <Text style={[styles.zonaSubhead, { color: c.textSub }]}>🏘️ {zg.zona}</Text>
+                    )}
+                    <View style={styles.cardsGrid}>
+                      {zg.grupos.map(g => renderCard(zg, g))}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ))
+          ) : (
+            /* Querétaro: rejilla directa de desarrollos */
+            <View style={styles.cardsGrid}>
+              {zonaGrupos.flatMap(zg => zg.grupos.map(g => renderCard(zg, g)))}
+            </View>
           )}
-          </View>
         </ScrollView>
       )}
     </View>
@@ -499,6 +523,14 @@ const styles = StyleSheet.create({
   scopeChip: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 9, alignItems: 'center' },
   scopeChipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   scopeChipTxt: { fontSize: 13.5, fontWeight: '800' },
+  estadoSeccion: { marginBottom: 14 },
+  estadoHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#0f4c81', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 8,
+  },
+  estadoHeaderTxt: { color: '#fff', fontSize: 16, fontWeight: '900', flexShrink: 1 },
+  estadoHeaderMeta: { color: '#cfe0f0', fontSize: 12, fontWeight: '700', marginLeft: 8 },
+  zonaSubhead: { fontSize: 13, fontWeight: '800', marginBottom: 6, marginLeft: 2 },
 
   searchBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
