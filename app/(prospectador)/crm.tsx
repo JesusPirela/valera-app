@@ -136,7 +136,8 @@ function diasVencido(c: Cliente): number {
   const now = Date.now()
   let vencioEn = now
   if (c.proximo_contacto) {
-    const t = new Date(c.proximo_contacto).getTime()
+    // Parsear la fecha en hora local añadiendo T00:00 para evitar interpretación UTC
+    const t = new Date(c.proximo_contacto.slice(0, 10) + 'T00:00:00').getTime()
     if (t < now) vencioEn = Math.min(vencioEn, t)
   }
   const recMin = (c.recordatorios ?? [])
@@ -164,14 +165,21 @@ function normalizarTel(tel: string): string {
 //    definió cuándo lo vuelve a contactar).
 // Antes solo contaba el recordatorio abierto, así que un cliente con el próximo
 // contacto vencido (⚠ en la columna de fecha) no aparecía al filtrar VENCIDOS.
+function fechaHoyLocal(): string {
+  const h = new Date()
+  return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`
+}
+
 function necesitaSeguimiento(c: Cliente): boolean {
   if (c.estado === 'descartado' || c.estado === 'compro' || c.estado === 'compro_externo') return false
-  const now = Date.now()
   if (c.proximo_contacto) {
-    const t = new Date(c.proximo_contacto).getTime()
-    if (t > now) return false
-    if (t < now) return true
+    // Comparar solo fechas calendario (YYYY-MM-DD) para evitar el desfase UTC:
+    // "2025-01-15" como timestamp UTC es medianoche UTC = 6pm México del día anterior.
+    const fechaContacto = c.proximo_contacto.slice(0, 10)
+    if (fechaContacto >= fechaHoyLocal()) return false  // hoy o futuro → no vencido
+    return true                                          // ayer o antes → vencido
   }
+  const now = Date.now()
   return (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
 }
 
@@ -1220,42 +1228,51 @@ export default function CRM() {
           </TouchableOpacity>
         )}
 
-        {/* ── Presupuesto total activo (aprox.) ── */}
-        {presupuestoConteo > 0 && (
-          <View style={s.presuBanner}>
-            <Text style={{ fontSize: 22 }}>💰</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.presuBannerLbl}>Presupuesto activo (aprox.)</Text>
-              <Text style={s.presuBannerNum}>${Math.round(presupuestoActivo).toLocaleString('es-MX')}</Text>
+        {/* ── Vencidos + Presupuesto (fila compacta) ── */}
+        <View style={s.topInfoRow}>
+          <TouchableOpacity
+            style={[s.vencidosPill, vencidos > 0 && s.vencidosPillActivo]}
+            onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(v => !v) }}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.vencidosPillNum, vencidos > 0 && { color: '#ef4444' }]}>{vencidos}</Text>
+            <Text style={[s.vencidosPillLbl, vencidos > 0 && { color: '#ef4444' }]}>⚠ VENCIDOS</Text>
+          </TouchableOpacity>
+          {presupuestoConteo > 0 && (
+            <View style={s.presuPill}>
+              <Text style={s.presuPillIco}>💰</Text>
+              <View>
+                <Text style={s.presuPillNum}>${(presupuestoActivo / 1_000_000).toFixed(1)}M</Text>
+                <Text style={s.presuPillLbl}>presupuesto activo</Text>
+              </View>
             </View>
-            <Text style={s.presuBannerSub}>de {presupuestoConteo} {presupuestoConteo === 1 ? 'cliente' : 'clientes'}</Text>
-          </View>
-        )}
+          )}
+        </View>
 
-        {/* ── KPI strip (todos clickeables) ── */}
+        {/* ── KPI strip ── */}
         <View style={[s.kpiStrip, { backgroundColor: c.card, borderBottomColor: c.border }]}>
           <TouchableOpacity
-            style={[s.kpiItem, estadoFiltro === null && !filtroVencidos && s.kpiActivo]}
-            onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(false) }}
+            style={[s.kpiItem, estadoFiltro === 'cita_por_agendar' && s.kpiActivo]}
+            onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_por_agendar' ? null : 'cita_por_agendar') }}
           >
-            <Text style={[s.kpiNum, { color: '#3b82f6' }]}>{activos}</Text>
-            <Text style={[s.kpiLbl, { color: c.textMute }]}>ACTIVOS</Text>
+            <Text style={[s.kpiNum, { color: '#bf4e1a' }]}>{conteos['cita_por_agendar'] ?? 0}</Text>
+            <Text style={[s.kpiLbl, { color: c.textMute }]}>X AGENDAR</Text>
           </TouchableOpacity>
           <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
           <TouchableOpacity
             style={[s.kpiItem, estadoFiltro === 'cita_agendada' && s.kpiActivo]}
             onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_agendada' ? null : 'cita_agendada') }}
           >
-            <Text style={[s.kpiNum, { color: '#f59e0b' }]}>{citas}</Text>
-            <Text style={[s.kpiLbl, { color: c.textMute }]}>CITAS</Text>
+            <Text style={[s.kpiNum, { color: '#1a6855' }]}>{conteos['cita_agendada'] ?? 0}</Text>
+            <Text style={[s.kpiLbl, { color: c.textMute }]}>AGENDADA</Text>
           </TouchableOpacity>
           <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
           <TouchableOpacity
-            style={[s.kpiItem, filtroVencidos && s.kpiActivo]}
-            onPress={() => { setEstadoFiltro(null); setFiltroVencidos(v => !v) }}
+            style={[s.kpiItem, estadoFiltro === 'seguimiento_cierre' && s.kpiActivo]}
+            onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'seguimiento_cierre' ? null : 'seguimiento_cierre') }}
           >
-            <Text style={[s.kpiNum, vencidos > 0 ? { color: '#ef4444' } : { color: c.border }]}>{vencidos}</Text>
-            <Text style={[s.kpiLbl, { color: c.textMute }]}>VENCIDOS</Text>
+            <Text style={[s.kpiNum, { color: '#8b2252' }]}>{conteos['seguimiento_cierre'] ?? 0}</Text>
+            <Text style={[s.kpiLbl, { color: c.textMute }]}>SEG. CIERRE</Text>
           </TouchableOpacity>
           <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
           <TouchableOpacity
@@ -2253,6 +2270,26 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
   },
+  topInfoRow: {
+    flexDirection: 'row', alignItems: 'stretch', gap: 8,
+    marginHorizontal: 12, marginTop: 10, marginBottom: 2,
+  },
+  vencidosPill: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderRadius: 12, borderWidth: 1.5, borderColor: '#e2e8f0',
+    paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f8fafc',
+  },
+  vencidosPillActivo: { borderColor: '#fca5a5', backgroundColor: '#fff5f5' },
+  vencidosPillNum: { fontSize: 22, fontWeight: '900', color: '#94a3b8' },
+  vencidosPillLbl: { fontSize: 11, fontWeight: '700', color: '#94a3b8' },
+  presuPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0',
+    paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f0fdf4',
+  },
+  presuPillIco: { fontSize: 16 },
+  presuPillNum: { fontSize: 15, fontWeight: '800', color: '#1a6470' },
+  presuPillLbl: { fontSize: 10, color: '#6b7280', fontWeight: '600' },
   presuBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     marginHorizontal: 12, marginTop: 10, borderRadius: 14,

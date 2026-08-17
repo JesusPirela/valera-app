@@ -58,6 +58,25 @@ const GIF_MAP: Record<string, string> = Object.fromEntries(
   AVATARES_PREMIUM.map(a => [a.emoji, a.gif])
 )
 
+function _parsePresu(txt: string | null | undefined): number | null {
+  if (!txt) return null
+  const s = String(txt).toLowerCase().replace(/[, $]/g, '')
+  const m = s.match(/(\d+(\.\d+)?)\s*(m|k)?/)
+  if (!m) return null
+  let n = parseFloat(m[1])
+  if (isNaN(n)) return null
+  const suf = m[3]
+  if (suf === 'm') n *= 1_000_000
+  else if (suf === 'k') n *= 1_000
+  else if (n < 100) n *= 1_000_000
+  return n
+}
+function _formatPresu(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`
+  if (n >= 1_000) return `$${Math.round(n / 1_000)}k`
+  return `$${Math.round(n)}`
+}
+
 function mostrarAlerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
   else Alert.alert('Aviso', msg)
@@ -144,6 +163,7 @@ export default function Perfil() {
   const [userId, setUserId] = useState('')
   const [nombre, setNombre] = useState('')
   const [stats, setStats] = useState<UserStats | null>(null)
+  const [presupuestoActivo, setPresupuestoActivo] = useState(0)
   const [telefono, setTelefono] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarEmoji, setAvatarEmoji] = useState('👤')
@@ -192,11 +212,21 @@ export default function Perfil() {
     setUserId(user.id)
     setEmail(user.email ?? '')
 
-    const [{ data }, statsData] = await Promise.all([
+    const [{ data }, statsData, { data: clientesData }] = await Promise.all([
       supabase.from('profiles').select('nombre, telefono, avatar_url, color_acento, figura_acento, colores_desbloqueados, avatares_desbloqueados').eq('id', user.id).single(),
       getUserStats(user.id),
+      supabase.from('clientes').select('presupuesto, estado').eq('agente_id', user.id),
     ])
     setStats(statsData)
+    if (clientesData) {
+      let total = 0
+      for (const c of clientesData) {
+        if (c.estado === 'descartado' || c.estado === 'compro' || c.estado === 'compro_externo') continue
+        const v = _parsePresu(c.presupuesto)
+        if (v != null && v > 0) total += v
+      }
+      setPresupuestoActivo(total)
+    }
 
     if (data) {
       setNombre(data.nombre ?? '')
@@ -493,6 +523,16 @@ export default function Perfil() {
                 <Text style={[s.statLbl, { color: c.textMute }]}>Propiedades</Text>
               </View>
             </View>
+            {presupuestoActivo > 0 && (
+              <View style={[s.statsRow, { borderTopColor: c.border }]}>
+                <View style={{ flex: 1, alignItems: 'center', paddingVertical: 8 }}>
+                  <Text style={[s.statVal, { color: '#10b981', fontSize: 17 }]}>
+                    💵 {_formatPresu(presupuestoActivo)}
+                  </Text>
+                  <Text style={[s.statLbl, { color: c.textMute }]}>Presupuesto activo en pipeline</Text>
+                </View>
+              </View>
+            )}
           </View>
         )
       })()}
