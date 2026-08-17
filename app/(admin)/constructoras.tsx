@@ -30,6 +30,10 @@ type ModeloZona = Modelo & { zonaDet: string; ciudad: string }
 const CIUDAD_LABELS: Record<string, string> = {
   queretaro: 'Querétaro', monterrey: 'Monterrey', puebla: 'Puebla',
 }
+// Estado (para el catálogo NACIONAL, que secciona por estado → zona).
+const ESTADO_LABELS: Record<string, string> = {
+  queretaro: 'Querétaro', monterrey: 'Nuevo León', puebla: 'Puebla',
+}
 const SIN_ZONA = 'Otras zonas'
 
 type Contacto = {
@@ -79,7 +83,10 @@ function alerta(msg: string) {
 
 export default function AdminConstructoras() {
   const c = useColors()
-  const params = useLocalSearchParams<{ vista?: string; q?: string }>()
+  const params = useLocalSearchParams<{ vista?: string; q?: string; scope?: string }>()
+  // 'queretaro' (por defecto) muestra SOLO desarrollos de Querétaro; 'nacional'
+  // muestra los de otros estados, seccionados por estado → zona.
+  const scope: 'queretaro' | 'nacional' = params.scope === 'nacional' ? 'nacional' : 'queretaro'
   const [vista, setVista] = useState<'catalogo' | 'contactos'>(params.vista === 'contactos' ? 'contactos' : 'catalogo')
   const [rol, setRol] = useState<string | null>(null)
 
@@ -146,9 +153,16 @@ export default function AdminConstructoras() {
     ciudad: m.zona ? (CIUDAD_LABELS[m.zona] ?? m.zona) : '',
   })), [modelos])
 
+  // Filtrado por alcance: Querétaro (zona 'queretaro' o sin zona) vs Nacional
+  // (cualquier otro estado). El nacional NO incluye ningún desarrollo de Qro.
+  const enriquecidosScope = useMemo(() => enriquecidos.filter(m => {
+    const esQro = m.zona === 'queretaro' || m.zona == null
+    return scope === 'nacional' ? !esQro : esQro
+  }), [enriquecidos, scope])
+
   const zonasDisponibles = useMemo(() => {
     const cont = new Map<string, number>()
-    for (const m of enriquecidos) cont.set(m.zonaDet, (cont.get(m.zonaDet) ?? 0) + 1)
+    for (const m of enriquecidosScope) cont.set(m.zonaDet, (cont.get(m.zonaDet) ?? 0) + 1)
     return Array.from(cont.entries())
       .sort((a, b) => {
         if (a[0] === SIN_ZONA) return 1
@@ -160,7 +174,7 @@ export default function AdminConstructoras() {
 
   const filtrados = useMemo(() => {
     const q = normalizar(busqueda.trim())
-    return enriquecidos.filter(m => {
+    return enriquecidosScope.filter(m => {
       if (zonaSel && m.zonaDet !== zonaSel) return false
       if (!q) return true
       return (
@@ -171,7 +185,7 @@ export default function AdminConstructoras() {
         normalizar(m.direccion ?? '').includes(q)
       )
     })
-  }, [enriquecidos, busqueda, zonaSel])
+  }, [enriquecidosScope, busqueda, zonaSel])
 
   // Agrupar: fraccionamiento → constructora
   const zonaGrupos = useMemo(() => {
@@ -209,7 +223,7 @@ export default function AdminConstructoras() {
 
   const empresaGrupos = useMemo(() => {
     const q = normalizar(busqueda.trim())
-    const lista = enriquecidos.filter(m => {
+    const lista = enriquecidosScope.filter(m => {
       if (!q) return true
       return (
         normalizar(m.nombre_constructora ?? '').includes(q) ||
@@ -242,7 +256,53 @@ export default function AdminConstructoras() {
         if (b.empresa === SIN_MATRIZ) return -1
         return b.total - a.total
       })
-  }, [enriquecidos, busqueda, empresaMap])
+  }, [enriquecidosScope, busqueda, empresaMap])
+
+  // NACIONAL: agrupa por estado → zona (colonia) → constructora → modelos.
+  const estadoGrupos = useMemo(() => {
+    const q = normalizar(busqueda.trim())
+    const lista = enriquecidosScope.filter(m => {
+      if (!q) return true
+      return (
+        normalizar(m.nombre_constructora ?? '').includes(q) ||
+        normalizar(m.titulo ?? '').includes(q) ||
+        normalizar(m.codigo ?? '').includes(q) ||
+        normalizar(m.zonaDet).includes(q) ||
+        normalizar(m.direccion ?? '').includes(q)
+      )
+    })
+    const estadoDe = (m: ModeloZona) => m.zona ? (ESTADO_LABELS[m.zona] ?? CIUDAD_LABELS[m.zona] ?? m.zona) : 'Sin estado'
+    const porEstado = new Map<string, ModeloZona[]>()
+    for (const m of lista) {
+      const e = estadoDe(m)
+      if (!porEstado.has(e)) porEstado.set(e, [])
+      porEstado.get(e)!.push(m)
+    }
+    return Array.from(porEstado.entries())
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([estado, mods]) => {
+        const porZona = new Map<string, ModeloZona[]>()
+        for (const m of mods) {
+          if (!porZona.has(m.zonaDet)) porZona.set(m.zonaDet, [])
+          porZona.get(m.zonaDet)!.push(m)
+        }
+        const zonas = Array.from(porZona.entries())
+          .sort((a, b) => (a[0] === SIN_ZONA ? 1 : b[0] === SIN_ZONA ? -1 : b[1].length - a[1].length))
+          .map(([zona, zmods]) => {
+            const constMap = new Map<string, ModeloZona[]>()
+            for (const m of zmods) {
+              const nombre = m.nombre_constructora?.trim() || SIN_CONSTRUCTORA_ADM
+              if (!constMap.has(nombre)) constMap.set(nombre, [])
+              constMap.get(nombre)!.push(m)
+            }
+            const constructoras = Array.from(constMap.entries())
+              .map(([nombre, ms]) => ({ nombre, modelos: ms }))
+              .sort((a, b) => b.modelos.length - a.modelos.length)
+            return { zona, total: zmods.length, constructoras }
+          })
+        return { estado, total: mods.length, zonas }
+      })
+  }, [enriquecidosScope, busqueda])
 
   // Contactos ya guardados (coordinador + teléfono), sin repetir, para reusarlos
   // con un click en el formulario en vez de reescribir el número cada vez.
@@ -346,8 +406,14 @@ export default function AdminConstructoras() {
       {vista === 'catalogo' || !esAdmin ? (
         <>
           <View style={styles.intro}>
-            <Text style={[styles.introTitle, { color: c.text }]}>🏗️ Constructoras</Text>
-            <Text style={[styles.introSub, { color: c.textMute }]}>Vista por empresa matriz → desarrollo → modelos.</Text>
+            <Text style={[styles.introTitle, { color: c.text }]}>
+              {scope === 'nacional' ? '🌎 Constructoras Nacionales' : '🏗️ Constructoras de Querétaro'}
+            </Text>
+            <Text style={[styles.introSub, { color: c.textMute }]}>
+              {scope === 'nacional'
+                ? 'Desarrollos de otros estados, seccionados por estado → zona.'
+                : 'Vista por empresa matriz → desarrollo → modelos.'}
+            </Text>
           </View>
 
           <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -370,6 +436,78 @@ export default function AdminConstructoras() {
 
           {loadingCatalogo ? (
             <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
+          ) : scope === 'nacional' ? (
+            estadoGrupos.length === 0 ? (
+              <View style={styles.empty}>
+                <Text style={{ fontSize: 46, marginBottom: 10 }}>🌎</Text>
+                <Text style={[styles.emptyText, { color: c.textMute }]}>
+                  {busqueda ? 'Sin resultados para ese filtro.' : 'Aún no hay desarrollos de otros estados. Agrega propiedades de constructora fuera de Querétaro y aquí se organizan por estado y zona.'}
+                </Text>
+              </View>
+            ) : (
+              <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
+                {estadoGrupos.map(est => (
+                  <View key={est.estado} style={{ marginBottom: 10 }}>
+                    <View style={[styles.empresaHeader, { backgroundColor: '#0f4c81' }]}>
+                      <Text style={styles.empresaTitulo} numberOfLines={1}>📍 {est.estado}</Text>
+                      <Text style={styles.empresaMeta}>
+                        {est.zonas.length} {est.zonas.length === 1 ? 'zona' : 'zonas'} · {est.total} {est.total === 1 ? 'modelo' : 'modelos'}
+                      </Text>
+                    </View>
+                    {est.zonas.map(z => (
+                      <View key={`${est.estado}_${z.zona}`} style={{ paddingLeft: 10, marginTop: 6 }}>
+                        <View style={[styles.zonaBanner, { backgroundColor: c.card, borderColor: c.border }]}>
+                          <Text style={[styles.zonaBannerTxt, { color: c.textSub }]} numberOfLines={1}>🏘️ {z.zona}</Text>
+                          <Text style={styles.grupoMeta}>{z.total}</Text>
+                        </View>
+                        {z.constructoras.map(ct => {
+                          const key = `nac_${est.estado}_${z.zona}_${ct.nombre}`
+                          const abierta = abiertas[key] ?? busqueda.trim().length > 0
+                          return (
+                            <View key={key} style={{ paddingLeft: 10, marginTop: 4 }}>
+                              <TouchableOpacity
+                                style={[styles.grupoHeader, { backgroundColor: c.card, borderColor: '#c9a84c', borderWidth: 1.4 }]}
+                                onPress={() => setAbiertas(s => ({ ...s, [key]: !abierta }))}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={[styles.grupoChevron, { color: '#c9a84c' }]}>{abierta ? '▼' : '▶'}</Text>
+                                <Text style={[styles.grupoTitulo, { color: c.text, flex: 1 }]} numberOfLines={1}>{ct.nombre}</Text>
+                                <Text style={styles.grupoMeta}>{ct.modelos.length} {ct.modelos.length === 1 ? 'modelo' : 'modelos'}</Text>
+                              </TouchableOpacity>
+                              {abierta && ct.modelos.map(m => {
+                                const img = (m.propiedad_imagenes ?? [])[0]
+                                return (
+                                  <TouchableOpacity
+                                    key={m.id}
+                                    style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border, marginLeft: 8 }]}
+                                    onPress={() => m.codigo
+                                      ? router.push(`/ficha/${m.codigo}`)
+                                      : router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })}
+                                    activeOpacity={0.85}
+                                  >
+                                    {img?.url ? (
+                                      <ThumbImage url={img.thumb_url ?? img.url} style={styles.modeloImg} />
+                                    ) : (
+                                      <View style={[styles.modeloImg, styles.modeloImgPh]}><Text style={{ fontSize: 24 }}>🏠</Text></View>
+                                    )}
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={[styles.modeloTitulo, { color: c.text }]} numberOfLines={2}>{m.titulo}</Text>
+                                      <Text style={styles.modeloPrecio}>{formatPrecio(m.precio)}</Text>
+                                      {m.codigo ? <Text style={styles.modeloCodigo}>{m.codigo}</Text> : null}
+                                    </View>
+                                    <Text style={styles.modeloChevron}>›</Text>
+                                  </TouchableOpacity>
+                                )
+                              })}
+                            </View>
+                          )
+                        })}
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </ScrollView>
+            )
           ) : empresaGrupos.length === 0 ? (
             <View style={styles.empty}>
               <Text style={{ fontSize: 46, marginBottom: 10 }}>🏗️</Text>
@@ -776,6 +914,12 @@ const styles = StyleSheet.create({
   grupoTitulo: { fontSize: 15, fontWeight: '800' },
   grupoUbic: { fontSize: 12, fontWeight: '600', marginTop: 2 },
   grupoMeta: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
+  zonaBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+    borderRadius: 8, borderWidth: 1, borderLeftWidth: 4, borderLeftColor: '#0f4c81',
+    paddingHorizontal: 12, paddingVertical: 8, marginBottom: 6,
+  },
+  zonaBannerTxt: { fontSize: 13.5, fontWeight: '800', flex: 1 },
 
   modeloCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
