@@ -1236,7 +1236,7 @@ export default function CRM() {
             activeOpacity={0.8}
           >
             <Text style={[s.vencidosPillNum, vencidos > 0 && { color: '#ef4444' }]}>{vencidos}</Text>
-            <Text style={[s.vencidosPillLbl, vencidos > 0 && { color: '#ef4444' }]}>⚠ VENCIDOS</Text>
+            <Text style={[s.vencidosPillLbl, vencidos > 0 && { color: '#ef4444' }]}>⚠ SEGUIMIENTOS VENCIDOS</Text>
           </TouchableOpacity>
           {presupuestoConteo > 0 && (
             <View style={s.presuPill}>
