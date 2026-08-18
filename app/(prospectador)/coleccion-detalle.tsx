@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, Modal,
   ActivityIndicator, StyleSheet, Platform, Linking, Alert,
@@ -54,6 +54,13 @@ export default function ColeccionDetalle() {
   const [resultados, setResultados] = useState<PropBusca[]>([])
   const [buscando, setBuscando] = useState(false)
   const [modalForm, setModalForm] = useState(false)
+  // Filtros del buscador de propiedades
+  const [fOp, setFOp] = useState<string | null>(null)
+  const [fTipo, setFTipo] = useState<string | null>(null)
+  const [fRec, setFRec] = useState<number | null>(null)
+  const [fMin, setFMin] = useState('')
+  const [fMax, setFMax] = useState('')
+  const hayFiltro = !!fOp || !!fTipo || !!fRec || !!fMin.trim() || !!fMax.trim()
 
   const cargar = useCallback(async () => {
     try {
@@ -74,17 +81,27 @@ export default function ColeccionDetalle() {
 
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
 
-  async function buscar(q: string) {
-    setBusca(q)
-    if (q.trim().length < 2) { setResultados([]); return }
+  async function buscar() {
+    const q = busca.trim()
+    // Requiere al menos texto (2+) o algún filtro activo para consultar.
+    if (q.length < 2 && !hayFiltro) { setResultados([]); return }
     setBuscando(true)
     try {
-      const like = `%${q.trim()}%`
-      const { data } = await supabase.from('propiedades')
+      let query = supabase.from('propiedades')
         .select('id, codigo, titulo, precio, direccion, propiedad_imagenes(url, orden, thumb_url)')
         .eq('estado', 'disponible').eq('es_inventario', false)
-        .or(`codigo.ilike.${like},titulo.ilike.${like},direccion.ilike.${like}`)
-        .limit(20)
+      if (q.length >= 2) {
+        const like = `%${q}%`
+        query = query.or(`codigo.ilike.${like},titulo.ilike.${like},direccion.ilike.${like}`)
+      }
+      if (fOp) query = query.eq('operacion', fOp)
+      if (fTipo) query = query.eq('tipo', fTipo)
+      if (fRec) query = query.gte('recamaras', fRec)
+      const minN = parseInt(fMin.replace(/\D/g, ''), 10)
+      if (!isNaN(minN)) query = query.gte('precio', minN)
+      const maxN = parseInt(fMax.replace(/\D/g, ''), 10)
+      if (!isNaN(maxN)) query = query.lte('precio', maxN)
+      const { data } = await query.order('precio', { ascending: true, nullsFirst: false }).limit(30)
       const yaEn = new Set((det?.items ?? []).map(i => i.propiedad_id))
       const rows = (data ?? []).map((p: any) => {
         const imgs = [...(p.propiedad_imagenes ?? [])].sort((a: any, b: any) => a.orden - b.orden)
@@ -94,6 +111,15 @@ export default function ColeccionDetalle() {
       setResultados(rows)
     } catch { /* sin red */ } finally { setBuscando(false) }
   }
+
+  // Re-ejecuta la búsqueda (con debounce) cuando cambia el texto o cualquier
+  // filtro, mientras el modal de agregar está abierto.
+  useEffect(() => {
+    if (!addModal) return
+    const t = setTimeout(() => { buscar() }, 350)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addModal, busca, fOp, fTipo, fRec, fMin, fMax, det?.items?.length])
 
   async function agregar(p: PropBusca) {
     setResultados(r => r.filter(x => x.id !== p.id))
@@ -239,10 +265,52 @@ export default function ColeccionDetalle() {
               </TouchableOpacity>
             </View>
             <TextInput style={[st.input, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
-              value={busca} onChangeText={buscar} placeholder="Buscar por código, título o zona…" placeholderTextColor={c.textMute} autoFocus />
+              value={busca} onChangeText={setBusca} placeholder="Buscar por código, título o zona…" placeholderTextColor={c.textMute} autoFocus />
+
+            {/* Filtros */}
+            <View style={{ marginTop: 8 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.chipRow} keyboardShouldPersistTaps="handled">
+                {[{ v: 'venta', l: 'Venta' }, { v: 'renta', l: 'Renta' }].map(o => {
+                  const on = fOp === o.v
+                  return (
+                    <TouchableOpacity key={o.v} style={[st.chip, { borderColor: c.border }, on && st.chipOn]} onPress={() => setFOp(on ? null : o.v)}>
+                      <Text style={[st.chipTxt, { color: on ? '#fff' : c.textSub }]}>{o.l}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+                {[{ v: 'casa', l: '🏡 Casa' }, { v: 'departamento', l: '🏢 Depto' }, { v: 'local', l: '🏪 Local' }, { v: 'terreno', l: '🌄 Terreno' }].map(t => {
+                  const on = fTipo === t.v
+                  return (
+                    <TouchableOpacity key={t.v} style={[st.chip, { borderColor: c.border }, on && st.chipOn]} onPress={() => setFTipo(on ? null : t.v)}>
+                      <Text style={[st.chipTxt, { color: on ? '#fff' : c.textSub }]}>{t.l}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+                {[1, 2, 3, 4].map(n => {
+                  const on = fRec === n
+                  return (
+                    <TouchableOpacity key={n} style={[st.chip, { borderColor: c.border }, on && st.chipOn]} onPress={() => setFRec(on ? null : n)}>
+                      <Text style={[st.chipTxt, { color: on ? '#fff' : c.textSub }]}>🛏️ {n}+</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
+              <View style={st.precioRow}>
+                <TextInput style={[st.precioInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
+                  value={fMin} onChangeText={setFMin} placeholder="Precio mín." placeholderTextColor={c.textMute} keyboardType="numeric" />
+                <TextInput style={[st.precioInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
+                  value={fMax} onChangeText={setFMax} placeholder="Precio máx." placeholderTextColor={c.textMute} keyboardType="numeric" />
+                {hayFiltro && (
+                  <TouchableOpacity style={st.limpiar} onPress={() => { setFOp(null); setFTipo(null); setFRec(null); setFMin(''); setFMax('') }}>
+                    <Text style={st.limpiarTxt}>Limpiar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
             <ScrollView keyboardShouldPersistTaps="handled" style={{ marginTop: 10 }}>
               {buscando ? <ActivityIndicator color={c.text} style={{ marginTop: 20 }} />
-                : busca.trim().length < 2 ? <Text style={[st.buscaHint, { color: c.textMute }]}>Escribe al menos 2 letras.</Text>
+                : busca.trim().length < 2 && !hayFiltro ? <Text style={[st.buscaHint, { color: c.textMute }]}>Escribe al menos 2 letras o usa un filtro.</Text>
                 : resultados.length === 0 ? <Text style={[st.buscaHint, { color: c.textMute }]}>Sin resultados nuevos.</Text>
                 : resultados.map(p => (
                   <TouchableOpacity key={p.id} style={[st.resRow, { borderColor: c.border }]} onPress={() => agregar(p)}>
@@ -289,6 +357,14 @@ const st = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 12, padding: 10, marginTop: 12 },
   itemImg: { width: 64, height: 64, borderRadius: 8 },
   itemPrecio: { fontSize: 16, fontWeight: '800' },
+  chipRow: { gap: 7, paddingRight: 6, paddingVertical: 2 },
+  chip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
+  chipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  chipTxt: { fontSize: 12.5, fontWeight: '700' },
+  precioRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  precioInput: { flex: 1, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13 },
+  limpiar: { paddingHorizontal: 6, paddingVertical: 8 },
+  limpiarTxt: { color: '#e11d48', fontWeight: '800', fontSize: 12.5 },
   itemTitulo: { fontSize: 12, marginTop: 2 },
   itemStats: { marginTop: 6 },
   favTag: { fontSize: 12, color: '#e11d48', fontWeight: '700' },
