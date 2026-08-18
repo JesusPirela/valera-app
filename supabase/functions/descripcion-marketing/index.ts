@@ -23,13 +23,14 @@ const MODELOS_GROQ = [
   'qwen/qwen3-32b',
 ]
 
-// gemini-2.0-flash primero: estable y sin "thinking". Los nombres se
-// descontinúan, así que se prueban varios hasta dar con uno vigente.
+// Modelos vigentes de Gemini (los anteriores quedaron descontinuados). Los
+// nombres cambian seguido; se prueban varios hasta dar con uno con cuota.
 const MODELOS_GEMINI = [
-  'gemini-2.0-flash',
-  'gemini-2.5-flash',
   'gemini-flash-latest',
-  'gemini-2.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-3.5-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-2.5-flash',
 ]
 
 const MODELOS_OPENROUTER = [

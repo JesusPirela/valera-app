@@ -20,13 +20,14 @@ const MODELOS_GROQ = [
 // Modelos de Gemini a probar en orden (los nombres cambian con las versiones;
 // `-latest` apunta siempre al vigente, y se prueban alternativas por si Google
 // descontinúa alguno — que es justo lo que rompió la versión anterior).
-// gemini-2.0-flash primero: es estable, rápido y NO usa "thinking" (los modelos
-// con thinking devuelven su razonamiento en vez de la descripción y se cortan).
+// Modelos vigentes de Gemini (los anteriores quedaron descontinuados; la propia
+// API recomienda estos). flash-lite primero: tiene más cuota gratis diaria.
 const MODELOS_GEMINI = [
-  'gemini-2.0-flash',
-  'gemini-2.5-flash',
   'gemini-flash-latest',
-  'gemini-2.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-3.5-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-2.5-flash',
 ]
 
 // Modelos gratis de OpenRouter (respaldo final; sus cupos gratis cambian seguido).
