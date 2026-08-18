@@ -33,6 +33,7 @@
     "expo-notifications": "~0.31.5",
     "expo-print": "~14.1.4",
     "expo-router": "~5.1.11",
+    "expo-screen-orientation": "~8.1.7",
     "expo-sharing": "~13.1.5",
     "expo-status-bar": "~2.2.3",
     "expo-task-manager": "~13.1.6",

@@ -26,6 +26,7 @@ import { Tooltip } from '../../components/Tooltip'
 // en vez de quedarse en blanco/negro (expo-router usa este export por ruta).
 export { ErrorBoundary } from '../../components/PantallaError'
 import { parseZonasGuardadas } from '../../lib/zonas-interes'
+import * as ScreenOrientation from 'expo-screen-orientation'
 
 type Cliente = {
   id: string
@@ -487,6 +488,29 @@ export default function CRM() {
   const [sortBy, setSortBy]               = useState<SortBy>('reciente')
   const [showSort, setShowSort]           = useState(false)
   const [vistaExcel, setVistaExcel]       = useState(false)
+  const [landscape, setLandscape]         = useState(false)
+
+  // Orientación: al salir del CRM volver a portrait
+  useFocusEffect(useCallback(() => {
+    return () => {
+      setLandscape(false)
+      if (Platform.OS !== 'web') {
+        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {})
+      }
+    }
+  }, []))
+
+  async function toggleLandscape() {
+    if (Platform.OS === 'web') return
+    const next = !landscape
+    setLandscape(next)
+    if (next) {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {})
+    } else {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {})
+    }
+  }
+
   // Tick que avanza cada minuto para que el memo de "vencidos" recalcule
   // aunque los datos del servidor no hayan cambiado (un recordatorio que
   // vence mientras la app está abierta no implica un nuevo fetch).
@@ -1254,6 +1278,286 @@ export default function CRM() {
     <ClienteCard item={item} c={c} darkMode={darkMode} userRole={userRole} onChatbot={abrirModalChatbot} />
   ), [c, darkMode, userRole, abrirModalChatbot])
 
+  // Header que se desplaza con el scroll en vista lista
+  const crmListHeader = (
+    <>
+      {/* ── Vencidos + Presupuesto (fila compacta) ── */}
+      <View style={s.topInfoRow}>
+        <TouchableOpacity
+          style={[s.vencidosPill, vencidos > 0 && s.vencidosPillActivo]}
+          onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(v => !v) }}
+          activeOpacity={0.8}
+        >
+          <Text style={[s.vencidosPillNum, vencidos > 0 && { color: '#ef4444' }]}>{vencidos}</Text>
+          <Text style={[s.vencidosPillLbl, vencidos > 0 && { color: '#ef4444' }]}>⚠ SEGUIMIENTOS VENCIDOS</Text>
+        </TouchableOpacity>
+        {presupuestoConteo > 0 && (
+          <View style={s.presuPill}>
+            <Text style={s.presuPillIco}>💰</Text>
+            <View>
+              <Text style={s.presuPillNum}>${(presupuestoActivo / 1_000_000).toFixed(1)}M</Text>
+              <Text style={s.presuPillLbl}>presupuesto activo</Text>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* ── KPI strip ── */}
+      <View style={[s.kpiStrip, { backgroundColor: c.card, borderBottomColor: c.border }]}>
+        <TouchableOpacity
+          style={[s.kpiItem, estadoFiltro === 'cita_por_agendar' && s.kpiActivo]}
+          onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_por_agendar' ? null : 'cita_por_agendar') }}
+        >
+          <Text style={[s.kpiNum, { color: '#bf4e1a' }]}>{conteos['cita_por_agendar'] ?? 0}</Text>
+          <Text style={[s.kpiLbl, { color: c.textMute }]}>X AGENDAR</Text>
+        </TouchableOpacity>
+        <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
+        <TouchableOpacity
+          style={[s.kpiItem, estadoFiltro === 'cita_agendada' && s.kpiActivo]}
+          onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_agendada' ? null : 'cita_agendada') }}
+        >
+          <Text style={[s.kpiNum, { color: '#1a6855' }]}>{conteos['cita_agendada'] ?? 0}</Text>
+          <Text style={[s.kpiLbl, { color: c.textMute }]}>AGENDADA</Text>
+        </TouchableOpacity>
+        <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
+        <TouchableOpacity
+          style={[s.kpiItem, estadoFiltro === 'seguimiento_cierre' && s.kpiActivo]}
+          onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'seguimiento_cierre' ? null : 'seguimiento_cierre') }}
+        >
+          <Text style={[s.kpiNum, { color: '#8b2252' }]}>{conteos['seguimiento_cierre'] ?? 0}</Text>
+          <Text style={[s.kpiLbl, { color: c.textMute }]}>SEG. CIERRE</Text>
+        </TouchableOpacity>
+        <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
+        <TouchableOpacity
+          style={[s.kpiItem, estadoFiltro === '__cerrados__' && s.kpiActivo]}
+          onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === '__cerrados__' ? null : '__cerrados__') }}
+        >
+          <Text style={[s.kpiNum, { color: '#10b981' }]}>{cerrados}</Text>
+          <Text style={[s.kpiLbl, { color: c.textMute }]}>CERRADOS</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Funnel bar ── */}
+      <View style={[s.funnelWrap, { backgroundColor: c.card }]}>
+        <View style={[s.funnelBar, { backgroundColor: darkMode ? c.border : '#e2e8f0' }]}>
+          {total === 0 ? (
+            <View style={[s.funnelSeg, { flex: 1, backgroundColor: c.border }]} />
+          ) : (
+            ORDEN_ESTADOS.map(e => {
+              const n = conteos[e]
+              if (n === 0) return null
+              const info = estadoInfo(e)
+              return (
+                <TouchableOpacity
+                  key={e}
+                  style={[s.funnelSeg, { flex: n, backgroundColor: info.color }]}
+                  onPress={() => setEstadoFiltro(estadoFiltro === e ? null : e)}
+                  activeOpacity={0.75}
+                />
+              )
+            })
+          )}
+        </View>
+        {total === 0 && !isLoading ? (
+          <Text style={s.funnelEmpty}>Agrega tu primer lead para ver el embudo de ventas</Text>
+        ) : (
+          <View style={s.funnelLegend}>
+            {ORDEN_ESTADOS.filter(e => conteos[e] > 0).map(e => {
+              const info = estadoInfo(e)
+              const activo = estadoFiltro === e
+              return (
+                <TouchableOpacity
+                  key={e}
+                  style={[s.legendItem, activo && { backgroundColor: info.color + '22', borderRadius: 12, paddingHorizontal: 6 }]}
+                  onPress={() => { setFiltroVencidos(false); setEstadoFiltro(activo ? null : e) }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[s.legendDot, { backgroundColor: info.color }]} />
+                  <Text style={[s.legendTxt, { color: activo ? info.color : c.textSub }, activo && { fontWeight: '700' }]}>{info.label} ({conteos[e]})</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        )}
+      </View>
+
+      {/* ── Oportunidades en riesgo ── */}
+      {clientesEnRiesgo.length > 0 && !filtroVencidos && !bannerCerrado && (
+        <View style={s.opBanner}>
+          <View style={s.opHeader}>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+              onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true) }}
+              activeOpacity={0.85}
+            >
+              <Text style={s.opEmoji}>⚠️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.opTitulo}>
+                  {clientesEnRiesgo.length} oportunidad{clientesEnRiesgo.length === 1 ? '' : 'es'} en riesgo
+                </Text>
+                <Text style={s.opSub}>Contáctalos antes de que se enfríen</Text>
+              </View>
+              <Text style={s.opCta}>Ver todos →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setBannerCerrado(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingLeft: 8 }}>
+              <Ionicons name="close" size={18} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
+          {!vistaExcel && clientesEnRiesgo.slice(0, 3).map(cl => {
+            const dias = diasVencido(cl)
+            return (
+              <TouchableOpacity
+                key={cl.id}
+                style={s.opCliente}
+                onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${cl.id}` as any)}
+                activeOpacity={0.8}
+              >
+                <Text style={s.opClienteNombre} numberOfLines={1}>{cl.nombre}</Text>
+                <View style={[s.opDiasBadge, dias >= 7 && s.opDiasBadgeAlta]}>
+                  <Text style={[s.opDiasTxt, dias >= 7 && s.opDiasTxtAlta]}>{dias}d</Text>
+                </View>
+              </TouchableOpacity>
+            )
+          })}
+          {!vistaExcel && clientesEnRiesgo.length > 3 && (
+            <Text style={s.opMas}>+{clientesEnRiesgo.length - 3} más — toca "Ver todos" para verlos</Text>
+          )}
+        </View>
+      )}
+
+      {/* ── Clientes duplicados ── */}
+      {gruposDuplicados.length > 0 && !bannerDupCerrado && (
+        <View style={s.dupBanner}>
+          <TouchableOpacity
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
+            onPress={() => setShowDuplicadosModal(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={{ fontSize: 18 }}>🔁</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.dupBannerTitulo}>
+                {gruposDuplicados.reduce((sum, g) => sum + g.length, 0)} clientes con número repetido
+              </Text>
+              <Text style={s.dupBannerSub}>Toca para revisar y limpiar duplicados</Text>
+            </View>
+            <Text style={s.dupBannerCta}>Ver →</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setBannerDupCerrado(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingLeft: 8 }}>
+            <Ionicons name="close" size={18} color="#d97706" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ── Botones: chats de WhatsApp + Colecciones ── */}
+      <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 12, marginTop: 8 }}>
+        <TouchableOpacity style={[s.btnCampana, { flex: 1, marginHorizontal: 0, marginTop: 0 }]} onPress={() => router.push('/(prospectador)/chats')}>
+          <Text style={s.btnCampanaTxt}>💬 Chats de WhatsApp</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.btnCampana, { flex: 1, marginHorizontal: 0, marginTop: 0, backgroundColor: '#1a6470' }]} onPress={() => router.push('/(prospectador)/colecciones')}>
+          <Text style={s.btnCampanaTxt}>📁 Colecciones</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Botón: Leads de campaña ── */}
+      {leadsCampania.length > 0 && (
+        <TouchableOpacity style={s.btnLeadsCamp} onPress={() => router.push('/(prospectador)/leads-campania')} activeOpacity={0.88}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+            <Text style={{ fontSize: 28 }}>📣</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.btnLeadsCampTit}>Leads de campaña</Text>
+              <Text style={s.btnLeadsCampSub}>Tu CRM de clientes de campaña</Text>
+            </View>
+          </View>
+          <View style={s.badgeCampaniaBig}><Text style={s.badgeCampaniaBigTxt}>{leadsCampania.length}</Text></View>
+          <Ionicons name="chevron-forward" size={22} color="rgba(255,255,255,0.9)" style={{ marginLeft: 6 }} />
+        </TouchableOpacity>
+      )}
+
+      {/* ── Search + sort + nuevo ── */}
+      <View style={s.searchRow}>
+        <View style={[s.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
+          <Ionicons name="search-outline" size={15} color={c.textMute} style={{ marginRight: 8 }} />
+          <TextInput
+            style={[s.searchInput, { color: c.text }]}
+            placeholder="Buscar nombre, teléfono, empresa..."
+            placeholderTextColor={c.textMute}
+            value={busqueda}
+            onChangeText={setBusqueda}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+            returnKeyType="search"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
+        </View>
+        <Tooltip label="Ordenar clientes">
+          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setShowSort(true)}>
+            <Ionicons name="funnel-outline" size={15} color="#1a6470" />
+            {sortBy !== 'reciente' && <View style={s.sortDot} />}
+          </TouchableOpacity>
+        </Tooltip>
+        <Tooltip label={vistaExcel ? 'Ver como lista' : 'Ver como tabla'}>
+          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={toggleVista}>
+            <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
+          </TouchableOpacity>
+        </Tooltip>
+        <Tooltip label="Importar clientes (CSV)">
+          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
+            <Ionicons name="cloud-upload-outline" size={15} color="#1a6470" />
+          </TouchableOpacity>
+        </Tooltip>
+        <Tooltip label="Exportar clientes (CSV)">
+          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={exportarCSV} disabled={exportando}>
+            {exportando
+              ? <ActivityIndicator size="small" color="#1a6470" />
+              : <Ionicons name="download-outline" size={15} color="#1a6470" />
+            }
+          </TouchableOpacity>
+        </Tooltip>
+        {Platform.OS !== 'web' && (
+          <Tooltip label={landscape ? 'Vista vertical' : 'Vista horizontal'}>
+            <TouchableOpacity style={[s.sortBtn, { backgroundColor: landscape ? '#1a6470' : c.card, borderColor: landscape ? '#1a6470' : c.border }]} onPress={toggleLandscape}>
+              <Ionicons name={landscape ? 'phone-portrait-outline' : 'phone-landscape-outline'} size={15} color={landscape ? '#fff' : '#1a6470'} />
+            </TouchableOpacity>
+          </Tooltip>
+        )}
+        <Tooltip label="Nuevo cliente">
+          <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
+            <Ionicons name="add" size={20} color="#fff" />
+          </TouchableOpacity>
+        </Tooltip>
+      </View>
+
+      {/* ── Operacion tabs ── */}
+      <View style={[s.opRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>
+        {([null, 'venta', 'renta'] as const).map(op => {
+          const label = op === null ? 'Todos' : op === 'venta' ? '🏠 Venta' : '🔑 Renta'
+          const cnt   = op === null ? clientes.length : clientes.filter(c => c.tipo_operacion === op).length
+          const activo = opFiltro === op
+          return (
+            <TouchableOpacity key={String(op)} style={[s.opTab, activo && s.opTabActivo]} onPress={() => setOpFiltro(op)}>
+              <Text style={[s.opTabTxt, { color: c.textMute }, activo && s.opTabTxtActivo]}>{label}</Text>
+              <View style={[s.opTabBadge, { backgroundColor: c.border }, activo && s.opTabBadgeActivo]}>
+                <Text style={[s.opTabBadgeTxt, { color: c.textMute }, activo && { color: '#1a6470' }]}>{cnt}</Text>
+              </View>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+
+      {/* ── Sort label ── */}
+      {sortBy !== 'reciente' && (
+        <View style={s.sortActiveBar}>
+          <Ionicons name="funnel" size={11} color="#1a6470" />
+          <Text style={s.sortActiveTxt}>Ordenado por: {SORT_LABELS[sortBy]}</Text>
+          <TouchableOpacity onPress={() => setSortBy('reciente')}>
+            <Ionicons name="close-circle" size={14} color="#94a3b8" />
+          </TouchableOpacity>
+        </View>
+      )}
+    </>
+  )
+
   return (
     <>
       <OfflineBanner />
@@ -1285,289 +1589,8 @@ export default function CRM() {
           </TouchableOpacity>
         )}
 
-        {/* ── Vencidos + Presupuesto (fila compacta) ── */}
-        <View style={s.topInfoRow}>
-          <TouchableOpacity
-            style={[s.vencidosPill, vencidos > 0 && s.vencidosPillActivo]}
-            onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(v => !v) }}
-            activeOpacity={0.8}
-          >
-            <Text style={[s.vencidosPillNum, vencidos > 0 && { color: '#ef4444' }]}>{vencidos}</Text>
-            <Text style={[s.vencidosPillLbl, vencidos > 0 && { color: '#ef4444' }]}>⚠ SEGUIMIENTOS VENCIDOS</Text>
-          </TouchableOpacity>
-          {presupuestoConteo > 0 && (
-            <View style={s.presuPill}>
-              <Text style={s.presuPillIco}>💰</Text>
-              <View>
-                <Text style={s.presuPillNum}>${(presupuestoActivo / 1_000_000).toFixed(1)}M</Text>
-                <Text style={s.presuPillLbl}>presupuesto activo</Text>
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* ── KPI strip ── */}
-        <View style={[s.kpiStrip, { backgroundColor: c.card, borderBottomColor: c.border }]}>
-          <TouchableOpacity
-            style={[s.kpiItem, estadoFiltro === 'cita_por_agendar' && s.kpiActivo]}
-            onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_por_agendar' ? null : 'cita_por_agendar') }}
-          >
-            <Text style={[s.kpiNum, { color: '#bf4e1a' }]}>{conteos['cita_por_agendar'] ?? 0}</Text>
-            <Text style={[s.kpiLbl, { color: c.textMute }]}>X AGENDAR</Text>
-          </TouchableOpacity>
-          <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
-          <TouchableOpacity
-            style={[s.kpiItem, estadoFiltro === 'cita_agendada' && s.kpiActivo]}
-            onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_agendada' ? null : 'cita_agendada') }}
-          >
-            <Text style={[s.kpiNum, { color: '#1a6855' }]}>{conteos['cita_agendada'] ?? 0}</Text>
-            <Text style={[s.kpiLbl, { color: c.textMute }]}>AGENDADA</Text>
-          </TouchableOpacity>
-          <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
-          <TouchableOpacity
-            style={[s.kpiItem, estadoFiltro === 'seguimiento_cierre' && s.kpiActivo]}
-            onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'seguimiento_cierre' ? null : 'seguimiento_cierre') }}
-          >
-            <Text style={[s.kpiNum, { color: '#8b2252' }]}>{conteos['seguimiento_cierre'] ?? 0}</Text>
-            <Text style={[s.kpiLbl, { color: c.textMute }]}>SEG. CIERRE</Text>
-          </TouchableOpacity>
-          <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
-          <TouchableOpacity
-            style={[s.kpiItem, estadoFiltro === '__cerrados__' && s.kpiActivo]}
-            onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === '__cerrados__' ? null : '__cerrados__') }}
-          >
-            <Text style={[s.kpiNum, { color: '#10b981' }]}>{cerrados}</Text>
-            <Text style={[s.kpiLbl, { color: c.textMute }]}>CERRADOS</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Funnel bar ── */}
-        <View style={[s.funnelWrap, { backgroundColor: c.card }]}>
-          <View style={[s.funnelBar, { backgroundColor: darkMode ? c.border : '#e2e8f0' }]}>
-            {total === 0 ? (
-              <View style={[s.funnelSeg, { flex: 1, backgroundColor: c.border }]} />
-            ) : (
-              ORDEN_ESTADOS.map(e => {
-                const n = conteos[e]
-                if (n === 0) return null
-                const info = estadoInfo(e)
-                return (
-                  <TouchableOpacity
-                    key={e}
-                    style={[s.funnelSeg, { flex: n, backgroundColor: info.color }]}
-                    onPress={() => setEstadoFiltro(estadoFiltro === e ? null : e)}
-                    activeOpacity={0.75}
-                  />
-                )
-              })
-            )}
-          </View>
-          {total === 0 && !isLoading ? (
-            <Text style={s.funnelEmpty}>Agrega tu primer lead para ver el embudo de ventas</Text>
-          ) : (
-            <View style={s.funnelLegend}>
-              {ORDEN_ESTADOS.filter(e => conteos[e] > 0).map(e => {
-                const info = estadoInfo(e)
-                const activo = estadoFiltro === e
-                return (
-                  <TouchableOpacity
-                    key={e}
-                    style={[s.legendItem, activo && { backgroundColor: info.color + '22', borderRadius: 12, paddingHorizontal: 6 }]}
-                    onPress={() => { setFiltroVencidos(false); setEstadoFiltro(activo ? null : e) }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[s.legendDot, { backgroundColor: info.color }]} />
-                    <Text style={[s.legendTxt, { color: activo ? info.color : c.textSub }, activo && { fontWeight: '700' }]}>{info.label} ({conteos[e]})</Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          )}
-        </View>
-
-
-        {/* ── Oportunidades en riesgo ── */}
-        {clientesEnRiesgo.length > 0 && !filtroVencidos && !bannerCerrado && (
-          <View style={s.opBanner}>
-            <View style={s.opHeader}>
-              <TouchableOpacity
-                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-                onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true) }}
-                activeOpacity={0.85}
-              >
-                <Text style={s.opEmoji}>⚠️</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.opTitulo}>
-                    {clientesEnRiesgo.length} oportunidad{clientesEnRiesgo.length === 1 ? '' : 'es'} en riesgo
-                  </Text>
-                  <Text style={s.opSub}>Contáctalos antes de que se enfríen</Text>
-                </View>
-                <Text style={s.opCta}>Ver todos →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setBannerCerrado(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingLeft: 8 }}>
-                <Ionicons name="close" size={18} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-            {!vistaExcel && clientesEnRiesgo.slice(0, 3).map(cl => {
-              const dias = diasVencido(cl)
-              return (
-                <TouchableOpacity
-                  key={cl.id}
-                  style={s.opCliente}
-                  onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${cl.id}` as any)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={s.opClienteNombre} numberOfLines={1}>{cl.nombre}</Text>
-                  <View style={[s.opDiasBadge, dias >= 7 && s.opDiasBadgeAlta]}>
-                    <Text style={[s.opDiasTxt, dias >= 7 && s.opDiasTxtAlta]}>{dias}d</Text>
-                  </View>
-                </TouchableOpacity>
-              )
-            })}
-            {!vistaExcel && clientesEnRiesgo.length > 3 && (
-              <Text style={s.opMas}>+{clientesEnRiesgo.length - 3} más — toca "Ver todos" para verlos</Text>
-            )}
-          </View>
-        )}
-
-        {/* ── Clientes duplicados ── */}
-        {gruposDuplicados.length > 0 && !bannerDupCerrado && (
-          <View style={s.dupBanner}>
-            <TouchableOpacity
-              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
-              onPress={() => setShowDuplicadosModal(true)}
-              activeOpacity={0.85}
-            >
-              <Text style={{ fontSize: 18 }}>🔁</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={s.dupBannerTitulo}>
-                  {gruposDuplicados.reduce((sum, g) => sum + g.length, 0)} clientes con número repetido
-                </Text>
-                <Text style={s.dupBannerSub}>Toca para revisar y limpiar duplicados</Text>
-              </View>
-              <Text style={s.dupBannerCta}>Ver →</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setBannerDupCerrado(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingLeft: 8 }}>
-              <Ionicons name="close" size={18} color="#d97706" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ── Botones: chats de WhatsApp + Colecciones ── */}
-        <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 12, marginTop: 8 }}>
-          <TouchableOpacity style={[s.btnCampana, { flex: 1, marginHorizontal: 0, marginTop: 0 }]} onPress={() => router.push('/(prospectador)/chats')}>
-            <Text style={s.btnCampanaTxt}>💬 Chats de WhatsApp</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.btnCampana, { flex: 1, marginHorizontal: 0, marginTop: 0, backgroundColor: '#1a6470' }]} onPress={() => router.push('/(prospectador)/colecciones')}>
-            <Text style={s.btnCampanaTxt}>📁 Colecciones</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Botón: Leads de campaña (solo si hay clientes asignados de campaña) ── */}
-        {leadsCampania.length > 0 && (
-          <TouchableOpacity style={s.btnLeadsCamp} onPress={() => router.push('/(prospectador)/leads-campania')} activeOpacity={0.88}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-              <Text style={{ fontSize: 28 }}>📣</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={s.btnLeadsCampTit}>Leads de campaña</Text>
-                <Text style={s.btnLeadsCampSub}>Tu CRM de clientes de campaña</Text>
-              </View>
-            </View>
-            <View style={s.badgeCampaniaBig}><Text style={s.badgeCampaniaBigTxt}>{leadsCampania.length}</Text></View>
-            <Ionicons name="chevron-forward" size={22} color="rgba(255,255,255,0.9)" style={{ marginLeft: 6 }} />
-          </TouchableOpacity>
-        )}
-
-        {/* ── Search + sort + nuevo ── */}
-        <View style={s.searchRow}>
-          <View style={[s.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
-            <Ionicons name="search-outline" size={15} color={c.textMute} style={{ marginRight: 8 }} />
-            <TextInput
-              style={[s.searchInput, { color: c.text }]}
-              placeholder="Buscar nombre, teléfono, empresa..."
-              placeholderTextColor={c.textMute}
-              value={busqueda}
-              onChangeText={setBusqueda}
-              autoCapitalize="none"
-              autoCorrect={false}
-              clearButtonMode="while-editing"
-              returnKeyType="search"
-              onSubmitEditing={() => Keyboard.dismiss()}
-            />
-          </View>
-          <Tooltip label="Ordenar clientes">
-            <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setShowSort(true)}>
-              <Ionicons name="funnel-outline" size={15} color="#1a6470" />
-              {sortBy !== 'reciente' && <View style={s.sortDot} />}
-            </TouchableOpacity>
-          </Tooltip>
-          <Tooltip label={vistaExcel ? 'Ver como lista' : 'Ver como tabla'}>
-            <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={toggleVista}>
-              <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
-            </TouchableOpacity>
-          </Tooltip>
-          <Tooltip label="Importar clientes (CSV)">
-            <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
-              <Ionicons name="cloud-upload-outline" size={15} color="#1a6470" />
-            </TouchableOpacity>
-          </Tooltip>
-          <Tooltip label="Exportar clientes (CSV)">
-            <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={exportarCSV} disabled={exportando}>
-              {exportando
-                ? <ActivityIndicator size="small" color="#1a6470" />
-                : <Ionicons name="download-outline" size={15} color="#1a6470" />
-              }
-            </TouchableOpacity>
-          </Tooltip>
-          <Tooltip label="Nuevo cliente">
-            <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
-              <Ionicons name="add" size={20} color="#fff" />
-            </TouchableOpacity>
-          </Tooltip>
-        </View>
-
-        {/* ── Operacion tabs ── */}
-        <View style={[s.opRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>
-          {([null, 'venta', 'renta'] as const).map(op => {
-            const label = op === null ? 'Todos' : op === 'venta' ? '🏠 Venta' : '🔑 Renta'
-            const cnt   = op === null ? clientes.length : clientes.filter(c => c.tipo_operacion === op).length
-            const activo = opFiltro === op
-            return (
-              <TouchableOpacity key={String(op)} style={[s.opTab, activo && s.opTabActivo]} onPress={() => setOpFiltro(op)}>
-                <Text style={[s.opTabTxt, { color: c.textMute }, activo && s.opTabTxtActivo]}>{label}</Text>
-                <View style={[s.opTabBadge, { backgroundColor: c.border }, activo && s.opTabBadgeActivo]}>
-                  <Text style={[s.opTabBadgeTxt, { color: c.textMute }, activo && { color: '#1a6470' }]}>{cnt}</Text>
-                </View>
-              </TouchableOpacity>
-            )
-          })}
-        </View>
-
-        {/* ── Sort label ── */}
-        {sortBy !== 'reciente' && (
-          <View style={s.sortActiveBar}>
-            <Ionicons name="funnel" size={11} color="#1a6470" />
-            <Text style={s.sortActiveTxt}>Ordenado por: {SORT_LABELS[sortBy]}</Text>
-            <TouchableOpacity onPress={() => setSortBy('reciente')}>
-              <Ionicons name="close-circle" size={14} color="#94a3b8" />
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* ── List ── */}
-        {isLoading ? (
-          <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 48 }} />
-        ) : filtrados.length === 0 ? (
-          <View style={s.empty}>
-            <View style={s.emptyIcon}>
-              <Ionicons name="people-outline" size={32} color="#94a3b8" />
-            </View>
-            <Text style={s.emptyTitle}>{busqueda || estadoFiltro ? 'Sin resultados' : 'Sin leads aún'}</Text>
-            {!busqueda && !estadoFiltro && (
-              <Text style={s.emptySub}>Agrega tu primer lead con el botón "Nuevo lead"</Text>
-            )}
-          </View>
-        ) : vistaExcel ? (() => {
+        {vistaExcel ? (() => {
           const tableHeader = (
             <View style={s.excelTrHead}>
               {TABLE_COLS.map(col => {
@@ -1834,10 +1857,10 @@ export default function CRM() {
           )
         })() : (
           <FlatList
-            data={filtrados}
+            data={isLoading ? [] : filtrados}
             keyExtractor={item => item.id}
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100, paddingTop: 10 }}
+            contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100, paddingTop: 6 }}
             showsVerticalScrollIndicator={false}
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
@@ -1847,6 +1870,22 @@ export default function CRM() {
             windowSize={7}
             initialNumToRender={15}
             renderItem={renderCliente}
+            ListHeaderComponent={crmListHeader}
+            ListEmptyComponent={
+              isLoading
+                ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 48 }} />
+                : (
+                  <View style={s.empty}>
+                    <View style={s.emptyIcon}>
+                      <Ionicons name="people-outline" size={32} color="#94a3b8" />
+                    </View>
+                    <Text style={s.emptyTitle}>{busqueda || estadoFiltro ? 'Sin resultados' : 'Sin leads aún'}</Text>
+                    {!busqueda && !estadoFiltro && (
+                      <Text style={s.emptySub}>Agrega tu primer lead con el botón "Nuevo lead"</Text>
+                    )}
+                  </View>
+                )
+            }
           />
         )}
       </View>

@@ -4,7 +4,7 @@
     "slug": "valera-app",
     "scheme": "valera-app",
     "version": "1.0.6",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {

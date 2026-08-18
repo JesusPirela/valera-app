@@ -45,11 +45,12 @@ async function traducirGroq(textos: string[]): Promise<string[] | null> {
   const out: string[] = []
   for (const t of textos) {
     if (!t?.trim()) { out.push(''); continue }
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const orKey = Deno.env.get('OPENROUTER_API_KEY') ?? key
+  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${orKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://valera.app' },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
         messages: [
           { role: 'system', content: 'You are a professional real-estate translator. Translate the user text from Spanish to natural US English. Reply with ONLY the translation, no quotes, no notes, no preamble. Keep line breaks.' },
           { role: 'user', content: t },

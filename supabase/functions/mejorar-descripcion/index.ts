@@ -6,22 +6,15 @@ const CORS = {
   'Content-Type': 'application/json',
 }
 
-// Cadena de respaldo: cada modelo de Groq tiene su PROPIA cuota diaria gratis.
-// Si uno se queda sin tokens (429) o no existe (404), se intenta el siguiente.
-// llama-3.1-8b-instant tiene ~5x mas cuota diaria que el 70b.
-const MODELOS_GROQ = [
-  'llama-3.3-70b-versatile',
-  'meta-llama/llama-4-scout-17b-16e-instruct',
-  'llama-3.1-8b-instant',
-  'openai/gpt-oss-20b',
-  'qwen/qwen3-32b',
+// OpenRouter primero (cuota gratis confiable, funciona con la key configurada).
+const MODELOS_OPENROUTER = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'google/gemini-2.0-flash-exp:free',
+  'deepseek/deepseek-chat-v3-0324:free',
 ]
 
-// Modelos de Gemini a probar en orden (los nombres cambian con las versiones;
-// `-latest` apunta siempre al vigente, y se prueban alternativas por si Google
-// descontinúa alguno — que es justo lo que rompió la versión anterior).
-// Modelos vigentes de Gemini (los anteriores quedaron descontinuados; la propia
-// API recomienda estos). flash-lite primero: tiene más cuota gratis diaria.
+// Gemini como respaldo (cuota gratis independiente). Se prueban varios nombres
+// porque Google los descontinúa con frecuencia.
 const MODELOS_GEMINI = [
   'gemini-3.5-flash-lite',
   'gemini-flash-lite-latest',
@@ -30,33 +23,13 @@ const MODELOS_GEMINI = [
   'gemini-2.5-flash',
 ]
 
-// Modelos gratis de OpenRouter (respaldo final; sus cupos gratis cambian seguido).
-const MODELOS_OPENROUTER = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'google/gemini-2.0-flash-exp:free',
-  'deepseek/deepseek-chat-v3-0324:free',
-]
-
 async function llamarOpenRouter(apiKey: string, model: string, prompt: string): Promise<{ ok: boolean; texto?: string; status?: number; err?: string }> {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 1200 }),
-  })
-  const json = await response.json()
-  if (!response.ok) return { ok: false, status: response.status, err: json?.error?.message ?? JSON.stringify(json) }
-  const crudo: string = json.choices?.[0]?.message?.content ?? ''
-  const texto = crudo.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
-  if (!texto) return { ok: false, err: 'Respuesta vacia' }
-  return { ok: true, texto }
-}
-
-async function llamarGroq(apiKey: string, model: string, prompt: string): Promise<{ ok: boolean; texto?: string; status?: number; err?: string }> {
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://valera.app',
     },
     body: JSON.stringify({
       model,
@@ -66,33 +39,24 @@ async function llamarGroq(apiKey: string, model: string, prompt: string): Promis
     }),
   })
   const json = await response.json()
-  if (!response.ok) {
-    return { ok: false, status: response.status, err: json?.error?.message ?? JSON.stringify(json) }
-  }
-  // Algunos modelos (qwen) incluyen su razonamiento en <think>...</think>: quitarlo
+  if (!response.ok) return { ok: false, status: response.status, err: json?.error?.message ?? JSON.stringify(json) }
   const crudo: string = json.choices?.[0]?.message?.content ?? ''
   const texto = crudo.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
   if (!texto) return { ok: false, err: 'Respuesta vacia' }
   return { ok: true, texto }
 }
 
-// Google Gemini (cuota gratis independiente de Groq). Recibe el modelo porque
-// los nombres se descontinúan y se prueban varios hasta dar con uno vigente.
 async function llamarGemini(apiKey: string, model: string, prompt: string): Promise<{ ok: boolean; texto?: string; err?: string }> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // Sin thinkingConfig: los modelos 3.x/-lite lo rechazan ("invalid argument").
-      // maxOutputTokens amplio para que quepa la respuesta aunque el modelo piense.
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 3072 } }),
     },
   )
   const json = await response.json()
   if (!response.ok) return { ok: false, err: json?.error?.message ?? JSON.stringify(json) }
-  // Une solo las partes de texto que NO sean "pensamiento" (thought: true), para
-  // no incluir el razonamiento interno del modelo en la descripción.
   const parts: any[] = json?.candidates?.[0]?.content?.parts ?? []
   const texto = parts.filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('').trim()
   if (!texto) return { ok: false, err: 'Respuesta vacia de Gemini' }
@@ -108,11 +72,10 @@ serve(async (req) => {
       tipo, operacion, recamaras, banos, mediosBanos, m2, estacionamientos, modelo,
     } = await req.json()
 
-    const apiKey = Deno.env.get('GROQ_API_KEY')
-    const geminiKey = Deno.env.get('GEMINI_API_KEY')
     const openrouterKey = Deno.env.get('OPENROUTER_API_KEY')
-    if (!apiKey && !geminiKey && !openrouterKey) {
-      throw new Error('No hay ninguna IA configurada (falta GROQ_API_KEY, GEMINI_API_KEY u OPENROUTER_API_KEY en Supabase Secrets).')
+    const geminiKey = Deno.env.get('GEMINI_API_KEY')
+    if (!openrouterKey && !geminiKey) {
+      throw new Error('No hay ninguna IA configurada (falta OPENROUTER_API_KEY o GEMINI_API_KEY en Supabase Secrets).')
     }
 
     const emojiTipo = tipo === 'casa' ? '🏡' : tipo === 'departamento' ? '🏢' : tipo === 'local' ? '🏪' : tipo === 'terreno' ? '🌄' : '🏠'
@@ -185,36 +148,25 @@ ${tipo !== 'terreno' ? `[INSTRUCCIÓN CRÍTICA: Las siguientes dos secciones (Eq
 
 📲 Agenda tu cita y conoce este excelente ${tipoLabel.toLowerCase()}.`
 
-    // ── Cadena de respaldo ────────────────────────────────────────────────
     const errores: string[] = []
 
-    // 1) Groq (varios modelos, cada uno con su cuota gratis diaria)
-    if (apiKey) {
-      for (const modelo of MODELOS_GROQ) {
-        const r = await llamarGroq(apiKey, modelo, prompt)
-        if (r.ok) return new Response(JSON.stringify({ texto: r.texto, modelo }), { headers: CORS })
-        errores.push(`groq/${modelo}: ${r.err}`)
-        console.warn(`[mejorar-descripcion] groq ${modelo} fallo (${r.status}): ${r.err}`)
-      }
-    }
-
-    // 2) Gemini (cuota gratis independiente; se prueban varios nombres de modelo)
-    if (geminiKey) {
-      for (const modelo of MODELOS_GEMINI) {
-        const g = await llamarGemini(geminiKey, modelo, prompt)
-        if (g.ok) return new Response(JSON.stringify({ texto: g.texto, modelo: `gemini/${modelo}` }), { headers: CORS })
-        errores.push(`gemini/${modelo}: ${g.err}`)
-        console.warn(`[mejorar-descripcion] gemini ${modelo} fallo: ${g.err}`)
-      }
-    }
-
-    // 3) OpenRouter (respaldo final; modelos gratis que cambian con frecuencia)
+    // 1) OpenRouter (primario — cuota gratis confiable)
     if (openrouterKey) {
-      for (const modelo of MODELOS_OPENROUTER) {
-        const o = await llamarOpenRouter(openrouterKey, modelo, prompt)
-        if (o.ok) return new Response(JSON.stringify({ texto: o.texto, modelo: `openrouter/${modelo}` }), { headers: CORS })
-        errores.push(`openrouter/${modelo}: ${o.err}`)
-        console.warn(`[mejorar-descripcion] openrouter ${modelo} fallo (${o.status}): ${o.err}`)
+      for (const mdl of MODELOS_OPENROUTER) {
+        const r = await llamarOpenRouter(openrouterKey, mdl, prompt)
+        if (r.ok) return new Response(JSON.stringify({ texto: r.texto, modelo: mdl }), { headers: CORS })
+        errores.push(`openrouter/${mdl}: ${r.err}`)
+        console.warn(`[mejorar-descripcion] openrouter ${mdl} fallo (${r.status}): ${r.err}`)
+      }
+    }
+
+    // 2) Gemini (respaldo; se prueban varios nombres de modelo)
+    if (geminiKey) {
+      for (const mdl of MODELOS_GEMINI) {
+        const g = await llamarGemini(geminiKey, mdl, prompt)
+        if (g.ok) return new Response(JSON.stringify({ texto: g.texto, modelo: `gemini/${mdl}` }), { headers: CORS })
+        errores.push(`gemini/${mdl}: ${g.err}`)
+        console.warn(`[mejorar-descripcion] gemini ${mdl} fallo: ${g.err}`)
       }
     }
 
