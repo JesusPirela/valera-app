@@ -1797,9 +1797,12 @@ export default function CRM() {
               </View>
             )
             return (
-              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 12 }}>
-                <View style={[s.excelTableWrap, { backgroundColor: c.card }]}>{table}</View>
-              </ScrollView>
+              <View style={{ flex: 1 }}>
+                {crmListHeader}
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 12 }}>
+                  <View style={[s.excelTableWrap, { backgroundColor: c.card }]}>{table}</View>
+                </ScrollView>
+              </View>
             )
           }
 
