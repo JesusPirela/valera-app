@@ -144,13 +144,13 @@ DATOS (usa estos números exactos, no inventes):
 4. En el texto libre (secciones ✨, 🏠 Distribución, 🏢, 🌟 y 📍) NO escribas cifras numéricas: nada de precios, metros, cantidades de recámaras/baños ni años. Los únicos números permitidos en toda la respuesta son los de las líneas de datos estructurados (💰 Precio, 📐 Construcción, 🛏️/🚿/🚗) que se generan abajo con los datos exactos. La prosa describe cualidades, no números.
 5. La descripción debe ser exclusivamente sobre la propiedad: sus espacios, acabados, ambiente y entorno. Nada de información de contacto, condiciones comerciales ni terceros.
 6. EMOJIS — regla crítica: cada emoji debe representar visualmente lo que dice su línea (🍳 cocina, 🛋️ sala, 🌳 jardín, 🚗 estacionamiento, 🏊 alberca, 🏋️ gimnasio, 🔒 seguridad, etc.). NUNCA uses el mismo emoji más de una vez en toda la descripción, salvo 🛏️ cuando hay varias recámaras distintas. Varía los emojis; no pongas ✨ o 🏠 repetidamente.
-7. Si abajo aparece la línea "🏷️ Modelo: …", CONSÉRVALA TAL CUAL (es el nombre del modelo del desarrollo, no una inmobiliaria ni una clave). No la borres ni la modifiques.
+7. Si abajo aparece la línea "🏷️ Modelo: …", CONSÉRVALA TAL CUAL y EXACTAMENTE en su lugar: justo DEBAJO de la línea de "💰 Precio". No la muevas al final ni a otra sección, no la borres ni la modifiques.
 
 Responde ÚNICAMENTE con la descripción en este formato exacto:
 
 ${emojiTipo} ${tipoLabel} ${opLabel}${direccion ? ` en ${direccion}` : ''}
-${modelo && String(modelo).trim() ? `\n🏷️ Modelo: ${String(modelo).trim()}\n` : ''}
-💰 Precio: ${precioFmt || 'Consultar precio'}
+
+💰 Precio: ${precioFmt || 'Consultar precio'}${modelo && String(modelo).trim() ? `\n🏷️ Modelo: ${String(modelo).trim()}` : ''}
 ${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Construcción: ${m2} m²` : ''}
 
 ✨ [2-3 oraciones atractivas: qué hace especial esta propiedad, para quién es ideal. Sin números, sin nombres de inmobiliarias/personas, sin comisiones]
