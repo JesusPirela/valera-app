@@ -13,8 +13,42 @@ const MODELOS_GROQ = [
   'llama-3.3-70b-versatile',
   'meta-llama/llama-4-scout-17b-16e-instruct',
   'llama-3.1-8b-instant',
+  'openai/gpt-oss-20b',
   'qwen/qwen3-32b',
 ]
+
+// Modelos de Gemini a probar en orden (los nombres cambian con las versiones;
+// `-latest` apunta siempre al vigente, y se prueban alternativas por si Google
+// descontinúa alguno — que es justo lo que rompió la versión anterior).
+// gemini-2.0-flash primero: es estable, rápido y NO usa "thinking" (los modelos
+// con thinking devuelven su razonamiento en vez de la descripción y se cortan).
+const MODELOS_GEMINI = [
+  'gemini-2.0-flash',
+  'gemini-2.5-flash',
+  'gemini-flash-latest',
+  'gemini-2.5-flash-lite',
+]
+
+// Modelos gratis de OpenRouter (respaldo final; sus cupos gratis cambian seguido).
+const MODELOS_OPENROUTER = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'google/gemini-2.0-flash-exp:free',
+  'deepseek/deepseek-chat-v3-0324:free',
+]
+
+async function llamarOpenRouter(apiKey: string, model: string, prompt: string): Promise<{ ok: boolean; texto?: string; status?: number; err?: string }> {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 1200 }),
+  })
+  const json = await response.json()
+  if (!response.ok) return { ok: false, status: response.status, err: json?.error?.message ?? JSON.stringify(json) }
+  const crudo: string = json.choices?.[0]?.message?.content ?? ''
+  const texto = crudo.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+  if (!texto) return { ok: false, err: 'Respuesta vacia' }
+  return { ok: true, texto }
+}
 
 async function llamarGroq(apiKey: string, model: string, prompt: string): Promise<{ ok: boolean; texto?: string; status?: number; err?: string }> {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -41,18 +75,20 @@ async function llamarGroq(apiKey: string, model: string, prompt: string): Promis
   return { ok: true, texto }
 }
 
-// Respaldo final opcional: Google Gemini (cuota gratis independiente de Groq).
-// Solo se usa si GEMINI_API_KEY esta configurada en Supabase Secrets.
-async function llamarGemini(apiKey: string, prompt: string): Promise<{ ok: boolean; texto?: string; err?: string }> {
+// Google Gemini (cuota gratis independiente de Groq). Recibe el modelo porque
+// los nombres se descontinúan y se prueban varios hasta dar con uno vigente.
+async function llamarGemini(apiKey: string, model: string, prompt: string): Promise<{ ok: boolean; texto?: string; err?: string }> {
+  // thinkingBudget: 0 desactiva el razonamiento en los modelos con thinking (2.5+
+  // y los "-latest") para que no gasten el presupuesto pensando y devuelvan la
+  // descripción directa. gemini-2.0-flash no lo soporta, así que no se le manda.
+  const generationConfig: Record<string, unknown> = { temperature: 0.7, maxOutputTokens: 2048 }
+  if (!model.startsWith('gemini-2.0')) generationConfig.thinkingConfig = { thinkingBudget: 0 }
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 1200 },
-      }),
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig }),
     },
   )
   const json = await response.json()
@@ -72,8 +108,11 @@ serve(async (req) => {
     } = await req.json()
 
     const apiKey = Deno.env.get('GROQ_API_KEY')
-    if (!apiKey) throw new Error('GROQ_API_KEY no configurado en Supabase Secrets.')
     const geminiKey = Deno.env.get('GEMINI_API_KEY')
+    const openrouterKey = Deno.env.get('OPENROUTER_API_KEY')
+    if (!apiKey && !geminiKey && !openrouterKey) {
+      throw new Error('No hay ninguna IA configurada (falta GROQ_API_KEY, GEMINI_API_KEY u OPENROUTER_API_KEY en Supabase Secrets).')
+    }
 
     const emojiTipo = tipo === 'casa' ? '🏡' : tipo === 'departamento' ? '🏢' : tipo === 'local' ? '🏪' : tipo === 'terreno' ? '🌄' : '🏠'
     const tipoLabel = tipo === 'casa' ? 'Casa' : tipo === 'departamento' ? 'Departamento' : tipo === 'local' ? 'Local' : tipo === 'terreno' ? 'Terreno' : 'Propiedad'
@@ -147,25 +186,34 @@ ${tipo !== 'terreno' ? `[INSTRUCCIÓN CRÍTICA: Las siguientes dos secciones (Eq
     // ── Cadena de respaldo ────────────────────────────────────────────────
     const errores: string[] = []
 
-    for (const modelo of MODELOS_GROQ) {
-      const r = await llamarGroq(apiKey, modelo, prompt)
-      if (r.ok) {
-        return new Response(JSON.stringify({ texto: r.texto, modelo }), { headers: CORS })
+    // 1) Groq (varios modelos, cada uno con su cuota gratis diaria)
+    if (apiKey) {
+      for (const modelo of MODELOS_GROQ) {
+        const r = await llamarGroq(apiKey, modelo, prompt)
+        if (r.ok) return new Response(JSON.stringify({ texto: r.texto, modelo }), { headers: CORS })
+        errores.push(`groq/${modelo}: ${r.err}`)
+        console.warn(`[mejorar-descripcion] groq ${modelo} fallo (${r.status}): ${r.err}`)
       }
-      errores.push(`${modelo}: ${r.err}`)
-      // 429 = sin creditos/rate limit -> probar siguiente modelo.
-      // 404/400 = modelo no existe -> probar siguiente.
-      // Otros errores tambien continuan: el siguiente modelo puede funcionar.
-      console.warn(`[mejorar-descripcion] ${modelo} fallo (${r.status}): ${r.err}`)
     }
 
-    // Respaldo final: Gemini (si esta configurado)
+    // 2) Gemini (cuota gratis independiente; se prueban varios nombres de modelo)
     if (geminiKey) {
-      const g = await llamarGemini(geminiKey, prompt)
-      if (g.ok) {
-        return new Response(JSON.stringify({ texto: g.texto, modelo: 'gemini-2.0-flash' }), { headers: CORS })
+      for (const modelo of MODELOS_GEMINI) {
+        const g = await llamarGemini(geminiKey, modelo, prompt)
+        if (g.ok) return new Response(JSON.stringify({ texto: g.texto, modelo: `gemini/${modelo}` }), { headers: CORS })
+        errores.push(`gemini/${modelo}: ${g.err}`)
+        console.warn(`[mejorar-descripcion] gemini ${modelo} fallo: ${g.err}`)
       }
-      errores.push(`gemini: ${g.err}`)
+    }
+
+    // 3) OpenRouter (respaldo final; modelos gratis que cambian con frecuencia)
+    if (openrouterKey) {
+      for (const modelo of MODELOS_OPENROUTER) {
+        const o = await llamarOpenRouter(openrouterKey, modelo, prompt)
+        if (o.ok) return new Response(JSON.stringify({ texto: o.texto, modelo: `openrouter/${modelo}` }), { headers: CORS })
+        errores.push(`openrouter/${modelo}: ${o.err}`)
+        console.warn(`[mejorar-descripcion] openrouter ${modelo} fallo (${o.status}): ${o.err}`)
+      }
     }
 
     throw new Error(`Todos los modelos de IA agotaron sus créditos o fallaron. Se reintenta mañana (las cuotas gratis se reinician cada día). Detalle: ${errores.join(' | ')}`)

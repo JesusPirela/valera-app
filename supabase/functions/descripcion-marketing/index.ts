@@ -19,8 +19,38 @@ const MODELOS_GROQ = [
   'llama-3.3-70b-versatile',
   'meta-llama/llama-4-scout-17b-16e-instruct',
   'llama-3.1-8b-instant',
+  'openai/gpt-oss-20b',
   'qwen/qwen3-32b',
 ]
+
+// gemini-2.0-flash primero: estable y sin "thinking". Los nombres se
+// descontinúan, así que se prueban varios hasta dar con uno vigente.
+const MODELOS_GEMINI = [
+  'gemini-2.0-flash',
+  'gemini-2.5-flash',
+  'gemini-flash-latest',
+  'gemini-2.5-flash-lite',
+]
+
+const MODELOS_OPENROUTER = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'google/gemini-2.0-flash-exp:free',
+  'deepseek/deepseek-chat-v3-0324:free',
+]
+
+async function llamarOpenRouter(apiKey: string, model: string, prompt: string, temp: number) {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: temp, max_tokens: 1200 }),
+  })
+  const json = await response.json()
+  if (!response.ok) return { ok: false, status: response.status, err: json?.error?.message ?? JSON.stringify(json) }
+  const crudo: string = json.choices?.[0]?.message?.content ?? ''
+  const texto = crudo.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+  if (!texto) return { ok: false, err: 'Respuesta vacia' }
+  return { ok: true, texto }
+}
 
 // Enfoques para diversificar: cada generación toma uno al azar → dos versiones
 // de la misma propiedad salen distintas (para no ser detectada como duplicada).
@@ -48,11 +78,15 @@ async function llamarGroq(apiKey: string, model: string, prompt: string, temp: n
   return { ok: true, texto }
 }
 
-async function llamarGemini(apiKey: string, prompt: string, temp: number) {
+async function llamarGemini(apiKey: string, model: string, prompt: string, temp: number) {
+  // thinkingBudget: 0 desactiva el razonamiento en modelos 2.5+/-latest (si no,
+  // devuelven su deliberación en vez del texto). gemini-2.0-flash no lo soporta.
+  const generationConfig: Record<string, unknown> = { temperature: temp, maxOutputTokens: 2048 }
+  if (!model.startsWith('gemini-2.0')) generationConfig.thinkingConfig = { thinkingBudget: 0 }
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: temp, maxOutputTokens: 1200 } }) },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig }) },
   )
   const json = await response.json()
   if (!response.ok) return { ok: false, err: json?.error?.message ?? JSON.stringify(json) }
@@ -94,8 +128,11 @@ serve(async (req) => {
     const restantes: number = rl.restantes ?? 0
 
     const apiKey = Deno.env.get('GROQ_API_KEY')
-    if (!apiKey) throw new Error('GROQ_API_KEY no configurado en Supabase Secrets.')
     const geminiKey = Deno.env.get('GEMINI_API_KEY')
+    const openrouterKey = Deno.env.get('OPENROUTER_API_KEY')
+    if (!apiKey && !geminiKey && !openrouterKey) {
+      throw new Error('No hay ninguna IA configurada (falta GROQ_API_KEY, GEMINI_API_KEY u OPENROUTER_API_KEY en Supabase Secrets).')
+    }
 
     const emojiTipo = tipo === 'casa' ? '🏡' : tipo === 'departamento' ? '🏢' : tipo === 'local' ? '🏪' : tipo === 'terreno' ? '🌄' : '🏠'
     const tipoLabel = tipo === 'casa' ? 'Casa' : tipo === 'departamento' ? 'Departamento' : tipo === 'local' ? 'Local' : tipo === 'terreno' ? 'Terreno' : 'Propiedad'
@@ -155,15 +192,26 @@ ${tipo !== 'terreno' ? `
 📲 Agenda tu cita y conoce este excelente ${tipoLabel.toLowerCase()}.`
 
     const errores: string[] = []
-    for (const modelo of MODELOS_GROQ) {
-      const r = await llamarGroq(apiKey, modelo, prompt, 0.95)
-      if (r.ok) return new Response(JSON.stringify({ texto: r.texto, modelo, restantes }), { headers: CORS })
-      errores.push(`${modelo}: ${r.err}`)
+    if (apiKey) {
+      for (const modelo of MODELOS_GROQ) {
+        const r = await llamarGroq(apiKey, modelo, prompt, 0.95)
+        if (r.ok) return new Response(JSON.stringify({ texto: r.texto, modelo, restantes }), { headers: CORS })
+        errores.push(`groq/${modelo}: ${r.err}`)
+      }
     }
     if (geminiKey) {
-      const g = await llamarGemini(geminiKey, prompt, 0.95)
-      if (g.ok) return new Response(JSON.stringify({ texto: g.texto, modelo: 'gemini-2.0-flash', restantes }), { headers: CORS })
-      errores.push(`gemini: ${g.err}`)
+      for (const modelo of MODELOS_GEMINI) {
+        const g = await llamarGemini(geminiKey, modelo, prompt, 0.95)
+        if (g.ok) return new Response(JSON.stringify({ texto: g.texto, modelo: `gemini/${modelo}`, restantes }), { headers: CORS })
+        errores.push(`gemini/${modelo}: ${g.err}`)
+      }
+    }
+    if (openrouterKey) {
+      for (const modelo of MODELOS_OPENROUTER) {
+        const o = await llamarOpenRouter(openrouterKey, modelo, prompt, 0.95)
+        if (o.ok) return new Response(JSON.stringify({ texto: o.texto, modelo: `openrouter/${modelo}`, restantes }), { headers: CORS })
+        errores.push(`openrouter/${modelo}: ${o.err}`)
+      }
     }
 
     throw new Error(`Todas las IAs agotaron su cuota o fallaron (se reinician cada día). Detalle: ${errores.join(' | ')}`)
