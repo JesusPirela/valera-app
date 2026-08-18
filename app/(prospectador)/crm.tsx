@@ -26,7 +26,6 @@ import { Tooltip } from '../../components/Tooltip'
 // en vez de quedarse en blanco/negro (expo-router usa este export por ruta).
 export { ErrorBoundary } from '../../components/PantallaError'
 import { parseZonasGuardadas } from '../../lib/zonas-interes'
-import * as ScreenOrientation from 'expo-screen-orientation'
 
 type Cliente = {
   id: string
@@ -488,35 +487,6 @@ export default function CRM() {
   const [sortBy, setSortBy]               = useState<SortBy>('reciente')
   const [showSort, setShowSort]           = useState(false)
   const [vistaExcel, setVistaExcel]       = useState(false)
-  const [landscape, setLandscape]         = useState(false)
-
-  // Al entrar al CRM: resetear siempre a portrait (limpia estado si venía de landscape).
-  // Al salir: solo restablecer la orientación nativa (sin tocar estado de React para
-  // evitar re-renders inesperados mientras la pantalla está en blur).
-  useFocusEffect(useCallback(() => {
-    setLandscape(false)
-    if (Platform.OS !== 'web') {
-      try { ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {}) } catch {}
-    }
-    return () => {
-      if (Platform.OS !== 'web') {
-        try { ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {}) } catch {}
-      }
-    }
-  }, []))
-
-  async function toggleLandscape() {
-    if (Platform.OS === 'web') return
-    const next = !landscape
-    setLandscape(next)
-    try {
-      if (next) {
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {})
-      } else {
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {})
-      }
-    } catch {}
-  }
 
   // Tick que avanza cada minuto para que el memo de "vencidos" recalcule
   // aunque los datos del servidor no hayan cambiado (un recordatorio que
@@ -1522,13 +1492,6 @@ export default function CRM() {
             }
           </TouchableOpacity>
         </Tooltip>
-        {Platform.OS !== 'web' && (
-          <Tooltip label={landscape ? 'Vista vertical' : 'Vista horizontal'}>
-            <TouchableOpacity style={[s.sortBtn, { backgroundColor: landscape ? '#1a6470' : c.card, borderColor: landscape ? '#1a6470' : c.border }]} onPress={toggleLandscape}>
-              <Ionicons name={landscape ? 'phone-portrait-outline' : 'phone-landscape-outline'} size={15} color={landscape ? '#fff' : '#1a6470'} />
-            </TouchableOpacity>
-          </Tooltip>
-        )}
         <Tooltip label="Nuevo cliente">
           <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
             <Ionicons name="add" size={20} color="#fff" />
