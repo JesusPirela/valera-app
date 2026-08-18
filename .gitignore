@@ -30,9 +30,15 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files y cualquier archivo con secretos (defensivo)
 .env
-.env*.local
+.env*
+!.env.example
+*.key
+*.p8
+*-service-account*.json
+serviceAccountKey*.json
+secrets.*
 
 # Claude Code local settings
 .claude/settings.local.json
