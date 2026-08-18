@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, Modal,
-  ActivityIndicator, StyleSheet, Platform, Linking, Alert,
+  ActivityIndicator, StyleSheet, Platform, Linking, Alert, FlatList,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
@@ -101,7 +101,9 @@ export default function ColeccionDetalle() {
       if (!isNaN(minN)) query = query.gte('precio', minN)
       const maxN = parseInt(fMax.replace(/\D/g, ''), 10)
       if (!isNaN(maxN)) query = query.lte('precio', maxN)
-      const { data } = await query.order('precio', { ascending: true, nullsFirst: false }).limit(30)
+      // Tope alto: una zona (ej. Juriquilla) puede tener cientos de propiedades
+      // y el usuario quiere verlas TODAS, no solo las primeras.
+      const { data } = await query.order('precio', { ascending: true, nullsFirst: false }).limit(500)
       const yaEn = new Set((det?.items ?? []).map(i => i.propiedad_id))
       const rows = (data ?? []).map((p: any) => {
         const imgs = [...(p.propiedad_imagenes ?? [])].sort((a: any, b: any) => a.orden - b.orden)
@@ -308,23 +310,34 @@ export default function ColeccionDetalle() {
               </View>
             </View>
 
-            <ScrollView keyboardShouldPersistTaps="handled" style={{ marginTop: 10 }}>
-              {buscando ? <ActivityIndicator color={c.text} style={{ marginTop: 20 }} />
-                : busca.trim().length < 2 && !hayFiltro ? <Text style={[st.buscaHint, { color: c.textMute }]}>Escribe al menos 2 letras o usa un filtro.</Text>
-                : resultados.length === 0 ? <Text style={[st.buscaHint, { color: c.textMute }]}>Sin resultados nuevos.</Text>
-                : resultados.map(p => (
-                  <TouchableOpacity key={p.id} style={[st.resRow, { borderColor: c.border }]} onPress={() => agregar(p)}>
-                    {p.imagen ? <Image source={{ uri: thumb(p.imagen, { width: 120, quality: 55 }) ?? p.imagen }} style={st.resImg} contentFit="cover" />
-                      : <View style={[st.resImg, { backgroundColor: c.border }]} />}
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: c.text, fontWeight: '700', fontSize: 14 }} numberOfLines={1}>{fmt(p.precio)}</Text>
-                      <Text style={{ color: c.textSub, fontSize: 12 }} numberOfLines={1}>{p.codigo} · {p.titulo}</Text>
-                    </View>
-                    <Ionicons name="add-circle" size={26} color="#1a6470" />
-                  </TouchableOpacity>
-                ))}
-              <View style={{ height: 30 }} />
-            </ScrollView>
+            <FlatList
+              style={{ marginTop: 10, flex: 1 }}
+              data={resultados}
+              keyExtractor={p => p.id}
+              keyboardShouldPersistTaps="handled"
+              initialNumToRender={12}
+              windowSize={7}
+              ListHeaderComponent={resultados.length > 0
+                ? <Text style={[st.buscaHint, { color: c.textMute, textAlign: 'left', marginTop: 0, marginBottom: 6 }]}>{resultados.length} resultado{resultados.length !== 1 ? 's' : ''}</Text>
+                : null}
+              ListEmptyComponent={
+                buscando ? <ActivityIndicator color={c.text} style={{ marginTop: 20 }} />
+                  : busca.trim().length < 2 && !hayFiltro ? <Text style={[st.buscaHint, { color: c.textMute }]}>Escribe al menos 2 letras o usa un filtro.</Text>
+                  : <Text style={[st.buscaHint, { color: c.textMute }]}>Sin resultados nuevos.</Text>
+              }
+              renderItem={({ item: p }) => (
+                <TouchableOpacity style={[st.resRow, { borderColor: c.border }]} onPress={() => agregar(p)}>
+                  {p.imagen ? <Image source={{ uri: thumb(p.imagen, { width: 120, quality: 55 }) ?? p.imagen }} style={st.resImg} contentFit="cover" />
+                    : <View style={[st.resImg, { backgroundColor: c.border }]} />}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: c.text, fontWeight: '700', fontSize: 14 }} numberOfLines={1}>{fmt(p.precio)}</Text>
+                    <Text style={{ color: c.textSub, fontSize: 12 }} numberOfLines={1}>{p.codigo} · {p.titulo}</Text>
+                  </View>
+                  <Ionicons name="add-circle" size={26} color="#1a6470" />
+                </TouchableOpacity>
+              )}
+              ListFooterComponent={<View style={{ height: 30 }} />}
+            />
           </View>
         </View>
       </Modal>
