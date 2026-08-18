@@ -1807,7 +1807,9 @@ export default function CRM() {
           // evita que la app se trabe con cientos de clientes en vista Excel)
           const mobileTableWidth = TABLE_COLS.reduce((sum, col) => sum + col.mw, 0)
           return (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+            <View style={{ flex: 1 }}>
+              {crmListHeader}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
               <FlatList
                 data={filtradosExcel}
                 keyExtractor={item => item.id}
@@ -1824,7 +1826,8 @@ export default function CRM() {
                 maxToRenderPerBatch={20}
                 initialNumToRender={20}
               />
-            </ScrollView>
+              </ScrollView>
+            </View>
           )
         })() : (
           <FlatList
