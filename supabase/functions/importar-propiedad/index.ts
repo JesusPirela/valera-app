@@ -85,6 +85,23 @@ function detectarModelo(html: string, titulo: string, url: string): string {
   return ''
 }
 
+// Parser dedicado: GP Vivienda (y otras constructoras con WordPress) publican un
+// bloque <... ModeloActual_InfoJson>{...}</...> con la ubicación estructurada
+// (proyecto/fraccionamiento, municipio y estado). Es mucho más confiable que
+// adivinar la ubicación del texto libre.
+function parseInfoJsonWp(html: string): { proyecto: string; zona: string; estado: string } | null {
+  const m = html.match(/ModeloActual_InfoJson[^>]*>\s*(\{[\s\S]*?\})\s*</i)
+  if (!m) return null
+  try {
+    const j = JSON.parse(m[1])
+    const proyecto = String(j.proyecto ?? '').trim()
+    const zona = String(j.zona ?? '').trim()
+    const estado = String(j.estado ?? '').trim()
+    if (!estado && !zona && !proyecto) return null
+    return { proyecto, zona, estado }
+  } catch { return null }
+}
+
 function htmlText(s: string): string {
   return decodeEntities(
     s
@@ -1189,6 +1206,17 @@ serve(async (req) => {
     }
 
     const modelo = detectarModelo(html, titulo, url)
+
+    // Enriquecer la ubicación con el JSON estructurado de WordPress (GP Vivienda,
+    // etc.). Si trae estado y la dirección no lo menciona, se arma una dirección
+    // limpia "proyecto, municipio, estado" para que el estado_mx salga correcto.
+    const info = parseInfoJsonWp(html)
+    if (info?.estado) {
+      const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      if (!direccion || !norm(direccion).includes(norm(info.estado))) {
+        direccion = [info.proyecto, info.zona, info.estado].filter(Boolean).join(', ')
+      }
+    }
 
     return new Response(JSON.stringify({
       titulo, descripcion, precio, direccion, zona, modelo,
