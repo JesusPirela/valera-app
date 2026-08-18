@@ -58,3 +58,4 @@ secrets.*
 scripts/insert_batch.js
 scripts/parse_leads.js
 .claude/worktrees/
+supabase/.temp/
