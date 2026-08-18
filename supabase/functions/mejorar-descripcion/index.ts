@@ -23,9 +23,9 @@ const MODELOS_GROQ = [
 // Modelos vigentes de Gemini (los anteriores quedaron descontinuados; la propia
 // API recomienda estos). flash-lite primero: tiene más cuota gratis diaria.
 const MODELOS_GEMINI = [
-  'gemini-flash-latest',
-  'gemini-flash-lite-latest',
   'gemini-3.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-flash-latest',
   'gemini-3.6-flash',
   'gemini-2.5-flash',
 ]
@@ -79,22 +79,22 @@ async function llamarGroq(apiKey: string, model: string, prompt: string): Promis
 // Google Gemini (cuota gratis independiente de Groq). Recibe el modelo porque
 // los nombres se descontinúan y se prueban varios hasta dar con uno vigente.
 async function llamarGemini(apiKey: string, model: string, prompt: string): Promise<{ ok: boolean; texto?: string; err?: string }> {
-  // thinkingBudget: 0 desactiva el razonamiento en los modelos con thinking (2.5+
-  // y los "-latest") para que no gasten el presupuesto pensando y devuelvan la
-  // descripción directa. gemini-2.0-flash no lo soporta, así que no se le manda.
-  const generationConfig: Record<string, unknown> = { temperature: 0.7, maxOutputTokens: 2048 }
-  if (!model.startsWith('gemini-2.0')) generationConfig.thinkingConfig = { thinkingBudget: 0 }
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig }),
+      // Sin thinkingConfig: los modelos 3.x/-lite lo rechazan ("invalid argument").
+      // maxOutputTokens amplio para que quepa la respuesta aunque el modelo piense.
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 3072 } }),
     },
   )
   const json = await response.json()
   if (!response.ok) return { ok: false, err: json?.error?.message ?? JSON.stringify(json) }
-  const texto: string = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  // Une solo las partes de texto que NO sean "pensamiento" (thought: true), para
+  // no incluir el razonamiento interno del modelo en la descripción.
+  const parts: any[] = json?.candidates?.[0]?.content?.parts ?? []
+  const texto = parts.filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('').trim()
   if (!texto) return { ok: false, err: 'Respuesta vacia de Gemini' }
   return { ok: true, texto }
 }

@@ -26,9 +26,9 @@ const MODELOS_GROQ = [
 // Modelos vigentes de Gemini (los anteriores quedaron descontinuados). Los
 // nombres cambian seguido; se prueban varios hasta dar con uno con cuota.
 const MODELOS_GEMINI = [
-  'gemini-flash-latest',
-  'gemini-flash-lite-latest',
   'gemini-3.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-flash-latest',
   'gemini-3.6-flash',
   'gemini-2.5-flash',
 ]
@@ -80,18 +80,16 @@ async function llamarGroq(apiKey: string, model: string, prompt: string, temp: n
 }
 
 async function llamarGemini(apiKey: string, model: string, prompt: string, temp: number) {
-  // thinkingBudget: 0 desactiva el razonamiento en modelos 2.5+/-latest (si no,
-  // devuelven su deliberación en vez del texto). gemini-2.0-flash no lo soporta.
-  const generationConfig: Record<string, unknown> = { temperature: temp, maxOutputTokens: 2048 }
-  if (!model.startsWith('gemini-2.0')) generationConfig.thinkingConfig = { thinkingBudget: 0 }
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig }) },
+      // Sin thinkingConfig: los modelos 3.x/-lite lo rechazan ("invalid argument").
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: temp, maxOutputTokens: 3072 } }) },
   )
   const json = await response.json()
   if (!response.ok) return { ok: false, err: json?.error?.message ?? JSON.stringify(json) }
-  const texto: string = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  const parts: any[] = json?.candidates?.[0]?.content?.parts ?? []
+  const texto = parts.filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('').trim()
   if (!texto) return { ok: false, err: 'Respuesta vacia de Gemini' }
   return { ok: true, texto }
 }
