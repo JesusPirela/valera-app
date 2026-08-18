@@ -925,6 +925,15 @@ serve(async (req) => {
       recamaras = cap(specInt('recamaras', 'dormitorios', 'habitaciones', 'recamara') ??
         firstInt(dhtml.match(/(\d+)\s*rec[aá]maras?/i)?.[1]), 5)
     }
+    // Baños con medio en una sola cifra: "2½ Baños", "2 1/2 baños", "2.5 baños"
+    // (común en constructoras como GP Vivienda) → 2 completos + 1 medio baño.
+    {
+      const mBanoMedio = dhtml.match(/(\d+)\s*(?:½|1\s*\/\s*2|[.,]5)\s*ba[ñn]os?/i)
+      if (mBanoMedio) {
+        if (banos === null)       banos       = cap(parseInt(mBanoMedio[1], 10), 4)
+        if (mediosBanos === null) mediosBanos = 1
+      }
+    }
     if (banos === null) {
       const full = dhtml.match(/(\d+)\s*ba[ñn]os?\s*completos?/i)?.[1]
       banos = cap(firstInt(full) ?? specInt('banos', 'banos completos', 'bano') ??
