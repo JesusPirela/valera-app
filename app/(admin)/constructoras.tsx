@@ -20,6 +20,7 @@ type Modelo = {
   precio: number | null
   nombre_constructora: string | null
   zona: string | null
+  estado_mx: string | null
   direccion: string | null
   exclusiva: boolean | null
   inmobiliarias: { exclusiva: boolean } | null
@@ -69,7 +70,10 @@ function formatPrecio(precio: number | null) {
 // Estado de una propiedad. La ubicación real vive en el campo `zona` (texto
 // libre: "queretaro", "monterrey", "Cancun", "Coahuila"…), así que se detecta
 // primero de ahí; luego de dirección/título; por defecto Querétaro.
-function estadoDePropiedad(m: { direccion: string | null; titulo: string; zona: string | null }): string {
+function estadoDePropiedad(m: { direccion: string | null; titulo: string; zona: string | null; estado_mx?: string | null }): string {
+  // Preferir la columna persistida (la calcula el trigger en la BD); si por
+  // alguna razón no está, se detecta al vuelo como respaldo.
+  if (m.estado_mx) return m.estado_mx
   const det = detectarEstadoMexico(`${m.zona ?? ''} ${m.direccion ?? ''} ${m.titulo ?? ''}`)
   if (det) return det
   if (m.zona && ESTADO_LABELS[m.zona]) return ESTADO_LABELS[m.zona]
@@ -135,7 +139,7 @@ export default function AdminConstructoras() {
     setLoadingCatalogo(true)
     const { data } = await supabase
       .from('propiedades')
-      .select('id, codigo, titulo, precio, nombre_constructora, zona, direccion, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, thumb_url, orden)')
+      .select('id, codigo, titulo, precio, nombre_constructora, zona, estado_mx, direccion, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, thumb_url, orden)')
       .eq('es_constructora', true)
       .eq('es_inventario', false)
       .order('nombre_constructora', { ascending: true, nullsFirst: false })
