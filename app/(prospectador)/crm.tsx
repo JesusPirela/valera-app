@@ -490,12 +490,17 @@ export default function CRM() {
   const [vistaExcel, setVistaExcel]       = useState(false)
   const [landscape, setLandscape]         = useState(false)
 
-  // Orientación: al salir del CRM volver a portrait
+  // Al entrar al CRM: resetear siempre a portrait (limpia estado si venía de landscape).
+  // Al salir: solo restablecer la orientación nativa (sin tocar estado de React para
+  // evitar re-renders inesperados mientras la pantalla está en blur).
   useFocusEffect(useCallback(() => {
+    setLandscape(false)
+    if (Platform.OS !== 'web') {
+      try { ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {}) } catch {}
+    }
     return () => {
-      setLandscape(false)
       if (Platform.OS !== 'web') {
-        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {})
+        try { ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {}) } catch {}
       }
     }
   }, []))
@@ -504,11 +509,13 @@ export default function CRM() {
     if (Platform.OS === 'web') return
     const next = !landscape
     setLandscape(next)
-    if (next) {
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {})
-    } else {
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {})
-    }
+    try {
+      if (next) {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {})
+      } else {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {})
+      }
+    } catch {}
   }
 
   // Tick que avanza cada minuto para que el memo de "vencidos" recalcule
@@ -1278,9 +1285,10 @@ export default function CRM() {
     <ClienteCard item={item} c={c} darkMode={darkMode} userRole={userRole} onChatbot={abrirModalChatbot} />
   ), [c, darkMode, userRole, abrirModalChatbot])
 
-  // Header que se desplaza con el scroll en vista lista
+  // Header que se desplaza con el scroll en vista lista.
+  // Se usa View en lugar de Fragment porque ListHeaderComponent necesita un único nodo raíz.
   const crmListHeader = (
-    <>
+    <View>
       {/* ── Vencidos + Presupuesto (fila compacta) ── */}
       <View style={s.topInfoRow}>
         <TouchableOpacity
@@ -1555,7 +1563,7 @@ export default function CRM() {
           </TouchableOpacity>
         </View>
       )}
-    </>
+    </View>
   )
 
   return (
