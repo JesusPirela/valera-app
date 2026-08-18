@@ -11,6 +11,7 @@ import { supabase } from '../../lib/supabase'
 import { thumb } from '../../lib/img'
 import { useColors } from '../../lib/ThemeContext'
 import CompartirFormulario from '../../components/CompartirFormulario'
+import { FiltrosBusquedaPropiedad, FiltrosPropiedad, FILTROS_VACIOS, hayFiltrosActivos, aplicarFiltrosPropiedad } from '../../components/FiltrosBusquedaPropiedad'
 
 const BASE_LINK = 'https://valeraapp.valerarealestate.com/coleccion/'
 
@@ -54,13 +55,9 @@ export default function ColeccionDetalle() {
   const [resultados, setResultados] = useState<PropBusca[]>([])
   const [buscando, setBuscando] = useState(false)
   const [modalForm, setModalForm] = useState(false)
-  // Filtros del buscador de propiedades
-  const [fOp, setFOp] = useState<string | null>(null)
-  const [fTipo, setFTipo] = useState<string | null>(null)
-  const [fRec, setFRec] = useState<number | null>(null)
-  const [fMin, setFMin] = useState('')
-  const [fMax, setFMax] = useState('')
-  const hayFiltro = !!fOp || !!fTipo || !!fRec || !!fMin.trim() || !!fMax.trim()
+  // Filtros del buscador de propiedades (componente reutilizable)
+  const [filtros, setFiltros] = useState<FiltrosPropiedad>(FILTROS_VACIOS)
+  const hayFiltro = hayFiltrosActivos(filtros)
 
   const cargar = useCallback(async () => {
     try {
@@ -94,13 +91,7 @@ export default function ColeccionDetalle() {
         const like = `%${q}%`
         query = query.or(`codigo.ilike.${like},titulo.ilike.${like},direccion.ilike.${like}`)
       }
-      if (fOp) query = query.eq('operacion', fOp)
-      if (fTipo) query = query.eq('tipo', fTipo)
-      if (fRec) query = query.gte('recamaras', fRec)
-      const minN = parseInt(fMin.replace(/\D/g, ''), 10)
-      if (!isNaN(minN)) query = query.gte('precio', minN)
-      const maxN = parseInt(fMax.replace(/\D/g, ''), 10)
-      if (!isNaN(maxN)) query = query.lte('precio', maxN)
+      query = aplicarFiltrosPropiedad(query, filtros)
       // Tope alto: una zona (ej. Juriquilla) puede tener cientos de propiedades
       // y el usuario quiere verlas TODAS, no solo las primeras.
       const { data } = await query.order('precio', { ascending: true, nullsFirst: false }).limit(500)
@@ -121,7 +112,7 @@ export default function ColeccionDetalle() {
     const t = setTimeout(() => { buscar() }, 350)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addModal, busca, fOp, fTipo, fRec, fMin, fMax, det?.items?.length])
+  }, [addModal, busca, filtros, det?.items?.length])
 
   async function agregar(p: PropBusca) {
     setResultados(r => r.filter(x => x.id !== p.id))
@@ -269,46 +260,7 @@ export default function ColeccionDetalle() {
             <TextInput style={[st.input, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
               value={busca} onChangeText={setBusca} placeholder="Buscar por código, título o zona…" placeholderTextColor={c.textMute} autoFocus />
 
-            {/* Filtros */}
-            <View style={{ marginTop: 8 }}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.chipRow} keyboardShouldPersistTaps="handled">
-                {[{ v: 'venta', l: 'Venta' }, { v: 'renta', l: 'Renta' }].map(o => {
-                  const on = fOp === o.v
-                  return (
-                    <TouchableOpacity key={o.v} style={[st.chip, { borderColor: c.border }, on && st.chipOn]} onPress={() => setFOp(on ? null : o.v)}>
-                      <Text style={[st.chipTxt, { color: on ? '#fff' : c.textSub }]}>{o.l}</Text>
-                    </TouchableOpacity>
-                  )
-                })}
-                {[{ v: 'casa', l: '🏡 Casa' }, { v: 'departamento', l: '🏢 Depto' }, { v: 'local', l: '🏪 Local' }, { v: 'terreno', l: '🌄 Terreno' }].map(t => {
-                  const on = fTipo === t.v
-                  return (
-                    <TouchableOpacity key={t.v} style={[st.chip, { borderColor: c.border }, on && st.chipOn]} onPress={() => setFTipo(on ? null : t.v)}>
-                      <Text style={[st.chipTxt, { color: on ? '#fff' : c.textSub }]}>{t.l}</Text>
-                    </TouchableOpacity>
-                  )
-                })}
-                {[1, 2, 3, 4].map(n => {
-                  const on = fRec === n
-                  return (
-                    <TouchableOpacity key={n} style={[st.chip, { borderColor: c.border }, on && st.chipOn]} onPress={() => setFRec(on ? null : n)}>
-                      <Text style={[st.chipTxt, { color: on ? '#fff' : c.textSub }]}>🛏️ {n}+</Text>
-                    </TouchableOpacity>
-                  )
-                })}
-              </ScrollView>
-              <View style={st.precioRow}>
-                <TextInput style={[st.precioInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
-                  value={fMin} onChangeText={setFMin} placeholder="Precio mín." placeholderTextColor={c.textMute} keyboardType="numeric" />
-                <TextInput style={[st.precioInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
-                  value={fMax} onChangeText={setFMax} placeholder="Precio máx." placeholderTextColor={c.textMute} keyboardType="numeric" />
-                {hayFiltro && (
-                  <TouchableOpacity style={st.limpiar} onPress={() => { setFOp(null); setFTipo(null); setFRec(null); setFMin(''); setFMax('') }}>
-                    <Text style={st.limpiarTxt}>Limpiar</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
+            <FiltrosBusquedaPropiedad value={filtros} onChange={setFiltros} />
 
             <FlatList
               style={{ marginTop: 10, flex: 1 }}
@@ -370,14 +322,6 @@ const st = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 12, padding: 10, marginTop: 12 },
   itemImg: { width: 64, height: 64, borderRadius: 8 },
   itemPrecio: { fontSize: 16, fontWeight: '800' },
-  chipRow: { gap: 7, paddingRight: 6, paddingVertical: 2 },
-  chip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
-  chipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  chipTxt: { fontSize: 12.5, fontWeight: '700' },
-  precioRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  precioInput: { flex: 1, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13 },
-  limpiar: { paddingHorizontal: 6, paddingVertical: 8 },
-  limpiarTxt: { color: '#e11d48', fontWeight: '800', fontSize: 12.5 },
   itemTitulo: { fontSize: 12, marginTop: 2 },
   itemStats: { marginTop: 6 },
   favTag: { fontSize: 12, color: '#e11d48', fontWeight: '700' },
