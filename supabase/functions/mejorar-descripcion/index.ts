@@ -104,7 +104,7 @@ serve(async (req) => {
   try {
     const {
       titulo, direccion, precio, descripcion,
-      tipo, operacion, recamaras, banos, mediosBanos, m2, estacionamientos,
+      tipo, operacion, recamaras, banos, mediosBanos, m2, estacionamientos, modelo,
     } = await req.json()
 
     const apiKey = Deno.env.get('GROQ_API_KEY')
@@ -144,11 +144,12 @@ DATOS (usa estos números exactos, no inventes):
 4. En el texto libre (secciones ✨, 🏠 Distribución, 🏢, 🌟 y 📍) NO escribas cifras numéricas: nada de precios, metros, cantidades de recámaras/baños ni años. Los únicos números permitidos en toda la respuesta son los de las líneas de datos estructurados (💰 Precio, 📐 Construcción, 🛏️/🚿/🚗) que se generan abajo con los datos exactos. La prosa describe cualidades, no números.
 5. La descripción debe ser exclusivamente sobre la propiedad: sus espacios, acabados, ambiente y entorno. Nada de información de contacto, condiciones comerciales ni terceros.
 6. EMOJIS — regla crítica: cada emoji debe representar visualmente lo que dice su línea (🍳 cocina, 🛋️ sala, 🌳 jardín, 🚗 estacionamiento, 🏊 alberca, 🏋️ gimnasio, 🔒 seguridad, etc.). NUNCA uses el mismo emoji más de una vez en toda la descripción, salvo 🛏️ cuando hay varias recámaras distintas. Varía los emojis; no pongas ✨ o 🏠 repetidamente.
+7. Si abajo aparece la línea "🏷️ Modelo: …", CONSÉRVALA TAL CUAL (es el nombre del modelo del desarrollo, no una inmobiliaria ni una clave). No la borres ni la modifiques.
 
 Responde ÚNICAMENTE con la descripción en este formato exacto:
 
 ${emojiTipo} ${tipoLabel} ${opLabel}${direccion ? ` en ${direccion}` : ''}
-
+${modelo && String(modelo).trim() ? `\n🏷️ Modelo: ${String(modelo).trim()}\n` : ''}
 💰 Precio: ${precioFmt || 'Consultar precio'}
 ${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Construcción: ${m2} m²` : ''}
 

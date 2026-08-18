@@ -167,6 +167,7 @@ export default function NuevaPropiedad() {
   const [descripcion, setDescripcion] = useState('')
   const [precio, setPrecio] = useState('')
   const [direccion, setDireccion] = useState('')
+  const [modeloDesarrollo, setModeloDesarrollo] = useState('')  // modelo detectado al importar (ej. "Lisboa VI")
   const [operacion, setOperacion] = useState<'venta' | 'renta'>('venta')
   const [tipo, setTipo] = useState<'casa' | 'departamento' | 'local' | 'terreno'>('casa')
   const [estado, setEstado] = useState<'disponible' | 'vendida'>('disponible')
@@ -387,6 +388,7 @@ export default function NuevaPropiedad() {
       if (d.tipo)      setTipo(d.tipo)
       if (d.operacion) setOperacion(d.operacion)
       if (d.zona)      setZona(d.zona)
+      if (d.modelo)    setModeloDesarrollo(d.modelo)
       if (d.imagenes?.length > 0) setImagenes(d.imagenes)
 
       const partes: string[] = []
@@ -564,7 +566,7 @@ export default function NuevaPropiedad() {
   async function mejorarConDatos(d?: {
     titulo?: string; descripcion?: string; precio?: string; direccion?: string
     tipo?: string; operacion?: string; recamaras?: number | null; banos?: number | null
-    mediosBanos?: number | null; m2?: string; estacionamientos?: number | null
+    mediosBanos?: number | null; m2?: string; estacionamientos?: number | null; modelo?: string
   }): Promise<void> {
     setMejorando(true)
     setMejorandoMsg('')
@@ -581,6 +583,7 @@ export default function NuevaPropiedad() {
         mediosBanos:      d?.mediosBanos      != null ? d.mediosBanos      : mediosBanos,
         m2:               d?.m2               != null ? d.m2               : m2,
         estacionamientos: d?.estacionamientos != null ? d.estacionamientos : estacionamientos,
+        modelo:           d?.modelo           != null ? d.modelo           : modeloDesarrollo,
       }
       const { data, error } = await supabase.functions.invoke('mejorar-descripcion', { body })
       if (error) {

@@ -54,6 +54,37 @@ function mapOp(s: string): 'venta' | 'renta' | null {
   return null
 }
 
+// Detecta el NOMBRE DEL MODELO de un desarrollo (ej. "Lisboa VI") a partir del
+// patrón "Modelo <X>" en título/og:title/h1, o del slug "...modelo-<x>/" del URL.
+// Muchas constructoras (GP Vivienda, etc.) publican una página por modelo.
+function tituloModelo(s: string): string {
+  return s.replace(/\b\w/g, ch => ch.toUpperCase())
+}
+function detectarModelo(html: string, titulo: string, url: string): string {
+  const ogt = getMeta(html, 'og:title')
+  const titleTag = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? ''
+  const h1 = (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? '').replace(/<[^>]+>/g, ' ')
+  // Se prueban en orden de mejor mayúsculas/limpieza. `titulo` y `<title>` suelen
+  // traer "Lisboa VI" bien escrito; og:title a veces lo pasa a "Lisboa Vi".
+  const fuentes = [titulo, titleTag, ogt, h1]
+    .map(x => decodeEntities(String(x || '')).replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+  // "Modelo <nombre>" hasta " en/de/del", un separador (| : - –) o el final.
+  const re = /modelo\s+([A-Za-zÁÉÍÓÚÑáéíóúñ0-9.]+(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñ0-9.]+){0,3}?)(?=\s+(?:en|de|del)\b|\s*[|:\-–]|\s*$)/i
+  for (const f of fuentes) {
+    const m = f.match(re)
+    const nombre = m?.[1]?.trim()
+    if (nombre && nombre.length >= 2 && nombre.length <= 40) return nombre
+  }
+  // Respaldo: slug del URL "...-modelo-lisboa-vi/"
+  const slug = url.match(/modelo-([a-z0-9-]+?)\/?(?:$|[?#])/i)?.[1]
+  if (slug) {
+    const nombre = slug.replace(/-/g, ' ').trim()
+    if (nombre.length >= 2 && nombre.length <= 40) return tituloModelo(nombre)
+  }
+  return ''
+}
+
 function htmlText(s: string): string {
   return decodeEntities(
     s
@@ -1148,8 +1179,10 @@ serve(async (req) => {
       else if (/puebla/.test(haystack))                  zona = 'puebla'
     }
 
+    const modelo = detectarModelo(html, titulo, url)
+
     return new Response(JSON.stringify({
-      titulo, descripcion, precio, direccion, zona,
+      titulo, descripcion, precio, direccion, zona, modelo,
       recamaras, banos, mediosBanos, estacionamientos,
       m2, m2Terreno, tipo, operacion, imagenes,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
