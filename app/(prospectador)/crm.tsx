@@ -228,6 +228,63 @@ function FechaSpin({ label, value, onUp, onDown, c }: {
   )
 }
 
+// Calendario mensual compacto para elegir el DÍA del próximo contacto (la hora
+// se sigue ajustando con los spinners). Deshabilita días anteriores a `min`.
+function MiniCalendario({ value, min, onSelect, c }: {
+  value: Date; min: Date; onSelect: (d: Date) => void; c: ColoresCard
+}) {
+  const [vista, setVista] = useState(() => new Date(value.getFullYear(), value.getMonth(), 1))
+  const year = vista.getFullYear()
+  const month = vista.getMonth()
+  const offset = (new Date(year, month, 1).getDay() + 6) % 7   // L=0 … D=6
+  const diasEnMes = new Date(year, month + 1, 0).getDate()
+  const celdas: (number | null)[] = []
+  for (let i = 0; i < offset; i++) celdas.push(null)
+  for (let d = 1; d <= diasEnMes; d++) celdas.push(d)
+  const minDia = new Date(min.getFullYear(), min.getMonth(), min.getDate())
+  const selY = value.getFullYear(), selM = value.getMonth(), selD = value.getDate()
+  const puedeRetroceder = year > minDia.getFullYear() || (year === minDia.getFullYear() && month > minDia.getMonth())
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <TouchableOpacity disabled={!puedeRetroceder} onPress={() => setVista(new Date(year, month - 1, 1))} style={{ padding: 6, opacity: puedeRetroceder ? 1 : 0.3 }}>
+          <Text style={{ fontSize: 22, color: '#1a6470' }}>‹</Text>
+        </TouchableOpacity>
+        <Text style={{ fontSize: 14, fontWeight: '800', color: c.text, textTransform: 'capitalize' }}>
+          {vista.toLocaleString('es-MX', { month: 'long' })} {year}
+        </Text>
+        <TouchableOpacity onPress={() => setVista(new Date(year, month + 1, 1))} style={{ padding: 6 }}>
+          <Text style={{ fontSize: 22, color: '#1a6470' }}>›</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+        {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((w, i) => (
+          <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '700', color: c.textMute }}>{w}</Text>
+        ))}
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+        {celdas.map((d, i) => {
+          if (d === null) return <View key={i} style={{ width: `${100 / 7}%`, height: 36 }} />
+          const pasado = new Date(year, month, d) < minDia
+          const sel = d === selD && month === selM && year === selY
+          return (
+            <TouchableOpacity
+              key={i}
+              disabled={pasado}
+              onPress={() => onSelect(new Date(year, month, d, value.getHours(), value.getMinutes()))}
+              style={{ width: `${100 / 7}%`, height: 36, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: sel ? '#1a6470' : 'transparent' }}>
+                <Text style={{ fontSize: 13, fontWeight: sel ? '800' : '500', color: sel ? '#fff' : c.text, opacity: pasado ? 0.3 : 1 }}>{d}</Text>
+              </View>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
+
 export function abrirWhatsApp(telefono: string, nombre: string) {
   let phone = telefono.replace(/\D/g, '')
   // Normalizar número mexicano para WhatsApp (formato nuevo: 52 + 10 dígitos = 12 total)
@@ -1995,10 +2052,8 @@ export default function CRM() {
           <View style={[s.dpModal, { backgroundColor: c.card }]}>
             <Text style={[s.dpTitle, { color: c.text }]}>Próximo contacto</Text>
             <Text style={[s.dpSecLabel, { color: c.textMute }]}>Fecha</Text>
-            <View style={s.dpRow}>
-              <FechaSpin label="Día" value={fechaTemp.getDate()} onUp={() => ajustarFechaTemp('date', 1)} onDown={() => ajustarFechaTemp('date', -1)} c={c} />
-              <FechaSpin label="Mes" value={fechaTemp.toLocaleString('es-MX', { month: 'short' })} onUp={() => ajustarFechaTemp('month', 1)} onDown={() => ajustarFechaTemp('month', -1)} c={c} />
-              <FechaSpin label="Año" value={fechaTemp.getFullYear()} onUp={() => ajustarFechaTemp('year', 1)} onDown={() => ajustarFechaTemp('year', -1)} c={c} />
+            <View style={{ marginBottom: 14 }}>
+              <MiniCalendario value={fechaTemp} min={new Date()} onSelect={setFechaTemp} c={c} />
             </View>
             <Text style={[s.dpSecLabel, { color: c.textMute }]}>Hora</Text>
             <View style={s.dpRow}>
