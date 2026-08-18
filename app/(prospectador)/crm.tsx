@@ -1560,6 +1560,8 @@ export default function CRM() {
           </TouchableOpacity>
         )}
 
+        {crmListHeader}
+
         {/* ── List ── */}
         {vistaExcel ? (() => {
           const tableHeader = (
@@ -1797,12 +1799,9 @@ export default function CRM() {
               </View>
             )
             return (
-              <View style={{ flex: 1 }}>
-                {crmListHeader}
-                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 12 }}>
-                  <View style={[s.excelTableWrap, { backgroundColor: c.card }]}>{table}</View>
-                </ScrollView>
-              </View>
+              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 12 }}>
+                <View style={[s.excelTableWrap, { backgroundColor: c.card }]}>{table}</View>
+              </ScrollView>
             )
           }
 
@@ -1811,7 +1810,6 @@ export default function CRM() {
           const mobileTableWidth = TABLE_COLS.reduce((sum, col) => sum + col.mw, 0)
           return (
             <View style={{ flex: 1 }}>
-              {crmListHeader}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
               <FlatList
                 data={filtradosExcel}
@@ -1847,7 +1845,6 @@ export default function CRM() {
             windowSize={7}
             initialNumToRender={15}
             renderItem={renderCliente}
-            ListHeaderComponent={crmListHeader}
             ListEmptyComponent={
               isLoading
                 ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 48 }} />
