@@ -24,6 +24,7 @@ import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
 import AsesorPicker from '../../components/ui/AsesorPicker'
 import { COLONIAS } from '../../lib/colonias'
+import { detectarEstadoMexico } from '../../lib/estados-mexico'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import CensorEditorModal from '../../components/CensorEditorModal'
@@ -146,6 +147,18 @@ function parsearFicha(texto: string) {
   return { titulo, direccion, precio, m2, m2Terreno, recamaras, banos, mediosBanos, estacionamientos, tipo, operacion }
 }
 
+// A partir de un texto de ubicación/dirección, devuelve el valor de `zona`:
+// las 3 ciudades con opción propia usan su enum; cualquier otro estado se
+// guarda con su nombre (ej. "Quintana Roo"). null si no se reconoce nada.
+function zonaDesdeTexto(texto: string): string | null {
+  const est = detectarEstadoMexico(texto)
+  if (!est) return null
+  if (est === 'Querétaro') return 'queretaro'
+  if (est === 'Nuevo León') return 'monterrey'
+  if (est === 'Puebla') return 'puebla'
+  return est
+}
+
 export default function NuevaPropiedad() {
   useSupervisorBlock()
   const c = useColors()
@@ -253,10 +266,8 @@ export default function NuevaPropiedad() {
     setDireccion(partes); setGeoQuery(partes)
     setLat(parseFloat(r.lat)); setLng(parseFloat(r.lon))
     setGeoResults([])
-    const dn = r.display_name.toLowerCase()
-    if (dn.includes('querétaro') || dn.includes('queretaro')) setZona('queretaro')
-    else if (dn.includes('monterrey') || dn.includes('nuevo león') || dn.includes('nuevo leon')) setZona('monterrey')
-    else if (dn.includes('puebla')) setZona('puebla')
+    const z = zonaDesdeTexto(r.display_name)
+    if (z) setZona(z)
   }
 
   function aplicarFicha() {
@@ -1003,7 +1014,7 @@ export default function NuevaPropiedad() {
             style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: c.input, borderColor: lat ? '#22a35e' : c.inputBorder, color: c.inputText }]}
             placeholder="Ej. Corregidora, Querétaro"
             value={geoQuery}
-            onChangeText={v => { setGeoQuery(v); setDireccion(v); setTituloEditado(false); setLat(null); setLng(null) }}
+            onChangeText={v => { setGeoQuery(v); setDireccion(v); setTituloEditado(false); setLat(null); setLng(null); const z = zonaDesdeTexto(v); if (z) setZona(z) }}
             maxLength={200}
           />
           {geoLoading && <ActivityIndicator size="small" color="#1976D2" style={{ marginLeft: 8 }} />}
