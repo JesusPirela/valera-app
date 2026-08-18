@@ -340,6 +340,7 @@ export default function AdminConstructoras() {
     setEditando(item)
     setForm({
       nombre: item.nombre,
+      empresa_matriz: item.empresa_matriz,
       imagen_portada: item.imagen_portada,
       coordinador_nombre: item.coordinador_nombre,
       telefono_contacto: item.telefono_contacto,

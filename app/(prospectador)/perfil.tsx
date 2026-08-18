@@ -335,8 +335,10 @@ export default function Perfil() {
   async function seleccionarFoto() {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      // 'limited' = acceso a fotos seleccionadas (iOS 14+) — también válido
-      if (status !== 'granted' && status !== 'limited') {
+      // 'limited' = acceso a fotos seleccionadas (iOS 14+) — también válido.
+      // El enum PermissionStatus no incluye 'limited' (vive en accessPrivileges),
+      // por eso se compara como string.
+      if (status !== 'granted' && String(status) !== 'limited') {
         mostrarAlerta('Necesitamos permiso para acceder a tu galería. Ve a Configuración → Valera → Fotos y permite el acceso.')
         return
       }

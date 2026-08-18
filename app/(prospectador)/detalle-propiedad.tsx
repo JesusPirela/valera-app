@@ -2446,7 +2446,7 @@ export default function DetallePropiedad() {
         {/* Botón coordinar cita */}
         <TouchableOpacity
           style={[styles.btnCita, !propiedad && styles.btnDisabled]}
-          onPress={abrirModalCita}
+          onPress={() => abrirModalCita()}
           disabled={!propiedad}
         >
           <Text style={styles.btnCitaText}>
