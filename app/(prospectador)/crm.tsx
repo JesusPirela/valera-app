@@ -1560,8 +1560,6 @@ export default function CRM() {
           </TouchableOpacity>
         )}
 
-        {crmListHeader}
-
         {/* ── List ── */}
         {vistaExcel ? (() => {
           const tableHeader = (
@@ -1800,35 +1798,24 @@ export default function CRM() {
             )
             return (
               <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 12 }}>
+                {crmListHeader}
                 <View style={[s.excelTableWrap, { backgroundColor: c.card }]}>{table}</View>
               </ScrollView>
             )
           }
 
-          // Mobile: FlatList virtualizado (las filas no se montan todas a la vez,
-          // evita que la app se trabe con cientos de clientes en vista Excel)
           const mobileTableWidth = TABLE_COLS.reduce((sum, col) => sum + col.mw, 0)
           return (
-            <View style={{ flex: 1 }}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
-              <FlatList
-                data={filtradosExcel}
-                keyExtractor={item => item.id}
-                style={{ width: mobileTableWidth }}
-                ListHeaderComponent={() => tableHeader}
-                stickyHeaderIndices={[0]}
-                renderItem={({ item, index }) => renderExcelRow(item, index)}
-                contentContainerStyle={{ paddingBottom: 100 }}
-                showsVerticalScrollIndicator={false}
-                keyboardDismissMode="on-drag"
-                keyboardShouldPersistTaps="handled"
-                removeClippedSubviews
-                windowSize={7}
-                maxToRenderPerBatch={20}
-                initialNumToRender={20}
-              />
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
+              {crmListHeader}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={{ width: mobileTableWidth }}>
+                  {tableHeader}
+                  {filtradosExcel.map((item, idx) => renderExcelRow(item, idx))}
+                  <View style={{ height: 100 }} />
+                </View>
               </ScrollView>
-            </View>
+            </ScrollView>
           )
         })() : (
           <FlatList
@@ -1845,6 +1832,7 @@ export default function CRM() {
             windowSize={7}
             initialNumToRender={15}
             renderItem={renderCliente}
+            ListHeaderComponent={crmListHeader}
             ListEmptyComponent={
               isLoading
                 ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 48 }} />
