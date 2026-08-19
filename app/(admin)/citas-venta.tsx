@@ -1,15 +1,13 @@
 // Tabla EXCLUSIVA admin/supervisor: seguimiento de citas de venta.
-// - Import del Excel (mapea nombres a usuarios, orden del CSV, liga asesor) y
-//   autollenado desde el dashboard de citas (trigger BD).
-// - Filtros estilo Excel, celdas editables. Cliente/Prospecto/Coordinó/Atendió
-//   son menús desplegables (clientes/usuarios); "Día de la cita" es calendario +
-//   hora; el teléfono se autollena con el cliente; Atendió liga al asesor.
-// - Filas memoizadas (edición sin lag), encabezado sticky y barra horizontal
-//   fija al pie.
+// - Import del Excel (mapea nombres, orden del CSV, liga asesor) + autollenado
+//   desde el dashboard (solo citas coordinadas por Alexis o Chucho).
+// - VIRTUALIZADA (FlatList, altura de fila fija): solo dibuja lo visible → RAM baja.
+// - Filtros estilo Excel, celdas editables (menús para cliente/usuarios, calendario
+//   para el día), borrar filas, encabezado sticky y barras de scroll siempre visibles.
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react'
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
-  TextInput, Platform, Modal,
+  View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator,
+  TextInput, Platform, Modal, Alert,
 } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import { useFocusEffect } from 'expo-router'
@@ -25,6 +23,7 @@ type Fila = CitaRetro & {
 type ColKey = keyof Fila
 type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha'
 const VACIO = '(Vacías)'
+const ROW_H = 54  // altura fija de fila (necesaria para virtualizar con getItemLayout)
 
 const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   { key: 'cliente_nombre', label: 'Cliente', w: 190, tipo: 'cliente' },
@@ -41,7 +40,7 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   { key: 'estado_seguimiento', label: 'Estado seguimiento', w: 170, tipo: 'texto' },
   { key: 'fecha_prox_seguimiento', label: 'Próx. seguimiento', w: 150, tipo: 'texto' },
 ]
-const TIPO_DE: Record<string, Tipo> = Object.fromEntries(COLS.map(c => [c.key, c.tipo]))
+const ACC_W = 130  // columna de acciones (retro + borrar)
 
 const MAPEO: Record<string, string> = {
   andres: 'Andres Asesor', andre: 'André Tenorio', ruben: 'Rayo⚡', rayo: 'Rayo⚡',
@@ -67,7 +66,7 @@ function arreglarEncoding(s: string): string {
   if (!s || !/[ÃÂ]/.test(s)) return s
   try {
     const bytes = Uint8Array.from([...s].map(ch => ch.charCodeAt(0) & 0xff))
-    // @ts-ignore TextDecoder existe en web (donde se usa el import)
+    // @ts-ignore TextDecoder existe en web
     return new TextDecoder('utf-8').decode(bytes)
   } catch { return s }
 }
@@ -84,49 +83,39 @@ function parseCSV(text: string): string[][] {
   if (cur.length || row.length) { row.push(cur); rows.push(row) }
   return rows
 }
+function confirmar(msg: string, onSi: () => void) {
+  if (Platform.OS === 'web') { if (window.confirm(msg)) onSi() }
+  else Alert.alert('Confirmar', msg, [{ text: 'Cancelar', style: 'cancel' }, { text: 'Borrar', style: 'destructive', onPress: onSi }])
+}
 
-// ── Fila memoizada: solo se re-renderiza si cambia su dato o su celda en edición ─
-const FilaRow = memo(function FilaRow({ f, idx, editKey, onText, onSaveText, onPick, onRetro }: {
-  f: Fila; idx: number; editKey: ColKey | null
-  onText: (id: string, k: ColKey) => void
-  onSaveText: (id: string, k: ColKey, v: string) => void
-  onPick: (id: string, k: ColKey, t: Tipo) => void
-  onRetro: (f: Fila) => void
+// ── Fila (solo muestra; memoizada y de altura fija → virtualización sin lag) ──
+const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
+  f: Fila; idx: number
+  onTap: (id: string, k: ColKey, t: Tipo, val: string) => void
+  onRetro: (f: Fila) => void; onDelete: (f: Fila) => void
 }) {
   const c = useColors()
-  const [txt, setTxt] = useState('')
-  useEffect(() => { if (editKey && TIPO_DE[editKey] === 'texto') setTxt(String(f[editKey] ?? '')) }, [editKey])
   return (
-    <View style={[st.row, { borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
+    <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
       {COLS.map(col => {
-        const tipo = col.tipo
         const val = (f[col.key] as string) ?? ''
-        if (editKey === col.key && tipo === 'texto') {
-          return (
-            <TextInput key={col.key} style={[st.cell, st.cellEdit, { width: col.w, color: c.text }]}
-              value={txt} onChangeText={setTxt} autoFocus multiline
-              onBlur={() => onSaveText(f.id, col.key, txt)} onSubmitEditing={() => onSaveText(f.id, col.key, txt)} />
-          )
-        }
         return (
           <TouchableOpacity key={col.key} style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
-            onPress={() => tipo === 'texto' ? onText(f.id, col.key) : onPick(f.id, col.key, tipo)}>
-            <Text style={{ color: val ? c.text : c.textMute, fontSize: 12.5 }} numberOfLines={3}>
-              {val || '—'}{tipo !== 'texto' ? '  ▾' : ''}
-            </Text>
+            onPress={() => onTap(f.id, col.key, col.tipo, val)}>
+            <Text style={{ color: val ? c.text : c.textMute, fontSize: 12.5 }} numberOfLines={2}>{val || '—'}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
           </TouchableOpacity>
         )
       })}
-      <View style={[st.cell, { width: 150, borderColor: c.border }]}>
+      <View style={[st.cell, { width: ACC_W, borderColor: c.border, flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
         <TouchableOpacity style={[st.retroBtn, f.retro_completada_at ? st.retroHecha : st.retroPend]} onPress={() => onRetro(f)}>
-          <Text style={[st.retroBtnTxt, { color: f.retro_completada_at ? '#1a6855' : '#fff' }]}>{f.retro_completada_at ? '✓ Ver / editar' : '📝 Dar retro'}</Text>
+          <Text style={[st.retroBtnTxt, { color: f.retro_completada_at ? '#1a6855' : '#fff' }]}>{f.retro_completada_at ? '✓' : '📝'}</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => onDelete(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}><Text style={st.delTxt}>🗑</Text></TouchableOpacity>
       </View>
     </View>
   )
-}, (a, b) => a.f === b.f && a.idx === b.idx && a.editKey === b.editKey)
+}, (a, b) => a.f === b.f && a.idx === b.idx)
 
-// ── Calendario + hora (para "Día de la cita") ────────────────────────────────
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 function fmtFecha(d: Date): string {
   const h = d.getHours(); const ampm = h < 12 ? 'am' : 'pm'; const h12 = h % 12 || 12
@@ -140,9 +129,7 @@ function CalendarioHora({ onConfirm, onClose }: { onConfirm: (display: string, i
   const off = (new Date(y, m, 1).getDay() + 6) % 7
   const dias = new Date(y, m + 1, 0).getDate()
   const celdas: (number | null)[] = [...Array(off).fill(null), ...Array.from({ length: dias }, (_, i) => i + 1)]
-  const set = (patch: Partial<{ dd: number; hh: number; mm: number }>) => {
-    setD(prev => { const x = new Date(prev); if (patch.dd) x.setFullYear(y, m, patch.dd); if (patch.hh != null) x.setHours(patch.hh); if (patch.mm != null) x.setMinutes(patch.mm); return x })
-  }
+  const set = (patch: Partial<{ dd: number; hh: number; mm: number }>) => setD(prev => { const x = new Date(prev); if (patch.dd) x.setFullYear(y, m, patch.dd); if (patch.hh != null) x.setHours(patch.hh); if (patch.mm != null) x.setMinutes(patch.mm); return x })
   const h = d.getHours()
   return (
     <View style={[st.dropCard, { backgroundColor: c.card, maxWidth: 340 }]}>
@@ -158,9 +145,7 @@ function CalendarioHora({ onConfirm, onClose }: { onConfirm: (display: string, i
           const sel = dd === d.getDate() && m === d.getMonth() && y === d.getFullYear()
           return (
             <TouchableOpacity key={i} style={st.calCell} onPress={() => set({ dd })}>
-              <View style={[st.calDia, sel && { backgroundColor: '#1a6470' }]}>
-                <Text style={{ color: sel ? '#fff' : c.text, fontWeight: sel ? '800' : '500', fontSize: 13 }}>{dd}</Text>
-              </View>
+              <View style={[st.calDia, sel && { backgroundColor: '#1a6470' }]}><Text style={{ color: sel ? '#fff' : c.text, fontWeight: sel ? '800' : '500', fontSize: 13 }}>{dd}</Text></View>
             </TouchableOpacity>
           )
         })}
@@ -194,21 +179,28 @@ export default function CitasVenta() {
   const [dropCol, setDropCol] = useState<ColKey | null>(null)
   const [dropSel, setDropSel] = useState<Set<string>>(new Set())
   const [dropBusca, setDropBusca] = useState('')
-  const [edit, setEdit] = useState<{ id: string; key: ColKey } | null>(null)
+  const [editTxt, setEditTxt] = useState<{ id: string; key: ColKey; val: string } | null>(null)
   const [picker, setPicker] = useState<{ id: string; key: ColKey; tipo: Tipo } | null>(null)
   const [pickBusca, setPickBusca] = useState('')
   const [wizard, setWizard] = useState<Fila | null>(null)
   const [importando, setImportando] = useState(false)
   const [msg, setMsg] = useState('')
+
   const headerRef = useRef<ScrollView>(null); const bodyRef = useRef<ScrollView>(null); const barRef = useRef<ScrollView>(null)
-  const syncing = useRef(false)
+  const listRef = useRef<FlatList>(null); const vbarRef = useRef<ScrollView>(null)
+  const syncingX = useRef(false); const syncingY = useRef(false)
   function syncX(x: number, from: 'h' | 'b' | 'bar') {
-    if (syncing.current) return
-    syncing.current = true
+    if (syncingX.current) return; syncingX.current = true
     if (from !== 'h') headerRef.current?.scrollTo({ x, animated: false })
     if (from !== 'b') bodyRef.current?.scrollTo({ x, animated: false })
     if (from !== 'bar') barRef.current?.scrollTo({ x, animated: false })
-    requestAnimationFrame(() => { syncing.current = false })
+    requestAnimationFrame(() => { syncingX.current = false })
+  }
+  function syncY(yy: number, from: 'list' | 'vbar') {
+    if (syncingY.current) return; syncingY.current = true
+    if (from !== 'list') listRef.current?.scrollToOffset({ offset: yy, animated: false })
+    if (from !== 'vbar') vbarRef.current?.scrollTo({ y: yy, animated: false })
+    requestAnimationFrame(() => { syncingY.current = false })
   }
 
   const cargar = useCallback(async () => {
@@ -236,8 +228,7 @@ export default function CitasVenta() {
   ), [filas, filtrosSel])
 
   const valoresColumna = (key: ColKey): string[] => {
-    const s = new Set<string>()
-    for (const f of filas) s.add(valorDe(f, key))
+    const s = new Set<string>(); for (const f of filas) s.add(valorDe(f, key))
     return [...s].sort((a, b) => a === VACIO ? 1 : b === VACIO ? -1 : a.localeCompare(b, 'es', { numeric: true }))
   }
   const abrirDropdown = (key: ColKey) => { const a = filtrosSel[key]; setDropSel(a ? new Set(a) : new Set(valoresColumna(key))); setDropBusca(''); setDropCol(key) }
@@ -248,26 +239,32 @@ export default function CitasVenta() {
     setDropCol(null)
   }
 
-  // Guardado (local + BD). patch puede tener varios campos (cliente→+teléfono, atendió→+asesor_id).
   const aplicarCambio = useCallback(async (id: string, patch: Record<string, any>) => {
     setFilas(fs => fs.map(f => f.id === id ? { ...f, ...patch } as Fila : f))
     await supabase.from('citas_venta').update(patch).eq('id', id)
   }, [])
-  const onText = useCallback((id: string, k: ColKey) => setEdit({ id, key: k }), [])
-  const onSaveText = useCallback((id: string, k: ColKey, v: string) => { setEdit(null); aplicarCambio(id, { [k]: v.trim() || null }) }, [aplicarCambio])
-  const onPick = useCallback((id: string, k: ColKey, t: Tipo) => { setPickBusca(''); setPicker({ id, key: k, tipo: t }) }, [])
+  const onTap = useCallback((id: string, k: ColKey, t: Tipo, val: string) => {
+    if (t === 'texto') setEditTxt({ id, key: k, val })
+    else { setPickBusca(''); setPicker({ id, key: k, tipo: t }) }
+  }, [])
   const onRetro = useCallback((f: Fila) => setWizard(f), [])
+  const onDelete = useCallback((f: Fila) => {
+    confirmar(`¿Borrar la cita de "${f.cliente_nombre ?? 'sin nombre'}"?`, async () => {
+      setFilas(fs => fs.filter(x => x.id !== f.id))
+      await supabase.from('citas_venta').delete().eq('id', f.id)
+    })
+  }, [])
 
   function elegirUsuario(nombre: string, id: string | null) {
     if (!picker) return
-    const patch: Record<string, any> = { [picker.key]: nombre }
+    const patch: Record<string, any> = { [picker.key]: nombre || null }
     if (picker.key === 'atendio') patch.asesor_id = id
     aplicarCambio(picker.id, patch); setPicker(null)
   }
   function elegirCliente(nombre: string, tel: string | null) {
     if (!picker) return
     const patch: Record<string, any> = { cliente_nombre: nombre }
-    if (tel) patch.telefono = tel   // autollena el teléfono si el cliente lo tiene
+    if (tel) patch.telefono = tel
     aplicarCambio(picker.id, patch); setPicker(null)
   }
 
@@ -286,11 +283,9 @@ export default function CitasVenta() {
       const registros = rows.slice(1).map((r, i) => {
         const atendio = mapear(limpio(r[8]))
         return {
-          orden: i, cliente_nombre: limpio(r[0]) || null,
-          telefono: (r[1] ?? '').replace(/[^\d+]/g, '') || null,
-          detalles_pago: limpio(r[2]) || null, interesado_en: limpio(r[3]) || null,
-          dia_cita: limpio(r[4]) || null, retro_como_estuvo: limpio(r[5]) || null,
-          prospecto: mapear(limpio(r[6])) || null, coordino: mapear(limpio(r[7])) || null,
+          orden: i, cliente_nombre: limpio(r[0]) || null, telefono: (r[1] ?? '').replace(/[^\d+]/g, '') || null,
+          detalles_pago: limpio(r[2]) || null, interesado_en: limpio(r[3]) || null, dia_cita: limpio(r[4]) || null,
+          retro_como_estuvo: limpio(r[5]) || null, prospecto: mapear(limpio(r[6])) || null, coordino: mapear(limpio(r[7])) || null,
           atendio: atendio || null, asesor_id: idPorNombre.get(atendio) ?? null,
           estado_seguimiento: limpio(r[9]) || null, fecha_prox_seguimiento: limpio(r[10]) || null, origen: 'excel',
         }
@@ -300,12 +295,11 @@ export default function CitasVenta() {
       setMsg(`Importando ${registros.length} citas…`)
       let ok = 0
       for (let i = 0; i < registros.length; i += 200) { const { error } = await supabase.from('citas_venta').insert(registros.slice(i, i + 200)); if (!error) ok += Math.min(200, registros.length - i) }
-      setMsg(`✓ Se importaron ${ok} citas (nombres mapeados y en orden del Excel).`)
-      cargar()
+      setMsg(`✓ Se importaron ${ok} citas.`); cargar()
     } catch (e: any) { setMsg('✗ Error al importar: ' + (e?.message ?? 'desconocido')) } finally { setImportando(false) }
   }
 
-  const totalW = COLS.reduce((s, col) => s + col.w, 0) + 150
+  const totalW = COLS.reduce((s, col) => s + col.w, 0) + ACC_W
   const dropValores = dropCol ? valoresColumna(dropCol).filter(v => !dropBusca.trim() || v.toLowerCase().includes(dropBusca.toLowerCase())) : []
   const pickLista = picker
     ? (picker.tipo === 'cliente'
@@ -320,9 +314,7 @@ export default function CitasVenta() {
           <Text style={[st.h1, { color: c.text }]}>📋 Citas de venta</Text>
           <Text style={[st.sub, { color: c.textMute }]}>{filas.length} citas · {visibles.length} visibles · exclusiva admin/supervisor</Text>
         </View>
-        {Object.keys(filtrosSel).length > 0 && (
-          <TouchableOpacity style={st.btnLimpiar} onPress={() => setFiltrosSel({})}><Text style={st.btnLimpiarTxt}>✕ Quitar filtros</Text></TouchableOpacity>
-        )}
+        {Object.keys(filtrosSel).length > 0 && <TouchableOpacity style={st.btnLimpiar} onPress={() => setFiltrosSel({})}><Text style={st.btnLimpiarTxt}>✕ Quitar filtros</Text></TouchableOpacity>}
         <TouchableOpacity style={[st.btnImport, importando && { opacity: 0.6 }]} onPress={importarCSV} disabled={importando}>
           {importando ? <ActivityIndicator size="small" color="#fff" /> : <Text style={st.btnImportTxt}>⬆ Importar CSV</Text>}
         </TouchableOpacity>
@@ -330,47 +322,67 @@ export default function CitasVenta() {
       {msg ? <Text style={[st.msg, { color: msg.startsWith('✓') ? '#1a6855' : msg.startsWith('✗') ? '#c0392b' : c.textMute }]}>{msg}</Text> : null}
 
       {loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : (
-        <ScrollView style={{ flex: 1, marginTop: 8 }} showsVerticalScrollIndicator persistentScrollbar stickyHeaderIndices={[0]} scrollEventThrottle={16}>
-          <ScrollView ref={headerRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}
-            onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'h')} style={{ backgroundColor: c.bg }}>
-            <View style={[st.headRow, { backgroundColor: '#0f4c58', width: totalW }]}>
-              {COLS.map(col => {
-                const activo = !!filtrosSel[col.key]
-                return (
-                  <TouchableOpacity key={col.key} style={[st.headCell, { width: col.w }]} activeOpacity={0.7} onPress={() => abrirDropdown(col.key)}>
-                    <Text style={st.headTxt} numberOfLines={2}>{col.label}</Text>
-                    <Text style={[st.embudo, activo && st.embudoActivo]}>{activo ? '▼●' : '▾'}</Text>
-                  </TouchableOpacity>
-                )
-              })}
-              <Text style={[st.headCell, st.headTxt, { width: 150 }]}>Retro</Text>
-            </View>
-          </ScrollView>
+        <View style={{ flex: 1, marginTop: 8, flexDirection: 'row' }}>
+          <View style={{ flex: 1 }}>
+            {/* Encabezado (fijo arriba, scroll horizontal sincronizado) */}
+            <ScrollView ref={headerRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'h')} style={{ flexGrow: 0 }}>
+              <View style={[st.headRow, { backgroundColor: '#0f4c58', width: totalW }]}>
+                {COLS.map(col => {
+                  const activo = !!filtrosSel[col.key]
+                  return (
+                    <TouchableOpacity key={col.key} style={[st.headCell, { width: col.w }]} activeOpacity={0.7} onPress={() => abrirDropdown(col.key)}>
+                      <Text style={st.headTxt} numberOfLines={2}>{col.label}</Text>
+                      <Text style={[st.embudo, activo && st.embudoActivo]}>{activo ? '▼●' : '▾'}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+                <Text style={[st.headCell, st.headTxt, { width: ACC_W }]}>Retro / Borrar</Text>
+              </View>
+            </ScrollView>
 
-          <ScrollView ref={bodyRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}
-            onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'b')}>
-            <View style={{ width: totalW }}>
-              {visibles.map((f, idx) => (
-                <FilaRow key={f.id} f={f} idx={idx} editKey={edit?.id === f.id ? edit.key : null}
-                  onText={onText} onSaveText={onSaveText} onPick={onPick} onRetro={onRetro} />
-              ))}
-              {visibles.length === 0 && (
-                <Text style={[st.vacio, { color: c.textMute }]}>
-                  {Object.keys(filtrosSel).length ? 'Sin resultados con esos filtros.' : 'Aún no hay citas. Importa tu Excel con "Importar CSV".'}
-                </Text>
-              )}
-              <View style={{ height: 60 }} />
-            </View>
+            {/* Cuerpo: scroll horizontal envuelve una FlatList virtualizada */}
+            <ScrollView ref={bodyRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'b')} style={{ flex: 1 }}>
+              <FlatList
+                ref={listRef}
+                style={{ width: totalW }}
+                data={visibles}
+                keyExtractor={f => f.id}
+                getItemLayout={(_, i) => ({ length: ROW_H, offset: ROW_H * i, index: i })}
+                renderItem={({ item, index }) => <FilaRow f={item} idx={index} onTap={onTap} onRetro={onRetro} onDelete={onDelete} />}
+                initialNumToRender={25} maxToRenderPerBatch={25} windowSize={11} removeClippedSubviews
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onScroll={e => syncY(e.nativeEvent.contentOffset.y, 'list')}
+                ListEmptyComponent={<Text style={[st.vacio, { color: c.textMute }]}>{Object.keys(filtrosSel).length ? 'Sin resultados con esos filtros.' : 'Aún no hay citas. Importa tu Excel con "Importar CSV".'}</Text>}
+              />
+            </ScrollView>
+
+            {/* Barra horizontal fija al pie */}
+            <ScrollView ref={barRef} horizontal showsHorizontalScrollIndicator persistentScrollbar scrollEventThrottle={16} onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'bar')} style={st.barraAbajo}>
+              <View style={{ width: totalW, height: 1 }} />
+            </ScrollView>
+          </View>
+
+          {/* Barra vertical fija a la derecha (siempre visible y arrastrable) */}
+          <ScrollView ref={vbarRef} showsVerticalScrollIndicator persistentScrollbar scrollEventThrottle={16} onScroll={e => syncY(e.nativeEvent.contentOffset.y, 'vbar')} style={st.barraDer}>
+            <View style={{ width: 1, height: Math.max(visibles.length * ROW_H, 1) }} />
           </ScrollView>
-        </ScrollView>
+        </View>
       )}
 
-      {!loading && (
-        <ScrollView ref={barRef} horizontal showsHorizontalScrollIndicator persistentScrollbar scrollEventThrottle={16}
-          onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'bar')} style={st.barraAbajo}>
-          <View style={{ width: totalW, height: 1 }} />
-        </ScrollView>
-      )}
+      {/* Editar celda de texto */}
+      <Modal visible={editTxt !== null} transparent animationType="fade" onRequestClose={() => setEditTxt(null)}>
+        <TouchableOpacity style={st.dropOverlay} activeOpacity={1} onPress={() => setEditTxt(null)}>
+          <TouchableOpacity activeOpacity={1} style={[st.dropCard, { backgroundColor: c.card }]} onPress={e => e.stopPropagation?.()}>
+            <Text style={[st.dropTitulo, { color: c.text }]}>{COLS.find(cc => cc.key === editTxt?.key)?.label}</Text>
+            <TextInput style={[st.editArea, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={editTxt?.val ?? ''} onChangeText={v => setEditTxt(e => e ? { ...e, val: v } : e)} multiline autoFocus textAlignVertical="top" />
+            <View style={st.dropAcciones}>
+              <TouchableOpacity style={st.dropCancel} onPress={() => setEditTxt(null)}><Text style={[st.dropCancelTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
+              <TouchableOpacity style={st.dropOk} onPress={() => { if (editTxt) aplicarCambio(editTxt.id, { [editTxt.key]: editTxt.val.trim() || null }); setEditTxt(null) }}><Text style={st.dropOkTxt}>Guardar</Text></TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Filtro estilo Excel */}
       <Modal visible={dropCol !== null} transparent animationType="fade" onRequestClose={() => setDropCol(null)}>
@@ -402,7 +414,7 @@ export default function CitasVenta() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Menú desplegable: usuario / cliente / fecha */}
+      {/* Menú: usuario / cliente / fecha */}
       <Modal visible={picker !== null} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
         <TouchableOpacity style={st.dropOverlay} activeOpacity={1} onPress={() => setPicker(null)}>
           <TouchableOpacity activeOpacity={1} onPress={e => e.stopPropagation?.()}>
@@ -413,12 +425,9 @@ export default function CitasVenta() {
                 <Text style={[st.dropTitulo, { color: c.text }]}>{picker?.tipo === 'cliente' ? 'Elegir cliente' : 'Elegir usuario'}</Text>
                 <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={pickBusca} onChangeText={setPickBusca} placeholder="Buscar…" placeholderTextColor={c.textMute} autoFocus />
                 <ScrollView style={{ maxHeight: 340, marginTop: 8 }} keyboardShouldPersistTaps="handled">
-                  {picker?.tipo === 'usuario' && (
-                    <TouchableOpacity style={st.dropItem} onPress={() => elegirUsuario('', null)}><Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin asignar —</Text></TouchableOpacity>
-                  )}
+                  {picker?.tipo === 'usuario' && <TouchableOpacity style={st.dropItem} onPress={() => elegirUsuario('', null)}><Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin asignar —</Text></TouchableOpacity>}
                   {(pickLista as any[]).map((x: any) => (
-                    <TouchableOpacity key={x.id} style={st.dropItem}
-                      onPress={() => picker?.tipo === 'cliente' ? elegirCliente(x.nombre, x.telefono) : elegirUsuario(x.nombre, x.id)}>
+                    <TouchableOpacity key={x.id} style={st.dropItem} onPress={() => picker?.tipo === 'cliente' ? elegirCliente(x.nombre, x.telefono) : elegirUsuario(x.nombre, x.id)}>
                       <Text style={[st.dropItemTxt, { color: c.text }]} numberOfLines={1}>{x.nombre}{picker?.tipo === 'cliente' && x.telefono ? `  ·  ${x.telefono}` : ''}</Text>
                     </TouchableOpacity>
                   ))}
@@ -451,15 +460,17 @@ const st = StyleSheet.create({
   headTxt: { flex: 1, fontSize: 11.5, fontWeight: '800', color: '#fff' },
   embudo: { color: '#ffffff99', fontSize: 12, fontWeight: '900' },
   embudoActivo: { color: '#f4c752' },
-  row: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'stretch' },
-  cell: { paddingHorizontal: 8, paddingVertical: 9, borderRightWidth: StyleSheet.hairlineWidth, justifyContent: 'center' },
-  cellEdit: { borderWidth: 1.5, borderColor: '#1a6470', borderRadius: 4, fontSize: 12.5, paddingVertical: 6, textAlignVertical: 'top' },
-  retroBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignSelf: 'flex-start' },
+  row: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'stretch', overflow: 'hidden' },
+  cell: { paddingHorizontal: 8, paddingVertical: 8, borderRightWidth: StyleSheet.hairlineWidth, justifyContent: 'center', overflow: 'hidden' },
+  retroBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   retroPend: { backgroundColor: '#1a6470' },
   retroHecha: { backgroundColor: '#1a685522', borderWidth: 1, borderColor: '#1a6855' },
-  retroBtnTxt: { fontSize: 11.5, fontWeight: '800' },
+  retroBtnTxt: { fontSize: 13, fontWeight: '800' },
+  delTxt: { fontSize: 16 },
   vacio: { textAlign: 'center', padding: 30, fontSize: 13.5, lineHeight: 20, maxWidth: 420 },
   barraAbajo: { height: 16, flexGrow: 0, marginTop: 2 },
+  barraDer: { width: 16, flexGrow: 0, marginLeft: 2 },
+  editArea: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14, minHeight: 120 },
   dropOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   dropCard: { width: '100%', maxWidth: 380, borderRadius: 14, padding: 16 },
   dropTitulo: { fontSize: 15, fontWeight: '800', marginBottom: 10 },
