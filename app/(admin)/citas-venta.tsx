@@ -45,6 +45,7 @@ const MAPEO: Record<string, string> = {
   ruben: 'Rayo⚡', rayo: 'Rayo⚡',
   ak: 'Aketzali', aketzali: 'Aketzali',
   alexis: 'Alexis', chucho: 'Chucho',
+  lupillo: 'Carlos Carbajal', ian: 'Ian Gonzalez',
   fatima: 'Fatima Ruiz', 'fatima ruiz': 'Fatima Ruiz',
   alma: 'Alma Carrera', jessica: 'Jessica Santos', hugo: 'Hugo Prado',
   deisy: 'Deisy García Farias', martin: 'Martin Ballesteros',
