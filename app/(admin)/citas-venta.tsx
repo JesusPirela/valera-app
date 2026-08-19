@@ -1,9 +1,12 @@
 // Tabla EXCLUSIVA admin/supervisor: seguimiento de citas de venta.
-// - Se llena sola con el dashboard de citas (trigger BD) e importa el Excel.
-// - Import: mapea nombres a usuarios reales, respeta el orden del CSV, liga asesor.
-// - Filtros ESTILO EXCEL por columna (embudo → lista de valores con casillas),
-//   celdas editables, encabezado + scroll horizontal fijos (sticky).
-import { useCallback, useMemo, useRef, useState } from 'react'
+// - Import del Excel (mapea nombres a usuarios, orden del CSV, liga asesor) y
+//   autollenado desde el dashboard de citas (trigger BD).
+// - Filtros estilo Excel, celdas editables. Cliente/Prospecto/Coordinó/Atendió
+//   son menús desplegables (clientes/usuarios); "Día de la cita" es calendario +
+//   hora; el teléfono se autollena con el cliente; Atendió liga al asesor.
+// - Filas memoizadas (edición sin lag), encabezado sticky y barra horizontal
+//   fija al pie.
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
   TextInput, Platform, Modal,
@@ -20,54 +23,46 @@ type Fila = CitaRetro & {
   estado_seguimiento: string | null; fecha_prox_seguimiento: string | null; retro_completada_at: string | null
 }
 type ColKey = keyof Fila
+type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha'
 const VACIO = '(Vacías)'
 
-const COLS: { key: ColKey; label: string; w: number }[] = [
-  { key: 'cliente_nombre', label: 'Cliente', w: 180 },
-  { key: 'telefono', label: 'Teléfono', w: 130 },
-  { key: 'detalles_pago', label: 'Forma de pago', w: 230 },
-  { key: 'interesado_en', label: 'Interesado en', w: 250 },
-  { key: 'dia_cita', label: 'Día de la cita', w: 150 },
-  { key: 'prospecto', label: 'Prospectó', w: 150 },
-  { key: 'coordino', label: 'Coordinó', w: 140 },
-  { key: 'atendio', label: 'Atendió', w: 150 },
-  { key: 'retro_como_estuvo', label: 'Cómo estuvo la cita', w: 250 },
-  { key: 'retro_info_extra', label: 'Info extra del cliente', w: 250 },
-  { key: 'retro_plan_accion', label: 'Plan de acción', w: 250 },
-  { key: 'estado_seguimiento', label: 'Estado seguimiento', w: 170 },
-  { key: 'fecha_prox_seguimiento', label: 'Próx. seguimiento', w: 150 },
+const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
+  { key: 'cliente_nombre', label: 'Cliente', w: 190, tipo: 'cliente' },
+  { key: 'telefono', label: 'Teléfono', w: 130, tipo: 'texto' },
+  { key: 'detalles_pago', label: 'Forma de pago', w: 230, tipo: 'texto' },
+  { key: 'interesado_en', label: 'Interesado en', w: 250, tipo: 'texto' },
+  { key: 'dia_cita', label: 'Día de la cita', w: 170, tipo: 'fecha' },
+  { key: 'prospecto', label: 'Prospectó', w: 160, tipo: 'usuario' },
+  { key: 'coordino', label: 'Coordinó', w: 150, tipo: 'usuario' },
+  { key: 'atendio', label: 'Atendió', w: 160, tipo: 'usuario' },
+  { key: 'retro_como_estuvo', label: 'Cómo estuvo la cita', w: 250, tipo: 'texto' },
+  { key: 'retro_info_extra', label: 'Info extra del cliente', w: 250, tipo: 'texto' },
+  { key: 'retro_plan_accion', label: 'Plan de acción', w: 250, tipo: 'texto' },
+  { key: 'estado_seguimiento', label: 'Estado seguimiento', w: 170, tipo: 'texto' },
+  { key: 'fecha_prox_seguimiento', label: 'Próx. seguimiento', w: 150, tipo: 'texto' },
 ]
+const TIPO_DE: Record<string, Tipo> = Object.fromEntries(COLS.map(c => [c.key, c.tipo]))
 
-// ── Mapeo de nombres del Excel → nombre EXACTO del usuario en la app ─────────
 const MAPEO: Record<string, string> = {
-  andres: 'Andres Asesor', andre: 'André Tenorio',
-  ruben: 'Rayo⚡', rayo: 'Rayo⚡',
-  ak: 'Aketzali', aketzali: 'Aketzali',
-  alexis: 'Alexis', chucho: 'Chucho',
+  andres: 'Andres Asesor', andre: 'André Tenorio', ruben: 'Rayo⚡', rayo: 'Rayo⚡',
+  ak: 'Aketzali', aketzali: 'Aketzali', alexis: 'Alexis', chucho: 'Chucho',
   lupillo: 'Carlos Carbajal', ian: 'Ian Gonzalez',
-  fatima: 'Fatima Ruiz', 'fatima ruiz': 'Fatima Ruiz',
-  alma: 'Alma Carrera', jessica: 'Jessica Santos', hugo: 'Hugo Prado',
-  deisy: 'Deisy García Farias', martin: 'Martin Ballesteros',
-  'carlos garcia': 'Carlos Garcia', 'carlos carbajal': 'Carlos Carbajal',
+  fatima: 'Fatima Ruiz', 'fatima ruiz': 'Fatima Ruiz', alma: 'Alma Carrera',
+  jessica: 'Jessica Santos', hugo: 'Hugo Prado', deisy: 'Deisy García Farias',
+  martin: 'Martin Ballesteros', 'carlos garcia': 'Carlos Garcia', 'carlos carbajal': 'Carlos Carbajal',
   brith: 'Brith Solis 🐉', brithanni: 'Brith Solis 🐉', brit: 'Brith Solis 🐉', 'brith solis': 'Brith Solis 🐉',
-  karina: 'Karina Jaret', santi: 'Santiago Alfaro', santiago: 'Santiago Alfaro',
-  sara: 'Sara', roberto: 'Roberto Betito', beto: 'Roberto Betito',
-  oliver: 'Oliver Javier', leo: 'Leonardo Pirela', eve: 'Eve Limon',
-  gabriela: 'Gabriela', alberto: 'Alberto Bucio', 'ana hilda': 'Ana Hilda Pérez Mar',
-  angelica: 'Angelica Zarate', angy: 'Angelica Zarate', lydia: 'Lydia Rodríguez',
-  marisol: 'Marisol', dax: 'Dax Alejandro', kevin: 'Kevin Ituriel',
+  karina: 'Karina Jaret', santi: 'Santiago Alfaro', santiago: 'Santiago Alfaro', sara: 'Sara',
+  roberto: 'Roberto Betito', beto: 'Roberto Betito', oliver: 'Oliver Javier',
+  leo: 'Leonardo Pirela', eve: 'Eve Limon', gabriela: 'Gabriela', alberto: 'Alberto Bucio',
+  'ana hilda': 'Ana Hilda Pérez Mar', angelica: 'Angelica Zarate', angy: 'Angelica Zarate',
+  lydia: 'Lydia Rodríguez', marisol: 'Marisol', dax: 'Dax Alejandro', kevin: 'Kevin Ituriel',
   'wendy l': 'Wendoly Lefranc', wendy: 'Wendoly Lefranc', sofia: 'Sofia Camacho',
-  oswaldo: 'Oswaldo Andrés Balderas', steve: 'Esteban Astor',
-  'jose fernando': 'Jose Fernando', kary: 'Kary Mama Beto',
+  oswaldo: 'Oswaldo Andrés Balderas', steve: 'Esteban Astor', 'jose fernando': 'Jose Fernando', kary: 'Kary Mama Beto',
 }
 function normalizar(s: string): string {
-  return (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9 ]/g, '').trim().replace(/\s+/g, ' ')
+  return (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim().replace(/\s+/g, ' ')
 }
-function mapear(nombre: string | undefined): string {
-  const v = (nombre ?? '').trim()
-  return v ? (MAPEO[normalizar(v)] ?? v) : v
-}
+function mapear(n: string | undefined): string { const v = (n ?? '').trim(); return v ? (MAPEO[normalizar(v)] ?? v) : v }
 function arreglarEncoding(s: string): string {
   if (!s || !/[ÃÂ]/.test(s)) return s
   try {
@@ -90,25 +85,122 @@ function parseCSV(text: string): string[][] {
   return rows
 }
 
+// ── Fila memoizada: solo se re-renderiza si cambia su dato o su celda en edición ─
+const FilaRow = memo(function FilaRow({ f, idx, editKey, onText, onSaveText, onPick, onRetro }: {
+  f: Fila; idx: number; editKey: ColKey | null
+  onText: (id: string, k: ColKey) => void
+  onSaveText: (id: string, k: ColKey, v: string) => void
+  onPick: (id: string, k: ColKey, t: Tipo) => void
+  onRetro: (f: Fila) => void
+}) {
+  const c = useColors()
+  const [txt, setTxt] = useState('')
+  useEffect(() => { if (editKey && TIPO_DE[editKey] === 'texto') setTxt(String(f[editKey] ?? '')) }, [editKey])
+  return (
+    <View style={[st.row, { borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
+      {COLS.map(col => {
+        const tipo = col.tipo
+        const val = (f[col.key] as string) ?? ''
+        if (editKey === col.key && tipo === 'texto') {
+          return (
+            <TextInput key={col.key} style={[st.cell, st.cellEdit, { width: col.w, color: c.text }]}
+              value={txt} onChangeText={setTxt} autoFocus multiline
+              onBlur={() => onSaveText(f.id, col.key, txt)} onSubmitEditing={() => onSaveText(f.id, col.key, txt)} />
+          )
+        }
+        return (
+          <TouchableOpacity key={col.key} style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
+            onPress={() => tipo === 'texto' ? onText(f.id, col.key) : onPick(f.id, col.key, tipo)}>
+            <Text style={{ color: val ? c.text : c.textMute, fontSize: 12.5 }} numberOfLines={3}>
+              {val || '—'}{tipo !== 'texto' ? '  ▾' : ''}
+            </Text>
+          </TouchableOpacity>
+        )
+      })}
+      <View style={[st.cell, { width: 150, borderColor: c.border }]}>
+        <TouchableOpacity style={[st.retroBtn, f.retro_completada_at ? st.retroHecha : st.retroPend]} onPress={() => onRetro(f)}>
+          <Text style={[st.retroBtnTxt, { color: f.retro_completada_at ? '#1a6855' : '#fff' }]}>{f.retro_completada_at ? '✓ Ver / editar' : '📝 Dar retro'}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  )
+}, (a, b) => a.f === b.f && a.idx === b.idx && a.editKey === b.editKey)
+
+// ── Calendario + hora (para "Día de la cita") ────────────────────────────────
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+function fmtFecha(d: Date): string {
+  const h = d.getHours(); const ampm = h < 12 ? 'am' : 'pm'; const h12 = h % 12 || 12
+  return `${d.getDate()} de ${MESES[d.getMonth()]} ${d.getFullYear()}, ${h12}:${String(d.getMinutes()).padStart(2, '0')} ${ampm}`
+}
+function CalendarioHora({ onConfirm, onClose }: { onConfirm: (display: string, iso: string) => void; onClose: () => void }) {
+  const c = useColors()
+  const [d, setD] = useState(() => { const x = new Date(); x.setMinutes(0); return x })
+  const [vista, setVista] = useState(() => new Date(d.getFullYear(), d.getMonth(), 1))
+  const y = vista.getFullYear(), m = vista.getMonth()
+  const off = (new Date(y, m, 1).getDay() + 6) % 7
+  const dias = new Date(y, m + 1, 0).getDate()
+  const celdas: (number | null)[] = [...Array(off).fill(null), ...Array.from({ length: dias }, (_, i) => i + 1)]
+  const set = (patch: Partial<{ dd: number; hh: number; mm: number }>) => {
+    setD(prev => { const x = new Date(prev); if (patch.dd) x.setFullYear(y, m, patch.dd); if (patch.hh != null) x.setHours(patch.hh); if (patch.mm != null) x.setMinutes(patch.mm); return x })
+  }
+  const h = d.getHours()
+  return (
+    <View style={[st.dropCard, { backgroundColor: c.card, maxWidth: 340 }]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <TouchableOpacity onPress={() => setVista(new Date(y, m - 1, 1))}><Text style={st.calNav}>‹</Text></TouchableOpacity>
+        <Text style={[st.dropTitulo, { color: c.text, marginBottom: 0, textTransform: 'capitalize' }]}>{MESES[m]} {y}</Text>
+        <TouchableOpacity onPress={() => setVista(new Date(y, m + 1, 1))}><Text style={st.calNav}>›</Text></TouchableOpacity>
+      </View>
+      <View style={{ flexDirection: 'row' }}>{['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((w, i) => <Text key={i} style={[st.calDow, { color: c.textMute }]}>{w}</Text>)}</View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+        {celdas.map((dd, i) => {
+          if (dd === null) return <View key={i} style={st.calCell} />
+          const sel = dd === d.getDate() && m === d.getMonth() && y === d.getFullYear()
+          return (
+            <TouchableOpacity key={i} style={st.calCell} onPress={() => set({ dd })}>
+              <View style={[st.calDia, sel && { backgroundColor: '#1a6470' }]}>
+                <Text style={{ color: sel ? '#fff' : c.text, fontWeight: sel ? '800' : '500', fontSize: 13 }}>{dd}</Text>
+              </View>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, justifyContent: 'center' }}>
+        <Text style={{ color: c.textMute, fontSize: 12 }}>Hora:</Text>
+        <TouchableOpacity onPress={() => set({ hh: (h + 23) % 24 })}><Text style={st.calStep}>−</Text></TouchableOpacity>
+        <Text style={{ color: c.text, fontWeight: '800', fontSize: 15, minWidth: 26, textAlign: 'center' }}>{h % 12 || 12}</Text>
+        <TouchableOpacity onPress={() => set({ hh: (h + 1) % 24 })}><Text style={st.calStep}>+</Text></TouchableOpacity>
+        <Text style={{ color: c.text }}>:</Text>
+        <TouchableOpacity onPress={() => set({ mm: (d.getMinutes() + 45) % 60 })}><Text style={st.calStep}>−</Text></TouchableOpacity>
+        <Text style={{ color: c.text, fontWeight: '800', fontSize: 15, minWidth: 30, textAlign: 'center' }}>{String(d.getMinutes()).padStart(2, '0')}</Text>
+        <TouchableOpacity onPress={() => set({ mm: (d.getMinutes() + 15) % 60 })}><Text style={st.calStep}>+</Text></TouchableOpacity>
+        <Text style={{ color: c.text, fontWeight: '700', marginLeft: 4 }}>{h < 12 ? 'am' : 'pm'}</Text>
+      </View>
+      <View style={st.dropAcciones}>
+        <TouchableOpacity style={st.dropCancel} onPress={onClose}><Text style={[st.dropCancelTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
+        <TouchableOpacity style={st.dropOk} onPress={() => onConfirm(fmtFecha(d), d.toISOString())}><Text style={st.dropOkTxt}>Aceptar</Text></TouchableOpacity>
+      </View>
+    </View>
+  )
+}
+
 export default function CitasVenta() {
   const c = useColors()
   const [filas, setFilas] = useState<Fila[]>([])
   const [loading, setLoading] = useState(true)
-  // Filtros estilo Excel: por columna, un conjunto de valores PERMITIDOS.
+  const [profiles, setProfiles] = useState<{ id: string; nombre: string }[]>([])
+  const [clientes, setClientes] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
   const [filtrosSel, setFiltrosSel] = useState<Record<string, Set<string>>>({})
-  const [dropCol, setDropCol] = useState<ColKey | null>(null)   // columna con el dropdown abierto
+  const [dropCol, setDropCol] = useState<ColKey | null>(null)
   const [dropSel, setDropSel] = useState<Set<string>>(new Set())
   const [dropBusca, setDropBusca] = useState('')
   const [edit, setEdit] = useState<{ id: string; key: ColKey } | null>(null)
-  const [editVal, setEditVal] = useState('')
+  const [picker, setPicker] = useState<{ id: string; key: ColKey; tipo: Tipo } | null>(null)
+  const [pickBusca, setPickBusca] = useState('')
   const [wizard, setWizard] = useState<Fila | null>(null)
   const [importando, setImportando] = useState(false)
   const [msg, setMsg] = useState('')
-  // Scroll horizontal sincronizado entre encabezado (sticky), cuerpo y la barra
-  // fija de abajo. Un lock evita el bucle entre los onScroll.
-  const headerRef = useRef<ScrollView>(null)
-  const bodyRef = useRef<ScrollView>(null)
-  const barRef = useRef<ScrollView>(null)
+  const headerRef = useRef<ScrollView>(null); const bodyRef = useRef<ScrollView>(null); const barRef = useRef<ScrollView>(null)
   const syncing = useRef(false)
   function syncX(x: number, from: 'h' | 'b' | 'bar') {
     if (syncing.current) return
@@ -120,13 +212,11 @@ export default function CitasVenta() {
   }
 
   const cargar = useCallback(async () => {
-    // Se pagina de 1000 en 1000 (Supabase limita cada consulta a 1000) para traer TODAS.
     const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at'
     const todas: Fila[] = []; const paso = 1000
     for (let desde = 0; ; desde += paso) {
       const { data, error } = await supabase.from('citas_venta').select(cols)
-        .order('orden', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false })
+        .order('orden', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false })
         .range(desde, desde + paso - 1)
       if (error || !data || data.length === 0) break
       todas.push(...(data as Fila[]))
@@ -135,43 +225,50 @@ export default function CitasVenta() {
     setFilas(todas); setLoading(false)
   }, [])
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
+  useEffect(() => {
+    supabase.from('profiles').select('id, nombre').order('nombre').then(({ data }) => setProfiles((data ?? []).filter((p: any) => p.nombre)))
+    supabase.from('clientes').select('id, nombre, telefono').is('eliminado_at', null).order('nombre').limit(5000).then(({ data }) => setClientes(data ?? []))
+  }, [])
 
   const valorDe = (f: Fila, key: ColKey) => String((f[key] as string) ?? '').trim() || VACIO
-
   const visibles = useMemo(() => filas.filter(f =>
     Object.entries(filtrosSel).every(([k, set]) => set.has(valorDe(f, k as ColKey)))
   ), [filas, filtrosSel])
 
-  // Valores distintos de una columna (para el dropdown), ordenados.
   const valoresColumna = (key: ColKey): string[] => {
     const s = new Set<string>()
     for (const f of filas) s.add(valorDe(f, key))
     return [...s].sort((a, b) => a === VACIO ? 1 : b === VACIO ? -1 : a.localeCompare(b, 'es', { numeric: true }))
   }
-
-  function abrirDropdown(key: ColKey) {
-    const actual = filtrosSel[key]
-    setDropSel(actual ? new Set(actual) : new Set(valoresColumna(key)))  // todo marcado si no hay filtro
-    setDropBusca('')
-    setDropCol(key)
-  }
-  function aplicarDropdown() {
+  const abrirDropdown = (key: ColKey) => { const a = filtrosSel[key]; setDropSel(a ? new Set(a) : new Set(valoresColumna(key))); setDropBusca(''); setDropCol(key) }
+  const aplicarDropdown = () => {
     if (!dropCol) return
     const todos = valoresColumna(dropCol)
-    setFiltrosSel(prev => {
-      const n = { ...prev }
-      if (dropSel.size === 0 || dropSel.size === todos.length) delete n[dropCol]  // sin filtro
-      else n[dropCol] = new Set(dropSel)
-      return n
-    })
+    setFiltrosSel(prev => { const n = { ...prev }; (dropSel.size === 0 || dropSel.size === todos.length) ? delete n[dropCol] : (n[dropCol] = new Set(dropSel)); return n })
     setDropCol(null)
   }
 
-  async function guardarCelda(id: string, key: ColKey, valor: string) {
-    setEdit(null)
-    const v = valor.trim() || null
-    setFilas(fs => fs.map(f => f.id === id ? { ...f, [key]: v } as Fila : f))
-    await supabase.from('citas_venta').update({ [key]: v }).eq('id', id)
+  // Guardado (local + BD). patch puede tener varios campos (cliente→+teléfono, atendió→+asesor_id).
+  const aplicarCambio = useCallback(async (id: string, patch: Record<string, any>) => {
+    setFilas(fs => fs.map(f => f.id === id ? { ...f, ...patch } as Fila : f))
+    await supabase.from('citas_venta').update(patch).eq('id', id)
+  }, [])
+  const onText = useCallback((id: string, k: ColKey) => setEdit({ id, key: k }), [])
+  const onSaveText = useCallback((id: string, k: ColKey, v: string) => { setEdit(null); aplicarCambio(id, { [k]: v.trim() || null }) }, [aplicarCambio])
+  const onPick = useCallback((id: string, k: ColKey, t: Tipo) => { setPickBusca(''); setPicker({ id, key: k, tipo: t }) }, [])
+  const onRetro = useCallback((f: Fila) => setWizard(f), [])
+
+  function elegirUsuario(nombre: string, id: string | null) {
+    if (!picker) return
+    const patch: Record<string, any> = { [picker.key]: nombre }
+    if (picker.key === 'atendio') patch.asesor_id = id
+    aplicarCambio(picker.id, patch); setPicker(null)
+  }
+  function elegirCliente(nombre: string, tel: string | null) {
+    if (!picker) return
+    const patch: Record<string, any> = { cliente_nombre: nombre }
+    if (tel) patch.telefono = tel   // autollena el teléfono si el cliente lo tiene
+    aplicarCambio(picker.id, patch); setPicker(null)
   }
 
   async function importarCSV() {
@@ -180,8 +277,7 @@ export default function CitasVenta() {
       if (res.canceled || !res.assets?.[0]) return
       setImportando(true); setMsg('Leyendo archivo…')
       const asset = res.assets[0]
-      const texto = Platform.OS === 'web' && (asset as any).file
-        ? await (asset as any).file.text() : await (await fetch(asset.uri)).text()
+      const texto = Platform.OS === 'web' && (asset as any).file ? await (asset as any).file.text() : await (await fetch(asset.uri)).text()
       const rows = parseCSV(texto)
       if (rows.length < 2) { setMsg('✗ El archivo no tiene filas.'); setImportando(false); return }
       const { data: perfiles } = await supabase.from('profiles').select('id, nombre')
@@ -190,40 +286,32 @@ export default function CitasVenta() {
       const registros = rows.slice(1).map((r, i) => {
         const atendio = mapear(limpio(r[8]))
         return {
-          orden: i,
-          cliente_nombre: limpio(r[0]) || null,
+          orden: i, cliente_nombre: limpio(r[0]) || null,
           telefono: (r[1] ?? '').replace(/[^\d+]/g, '') || null,
-          detalles_pago: limpio(r[2]) || null,
-          interesado_en: limpio(r[3]) || null,
-          dia_cita: limpio(r[4]) || null,
-          retro_como_estuvo: limpio(r[5]) || null,
-          prospecto: mapear(limpio(r[6])) || null,
-          coordino: mapear(limpio(r[7])) || null,
-          atendio: atendio || null,
-          asesor_id: idPorNombre.get(atendio) ?? null,
-          estado_seguimiento: limpio(r[9]) || null,
-          fecha_prox_seguimiento: limpio(r[10]) || null,
-          origen: 'excel',
+          detalles_pago: limpio(r[2]) || null, interesado_en: limpio(r[3]) || null,
+          dia_cita: limpio(r[4]) || null, retro_como_estuvo: limpio(r[5]) || null,
+          prospecto: mapear(limpio(r[6])) || null, coordino: mapear(limpio(r[7])) || null,
+          atendio: atendio || null, asesor_id: idPorNombre.get(atendio) ?? null,
+          estado_seguimiento: limpio(r[9]) || null, fecha_prox_seguimiento: limpio(r[10]) || null, origen: 'excel',
         }
       }).filter(x => x.cliente_nombre && x.cliente_nombre.toLowerCase() !== 'asd')
-
       setMsg('Reemplazando import anterior…')
       await supabase.from('citas_venta').delete().eq('origen', 'excel')
       setMsg(`Importando ${registros.length} citas…`)
       let ok = 0
-      for (let i = 0; i < registros.length; i += 200) {
-        const { error } = await supabase.from('citas_venta').insert(registros.slice(i, i + 200))
-        if (!error) ok += Math.min(200, registros.length - i)
-      }
+      for (let i = 0; i < registros.length; i += 200) { const { error } = await supabase.from('citas_venta').insert(registros.slice(i, i + 200)); if (!error) ok += Math.min(200, registros.length - i) }
       setMsg(`✓ Se importaron ${ok} citas (nombres mapeados y en orden del Excel).`)
       cargar()
-    } catch (e: any) {
-      setMsg('✗ Error al importar: ' + (e?.message ?? 'desconocido'))
-    } finally { setImportando(false) }
+    } catch (e: any) { setMsg('✗ Error al importar: ' + (e?.message ?? 'desconocido')) } finally { setImportando(false) }
   }
 
   const totalW = COLS.reduce((s, col) => s + col.w, 0) + 150
   const dropValores = dropCol ? valoresColumna(dropCol).filter(v => !dropBusca.trim() || v.toLowerCase().includes(dropBusca.toLowerCase())) : []
+  const pickLista = picker
+    ? (picker.tipo === 'cliente'
+        ? clientes.filter(x => !pickBusca.trim() || (x.nombre ?? '').toLowerCase().includes(pickBusca.toLowerCase()) || (x.telefono ?? '').includes(pickBusca))
+        : profiles.filter(x => !pickBusca.trim() || x.nombre.toLowerCase().includes(pickBusca.toLowerCase())))
+    : []
 
   return (
     <View style={[st.page, { backgroundColor: c.bg }]}>
@@ -233,9 +321,7 @@ export default function CitasVenta() {
           <Text style={[st.sub, { color: c.textMute }]}>{filas.length} citas · {visibles.length} visibles · exclusiva admin/supervisor</Text>
         </View>
         {Object.keys(filtrosSel).length > 0 && (
-          <TouchableOpacity style={st.btnLimpiar} onPress={() => setFiltrosSel({})}>
-            <Text style={st.btnLimpiarTxt}>✕ Quitar filtros</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={st.btnLimpiar} onPress={() => setFiltrosSel({})}><Text style={st.btnLimpiarTxt}>✕ Quitar filtros</Text></TouchableOpacity>
         )}
         <TouchableOpacity style={[st.btnImport, importando && { opacity: 0.6 }]} onPress={importarCSV} disabled={importando}>
           {importando ? <ActivityIndicator size="small" color="#fff" /> : <Text style={st.btnImportTxt}>⬆ Importar CSV</Text>}
@@ -243,21 +329,10 @@ export default function CitasVenta() {
       </View>
       {msg ? <Text style={[st.msg, { color: msg.startsWith('✓') ? '#1a6855' : msg.startsWith('✗') ? '#c0392b' : c.textMute }]}>{msg}</Text> : null}
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
-      ) : (
-        <ScrollView
-          style={{ flex: 1, marginTop: 8 }}
-          showsVerticalScrollIndicator persistentScrollbar
-          stickyHeaderIndices={[0]}
-          scrollEventThrottle={16}
-        >
-          {/* 0 · Encabezado STICKY (la barra horizontal va abajo, fija) */}
-          <ScrollView
-            ref={headerRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}
-            onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'h')}
-            style={{ backgroundColor: c.bg }}
-          >
+      {loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : (
+        <ScrollView style={{ flex: 1, marginTop: 8 }} showsVerticalScrollIndicator persistentScrollbar stickyHeaderIndices={[0]} scrollEventThrottle={16}>
+          <ScrollView ref={headerRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}
+            onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'h')} style={{ backgroundColor: c.bg }}>
             <View style={[st.headRow, { backgroundColor: '#0f4c58', width: totalW }]}>
               {COLS.map(col => {
                 const activo = !!filtrosSel[col.key]
@@ -272,39 +347,12 @@ export default function CitasVenta() {
             </View>
           </ScrollView>
 
-          {/* 1 · Cuerpo — se mueve en sinc. con el encabezado y la barra de abajo */}
-          <ScrollView
-            ref={bodyRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}
-            onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'b')}
-          >
+          <ScrollView ref={bodyRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}
+            onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'b')}>
             <View style={{ width: totalW }}>
               {visibles.map((f, idx) => (
-                <View key={f.id} style={[st.row, { borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
-                  {COLS.map(col => {
-                    const editing = edit?.id === f.id && edit?.key === col.key
-                    if (editing) {
-                      return (
-                        <TextInput key={col.key}
-                          style={[st.cell, st.cellEdit, { width: col.w, color: c.text }]}
-                          value={editVal} onChangeText={setEditVal} autoFocus multiline
-                          onBlur={() => guardarCelda(f.id, col.key, editVal)}
-                          onSubmitEditing={() => guardarCelda(f.id, col.key, editVal)} />
-                      )
-                    }
-                    const val = (f[col.key] as string) ?? ''
-                    return (
-                      <TouchableOpacity key={col.key} style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
-                        onPress={() => { setEdit({ id: f.id, key: col.key }); setEditVal(val) }}>
-                        <Text style={{ color: val ? c.text : c.textMute, fontSize: 12.5 }} numberOfLines={3}>{val || '—'}</Text>
-                      </TouchableOpacity>
-                    )
-                  })}
-                  <View style={[st.cell, { width: 150, borderColor: c.border }]}>
-                    <TouchableOpacity style={[st.retroBtn, f.retro_completada_at ? st.retroHecha : st.retroPend]} onPress={() => setWizard(f)}>
-                      <Text style={[st.retroBtnTxt, { color: f.retro_completada_at ? '#1a6855' : '#fff' }]}>{f.retro_completada_at ? '✓ Ver / editar' : '📝 Dar retro'}</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                <FilaRow key={f.id} f={f} idx={idx} editKey={edit?.id === f.id ? edit.key : null}
+                  onText={onText} onSaveText={onSaveText} onPick={onPick} onRetro={onRetro} />
               ))}
               {visibles.length === 0 && (
                 <Text style={[st.vacio, { color: c.textMute }]}>
@@ -317,25 +365,19 @@ export default function CitasVenta() {
         </ScrollView>
       )}
 
-      {/* Barra de desplazamiento horizontal FIJA al pie (siempre visible) */}
       {!loading && (
-        <ScrollView
-          ref={barRef} horizontal showsHorizontalScrollIndicator persistentScrollbar scrollEventThrottle={16}
-          onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'bar')}
-          style={st.barraAbajo}
-        >
+        <ScrollView ref={barRef} horizontal showsHorizontalScrollIndicator persistentScrollbar scrollEventThrottle={16}
+          onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'bar')} style={st.barraAbajo}>
           <View style={{ width: totalW, height: 1 }} />
         </ScrollView>
       )}
 
-      {/* Dropdown de filtro estilo Excel */}
+      {/* Filtro estilo Excel */}
       <Modal visible={dropCol !== null} transparent animationType="fade" onRequestClose={() => setDropCol(null)}>
         <TouchableOpacity style={st.dropOverlay} activeOpacity={1} onPress={() => setDropCol(null)}>
           <TouchableOpacity activeOpacity={1} style={[st.dropCard, { backgroundColor: c.card }]} onPress={e => e.stopPropagation?.()}>
             <Text style={[st.dropTitulo, { color: c.text }]}>Filtrar: {COLS.find(cc => cc.key === dropCol)?.label}</Text>
-            <TextInput
-              style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
-              value={dropBusca} onChangeText={setDropBusca} placeholder="Buscar valor…" placeholderTextColor={c.textMute} />
+            <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={dropBusca} onChangeText={setDropBusca} placeholder="Buscar valor…" placeholderTextColor={c.textMute} />
             <View style={st.dropTodos}>
               <TouchableOpacity onPress={() => setDropSel(new Set(dropValores))}><Text style={st.dropAccion}>Seleccionar todo</Text></TouchableOpacity>
               <Text style={{ color: c.textMute }}>·</Text>
@@ -351,12 +393,40 @@ export default function CitasVenta() {
                   </TouchableOpacity>
                 )
               })}
-              {dropValores.length === 0 && <Text style={{ color: c.textMute, padding: 12, fontSize: 12.5 }}>Sin valores.</Text>}
             </ScrollView>
             <View style={st.dropAcciones}>
               <TouchableOpacity style={st.dropCancel} onPress={() => setDropCol(null)}><Text style={[st.dropCancelTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
               <TouchableOpacity style={st.dropOk} onPress={aplicarDropdown}><Text style={st.dropOkTxt}>Aplicar</Text></TouchableOpacity>
             </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Menú desplegable: usuario / cliente / fecha */}
+      <Modal visible={picker !== null} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
+        <TouchableOpacity style={st.dropOverlay} activeOpacity={1} onPress={() => setPicker(null)}>
+          <TouchableOpacity activeOpacity={1} onPress={e => e.stopPropagation?.()}>
+            {picker?.tipo === 'fecha' ? (
+              <CalendarioHora onConfirm={(disp, iso) => { aplicarCambio(picker.id, { dia_cita: disp, fecha_cita: iso }); setPicker(null) }} onClose={() => setPicker(null)} />
+            ) : (
+              <View style={[st.dropCard, { backgroundColor: c.card }]}>
+                <Text style={[st.dropTitulo, { color: c.text }]}>{picker?.tipo === 'cliente' ? 'Elegir cliente' : 'Elegir usuario'}</Text>
+                <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={pickBusca} onChangeText={setPickBusca} placeholder="Buscar…" placeholderTextColor={c.textMute} autoFocus />
+                <ScrollView style={{ maxHeight: 340, marginTop: 8 }} keyboardShouldPersistTaps="handled">
+                  {picker?.tipo === 'usuario' && (
+                    <TouchableOpacity style={st.dropItem} onPress={() => elegirUsuario('', null)}><Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin asignar —</Text></TouchableOpacity>
+                  )}
+                  {(pickLista as any[]).map((x: any) => (
+                    <TouchableOpacity key={x.id} style={st.dropItem}
+                      onPress={() => picker?.tipo === 'cliente' ? elegirCliente(x.nombre, x.telefono) : elegirUsuario(x.nombre, x.id)}>
+                      <Text style={[st.dropItemTxt, { color: c.text }]} numberOfLines={1}>{x.nombre}{picker?.tipo === 'cliente' && x.telefono ? `  ·  ${x.telefono}` : ''}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {pickLista.length === 0 && <Text style={{ color: c.textMute, padding: 12, fontSize: 12.5 }}>Sin resultados.</Text>}
+                </ScrollView>
+                <TouchableOpacity style={[st.dropCancel, { marginTop: 12 }]} onPress={() => setPicker(null)}><Text style={[st.dropCancelTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
+              </View>
+            )}
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -390,14 +460,13 @@ const st = StyleSheet.create({
   retroBtnTxt: { fontSize: 11.5, fontWeight: '800' },
   vacio: { textAlign: 'center', padding: 30, fontSize: 13.5, lineHeight: 20, maxWidth: 420 },
   barraAbajo: { height: 16, flexGrow: 0, marginTop: 2 },
-  // Dropdown
   dropOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   dropCard: { width: '100%', maxWidth: 380, borderRadius: 14, padding: 16 },
   dropTitulo: { fontSize: 15, fontWeight: '800', marginBottom: 10 },
   dropBusca: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 13 },
   dropTodos: { flexDirection: 'row', gap: 10, marginTop: 8, alignItems: 'center' },
   dropAccion: { color: '#1a6470', fontWeight: '800', fontSize: 12.5 },
-  dropItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  dropItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9 },
   check: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: '#9aa', alignItems: 'center', justifyContent: 'center' },
   checkOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   checkMark: { color: '#fff', fontSize: 13, fontWeight: '900' },
@@ -407,4 +476,9 @@ const st = StyleSheet.create({
   dropCancelTxt: { fontWeight: '700', fontSize: 14 },
   dropOk: { flex: 1, backgroundColor: '#1a6470', borderRadius: 10, paddingVertical: 11, alignItems: 'center' },
   dropOkTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  calNav: { fontSize: 24, color: '#1a6470', fontWeight: '800', paddingHorizontal: 8 },
+  calDow: { flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '700' },
+  calCell: { width: `${100 / 7}%`, height: 34, alignItems: 'center', justifyContent: 'center' },
+  calDia: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  calStep: { fontSize: 20, color: '#1a6470', fontWeight: '800', paddingHorizontal: 8 },
 })
