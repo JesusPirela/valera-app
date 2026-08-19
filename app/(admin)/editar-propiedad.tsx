@@ -13,6 +13,7 @@ import {
   View,
   FlatList,
   Modal,
+  Linking,
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
@@ -197,6 +198,7 @@ export default function EditarPropiedad() {
   const [mostrarFicha, setMostrarFicha] = useState(false)
   const [fichaMsg, setFichaMsg] = useState('')
   const [urlImport, setUrlImport] = useState('')
+  const [urlOrigen, setUrlOrigen] = useState('')  // link de donde se importó
   const [importando, setImportando] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [loading, setLoading] = useState(true)
@@ -269,7 +271,7 @@ export default function EditarPropiedad() {
     const [{ data, error }, { data: constrData }] = await Promise.all([
       supabase
         .from('propiedades')
-        .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, lona_contactada, es_constructora, nombre_constructora, es_inventario, inventario_seccion, video_url, propiedad_imagenes(id, url, orden)')
+        .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, lona_contactada, es_constructora, nombre_constructora, es_inventario, inventario_seccion, video_url, url_origen, propiedad_imagenes(id, url, orden)')
         .eq('id', id)
         .single(),
       supabase
@@ -322,6 +324,7 @@ export default function EditarPropiedad() {
     setEsInventario((data as any).es_inventario ?? false)
     setInventarioSeccion((data as any).inventario_seccion ?? '')
     setVideoUrl((data as any).video_url ?? null)
+    setUrlOrigen((data as any).url_origen ?? '')
     setImagenes(
       ((data.propiedad_imagenes as ImagenExistente[]) ?? [])
         .sort((a, b) => a.orden - b.orden)
@@ -469,6 +472,7 @@ export default function EditarPropiedad() {
       if (error) throw error
       if ((data as any)?.error) throw new Error((data as any).error)
 
+      setUrlOrigen(url)  // recordar la fuente
       const d = data as any
       // Título: "Venta de Casa en El Mirador, Querétaro"
       {
@@ -829,6 +833,7 @@ export default function EditarPropiedad() {
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
           es_inventario: esInventario,
           inventario_seccion: esInventario ? (inventarioSeccion.trim() || null) : null,
+          url_origen: urlOrigen.trim() || null,
           lat: lat ?? null,
           lng: lng ?? null,
           video_url: videoFile ? await subirVideoPropiedad() : videoUrl,
@@ -974,6 +979,22 @@ export default function EditarPropiedad() {
             <Text style={[styles.fichaMsg, { color: importMsg.startsWith('✓') ? '#c9a84c' : importMsg.startsWith('✗') ? '#e53935' : '#aaa' }]}>
               {importMsg}
             </Text>
+          ) : null}
+          {urlOrigen ? (
+            <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Text style={{ fontSize: 11, color: '#7a5200', fontWeight: '700' }}>FUENTE:</Text>
+              <TouchableOpacity
+                style={{ flex: 1, minWidth: 0 }}
+                onPress={() => { Platform.OS === 'web' ? window.open(urlOrigen, '_blank') : Linking.openURL(urlOrigen) }}
+              >
+                <Text style={{ fontSize: 12, color: '#c9a84c', textDecorationLine: 'underline' }} numberOfLines={1}>
+                  {urlOrigen}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setUrlOrigen('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ fontSize: 12, color: '#e53935', fontWeight: '700' }}>Quitar</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
         </View>
 

@@ -210,6 +210,7 @@ export default function NuevaPropiedad() {
   const [mostrarFicha, setMostrarFicha] = useState(true)
   const [fichaMsg, setFichaMsg] = useState('')
   const [urlImport, setUrlImport] = useState('')
+  const [urlOrigen, setUrlOrigen] = useState('')  // link de donde se importó (se guarda en la propiedad)
   const [importando, setImportando] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [loading, setLoading] = useState(false)
@@ -357,6 +358,7 @@ export default function NuevaPropiedad() {
       if (error) throw error
       if ((data as any)?.error) throw new Error((data as any).error)
 
+      setUrlOrigen(url)  // recordar la fuente para guardarla en la propiedad
       const d = data as any
       // Título: "Venta de Casa en El Mirador, Querétaro"
       {
@@ -776,6 +778,7 @@ export default function NuevaPropiedad() {
         created_by: user.id,
         lat: lat ?? null,
         lng: lng ?? null,
+        url_origen: urlOrigen.trim() || null,
         video_url: null as string | null,
       }
 
