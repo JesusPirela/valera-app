@@ -311,9 +311,9 @@ export default function NuevaPropiedad() {
         .not('nombre_constructora', 'is', null)
         .limit(2000)
       if (!activo || error) return
-      const nombres = [...new Set(
+      const nombres = ([...new Set(
         (data ?? []).map((p: any) => (p.nombre_constructora as string)?.trim()).filter(Boolean)
-      )].sort() as string[]
+      )] as string[]).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base', numeric: true }))
       setConstructorasExistentes(nombres)
     })()
     return () => { activo = false }

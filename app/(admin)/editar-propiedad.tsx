@@ -280,9 +280,9 @@ export default function EditarPropiedad() {
     ])
 
     // Lista única de constructoras existentes en la DB
-    const nombresExistentes = [...new Set(
+    const nombresExistentes = ([...new Set(
       (constrData ?? []).map((p: any) => p.nombre_constructora as string).filter(Boolean)
-    )].sort() as string[]
+    )] as string[]).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base', numeric: true }))
     setConstructorasExistentes(nombresExistentes)
 
     if (error || !data) {
