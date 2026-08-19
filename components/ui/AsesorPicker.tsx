@@ -11,8 +11,22 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Linking,
 } from 'react-native'
 import { supabase } from '../../lib/supabase'
+
+// Normaliza un teléfono mexicano para WhatsApp (52 + 10 dígitos).
+function waNum(tel: string): string {
+  let p = tel.replace(/\D/g, '')
+  if (p.startsWith('5252')) p = p.slice(2)
+  if (p.startsWith('521') && p.length === 13) p = '52' + p.slice(3)
+  return p.length === 10 ? '52' + p : p
+}
+function abrirWhatsApp(tel: string) {
+  const url = `https://wa.me/${waNum(tel)}`
+  if (Platform.OS === 'web') window.open(url, '_blank'); else Linking.openURL(url)
+}
+function llamar(tel: string) { Linking.openURL(`tel:${tel.replace(/[^\d+]/g, '')}`) }
 
 export type Asesor = {
   id: string
@@ -102,6 +116,21 @@ export default function AsesorPicker({ value, onChange }: Props) {
         )}
         <Text style={styles.chevron}>▾</Text>
       </TouchableOpacity>
+
+      {/* Contacto directo del asesor asignado */}
+      {asesorSeleccionado?.telefono ? (
+        <View style={styles.contactoBar}>
+          <Text style={styles.contactoTel}>📞 {asesorSeleccionado.telefono}</Text>
+          <View style={styles.contactoAcciones}>
+            <TouchableOpacity style={[styles.contactoBtn, styles.contactoLlamar]} onPress={() => llamar(asesorSeleccionado.telefono!)}>
+              <Text style={styles.contactoLlamarTxt}>Llamar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.contactoBtn, styles.contactoWa]} onPress={() => abrirWhatsApp(asesorSeleccionado.telefono!)}>
+              <Text style={styles.contactoWaTxt}>WhatsApp</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setOpen(false)} />
@@ -213,6 +242,20 @@ const styles = StyleSheet.create({
   selectorSub: { fontSize: 12, color: '#888', marginTop: 2 },
   selectorPlaceholder: { fontSize: 15, color: '#aaa' },
   chevron: { fontSize: 16, color: '#888' },
+
+  contactoBar: {
+    marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: 10, flexWrap: 'wrap',
+    backgroundColor: '#1a64700d', borderWidth: 1, borderColor: '#1a647033',
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9,
+  },
+  contactoTel: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
+  contactoAcciones: { flexDirection: 'row', gap: 8 },
+  contactoBtn: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7 },
+  contactoLlamar: { backgroundColor: '#1a6470' },
+  contactoLlamarTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  contactoWa: { backgroundColor: '#25D366' },
+  contactoWaTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   modalWrapper: { flex: 1, justifyContent: 'flex-end' },
