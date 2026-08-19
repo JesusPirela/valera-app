@@ -104,9 +104,20 @@ export default function CitasVenta() {
   const [wizard, setWizard] = useState<Fila | null>(null)
   const [importando, setImportando] = useState(false)
   const [msg, setMsg] = useState('')
-  // Scroll horizontal sincronizado entre encabezado (sticky) y cuerpo.
+  // Scroll horizontal sincronizado entre encabezado (sticky), cuerpo y la barra
+  // fija de abajo. Un lock evita el bucle entre los onScroll.
   const headerRef = useRef<ScrollView>(null)
   const bodyRef = useRef<ScrollView>(null)
+  const barRef = useRef<ScrollView>(null)
+  const syncing = useRef(false)
+  function syncX(x: number, from: 'h' | 'b' | 'bar') {
+    if (syncing.current) return
+    syncing.current = true
+    if (from !== 'h') headerRef.current?.scrollTo({ x, animated: false })
+    if (from !== 'b') bodyRef.current?.scrollTo({ x, animated: false })
+    if (from !== 'bar') barRef.current?.scrollTo({ x, animated: false })
+    requestAnimationFrame(() => { syncing.current = false })
+  }
 
   const cargar = useCallback(async () => {
     // Se pagina de 1000 en 1000 (Supabase limita cada consulta a 1000) para traer TODAS.
@@ -241,10 +252,10 @@ export default function CitasVenta() {
           stickyHeaderIndices={[0]}
           scrollEventThrottle={16}
         >
-          {/* 0 · Encabezado STICKY — su barra horizontal queda siempre visible */}
+          {/* 0 · Encabezado STICKY (la barra horizontal va abajo, fija) */}
           <ScrollView
-            ref={headerRef} horizontal showsHorizontalScrollIndicator scrollEventThrottle={16}
-            onScroll={e => bodyRef.current?.scrollTo({ x: e.nativeEvent.contentOffset.x, animated: false })}
+            ref={headerRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}
+            onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'h')}
             style={{ backgroundColor: c.bg }}
           >
             <View style={[st.headRow, { backgroundColor: '#0f4c58', width: totalW }]}>
@@ -261,10 +272,10 @@ export default function CitasVenta() {
             </View>
           </ScrollView>
 
-          {/* 1 · Cuerpo — se mueve en sinc. con el encabezado */}
+          {/* 1 · Cuerpo — se mueve en sinc. con el encabezado y la barra de abajo */}
           <ScrollView
             ref={bodyRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}
-            onScroll={e => headerRef.current?.scrollTo({ x: e.nativeEvent.contentOffset.x, animated: false })}
+            onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'b')}
           >
             <View style={{ width: totalW }}>
               {visibles.map((f, idx) => (
@@ -303,6 +314,17 @@ export default function CitasVenta() {
               <View style={{ height: 60 }} />
             </View>
           </ScrollView>
+        </ScrollView>
+      )}
+
+      {/* Barra de desplazamiento horizontal FIJA al pie (siempre visible) */}
+      {!loading && (
+        <ScrollView
+          ref={barRef} horizontal showsHorizontalScrollIndicator persistentScrollbar scrollEventThrottle={16}
+          onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'bar')}
+          style={st.barraAbajo}
+        >
+          <View style={{ width: totalW, height: 1 }} />
         </ScrollView>
       )}
 
@@ -367,6 +389,7 @@ const st = StyleSheet.create({
   retroHecha: { backgroundColor: '#1a685522', borderWidth: 1, borderColor: '#1a6855' },
   retroBtnTxt: { fontSize: 11.5, fontWeight: '800' },
   vacio: { textAlign: 'center', padding: 30, fontSize: 13.5, lineHeight: 20, maxWidth: 420 },
+  barraAbajo: { height: 16, flexGrow: 0, marginTop: 2 },
   // Dropdown
   dropOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   dropCard: { width: '100%', maxWidth: 380, borderRadius: 14, padding: 16 },
