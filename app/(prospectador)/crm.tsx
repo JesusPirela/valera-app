@@ -1263,7 +1263,12 @@ export default function CRM() {
       <View style={s.topInfoRow}>
         <TouchableOpacity
           style={[s.vencidosPill, vencidos > 0 && s.vencidosPillActivo]}
-          onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(v => !v) }}
+          onPress={() => {
+            setEstadoFiltro(null); setOpFiltro(null)
+            setBusqueda(''); setInteresFilter(null); setZonaFilter(null)
+            setFuenteFilter(null); setCreditoFilter(null); setPresMin(''); setPresMax('')
+            setFiltroVencidos(v => !v)
+          }}
           activeOpacity={0.8}
         >
           <Text style={[s.vencidosPillNum, vencidos > 0 && { color: '#ef4444' }]}>{vencidos}</Text>
@@ -1365,7 +1370,11 @@ export default function CRM() {
           <View style={s.opHeader}>
             <TouchableOpacity
               style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-              onPress={() => { setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true) }}
+              onPress={() => {
+                setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true)
+                setBusqueda(''); setInteresFilter(null); setZonaFilter(null)
+                setFuenteFilter(null); setCreditoFilter(null); setPresMin(''); setPresMax('')
+              }}
               activeOpacity={0.85}
             >
               <Text style={s.opEmoji}>⚠️</Text>
