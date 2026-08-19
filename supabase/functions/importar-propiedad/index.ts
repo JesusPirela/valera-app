@@ -111,6 +111,27 @@ function htmlText(s: string): string {
   ).trim()
 }
 
+// Normaliza una URL de imagen. Por defecto quita el query (params de resize/caché)
+// para deduplicar. PERO Firebase Storage y las URLs firmadas NECESITAN su query
+// (alt=media&token=…, firmas de S3) o devuelven 403 — en esos casos se conserva
+// completa. Decodifica &amp; primero (algunos portales codifican la URL en HTML).
+function limpiarUrlImg(u: string): string {
+  // decodeEntities: &amp; -> &  (HTML).  & -> &  y  \/ -> /  (escapes de JSON,
+  // cuando la URL viene dentro de un <script> con datos, ej. Sadasi/Remix).
+  const dec = decodeEntities(u).replace(/\\u0026/gi, '&').replace(/\\\//g, '/').trim()
+  try {
+    const p = new URL(dec)
+    if (/(^|\.)firebasestorage\.googleapis\.com$/i.test(p.hostname) ||
+        p.searchParams.has('token') || p.searchParams.get('alt') === 'media' ||
+        p.searchParams.has('X-Amz-Signature') || p.searchParams.has('Signature') || p.searchParams.has('Expires')) {
+      return dec
+    }
+    return dec.split('?')[0]
+  } catch {
+    return dec.split('?')[0]
+  }
+}
+
 // Decodifica las entidades HTML más comunes en portales en español.
 // Necesario para que las expresiones de etiquetas (Recámaras, Construcción, m²…)
 // hagan match aunque el portal las codifique (&aacute;, &ntilde;, &sup2;…).
@@ -1036,10 +1057,13 @@ serve(async (req) => {
       /https?:\/\/[^\s"'<>?]+\.(?:cloudfront\.net|amazonaws\.com)\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
       // Lamudi: URLs base64 SIN extensión (img.lamudi.com.mx/<token>)
       /https?:\/\/img\.lamudi\.com\.mx\/[^\s"'<>)]+/gi,
+      // Firebase Storage (Sadasi, etc.): CON su query (alt=media&token=…) que es
+      // obligatorio para cargar. &amp; incluido porque la URL viene HTML-escapada.
+      /https?:\/\/firebasestorage\.googleapis\.com\/[^\s"'<>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^\s"'<>]*)?/gi,
     ]
     const rawImgs: string[] = []
     for (const pat of imgPatterns) {
-      for (const m of html.matchAll(pat)) rawImgs.push(m[0].split('?')[0])
+      for (const m of html.matchAll(pat)) rawImgs.push(limpiarUrlImg(m[0]))
     }
     // Descarta logos, íconos, avatares y recortes (no son fotos de la propiedad).
     const junk = /(logo|icon|favicon|avatar|sprite|placeholder|cropped-|whatsapp-image-2021|-32x32|-150x150|-180x180|-192x192|-270x270)/i
@@ -1150,8 +1174,13 @@ serve(async (req) => {
         const v = raw.trim()
         if (!v || v.startsWith('data:')) return
         try {
-          const abs = new URL(v, url).href.split('?')[0]
-          if (/\.(jpe?g|png|webp)$/i.test(abs) && !found.includes(abs)) found.push(abs)
+          const abs = new URL(decodeEntities(v), url).href
+          // La extensión se valida en la RUTA (sin query); la URL final conserva
+          // el query si lo necesita (Firebase/firmadas) vía limpiarUrlImg.
+          if (/\.(jpe?g|png|webp)$/i.test(abs.split('?')[0])) {
+            const final = limpiarUrlImg(abs)
+            if (!found.includes(final)) found.push(final)
+          }
         } catch { /* url inválida/relativa irresoluble */ }
       }
       // src / lazy-load attrs (toma la primera URL si viene un srcset)
@@ -1196,7 +1225,7 @@ serve(async (req) => {
     }
     if (!imagenes.length) {
       const og = getMeta(html, 'og:image') || getMeta(html, 'og:image:secure_url')
-      if (og) imagenes = [og.split('?')[0]]
+      if (og) imagenes = [limpiarUrlImg(og)]
     }
     if (!zona) {
       const haystack = (direccion + ' ' + titulo + ' ' + url).toLowerCase()
@@ -1205,7 +1234,29 @@ serve(async (req) => {
       else if (/puebla/.test(haystack))                  zona = 'puebla'
     }
 
-    const modelo = detectarModelo(html, titulo, url)
+    // ── Sadasi (sadasi.com) ────────────────────────────────────────────────
+    // Trae los m² en un JSON de la página y la ubicación/modelo en la ruta del
+    // URL: /<ciudad-estado>/<desarrollo>/<modelo>. Ej:
+    // /aguascalientes-aguascalientes/villas-de-montecassino/milan
+    let modeloHint = ''
+    try {
+      if (/(^|\.)sadasi\.com$/i.test(new URL(url).hostname)) {
+        const mc = html.match(/square_meters_of_construction"\s*:\s*([\d.]+)/i)
+        if (mc && !m2) m2 = String(Math.round(parseFloat(mc[1])))
+        const ml = html.match(/square_meters_of_land"\s*:\s*([\d.]+)/i)
+        if (ml && !m2Terreno) m2Terreno = String(Math.round(parseFloat(ml[1])))
+        const segs = new URL(url).pathname.split('/').filter(Boolean)
+        if (segs.length >= 2 && !direccion) {
+          const desarrollo = tituloModelo(segs[1].replace(/-/g, ' '))
+          const ubic = [...new Set(tituloModelo(segs[0].replace(/-/g, ' ')).split(' '))].join(' ')
+          direccion = `${desarrollo}, ${ubic}`
+        }
+        // Sadasi titula la página con el nombre del modelo (ej. "Milán").
+        if (titulo && titulo.length <= 30 && !/\s(en|de)\s/i.test(titulo)) modeloHint = titulo.trim()
+      }
+    } catch { /* URL inválida */ }
+
+    const modelo = detectarModelo(html, titulo, url) || modeloHint
 
     // Enriquecer la ubicación con el JSON estructurado de WordPress (GP Vivienda,
     // etc.). Si trae estado y la dirección no lo menciona, se arma una dirección

@@ -38,6 +38,18 @@ const CASOS = [
     ],
   },
   {
+    nombre: 'Sadasi — Milán (fotos Firebase + datos completos)',
+    url: 'https://www.sadasi.com/aguascalientes-aguascalientes/villas-de-montecassino/milan',
+    checa: (d) => [
+      ['modelo = Milán', d.modelo === 'Milán'],
+      ['precio detectado', Number(d.precio) > 0],
+      ['m² construcción detectado', Number(d.m2) > 0],
+      ['estado detectado = Aguascalientes', /aguascalientes/i.test(d.direccion ?? '')],
+      ['trae fotos (≥ 10)', (d.imagenes?.length ?? 0) >= 10],
+      ['fotos conservan el token de Firebase', (d.imagenes ?? []).every(u => !/firebasestorage/.test(u) || /[?&]token=/.test(u))],
+    ],
+  },
+  {
     nombre: 'GP Vivienda — Toscana (½ baño)',
     url: 'https://gpvivienda.com/casas-venta-leon-cataluna-residencial-modelo-toscana/',
     checa: (d) => [
