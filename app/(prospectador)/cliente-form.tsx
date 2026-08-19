@@ -277,7 +277,7 @@ export default function ClienteForm() {
   }, [esEdicion]))
 
   // Común
-  const [tipoOperacion, setTipoOperacion] = useState<'venta' | 'renta' | null>(null)
+  const [tipoOperacion, setTipoOperacion] = useState<'venta' | 'renta' | 'captacion' | null>(null)
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
   const [fuente, setFuente] = useState<string>('otro')
@@ -541,7 +541,7 @@ export default function ClienteForm() {
       {/* ── 1. Tipo de operación (siempre primero) ── */}
       <Text style={styles.sectionTitle}>Tipo de operación</Text>
       <View style={{ flexDirection: 'row', gap: 10, marginBottom: 24 }}>
-        {([{ value: 'venta', label: 'Venta' }, { value: 'renta', label: 'Renta' }] as const).map((op) => {
+        {([{ value: 'venta', label: '🏠 Venta' }, { value: 'renta', label: '🔑 Renta' }, { value: 'captacion', label: '🔍 Captación' }] as const).map((op) => {
           const activo = tipoOperacion === op.value
           return (
             <TouchableOpacity

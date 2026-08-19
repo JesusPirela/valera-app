@@ -483,7 +483,7 @@ export default function CRM() {
   const [bannerCerrado, setBannerCerrado]       = useState(false)
   const [bannerDupCerrado, setBannerDupCerrado] = useState(false)
   const [showDuplicadosModal, setShowDuplicadosModal] = useState(false)
-  const [opFiltro, setOpFiltro]           = useState<'venta' | 'renta' | null>(null)
+  const [opFiltro, setOpFiltro]           = useState<'venta' | 'renta' | 'captacion' | null>(null)
   const [sortBy, setSortBy]               = useState<SortBy>('reciente')
   const [showSort, setShowSort]           = useState(false)
   const [vistaExcel, setVistaExcel]       = useState(false)
@@ -861,6 +861,7 @@ export default function CRM() {
           { value: null, label: 'Todos' },
           { value: 'venta', label: '🏠 Venta' },
           { value: 'renta', label: '🔑 Renta' },
+          { value: 'captacion', label: '🔍 Captación' },
         ],
       })
     } else if (colId === 'interes') {
@@ -1009,6 +1010,7 @@ export default function CRM() {
           { value: null, label: '— Sin operación' },
           { value: 'venta', label: '🏠 Venta' },
           { value: 'renta', label: '🔑 Renta' },
+          { value: 'captacion', label: '🔍 Captación' },
         ],
       })
     } else if (col === 'tipo_credito') {
@@ -1326,7 +1328,7 @@ export default function CRM() {
           {total === 0 ? (
             <View style={[s.funnelSeg, { flex: 1, backgroundColor: c.border }]} />
           ) : (
-            ORDEN_ESTADOS.map(e => {
+            ORDEN_ESTADOS.filter(e => e !== 'compro' && e !== 'compro_externo').map(e => {
               const n = conteos[e]
               if (n === 0) return null
               const info = estadoInfo(e)
@@ -1345,7 +1347,7 @@ export default function CRM() {
           <Text style={s.funnelEmpty}>Agrega tu primer lead para ver el embudo de ventas</Text>
         ) : (
           <View style={s.funnelLegend}>
-            {ORDEN_ESTADOS.filter(e => conteos[e] > 0).map(e => {
+            {ORDEN_ESTADOS.filter(e => e !== 'compro' && e !== 'compro_externo' && conteos[e] > 0).map(e => {
               const info = estadoInfo(e)
               const activo = estadoFiltro === e
               return (
@@ -1510,8 +1512,8 @@ export default function CRM() {
 
       {/* ── Operacion tabs ── */}
       <View style={[s.opRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>
-        {([null, 'venta', 'renta'] as const).map(op => {
-          const label = op === null ? 'Todos' : op === 'venta' ? '🏠 Venta' : '🔑 Renta'
+        {([null, 'venta', 'renta', 'captacion'] as const).map(op => {
+          const label = op === null ? 'Todos' : op === 'venta' ? '🏠 Venta' : op === 'renta' ? '🔑 Renta' : '🔍 Captación'
           const cnt   = op === null ? clientes.length : clientes.filter(c => c.tipo_operacion === op).length
           const activo = opFiltro === op
           return (
@@ -1714,11 +1716,18 @@ export default function CRM() {
                       return (
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'operacion')} activeOpacity={0.6}>
                           {item.tipo_operacion
-                            ? <View style={[s.excelOpTag, item.tipo_operacion === 'venta'
-                                ? { backgroundColor: darkMode ? 'rgba(26,100,112,0.22)' : '#e0f4f5' }
-                                : { backgroundColor: darkMode ? 'rgba(124,58,237,0.22)' : '#f3e8ff' }]}>
-                                <Text style={[s.excelOpTxt, { color: item.tipo_operacion === 'venta' ? '#1a9aaa' : '#a78bfa' }]}>
-                                  {item.tipo_operacion === 'venta' ? '🏠 Venta' : '🔑 Renta'}
+                            ? <View style={[s.excelOpTag,
+                                item.tipo_operacion === 'venta'
+                                  ? { backgroundColor: darkMode ? 'rgba(26,100,112,0.22)' : '#e0f4f5' }
+                                  : item.tipo_operacion === 'renta'
+                                  ? { backgroundColor: darkMode ? 'rgba(124,58,237,0.22)' : '#f3e8ff' }
+                                  : { backgroundColor: darkMode ? 'rgba(234,179,8,0.18)' : '#fefce8' }]}>
+                                <Text style={[s.excelOpTxt, {
+                                  color: item.tipo_operacion === 'venta' ? '#1a9aaa'
+                                    : item.tipo_operacion === 'renta' ? '#a78bfa'
+                                    : '#a16207'
+                                }]}>
+                                  {item.tipo_operacion === 'venta' ? '🏠 Venta' : item.tipo_operacion === 'renta' ? '🔑 Renta' : '🔍 Captación'}
                                 </Text>
                               </View>
                             : <Text style={[s.excelNull, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>—</Text>
