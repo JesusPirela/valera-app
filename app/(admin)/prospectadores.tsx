@@ -155,6 +155,8 @@ export default function Prospectadores() {
   const [lista, setLista] = useState<Prospectador[]>([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
+  const [pubMap, setPubMap] = useState<Map<string, number>>(new Map())
+  const [ordenPub, setOrdenPub] = useState<'no' | 'asc' | 'desc'>('no')  // por publicaciones
 
   // Selector de rol inline
   const [editandoRolId, setEditandoRolId] = useState<string | null>(null)
@@ -196,19 +198,27 @@ export default function Prospectadores() {
 
   const listaFiltrada = useMemo(() => {
     const q = normalizar(busqueda)
-    return lista
-      .filter(p => !busqueda.trim() || normalizar(p.nombre).includes(q) || normalizar(p.email).includes(q))
-      .sort((a, b) => {
-        const r = (rol: string) => RANGO_ROL[rol] ?? 99
-        const dr = r(a.role) - r(b.role)
-        return dr !== 0 ? dr : (a.nombre ?? a.email).localeCompare(b.nombre ?? b.email)
+    const base = lista.filter(p => !busqueda.trim() || normalizar(p.nombre).includes(q) || normalizar(p.email).includes(q))
+    if (ordenPub !== 'no') {
+      return [...base].sort((a, b) => {
+        const d = (pubMap.get(a.id) ?? 0) - (pubMap.get(b.id) ?? 0)
+        return ordenPub === 'asc' ? d : -d   // asc = menos publicadas primero
       })
-  }, [lista, busqueda])
+    }
+    return base.sort((a, b) => {
+      const r = (rol: string) => RANGO_ROL[rol] ?? 99
+      const dr = r(a.role) - r(b.role)
+      return dr !== 0 ? dr : (a.nombre ?? a.email).localeCompare(b.nombre ?? b.email)
+    })
+  }, [lista, busqueda, ordenPub, pubMap])
 
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
     const { data, error } = await supabase.rpc('get_prospectadores')
     if (!error) setLista(data ?? [])
+    supabase.rpc('get_publicaciones_por_usuario').then(({ data: pubs }) => {
+      setPubMap(new Map((pubs ?? []).map((r: any) => [r.user_id, r.total])))
+    })
     yaCargoRef.current = true
     setLoading(false)
   }
@@ -461,6 +471,16 @@ export default function Prospectadores() {
         ) : null}
       </View>
 
+      {/* Orden por publicaciones (menos ↔ más) */}
+      <TouchableOpacity
+        style={[styles.ordenPub, { borderColor: ordenPub === 'no' ? c.border : '#1a6470', backgroundColor: ordenPub === 'no' ? 'transparent' : '#1a647012' }]}
+        onPress={() => setOrdenPub(o => o === 'no' ? 'desc' : o === 'desc' ? 'asc' : 'no')}
+      >
+        <Text style={[styles.ordenPubTxt, { color: ordenPub === 'no' ? c.textSub : '#1a6470' }]}>
+          📊 {ordenPub === 'desc' ? 'Más publicadas primero' : ordenPub === 'asc' ? 'Menos publicadas primero' : 'Ordenar por publicaciones'}
+        </Text>
+      </TouchableOpacity>
+
       {loading ? (
         <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : lista.length === 0 ? (
@@ -488,6 +508,9 @@ export default function Prospectadores() {
                   {/* Nombre + indicador online */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <Text style={[styles.cardNombre, { color: c.text }]}>{item.nombre || item.email}</Text>
+                    {ordenPub !== 'no' && (
+                      <View style={styles.pubPill}><Text style={styles.pubPillTxt}>📊 {pubMap.get(item.id) ?? 0}</Text></View>
+                    )}
                     {(() => {
                       const est = estadoConexion(item.last_seen)
                       return (
@@ -982,6 +1005,10 @@ const styles = StyleSheet.create({
   },
   searchIcon:  { fontSize: 15 },
   searchInput: { flex: 1, fontSize: 14 },
+  ordenPub: { borderWidth: 1.5, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, alignItems: 'center', marginBottom: 12 },
+  ordenPubTxt: { fontSize: 13, fontWeight: '800' },
+  pubPill: { backgroundColor: '#1a647018', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  pubPillTxt: { color: '#1a6470', fontSize: 11.5, fontWeight: '800' },
 
   btnNuevo: {
     backgroundColor: '#1a6470',
