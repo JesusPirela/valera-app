@@ -365,6 +365,10 @@ export default function ProspectadorPropiedades() {
   const [fechaDesdeCustom, setFechaDesdeCustom] = useState('')
   const [fechaHastaCustom, setFechaHastaCustom] = useState('')
   const [vistaZonas, setVistaZonas] = useState(false)
+  const [retrosPend, setRetrosPend] = useState(0)   // citas del asesor por retroalimentar
+  useFocusEffect(useCallback(() => {
+    supabase.rpc('get_mis_citas_pendientes_retro').then(({ data }) => setRetrosPend((data ?? []).length))
+  }, []))
   // Historial de búsquedas (tipo EasyBroker): últimas combinaciones de filtros.
   const [recientes, setRecientes] = useState<BusquedaGuardada[]>([])
   useEffect(() => { leerHistorial().then(setRecientes) }, [])
@@ -1192,6 +1196,16 @@ export default function ProspectadorPropiedades() {
             <Ionicons name="locate-outline" size={14} color="#1976D2" />
             <Text style={[styles.zonasToggleText, { color: '#1976D2' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Zonas</Text>
           </TouchableOpacity>
+          {retrosPend > 0 && (
+            <TouchableOpacity
+              style={[styles.zonasToggle, { borderColor: '#1a6470', backgroundColor: '#1a6470' }]}
+              onPress={() => router.push('/(prospectador)/mis-retros')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="chatbox-ellipses-outline" size={14} color="#fff" />
+              <Text style={[styles.zonasToggleText, { color: '#fff' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Mis retros ({retrosPend})</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </View>
       {mostrarFiltros && (

@@ -14,6 +14,12 @@ export type CitaRetro = {
   id: string
   cliente_nombre: string | null
   interesado_en: string | null
+  telefono?: string | null
+  detalles_pago?: string | null
+  dia_cita?: string | null
+  prospecto?: string | null
+  coordino?: string | null
+  atendio?: string | null
   retro_como_estuvo?: string | null
   retro_info_extra?: string | null
   retro_plan_accion?: string | null
@@ -84,16 +90,23 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.overlay}>
         <View style={[s.card, { backgroundColor: c.card }]}>
-          {/* Encabezado */}
+          {/* Encabezado con TODOS los datos de la cita (contexto para el asesor) */}
           <View style={s.head}>
             <View style={{ flex: 1 }}>
               <Text style={s.eyebrow}>RETROALIMENTACIÓN</Text>
               <Text style={[s.cliente, { color: c.text }]} numberOfLines={1}>{cita.cliente_nombre || 'Cliente'}</Text>
-              {cita.interesado_en ? <Text style={[s.prop, { color: c.textMute }]} numberOfLines={1}>🏠 {cita.interesado_en}</Text> : null}
             </View>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={{ fontSize: 22, color: c.textMute }}>✕</Text>
             </TouchableOpacity>
+          </View>
+          <View style={[s.datos, { backgroundColor: c.bg, borderColor: c.border }]}>
+            {cita.interesado_en ? <Text style={[s.datoLinea, { color: c.text }]} numberOfLines={2}>🏠 {cita.interesado_en}</Text> : null}
+            {cita.dia_cita ? <Text style={[s.datoLinea, { color: c.textSub }]} numberOfLines={1}>📅 {cita.dia_cita}</Text> : null}
+            {cita.telefono ? <Text style={[s.datoLinea, { color: c.textSub }]} numberOfLines={1}>📞 {cita.telefono}</Text> : null}
+            {cita.detalles_pago ? <Text style={[s.datoLinea, { color: c.textSub }]} numberOfLines={1}>💳 {cita.detalles_pago}</Text> : null}
+            {cita.prospecto ? <Text style={[s.datoLinea, { color: c.textMute }]} numberOfLines={1}>🌱 Prospectó: {cita.prospecto}</Text> : null}
+            {cita.coordino ? <Text style={[s.datoLinea, { color: c.textMute }]} numberOfLines={1}>🧭 Coordinó: {cita.coordino}</Text> : null}
           </View>
 
           {/* Barra de progreso por pasos */}
@@ -154,6 +167,8 @@ const s = StyleSheet.create({
   eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: '#c9a84c' },
   cliente: { fontSize: 18, fontWeight: '800', marginTop: 2 },
   prop: { fontSize: 12.5, marginTop: 1 },
+  datos: { borderWidth: 1, borderRadius: 10, padding: 10, gap: 3, marginBottom: 12 },
+  datoLinea: { fontSize: 12.5, lineHeight: 17 },
   progreso: { flexDirection: 'row', gap: 6 },
   progSeg: { flex: 1, height: 5, borderRadius: 3 },
   contador: { fontSize: 11, fontWeight: '600', marginTop: 6, marginBottom: 14 },

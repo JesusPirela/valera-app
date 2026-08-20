@@ -7,7 +7,10 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
 
-type Pend = { id: string; cliente_nombre: string | null; interesado_en: string | null; dia_cita: string | null }
+type Pend = {
+  id: string; cliente_nombre: string | null; telefono: string | null; detalles_pago: string | null
+  interesado_en: string | null; dia_cita: string | null; prospecto: string | null; coordino: string | null; atendio: string | null
+}
 
 export default function MisRetros() {
   const c = useColors()
@@ -36,8 +39,12 @@ export default function MisRetros() {
             <TouchableOpacity key={p.id} style={[st.card, { backgroundColor: c.card, borderColor: c.border }]} activeOpacity={0.85} onPress={() => setWizard(p)}>
               <View style={{ flex: 1 }}>
                 <Text style={[st.cliente, { color: c.text }]} numberOfLines={1}>{p.cliente_nombre || 'Cliente'}</Text>
-                {p.interesado_en ? <Text style={[st.linea, { color: c.textSub }]} numberOfLines={1}>🏠 {p.interesado_en}</Text> : null}
+                {p.interesado_en ? <Text style={[st.linea, { color: c.textSub }]} numberOfLines={2}>🏠 {p.interesado_en}</Text> : null}
                 {p.dia_cita ? <Text style={[st.linea, { color: c.textMute }]} numberOfLines={1}>📅 {p.dia_cita}</Text> : null}
+                {p.telefono ? <Text style={[st.linea, { color: c.textMute }]} numberOfLines={1}>📞 {p.telefono}</Text> : null}
+                {p.detalles_pago ? <Text style={[st.linea, { color: c.textMute }]} numberOfLines={1}>💳 {p.detalles_pago}</Text> : null}
+                {p.prospecto ? <Text style={[st.linea, { color: c.textMute }]} numberOfLines={1}>🌱 Prospectó: {p.prospecto}</Text> : null}
+                {p.coordino ? <Text style={[st.linea, { color: c.textMute }]} numberOfLines={1}>🧭 Coordinó: {p.coordino}</Text> : null}
               </View>
               <View style={st.responder}><Text style={st.responderTxt}>Responder ›</Text></View>
             </TouchableOpacity>
