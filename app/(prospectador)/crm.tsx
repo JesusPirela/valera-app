@@ -172,15 +172,18 @@ function fechaHoyLocal(): string {
 
 function necesitaSeguimiento(c: Cliente): boolean {
   if (c.estado === 'descartado' || c.estado === 'compro' || c.estado === 'compro_externo') return false
+  const now = Date.now()
+  // Recordatorio pendiente vencido → siempre urgente, incluso si proximo_contacto
+  // apunta al futuro (puede ocurrir si el trigger aún no sincronizó).
+  if ((c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)) return true
   if (c.proximo_contacto) {
     // Comparar solo fechas calendario (YYYY-MM-DD) para evitar el desfase UTC:
     // "2025-01-15" como timestamp UTC es medianoche UTC = 6pm México del día anterior.
     const fechaContacto = c.proximo_contacto.slice(0, 10)
-    if (fechaContacto >= fechaHoyLocal()) return false  // hoy o futuro → no vencido
-    return true                                          // ayer o antes → vencido
+    if (fechaContacto > fechaHoyLocal()) return false  // solo futuro → no vencido
+    return true                                         // hoy o antes → vencido
   }
-  const now = Date.now()
-  return (c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
+  return false
 }
 
 // Parsea un presupuesto en texto libre a un número aproximado (para filtrar por rango).
