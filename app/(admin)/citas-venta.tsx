@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react'
 import {
   View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator,
-  TextInput, Platform, Modal, Alert,
+  TextInput, Platform, Modal, Alert, Animated, Easing, KeyboardAvoidingView,
 } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import { useFocusEffect } from 'expo-router'
@@ -179,6 +179,133 @@ function CalendarioHora({ onConfirm, onClose }: { onConfirm: (display: string, i
   )
 }
 
+// ── Asistente para añadir una cita a mano (paso a paso, con "Omitir") ────────
+const PASOS_ADD: { key: string; label: string; icono: string; tipo: Tipo; kb?: 'phone-pad' }[] = [
+  { key: 'cliente_nombre', label: '¿Quién es el cliente?', icono: '🧑', tipo: 'cliente' },
+  { key: 'telefono', label: 'Teléfono', icono: '📞', tipo: 'texto', kb: 'phone-pad' },
+  { key: 'detalles_pago', label: 'Forma de pago', icono: '💳', tipo: 'texto' },
+  { key: 'interesado_en', label: '¿En qué propiedad está interesado?', icono: '🏠', tipo: 'texto' },
+  { key: 'dia_cita', label: 'Día y hora de la cita', icono: '📅', tipo: 'fecha' },
+  { key: 'prospecto', label: '¿Quién prospectó?', icono: '🌱', tipo: 'usuario' },
+  { key: 'coordino', label: '¿Quién coordinó?', icono: '🧭', tipo: 'usuario' },
+  { key: 'atendio', label: '¿Quién atendió? (asesor)', icono: '🤝', tipo: 'usuario' },
+  { key: 'estado_seguimiento', label: 'Estado de seguimiento', icono: '📌', tipo: 'texto' },
+]
+
+function AgregarCitaModal({ profiles, clientes, onClose, onSaved }: {
+  profiles: { id: string; nombre: string }[]
+  clientes: { id: string; nombre: string; telefono: string | null }[]
+  onClose: () => void; onSaved: () => void
+}) {
+  const c = useColors()
+  const [paso, setPaso] = useState(0)
+  const [datos, setDatos] = useState<Record<string, any>>({})
+  const [busca, setBusca] = useState('')
+  const [txt, setTxt] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const anim = useRef(new Animated.Value(0)).current
+  const op = useRef(new Animated.Value(1)).current
+  const P = PASOS_ADD[paso]
+
+  function irA(nuevo: number, dir: 1 | -1, base: Record<string, any>) {
+    Animated.parallel([
+      Animated.timing(anim, { toValue: -dir * 40, duration: 150, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(op, { toValue: 0, duration: 130, useNativeDriver: true }),
+    ]).start(() => {
+      setPaso(nuevo); setBusca('')
+      const np = PASOS_ADD[nuevo]
+      setTxt(np && np.tipo === 'texto' ? String(base[np.key] ?? '') : '')
+      anim.setValue(dir * 40)
+      Animated.parallel([
+        Animated.spring(anim, { toValue: 0, useNativeDriver: true, friction: 8, tension: 60 }),
+        Animated.timing(op, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start()
+    })
+  }
+  async function guardar(base: Record<string, any>) {
+    setGuardando(true)
+    try { await supabase.from('citas_venta').insert({ ...base, origen: 'manual' }); onSaved(); onClose() }
+    catch { setGuardando(false) }
+  }
+  function avanzar(patch?: Record<string, any>) {
+    const base = patch ? { ...datos, ...patch } : datos
+    setDatos(base)
+    if (paso === PASOS_ADD.length - 1) guardar(base)
+    else irA(paso + 1, 1, base)
+  }
+  const atras = () => { if (paso > 0) irA(paso - 1, -1, datos) }
+  const esUltimo = paso === PASOS_ADD.length - 1
+  const lista = P.tipo === 'cliente'
+    ? clientes.filter(x => !busca.trim() || (x.nombre ?? '').toLowerCase().includes(busca.toLowerCase()) || (x.telefono ?? '').includes(busca))
+    : P.tipo === 'usuario' ? profiles.filter(x => !busca.trim() || x.nombre.toLowerCase().includes(busca.toLowerCase())) : []
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={st.dropOverlay}>
+        <View style={[st.dropCard, { backgroundColor: c.card, maxWidth: 440 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#c9a84c' }}>AÑADIR CITA DE VENTA</Text>
+            <TouchableOpacity onPress={onClose}><Text style={{ fontSize: 20, color: c.textMute }}>✕</Text></TouchableOpacity>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 5, marginBottom: 4 }}>
+            {PASOS_ADD.map((_, i) => <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i <= paso ? '#1a6470' : c.border }} />)}
+          </View>
+          <Text style={{ fontSize: 11, color: c.textMute, marginBottom: 12 }}>Paso {paso + 1} de {PASOS_ADD.length}</Text>
+
+          <Animated.View style={{ transform: [{ translateX: anim }], opacity: op }}>
+            <Text style={{ fontSize: 28, textAlign: 'center' }}>{P.icono}</Text>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: c.text, textAlign: 'center', marginTop: 4, marginBottom: 12 }}>{P.label}</Text>
+
+            {P.tipo === 'texto' && (
+              <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg, paddingVertical: 11 }]}
+                value={txt} onChangeText={setTxt} autoFocus keyboardType={P.kb === 'phone-pad' ? 'phone-pad' : 'default'}
+                placeholder="Escribe aquí…" placeholderTextColor={c.textMute}
+                onSubmitEditing={() => avanzar({ [P.key]: txt.trim() || null })} />
+            )}
+
+            {(P.tipo === 'cliente' || P.tipo === 'usuario') && (
+              <>
+                <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={busca} onChangeText={setBusca} placeholder="Buscar…" placeholderTextColor={c.textMute} autoFocus />
+                <ScrollView style={{ maxHeight: 260, marginTop: 8 }} keyboardShouldPersistTaps="handled">
+                  {P.tipo === 'usuario' && <TouchableOpacity style={st.dropItem} onPress={() => avanzar({ [P.key]: null })}><Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin asignar —</Text></TouchableOpacity>}
+                  {(lista as any[]).map((x: any) => (
+                    <TouchableOpacity key={x.id} style={st.dropItem} onPress={() => P.tipo === 'cliente'
+                      ? avanzar({ cliente_nombre: x.nombre, ...(x.telefono ? { telefono: x.telefono } : {}) })
+                      : avanzar(P.key === 'atendio' ? { atendio: x.nombre, asesor_id: x.id } : { [P.key]: x.nombre })}>
+                      <Text style={[st.dropItemTxt, { color: c.text }]} numberOfLines={1}>{x.nombre}{P.tipo === 'cliente' && x.telefono ? `  ·  ${x.telefono}` : ''}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {lista.length === 0 && <Text style={{ color: c.textMute, padding: 12, fontSize: 12.5 }}>Sin resultados.</Text>}
+                </ScrollView>
+              </>
+            )}
+
+            {P.tipo === 'fecha' && (
+              <View style={{ alignItems: 'center' }}>
+                <CalendarioHora onConfirm={(d, i) => avanzar({ dia_cita: d, fecha_cita: i })} onClose={atras} />
+              </View>
+            )}
+          </Animated.View>
+
+          {/* Pie: Atrás / Omitir / (texto: Siguiente-Guardar) */}
+          {P.tipo !== 'fecha' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 16 }}>
+              <TouchableOpacity disabled={paso === 0} onPress={atras} style={{ opacity: paso === 0 ? 0.35 : 1, paddingVertical: 10, paddingHorizontal: 6 }}><Text style={{ color: c.textSub, fontWeight: '700' }}>‹ Atrás</Text></TouchableOpacity>
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity onPress={() => avanzar()} style={{ paddingVertical: 10, paddingHorizontal: 12 }}><Text style={{ color: c.textMute, fontWeight: '700' }}>Omitir</Text></TouchableOpacity>
+              {P.tipo === 'texto' && (
+                <TouchableOpacity style={st.dropOk} onPress={() => avanzar({ [P.key]: txt.trim() || null })} disabled={guardando}>
+                  {guardando ? <ActivityIndicator size="small" color="#fff" /> : <Text style={st.dropOkTxt}>{esUltimo ? 'Guardar ✓' : 'Siguiente ›'}</Text>}
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  )
+}
+
 export default function CitasVenta() {
   const c = useColors()
   const [filas, setFilas] = useState<Fila[]>([])
@@ -193,6 +320,7 @@ export default function CitasVenta() {
   const [picker, setPicker] = useState<{ id: string; key: ColKey; tipo: Tipo } | null>(null)
   const [pickBusca, setPickBusca] = useState('')
   const [wizard, setWizard] = useState<Fila | null>(null)
+  const [agregar, setAgregar] = useState(false)
   const [importando, setImportando] = useState(false)
   const [msg, setMsg] = useState('')
   const [listH, setListH] = useState(0)   // alto medido del cuerpo (para virtualizar la FlatList)
@@ -328,6 +456,7 @@ export default function CitasVenta() {
           <Text style={[st.sub, { color: c.textMute }]}>{filas.length} citas · {visibles.length} visibles · exclusiva admin/supervisor</Text>
         </View>
         {Object.keys(filtrosSel).length > 0 && <TouchableOpacity style={st.btnLimpiar} onPress={() => setFiltrosSel({})}><Text style={st.btnLimpiarTxt}>✕ Quitar filtros</Text></TouchableOpacity>}
+        <TouchableOpacity style={st.btnAgregar} onPress={() => setAgregar(true)}><Text style={st.btnAgregarTxt}>＋ Añadir cita</Text></TouchableOpacity>
         <TouchableOpacity style={[st.btnImport, importando && { opacity: 0.6 }]} onPress={importarCSV} disabled={importando}>
           {importando ? <ActivityIndicator size="small" color="#fff" /> : <Text style={st.btnImportTxt}>⬆ Importar CSV</Text>}
         </TouchableOpacity>
@@ -460,6 +589,7 @@ export default function CitasVenta() {
       </Modal>
 
       {wizard && <RetroCitaWizard cita={wizard} onClose={() => setWizard(null)} onSaved={cargar} />}
+      {agregar && <AgregarCitaModal profiles={profiles} clientes={clientes} onClose={() => setAgregar(false)} onSaved={cargar} />}
     </View>
   )
 }
@@ -473,6 +603,8 @@ const st = StyleSheet.create({
   btnLimpiarTxt: { color: '#c0392b', fontWeight: '800', fontSize: 12.5 },
   btnImport: { backgroundColor: '#7a4f00', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   btnImportTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  btnAgregar: { backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+  btnAgregarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   msg: { fontSize: 12.5, fontWeight: '600', marginTop: 4 },
   headRow: { flexDirection: 'row', borderTopLeftRadius: 8, borderTopRightRadius: 8 },
   headCell: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 11, borderRightWidth: StyleSheet.hairlineWidth, borderColor: '#ffffff22' },
