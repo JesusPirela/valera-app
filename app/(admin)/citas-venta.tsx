@@ -40,7 +40,9 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   { key: 'estado_seguimiento', label: 'Estado seguimiento', w: 170, tipo: 'texto' },
   { key: 'fecha_prox_seguimiento', label: 'Próx. seguimiento', w: 150, tipo: 'texto' },
 ]
-const ACC_W = 130  // columna de acciones (retro + borrar)
+const NUM_W = 48    // contador de fila (izquierda)
+const RETRO_W = 100 // columna de retroalimentación
+const DEL_W = 80    // columna de borrar (aparte)
 
 const MAPEO: Record<string, string> = {
   andres: 'Andres Asesor', andre: 'André Tenorio', ruben: 'Rayo⚡', rayo: 'Rayo⚡',
@@ -97,6 +99,10 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
   const c = useColors()
   return (
     <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
+      {/* Contador de fila (como Excel) */}
+      <View style={[st.cell, st.counterCell, { width: NUM_W, borderColor: c.border }]}>
+        <Text style={[st.counterTxt, { color: c.textMute }]}>{idx + 1}</Text>
+      </View>
       {COLS.map(col => {
         const val = (f[col.key] as string) ?? ''
         return (
@@ -106,10 +112,14 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
           </TouchableOpacity>
         )
       })}
-      <View style={[st.cell, { width: ACC_W, borderColor: c.border, flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
+      {/* Retroalimentación */}
+      <View style={[st.cell, { width: RETRO_W, borderColor: c.border, alignItems: 'center' }]}>
         <TouchableOpacity style={[st.retroBtn, f.retro_completada_at ? st.retroHecha : st.retroPend]} onPress={() => onRetro(f)}>
-          <Text style={[st.retroBtnTxt, { color: f.retro_completada_at ? '#1a6855' : '#fff' }]}>{f.retro_completada_at ? '✓' : '📝'}</Text>
+          <Text style={[st.retroBtnTxt, { color: f.retro_completada_at ? '#1a6855' : '#fff' }]}>{f.retro_completada_at ? '✓ Retro' : '📝 Retro'}</Text>
         </TouchableOpacity>
+      </View>
+      {/* Borrar (columna aparte) */}
+      <View style={[st.cell, { width: DEL_W, borderColor: c.border, alignItems: 'center' }]}>
         <TouchableOpacity onPress={() => onDelete(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}><Text style={st.delTxt}>🗑</Text></TouchableOpacity>
       </View>
     </View>
@@ -302,7 +312,7 @@ export default function CitasVenta() {
     } catch (e: any) { setMsg('✗ Error al importar: ' + (e?.message ?? 'desconocido')) } finally { setImportando(false) }
   }
 
-  const totalW = COLS.reduce((s, col) => s + col.w, 0) + ACC_W
+  const totalW = NUM_W + COLS.reduce((s, col) => s + col.w, 0) + RETRO_W + DEL_W
   const dropValores = dropCol ? valoresColumna(dropCol).filter(v => !dropBusca.trim() || v.toLowerCase().includes(dropBusca.toLowerCase())) : []
   const pickLista = picker
     ? (picker.tipo === 'cliente'
@@ -330,6 +340,7 @@ export default function CitasVenta() {
             {/* Encabezado (fijo arriba, scroll horizontal sincronizado) */}
             <ScrollView ref={headerRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'h')} style={{ flexGrow: 0 }}>
               <View style={[st.headRow, { backgroundColor: '#0f4c58', width: totalW }]}>
+                <Text style={[st.headCell, st.headTxt, { width: NUM_W, textAlign: 'center' }]}>#</Text>
                 {COLS.map(col => {
                   const activo = !!filtrosSel[col.key]
                   return (
@@ -339,7 +350,8 @@ export default function CitasVenta() {
                     </TouchableOpacity>
                   )
                 })}
-                <Text style={[st.headCell, st.headTxt, { width: ACC_W }]}>Retro / Borrar</Text>
+                <Text style={[st.headCell, st.headTxt, { width: RETRO_W, textAlign: 'center' }]}>Retro</Text>
+                <Text style={[st.headCell, st.headTxt, { width: DEL_W, textAlign: 'center' }]}>Borrar</Text>
               </View>
             </ScrollView>
 
@@ -472,8 +484,10 @@ const st = StyleSheet.create({
   retroBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   retroPend: { backgroundColor: '#1a6470' },
   retroHecha: { backgroundColor: '#1a685522', borderWidth: 1, borderColor: '#1a6855' },
-  retroBtnTxt: { fontSize: 13, fontWeight: '800' },
+  retroBtnTxt: { fontSize: 11.5, fontWeight: '800' },
   delTxt: { fontSize: 16 },
+  counterCell: { alignItems: 'center', backgroundColor: '#0f4c580d' },
+  counterTxt: { fontSize: 11, fontWeight: '700' },
   vacio: { textAlign: 'center', padding: 30, fontSize: 13.5, lineHeight: 20, maxWidth: 420 },
   barraAbajo: { height: 16, flexGrow: 0, marginTop: 2 },
   barraDer: { width: 16, flexGrow: 0, marginLeft: 2 },
