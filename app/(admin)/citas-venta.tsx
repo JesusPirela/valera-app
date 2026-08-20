@@ -265,7 +265,12 @@ function AgregarCitaModal({ profiles, clientes, onClose, onSaved }: {
 
             {(P.tipo === 'cliente' || P.tipo === 'usuario') && (
               <>
-                <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={busca} onChangeText={setBusca} placeholder="Buscar…" placeholderTextColor={c.textMute} autoFocus />
+                <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={busca} onChangeText={setBusca} placeholder={P.tipo === 'usuario' ? 'Buscar o escribir un nombre…' : 'Buscar…'} placeholderTextColor={c.textMute} autoFocus />
+                {P.tipo === 'usuario' && busca.trim().length > 0 && (
+                  <TouchableOpacity style={st.otroBtn} onPress={() => avanzar(P.key === 'atendio' ? { atendio: busca.trim(), asesor_id: null } : { [P.key]: busca.trim() })}>
+                    <Text style={st.otroBtnTxt}>✏️ Usar «{busca.trim()}» (fuera de la app)</Text>
+                  </TouchableOpacity>
+                )}
                 <ScrollView style={{ maxHeight: 260, marginTop: 8 }} keyboardShouldPersistTaps="handled">
                   {P.tipo === 'usuario' && <TouchableOpacity style={st.dropItem} onPress={() => avanzar({ [P.key]: null })}><Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin asignar —</Text></TouchableOpacity>}
                   {(lista as any[]).map((x: any) => (
@@ -571,7 +576,12 @@ export default function CitasVenta() {
             ) : (
               <View style={[st.dropCard, { backgroundColor: c.card }]}>
                 <Text style={[st.dropTitulo, { color: c.text }]}>{picker?.tipo === 'cliente' ? 'Elegir cliente' : 'Elegir usuario'}</Text>
-                <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={pickBusca} onChangeText={setPickBusca} placeholder="Buscar…" placeholderTextColor={c.textMute} autoFocus />
+                <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={pickBusca} onChangeText={setPickBusca} placeholder={picker?.tipo === 'usuario' ? 'Buscar o escribir un nombre…' : 'Buscar…'} placeholderTextColor={c.textMute} autoFocus />
+                {picker?.tipo === 'usuario' && pickBusca.trim().length > 0 && (
+                  <TouchableOpacity style={st.otroBtn} onPress={() => elegirUsuario(pickBusca.trim(), null)}>
+                    <Text style={st.otroBtnTxt}>✏️ Usar «{pickBusca.trim()}» (fuera de la app)</Text>
+                  </TouchableOpacity>
+                )}
                 <ScrollView style={{ maxHeight: 340, marginTop: 8 }} keyboardShouldPersistTaps="handled">
                   {picker?.tipo === 'usuario' && <TouchableOpacity style={st.dropItem} onPress={() => elegirUsuario('', null)}><Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin asignar —</Text></TouchableOpacity>}
                   {(pickLista as any[]).map((x: any) => (
@@ -635,6 +645,8 @@ const st = StyleSheet.create({
   checkOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   checkMark: { color: '#fff', fontSize: 13, fontWeight: '900' },
   dropItemTxt: { fontSize: 13.5, flex: 1 },
+  otroBtn: { marginTop: 8, borderWidth: 1.5, borderColor: '#1a6470', borderStyle: 'dashed', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 10, alignItems: 'center' },
+  otroBtnTxt: { color: '#1a6470', fontWeight: '800', fontSize: 12.5 },
   dropAcciones: { flexDirection: 'row', gap: 10, marginTop: 14 },
   dropCancel: { flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 10, paddingVertical: 11, alignItems: 'center' },
   dropCancelTxt: { fontWeight: '700', fontSize: 14 },
