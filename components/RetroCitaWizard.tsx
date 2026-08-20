@@ -5,7 +5,7 @@
 import { useRef, useState } from 'react'
 import {
   Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, Animated,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Easing,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Easing, Alert,
 } from 'react-native'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
@@ -83,6 +83,16 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
     }
   }
 
+  function cancelarCita() {
+    const hazlo = async () => {
+      setGuardando(true)
+      try { await supabase.rpc('cancelar_cita_venta', { p_id: cita.id }); onSaved?.(); onClose() }
+      catch { setGuardando(false) }
+    }
+    if (Platform.OS === 'web') { if (window.confirm('¿La cita se canceló? Se marcará como CANCELADA.')) hazlo() }
+    else Alert.alert('Cancelar cita', '¿La cita se canceló? Se marcará como CANCELADA.', [{ text: 'No', style: 'cancel' }, { text: 'Sí, se canceló', style: 'destructive', onPress: hazlo }])
+  }
+
   const esUltimo = paso === PASOS.length - 1
   const P = PASOS[paso]
 
@@ -154,6 +164,11 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* Marcar la cita como cancelada */}
+          <TouchableOpacity style={s.cancelar} onPress={cancelarCita} disabled={guardando}>
+            <Text style={s.cancelarTxt}>❌ La cita se canceló</Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -181,4 +196,6 @@ const s = StyleSheet.create({
   btnAtrasTxt: { fontSize: 15, fontWeight: '700' },
   btnPrim: { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 26, minWidth: 128, alignItems: 'center' },
   btnPrimTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  cancelar: { marginTop: 14, paddingVertical: 10, alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderColor: '#c0392b33' },
+  cancelarTxt: { color: '#c0392b', fontSize: 13.5, fontWeight: '700' },
 })

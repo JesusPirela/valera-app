@@ -217,6 +217,7 @@ export default function AdminPropiedades() {
 
   const navItems = esSupervisor
     ? NAV_ITEMS.filter((item) => ![
+        '/(admin)/citas-venta',
         '/(admin)/nueva-propiedad',
         '/(admin)/university',
         '/(admin)/tienda-compras',
