@@ -185,6 +185,7 @@ export default function CitasVenta() {
   const [wizard, setWizard] = useState<Fila | null>(null)
   const [importando, setImportando] = useState(false)
   const [msg, setMsg] = useState('')
+  const [listH, setListH] = useState(0)   // alto medido del cuerpo (para virtualizar la FlatList)
 
   const headerRef = useRef<ScrollView>(null); const bodyRef = useRef<ScrollView>(null); const barRef = useRef<ScrollView>(null)
   const listRef = useRef<FlatList>(null); const vbarRef = useRef<ScrollView>(null)
@@ -342,11 +343,15 @@ export default function CitasVenta() {
               </View>
             </ScrollView>
 
-            {/* Cuerpo: scroll horizontal envuelve una FlatList virtualizada */}
-            <ScrollView ref={bodyRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'b')} style={{ flex: 1 }}>
+            {/* Cuerpo: scroll horizontal envuelve una FlatList virtualizada.
+                La FlatList NECESITA altura fija (medida) para virtualizar en web;
+                sin ella renderiza las 1000+ filas y come RAM. */}
+            <ScrollView ref={bodyRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}
+              onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'b')} style={{ flex: 1 }}
+              onLayout={e => setListH(e.nativeEvent.layout.height)}>
               <FlatList
                 ref={listRef}
-                style={{ width: totalW }}
+                style={{ width: totalW, height: listH }}
                 data={visibles}
                 keyExtractor={f => f.id}
                 getItemLayout={(_, i) => ({ length: ROW_H, offset: ROW_H * i, index: i })}
