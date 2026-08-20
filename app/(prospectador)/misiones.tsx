@@ -95,7 +95,9 @@ async function getConteosDiarios(uid: string): Promise<Map<string, number>> {
         .eq('user_id', uid).gte('completada_at', start).lt('completada_at', end),
     ])
     const intClientesUnicos = new Set((intRes.data ?? []).map(r => r.cliente_id)).size
-    m.set('propiedad',   propRes.data?.length  ?? 0)
+    // Propiedades DISTINTAS: 1 propiedad a varios portales (web/EB/ML) genera
+    // varias filas; sin dedup, publicar 1 contaba como 3+ (misión inflada).
+    m.set('propiedad',   new Set((propRes.data ?? []).map((r: any) => r.propiedad_id)).size)
     m.set('crm',         crmRes.data?.length   ?? 0)
     m.set('seguimiento', segRes.data?.length   ?? 0)
     m.set('interaccion', intClientesUnicos)

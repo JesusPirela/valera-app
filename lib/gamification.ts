@@ -216,11 +216,12 @@ function getAyerMX(): string {
 export async function actualizarMisionesPorCategoria(userId: string, categoria: string): Promise<void> {
   const hoy = getHoyMX()
 
-  // ── Misiones DIARIAS: función atómica en SQL (evita race conditions) ──
-  // Pasamos p_fecha en hora MX para evitar desfase UTC vs local
-  const { data: completadas, error: errDiaria } = await supabase.rpc('incrementar_mision_diaria', {
-    p_categoria: categoria,
-    p_fecha:     hoy,
+  // ── Misiones DIARIAS: RECALCULAR desde el conteo real (fuente de verdad) ──
+  // Antes se hacía +1 por evento (incrementar_mision_diaria); si un mismo hecho
+  // disparaba varias veces (ej. publicar a varios portales) la misión se inflaba
+  // y no bajaba. Ahora se sincroniza contra el conteo real, así nunca sobrecuenta.
+  const { data: completadas, error: errDiaria } = await supabase.rpc('sincronizar_misiones_diarias_hoy', {
+    p_fecha: hoy,
   })
   if (errDiaria) console.warn('[Misiones diarias]', errDiaria.message)
   // Otorgar recompensas por misiones diarias recién completadas
