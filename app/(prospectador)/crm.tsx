@@ -1638,13 +1638,14 @@ export default function CRM() {
                         <View key={col.id} style={[s.excelTdCell, cs, { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 6 }]}>
                           {createElement('textarea', {
                             autoFocus: true,
-                            value: editValue,
-                            onChange: (e: any) => setEditValue(e.target.value),
-                            onBlur: guardarTexto,
+                            // NO controlado: sin value/onChange no re-renderiza toda la
+                            // lista en cada tecla (por eso "no se ponía rápido el texto").
+                            defaultValue: editValue,
+                            onBlur: (e: any) => { const v = (e.target.value ?? '').trim() || null; setEditCell(null); guardarCelda(item.id, 'notas', v) },
                             // Enter guarda y cierra; Shift+Enter hace salto de línea.
                             onKeyDown: (e: any) => {
-                              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); guardarTexto() }
-                              else if (e.key === 'Escape') { guardarTexto() }
+                              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur() }
+                              else if (e.key === 'Escape') { e.currentTarget.blur() }
                             },
                             placeholder: 'Escribe una nota... (Enter guarda, Shift+Enter salta de línea)',
                             rows: 4,
