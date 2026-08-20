@@ -1343,8 +1343,12 @@ export default function CoordinacionCitas() {
   }, [miRole, miId])
 
   async function moverCita(cita: Cita, nuevoEstado: EstadoCita, razonCancelacion?: string) {
-    setCitas(prev => prev.map(c => c.id === cita.id ? { ...c, estado: nuevoEstado, updated_at: new Date().toISOString() } : c))
+    // Al marcar "coordinada" se registra quién la coordinó (si no estaba), para
+    // atribuirla y que entre a la tabla de Citas de Venta.
+    const coordina = nuevoEstado === 'coordinada' && !cita.coordinado_por && miId ? miId : undefined
+    setCitas(prev => prev.map(c => c.id === cita.id ? { ...c, estado: nuevoEstado, coordinado_por: coordina ?? c.coordinado_por, updated_at: new Date().toISOString() } : c))
     const payload: Record<string, unknown> = { estado: nuevoEstado }
+    if (coordina) payload.coordinado_por = coordina
     if (razonCancelacion) payload.razon_cancelacion = razonCancelacion
     const { data, error } = await supabase
       .from('citas_coordinacion')
