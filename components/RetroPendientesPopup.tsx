@@ -7,6 +7,7 @@
 // montarlo en app/(prospectador)/_layout.tsx:  <RetroPendientesPopup enabled />
 import { useEffect, useState } from 'react'
 import { Modal, View, Text, TouchableOpacity, StyleSheet, FlatList } from 'react-native'
+import { router } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
 import RetroCitaWizard, { CitaRetro } from './RetroCitaWizard'
@@ -52,6 +53,9 @@ export default function RetroPendientesPopup({ enabled = false }: { enabled?: bo
                 </TouchableOpacity>
               )}
             />
+            <TouchableOpacity style={s.verTodas} onPress={() => { setAbierto(false); router.push('/(prospectador)/mis-retros') }}>
+              <Text style={s.verTodasTxt}>📋 Ver todas mis citas</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={s.despues} onPress={() => setAbierto(false)}>
               <Text style={[s.despuesTxt, { color: c.textSub }]}>Más tarde</Text>
             </TouchableOpacity>
@@ -80,6 +84,8 @@ const s = StyleSheet.create({
   itemNombre: { fontSize: 15, fontWeight: '700' },
   itemSub: { fontSize: 12, marginTop: 1 },
   itemFlecha: { fontSize: 22, color: '#1a6470', fontWeight: '800' },
-  despues: { paddingVertical: 12, alignItems: 'center', marginTop: 4 },
+  verTodas: { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 12 },
+  verTodasTxt: { color: '#fff', fontSize: 14.5, fontWeight: '800' },
+  despues: { paddingVertical: 12, alignItems: 'center', marginTop: 2 },
   despuesTxt: { fontSize: 14, fontWeight: '600' },
 })
