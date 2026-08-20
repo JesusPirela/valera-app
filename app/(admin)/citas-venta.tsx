@@ -10,7 +10,7 @@ import {
   TextInput, Platform, Modal, Alert, Animated, Easing, KeyboardAvoidingView,
 } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
@@ -352,7 +352,9 @@ export default function CitasVenta() {
     const todas: Fila[] = []; const paso = 1000
     for (let desde = 0; ; desde += paso) {
       const { data, error } = await supabase.from('citas_venta').select(cols)
-        .order('orden', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false })
+        // excel por su orden; las del dashboard (orden NULL) van al final por
+        // fecha ascendente → cada cliente nuevo queda hasta abajo (sin pie fijo).
+        .order('orden', { ascending: true, nullsFirst: false }).order('created_at', { ascending: true })
         .range(desde, desde + paso - 1)
       if (error || !data || data.length === 0) break
       todas.push(...(data as Fila[]))
@@ -361,9 +363,27 @@ export default function CitasVenta() {
     setFilas(todas); setLoading(false)
   }, [])
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
+  // Candado: esta pantalla es SOLO para admins. Un supervisor u otro rol se saca.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      supabase.from('profiles').select('role').eq('id', session.user.id).single()
+        .then(({ data }) => { if (data && data.role !== 'admin') router.replace('/(admin)/propiedades') })
+    })
+  }, [])
   useEffect(() => {
     supabase.from('profiles').select('id, nombre').order('nombre').then(({ data }) => setProfiles((data ?? []).filter((p: any) => p.nombre)))
-    supabase.from('clientes').select('id, nombre, telefono').is('eliminado_at', null).order('nombre').limit(5000).then(({ data }) => setClientes(data ?? []))
+    // Paginar clientes: hay >1000 y Supabase limita cada consulta a 1000, así que
+    // sin paginar no salían todos (ej. Magda, alfabéticamente pasada la 1000).
+    ;(async () => {
+      const todos: { id: string; nombre: string; telefono: string | null }[] = []
+      for (let d = 0; ; d += 1000) {
+        const { data } = await supabase.from('clientes').select('id, nombre, telefono').is('eliminado_at', null).order('nombre').range(d, d + 999)
+        if (!data || data.length === 0) break
+        todos.push(...data); if (data.length < 1000) break
+      }
+      setClientes(todos)
+    })()
   }, [])
 
   const valorDe = (f: Fila, key: ColKey) => String((f[key] as string) ?? '').trim() || VACIO
