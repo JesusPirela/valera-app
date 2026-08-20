@@ -149,10 +149,11 @@ function decodeEntities(s: string): string {
 }
 
 // ── Vinte (vinte.com.mx) ─────────────────────────────────────────────────────
-// La URL tiene formato /{estado}/{desarrollo} y la página embebe todos los
-// modelos en un JSON-LD RealEstateListing > offers. Las imágenes están en S3
-// agrupadas por modelo: multimedia/{desarrollo}/models{slug}/galery/*.jpg.
-// Devuelve un array de modelos o [] si no es una página Vinte con offers.
+// La URL tiene formato /{estado}/{desarrollo}. Algunos desarrollos embeben los
+// modelos en un JSON-LD RealEstateListing > offers (ej. Catania); otros solo
+// usan HTML con secciones id="property-market-{slug}" (ej. Punta Cuerna).
+// Las imágenes están en S3: multimedia/{desarrollo}/models{slug}/galery/*.
+// Devuelve un array de modelos o [] si no es una página Vinte reconocida.
 interface VinteModelo {
   nombre: string
   precio: number
@@ -165,59 +166,125 @@ interface VinteModelo {
   desarrollo: string
 }
 
-function parseVinteModelos(html: string, url: string): VinteModelo[] {
-  try {
-    if (!/(^|\.)vinte\.com\.mx$/i.test(new URL(url).hostname)) return []
-  } catch { return [] }
-
-  const nodes = extractJsonLdNodes(html)
-  const listing = nodes.find(n => ldType(n).includes('RealEstateListing'))
-  if (!listing || !Array.isArray(listing.offers) || listing.offers.length === 0) return []
-
-  const segs = new URL(url).pathname.split('/').filter(Boolean)
-  const desarrollo = tituloModelo((segs[1] ?? '').replace(/-/g, ' '))
-
-  // Recolectar imágenes S3 agrupadas por slug de modelo: models{slug}/galery/
+function _vinteImgBySlug(html: string): Map<string, string[]> {
   const imgBySlug = new Map<string, string[]>()
-  for (const m of html.matchAll(/https?:\/\/[^"'\s]*vinte\.com\.mx\/[^"'\s]+\.(?:jpe?g|png|webp)/gi)) {
+  for (const m of html.matchAll(/https?:\/\/[^"'\s<>]*vinte\.com\.mx\/[^"'\s<>]+\.(?:jpe?g|png|webp)/gi)) {
     const imgUrl = m[0]
-    const sm = imgUrl.match(/models([a-z0-9]+)\/galery\//i)
+    const sm = imgUrl.match(/models([a-z0-9_-]+)\/galery\//i)
     if (sm) {
-      const slug = sm[1].toLowerCase()
+      const slug = sm[1].toLowerCase().replace(/[^a-z0-9]/g, '')
       if (!imgBySlug.has(slug)) imgBySlug.set(slug, [])
       const arr = imgBySlug.get(slug)!
       if (!arr.includes(imgUrl)) arr.push(imgUrl)
     }
   }
+  return imgBySlug
+}
 
+function parseVinteModelos(html: string, url: string): VinteModelo[] {
+  try {
+    if (!/(^|\.)vinte\.com\.mx$/i.test(new URL(url).hostname)) return []
+  } catch { return [] }
+
+  const segs = new URL(url).pathname.split('/').filter(Boolean)
+  const desarrollo = tituloModelo((segs[1] ?? '').replace(/-/g, ' '))
+  const estadoRaw = tituloModelo((segs[0] ?? '').replace(/-/g, ' '))
+
+  const imgBySlug = _vinteImgBySlug(html)
+
+  // RUTA 1: JSON-LD RealEstateListing
+  const nodes = extractJsonLdNodes(html)
+  const listing = nodes.find(n => ldType(n).includes('RealEstateListing'))
+  if (listing && Array.isArray(listing.offers) && listing.offers.length > 0) {
+    const modelos: VinteModelo[] = []
+    for (const offer of listing.offers) {
+      const seller = offer.seller ?? offer
+      const nombre = String(seller.name ?? '').trim()
+      if (!nombre) continue
+
+      const precio = parseNum(offer.price) ?? 0
+      const recamaras = cap(parseNum(seller.numberOfRooms), 5)
+      const banos = cap(parseNum(seller.numberOfBathroomsTotal), 4)
+
+      const desc = String(seller.description ?? '')
+      const m2Match = desc.match(/([\d.]+)\s*m[²2]/i)
+      const m2 = m2Match ? String(parseFloat(m2Match[1])) : null
+
+      const estMatch = desc.match(/[Ee]stacionamientos?\s+(\d+)/)
+      const estacionamientos = estMatch ? parseInt(estMatch[1], 10) : 2
+
+      const addr = seller.address ?? {}
+      const localidad = String(addr.addressLocality ?? '').trim()
+      const region = String(addr.addressRegion ?? '').trim()
+      const direccion = [desarrollo, localidad, region].filter(Boolean).join(', ')
+
+      const slug = nombre.toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]/g, '')
+      const imgs = imgBySlug.get(slug) ?? (seller.image ? [String(seller.image)] : [])
+
+      modelos.push({ nombre, precio, recamaras, banos, estacionamientos, m2, imagenes: imgs, direccion, desarrollo })
+    }
+    if (modelos.length > 0) return modelos
+  }
+
+  // RUTA 2: Fallback HTML — secciones id="property-market-{slug}"
+  // Extrae slugs en orden de aparición en el HTML
+  const slugMatches = [...html.matchAll(/id="property-market-([a-z0-9-]+)"\s+role="tabpanel"/gi)]
+  if (slugMatches.length === 0) return []
+
+  // Extraer nombre display de cada modelo desde el nav de tabs
+  const nombrePorSlug = new Map<string, string>()
+  for (const m of html.matchAll(/href="#property-market-([a-z0-9-]+)"[^>]*>[\s\S]{0,400}?<h3[^>]*>([\s\S]*?)<\/h3>/gi)) {
+    const slug = m[1].toLowerCase()
+    const nombre = decodeEntities(m[2].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim()
+    if (nombre && !nombrePorSlug.has(slug)) nombrePorSlug.set(slug, nombre)
+  }
+
+  // Precio a nivel de desarrollo (ej. "$1,759,000*") como precio por defecto
+  const precioDevMatch = html.match(/\$\s*([\d,]+(?:,\d{3})+)/)
+  const precioDesarrollo = precioDevMatch
+    ? parseInt(precioDevMatch[1].replace(/,/g, ''), 10)
+    : 0
+
+  // Localidad y estado para dirección
+  const localM = html.match(/fa-map-marker-alt[^<]{0,80}<\/i>\s*([^<]{3,60}?)\s*<\//)
+  const localidad = localM ? localM[1].trim() : ''
+  const direccionBase = [desarrollo, localidad, estadoRaw].filter(Boolean).join(', ')
+
+  const slugsOrdenados = slugMatches.map(m => m[1].toLowerCase())
   const modelos: VinteModelo[] = []
-  for (const offer of listing.offers) {
-    const seller = offer.seller ?? offer
-    const nombre = String(seller.name ?? '').trim()
-    if (!nombre) continue
 
-    const precio = parseNum(offer.price) ?? 0
-    const recamaras = cap(parseNum(seller.numberOfRooms), 5)
-    const banos = cap(parseNum(seller.numberOfBathroomsTotal), 4)
+  for (let i = 0; i < slugsOrdenados.length; i++) {
+    const slug = slugsOrdenados[i]
+    const marker = slugMatches[i].index!
+    const endIdx = i + 1 < slugsOrdenados.length ? slugMatches[i + 1].index! : html.length
+    const seccion = html.slice(marker, endIdx)
 
-    const desc = String(seller.description ?? '')
-    const m2Match = desc.match(/([\d.]+)\s*m[²2]/i)
-    const m2 = m2Match ? String(parseFloat(m2Match[1])) : null
+    // Saltar modelos agotados
+    if (/AGOTADO/i.test(seccion.slice(0, 800))) continue
 
-    const estMatch = desc.match(/[Ee]stacionamientos?\s+(\d+)/)
-    const estacionamientos = estMatch ? parseInt(estMatch[1], 10) : 2
+    // Extraer specs desde dt/dd
+    const recM = seccion.match(/Rec[aá]maras<\/dt>\s*<dd[^>]*>\s*([\d]+)/i)
+    const banM = seccion.match(/Ba[ñn]os<\/dt>\s*<dd[^>]*>\s*([\d]+)/i)
+    const m2M = seccion.match(/Metros de construcci[oó]n<\/dt>\s*<dd[^>]*>\s*([\d.]+)/i)
+    const estM = seccion.match(/Estacionamientos?<\/dt>\s*<dd[^>]*>\s*([\d]+)/i)
 
-    const addr = seller.address ?? {}
-    const localidad = String(addr.addressLocality ?? '').trim()
-    const region = String(addr.addressRegion ?? '').trim()
-    const direccion = [desarrollo, localidad, region].filter(Boolean).join(', ')
+    const recamaras = recM ? parseInt(recM[1], 10) : null
+    const banos = banM ? parseInt(banM[1], 10) : null
+    const m2 = m2M ? m2M[1] : null
+    const estacionamientos = estM ? parseInt(estM[1], 10) : null
 
-    const slug = nombre.toLowerCase()
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
-      .replace(/\s+/g, '')
-    const imgs = imgBySlug.get(slug) ?? (seller.image ? [String(seller.image)] : [])
+    // Precio del modelo si viene en la sección, si no usar el del desarrollo
+    const precioM = seccion.match(/\$\s*([\d,]+(?:,\d{3})+)/)
+    const precio = precioM ? parseInt(precioM[1].replace(/,/g, ''), 10) : precioDesarrollo
 
-    modelos.push({ nombre, precio, recamaras, banos, estacionamientos, m2, imagenes: imgs, direccion, desarrollo })
+    // Imágenes del modelo (solo las del bucket models{slug}/galery/)
+    const slugKey = slug.replace(/[^a-z0-9]/g, '')
+    const imgs = imgBySlug.get(slugKey) ?? []
+
+    const nombre = nombrePorSlug.get(slug) ?? tituloModelo(slug.replace(/-/g, ' '))
+    modelos.push({ nombre, precio, recamaras, banos, estacionamientos, m2, imagenes: imgs, direccion: direccionBase, desarrollo })
   }
 
   return modelos
