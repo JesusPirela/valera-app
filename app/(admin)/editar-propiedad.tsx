@@ -201,6 +201,8 @@ export default function EditarPropiedad() {
   const [urlOrigen, setUrlOrigen] = useState('')  // link de donde se importó
   const [importando, setImportando] = useState(false)
   const [importMsg, setImportMsg] = useState('')
+  const [modelosVinte, setModelosVinte] = useState<any[] | null>(null)
+  const [modeloVinteSeleccionado, setModeloVinteSeleccionado] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [guardadoOk, setGuardadoOk] = useState(false)
@@ -459,6 +461,60 @@ export default function EditarPropiedad() {
     setMostrarFicha(false)
   }
 
+  function aplicarDatosImportados(d: any) {
+    if (!d._soloEspecificaciones) {
+      const op = (d.operacion ?? operacion) === 'renta' ? 'Renta' : 'Venta'
+      const TIPOS_T: Record<string, string> = { casa: 'Casa', departamento: 'Departamento', terreno: 'Terreno', local: 'Local' }
+      const tp = TIPOS_T[d.tipo ?? tipo] ?? 'Propiedad'
+      const addr = ((d.direccion ?? direccion) || '').trim()
+      if (addr) {
+        const partes = addr.split(',').map((p: string) => p.trim()).filter(Boolean)
+        const PREFIJOS = /^(fraccionamiento|fracc\.?|colonia|col\.?|barrio|residencial|privada|priv\.?)\s+/i
+        const lugar = partes[0].replace(PREFIJOS, '').trim()
+        const estado = partes.length > 1 ? partes[partes.length - 1] : ''
+        const ubic = estado && estado.toLowerCase() !== lugar.toLowerCase() ? `${lugar}, ${estado}` : lugar
+        setTitulo(`${op} de ${tp} en ${ubic}`)
+      } else {
+        setTitulo(`${op} de ${tp}`)
+      }
+    }
+    if (d.descripcion)  setDescripcion(d.descripcion)
+    if (d.precio)       setPrecio(d.precio)
+    if (d.direccion && !d._soloEspecificaciones) { setDireccion(d.direccion); setGeoQuery(d.direccion) }
+    if (d.recamaras  != null) setRecamaras(d.recamaras)
+    if (d.banos      != null) setBanos(d.banos)
+    if (d.mediosBanos != null) setMediosBanos(d.mediosBanos)
+    if (d.estacionamientos != null) setEstacionamientos(d.estacionamientos)
+    if (d.m2)        setM2(d.m2)
+    if (d.m2Terreno) setM2Terreno(d.m2Terreno)
+    if (d.tipo)      setTipo(d.tipo)
+    if (d.operacion) setOperacion(d.operacion)
+    if (d.zona)      setZona(d.zona)
+    if (d.modelo)    setModeloDesarrollo(d.modelo)
+    if (d.imagenes?.length > 0) agregarUris(d.imagenes)
+  }
+
+  function aplicarModeloVinte(modelo: any) {
+    setModeloVinteSeleccionado(modelo.nombre)
+    aplicarDatosImportados({
+      _soloEspecificaciones: true,
+      precio: modelo.precio > 0 ? String(modelo.precio) : '',
+      recamaras: modelo.recamaras,
+      banos: modelo.banos,
+      estacionamientos: modelo.estacionamientos,
+      m2: modelo.m2 ?? '',
+      modelo: modelo.nombre,
+      imagenes: modelo.imagenes,
+    })
+    const partes: string[] = [modelo.nombre]
+    if (modelo.precio) partes.push(`$${parseInt(modelo.precio).toLocaleString('es-MX')}`)
+    if (modelo.recamaras) partes.push(`${modelo.recamaras} rec.`)
+    if (modelo.banos) partes.push(`${modelo.banos} baños`)
+    if (modelo.m2) partes.push(`${modelo.m2} m²`)
+    if (modelo.imagenes?.length) partes.push(`${modelo.imagenes.length} fotos`)
+    setImportMsg(`✓ Modelo ${partes.join(' · ')}`)
+  }
+
   async function importarDesdeUrl() {
     const url = urlImport.trim()
     if (!url || !/^https?:\/\//.test(url)) {
@@ -467,44 +523,26 @@ export default function EditarPropiedad() {
     }
     setImportando(true)
     setImportMsg('Descargando información…')
+    setModelosVinte(null)
+    setModeloVinteSeleccionado(null)
     try {
       const { data, error } = await supabase.functions.invoke('importar-propiedad', { body: { url } })
       if (error) throw error
       if ((data as any)?.error) throw new Error((data as any).error)
 
-      setUrlOrigen(url)  // recordar la fuente
+      setUrlOrigen(url)
       const d = data as any
-      // Título: "Venta de Casa en El Mirador, Querétaro"
-      {
-        const op = (d.operacion ?? operacion) === 'renta' ? 'Renta' : 'Venta'
-        const TIPOS_T: Record<string, string> = { casa: 'Casa', departamento: 'Departamento', terreno: 'Terreno', local: 'Local' }
-        const tp = TIPOS_T[d.tipo ?? tipo] ?? 'Propiedad'
-        const addr = ((d.direccion ?? direccion) || '').trim()
-        if (addr) {
-          const partes = addr.split(',').map((p: string) => p.trim()).filter(Boolean)
-          const PREFIJOS = /^(fraccionamiento|fracc\.?|colonia|col\.?|barrio|residencial|privada|priv\.?)\s+/i
-          const lugar = partes[0].replace(PREFIJOS, '').trim()
-          const estado = partes.length > 1 ? partes[partes.length - 1] : ''
-          const ubic = estado && estado.toLowerCase() !== lugar.toLowerCase() ? `${lugar}, ${estado}` : lugar
-          setTitulo(`${op} de ${tp} en ${ubic}`)
-        } else {
-          setTitulo(`${op} de ${tp}`)
-        }
+
+      // Vinte: múltiples modelos — mostrar picker, aplicar el primero por defecto
+      if (Array.isArray(d._modelos) && d._modelos.length > 1) {
+        setModelosVinte(d._modelos)
+        aplicarDatosImportados(d)
+        aplicarModeloVinte(d._modelos[0])
+        setImportMsg(`✓ ${d._desarrollo ?? 'Vinte'} · Selecciona el modelo:`)
+        return
       }
-      if (d.descripcion)  setDescripcion(d.descripcion)
-      if (d.precio)       setPrecio(d.precio)
-      if (d.direccion)    { setDireccion(d.direccion); setGeoQuery(d.direccion) }
-      if (d.recamaras  != null) setRecamaras(d.recamaras)
-      if (d.banos      != null) setBanos(d.banos)
-      if (d.mediosBanos != null) setMediosBanos(d.mediosBanos)
-      if (d.estacionamientos != null) setEstacionamientos(d.estacionamientos)
-      if (d.m2)        setM2(d.m2)
-      if (d.m2Terreno) setM2Terreno(d.m2Terreno)
-      if (d.tipo)      setTipo(d.tipo)
-      if (d.operacion) setOperacion(d.operacion)
-      if (d.zona)      setZona(d.zona)
-      if (d.modelo)    setModeloDesarrollo(d.modelo)
-      if (d.imagenes?.length > 0) agregarUris(d.imagenes)
+
+      aplicarDatosImportados(d)
 
       const partes: string[] = []
       if (d.titulo)    partes.push(d.titulo)
@@ -980,6 +1018,38 @@ export default function EditarPropiedad() {
               {importMsg}
             </Text>
           ) : null}
+          {modelosVinte && modelosVinte.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {modelosVinte.map((m: any) => {
+                  const seleccionado = modeloVinteSeleccionado === m.nombre
+                  return (
+                    <TouchableOpacity
+                      key={m.nombre}
+                      onPress={() => aplicarModeloVinte(m)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 7,
+                        borderRadius: 20,
+                        backgroundColor: seleccionado ? '#c9a84c' : '#2a2000',
+                        borderWidth: 1,
+                        borderColor: seleccionado ? '#c9a84c' : '#5a4200',
+                      }}
+                    >
+                      <Text style={{ color: seleccionado ? '#1a1000' : '#c9a84c', fontWeight: '600', fontSize: 13 }}>
+                        {m.nombre}
+                      </Text>
+                      {m.precio > 0 && (
+                        <Text style={{ color: seleccionado ? '#3a2800' : '#7a6030', fontSize: 10, marginTop: 1 }}>
+                          ${parseInt(m.precio).toLocaleString('es-MX')}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+            </ScrollView>
+          )}
           {urlOrigen ? (
             <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Text style={{ fontSize: 11, color: '#7a5200', fontWeight: '700' }}>FUENTE:</Text>

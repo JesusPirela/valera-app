@@ -148,6 +148,81 @@ function decodeEntities(s: string): string {
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => { try { return String.fromCharCode(parseInt(n, 16)) } catch { return '' } })
 }
 
+// ── Vinte (vinte.com.mx) ─────────────────────────────────────────────────────
+// La URL tiene formato /{estado}/{desarrollo} y la página embebe todos los
+// modelos en un JSON-LD RealEstateListing > offers. Las imágenes están en S3
+// agrupadas por modelo: multimedia/{desarrollo}/models{slug}/galery/*.jpg.
+// Devuelve un array de modelos o [] si no es una página Vinte con offers.
+interface VinteModelo {
+  nombre: string
+  precio: number
+  recamaras: number | null
+  banos: number | null
+  estacionamientos: number | null
+  m2: string | null
+  imagenes: string[]
+  direccion: string
+  desarrollo: string
+}
+
+function parseVinteModelos(html: string, url: string): VinteModelo[] {
+  try {
+    if (!/(^|\.)vinte\.com\.mx$/i.test(new URL(url).hostname)) return []
+  } catch { return [] }
+
+  const nodes = extractJsonLdNodes(html)
+  const listing = nodes.find(n => ldType(n).includes('RealEstateListing'))
+  if (!listing || !Array.isArray(listing.offers) || listing.offers.length === 0) return []
+
+  const segs = new URL(url).pathname.split('/').filter(Boolean)
+  const desarrollo = tituloModelo((segs[1] ?? '').replace(/-/g, ' '))
+
+  // Recolectar imágenes S3 agrupadas por slug de modelo: models{slug}/galery/
+  const imgBySlug = new Map<string, string[]>()
+  for (const m of html.matchAll(/https?:\/\/[^"'\s]*vinte\.com\.mx\/[^"'\s]+\.(?:jpe?g|png|webp)/gi)) {
+    const imgUrl = m[0]
+    const sm = imgUrl.match(/models([a-z0-9]+)\/galery\//i)
+    if (sm) {
+      const slug = sm[1].toLowerCase()
+      if (!imgBySlug.has(slug)) imgBySlug.set(slug, [])
+      const arr = imgBySlug.get(slug)!
+      if (!arr.includes(imgUrl)) arr.push(imgUrl)
+    }
+  }
+
+  const modelos: VinteModelo[] = []
+  for (const offer of listing.offers) {
+    const seller = offer.seller ?? offer
+    const nombre = String(seller.name ?? '').trim()
+    if (!nombre) continue
+
+    const precio = parseNum(offer.price) ?? 0
+    const recamaras = cap(parseNum(seller.numberOfRooms), 5)
+    const banos = cap(parseNum(seller.numberOfBathroomsTotal), 4)
+
+    const desc = String(seller.description ?? '')
+    const m2Match = desc.match(/([\d.]+)\s*m[²2]/i)
+    const m2 = m2Match ? String(parseFloat(m2Match[1])) : null
+
+    const estMatch = desc.match(/[Ee]stacionamientos?\s+(\d+)/)
+    const estacionamientos = estMatch ? parseInt(estMatch[1], 10) : 2
+
+    const addr = seller.address ?? {}
+    const localidad = String(addr.addressLocality ?? '').trim()
+    const region = String(addr.addressRegion ?? '').trim()
+    const direccion = [desarrollo, localidad, region].filter(Boolean).join(', ')
+
+    const slug = nombre.toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/\s+/g, '')
+    const imgs = imgBySlug.get(slug) ?? (seller.image ? [String(seller.image)] : [])
+
+    modelos.push({ nombre, precio, recamaras, banos, estacionamientos, m2, imagenes: imgs, direccion, desarrollo })
+  }
+
+  return modelos
+}
+
 // ── JSON-LD (schema.org) ──────────────────────────────────────────────────
 // Lamudi y muchos otros portales publican los datos en bloques
 // <script type="application/ld+json">. Devuelve todos los nodos aplanados.
@@ -547,6 +622,32 @@ serve(async (req) => {
     if (!url || !/^https?:\/\//.test(url)) throw new Error('URL inválida')
 
     const html = await fetchHtml(url)
+
+    // ── Vinte: devuelve todos los modelos del desarrollo ──────────────────────
+    const vinteModelos = parseVinteModelos(html, url)
+    if (vinteModelos.length > 0) {
+      const primero = vinteModelos[0]
+      return new Response(JSON.stringify({
+        titulo: '',
+        descripcion: '',
+        precio: primero.precio > 0 ? String(primero.precio) : '',
+        direccion: primero.direccion,
+        zona: null,
+        modelo: primero.nombre,
+        recamaras: primero.recamaras,
+        banos: primero.banos,
+        mediosBanos: null,
+        estacionamientos: primero.estacionamientos,
+        m2: primero.m2 ?? '',
+        m2Terreno: null,
+        tipo: 'casa',
+        operacion: 'venta',
+        imagenes: primero.imagenes,
+        _modelos: vinteModelos,
+        _desarrollo: primero.desarrollo,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     // Versión con entidades decodificadas: se usa para extraer etiquetas/valores.
     const dhtml = decodeEntities(html)
     // Cuadro de características etiqueta→valor (Tokko/reval, Inmobay, gminmobiliaria…).
