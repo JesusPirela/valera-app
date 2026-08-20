@@ -295,7 +295,9 @@ export default function CitasVenta() {
       setMsg(`Importando ${registros.length} citas…`)
       let ok = 0
       for (let i = 0; i < registros.length; i += 200) { const { error } = await supabase.from('citas_venta').insert(registros.slice(i, i + 200)); if (!error) ok += Math.min(200, registros.length - i) }
-      setMsg(`✓ Se importaron ${ok} citas.`); cargar()
+      setMsg(`Importadas ${ok}. Rellenando datos del dashboard…`)
+      await supabase.rpc('backfill_citas_venta')   // rellena teléfono/coordino/atendió faltantes
+      setMsg(`✓ Se importaron ${ok} citas (con datos del dashboard rellenados).`); cargar()
     } catch (e: any) { setMsg('✗ Error al importar: ' + (e?.message ?? 'desconocido')) } finally { setImportando(false) }
   }
 
