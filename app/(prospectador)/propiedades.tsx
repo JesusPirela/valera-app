@@ -91,6 +91,10 @@ type OrdenPrecio = 'asc' | 'desc' | null
 type FiltroPublicadas = 'publicadas' | 'sin_publicar' | null
 type FiltroNueva = boolean
 
+// Scroll offset persistente entre mounts (vive mientras el bundle JS esté cargado).
+// Permite restaurar la posición al volver del detalle sin necesidad de AsyncStorage.
+let _scrollOffset = 0
+
 type PropiedadesData = {
   rol: string | null
   nombreUsuario: string | null
@@ -341,6 +345,7 @@ export default function ProspectadorPropiedades() {
   const [busqueda, setBusqueda] = useState('')
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [toggling, setToggling] = useState<Set<string>>(new Set())
+  const flatListRef = useRef<FlatList>(null)
   const togglingRef = useRef<Set<string>>(new Set())
   togglingRef.current = toggling
   const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
@@ -553,6 +558,7 @@ export default function ProspectadorPropiedades() {
   // Jalar para actualizar: fuerza traer propiedades y publicaciones frescas.
   const [refreshing, setRefreshing] = useState(false)
   const onPull = useCallback(async () => {
+    _scrollOffset = 0
     setRefreshing(true)
     try { await Promise.all([refetch(), refetchPub(), refetchViews()]) } catch {}
     finally { setRefreshing(false) }
@@ -585,6 +591,13 @@ export default function ProspectadorPropiedades() {
       // (nunca persiste) y staleTime=0, así cualquier estado optimista perdido
       // tras un crash o cambio de pantalla se corrige al volver aquí.
       refetchPub()
+    }
+    // Restaurar posición de scroll al volver del detalle (o de cualquier sub-pantalla).
+    // requestAnimationFrame da tiempo a que el layout del FlatList esté listo.
+    if (_scrollOffset > 0) {
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToOffset({ offset: _scrollOffset, animated: false })
+      })
     }
   }, [refetch, refetchPub, queryClient, vistaComo]))
 
@@ -1438,6 +1451,7 @@ export default function ProspectadorPropiedades() {
           </ScrollView>
         ) : (
           <FlatList
+            ref={flatListRef}
             data={propiedadesFiltradas}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 16 }}
@@ -1448,6 +1462,8 @@ export default function ProspectadorPropiedades() {
             maxToRenderPerBatch={tarjetasPorTanda(ahorroActivo)}
             windowSize={ahorroActivo ? 5 : 11}
             ListHeaderComponent={filtrosHeader}
+            onScroll={({ nativeEvent }) => { _scrollOffset = nativeEvent.contentOffset.y }}
+            scrollEventThrottle={100}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
