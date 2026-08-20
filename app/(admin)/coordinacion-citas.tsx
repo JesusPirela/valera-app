@@ -555,7 +555,7 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
         const { data: nuevo, error: errC } = await supabase.from('clientes').insert({
           nombre: nuevoNombre.trim(), telefono: nuevoTelefono.trim(),
           fuente_lead: 'otro', estado: 'por_perfilar',
-          ...(vistaAsesor ? { tipo_operacion: tipoOperacion } : {}),
+          tipo_operacion: tipoOperacion,   // venta/renta (también para admins)
           responsable_id: prospectadorId || user!.id,
         }).select('id').single()
         if (errC) { alerta(errC.message); setGuardando(false); return }
@@ -631,7 +631,7 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
                           setClienteId(c.id); setClienteNombre(c.nombre); setClientes([])
                           // Autocompletar el prospectador con el dueño del cliente.
                           if (c.responsable_id) setProspectadorId(c.responsable_id)
-                          if (vistaAsesor) setTipoOperacion(c.tipo_operacion === 'renta' ? 'renta' : 'venta')
+                          setTipoOperacion(c.tipo_operacion === 'renta' ? 'renta' : 'venta')
                         }}>
                         <Text style={s.clienteRowNombre}>{c.nombre}</Text>
                         {c.responsable?.nombre && (
@@ -645,9 +645,9 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
               </>
             )}
 
-            {vistaAsesor && (
+            {(
               <>
-                <Text style={[s.fieldLabel, { marginTop: 14 }]}>Operación</Text>
+                <Text style={[s.fieldLabel, { marginTop: 14 }]}>Operación (Venta / Renta)</Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
                   {(['venta', 'renta'] as const).map(op => {
                     const activo = tipoOperacion === op
