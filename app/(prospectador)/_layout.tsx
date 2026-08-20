@@ -15,6 +15,7 @@ import { useVistaComo } from '../../lib/VistaComo'
 import VistaComoBanner from '../../components/VistaComoBanner'
 import AscensoRolModal from '../../components/AscensoRolModal'
 import PopupLeadsCampania from '../../components/PopupLeadsCampania'
+import RetroPendientesPopup from '../../components/RetroPendientesPopup'
 
 const LOGO = require('../../assets/logo-recortado.png')
 
@@ -233,6 +234,7 @@ export default function ProspectadorLayout() {
     <VistaComoBanner />
     <AscensoRolModal rol={ascensoRol} onClose={() => setAscensoRol(null)} />
     <PopupLeadsCampania />
+    <RetroPendientesPopup enabled />
     <Tabs
       // "atrás" vuelve a la pantalla ANTERIOR de verdad, no al inicio.
       //

@@ -9,6 +9,7 @@ import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme } from '../../lib/ThemeContext'
 import { useVistaComo } from '../../lib/VistaComo'
 import HeaderBack from '../../components/HeaderBack'
+import RetroPendientesPopup from '../../components/RetroPendientesPopup'
 
 const LOGO = require('../../assets/logo-recortado.png')
 
@@ -135,6 +136,8 @@ export default function AdminLayout() {
   if (!vistaComoListo || vistaComo) return null
 
   return (
+    <>
+    <RetroPendientesPopup enabled />
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: '#1a6470' },
@@ -180,6 +183,7 @@ export default function AdminLayout() {
         ),
       }}
     />
+    </>
   )
 }
 
