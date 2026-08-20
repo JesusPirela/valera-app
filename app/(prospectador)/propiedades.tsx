@@ -857,7 +857,10 @@ export default function ProspectadorPropiedades() {
     }
   }
   if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) > 0)
-  if (filtroPublicadas === 'sin_publicar') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0 || recienPublicadosRef.current.has(p.id))
+  // Solo filtrar cuando el query de publicaciones ya cargó correctamente.
+  // Si pubData es undefined (cargando o error de red), mostrar todo para evitar
+  // falsos positivos donde propiedades publicadas aparecen como "sin publicar".
+  if (filtroPublicadas === 'sin_publicar' && pubData != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0 || recienPublicadosRef.current.has(p.id))
   if (filtroNueva) {
     const haceUnaS = Date.now() - 7 * 24 * 60 * 60 * 1000
     propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() > haceUnaS)
@@ -958,7 +961,7 @@ export default function ProspectadorPropiedades() {
   return propiedadesFiltradas
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    propiedades, busqueda, filtroPublicadas, publicaciones, filtroNueva,
+    propiedades, busqueda, filtroPublicadas, publicaciones, pubData, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
     viewsData,

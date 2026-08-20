@@ -225,7 +225,70 @@ function parseVinteModelos(html: string, url: string): VinteModelo[] {
 
       modelos.push({ nombre, precio, recamaras, banos, estacionamientos, m2, imagenes: imgs, direccion, desarrollo })
     }
-    if (modelos.length > 0) return modelos
+    if (modelos.length > 0) {
+      // Cruzar con secciones HTML para: (1) corregir precios, (2) agregar modelos
+      // que están en HTML pero no en JSON-LD (ej. Vizzini en Real Segovia)
+      const htmlSections = [...html.matchAll(/id="property-market-([a-z0-9-]+)"\s+role="tabpanel"/gi)]
+      if (htmlSections.length > 0) {
+        const htmlSlugs = htmlSections.map(m => m[1].toLowerCase())
+
+        // Nombres display del nav para modelos HTML
+        const nombrePorSlugHtml = new Map<string, string>()
+        for (const m of html.matchAll(/href="#property-market-([a-z0-9-]+)"[^>]*>[\s\S]{0,400}?<h3[^>]*>([\s\S]*?)<\/h3>/gi)) {
+          const s = m[1].toLowerCase()
+          const n = decodeEntities(m[2].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim()
+          if (n && !nombrePorSlugHtml.has(s)) nombrePorSlugHtml.set(s, n)
+        }
+
+        // Slugs de modelos ya obtenidos de JSON-LD
+        const slugsJsonLd = new Set(modelos.map(m =>
+          m.nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+        ))
+
+        for (let i = 0; i < htmlSlugs.length; i++) {
+          const sSlug = htmlSlugs[i].replace(/[^a-z0-9]/g, '')
+          const endIdx = i + 1 < htmlSlugs.length ? htmlSections[i + 1].index! : html.length
+          const sec = html.slice(htmlSections[i].index!, endIdx)
+
+          // Precio de la sección HTML (más fiable que JSON-LD)
+          const pm = sec.match(/Desde\s*\$\s*([\d,]+(?:,\d{3})+)/i)
+            ?? sec.match(/\$\s*([\d,]+(?:,\d{3})+)/)
+          const precioHtml = pm ? parseInt(pm[1].replace(/,/g, ''), 10) : 0
+
+          // Verificar si este slug HTML ya tiene correspondencia en JSON-LD
+          const modeloExistente = modelos.find(m => {
+            const ms = m.nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+            return ms === sSlug || ms.startsWith(sSlug) || sSlug.startsWith(ms)
+          })
+
+          if (modeloExistente) {
+            // Sobreescribir precio con el de la página
+            if (precioHtml > 100_000) modeloExistente.precio = precioHtml
+          } else {
+            // Modelo nuevo que no estaba en JSON-LD — extraer specs del HTML
+            if (/AGOTADO/i.test(sec.slice(0, 800))) continue
+            const recM = sec.match(/Rec[aá]maras<\/dt>\s*<dd[^>]*>\s*([\d]+)/i)
+            const banM = sec.match(/Ba[ñn]os<\/dt>\s*<dd[^>]*>\s*([\d]+)/i)
+            const m2M = sec.match(/Metros de construcci[oó]n<\/dt>\s*<dd[^>]*>\s*([\d.]+)/i)
+            const estM = sec.match(/Estacionamientos?<\/dt>\s*<dd[^>]*>\s*([\d]+)/i)
+            const slugKey = htmlSlugs[i].replace(/[^a-z0-9]/g, '')
+            const nombre = nombrePorSlugHtml.get(htmlSlugs[i]) ?? tituloModelo(htmlSlugs[i].replace(/-/g, ' '))
+            modelos.push({
+              nombre,
+              precio: precioHtml > 100_000 ? precioHtml : 0,
+              recamaras: recM ? parseInt(recM[1], 10) : null,
+              banos: banM ? parseInt(banM[1], 10) : null,
+              estacionamientos: estM ? parseInt(estM[1], 10) : null,
+              m2: m2M ? m2M[1] : null,
+              imagenes: imgBySlug.get(slugKey) ?? [],
+              direccion: modelos[0]?.direccion ?? desarrollo,
+              desarrollo,
+            })
+          }
+        }
+      }
+      return modelos
+    }
   }
 
   // RUTA 2: Fallback HTML — secciones id="property-market-{slug}"
