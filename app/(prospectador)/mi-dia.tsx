@@ -112,9 +112,9 @@ export default function MiDia() {
         .order('proximo_contacto', { ascending: true })
         .limit(15),
       supabase.from('user_misiones')
-        .select('id, nombre, descripcion, progreso, meta, tipo')
+        .select('id, progreso, fecha_reset, mision:misiones(nombre:titulo, descripcion, meta, tipo)')
         .eq('user_id', user.id)
-        .eq('fecha', hoy.toISOString().slice(0, 10))
+        .eq('fecha_reset', hoy.toISOString().slice(0, 10))
         .eq('completada', false),
       supabase.from('publicacion_log')
         .select('id', { count: 'exact', head: true })
@@ -126,7 +126,11 @@ export default function MiDia() {
     setRecordatorios((recsRes.data ?? []) as unknown as Recordatorio[])
     setDormidos((dormidosRes.data ?? []) as ClienteDormido[])
     setSeguimientosHoy((segHoyRes.data ?? []) as ClienteSeguimientoHoy[])
-    setMisiones((misionesRes.data ?? []) as unknown as Mision[])
+    setMisiones(((misionesRes.data ?? []) as any[]).map(um => ({
+      id: um.id, progreso: um.progreso,
+      nombre: um.mision?.nombre, descripcion: um.mision?.descripcion,
+      meta: um.mision?.meta, tipo: um.mision?.tipo,
+    })) as unknown as Mision[])
     setPubsHoy(pubsRes.count ?? 0)
     setLoading(false)
     setRefreshing(false)
