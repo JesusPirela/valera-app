@@ -1040,7 +1040,7 @@ export default function DetallePropiedad() {
       }
       // Color de la ficha según quién subió la propiedad (created_by).
       // Configurable por admin; por defecto el teal de Valera.
-      const colorFicha = subidoPor?.colorFicha || '#1a6470'
+      const colorFicha = subidoPor?.colorFicha || '#0a2a5e'
       const colorFichaMap = colorFicha.replace('#', '0x')
 
       const esc = (s: string | null | undefined) =>
@@ -1051,9 +1051,12 @@ export default function DetallePropiedad() {
       // las fotos de la propiedad). data:image/png siempre funciona en el renderer
       // de impresión de Android; data:image/svg+xml no renderiza en ese contexto.
       // Web: mantiene SVG vía fetch (mayor calidad vectorial en jsPDF).
-      const prepararDescripcionPDF = async (desc: string): Promise<string> => {
+      // Construye el mapa emoji→<img> (Twemoji) para un texto dado. Extraído de
+      // prepararDescripcionPDF para poder reutilizarlo en la sección de
+      // "Distribución de espacios" (que también lleva emojis).
+      const construirMapaEmojis = async (texto: string): Promise<Map<string, string>> => {
         const EMOJI_RE = /[\u{1F300}-\u{1FAFF}]|[\u{2600}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{231A}\u{231B}\u{23E9}-\u{23F3}\u{2702}\u{2705}\u{2708}-\u{270D}\u{270F}\u{2712}\u{2714}\u{2716}\u{2721}\u{2728}\u{274C}\u{274E}\u{2753}-\u{2755}\u{2757}\u{2764}\u{2795}-\u{2797}\u{27A1}\u{27B0}\u{27BF}]/gu
-        const uniqueEmoji = [...new Set([...desc.matchAll(EMOJI_RE)].map(m => m[0]))]
+        const uniqueEmoji = [...new Set([...texto.matchAll(EMOJI_RE)].map(m => m[0]))]
         const emojiMap = new Map<string, string>()
         await Promise.all(uniqueEmoji.map(async (emoji) => {
           try {
@@ -1095,10 +1098,19 @@ export default function DetallePropiedad() {
             }
           } catch { /* deja el emoji como texto si falla */ }
         }))
-        let result = esc(desc)
-        for (const [emoji, img] of emojiMap) {
-          result = result.split(emoji).join(img)
-        }
+        return emojiMap
+      }
+
+      // Reemplaza los glifos de emoji por sus <img> según el mapa dado.
+      const aplicarEmojis = (texto: string, mapa: Map<string, string>): string => {
+        let result = texto
+        for (const [emoji, img] of mapa) result = result.split(emoji).join(img)
+        return result
+      }
+
+      const prepararDescripcionPDF = async (desc: string): Promise<string> => {
+        const mapa = await construirMapaEmojis(desc)
+        const result = aplicarEmojis(esc(desc), mapa)
         // Compactar: quitar espacios sobrantes al final de línea y COLAPSAR las
         // líneas en blanco (el texto suele traer dobles saltos `\n\n` que en el
         // PDF se veían como huecos enormes entre cada renglón). Queda una lista
@@ -1207,6 +1219,56 @@ export default function DetallePropiedad() {
 
       const descHTML = descTxt ? await prepararDescripcionPDF(descTxt) : null
 
+      // ── Distribución de espacios (emojis dinámicos) ─────────────────────────
+      // Regla de oro de la guía de fichas: "el emoji sigue al dato, nunca al
+      // revés". Solo se listan espacios que la propiedad REALMENTE tiene, a
+      // partir de sus datos estructurados. No se inventan jardines, albercas ni
+      // cocinas: la BD no los registra, así que no aparecen. Si en el futuro se
+      // capturan más espacios, se agregan aquí.
+      const en = lang === 'en'
+      const espacios: { emoji: string; nombre: string }[] = []
+      const nRec = propiedad.recamaras ?? 0
+      for (let i = 0; i < nRec; i++) {
+        espacios.push({
+          emoji: '🛏️',
+          nombre: i === 0
+            ? (en ? 'Master bedroom' : 'Recámara principal')
+            : (en ? `Bedroom ${i + 1}` : `Recámara ${i + 1}`),
+        })
+      }
+      if (propiedad.banos != null && propiedad.banos > 0) {
+        espacios.push({
+          emoji: '🚿',
+          nombre: propiedad.banos === 1
+            ? (en ? '1 full bathroom' : '1 baño completo')
+            : (en ? `${propiedad.banos} full bathrooms` : `${propiedad.banos} baños completos`),
+        })
+      }
+      if (propiedad.medios_banos != null && propiedad.medios_banos > 0) {
+        espacios.push({
+          emoji: '🚽',
+          nombre: propiedad.medios_banos === 1
+            ? (en ? 'Half bathroom' : 'Medio baño')
+            : (en ? `${propiedad.medios_banos} half bathrooms` : `${propiedad.medios_banos} medios baños`),
+        })
+      }
+      if (propiedad.estacionamientos != null && propiedad.estacionamientos > 0) {
+        espacios.push({
+          emoji: '🚗',
+          nombre: propiedad.estacionamientos === 1
+            ? (en ? 'Parking for 1 car' : 'Estacionamiento (1 auto)')
+            : (en ? `Parking for ${propiedad.estacionamientos} cars` : `Estacionamiento (${propiedad.estacionamientos} autos)`),
+        })
+      }
+      let espaciosHTML = ''
+      if (espacios.length > 0) {
+        const mapaEsp = await construirMapaEmojis(espacios.map(e => e.emoji).join(' '))
+        const filas = espacios.map(e =>
+          `<div class="espacio"><span class="espacio-emoji">${aplicarEmojis(e.emoji, mapaEsp)}</span><span class="espacio-nombre">${esc(e.nombre)}</span></div>`
+        ).join('')
+        espaciosHTML = `<div class="seccion-grupo"><div class="seccion">${en ? 'Layout' : 'Distribución de espacios'}</div><div class="espacios">${filas}</div></div>`
+      }
+
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${propiedad.codigo ?? 'ficha'}</title><style>
         * {
           box-sizing: border-box; margin: 0; padding: 0;
@@ -1216,10 +1278,10 @@ export default function DetallePropiedad() {
         .header { background: ${colorFicha}; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
         .header-left { flex: 1; }
         .header-logo { height: 130px; max-width: 280px; object-fit: contain; flex-shrink: 0; margin-left: 16px; }
-        .codigo { font-size: 13px; color: #c9a84c; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
+        .codigo { font-size: 13px; color: #FFD700; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
         .titulo { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 4px; }
         .tipo-op { font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 10px; }
-        .precio { font-size: 30px; font-weight: 800; color: #c9a84c; margin-bottom: 5px; }
+        .precio { font-size: 30px; font-weight: 800; color: #FFD700; margin-bottom: 5px; }
         .direccion { font-size: 14px; color: rgba(255,255,255,0.8); }
         .body { padding: 20px 28px; }
         .imagen-principal-wrap { width: 100%; height: 420px; border-radius: 10px; overflow: hidden; margin-bottom: 16px; background: #eef2f3; display: flex; align-items: center; justify-content: center; }
@@ -1241,6 +1303,10 @@ export default function DetallePropiedad() {
         .galeria-grupo { break-inside: avoid; page-break-inside: avoid; }
         .seccion-grupo { break-inside: avoid; page-break-inside: avoid; overflow: hidden; }
         .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; break-inside: avoid; page-break-inside: avoid; }
+        .espacios { display: flex; flex-wrap: wrap; margin-bottom: 8px; }
+        .espacio { width: 50%; display: flex; align-items: center; gap: 8px; padding: 7px 0; break-inside: avoid; page-break-inside: avoid; }
+        .espacio-emoji { font-size: 16px; line-height: 1; flex-shrink: 0; }
+        .espacio-nombre { font-size: 13px; font-weight: 600; color: #333; }
       </style></head><body>
       <div class="header">
         <div class="header-left">
@@ -1260,6 +1326,7 @@ export default function DetallePropiedad() {
         </div>` : ''}
         ${cars.length > 0 ? `<div class="seccion-grupo"><div class="seccion">${esc(tf(lang, 'caracteristicas'))}</div><div class="cars">${cars.join('')}</div></div>` : ''}
         ${descHTML !== null && descHTML.trim() !== '' ? `<div class="seccion-grupo"><div class="seccion">${esc(tf(lang, 'descripcion'))}</div><div class="desc">${descHTML}</div></div>` : ''}
+        ${espaciosHTML}
         ${galeriaHTML}
         ${mapaHTML}
         <div class="footer">Valera Real Estate · valerarealestate.com</div>
