@@ -1804,11 +1804,32 @@ export default function DetallePropiedad() {
           // permanente de la app — antes se acumulaban para siempre y con
           // varias propiedades publicadas llenaban el almacenamiento del
           // teléfono hasta dejarlo sin memoria.
-          const dest = `${FileSystem.cacheDirectory}${propiedad.codigo ?? 'prop'}-${i + 1}-${Date.now()}.${extValida}`
-          const { uri, status: dlStatus } = await FileSystem.downloadAsync(url, dest)
-          if (dlStatus !== 200) { errores.push(`img${i + 1}: HTTP ${dlStatus}`); continue }
-          await MediaLibrary.createAssetAsync(uri)
-          FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {})
+          const base = `${FileSystem.cacheDirectory}${propiedad.codigo ?? 'prop'}-${i + 1}-${Date.now()}`
+
+          // Intentar descarga directa con timeout de 15 s. Si falla (CDN externo,
+          // 403, redirect que expo-file-system no sigue), reintentar vía el proxy
+          // wsrv.nl — mismo mecanismo que usa imagenABase64() para el PDF.
+          let dlUri: string | null = null
+          try {
+            const { uri, status: s } = await conTimeout(
+              FileSystem.downloadAsync(url, `${base}.${extValida}`), 15000
+            )
+            if (s === 200) dlUri = uri
+          } catch { /* timeout o error de red */ }
+
+          if (!dlUri) {
+            const proxyUrl = proxyImagen(url, { width: 1080, quality: 90 }) ?? url
+            try {
+              const { uri, status: s } = await conTimeout(
+                FileSystem.downloadAsync(proxyUrl, `${base}_p.jpg`), 15000
+              )
+              if (s === 200) dlUri = uri
+            } catch { /* proxy también falló */ }
+          }
+
+          if (!dlUri) { errores.push(`img${i + 1}: sin respuesta`); continue }
+          await MediaLibrary.createAssetAsync(dlUri)
+          FileSystem.deleteAsync(dlUri, { idempotent: true }).catch(() => {})
           guardadas++
         } catch (e: any) {
           errores.push(`img${i + 1}: ${e?.message ?? e}`)

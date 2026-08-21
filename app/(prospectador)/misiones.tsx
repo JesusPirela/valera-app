@@ -62,10 +62,12 @@ const bStyles = StyleSheet.create({
 const getHoyMX = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 
 function getMXDayBounds(hoyMX: string): { start: string; end: string } {
-  // Mexico City: CDT (UTC-5) abril-octubre, CST (UTC-6) noviembre-marzo
-  const month = parseInt(hoyMX.split('-')[1], 10)
-  const offsetHours = (month >= 4 && month <= 10) ? 5 : 6
-  const startMs = new Date(hoyMX + 'T00:00:00Z').getTime() + offsetHours * 3600000
+  // Calcular el offset real de México ese día con Intl en lugar de un corte fijo
+  // por mes (que era incorrecto para la última semana de marzo cuando empieza DST).
+  const midday = new Date(hoyMX + 'T12:00:00Z')
+  const mxMidday = new Date(midday.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }))
+  const offsetMs = midday.getTime() - mxMidday.getTime()
+  const startMs = new Date(hoyMX + 'T00:00:00Z').getTime() + offsetMs
   return {
     start: new Date(startMs).toISOString(),
     end:   new Date(startMs + 86400000).toISOString(),
@@ -80,7 +82,7 @@ async function getConteosDiarios(uid: string): Promise<Map<string, number>> {
 
     const [propRes, crmRes, segRes, intRes, cursoRes] = await Promise.all([
       supabase.from('propiedad_publicacion').select('propiedad_id')
-        .eq('user_id', uid).gte('fecha_publicacion', start).lt('fecha_publicacion', end),
+        .eq('user_id', uid).eq('publicada', true).gte('fecha_publicacion', start).lt('fecha_publicacion', end),
       supabase.from('clientes').select('id')
         .eq('responsable_id', uid).gte('created_at', start).lt('created_at', end),
       // seguimientos_dia es la fuente de verdad desde el rework del 20260723;
@@ -122,8 +124,15 @@ function buildLista(
     const um = progresoMap.get(m.id)
     if (m.tipo === 'diaria') {
       const conteo = Math.min(conteosMap.get(m.categoria) ?? 0, m.meta)
-      const completada = conteo >= m.meta || (um?.fecha_reset === hoy && (um?.completada ?? false))
-      return { ...m, progreso: conteo, completada, fecha_reset: um?.fecha_reset ?? null }
+      // Fallback: si el registro en BD dice que se completó hoy pero el conteo
+      // en tiempo real es menor (ej. propiedad publicada y luego despublicada),
+      // se honra el registro de BD — la recompensa ya fue otorgada.
+      const dbCompletadaHoy = um?.fecha_reset === hoy && (um?.completada ?? false)
+      const completada = conteo >= m.meta || dbCompletadaHoy
+      // Si completada solo por fallback de BD, mostrar meta completa en la barra
+      // para que sea consistente con el badge ✓ (evita el 0/1 con ✓ confuso).
+      const progreso = completada ? Math.max(conteo, m.meta) : conteo
+      return { ...m, progreso, completada, fecha_reset: um?.fecha_reset ?? null }
     }
     return { ...m, progreso: um?.progreso ?? 0, completada: um?.completada ?? false, fecha_reset: um?.fecha_reset ?? null }
   })

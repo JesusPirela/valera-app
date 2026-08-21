@@ -177,11 +177,12 @@ function necesitaSeguimiento(c: Cliente): boolean {
   // apunta al futuro (puede ocurrir si el trigger aún no sincronizó).
   if ((c.recordatorios ?? []).some(r => !r.completado && new Date(r.fecha_hora).getTime() < now)) return true
   if (c.proximo_contacto) {
-    // Comparar solo fechas calendario (YYYY-MM-DD) para evitar el desfase UTC:
-    // "2025-01-15" como timestamp UTC es medianoche UTC = 6pm México del día anterior.
-    const fechaContacto = c.proximo_contacto.slice(0, 10)
-    if (fechaContacto > fechaHoyLocal()) return false  // solo futuro → no vencido
-    return true                                         // hoy o antes → vencido
+    // Usar la misma comparación exacta de timestamp que la columna ⚠ de la tabla.
+    // Antes usábamos slice(0,10) + string, lo que causaba que fechas con hora
+    // vespertina (>= ~7pm México → UTC del día siguiente) no aparecieran en el
+    // filtro aunque la tabla ya mostraba ⚠.
+    if (new Date(c.proximo_contacto).getTime() > now) return false  // futuro → no vencido
+    return true                                                       // pasado o presente → vencido
   }
   return false
 }

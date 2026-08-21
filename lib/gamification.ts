@@ -286,7 +286,7 @@ export async function actualizarMisionesPorCategoria(userId: string, categoria: 
       }).eq('id', um.id)
     }
 
-    if (nuevaCompl) {
+    if (nuevaCompl && !(um?.completada)) {
       await conReintento(() => supabase.rpc('award_xp_coins', {
         p_user_id: userId, p_xp: m.recompensa_xp, p_coins: m.recompensa_coins,
         p_concepto: '¡Misión completada! 🎯', p_campo_contador: null,
