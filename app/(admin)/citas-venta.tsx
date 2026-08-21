@@ -4,7 +4,7 @@
 // - VIRTUALIZADA (FlatList, altura de fila fija): solo dibuja lo visible → RAM baja.
 // - Filtros estilo Excel, celdas editables (menús para cliente/usuarios, calendario
 //   para el día), borrar filas, encabezado sticky y barras de scroll siempre visibles.
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, memo, createElement } from 'react'
 import {
   View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator,
   TextInput, Platform, Modal, Alert, Animated, Easing, KeyboardAvoidingView,
@@ -17,7 +17,7 @@ import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
 
 type Fila = CitaRetro & {
   orden: number | null; telefono: string | null; detalles_pago: string | null
-  dia_cita: string | null; prospecto: string | null; coordino: string | null; atendio: string | null
+  dia_cita: string | null; fecha_cita: string | null; prospecto: string | null; coordino: string | null; atendio: string | null
   estado_seguimiento: string | null; fecha_prox_seguimiento: string | null; retro_completada_at: string | null
 }
 type ColKey = keyof Fila
@@ -318,6 +318,7 @@ export default function CitasVenta() {
   const [profiles, setProfiles] = useState<{ id: string; nombre: string }[]>([])
   const [clientes, setClientes] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
   const [filtrosSel, setFiltrosSel] = useState<Record<string, Set<string>>>({})
+  const [rango, setRango] = useState<{ desde: string; hasta: string } | null>(null)  // YYYY-MM-DD
   const [dropCol, setDropCol] = useState<ColKey | null>(null)
   const [dropSel, setDropSel] = useState<Set<string>>(new Set())
   const [dropBusca, setDropBusca] = useState('')
@@ -348,7 +349,7 @@ export default function CitasVenta() {
   }
 
   const cargar = useCallback(async () => {
-    const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at'
+    const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, fecha_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at'
     const todas: Fila[] = []; const paso = 1000
     for (let desde = 0; ; desde += paso) {
       const { data, error } = await supabase.from('citas_venta').select(cols)
@@ -387,9 +388,34 @@ export default function CitasVenta() {
   }, [])
 
   const valorDe = (f: Fila, key: ColKey) => String((f[key] as string) ?? '').trim() || VACIO
-  const visibles = useMemo(() => filas.filter(f =>
-    Object.entries(filtrosSel).every(([k, set]) => set.has(valorDe(f, k as ColKey)))
-  ), [filas, filtrosSel])
+  const visibles = useMemo(() => filas.filter(f => {
+    if (!Object.entries(filtrosSel).every(([k, set]) => set.has(valorDe(f, k as ColKey)))) return false
+    if (rango) {
+      if (!f.fecha_cita) return false                     // sin fecha real → fuera del filtro de fechas
+      const d = f.fecha_cita.slice(0, 10)                 // YYYY-MM-DD
+      if (d < rango.desde || d > rango.hasta) return false
+    }
+    return true
+  }), [filas, filtrosSel, rango])
+
+  // Presets de rango (últimos N días, hasta hoy).
+  const hoyISO = () => new Date().toISOString().slice(0, 10)
+  const haceDias = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10) }
+  const preset = (dias: number) => setRango({ desde: haceDias(dias), hasta: hoyISO() })
+
+  function exportarCSV() {
+    const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s }
+    const encabezados = ['#', ...COLS.map(c => c.label)]
+    const filasCsv = visibles.map((f, i) => [i + 1, ...COLS.map(col => esc(f[col.key]))].join(','))
+    const csv = encabezados.map(esc).join(',') + '\n' + filasCsv.join('\n')
+    if (Platform.OS === 'web') {
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `citas-venta-${hoyISO()}.csv`
+      a.click()
+    }
+  }
 
   const valoresColumna = (key: ColKey): string[] => {
     const s = new Set<string>(); for (const f of filas) s.add(valorDe(f, key))
@@ -482,11 +508,33 @@ export default function CitasVenta() {
         </View>
         {Object.keys(filtrosSel).length > 0 && <TouchableOpacity style={st.btnLimpiar} onPress={() => setFiltrosSel({})}><Text style={st.btnLimpiarTxt}>✕ Quitar filtros</Text></TouchableOpacity>}
         <TouchableOpacity style={st.btnAgregar} onPress={() => setAgregar(true)}><Text style={st.btnAgregarTxt}>＋ Añadir cita</Text></TouchableOpacity>
+        <TouchableOpacity style={st.btnExport} onPress={exportarCSV}><Text style={st.btnExportTxt}>⬇ Exportar</Text></TouchableOpacity>
         <TouchableOpacity style={[st.btnImport, importando && { opacity: 0.6 }]} onPress={importarCSV} disabled={importando}>
           {importando ? <ActivityIndicator size="small" color="#fff" /> : <Text style={st.btnImportTxt}>⬆ Importar CSV</Text>}
         </TouchableOpacity>
       </View>
       {msg ? <Text style={[st.msg, { color: msg.startsWith('✓') ? '#1a6855' : msg.startsWith('✗') ? '#c0392b' : c.textMute }]}>{msg}</Text> : null}
+
+      {/* Filtro por fecha de la cita: presets + rango exacto */}
+      <View style={st.fechaBar}>
+        <Text style={[st.fechaLabel, { color: c.textSub }]}>📅 Fecha de cita:</Text>
+        {[{ d: 7, l: '1 semana' }, { d: 14, l: '2 semanas' }, { d: 30, l: '1 mes' }].map(p => {
+          const on = !!rango && rango.desde === haceDias(p.d) && rango.hasta === hoyISO()
+          return (
+            <TouchableOpacity key={p.d} style={[st.fechaChip, { borderColor: c.border }, on && st.fechaChipOn]} onPress={() => preset(p.d)}>
+              <Text style={[st.fechaChipTxt, { color: on ? '#fff' : c.textSub }]}>{p.l}</Text>
+            </TouchableOpacity>
+          )
+        })}
+        {Platform.OS === 'web' && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            {createElement('input', { type: 'date', value: rango?.desde ?? '', onChange: (e: any) => setRango(r => ({ desde: e.target.value, hasta: r?.hasta || hoyISO() })), style: { padding: '5px 7px', borderRadius: 7, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 12 } })}
+            <Text style={{ color: c.textMute }}>→</Text>
+            {createElement('input', { type: 'date', value: rango?.hasta ?? '', onChange: (e: any) => setRango(r => ({ desde: r?.desde || e.target.value, hasta: e.target.value })), style: { padding: '5px 7px', borderRadius: 7, border: `1px solid ${c.border}`, background: c.bg, color: c.text, fontSize: 12 } })}
+          </View>
+        )}
+        {rango && <TouchableOpacity onPress={() => setRango(null)}><Text style={st.fechaLimpiar}>✕ Quitar fecha</Text></TouchableOpacity>}
+      </View>
 
       {loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : (
         <View style={{ flex: 1, marginTop: 8, flexDirection: 'row' }}>
@@ -635,6 +683,14 @@ const st = StyleSheet.create({
   btnImportTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   btnAgregar: { backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   btnAgregarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  btnExport: { backgroundColor: '#1a6855', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+  btnExportTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  fechaBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' },
+  fechaLabel: { fontSize: 12.5, fontWeight: '700' },
+  fechaChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
+  fechaChipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  fechaChipTxt: { fontSize: 12.5, fontWeight: '700' },
+  fechaLimpiar: { color: '#c0392b', fontWeight: '800', fontSize: 12.5 },
   msg: { fontSize: 12.5, fontWeight: '600', marginTop: 4 },
   headRow: { flexDirection: 'row', borderTopLeftRadius: 8, borderTopRightRadius: 8 },
   headCell: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 11, borderRightWidth: StyleSheet.hairlineWidth, borderColor: '#ffffff22' },
