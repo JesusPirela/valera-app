@@ -42,10 +42,12 @@ BEGIN
     v_count := 0;
 
     IF m.categoria = 'propiedad' THEN
-      -- Solo propiedades que siguen publicadas (publicada = true).
-      -- Sin este filtro, publicar+despublicar y luego hacer un seguimiento
-      -- volvía a marcar la misión como completada por el sync SQL.
-      SELECT COUNT(*) INTO v_count
+      -- COUNT(DISTINCT): una propiedad publicada en varios portales genera varias
+      -- filas (una por portal); sin DISTINCT cada portal contaba como una publicación
+      -- distinta y bastaba publicar 1 propiedad en 10 portales para completar la misión.
+      -- Solo propiedades que siguen publicadas (publicada = true): publicar+despublicar
+      -- y luego hacer un seguimiento ya no vuelve a marcarla como completada.
+      SELECT COUNT(DISTINCT propiedad_id) INTO v_count
       FROM public.propiedad_publicacion
       WHERE user_id = v_user_id
         AND publicada = true
@@ -90,11 +92,9 @@ BEGIN
       CONTINUE;
     END IF;
 
-    IF NOT um_exists OR um_fecha IS NULL OR um_fecha < p_fecha THEN
-      v_prog := LEAST(v_count, m.meta);
-    ELSE
-      v_prog := GREATEST(COALESCE(um_prog, 0), LEAST(v_count, m.meta));
-    END IF;
+    -- Recalcular SIEMPRE desde el conteo real: permite corregir hacia abajo
+    -- (ej. propiedad despublicada) y evita inflar el progreso de un día anterior.
+    v_prog := LEAST(v_count, m.meta);
 
     v_compl := v_prog >= m.meta;
     v_nueva := v_compl AND NOT (um_exists AND um_compl AND um_fecha = p_fecha);

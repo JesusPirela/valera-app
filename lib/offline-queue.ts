@@ -91,15 +91,16 @@ export async function getPendingCount(): Promise<number> {
 // Solo ejecuta operaciones que pertenecen al usuario actualmente autenticado;
 // las de otros usuarios quedan en cola hasta que ese usuario vuelva a iniciar sesión.
 // Devuelve cuántas tuvieron éxito y cuántas fallaron.
-export async function flushQueue(): Promise<{ success: number; failed: number }> {
+export async function flushQueue(): Promise<{ success: number; failed: number; hadPublications: boolean }> {
   const queue = await getQueue()
-  if (queue.length === 0) return { success: 0, failed: 0 }
+  if (queue.length === 0) return { success: 0, failed: 0, hadPublications: false }
 
   const { data: { session } } = await supabase.auth.getSession()
   const currentUserId = session?.user?.id
 
   let success = 0
   let failed = 0
+  let hadPublications = false
   // Ops de otros usuarios se preservan intactas en la cola.
   const skippedOps: QueueOp[] = []
   const failedOps: QueueOp[] = []
@@ -133,6 +134,7 @@ export async function flushQueue(): Promise<{ success: number; failed: number }>
         // Antes, cualquier ok:false != 'limite' se relanzaba y la operación quedaba
         // atorada para siempre, mostrando "N cambios no se pudieron enviar" sin fin.
         if (error) throw error
+        hadPublications = true
       }
       success++
     } catch {
@@ -143,5 +145,5 @@ export async function flushQueue(): Promise<{ success: number; failed: number }>
 
   // Conservar: las que fallaron (para reintentar) + las de otros usuarios (para su sesión)
   await saveQueue([...skippedOps, ...failedOps])
-  return { success, failed }
+  return { success, failed, hadPublications }
 }

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { conReintento } from './redIntentos'
+import { queryClient } from './queryClient'
 
 // ── Tipos ──────────────────────────────────────────────────────
 export type AccionGamificacion =
@@ -152,8 +153,9 @@ export async function registrarSeguimiento(userId: string, clienteId: string): P
     // Recalcular misiones desde la fuente de verdad (no incrementos a ciegas).
     await sincronizarMisionesDiarias(userId)
     await sincronizarMisionesBase(userId).catch(() => {})
-    // Cumplir la meta diaria es lo que mantiene viva la racha.
-    await supabase.rpc('sincronizar_racha')
+    // sincronizarRacha (local) además llama actualizarMisionesStreak; el RPC
+    // directo lo omitía y las misiones de streak no avanzaban.
+    await sincronizarRacha(userId).catch(() => {})
   } catch (e) {
     console.warn('[Gamification] registrarSeguimiento:', e)
   }
@@ -173,7 +175,7 @@ export async function registrarContacto(
     })
     if (error || !data?.nuevo) return  // ajeno o ya contado hoy
     await sincronizarMisionesDiarias(userId)
-    await supabase.rpc('sincronizar_racha')
+    await sincronizarRacha(userId).catch(() => {})
   } catch (e) {
     console.warn('[Gamification] registrarContacto:', e)
   }
@@ -224,6 +226,9 @@ export async function actualizarMisionesPorCategoria(userId: string, categoria: 
     p_fecha: hoy,
   })
   if (errDiaria) console.warn('[Misiones diarias]', errDiaria.message)
+  // Invalidar cache para que la pantalla refleje el progreso recién guardado
+  // sin esperar a que expire el staleTime de 5 min o a que llegue un evento realtime.
+  queryClient.invalidateQueries({ queryKey: ['misiones'] })
   // Otorgar recompensas por misiones diarias recién completadas
   let completoAlgunaDiaria = false
   for (const c of completadas ?? []) {
@@ -569,6 +574,8 @@ export async function sincronizarMisionesDiarias(userId: string): Promise<void> 
     const { data: completadas } = await supabase.rpc('sincronizar_misiones_diarias_hoy', {
       p_fecha: hoy,
     })
+    // Refrescar la pantalla de misiones sin esperar al staleTime ni al realtime
+    queryClient.invalidateQueries({ queryKey: ['misiones'] })
     // Otorgar recompensas por misiones recién completadas
     for (const c of completadas ?? []) {
       if (c.recien_completada) {

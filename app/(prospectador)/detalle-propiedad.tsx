@@ -491,6 +491,8 @@ export default function DetallePropiedad() {
         setPublicada(data.publicada)
         setFechaPublicacion(data.fecha_publicacion)
         setVecesPublicada(data.veces_publicada ?? 0)
+        // Ya publicada antes → desbloquear sin requerir copiar desc. o descargar fotos.
+        if ((data.veces_publicada ?? 0) > 0) marcarDesbloqueada(id as string)
       }
     } catch { /* sin red: mantener estado actual, no resetear */ }
   }

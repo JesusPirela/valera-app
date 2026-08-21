@@ -1082,7 +1082,7 @@ export default function ProspectadorPropiedades() {
       empresaMatriz={item.nombre_constructora ? (empresaMatrizMap.get(item.nombre_constructora) ?? null) : null}
       totalPublicadores={conteoPubs?.get(item.id) ?? 0}
       isNuevaParaTi={!esAdmin && !viewsData?.get(item.id)}
-      isUnlocked={esAdmin || desbloqueadas.has(item.id)}
+      isUnlocked={esAdmin || desbloqueadas.has(item.id) || (publicaciones[item.id] ?? 0) > 0}
       onOpen={onOpenCard}
       onShare={onShareCard}
       onPublish={onPublishCard}

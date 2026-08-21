@@ -62,12 +62,27 @@ const bStyles = StyleSheet.create({
 const getHoyMX = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 
 function getMXDayBounds(hoyMX: string): { start: string; end: string } {
-  // Calcular el offset real de México ese día con Intl en lugar de un corte fijo
-  // por mes (que era incorrecto para la última semana de marzo cuando empieza DST).
-  const midday = new Date(hoyMX + 'T12:00:00Z')
-  const mxMidday = new Date(midday.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }))
-  const offsetMs = midday.getTime() - mxMidday.getTime()
-  const startMs = new Date(hoyMX + 'T00:00:00Z').getTime() + offsetMs
+  // Calcular el offset correcto para Mexico City, incluyendo semanas de transición DST.
+  // CDT (UTC-5): desde el 2° domingo de marzo hasta el 1° domingo de noviembre.
+  // CST (UTC-6): resto del año.
+  // new Date(localeString) no es fiable: lo parsea en la tz del dispositivo, no en MX,
+  // lo que daba offset = 0 para usuarios en CDT y desplazaba el rango 5h hacia atrás.
+  const [year, month, day] = hoyMX.split('-').map(Number)
+  let offsetHours: number
+  if (month === 3) {
+    // Transición DST: 2° domingo de marzo a las 2am
+    const firstDay = new Date(Date.UTC(year, 2, 1))
+    while (firstDay.getUTCDay() !== 0) firstDay.setUTCDate(firstDay.getUTCDate() + 1)
+    offsetHours = day >= firstDay.getUTCDate() + 7 ? 5 : 6
+  } else if (month === 11) {
+    // Fin DST: 1° domingo de noviembre
+    const firstDay = new Date(Date.UTC(year, 10, 1))
+    while (firstDay.getUTCDay() !== 0) firstDay.setUTCDate(firstDay.getUTCDate() + 1)
+    offsetHours = day >= firstDay.getUTCDate() ? 6 : 5
+  } else {
+    offsetHours = (month >= 4 && month <= 10) ? 5 : 6
+  }
+  const startMs = new Date(hoyMX + 'T00:00:00Z').getTime() + offsetHours * 3600000
   return {
     start: new Date(startMs).toISOString(),
     end:   new Date(startMs + 86400000).toISOString(),
@@ -180,11 +195,13 @@ export default function Misiones() {
     try { await refetch() } catch {} finally { setRefreshing(false) }
   }, [refetch])
 
-  // Refresco en segundo plano al enfocar solo si el dato tiene más de 5 minutos.
+  // Refrescar en segundo plano al enfocar: misiones cambian tras cada acción del
+  // usuario (publicar, seguimiento, contacto). Si el usuario actúa y vuelve en
+  // menos de 5 min (antes bloqueado por staleTime), vería datos cacheados.
+  // refetch() con datos existentes no muestra spinner — actualiza silenciosamente.
   useFocusEffect(useCallback(() => {
-    const st = queryClient.getQueryState(['misiones'])
-    if (!st?.dataUpdatedAt || Date.now() - st.dataUpdatedAt > 1000 * 60 * 5) refetch()
-  }, [queryClient, refetch]))
+    refetch()
+  }, [refetch]))
 
   // Realtime: cambios en las misiones/stats del usuario refrescan el cache en vivo.
   useEffect(() => {

@@ -31,12 +31,17 @@ export function useOfflineSync(): OfflineSyncState {
     setIsSyncing(true)
     setSyncError(null)
     try {
-      const { success, failed } = await flushQueue()
+      const { success, failed, hadPublications } = await flushQueue()
       if (success > 0) {
         // Invalidar cache para reflejar los datos recién guardados
         queryClient.invalidateQueries({ queryKey: ['clientes'] })
         // Publicaciones encoladas ya aplicadas → refrescar contadores x/10
         queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
+        if (hadPublications) {
+          // Las publicaciones offline procesadas actualizan fecha_publicacion a AHORA:
+          // el conteo diario de misiones cambió → refrescar para evitar progreso stale.
+          queryClient.invalidateQueries({ queryKey: ['misiones'] })
+        }
       }
       if (failed > 0) {
         setSyncError(`${failed} ${failed > 1 ? 'cambios no se pudieron' : 'cambio no se pudo'} enviar`)
