@@ -1046,6 +1046,10 @@ export default function DetallePropiedad() {
       const esc = (s: string | null | undefined) =>
         (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
+      const en = lang === 'en'
+      // Título de sección con la regla dorada→azul característica de la ficha.
+      const sec = (t: string) => `<div class="seccion">${esc(t)}</div><div class="seccion-rule"></div>`
+
       // Convierte emoji en <img> embebida como data URI para que se vean en el PDF.
       // Android: descarga PNG 72x72 de Twemoji vía FileSystem (mismo mecanismo que
       // las fotos de la propiedad). data:image/png siempre funciona en el renderer
@@ -1186,7 +1190,7 @@ export default function DetallePropiedad() {
       // sigue de una página a la otra, sin huecos.
       const fotosRestantes = imagenesConSrc.slice(1)
       const galeriaHTML = fotosRestantes.length > 0
-        ? `<div class="seccion">Galería</div>
+        ? `<div class="seccion-grupo">${sec(lang === 'en' ? 'Photo gallery' : 'Galería de fotos')}</div>
            <div class="fotos">${fotosRestantes.map(img => `<img src="${img.src}" class="foto-galeria" />`).join('')}</div>`
         : ''
 
@@ -1209,7 +1213,7 @@ export default function DetallePropiedad() {
         const mapSrc = await imagenABase64(staticUrl)
         mapaHTML = `
           <div class="seccion-grupo">
-            <div class="seccion">Ubicación</div>
+            ${sec(lang === 'en' ? 'Location' : 'Ubicación')}
             <div class="mapa-box">
               ${mapSrc ? `<img src="${mapSrc}" class="mapa-img" />` : ''}
               <div class="mapa-dir">📍 ${esc(propiedad.direccion)}</div>
@@ -1225,7 +1229,6 @@ export default function DetallePropiedad() {
       // partir de sus datos estructurados. No se inventan jardines, albercas ni
       // cocinas: la BD no los registra, así que no aparecen. Si en el futuro se
       // capturan más espacios, se agregan aquí.
-      const en = lang === 'en'
       const espacios: { emoji: string; nombre: string }[] = []
       const nRec = propiedad.recamaras ?? 0
       for (let i = 0; i < nRec; i++) {
@@ -1266,7 +1269,7 @@ export default function DetallePropiedad() {
         const filas = espacios.map(e =>
           `<div class="espacio"><span class="espacio-emoji">${aplicarEmojis(e.emoji, mapaEsp)}</span><span class="espacio-nombre">${esc(e.nombre)}</span></div>`
         ).join('')
-        espaciosHTML = `<div class="seccion-grupo"><div class="seccion">${en ? 'Layout' : 'Distribución de espacios'}</div><div class="espacios">${filas}</div></div>`
+        espaciosHTML = `<div class="seccion-grupo">${sec(en ? 'Layout' : 'Distribución de espacios')}<div class="espacios">${filas}</div></div>`
       }
 
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${propiedad.codigo ?? 'ficha'}</title><style>
@@ -1274,62 +1277,77 @@ export default function DetallePropiedad() {
           box-sizing: border-box; margin: 0; padding: 0;
           -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;
         }
-        body { font-family: Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; }
-        .header { background: ${colorFicha}; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
-        .header-left { flex: 1; }
-        .header-logo { height: 130px; max-width: 280px; object-fit: contain; flex-shrink: 0; margin-left: 16px; }
-        .codigo { font-size: 13px; color: #FFD700; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
-        .titulo { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 4px; }
-        .tipo-op { font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 10px; }
-        .precio { font-size: 30px; font-weight: 800; color: #FFD700; margin-bottom: 5px; }
-        .direccion { font-size: 14px; color: rgba(255,255,255,0.8); }
-        .body { padding: 20px 28px; }
-        .imagen-principal-wrap { width: 100%; height: 420px; border-radius: 10px; overflow: hidden; margin-bottom: 16px; background: #eef2f3; display: flex; align-items: center; justify-content: center; }
-        .imagen-principal { width: 100%; height: 100%; object-fit: contain; display: block; }
-        .inmob-logo-wrap { text-align: center; margin-bottom: 16px; }
-        .inmob-logo { max-height: 90px; max-width: 240px; object-fit: contain; }
-        .inmob-nombre { font-size: 12px; color: #888; font-weight: 600; margin-top: 4px; }
-        .fotos { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; }
-        .foto-galeria { width: calc(50% - 7px); height: 330px; object-fit: contain; background: #eef2f3; border-radius: 8px; border: 1px solid #e0e8ea; break-inside: avoid; page-break-inside: avoid; }
-        .seccion { font-size: 10px; font-weight: 800; color: #888; letter-spacing: 1.2px; text-transform: uppercase; margin: 20px 0 10px; display: block; clear: both; }
-        .cars { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; overflow: hidden; }
-        .car-val { display: block; font-size: 20px; font-weight: 800; color: ${colorFicha}; }
-        .car-lbl { display: block; font-size: 11px; color: #888; margin-top: 2px; }
-        .desc { display: block; clear: both; font-size: 14px; font-weight: 500; line-height: 1.45; color: #222; background: #f7f9fa; border: 1px solid #e0e8ea; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; word-break: break-word; white-space: normal; overflow: visible; break-inside: avoid; page-break-inside: avoid; }
-        .mapa-box { border: 1.5px solid #e0e8ea; border-radius: 10px; overflow: hidden; margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
-        .mapa-img { width: 100%; height: 340px; object-fit: cover; display: block; }
-        .mapa-dir { background: #f0f5f5; padding: 10px 14px; font-size: 12px; color: ${colorFicha}; font-weight: 600; }
-        .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; clear: both; }
-        .galeria-grupo { break-inside: avoid; page-break-inside: avoid; }
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1a1a2e; background: #f5f8fc; }
+        /* Header azul, contenido centrado (logo → código → nombre → ciudad → precio → tipo). */
+        .header { background: ${colorFicha}; background-image: radial-gradient(circle at 50% -10%, rgba(255,255,255,0.14), rgba(255,255,255,0) 55%); padding: 34px 32px 26px; text-align: center; }
+        .header-logo { height: 116px; max-width: 220px; object-fit: contain; border-radius: 16px; margin: 0 auto 16px; display: block; }
+        .codigo { font-size: 11px; color: rgba(255,255,255,0.72); font-weight: 700; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 10px; }
+        .titulo { font-size: 27px; font-weight: 800; color: #fff; margin-bottom: 6px; line-height: 1.15; }
+        .ciudad { font-size: 13px; color: rgba(255,255,255,0.72); margin-bottom: 18px; }
+        .precio { font-size: 33px; font-weight: 800; color: #FFD700; margin-bottom: 5px; letter-spacing: 0.5px; }
+        .tipo-op { font-size: 11px; color: rgba(255,255,255,0.72); font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; }
+        .hero { margin-top: 24px; border-radius: 12px; overflow: hidden; min-height: 220px; display: flex; align-items: center; justify-content: center; }
+        .hero img { width: 100%; max-height: 380px; object-fit: contain; display: block; }
+        /* Cuerpo gris claro */
+        .body { padding: 26px 32px 30px; background: #f5f8fc; }
+        .inmob-logo-wrap { text-align: center; margin-bottom: 20px; }
+        .inmob-logo { max-height: 74px; max-width: 220px; object-fit: contain; }
+        .inmob-nombre { font-size: 11px; color: #8a94a6; font-weight: 600; margin-top: 4px; }
+        /* Título de sección + regla dorada→azul */
+        .seccion { font-size: 13px; font-weight: 800; color: ${colorFicha}; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 24px; clear: both; }
+        .seccion-rule { height: 3px; border-radius: 2px; margin: 8px 0 16px; background: linear-gradient(to right, #FFD700 0, #FFD700 64px, ${colorFicha} 64px, ${colorFicha} 100%); }
         .seccion-grupo { break-inside: avoid; page-break-inside: avoid; overflow: hidden; }
-        .car { background: #f0f5f5; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 70px; break-inside: avoid; page-break-inside: avoid; }
-        .espacios { display: flex; flex-wrap: wrap; margin-bottom: 8px; }
-        .espacio { width: 50%; display: flex; align-items: center; gap: 8px; padding: 7px 0; break-inside: avoid; page-break-inside: avoid; }
-        .espacio-emoji { font-size: 16px; line-height: 1; flex-shrink: 0; }
-        .espacio-nombre { font-size: 13px; font-weight: 600; color: #333; }
+        /* Tarjetas de características: 3 por fila, blancas, con borde izquierdo azul */
+        .cars { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 4px; }
+        .car { width: calc(33.333% - 10px); background: #fff; border-radius: 10px; border-left: 4px solid ${colorFicha}; padding: 16px 12px; text-align: center; box-shadow: 0 1px 3px rgba(10,42,94,0.08); break-inside: avoid; page-break-inside: avoid; }
+        .car-val { display: block; font-size: 25px; font-weight: 800; color: ${colorFicha}; }
+        .car-lbl { display: block; font-size: 10px; color: #8a94a6; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; margin-top: 5px; }
+        /* Descripción */
+        .desc { display: block; clear: both; font-size: 14px; font-weight: 500; line-height: 1.55; color: #444; margin-bottom: 4px; word-break: break-word; white-space: normal; overflow: visible; break-inside: avoid; page-break-inside: avoid; }
+        /* Distribución de espacios: 2 columnas, etiqueta azul negrita */
+        .espacios { display: flex; flex-wrap: wrap; margin-bottom: 4px; }
+        .espacio { width: 50%; display: flex; align-items: center; gap: 9px; padding: 8px 12px 8px 0; break-inside: avoid; page-break-inside: avoid; }
+        .espacio-emoji { font-size: 17px; line-height: 1; flex-shrink: 0; }
+        .espacio-nombre { font-size: 13px; font-weight: 700; color: ${colorFicha}; }
+        /* Galería: 3 por fila */
+        .fotos { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
+        .foto-galeria { width: calc(33.333% - 8px); height: 190px; object-fit: cover; background: ${colorFicha}; border-radius: 8px; break-inside: avoid; page-break-inside: avoid; }
+        /* Mapa */
+        .mapa-box { border-radius: 10px; overflow: hidden; margin-bottom: 4px; box-shadow: 0 1px 3px rgba(10,42,94,0.08); break-inside: avoid; page-break-inside: avoid; }
+        .mapa-img { width: 100%; height: 320px; object-fit: cover; display: block; }
+        .mapa-dir { background: #fff; padding: 10px 14px; font-size: 12px; color: ${colorFicha}; font-weight: 600; }
+        /* Footer azul con borde dorado */
+        .footer { background: ${colorFicha}; border-top: 4px solid #FFD700; text-align: center; padding: 24px 20px; }
+        .footer-marca { color: #FFD700; font-weight: 800; font-size: 14px; letter-spacing: 1.5px; margin-bottom: 7px; }
+        .footer-linea { color: rgba(255,255,255,0.85); font-size: 12px; margin-bottom: 3px; }
+        .footer-handle { font-weight: 700; color: #fff; }
+        .footer-eslogan { color: rgba(255,255,255,0.6); font-size: 11px; font-style: italic; margin-top: 9px; }
       </style></head><body>
       <div class="header">
-        <div class="header-left">
-          <div class="codigo">${esc(propiedad.codigo)}</div>
-          <div class="titulo">${esc(tituloTxt)}</div>
-          <div class="tipo-op">${esc(tipoOp)}</div>
-          <div class="precio">${precio}</div>
-          <div class="direccion">${esc(propiedad.direccion)}</div>
-        </div>
         ${logoSrc ? `<img src="${logoSrc}" class="header-logo" />` : ''}
+        <div class="codigo">${esc(propiedad.codigo)}</div>
+        <div class="titulo">${esc(tituloTxt)}</div>
+        <div class="ciudad">${esc(propiedad.direccion)}</div>
+        <div class="precio">${precio}</div>
+        <div class="tipo-op">${esc(tipoOp)} • MXN</div>
+        ${imagenPrincipal ? `<div class="hero"><img src="${imagenPrincipal.src}" /></div>` : ''}
       </div>
       <div class="body">
-        ${imagenPrincipal ? `<div class="imagen-principal-wrap"><img src="${imagenPrincipal.src}" class="imagen-principal" /></div>` : ''}
         ${inmobiliariaLogoSrc ? `<div class="inmob-logo-wrap">
           <img src="${inmobiliariaLogoSrc}" class="inmob-logo" />
           ${propiedad.inmobiliarias?.nombre ? `<div class="inmob-nombre">${esc(propiedad.inmobiliarias.nombre)}</div>` : ''}
         </div>` : ''}
-        ${cars.length > 0 ? `<div class="seccion-grupo"><div class="seccion">${esc(tf(lang, 'caracteristicas'))}</div><div class="cars">${cars.join('')}</div></div>` : ''}
-        ${descHTML !== null && descHTML.trim() !== '' ? `<div class="seccion-grupo"><div class="seccion">${esc(tf(lang, 'descripcion'))}</div><div class="desc">${descHTML}</div></div>` : ''}
+        ${cars.length > 0 ? `<div class="seccion-grupo"><div class="cars">${cars.join('')}</div></div>` : ''}
+        ${descHTML !== null && descHTML.trim() !== '' ? `<div class="seccion-grupo">${sec(tf(lang, 'descripcion'))}<div class="desc">${descHTML}</div></div>` : ''}
         ${espaciosHTML}
         ${galeriaHTML}
         ${mapaHTML}
-        <div class="footer">Valera Real Estate · valerarealestate.com</div>
+      </div>
+      <div class="footer">
+        <div class="footer-marca">VALERA REAL ESTATE</div>
+        <div class="footer-linea">${en ? 'Follow us on Instagram: ' : 'Síguenos en Instagram: '}<span class="footer-handle">@valerarealestate</span></div>
+        <div class="footer-linea">valerarealstate.com</div>
+        <div class="footer-eslogan">${en ? 'The real estate solution that will transform your life' : 'La solución inmobiliaria que transformará tu vida'}</div>
       </div>
       </body></html>`
 
