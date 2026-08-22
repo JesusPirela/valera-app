@@ -499,23 +499,25 @@ async function ejecutarHerramienta(
         }
       }
 
-      const columna = metrica === 'racha' ? 'racha_actual' : metrica === 'monedas' ? 'monedas' : 'xp_total'
+      const columna = metrica === 'racha' ? 'streak_dias' : metrica === 'monedas' ? 'valera_coins' : 'xp'
       const { data: stats } = await supabase
         .from('user_stats')
-        .select(`id, xp_total, nivel, racha_actual, racha_max, monedas`)
+        .select('id, xp, valera_coins, streak_dias')
         .order(columna, { ascending: false })
         .limit(limite)
+
+      // nivel se calcula desde xp: L = 1 + floor((-485 + sqrt(235225 + 60*xp)) / 30)
+      const calcNivel = (xp: number) => xp <= 0 ? 1 : 1 + Math.floor((-485 + Math.sqrt(235225 + 60 * xp)) / 30)
 
       return {
         metrica,
         ranking: (stats ?? []).map((s: any, i: number) => ({
           posicion: i + 1,
           nombre: nombresMap.get(s.id) ?? s.id,
-          xp: s.xp_total,
-          nivel: s.nivel,
-          racha_actual: s.racha_actual,
-          racha_max: s.racha_max,
-          monedas: s.monedas,
+          xp: s.xp,
+          nivel: calcNivel(s.xp ?? 0),
+          racha_dias: s.streak_dias,
+          monedas: s.valera_coins,
         })),
       }
     }
@@ -525,7 +527,7 @@ async function ejecutarHerramienta(
       const nombresMap = await buildNombresMap(supabase)
 
       const [cursosRes, progresoRes, certRes] = await Promise.all([
-        supabase.from('vu_cursos').select('id, titulo, activo').eq('activo', true),
+        supabase.from('vu_cursos').select('id, titulo, nivel, publicado').eq('publicado', true),
         supabase.from('vu_progreso').select('user_id, completada_at').not('completada_at', 'is', null),
         supabase.from('vu_certificados').select('user_id').limit(5000),
       ])
@@ -566,17 +568,20 @@ async function ejecutarHerramienta(
 
       const { data: sesiones } = await supabase
         .from('user_sessions')
-        .select('user_id, duracion_minutos, created_at')
-        .gte('created_at', inicio.toISOString())
+        .select('user_id, inicio, fin')
+        .gte('inicio', inicio.toISOString())
         .limit(5000)
 
       if (!sesiones?.length) {
         return { mensaje: 'No hay datos de sesiones en este período', periodo_dias: dias }
       }
 
+      const ahora2 = Date.now()
       const tiempos: Record<string, number> = {}
       for (const s of sesiones) {
-        tiempos[s.user_id] = (tiempos[s.user_id] || 0) + (s.duracion_minutos ?? 0)
+        const finMs = s.fin ? new Date(s.fin).getTime() : ahora2
+        const mins = Math.max(0, (finMs - new Date(s.inicio).getTime()) / 60000)
+        tiempos[s.user_id] = (tiempos[s.user_id] || 0) + mins
       }
 
       const ranking = Object.entries(tiempos)
@@ -670,7 +675,7 @@ async function ejecutarHerramienta(
   }
 }
 
-const MODELOS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-exp']
+const MODELOS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
 
 async function llamarGemini(
   apiKey: string,
@@ -687,7 +692,7 @@ async function llamarGemini(
         contents,
         tools: [{ function_declarations: HERRAMIENTAS }],
         tool_config: { function_calling_config: { mode: 'AUTO' } },
-        generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+        generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
       }),
     },
   )
@@ -724,14 +729,16 @@ serve(async (req) => {
       intentos++
 
       let resultado: { ok: boolean; json?: any; err?: string } = { ok: false, err: 'Sin modelos' }
+      let primerError = ''
       for (const modelo of MODELOS) {
         resultado = await llamarGemini(geminiKey, modelo, contents)
         if (resultado.ok) break
+        if (!primerError) primerError = `${modelo}: ${resultado.err}`
         console.warn(`[valera-ai] ${modelo} falló: ${resultado.err}`)
       }
 
       if (!resultado.ok || !resultado.json) {
-        throw new Error(`Gemini no respondió: ${resultado.err}`)
+        throw new Error(`Gemini no respondió: ${primerError}`)
       }
 
       const parts: any[] = resultado.json?.candidates?.[0]?.content?.parts ?? []
@@ -760,6 +767,7 @@ serve(async (req) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[valera-ai]', msg)
-    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: CORS })
+    // Devolvemos 200 para que el cliente pueda leer el error real en data.error
+    return new Response(JSON.stringify({ error: msg }), { headers: CORS })
   }
 })

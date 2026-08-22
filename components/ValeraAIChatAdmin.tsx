@@ -55,8 +55,9 @@ export default function ValeraAIChatAdmin() {
         body: { mensaje: msg, historial },
       })
 
-      if (error || data?.error) {
-        throw new Error(data?.error ?? error?.message ?? 'Error de conexión')
+      const errorMsg = data?.error ?? error?.message
+      if (errorMsg) {
+        throw new Error(errorMsg)
       }
 
       setMensajes(prev => [...prev, {
