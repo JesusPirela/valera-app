@@ -675,13 +675,13 @@ async function ejecutarHerramienta(
   }
 }
 
-const MODELOS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+const MODELOS = ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash']
 
 async function llamarGemini(
   apiKey: string,
   model: string,
   contents: unknown[],
-): Promise<{ ok: boolean; json?: any; err?: string }> {
+): Promise<{ ok: boolean; json?: any; err?: string; retryAfter?: number }> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
@@ -697,7 +697,12 @@ async function llamarGemini(
     },
   )
   const json = await res.json()
-  if (!res.ok) return { ok: false, err: json?.error?.message ?? `HTTP ${res.status}` }
+  if (!res.ok) {
+    const errMsg = json?.error?.message ?? `HTTP ${res.status}`
+    const match = errMsg.match(/Please retry in ([\d.]+)s/)
+    const retryAfter = match ? Math.ceil(parseFloat(match[1])) : undefined
+    return { ok: false, err: errMsg, retryAfter }
+  }
   return { ok: true, json }
 }
 
@@ -728,17 +733,27 @@ serve(async (req) => {
     while (!respuestaFinal && intentos < 5) {
       intentos++
 
-      let resultado: { ok: boolean; json?: any; err?: string } = { ok: false, err: 'Sin modelos' }
+      let resultado: { ok: boolean; json?: any; err?: string; retryAfter?: number } = { ok: false, err: 'Sin modelos' }
       let primerError = ''
       for (const modelo of MODELOS) {
         resultado = await llamarGemini(geminiKey, modelo, contents)
         if (resultado.ok) break
+        // Si es quota con tiempo de espera corto, esperamos y reintentamos una vez
+        if (resultado.retryAfter && resultado.retryAfter <= 25) {
+          console.log(`[valera-ai] ${modelo} quota, esperando ${resultado.retryAfter}s...`)
+          await new Promise(r => setTimeout(r, resultado.retryAfter! * 1000))
+          resultado = await llamarGemini(geminiKey, modelo, contents)
+          if (resultado.ok) break
+        }
         if (!primerError) primerError = `${modelo}: ${resultado.err}`
-        console.warn(`[valera-ai] ${modelo} falló: ${resultado.err}`)
+        console.warn(`[valera-ai] ${modelo} falló definitivamente: ${resultado.err}`)
       }
 
       if (!resultado.ok || !resultado.json) {
-        throw new Error(`Gemini no respondió: ${primerError}`)
+        const esQuota = primerError.toLowerCase().includes('quota') || primerError.toLowerCase().includes('exceeded')
+        throw new Error(esQuota
+          ? 'El servicio de IA está temporalmente saturado. Espera unos segundos e intenta de nuevo.'
+          : `Gemini no respondió: ${primerError}`)
       }
 
       const parts: any[] = resultado.json?.candidates?.[0]?.content?.parts ?? []
