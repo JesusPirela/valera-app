@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Image, Platform, Text, TouchableOpacity, View, StyleSheet } from 'react-native'
+import ValeraAIChatAdmin from '../../components/ValeraAIChatAdmin'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { Stack, router, usePathname, useGlobalSearchParams } from 'expo-router'
 import * as Notifications from 'expo-notifications'
@@ -136,7 +137,7 @@ export default function AdminLayout() {
   if (!vistaComoListo || vistaComo) return null
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
     <RetroPendientesPopup enabled />
     <Stack
       screenOptions={{
@@ -183,7 +184,8 @@ export default function AdminLayout() {
         ),
       }}
     />
-    </>
+    <ValeraAIChatAdmin />
+    </View>
   )
 }
 
