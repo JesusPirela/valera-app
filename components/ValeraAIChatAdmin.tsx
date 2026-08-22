@@ -16,9 +16,14 @@ type Mensaje = {
 const SUGERENCIAS = [
   '¿Cómo va el equipo hoy?',
   '¿Quién no ha publicado esta semana?',
-  '¿Cuántos leads hay sin asignar?',
+  '¿Cómo van las misiones hoy?',
+  '¿Quién lidera el ranking de XP?',
+  '¿Cuántas citas hay esta semana?',
+  '¿Quién tiene recordatorios vencidos?',
   'Muéstrame el ranking de publicaciones',
   '¿Cómo está el inventario?',
+  '¿Cómo va Valera University?',
+  '¿Cuántos leads hay sin asignar?',
 ]
 
 export default function ValeraAIChatAdmin() {
@@ -136,7 +141,7 @@ export default function ValeraAIChatAdmin() {
                   <Text style={s.bienvenidaIcon}>✦</Text>
                   <Text style={s.bienvenidaTitulo}>Hola, soy Valera IA</Text>
                   <Text style={s.bienvenidaSub}>
-                    Tu asistente de administración. Pregúntame sobre el equipo, inventario, leads o el pipeline de clientes.
+                    Tu asistente de administración. Pregúntame sobre actividad del equipo, citas, misiones, XP, university, campañas, recordatorios vencidos, inventario y más.
                   </Text>
                   <View style={s.sugerencias}>
                     {SUGERENCIAS.map((s2, i) => (
