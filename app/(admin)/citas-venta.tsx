@@ -319,6 +319,7 @@ export default function CitasVenta() {
   const [clientes, setClientes] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
   const [filtrosSel, setFiltrosSel] = useState<Record<string, Set<string>>>({})
   const [rango, setRango] = useState<{ desde: string; hasta: string } | null>(null)  // YYYY-MM-DD
+  const [ordenFecha, setOrdenFecha] = useState<'desc' | 'asc' | null>(null)  // orden por fecha de la cita (clic en la columna)
   const [dropCol, setDropCol] = useState<ColKey | null>(null)
   const [dropSel, setDropSel] = useState<Set<string>>(new Set())
   const [dropBusca, setDropBusca] = useState('')
@@ -388,15 +389,36 @@ export default function CitasVenta() {
   }, [])
 
   const valorDe = (f: Fila, key: ColKey) => String((f[key] as string) ?? '').trim() || VACIO
-  const visibles = useMemo(() => filas.filter(f => {
-    if (!Object.entries(filtrosSel).every(([k, set]) => set.has(valorDe(f, k as ColKey)))) return false
-    if (rango) {
-      if (!f.fecha_cita) return false                     // sin fecha real → fuera del filtro de fechas
-      const d = f.fecha_cita.slice(0, 10)                 // YYYY-MM-DD
-      if (d < rango.desde || d > rango.hasta) return false
+  const visibles = useMemo(() => {
+    const arr = filas.filter(f => {
+      if (!Object.entries(filtrosSel).every(([k, set]) => set.has(valorDe(f, k as ColKey)))) return false
+      if (rango) {
+        if (!f.fecha_cita) return false                     // sin fecha real → fuera del filtro de fechas
+        const d = f.fecha_cita.slice(0, 10)                 // YYYY-MM-DD
+        if (d < rango.desde || d > rango.hasta) return false
+      }
+      return true
+    })
+    // Orden por fecha de la cita (clic en la columna "Día de la cita"). Las filas
+    // sin fecha_cita real siempre van al final, no se mezclan con las fechadas.
+    if (ordenFecha) {
+      const dir = ordenFecha === 'desc' ? -1 : 1
+      arr.sort((a, b) => {
+        if (!a.fecha_cita && !b.fecha_cita) return 0
+        if (!a.fecha_cita) return 1
+        if (!b.fecha_cita) return -1
+        return a.fecha_cita < b.fecha_cita ? -dir : a.fecha_cita > b.fecha_cita ? dir : 0
+      })
     }
-    return true
-  }), [filas, filtrosSel, rango])
+    return arr
+  }, [filas, filtrosSel, rango, ordenFecha])
+
+  // Cicla: sin orden → más reciente primero → más antigua primero → sin orden.
+  function toggleOrdenFecha() {
+    setOrdenFecha(o => (o === null ? 'desc' : o === 'desc' ? 'asc' : null))
+    listRef.current?.scrollToOffset({ offset: 0, animated: false })
+    vbarRef.current?.scrollTo({ y: 0, animated: false })
+  }
 
   // Presets de rango (últimos N días, hasta hoy).
   const hoyISO = () => new Date().toISOString().slice(0, 10)
@@ -545,9 +567,20 @@ export default function CitasVenta() {
                 <Text style={[st.headCell, st.headTxt, { width: NUM_W, textAlign: 'center' }]}>#</Text>
                 {COLS.map(col => {
                   const activo = !!filtrosSel[col.key]
+                  const esFecha = col.tipo === 'fecha'
                   return (
                     <TouchableOpacity key={col.key} style={[st.headCell, { width: col.w }]} activeOpacity={0.7} onPress={() => abrirDropdown(col.key)}>
                       <Text style={st.headTxt} numberOfLines={2}>{col.label}</Text>
+                      {esFecha && (
+                        <TouchableOpacity
+                          onPress={(e: any) => { e?.stopPropagation?.(); toggleOrdenFecha() }}
+                          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} style={st.sortBtn}
+                        >
+                          <Text style={[st.sortTxt, ordenFecha != null && st.sortActivo]}>
+                            {ordenFecha === 'desc' ? '↓' : ordenFecha === 'asc' ? '↑' : '↕'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                       <Text style={[st.embudo, activo && st.embudoActivo]}>{activo ? '▼●' : '▾'}</Text>
                     </TouchableOpacity>
                   )
@@ -697,6 +730,9 @@ const st = StyleSheet.create({
   headTxt: { flex: 1, fontSize: 11.5, fontWeight: '800', color: '#fff' },
   embudo: { color: '#ffffff99', fontSize: 12, fontWeight: '900' },
   embudoActivo: { color: '#f4c752' },
+  sortBtn: { paddingHorizontal: 3 },
+  sortTxt: { color: '#ffffff99', fontSize: 13, fontWeight: '900' },
+  sortActivo: { color: '#f4c752' },
   row: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'stretch', overflow: 'hidden' },
   cell: { paddingHorizontal: 8, paddingVertical: 8, borderRightWidth: StyleSheet.hairlineWidth, justifyContent: 'center', overflow: 'hidden' },
   retroBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
