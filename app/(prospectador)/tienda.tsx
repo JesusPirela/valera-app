@@ -9,7 +9,9 @@ import { getUsuarioActual } from '../../lib/sesion'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { comprarItem, getCoinsDisplay, registrarPremioRuleta, calcularNivel } from '../../lib/gamification'
 import { RuletaModal, checkMilestone, CONFIG_DEFAULT, type Premio, type RuletaConfig } from '../../components/RuletaModal'
-import { PATRONES_ANIMADOS, AnimatedGradientView } from '../../lib/patrones'
+import { PATRONES_ANIMADOS, AnimatedGradientView, type PatronAnimado } from '../../lib/patrones'
+import { AVATARES_PREMIUM, type AvatarPremium } from '../../lib/avatares'
+import { RevelarPremioModal } from '../../components/RevelarPremioModal'
 
 type StoreItem = {
   id: string
@@ -70,6 +72,8 @@ export default function Tienda() {
   const [loading, setLoading]     = useState(true)
   const [comprando, setComprando]       = useState<string | null>(null)
   const [comprandoPatron, setComprandoPatron] = useState<string | null>(null)
+  // Revelado del premio entregado al instante (avatar/color al azar)
+  const [revelar, setRevelar] = useState<{ tipo: 'avatar' | 'color'; avatar?: AvatarPremium; patron?: PatronAnimado } | null>(null)
   const [showRuleta, setShowRuleta]           = useState(false)
   const [ruletaMilestone, setRuletaMilestone] = useState(false)
   const [milestoneNivel, setMilestoneNivel]   = useState<number | undefined>()
@@ -174,16 +178,45 @@ export default function Tienda() {
       alerta(`Necesitas ${item.costo_coins} Valera Coins. Tienes ${coins}.`)
       return
     }
+
+    // Packs de avatar/color: se entregan AL INSTANTE con un item al azar que el
+    // usuario aún no tenga. El cliente elige el random (conoce el catálogo y lo
+    // desbloqueado) y el servidor lo aplica de forma atómica. Cero admin.
+    const esPackAvatar = item.tipo === 'pack_avatar'
+    const esPackColor  = item.tipo === 'pack_color'
+    let valorElegido: string | null = null
+    let avatarElegido: AvatarPremium | undefined
+    let patronElegido: PatronAnimado | undefined
+    if (esPackAvatar) {
+      const faltan = AVATARES_PREMIUM.filter(a => !avatarsDesbloqueados.includes(a.emoji))
+      if (faltan.length === 0) { alerta('¡Ya tienes todos los avatares! 🎉'); return }
+      avatarElegido = faltan[Math.floor(Math.random() * faltan.length)]
+      valorElegido = avatarElegido.emoji
+    } else if (esPackColor) {
+      const faltan = PATRONES_ANIMADOS.filter(p => !coloresDesbloqueados.includes(p.id))
+      if (faltan.length === 0) { alerta('¡Ya tienes todos los colores! 🎉'); return }
+      patronElegido = faltan[Math.floor(Math.random() * faltan.length)]
+      valorElegido = patronElegido.id
+    }
+
     setComprando(item.id)
-    const { ok, error } = await comprarItem(userId, item.id, item.nombre, item.costo_coins)
+    const { ok, error, entregado } = await comprarItem(userId, item.id, item.nombre, item.costo_coins, valorElegido)
     setComprando(null)
 
-    if (ok) {
-      setCoins(prev => prev - item.costo_coins)
-      alerta(`¡Compraste "${item.nombre}"! 🎉\nEl equipo de Valera te contactará para entregar tu recompensa.`)
+    if (!ok) { alerta(error ?? 'Error al procesar la compra'); return }
+    setCoins(prev => prev - item.costo_coins)
+
+    if (entregado && esPackAvatar && avatarElegido) {
+      setAvatarsDesbloqueados(prev => [...prev, avatarElegido!.emoji])
+      setRevelar({ tipo: 'avatar', avatar: avatarElegido })
+      cargar()
+    } else if (entregado && esPackColor && patronElegido) {
+      setColoresDesbloqueados(prev => [...prev, patronElegido!.id])
+      setRevelar({ tipo: 'color', patron: patronElegido })
       cargar()
     } else {
-      alerta(error ?? 'Error al procesar la compra')
+      alerta(`¡Compraste "${item.nombre}"! 🎉\nEl equipo de Valera te contactará para entregar tu recompensa.`)
+      cargar()
     }
   }
 
@@ -631,6 +664,13 @@ export default function Tienda() {
         onClose={() => setShowRuleta(false)}
         onGanar={onGanarPremio}
         onGirarOtraVez={ruletaMilestone ? undefined : () => {}}
+      />
+      <RevelarPremioModal
+        visible={!!revelar}
+        tipo={revelar?.tipo ?? 'avatar'}
+        avatar={revelar?.avatar}
+        patron={revelar?.patron}
+        onClose={() => setRevelar(null)}
       />
     </View>
   )

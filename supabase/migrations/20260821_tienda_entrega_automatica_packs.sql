@@ -1,0 +1,87 @@
+CREATE OR REPLACE FUNCTION public.comprar_item_tienda(p_item_id uuid, p_nombre text, p_costo integer, p_valor text DEFAULT NULL)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_user_id     UUID := auth.uid();
+  v_user_nombre TEXT;
+  v_compra_id   UUID;
+  v_saldo       INTEGER;
+  v_item_tipo   TEXT;
+  v_asignacion  JSONB;
+  v_tiene       BOOLEAN := false;
+BEGIN
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'No autenticado');
+  END IF;
+
+  SELECT tipo INTO v_item_tipo FROM public.store_items WHERE id = p_item_id;
+
+  -- Si es lead, verificar pool ANTES de cobrar coins
+  IF v_item_tipo IN ('lead_premium', 'lead_meta') THEN
+    IF NOT EXISTS (SELECT 1 FROM public.leads_pool WHERE estado = 'disponible' LIMIT 1) THEN
+      RETURN jsonb_build_object('ok', false, 'error', 'No hay leads disponibles en este momento. El equipo está cargando más muy pronto.');
+    END IF;
+  END IF;
+
+  -- Packs de avatar/color: entrega AUTOMÁTICA de un item al azar. El cliente elige
+  -- uno que el usuario aún no tenga y lo manda en p_valor. Se valida ANTES de cobrar.
+  IF v_item_tipo IN ('pack_avatar', 'pack_color') THEN
+    IF p_valor IS NULL OR btrim(p_valor) = '' THEN
+      RETURN jsonb_build_object('ok', false, 'error', 'Ya tienes todos los de esta categoría 🎉');
+    END IF;
+    IF v_item_tipo = 'pack_color' THEN
+      SELECT p_valor = ANY(colores_desbloqueados) INTO v_tiene FROM profiles WHERE id = v_user_id;
+    ELSE
+      SELECT p_valor = ANY(avatares_desbloqueados) INTO v_tiene FROM profiles WHERE id = v_user_id;
+    END IF;
+    IF v_tiene THEN
+      RETURN jsonb_build_object('ok', false, 'error', 'Ya tienes ese item, intenta de nuevo');
+    END IF;
+  END IF;
+
+  -- Bloquear fila para evitar race conditions
+  SELECT valera_coins INTO v_saldo FROM public.user_stats WHERE id = v_user_id FOR UPDATE;
+
+  IF v_saldo IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Perfil de usuario no encontrado');
+  END IF;
+  IF v_saldo < p_costo THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'No tienes suficientes Valera Coins');
+  END IF;
+
+  UPDATE public.user_stats SET valera_coins = valera_coins - p_costo WHERE id = v_user_id;
+  INSERT INTO public.coin_transactions (user_id, cantidad, concepto) VALUES (v_user_id, -p_costo, 'Tienda: ' || p_nombre);
+  INSERT INTO public.store_compras (user_id, item_id, costo_coins) VALUES (v_user_id, p_item_id, p_costo) RETURNING id INTO v_compra_id;
+
+  v_user_nombre := COALESCE((SELECT nombre FROM public.profiles WHERE id = v_user_id), 'Un prospectador');
+
+  -- Leads: auto-asignación
+  IF v_item_tipo IN ('lead_premium', 'lead_meta') THEN
+    v_asignacion := public.asignar_lead_desde_pool(v_user_id, v_compra_id, 'tienda_' || v_item_tipo);
+    UPDATE public.store_compras SET estado = 'entregado', atendido_at = NOW() WHERE id = v_compra_id;
+    RETURN jsonb_build_object('ok', true, 'compra_id', v_compra_id, 'lead_asignado', v_asignacion);
+  END IF;
+
+  -- Packs de avatar/color: desbloquear y marcar entregado en el acto (sin admin)
+  IF v_item_tipo IN ('pack_avatar', 'pack_color') THEN
+    IF v_item_tipo = 'pack_color' THEN
+      UPDATE profiles SET colores_desbloqueados = array_append(colores_desbloqueados, p_valor) WHERE id = v_user_id;
+    ELSE
+      UPDATE profiles SET avatares_desbloqueados = array_append(avatares_desbloqueados, p_valor) WHERE id = v_user_id;
+    END IF;
+    UPDATE public.store_compras SET estado = 'entregado', atendido_at = NOW(), notas_admin = p_valor WHERE id = v_compra_id;
+    RETURN jsonb_build_object('ok', true, 'compra_id', v_compra_id, 'entregado', true, 'tipo', v_item_tipo, 'valor', p_valor);
+  END IF;
+
+  -- Otros items: notificar admins como antes (entrega manual)
+  INSERT INTO public.notificaciones (user_id, titulo, mensaje, tipo)
+  SELECT pr.id, 'Nueva compra en la Tienda 🛒',
+    v_user_nombre || ' canjeó "' || p_nombre || '" por ' || p_costo || ' Valera Coins. Pendiente de entrega.', 'tienda'
+  FROM public.profiles pr WHERE pr.role = 'admin';
+
+  RETURN jsonb_build_object('ok', true, 'compra_id', v_compra_id);
+END;
+$function$;

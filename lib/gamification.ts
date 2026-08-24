@@ -690,17 +690,21 @@ export async function comprarItem(
   _userId: string,
   itemId: string,
   nombre: string,
-  costo: number
-): Promise<{ ok: boolean; error?: string }> {
+  costo: number,
+  // Para packs de avatar/color: el item concreto (elegido al azar por el cliente)
+  // que se desbloquea al instante. Para el resto de items va null.
+  valor?: string | null,
+): Promise<{ ok: boolean; error?: string; entregado?: boolean; tipo?: string; valor?: string }> {
   try {
     const { data, error } = await supabase.rpc('comprar_item_tienda', {
       p_item_id: itemId,
       p_nombre:  nombre,
       p_costo:   costo,
+      p_valor:   valor ?? null,
     })
     if (error) return { ok: false, error: error.message }
     if (!data?.ok) return { ok: false, error: data?.error ?? 'Error al procesar la compra' }
-    return { ok: true }
+    return { ok: true, entregado: data.entregado === true, tipo: data.tipo, valor: data.valor }
   } catch (e: any) {
     return { ok: false, error: e.message }
   }
