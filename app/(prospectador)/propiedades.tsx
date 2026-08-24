@@ -656,6 +656,7 @@ export default function ProspectadorPropiedades() {
   const propiedades = queryData?.propiedades ?? []
   const publicaciones = pubData?.publicacionesMap ?? {}
   const esAdmin = queryData?.rol === 'admin'
+  const userId = queryData?.userId ?? null
   const esAsesorOMas = ['asesor', 'supervisor', 'admin'].includes(queryData?.rol ?? '')
 
   // ── Publicar (reescrito desde cero) ─────────────────────────────────────────
@@ -978,13 +979,33 @@ export default function ProspectadorPropiedades() {
   // Garantía final: ningún sort puede colarse sobre el filtro de operación.
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.operacion === filtroOperacion)
 
+  // Intercalar 5 "nunca publicadas" justo después de las destacadas.
+  // Orden final: [destacadas] → [5 nunca publicadas del pool no-destacado] → [resto]
+  // Hash FNV-1 de (userId + propertyId) → shuffle estable distinto por usuario.
+  if (conteoPubs && userId) {
+    const fnv = (uid: string, pid: string) => {
+      let h = 0x811c9dc5
+      for (const c of uid + pid) { h ^= c.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0 }
+      return h
+    }
+    const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
+    const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
+    const nuncaPublicadas = noDestacadas.filter(p => (conteoPubs.get(p.id) ?? 0) === 0)
+    if (nuncaPublicadas.length > 0) {
+      const shuffled = [...nuncaPublicadas].sort((a, b) => fnv(userId, a.id) - fnv(userId, b.id))
+      const top5 = shuffled.slice(0, 5)
+      const top5Ids = new Set(top5.map(p => p.id))
+      propiedadesFiltradas = [...destacadas, ...top5, ...noDestacadas.filter(p => !top5Ids.has(p.id))]
+    }
+  }
+
   return propiedadesFiltradas
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     propiedades, busqueda, filtroPublicadas, publicaciones, pubData, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
-    viewsData,
+    viewsData, conteoPubs, userId,
   ])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
