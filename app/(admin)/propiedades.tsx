@@ -295,6 +295,9 @@ export default function AdminPropiedades() {
     return bD - aD
   })
 
+  // Garantía final: ningún sort puede colarse sobre el filtro de operación.
+  if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.operacion === filtroOperacion)
+
   return { propiedadesFiltradas, propiedadesParaSugerenciasContacto }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propiedades, busqueda, filtroOperacion, filtroEstado, filtroTipo, busquedaContacto, ordenPrecio, ordenPublicaciones, publicacionesMap])

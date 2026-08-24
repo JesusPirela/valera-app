@@ -975,6 +975,9 @@ export default function ProspectadorPropiedades() {
     (a.estado === 'vendida' ? 1 : 0) - (b.estado === 'vendida' ? 1 : 0)
   )
 
+  // Garantía final: ningún sort puede colarse sobre el filtro de operación.
+  if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.operacion === filtroOperacion)
+
   return propiedadesFiltradas
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
