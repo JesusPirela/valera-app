@@ -9,6 +9,7 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import PropMapa from '../../components/PropMapa'
 import { thumb } from '../../lib/img'
+import { BadgeUbicacion } from '../../components/BadgeUbicacion'
 import {
   IdiomaFicha, tf, tipoLabel, formatPrecioLang, traducirFicha,
 } from '../../lib/ficha-i18n'
@@ -30,6 +31,7 @@ type Propiedad = {
   descripcion: string | null
   titulo_en: string | null
   descripcion_en: string | null
+  estado_mx: string | null
   lat: number | null
   lng: number | null
   propiedad_imagenes: { url: string; orden: number }[]
@@ -77,7 +79,7 @@ export default function FichaPublica() {
       )
       const query = supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, titulo_en, descripcion_en, lat, lng, propiedad_imagenes(url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, titulo_en, descripcion_en, estado_mx, lat, lng, propiedad_imagenes(url, orden)')
         .eq('codigo', codigo)
         .eq('estado', 'disponible')
         .eq('es_inventario', false)
@@ -247,8 +249,13 @@ export default function FichaPublica() {
           {/* Título */}
           <Text style={s.titulo}>{tituloMostrar}</Text>
 
-          {/* Dirección */}
-          <Text style={s.direccion}>📍 {propiedad.direccion}</Text>
+          {/* Dirección + badge de estado (Querétaro vs foránea) */}
+          <View style={{ marginBottom: 14 }}>
+            <View style={{ alignSelf: 'flex-start', marginBottom: 6 }}>
+              <BadgeUbicacion estado_mx={propiedad.estado_mx} direccion={propiedad.direccion} titulo={propiedad.titulo} />
+            </View>
+            <Text style={[s.direccion, { marginBottom: 0 }]}>📍 {propiedad.direccion}</Text>
+          </View>
 
           {/* Precio */}
           <View style={s.precioBox}>

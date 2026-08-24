@@ -28,6 +28,9 @@ import { listarCuentas } from '../../lib/cuentas'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { OfflineBanner } from '../../components/OfflineBanner'
+import { BadgeUbicacion } from '../../components/BadgeUbicacion'
+import { infoEstadoPropiedad } from '../../lib/estados-mexico'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { conReintentoData, generarIdemKey, conTimeout } from '../../lib/redIntentos'
 import { enqueuePublicacion } from '../../lib/offline-queue'
 import {
@@ -61,6 +64,7 @@ type Propiedad = {
   operacion: string | null
   tipo: string | null
   estado: string | null
+  estado_mx: string | null
   zona: 'queretaro' | 'monterrey' | 'puebla' | null
   lat: number | null
   lng: number | null
@@ -255,6 +259,9 @@ const PropiedadCard = memo(function PropiedadCard({
           ) : null}
         </View>
         <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
+        <View style={{ alignSelf: 'flex-start', marginBottom: 4 }}>
+          <BadgeUbicacion estado_mx={item.estado_mx} direccion={item.direccion} titulo={item.titulo} size="sm" />
+        </View>
         <Text style={styles.cardDireccion} numberOfLines={1}>{item.direccion}</Text>
         {item.descripcion ? (
           <Text style={styles.cardDescripcion} numberOfLines={3}>{item.descripcion}</Text>
@@ -360,6 +367,18 @@ export default function ProspectadorPropiedades() {
   const recienPublicadosRef = useRef<Set<string>>(new Set())
   const [filtroNueva, setFiltroNueva] = useState(false)
   const [filtroExclusiva, setFiltroExclusiva] = useState(false)
+  // Filtro por estado: arranca en Querétaro (el mercado principal) para que por
+  // defecto NO se mezclen foráneas. Se recuerda la última elección de cada quien.
+  const [filtroEstado, setFiltroEstado] = useState<'queretaro' | 'otros' | 'todas'>('queretaro')
+  useEffect(() => {
+    AsyncStorage.getItem('filtroEstadoProps').then(v => {
+      if (v === 'queretaro' || v === 'otros' || v === 'todas') setFiltroEstado(v)
+    }).catch(() => {})
+  }, [])
+  const cambiarFiltroEstado = useCallback((v: 'queretaro' | 'otros' | 'todas') => {
+    setFiltroEstado(v)
+    AsyncStorage.setItem('filtroEstadoProps', v).catch(() => {})
+  }, [])
   const [filtroDestacada, setFiltroDestacada] = useState(false)
   const [filtroFechaPreset, setFiltroFechaPreset] = useState<7 | 30 | 90 | 180 | null>(null)
   const [fechaDesdeCustom, setFechaDesdeCustom] = useState('')
@@ -450,7 +469,7 @@ export default function ProspectadorPropiedades() {
         const size = i === 0 ? PRIMERA : PAGE
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
+          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, estado_mx, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
           .in('estado', ['disponible', 'vendida'])
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -889,6 +908,14 @@ export default function ProspectadorPropiedades() {
   if (filtroExclusiva) {
     propiedadesFiltradas = propiedadesFiltradas.filter(p => p.exclusiva || p.inmobiliarias?.exclusiva)
   }
+  // Filtro por estado (Querétaro / Otros estados / Todas). "Desconocido" se
+  // considera FUERA de Querétaro para no ocultar una foránea sin dato.
+  if (filtroEstado !== 'todas') {
+    propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
+      const info = infoEstadoPropiedad({ estado_mx: p.estado_mx, direccion: p.direccion, titulo: p.titulo })
+      return filtroEstado === 'queretaro' ? info.esQueretaro : !info.esQueretaro
+    })
+  }
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
   if (filtroRecamaras != null) propiedadesFiltradas = propiedadesFiltradas.filter((p) => (p.recamaras ?? 0) >= filtroRecamaras)
@@ -1005,7 +1032,7 @@ export default function ProspectadorPropiedades() {
     propiedades, busqueda, filtroPublicadas, publicaciones, pubData, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
-    viewsData, conteoPubs, userId,
+    viewsData, conteoPubs, userId, filtroEstado,
   ])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
@@ -1155,6 +1182,29 @@ export default function ProspectadorPropiedades() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Selector de estado: por defecto Querétaro (mercado principal) para que no
+          se cuelen foráneas por accidente. Un toque para ver las de otros estados. */}
+      <View style={styles.estadoSeg}>
+        {([
+          ['queretaro', '📍 Querétaro'],
+          ['otros',     '✈️ Otros estados'],
+          ['todas',     'Todas'],
+        ] as const).map(([val, lbl]) => {
+          const on = filtroEstado === val
+          return (
+            <TouchableOpacity
+              key={val}
+              style={[styles.estadoSegBtn, on && (val === 'otros' ? styles.estadoSegOtros : styles.estadoSegOn)]}
+              onPress={() => cambiarFiltroEstado(val)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.estadoSegTxt, { color: c.textSub }, on && { color: val === 'otros' ? '#8a5a00' : '#fff' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{lbl}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+
       <View style={styles.controlsRow}>
         <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
           <Text style={[styles.filtrosToggleText, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
@@ -1711,6 +1761,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  estadoSeg: {
+    flexDirection: 'row', gap: 6, paddingHorizontal: 12, marginBottom: 8,
+  },
+  estadoSegBtn: {
+    flex: 1, paddingVertical: 8, borderRadius: 9, borderWidth: 1, borderColor: '#d6dde6',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  estadoSegOn:    { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  estadoSegOtros: { backgroundColor: '#fff4d6', borderColor: '#f0c14b' },
+  estadoSegTxt:   { fontSize: 12.5, fontWeight: '800' },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',

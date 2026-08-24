@@ -53,3 +53,24 @@ export function detectarEstadoMexico(texto: string): string | null {
   }
   return null
 }
+
+export const ESTADO_PRINCIPAL = 'Querétaro'
+
+export type InfoEstado = {
+  estado: string | null   // estado resuelto (o null si no se pudo determinar)
+  esQueretaro: boolean     // true si es del estado principal
+  foraneo: boolean         // true si es de OTRO estado (dato conocido y ≠ Querétaro)
+  desconocido: boolean     // true si no se pudo determinar (NO asumir Querétaro)
+}
+
+// Resuelve la ubicación de una propiedad SIN inventar: usa estado_mx si viene;
+// si no, lo detecta de la dirección/título. Regla de oro: si no se sabe, queda
+// "desconocido" y NUNCA se asume Querétaro (para no disfrazar una foránea).
+export function infoEstadoPropiedad(p: { estado_mx?: string | null; direccion?: string | null; titulo?: string | null }): InfoEstado {
+  const estado = (p.estado_mx && p.estado_mx.trim())
+    || detectarEstadoMexico(`${p.direccion ?? ''} ${p.titulo ?? ''}`)
+    || null
+  if (!estado) return { estado: null, esQueretaro: false, foraneo: false, desconocido: true }
+  const esQueretaro = norm(estado) === norm(ESTADO_PRINCIPAL)
+  return { estado, esQueretaro, foraneo: !esQueretaro, desconocido: false }
+}
