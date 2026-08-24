@@ -200,7 +200,7 @@ export default function Tienda() {
     }
 
     setComprando(item.id)
-    const { ok, error, entregado } = await comprarItem(userId, item.id, item.nombre, item.costo_coins, valorElegido)
+    const { ok, error, entregado, mensaje } = await comprarItem(userId, item.id, item.nombre, item.costo_coins, valorElegido)
     setComprando(null)
 
     if (!ok) { alerta(error ?? 'Error al procesar la compra'); return }
@@ -213,6 +213,10 @@ export default function Tienda() {
     } else if (entregado && esPackColor && patronElegido) {
       setColoresDesbloqueados(prev => [...prev, patronElegido!.id])
       setRevelar({ tipo: 'color', patron: patronElegido })
+      cargar()
+    } else if (entregado) {
+      // Acceso prioritario u otros items de entrega instantánea con mensaje.
+      alerta(mensaje ?? `¡Listo! Se aplicó "${item.nombre}". 🎉`)
       cargar()
     } else {
       alerta(`¡Compraste "${item.nombre}"! 🎉\nEl equipo de Valera te contactará para entregar tu recompensa.`)
