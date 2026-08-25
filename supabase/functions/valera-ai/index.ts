@@ -22,6 +22,7 @@ Pautas:
 - Responde siempre en español, de forma concisa y directa
 - Usa emojis y listas para presentar datos de forma legible
 - Si no tienes datos suficientes, dilo claramente
+- Si el usuario envía una imagen de una propiedad, analízala visualmente (tipo, color, tamaño, características), luego usa buscar_propiedades para encontrar coincidencias en el inventario
 - Hoy es ${getHoyMX()}`
 
 const HERRAMIENTAS = [
@@ -162,7 +163,66 @@ const HERRAMIENTAS = [
       },
     },
   },
+  {
+    name: 'generar_mensajes_equipo',
+    description: 'Analiza la productividad del día de hoy (publicaciones, clientes, citas, seguimientos) y genera un mensaje personalizado de WhatsApp para cada prospectador según su nivel de actividad. Puede filtrar por bloque. Úsala cuando el admin pida "mensajes para el equipo", "mensajes para el bloque X", "resumen del día" o quiera motivar/retroalimentar.',
+    parameters: {
+      type: 'object',
+      properties: {
+        bloque: { type: 'string', description: 'Nombre o parte del nombre del bloque para filtrar (opcional). Si se omite genera mensajes para todo el equipo.' },
+      },
+    },
+  },
+  {
+    name: 'buscar_propiedades',
+    description: 'Busca propiedades específicas en el inventario por características. Úsala para encontrar propiedades que coincidan con una descripción, una imagen analizada, o filtros concretos (zona, precio, tipo, recámaras). Devuelve código, dirección, precio y características clave.',
+    parameters: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', description: 'casa | departamento | terreno | local | bodega (opcional)' },
+        operacion: { type: 'string', description: 'venta | renta (opcional)' },
+        zona: { type: 'string', description: 'Zona, colonia o ciudad — búsqueda parcial (opcional)' },
+        precio_min: { type: 'number', description: 'Precio mínimo en pesos (opcional)' },
+        precio_max: { type: 'number', description: 'Precio máximo en pesos (opcional)' },
+        recamaras_min: { type: 'integer', description: 'Mínimo de recámaras (opcional)' },
+        descripcion: { type: 'string', description: 'Palabras clave a buscar en título, dirección o descripción (opcional)' },
+        limite: { type: 'integer', description: 'Máximo de resultados. Default 6' },
+      },
+    },
+  },
+  {
+    name: 'consultar_comparativa_zonas',
+    description: 'Comparativa de zonas del inventario disponible: precio promedio, mediano, mínimo y máximo por zona. Ideal para análisis de mercado interno, detectar zonas con más stock o precios más altos.',
+    parameters: {
+      type: 'object',
+      properties: {
+        operacion: { type: 'string', description: 'venta | renta (opcional, default ambas)' },
+        tipo: { type: 'string', description: 'casa | departamento | terreno | local (opcional)' },
+      },
+    },
+  },
 ]
+
+function generarMensajeWhatsApp(
+  nombre: string, pubs: number, clientes: number, citas: number, segs: number, ints: number,
+): string {
+  const meta = 20
+  const restante = Math.max(0, meta - pubs)
+  const extras: string[] = []
+  if (clientes > 0) extras.push(`agregaste ${clientes} cliente${clientes > 1 ? 's' : ''} al CRM`)
+  if (citas > 0) extras.push(`coordinaste ${citas} cita${citas > 1 ? 's' : ''}`)
+  if (segs > 0) extras.push(`tuviste ${segs} seguimiento${segs > 1 ? 's' : ''}`)
+  if (ints > 0 && !segs) extras.push(`${ints} interacción${ints > 1 ? 'es' : ''} con clientes`)
+  const ex = extras.length > 0 ? ` También ${extras.join(' y ')}.` : ''
+
+  if (pubs >= 20) return `🔥 ¡${nombre}! Publicaste ${pubs} propiedades hoy — ¡eso es estar al máximo!${ex} ¡Mañana mantenemos ese nivel! 💪`
+  if (pubs >= 15) return `📈 ¡Gran día ${nombre}! ${pubs} publicaciones, ya casi llegas a la meta de ${meta}.${ex} ¿Mañana publicamos ${restante} más y la cerramos? 🎯`
+  if (pubs >= 10) return `👍 Buen día ${nombre}, llegaste a ${pubs} publicaciones.${ex} Estás a ${restante} de la meta — ¿mañana le damos para cerrarla? 💪`
+  if (pubs >= 5)  return `💡 Hola ${nombre}, hoy tuviste ${pubs} publicaciones.${ex} ¡Mañana le damos con todo y publicamos ${Math.min(restante, 15)}+ para acercarnos a ${meta}! 🚀`
+  if (pubs >= 1)  return `⚡ ${nombre}, hoy arrancamos con ${pubs} publicación${pubs > 1 ? 'es' : ''}.${ex} ¡Mañana apuntamos a 10+! 💪`
+  if (extras.length > 0) return `👋 Hey ${nombre}, hoy sin publicaciones pero ${extras.join(' y ')}. ¡Mañana arrancamos con al menos 5! 🙌`
+  return `👋 Hey ${nombre}, hoy estuvo tranquilo — sin publicaciones. ¿Mañana arrancamos con 5? Estoy aquí para lo que necesites 🙌`
+}
 
 // Construye un mapa userId → nombre desde profiles.nombre
 // (crear-prospectador siempre guarda el nombre ahí al crear el usuario).
@@ -669,6 +729,151 @@ async function ejecutarHerramienta(
       }
     }
 
+    if (nombre === 'generar_mensajes_equipo') {
+      const hoy = new Date()
+      hoy.setHours(0, 0, 0, 0)
+      const hoyISO = hoy.toISOString()
+      const hoyStr = hoy.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+
+      // Si se pide por bloque, primero resolvemos los IDs del bloque
+      let idsBloque: Set<string> | null = null
+      let nombreBloque = ''
+      if (args.bloque) {
+        const { data: bloques } = await supabase
+          .from('bloques').select('id, nombre').ilike('nombre', `%${args.bloque}%`)
+        if (bloques?.length) {
+          const bIds = bloques.map((b: any) => b.id)
+          nombreBloque = bloques.map((b: any) => b.nombre).join(', ')
+          const { data: miembros } = await supabase
+            .from('profiles').select('id').in('bloque_id', bIds)
+          idsBloque = new Set((miembros ?? []).map((m: any) => m.id))
+        } else {
+          return { error: `No se encontró ningún bloque con el nombre "${args.bloque}"` }
+        }
+      }
+
+      const [nombresMapCompleto, perfilesRes, pubsRes, cliRes, citasRes, segsRes, intsRes] = await Promise.all([
+        buildNombresMap(supabase),
+        supabase.from('profiles').select('id, telefono').in('role', ['prospectador', 'prospectador_plus', 'supervisor', 'nuevo']),
+        supabase.from('propiedad_publicacion').select('user_id').eq('publicada', true).gte('fecha_publicacion', hoyISO),
+        supabase.from('clientes').select('responsable_id').gte('created_at', hoyISO),
+        supabase.from('citas_coordinacion').select('user_id').gte('created_at', hoyISO),
+        supabase.from('seguimientos_dia').select('user_id').gte('created_at', hoyISO),
+        supabase.from('interacciones').select('user_id').gte('created_at', hoyISO),
+      ])
+
+      // Filtrar por bloque si aplica
+      const nombresMap = idsBloque
+        ? new Map([...nombresMapCompleto].filter(([uid]) => idsBloque!.has(uid)))
+        : nombresMapCompleto
+
+      const telMap = new Map<string, string>()
+      for (const p of perfilesRes.data ?? []) if (p.telefono) telMap.set(p.id, p.telefono)
+
+      const conteo = new Map<string, { pubs: number; clientes: number; citas: number; segs: number; ints: number }>()
+      for (const [uid] of nombresMap) conteo.set(uid, { pubs: 0, clientes: 0, citas: 0, segs: 0, ints: 0 })
+
+      for (const r of pubsRes.data ?? []) if (conteo.has(r.user_id)) conteo.get(r.user_id)!.pubs++
+      for (const r of cliRes.data ?? []) if (conteo.has(r.responsable_id)) conteo.get(r.responsable_id)!.clientes++
+      for (const r of citasRes.data ?? []) if (conteo.has(r.user_id)) conteo.get(r.user_id)!.citas++
+      for (const r of segsRes.data ?? []) if (conteo.has(r.user_id)) conteo.get(r.user_id)!.segs++
+      for (const r of intsRes.data ?? []) if (conteo.has(r.user_id)) conteo.get(r.user_id)!.ints++
+
+      const prospectadores = Array.from(nombresMap.entries())
+        .map(([uid, nombre]) => {
+          const c = conteo.get(uid) ?? { pubs: 0, clientes: 0, citas: 0, segs: 0, ints: 0 }
+          return {
+            nombre,
+            telefono: telMap.get(uid) ?? null,
+            publicaciones: c.pubs,
+            clientes_nuevos: c.clientes,
+            citas: c.citas,
+            seguimientos: c.segs,
+            interacciones: c.ints,
+            mensaje: generarMensajeWhatsApp(nombre, c.pubs, c.clientes, c.citas, c.segs, c.ints),
+          }
+        })
+        .sort((a, b) => b.publicaciones - a.publicaciones)
+
+      return {
+        fecha: hoyStr,
+        bloque: nombreBloque || 'Todo el equipo',
+        total: prospectadores.length,
+        prospectadores,
+      }
+    }
+
+    if (nombre === 'buscar_propiedades') {
+      const limite = Math.min(args.limite ?? 6, 10)
+      let query = supabase
+        .from('propiedades')
+        .select('codigo, titulo, tipo, operacion, zona, precio, recamaras, banos, m2, estado, direccion, descripcion_corta')
+        .in('estado', ['disponible', 'vendida'])
+        .eq('es_inventario', false)
+
+      if (args.tipo) query = query.eq('tipo', args.tipo)
+      if (args.operacion) query = query.eq('operacion', args.operacion)
+      if (args.zona) query = query.ilike('zona', `%${args.zona}%`)
+      if (args.precio_min != null) query = query.gte('precio', args.precio_min)
+      if (args.precio_max != null) query = query.lte('precio', args.precio_max)
+      if (args.recamaras_min != null) query = query.gte('recamaras', args.recamaras_min)
+      if (args.descripcion) {
+        query = query.or(`titulo.ilike.%${args.descripcion}%,direccion.ilike.%${args.descripcion}%,descripcion_corta.ilike.%${args.descripcion}%`)
+      }
+
+      const { data, error: qErr } = await query.order('created_at', { ascending: false }).limit(limite)
+      if (qErr) return { error: qErr.message }
+      if (!data?.length) return { mensaje: 'No se encontraron propiedades con esos criterios. Intenta ampliar los filtros.', total: 0 }
+
+      return {
+        total_encontradas: data.length,
+        nota: data.length === limite ? `Mostrando las ${limite} más recientes. Ajusta los filtros para mayor precisión.` : undefined,
+        propiedades: data,
+      }
+    }
+
+    if (nombre === 'consultar_comparativa_zonas') {
+      let query = supabase
+        .from('propiedades')
+        .select('zona, precio, operacion, tipo')
+        .eq('estado', 'disponible')
+        .eq('es_inventario', false)
+        .not('zona', 'is', null)
+        .not('precio', 'is', null)
+        .gt('precio', 0)
+
+      if (args.operacion) query = query.eq('operacion', args.operacion)
+      if (args.tipo) query = query.eq('tipo', args.tipo)
+
+      const { data } = await query.limit(5000)
+
+      const zonaMap: Record<string, { total: number; precios: number[] }> = {}
+      for (const p of data ?? []) {
+        const z = (p.zona as string) || 'Sin zona'
+        if (!zonaMap[z]) zonaMap[z] = { total: 0, precios: [] }
+        zonaMap[z].total++
+        if (p.precio) zonaMap[z].precios.push(p.precio as number)
+      }
+
+      const zonas = Object.entries(zonaMap)
+        .map(([zona, info]) => {
+          const sorted = [...info.precios].sort((a, b) => a - b)
+          const mid = Math.floor(sorted.length / 2)
+          return {
+            zona,
+            propiedades: info.total,
+            precio_promedio: sorted.length > 0 ? Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length) : null,
+            precio_mediano: sorted[mid] ?? null,
+            precio_min: sorted[0] ?? null,
+            precio_max: sorted[sorted.length - 1] ?? null,
+          }
+        })
+        .sort((a, b) => b.propiedades - a.propiedades)
+        .slice(0, 15)
+
+      return { total_zonas: zonas.length, zonas }
+    }
+
     return { error: `Herramienta desconocida: ${nombre}` }
   } catch (e) {
     return { error: `Error en ${nombre}: ${e instanceof Error ? e.message : String(e)}` }
@@ -692,7 +897,7 @@ async function llamarGemini(
         contents,
         tools: [{ function_declarations: HERRAMIENTAS }],
         tool_config: { function_calling_config: { mode: 'AUTO' } },
-        generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+        generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
       }),
     },
   )
@@ -718,17 +923,25 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const { mensaje, historial = [] } = await req.json()
-    if (!mensaje?.trim()) throw new Error('El campo "mensaje" es requerido')
+    const { mensaje, historial = [], imagen } = await req.json()
+    if (!mensaje?.trim() && !imagen?.base64) throw new Error('Se requiere un mensaje o una imagen')
 
     const contents: any[] = []
     for (const m of historial) {
       contents.push({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] })
     }
-    contents.push({ role: 'user', parts: [{ text: mensaje }] })
+
+    // Construir el turno del usuario: imagen inline (si viene) + texto
+    const userParts: any[] = []
+    if (imagen?.base64 && imagen?.mimeType) {
+      userParts.push({ inlineData: { mimeType: imagen.mimeType, data: imagen.base64 } })
+    }
+    userParts.push({ text: mensaje?.trim() || 'Analiza esta imagen de una propiedad e intenta encontrar coincidencias en el inventario usando buscar_propiedades.' })
+    contents.push({ role: 'user', parts: userParts })
 
     let respuestaFinal: string | null = null
     let intentos = 0
+    let tarjetasWhatsapp: any[] | null = null
 
     while (!respuestaFinal && intentos < 5) {
       intentos++
@@ -767,6 +980,10 @@ serve(async (req) => {
             const { name, args } = p.functionCall
             console.log(`[valera-ai] herramienta: ${name}`, JSON.stringify(args))
             const res = await ejecutarHerramienta(name, args ?? {}, supabase)
+            // Capturar tarjetas de mensajes de equipo
+            if (name === 'generar_mensajes_equipo' && Array.isArray((res as any)?.prospectadores)) {
+              tarjetasWhatsapp = (res as any).prospectadores
+            }
             return { functionResponse: { name, response: res } }
           }),
         )
@@ -778,7 +995,9 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ respuesta: respuestaFinal }), { headers: CORS })
+    const responseBody: Record<string, unknown> = { respuesta: respuestaFinal }
+    if (tarjetasWhatsapp) responseBody.tarjetas = tarjetasWhatsapp
+    return new Response(JSON.stringify(responseBody), { headers: CORS })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[valera-ai]', msg)
