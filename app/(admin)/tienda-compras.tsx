@@ -64,7 +64,6 @@ const MENSAJES_DEFAULT: Record<string, string> = {
   sorteo:             '¡Tu número de sorteo está registrado! Te avisaremos con los detalles del sorteo mensual.',
   comision_extra:     '¡Tu bono de comisión adicional del 0.5% está activado para tus próximas 2 semanas de ventas!',
   curso_premium:      '¡Tu acceso al curso premium está listo! Te enviamos el enlace al módulo exclusivo de cierre de ventas.',
-  merch:              '¡Tu pedido de Merch Valera está en camino! El equipo te contactará para confirmar talla y dirección.',
 }
 
 const ES_LEAD = (tipo: string) => tipo === 'lead_premium' || tipo === 'lead_meta'
