@@ -34,7 +34,7 @@ export function BadgeUbicacion({ estado_mx, direccion, titulo, size = 'md' }: {
   }
   return (
     <View style={[s.base, s.fuera, { paddingVertical: padV, paddingHorizontal: padH }]}>
-      <Text style={[s.txt, s.fueraTxt, { fontSize: fs }]} numberOfLines={1}>✈️ Fuera de Qro · {info.estado}</Text>
+      <Text style={[s.txt, s.fueraTxt, { fontSize: fs }]} numberOfLines={1}>📍 {info.estado}</Text>
     </View>
   )
 }
