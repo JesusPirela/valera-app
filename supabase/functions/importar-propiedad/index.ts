@@ -744,77 +744,102 @@ function extractNocNokProperty(html: string): Record<string, unknown> | null {
   }
 }
 
+// ── EasyBroker: construir respuesta a partir de un objeto de la API ──────────
+function buildEbApiResponse(p: any, corsH: Record<string, string>): Response {
+  const opObj = Array.isArray(p.operations) ? p.operations.find((o: any) => o.active) : null
+  const opType = opObj?.type === 'rental' ? 'renta' : 'venta'
+  const precio = opObj?.amount ? String(Math.round(Number(opObj.amount))) : ''
+  const tipo = mapTipo(String(p.property_type ?? ''))
+  const loc = p.location ?? {}
+  const direccion = [loc.neighborhood, loc.city, loc.state].filter(Boolean).join(', ')
+  let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
+  const locStr = [loc.city ?? '', loc.state ?? ''].join(' ').toLowerCase()
+  if (/quer[eé]taro/.test(locStr))                zona = 'queretaro'
+  else if (/monterrey|nuevo\s*le[oó]n/.test(locStr)) zona = 'monterrey'
+  else if (/puebla/.test(locStr))                 zona = 'puebla'
+  const imagenes: string[] = (p.images ?? [])
+    .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
+    .map((i: any) => i.url ?? i.original_url ?? '')
+    .filter(Boolean)
+    .slice(0, 30)
+  return new Response(JSON.stringify({
+    titulo: p.title ?? '', descripcion: p.description ?? '',
+    precio, direccion, zona, modelo: '',
+    recamaras: p.bedrooms ?? null, banos: p.bathrooms ?? null,
+    mediosBanos: p.half_bathrooms ?? null, estacionamientos: p.parking_spaces ?? null,
+    m2: p.construction_size ? String(p.construction_size) : '',
+    m2Terreno: p.lot_size ? String(p.lot_size) : '',
+    tipo, operacion: opType, imagenes,
+  }), { headers: corsH })
+}
+
+// Busca una propiedad en el catálogo de EasyBroker comparando el slug de la URL
+// contra el slug del public_url de cada propiedad. Pagina hasta 20 páginas (1000 props).
+async function buscarEbPorSlug(apiKey: string, urlSlug: string): Promise<any | null> {
+  const slugWords = new Set(urlSlug.toLowerCase().split('-').filter(w => w.length > 3))
+  for (let page = 1; page <= 20; page++) {
+    let j: any
+    try {
+      const r = await fetch(`https://api.easybroker.com/v1/properties?limit=50&page=${page}`, {
+        headers: { accept: 'application/json', 'X-Authorization': apiKey },
+      })
+      if (!r.ok) break
+      j = await r.json()
+    } catch { break }
+    const props: any[] = j?.content ?? []
+    if (!props.length) break
+    for (const p of props) {
+      // Comparar contra el slug del public_url de la propiedad
+      const propSlug = (p.public_url ?? '').split('/').filter(Boolean).pop()?.toLowerCase() ?? ''
+      if (propSlug && propSlug === urlSlug) return p
+      // Coincidencia por palabras comunes (mínimo 4 palabras de >3 letras en común)
+      const propWords = new Set(propSlug.split('-').filter((w: string) => w.length > 3))
+      const common = [...slugWords].filter(w => propWords.has(w)).length
+      if (common >= 4) return p
+    }
+    if (props.length < 50) break // Última página
+  }
+  return null
+}
+
 // ── EasyBroker: importar desde URL de easybroker.com ───────────────────────
-// Las URLs de agente (/agent/) requieren login y no se pueden scraping.
-// Las URLs de listing público (/mx/listing/EB-XXXXXX) se importan vía API.
 async function importarEasyBroker(url: string): Promise<Response | null> {
   let parsed: URL
   try { parsed = new URL(url) } catch { return null }
   if (!/(?:^|\.)easybroker\.com$/i.test(parsed.hostname)) return null
 
   const corsH = { ...corsHeaders, 'Content-Type': 'application/json' }
+  const apiKey = (Deno as any).env?.get?.('EASYBROKER_API_KEY')
 
-  // URL de agente privado — requiere autenticación
-  if (/\/(agent|portal|agente)\//i.test(parsed.pathname)) {
-    throw new Error(
-      'Las URLs del portal de agente de EasyBroker requieren inicio de sesión y no se pueden importar automáticamente. ' +
-      'Busca la propiedad en Lamudi, Inmuebles24 u otro portal público y usa esa URL, ' +
-      'o bien copia los datos manualmente.'
-    )
+  // URL con EB-XXXXXX explícito → fetch directo por ID
+  const idMatch = parsed.pathname.match(/\/(EB-[A-Z0-9]+)/i)
+  if (idMatch) {
+    if (!apiKey) return null
+    const r = await fetch(`https://api.easybroker.com/v1/properties/${idMatch[1].toUpperCase()}`, {
+      headers: { accept: 'application/json', 'X-Authorization': apiKey },
+    })
+    if (r.ok) return buildEbApiResponse(await r.json(), corsH)
+    return null
   }
 
-  // URL de listing público: /mx/listing/EB-XXXXXX o /properties/EB-XXXXXX
-  const idMatch = parsed.pathname.match(/\/(EB-[A-Z0-9]+)/i)
-  if (!idMatch) return null // No es una URL de propiedad específica de EB
+  // URL de agente o MLS → buscar en el catálogo por slug
+  const segments = parsed.pathname.split('/').filter(Boolean)
+  const urlSlug = segments[segments.length - 1] ?? ''
+  if (urlSlug.length < 10) return null // No parece un slug de propiedad
 
-  const publicId = idMatch[1].toUpperCase()
-  const apiKey = (Deno as any).env?.get?.('EASYBROKER_API_KEY')
-  if (!apiKey) return null // Sin API key, caer al scraping normal
+  if (!apiKey) {
+    // Sin API key no podemos buscar: avisamos sin timeout
+    return new Response(JSON.stringify({
+      error: 'No se puede importar desde el portal de agente de EasyBroker sin la API key configurada en el servidor.',
+    }), { status: 200, headers: corsH })
+  }
 
-  const r = await fetch(`https://api.easybroker.com/v1/properties/${publicId}`, {
-    headers: { accept: 'application/json', 'X-Authorization': apiKey },
-  })
-  if (!r.ok) return null
-
-  const p = await r.json()
-
-  const opObj = Array.isArray(p.operations) ? p.operations.find((o: any) => o.active) : null
-  const opType = opObj?.type === 'rental' ? 'renta' : 'venta'
-  const precio = opObj?.amount ? String(Math.round(Number(opObj.amount))) : ''
-
-  const tipo = mapTipo(String(p.property_type ?? ''))
-  const loc = p.location ?? {}
-  const direccion = [loc.neighborhood, loc.city, loc.state].filter(Boolean).join(', ')
-
-  let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
-  const locStr = [loc.city ?? '', loc.state ?? ''].join(' ').toLowerCase()
-  if (/quer[eé]taro/.test(locStr))                zona = 'queretaro'
-  else if (/monterrey|nuevo\s*le[oó]n/.test(locStr)) zona = 'monterrey'
-  else if (/puebla/.test(locStr))                 zona = 'puebla'
-
-  const imagenes: string[] = (p.images ?? [])
-    .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
-    .map((i: any) => i.url ?? i.original_url ?? '')
-    .filter(Boolean)
-    .slice(0, 30)
+  const match = await buscarEbPorSlug(apiKey, urlSlug)
+  if (match) return buildEbApiResponse(match, corsH)
 
   return new Response(JSON.stringify({
-    titulo:           p.title ?? '',
-    descripcion:      p.description ?? '',
-    precio,
-    direccion,
-    zona,
-    modelo:           '',
-    recamaras:        p.bedrooms ?? null,
-    banos:            p.bathrooms ?? null,
-    mediosBanos:      p.half_bathrooms ?? null,
-    estacionamientos: p.parking_spaces ?? null,
-    m2:               p.construction_size ? String(p.construction_size) : '',
-    m2Terreno:        p.lot_size ? String(p.lot_size) : '',
-    tipo,
-    operacion:        opType,
-    imagenes,
-  }), { headers: corsH })
+    error: 'No se encontró esta propiedad en el catálogo de EasyBroker. Prueba con la URL pública de Lamudi, Inmuebles24 u otro portal.',
+  }), { status: 200, headers: corsH })
 }
 
 serve(async (req) => {

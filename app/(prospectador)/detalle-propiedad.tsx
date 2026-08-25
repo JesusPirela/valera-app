@@ -1279,7 +1279,7 @@ export default function DetallePropiedad() {
         }
         body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1a1a2e; background: #f5f8fc; }
         /* Header azul, contenido centrado (logo → código → nombre → ciudad → precio → tipo). */
-        .header { background: ${colorFicha}; background-image: radial-gradient(circle at 50% -10%, rgba(255,255,255,0.14), rgba(255,255,255,0) 55%); padding: 34px 32px 26px; text-align: center; }
+        .header { background-color: ${colorFicha}; background-image: radial-gradient(circle at 50% -10%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 55%); padding: 34px 32px 26px; text-align: center; }
         .header-logo { height: 116px; max-width: 220px; object-fit: contain; border-radius: 16px; margin: 0 auto 16px; display: block; }
         .codigo { font-size: 11px; color: rgba(255,255,255,0.72); font-weight: 700; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 10px; }
         .titulo { font-size: 27px; font-weight: 800; color: #fff; margin-bottom: 6px; line-height: 1.15; }
@@ -1317,7 +1317,7 @@ export default function DetallePropiedad() {
         .mapa-img { width: 100%; height: 320px; object-fit: cover; display: block; }
         .mapa-dir { background: #fff; padding: 10px 14px; font-size: 12px; color: ${colorFicha}; font-weight: 600; }
         /* Footer azul con borde dorado */
-        .footer { background: ${colorFicha}; border-top: 4px solid #FFD700; text-align: center; padding: 24px 20px; }
+        .footer { background-color: ${colorFicha}; border-top: 4px solid #FFD700; text-align: center; padding: 24px 20px; }
         .footer-marca { color: #FFD700; font-weight: 800; font-size: 14px; letter-spacing: 1.5px; margin-bottom: 7px; }
         .footer-linea { color: rgba(255,255,255,0.85); font-size: 12px; margin-bottom: 3px; }
         .footer-handle { font-weight: 700; color: #fff; }
