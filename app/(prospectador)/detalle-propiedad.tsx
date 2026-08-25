@@ -193,6 +193,7 @@ export default function DetallePropiedad() {
   const [descargando, setDescargando] = useState(false)
   const [descargandoVideo, setDescargandoVideo] = useState(false)
   const [modalSeleccion, setModalSeleccion] = useState(false)
+  const [preparandoSeleccion, setPreparandoSeleccion] = useState(false)
   const [seleccionadas, setSeleccionadas] = useState<Set<number>>(new Set())
   const [nota, setNota] = useState('')
   const [notaGuardada, setNotaGuardada] = useState('')
@@ -1859,7 +1860,18 @@ export default function DetallePropiedad() {
           // Pausa mínima entre descargas para que el navegador no las bloquee.
           if (i < objectUrls.length - 1) await new Promise<void>(r => setTimeout(r, 120))
         }
-        if (objectUrls.some(Boolean)) { premiarDescarga(); marcarDesbloqueada(propiedad.id) }
+        const bajadas = objectUrls.filter(Boolean).length
+        if (bajadas > 0) {
+          premiarDescarga(); marcarDesbloqueada(propiedad.id)
+          const total = imagenes.length
+          window.alert(
+            bajadas === total
+              ? `Se ${bajadas === 1 ? 'descargó' : 'descargaron'} ${bajadas} ${bajadas === 1 ? 'foto' : 'fotos'}.`
+              : `Se descargaron ${bajadas} de ${total} fotos (${total - bajadas} no se pudieron).`
+          )
+        } else {
+          window.alert('No se pudo descargar ninguna imagen.')
+        }
       } finally {
         setDescargando(false)
       }
@@ -1924,11 +1936,14 @@ export default function DetallePropiedad() {
       }
       setDescargando(false)
       if (guardadas > 0) { premiarDescarga(); marcarDesbloqueada(propiedad.id) }
+      const total = imagenes.length
       Alert.alert(
         guardadas > 0 ? 'Listo' : 'Error',
-        guardadas > 0
-          ? `${guardadas} de ${imagenes.length} imágenes guardadas en tu galería.`
-          : `No se pudo guardar ninguna imagen.\n\nError: ${errores[0] ?? 'desconocido'}`
+        guardadas === 0
+          ? `No se pudo guardar ninguna imagen.\n\nError: ${errores[0] ?? 'desconocido'}`
+          : guardadas === total
+            ? `Se ${guardadas === 1 ? 'guardó' : 'guardaron'} ${guardadas} ${guardadas === 1 ? 'foto' : 'fotos'} en tu galería.`
+            : `Se guardaron ${guardadas} de ${total} fotos (${total - guardadas} no se pudieron descargar).`
       )
     }
   }
@@ -2420,17 +2435,22 @@ export default function DetallePropiedad() {
 
             {/* Elegir cuáles descargar */}
             <TouchableOpacity
-              style={[styles.descargarBtn, styles.descargarBtnElegir, descargando && styles.btnDisabled]}
-              onPress={() => {
+              style={[styles.descargarBtn, styles.descargarBtnElegir, (descargando || preparandoSeleccion) && styles.btnDisabled]}
+              onPress={async () => {
                 setSeleccionadas(new Set())
+                // Cargar la lista COMPLETA antes de abrir el modal: si el cache
+                // solo tiene la portada, el conteo "X de Y" salía corto (decía 1
+                // de 1 cuando había 30). Ahora el modal siempre abre con el total real.
+                setPreparandoSeleccion(true)
+                await obtenerImagenesCompletas().catch(() => {})
+                setPreparandoSeleccion(false)
                 setModalSeleccion(true)
-                // Completar las fotos en segundo plano por si el cache solo
-                // tiene la portada (el sync actualiza el grid del modal).
-                obtenerImagenesCompletas().catch(() => {})
               }}
-              disabled={descargando}
+              disabled={descargando || preparandoSeleccion}
             >
-              <Text style={styles.descargarText}>☑ Elegir</Text>
+              {preparandoSeleccion
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.descargarText}>☑ Elegir</Text>}
             </TouchableOpacity>
           </View>
         )}
