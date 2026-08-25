@@ -15,18 +15,16 @@ const LIMITE_DIARIO = 5
 // OpenRouter primero (cuota gratis confiable, funciona con la key configurada).
 const MODELOS_OPENROUTER = [
   'meta-llama/llama-3.3-70b-instruct:free',
-  'google/gemini-2.0-flash-exp:free',
   'deepseek/deepseek-chat-v3-0324:free',
+  'mistralai/mistral-7b-instruct:free',
 ]
 
-// Modelos vigentes de Gemini (los anteriores quedaron descontinuados). Los
-// nombres cambian seguido; se prueban varios hasta dar con uno con cuota.
+// Modelos Gemini vigentes (confirmados en agosto 2026).
 const MODELOS_GEMINI = [
-  'gemini-3.5-flash-lite',
-  'gemini-flash-lite-latest',
-  'gemini-flash-latest',
-  'gemini-3.6-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
   'gemini-2.5-flash',
+  'gemini-1.5-flash',
 ]
 
 // Enfoques para diversificar: cada generación toma uno al azar → dos versiones
@@ -49,7 +47,7 @@ async function llamarOpenRouter(apiKey: string, model: string, prompt: string, t
       'Content-Type': 'application/json',
       'HTTP-Referer': 'https://valera.app',
     },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: temp, max_tokens: 1200 }),
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: temp, max_tokens: 2000 }),
   })
   const json = await response.json()
   if (!response.ok) return { ok: false, status: response.status, err: json?.error?.message ?? JSON.stringify(json) }
