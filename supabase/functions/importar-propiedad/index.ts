@@ -744,12 +744,89 @@ function extractNocNokProperty(html: string): Record<string, unknown> | null {
   }
 }
 
+// ── EasyBroker: importar desde URL de easybroker.com ───────────────────────
+// Las URLs de agente (/agent/) requieren login y no se pueden scraping.
+// Las URLs de listing público (/mx/listing/EB-XXXXXX) se importan vía API.
+async function importarEasyBroker(url: string): Promise<Response | null> {
+  let parsed: URL
+  try { parsed = new URL(url) } catch { return null }
+  if (!/(?:^|\.)easybroker\.com$/i.test(parsed.hostname)) return null
+
+  const corsH = { ...corsHeaders, 'Content-Type': 'application/json' }
+
+  // URL de agente privado — requiere autenticación
+  if (/\/(agent|portal|agente)\//i.test(parsed.pathname)) {
+    throw new Error(
+      'Las URLs del portal de agente de EasyBroker requieren inicio de sesión y no se pueden importar automáticamente. ' +
+      'Busca la propiedad en Lamudi, Inmuebles24 u otro portal público y usa esa URL, ' +
+      'o bien copia los datos manualmente.'
+    )
+  }
+
+  // URL de listing público: /mx/listing/EB-XXXXXX o /properties/EB-XXXXXX
+  const idMatch = parsed.pathname.match(/\/(EB-[A-Z0-9]+)/i)
+  if (!idMatch) return null // No es una URL de propiedad específica de EB
+
+  const publicId = idMatch[1].toUpperCase()
+  const apiKey = (Deno as any).env?.get?.('EASYBROKER_API_KEY')
+  if (!apiKey) return null // Sin API key, caer al scraping normal
+
+  const r = await fetch(`https://api.easybroker.com/v1/properties/${publicId}`, {
+    headers: { accept: 'application/json', 'X-Authorization': apiKey },
+  })
+  if (!r.ok) return null
+
+  const p = await r.json()
+
+  const opObj = Array.isArray(p.operations) ? p.operations.find((o: any) => o.active) : null
+  const opType = opObj?.type === 'rental' ? 'renta' : 'venta'
+  const precio = opObj?.amount ? String(Math.round(Number(opObj.amount))) : ''
+
+  const tipo = mapTipo(String(p.property_type ?? ''))
+  const loc = p.location ?? {}
+  const direccion = [loc.neighborhood, loc.city, loc.state].filter(Boolean).join(', ')
+
+  let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
+  const locStr = [loc.city ?? '', loc.state ?? ''].join(' ').toLowerCase()
+  if (/quer[eé]taro/.test(locStr))                zona = 'queretaro'
+  else if (/monterrey|nuevo\s*le[oó]n/.test(locStr)) zona = 'monterrey'
+  else if (/puebla/.test(locStr))                 zona = 'puebla'
+
+  const imagenes: string[] = (p.images ?? [])
+    .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
+    .map((i: any) => i.url ?? i.original_url ?? '')
+    .filter(Boolean)
+    .slice(0, 30)
+
+  return new Response(JSON.stringify({
+    titulo:           p.title ?? '',
+    descripcion:      p.description ?? '',
+    precio,
+    direccion,
+    zona,
+    modelo:           '',
+    recamaras:        p.bedrooms ?? null,
+    banos:            p.bathrooms ?? null,
+    mediosBanos:      p.half_bathrooms ?? null,
+    estacionamientos: p.parking_spaces ?? null,
+    m2:               p.construction_size ? String(p.construction_size) : '',
+    m2Terreno:        p.lot_size ? String(p.lot_size) : '',
+    tipo,
+    operacion:        opType,
+    imagenes,
+  }), { headers: corsH })
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
     const { url } = await req.json()
     if (!url || !/^https?:\/\//.test(url)) throw new Error('URL inválida')
+
+    // ── EasyBroker nativo (API o error temprano para URLs de agente) ──────────
+    const ebApiResp = await importarEasyBroker(url)
+    if (ebApiResp) return ebApiResp
 
     const html = await fetchHtml(url)
 
