@@ -22,6 +22,7 @@ type Cliente = {
   tipo_operacion: string | null; tipo_credito: string | null; presupuesto: string | null
   zona_busqueda: string | null; notas: string | null; proximo_contacto: string | null
   created_at: string; responsable_id: string
+  donado_por_nombre?: string | null
 }
 
 type Interaccion = { id: string; tipo: string; descripcion: string; created_at: string }
@@ -593,6 +594,11 @@ export default function DetalleCliente() {
           </View>
           <Text style={styles.heroNombre}>{cliente.nombre}</Text>
           {cliente.empresa ? <Text style={styles.heroEmpresa}>{cliente.empresa}</Text> : null}
+          {cliente.donado_por_nombre ? (
+            <View style={styles.heroDonado}>
+              <Text style={styles.heroDonadoText}>🎁 Donado por {cliente.donado_por_nombre}</Text>
+            </View>
+          ) : null}
           <View style={styles.heroBadge}>
             <Text style={styles.heroBadgeText}>{info.label}</Text>
           </View>
@@ -1137,6 +1143,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 5,
   },
   heroBadgeText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  heroDonado: {
+    backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 5, marginBottom: 8,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)',
+  },
+  heroDonadoText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
 
   // Stats strip (bottom of hero)
   heroStatsBar: {

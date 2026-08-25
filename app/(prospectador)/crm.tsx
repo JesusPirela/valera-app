@@ -46,6 +46,7 @@ type Cliente = {
   tipo_credito: string | null
   es_lead_campania?: boolean
   enviado_crm?: boolean
+  donado_por_nombre?: string | null
   recordatorios: { id: string; titulo: string; fecha_hora: string; completado: boolean }[]
 }
 
@@ -383,6 +384,13 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
                   </Text>
                 </View>
               ) : null}
+              {item.donado_por_nombre ? (
+                <View style={[s.fuenteTag, { backgroundColor: darkMode ? '#0d2018' : '#eefaf5', borderWidth: 1, borderColor: darkMode ? '#1e5c47' : '#b6e3d3' }]}>
+                  <Text style={[s.fuenteTagTxt, { color: darkMode ? '#5cc79f' : '#0f6b52' }]} numberOfLines={1}>
+                    🎁 Donado por {item.donado_por_nombre}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
           <View style={[s.estadoBadge, { backgroundColor: darkMode ? info.color + '40' : info.bg }]}>
@@ -624,7 +632,7 @@ export default function CRM() {
     queryFn: async () => {
       let q = supabase
         .from('clientes')
-        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, es_lead_campania, enviado_crm, recordatorios(id, titulo, fecha_hora, completado)')
+        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, es_lead_campania, enviado_crm, donado_por_nombre, recordatorios(id, titulo, fecha_hora, completado)')
         .is('eliminado_at', null)
         .order('updated_at', { ascending: false })
       if (soloMios) {
