@@ -161,6 +161,7 @@ interface VinteModelo {
   banos: number | null
   estacionamientos: number | null
   m2: string | null
+  m2Terreno?: string | null
   imagenes: string[]
   direccion: string
   desarrollo: string
@@ -350,6 +351,143 @@ function parseVinteModelos(html: string, url: string): VinteModelo[] {
     modelos.push({ nombre, precio, recamaras, banos, estacionamientos, m2, imagenes: imgs, direccion: direccionBase, desarrollo })
   }
 
+  return modelos
+}
+
+// ── Sadasi (sadasi.com) — parser multi-modelo ────────────────────────────
+// Soporta páginas de DESARROLLO (2 segmentos: /{ciudad-estado}/{desarrollo})
+// que listan varios modelos. Para páginas de modelo individual (3 segmentos)
+// devuelve [] y el flujo genérico ya maneja el resto (ver bloque SADASI más
+// abajo en serve()).
+//
+// SADASI embebe un array de productos en un bloque <script> como JSON plano;
+// los campos clave son: model_name, price, square_meters_of_construction,
+// square_meters_of_land, number_of_bedrooms, number_of_bathrooms,
+// parking_spaces. Las imágenes están en Firebase Storage.
+function parseSadasiModelos(html: string, url: string): VinteModelo[] {
+  try {
+    const u = new URL(url)
+    if (!/(^|\.)sadasi\.com$/i.test(u.hostname)) return []
+    const segs = u.pathname.split('/').filter(Boolean)
+    // Páginas de modelo individual (3 segmentos) → flujo genérico
+    if (segs.length !== 2) return []
+  } catch { return [] }
+
+  const segs = new URL(url).pathname.split('/').filter(Boolean)
+  const ciudadEstado = segs[0]   // ej. "queretaro-queretaro"
+  const desarrolloSlug = segs[1] // ej. "ex-hacienda-el-jacal"
+  const desarrolloNombre = tituloModelo(desarrolloSlug.replace(/-/g, ' '))
+  const ciudadNombre = tituloModelo(ciudadEstado.replace(/-/g, ' ').split(' ').slice(0, -1).join(' ') || ciudadEstado.replace(/-/g, ' '))
+  const direccionBase = `${desarrolloNombre}, ${ciudadNombre}`
+
+  // ── RUTA 1: JSON embebido en <script> ──────────────────────────────────
+  // SADASI inyecta los datos de cada modelo como JSON en el HTML (Remix/SSR).
+  // Buscamos todos los bloques que contengan "model_name" y los parseamos.
+  const modelos: VinteModelo[] = []
+  const jsonBlocks = html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)
+  for (const block of jsonBlocks) {
+    const src = block[1]
+    if (!src.includes('model_name') && !src.includes('square_meters_of_construction')) continue
+    // Extraer todos los objetos producto del bloque con el parser de profundidad
+    for (const objMatch of src.matchAll(/\{[^{}]*"model_name"[^{}]*\}/g)) {
+      try {
+        const dec = decodeEntities(objMatch[0]).replace(/\\u0026/gi, '&').replace(/\\\//g, '/')
+        const obj = JSON.parse(dec)
+        const nombre = String(obj.model_name ?? obj.name ?? '').trim()
+        if (!nombre) continue
+        const precio = parseNum(obj.price ?? obj.listing_price ?? 0) ?? 0
+        const m2 = obj.square_meters_of_construction
+          ? String(Math.round(parseFloat(obj.square_meters_of_construction)))
+          : null
+        const m2Terreno = obj.square_meters_of_land
+          ? String(Math.round(parseFloat(obj.square_meters_of_land)))
+          : null
+        const recamaras = obj.number_of_bedrooms != null ? parseInt(obj.number_of_bedrooms, 10) : null
+        const banos = obj.number_of_bathrooms != null ? parseFloat(obj.number_of_bathrooms) : null
+        const estacionamientos = obj.parking_spaces != null ? parseInt(obj.parking_spaces, 10) : null
+        // Imágenes: tomar las URLs de Firebase del mismo bloque cercano al objeto
+        const start = objMatch.index! - 100
+        const end = Math.min(src.length, (objMatch.index ?? 0) + objMatch[0].length + 500)
+        const nearby = src.slice(Math.max(0, start), end)
+        const imgs: string[] = []
+        for (const im of nearby.matchAll(/https?:\/\/firebasestorage\.googleapis\.com\/[^\s"'\\]+?\.(?:jpg|jpeg|png|webp)(?:[?%][^\s"'\\]*)?/gi)) {
+          const cleaned = limpiarUrlImg(im[0])
+          if (cleaned && !imgs.includes(cleaned)) imgs.push(cleaned)
+        }
+        // Si no hay imágenes en el objeto cercano, buscar por slug del modelo
+        if (!imgs.length) {
+          const slugModelo = nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '-')
+          for (const im of html.matchAll(new RegExp(`https?://firebasestorage\\.googleapis\\.com/[^\\s"'<>]+?${slugModelo}[^\\s"'<>]+?\\.(?:jpg|jpeg|png|webp)(?:\\?[^\\s"'<>]*)?`, 'gi'))) {
+            const cleaned = limpiarUrlImg(im[0])
+            if (cleaned && !imgs.includes(cleaned)) imgs.push(cleaned)
+          }
+        }
+        // Evitar duplicados
+        if (!modelos.some(m => m.nombre.toLowerCase() === nombre.toLowerCase())) {
+          modelos.push({ nombre, precio, recamaras, banos: banos ? Math.floor(banos) : null, estacionamientos, m2, m2Terreno, imagenes: imgs, direccion: direccionBase, desarrollo: desarrolloNombre })
+        }
+      } catch { /* JSON malformado — continuar */ }
+    }
+  }
+  if (modelos.length > 0) return modelos
+
+  // ── RUTA 2: HTML — enlaces a modelos (/ciudad-estado/desarrollo/modelo) ──
+  const linkPat = new RegExp(`href=["']\\/${ciudadEstado}\\/${desarrolloSlug}\\/([a-z0-9][a-z0-9-]*)["']`, 'gi')
+  const slugsSeen = new Set<string>()
+  for (const m of html.matchAll(linkPat)) {
+    slugsSeen.add(m[1])
+  }
+  if (slugsSeen.size === 0) return []
+
+  for (const slug of slugsSeen) {
+    const modelHref = `/${ciudadEstado}/${desarrolloSlug}/${slug}`
+    const idx = html.indexOf(modelHref)
+    if (idx === -1) continue
+    const secStart = Math.max(0, idx - 800)
+    const secEnd = Math.min(html.length, idx + 3000)
+    const sec = html.slice(secStart, secEnd)
+    if (/AGOTADO/i.test(sec.slice(0, 1200))) continue
+
+    // Precio
+    const precioM = sec.match(/\$\s*([\d,]+(?:,\d{3})+)/)
+    const precio = precioM ? parseInt(precioM[1].replace(/,/g, ''), 10) : 0
+
+    // Nombre: del texto del enlace o heading
+    const tituloM = sec.match(/<h[1-6][^>]*>(?:<a[^>]*>)?([^<]{2,50}?)<\/a?>[\s\S]{0,30}?<\/h[1-6]>/i)
+    const nombreRaw = tituloM ? decodeEntities(tituloM[1]).trim() : ''
+    const nombre = nombreRaw.replace(/^Casa\s+modelo\s+/i, '').trim()
+      || tituloModelo(slug.replace(/-/g, ' '))
+
+    // m² (icon alt o texto)
+    const m2M = sec.match(/(?:alt="[^"]*[Mm]etros[^"]*[Cc]onstrucci[oó]n[^"]*"[^>]*>[\s\S]{0,120}?|([\d.]+)\s*m[²2]\s*de\s*construcci[oó]n)([\d.]+)?/i)
+    const m2Raw = sec.match(/([\d.]+)\s*m[²2]/i)
+    const m2 = m2Raw ? String(Math.round(parseFloat(m2Raw[1]))) : null
+
+    const recM = sec.match(/(?:alt="[^"]*[Rr]ec[aá]mara[^"]*"[^>]*>[\s\S]{0,80}?|)(\d)\s*(?:[Rr]ec[aá]mara|<)/i)
+    const banM = sec.match(/([\d.]+)\s*[Bb]a[ñn]o/i)
+    const estM = sec.match(/(\d)\s*[Ee]stacionamiento/i)
+
+    // Imágenes Firebase en la sección
+    const imgs: string[] = []
+    for (const im of sec.matchAll(/https?:\/\/firebasestorage\.googleapis\.com\/[^\s"'<>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^\s"'<>]*)?/gi)) {
+      const cleaned = limpiarUrlImg(im[0])
+      if (cleaned && !imgs.includes(cleaned)) imgs.push(cleaned)
+    }
+
+    if (!modelos.some(m => m.nombre.toLowerCase() === nombre.toLowerCase())) {
+      modelos.push({
+        nombre,
+        precio,
+        recamaras: recM ? parseInt(recM[1] ?? recM[2] ?? '0', 10) || null : null,
+        banos: banM ? Math.floor(parseFloat(banM[1])) : null,
+        estacionamientos: estM ? parseInt(estM[1], 10) : null,
+        m2,
+        imagenes: imgs,
+        direccion: direccionBase,
+        desarrollo: desarrolloNombre,
+      })
+    }
+  }
   return modelos
 }
 
@@ -876,6 +1014,31 @@ serve(async (req) => {
         operacion: 'venta',
         imagenes: primero.imagenes,
         _modelos: vinteModelos,
+        _desarrollo: primero.desarrollo,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── Sadasi: devuelve todos los modelos del desarrollo ─────────────────────
+    const sadasiModelos = parseSadasiModelos(html, url)
+    if (sadasiModelos.length > 0) {
+      const primero = sadasiModelos[0]
+      return new Response(JSON.stringify({
+        titulo: '',
+        descripcion: '',
+        precio: primero.precio > 0 ? String(primero.precio) : '',
+        direccion: primero.direccion,
+        zona: null,
+        modelo: primero.nombre,
+        recamaras: primero.recamaras,
+        banos: primero.banos,
+        mediosBanos: null,
+        estacionamientos: primero.estacionamientos,
+        m2: primero.m2 ?? '',
+        m2Terreno: primero.m2Terreno ?? null,
+        tipo: 'casa',
+        operacion: 'venta',
+        imagenes: primero.imagenes,
+        _modelos: sadasiModelos,
         _desarrollo: primero.desarrollo,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
