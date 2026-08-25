@@ -866,8 +866,11 @@ export default function DetalleCliente() {
       {/* ── Donar al pool ────────────────────────────── */}
       <TouchableOpacity style={styles.btnDonar} onPress={donarCliente}>
         <Ionicons name="gift-outline" size={17} color="#0f6b52" />
-        <Text style={styles.btnDonarText}>Donar cliente al pool</Text>
+        <Text style={styles.btnDonarText}>Donar cliente</Text>
       </TouchableOpacity>
+      <Text style={styles.donarNota}>
+        Si el cliente que donas cierra la compra, te toca tu parte de la comisión + 200 coins y 300 XP. 🤝
+      </Text>
 
       {/* ── Eliminar ─────────────────────────────────── */}
       <TouchableOpacity style={styles.btnEliminar} onPress={eliminarCliente}>
@@ -1268,6 +1271,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eefaf5',
   },
   btnDonarText: { color: '#0f6b52', fontWeight: '700', fontSize: 14 },
+  donarNota: { color: '#4b7a6b', fontSize: 12, textAlign: 'center', marginHorizontal: 28, marginTop: 6, lineHeight: 16 },
 })
 
 // ── Modal styles ─────────────────────────────────────────
