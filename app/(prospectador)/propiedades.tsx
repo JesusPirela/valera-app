@@ -94,6 +94,7 @@ type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
 type FiltroPublicadas = 'publicadas' | 'sin_publicar' | null
 type FiltroNueva = boolean
+type FiltroOrden = 'normal' | 'mas_publicadas' | 'menos_publicadas' | 'mix'
 
 // Scroll offset persistente entre mounts (vive mientras el bundle JS esté cargado).
 // Permite restaurar la posición al volver del detalle sin necesidad de AsyncStorage.
@@ -206,6 +207,11 @@ const PropiedadCard = memo(function PropiedadCard({
               resizeMode="cover"
             />
           )}
+          {totalPublicadores === 0 && item.estado !== 'vendida' && (
+            <View style={styles.nuncaPublicadaBadge}>
+              <Text style={styles.nuncaPublicadaText}>🔥 NADIE LO HA PUBLICADO</Text>
+            </View>
+          )}
           <TouchableOpacity
             style={styles.lupitaBtn}
             onPress={(e) => { e.stopPropagation(); onZoom(thumb(primera.url, { width: 1080, quality: 72 }) ?? null) }}
@@ -213,6 +219,11 @@ const PropiedadCard = memo(function PropiedadCard({
           >
             <Text style={styles.lupitaText}>🔍</Text>
           </TouchableOpacity>
+        </View>
+      )}
+      {!primera?.url && totalPublicadores === 0 && item.estado !== 'vendida' && (
+        <View style={styles.nuncaPublicadaBadgeSinImagen}>
+          <Text style={styles.nuncaPublicadaText}>🔥 NADIE LO HA PUBLICADO</Text>
         </View>
       )}
       {item.estado === 'vendida' && (
@@ -367,6 +378,7 @@ export default function ProspectadorPropiedades() {
   const recienPublicadosRef = useRef<Set<string>>(new Set())
   const [filtroNueva, setFiltroNueva] = useState(false)
   const [filtroExclusiva, setFiltroExclusiva] = useState(false)
+  const [filtroOrden, setFiltroOrden] = useState<FiltroOrden>('normal')
   // Filtro por estado: arranca en Querétaro (el mercado principal) para que por
   // defecto NO se mezclen foráneas. Se recuerda la última elección de cada quien.
   const [filtroEstado, setFiltroEstado] = useState<'queretaro' | 'otros' | 'todas'>('queretaro')
@@ -864,6 +876,7 @@ export default function ProspectadorPropiedades() {
     filtroExclusiva ? 'exclusiva' : null,
     filtroDestacada ? 'destacada' : null,
     (filtroFechaPreset || fechaDesdeCustom || fechaHastaCustom) ? 'fecha' : null,
+    filtroOrden !== 'normal' ? 'orden' : null,
   ].filter(Boolean).length
 
   const _ahora = Date.now()
@@ -1006,24 +1019,65 @@ export default function ProspectadorPropiedades() {
   // Garantía final: ningún sort puede colarse sobre el filtro de operación.
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.operacion === filtroOperacion)
 
-  // Intercalar 5 "nunca publicadas" justo después de las destacadas.
-  // Orden final: [destacadas] → [5 nunca publicadas del pool no-destacado] → [resto]
+  // Orden del listado según filtroOrden.
   // Hash FNV-1 de (userId + propertyId) → shuffle estable distinto por usuario.
-  if (conteoPubs && userId) {
-    const fnv = (uid: string, pid: string) => {
-      let h = 0x811c9dc5
-      for (const c of uid + pid) { h ^= c.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0 }
-      return h
+  const fnv = (uid: string, pid: string) => {
+    let h = 0x811c9dc5
+    for (const c of uid + pid) { h ^= c.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0 }
+    return h
+  }
+
+  if (filtroOrden === 'normal') {
+    // Modo normal (comportamiento original): [destacadas] → [5 nunca publicadas FNV-1] → [resto]
+    if (conteoPubs && userId) {
+      const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
+      const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
+      const nuncaPublicadas = noDestacadas.filter(p => (conteoPubs.get(p.id) ?? 0) === 0)
+      if (nuncaPublicadas.length > 0) {
+        const shuffled = [...nuncaPublicadas].sort((a, b) => fnv(userId, a.id) - fnv(userId, b.id))
+        const top5 = shuffled.slice(0, 5)
+        const top5Ids = new Set(top5.map(p => p.id))
+        propiedadesFiltradas = [...destacadas, ...top5, ...noDestacadas.filter(p => !top5Ids.has(p.id))]
+      }
     }
+  } else if (filtroOrden === 'mas_publicadas' && conteoPubs) {
+    // Más publicadas primero (conteo global del equipo), destacadas siempre arriba.
     const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
     const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
-    const nuncaPublicadas = noDestacadas.filter(p => (conteoPubs.get(p.id) ?? 0) === 0)
-    if (nuncaPublicadas.length > 0) {
-      const shuffled = [...nuncaPublicadas].sort((a, b) => fnv(userId, a.id) - fnv(userId, b.id))
-      const top5 = shuffled.slice(0, 5)
-      const top5Ids = new Set(top5.map(p => p.id))
-      propiedadesFiltradas = [...destacadas, ...top5, ...noDestacadas.filter(p => !top5Ids.has(p.id))]
+    const ordenadas = [...noDestacadas].sort((a, b) =>
+      (conteoPubs.get(b.id) ?? 0) - (conteoPubs.get(a.id) ?? 0)
+    )
+    propiedadesFiltradas = [...destacadas, ...ordenadas]
+  } else if (filtroOrden === 'menos_publicadas' && conteoPubs) {
+    // Menos publicadas primero (0 van al inicio), destacadas siempre arriba.
+    const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
+    const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
+    const ordenadas = [...noDestacadas].sort((a, b) =>
+      (conteoPubs.get(a.id) ?? 0) - (conteoPubs.get(b.id) ?? 0)
+    )
+    propiedadesFiltradas = [...destacadas, ...ordenadas]
+  } else if (filtroOrden === 'mix' && conteoPubs && userId) {
+    // Mix inteligente: bloques de [2A, 2B, 1C] intercalados, con FNV-1 por usuario.
+    // Grupo A: nunca publicadas (0), Grupo B: poco publicadas (1-3), Grupo C: muy publicadas (>3)
+    const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
+    const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
+    const grupoA = noDestacadas.filter(p => (conteoPubs.get(p.id) ?? 0) === 0)
+    const grupoB = noDestacadas.filter(p => { const ct = conteoPubs.get(p.id) ?? 0; return ct >= 1 && ct <= 3 })
+    const grupoC = noDestacadas.filter(p => (conteoPubs.get(p.id) ?? 0) > 3)
+    const sortFnv = (arr: Propiedad[]) => [...arr].sort((a, b) => fnv(userId, a.id) - fnv(userId, b.id))
+    const sA = sortFnv(grupoA)
+    const sB = sortFnv(grupoB)
+    const sC = sortFnv(grupoC)
+    const mezclados: Propiedad[] = []
+    let iA = 0, iB = 0, iC = 0
+    while (iA < sA.length || iB < sB.length || iC < sC.length) {
+      let added = 0
+      for (let k = 0; k < 2 && iA < sA.length; k++) { mezclados.push(sA[iA++]); added++ }
+      for (let k = 0; k < 2 && iB < sB.length; k++) { mezclados.push(sB[iB++]); added++ }
+      for (let k = 0; k < 1 && iC < sC.length; k++) { mezclados.push(sC[iC++]); added++ }
+      if (added === 0) break
     }
+    propiedadesFiltradas = [...destacadas, ...mezclados]
   }
 
   return propiedadesFiltradas
@@ -1032,7 +1086,7 @@ export default function ProspectadorPropiedades() {
     propiedades, busqueda, filtroPublicadas, publicaciones, pubData, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
-    viewsData, conteoPubs, userId, filtroEstado,
+    viewsData, conteoPubs, userId, filtroEstado, filtroOrden,
   ])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
@@ -1077,6 +1131,7 @@ export default function ProspectadorPropiedades() {
     setFiltroFechaPreset(null)
     setFechaDesdeCustom('')
     setFechaHastaCustom('')
+    setFiltroOrden('normal')
   }
 
   // Snapshot de los filtros actuales para el historial.
@@ -1341,6 +1396,13 @@ export default function ProspectadorPropiedades() {
             <FiltroChip label="Todas" active={filtroPublicadas === null} onPress={() => setFiltroPublicadas(null)} color={primaryColor} />
             <FiltroChip label="Publicadas" active={filtroPublicadas === 'publicadas'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'publicadas' ? null : 'publicadas')} color={primaryColor} />
             <FiltroChip label="Sin publicar" active={filtroPublicadas === 'sin_publicar'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar')} color={primaryColor} />
+          </ScrollView>
+          <Text style={styles.filtroLabel}>Orden del listado</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="Normal" active={filtroOrden === 'normal'} onPress={() => setFiltroOrden('normal')} color={primaryColor} />
+            <FiltroChip label="🔥 Sin publicar" active={filtroOrden === 'menos_publicadas'} onPress={() => setFiltroOrden(filtroOrden === 'menos_publicadas' ? 'normal' : 'menos_publicadas')} color="#c0392b" />
+            <FiltroChip label="📈 Más publicadas" active={filtroOrden === 'mas_publicadas'} onPress={() => setFiltroOrden(filtroOrden === 'mas_publicadas' ? 'normal' : 'mas_publicadas')} color={primaryColor} />
+            <FiltroChip label="🎲 Mix inteligente" active={filtroOrden === 'mix'} onPress={() => setFiltroOrden(filtroOrden === 'mix' ? 'normal' : 'mix')} color="#1a6470" />
           </ScrollView>
           <Text style={styles.filtroLabel}>Fecha de publicación</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
@@ -1919,6 +1981,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#7a5500',
+  },
+  // Badge "NADIE LO HA PUBLICADO" — sobre la imagen (esquina superior izquierda)
+  nuncaPublicadaBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#c0392b',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 10,
+  },
+  // Variante sin imagen: va justo encima del body de la tarjeta
+  nuncaPublicadaBadgeSinImagen: {
+    backgroundColor: '#c0392b',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  nuncaPublicadaText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 10,
+    letterSpacing: 0.3,
   },
   vendidaBanner: {
     backgroundColor: '#374151',

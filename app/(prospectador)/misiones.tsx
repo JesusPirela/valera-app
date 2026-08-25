@@ -97,7 +97,7 @@ async function getConteosDiarios(uid: string): Promise<Map<string, number>> {
 
     const [propRes, crmRes, segRes, intRes, cursoRes] = await Promise.all([
       supabase.from('propiedad_publicacion').select('propiedad_id')
-        .eq('user_id', uid).eq('publicada', true).gte('fecha_publicacion', start).lt('fecha_publicacion', end),
+        .eq('user_id', uid).gt('veces_publicada', 0).gte('fecha_publicacion', start).lt('fecha_publicacion', end),
       supabase.from('clientes').select('id')
         .eq('responsable_id', uid).gte('created_at', start).lt('created_at', end),
       // seguimientos_dia es la fuente de verdad desde el rework del 20260723;
