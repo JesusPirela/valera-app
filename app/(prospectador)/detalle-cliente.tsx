@@ -512,6 +512,31 @@ export default function DetalleCliente() {
     }
   }
 
+  // Donar el cliente al pool de leads: sale de tu CRM y queda disponible para que
+  // otro lo tome. Si ese cliente llega a "compró", te toca tu parte de comisión.
+  async function donarCliente() {
+    const volver = () => router.canGoBack() ? router.back() : router.replace('/(prospectador)/crm')
+    const run = async () => {
+      const { data, error } = await supabase.rpc('donar_cliente', { p_cliente_id: id })
+      if (error || !data?.ok) {
+        const msg = error?.message || data?.error || 'No se pudo donar el cliente.'
+        if (Platform.OS === 'web') window.alert('⚠ ' + msg); else Alert.alert('Error', msg)
+        return
+      }
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
+      queryClient.removeQueries({ queryKey: ['detalle-cliente', id] })
+      const ok = data.mensaje ?? '🤝 ¡Gracias por donar! Si alguien lo cierra, te toca tu parte.'
+      if (Platform.OS === 'web') { window.alert(ok); volver() }
+      else Alert.alert('¡Donado!', ok, [{ text: 'OK', onPress: volver }])
+    }
+    const pregunta = '¿Donar este cliente al pool de leads?\n\nSaldrá de tu CRM y alguien más podrá tomarlo. Si ese cliente llega a comprar, te toca tu parte de la comisión.'
+    if (Platform.OS === 'web') { if (window.confirm(pregunta)) run() }
+    else Alert.alert('Donar cliente', pregunta, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Donar', onPress: run },
+    ])
+  }
+
   function abrirWhatsApp(msg: string) {
     if (!cliente) return
     let phone = cliente.telefono.replace(/\D/g, '')
@@ -836,6 +861,12 @@ export default function DetalleCliente() {
       >
         <Ionicons name="albums-outline" size={17} color="#fff" />
         <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Armar colección de propiedades</Text>
+      </TouchableOpacity>
+
+      {/* ── Donar al pool ────────────────────────────── */}
+      <TouchableOpacity style={styles.btnDonar} onPress={donarCliente}>
+        <Ionicons name="gift-outline" size={17} color="#0f6b52" />
+        <Text style={styles.btnDonarText}>Donar cliente al pool</Text>
       </TouchableOpacity>
 
       {/* ── Eliminar ─────────────────────────────────── */}
@@ -1230,6 +1261,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff8f8',
   },
   btnEliminarText: { color: '#c0392b', fontWeight: '600', fontSize: 14 },
+  btnDonar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginHorizontal: 16, marginTop: 20,
+    borderWidth: 1, borderColor: '#b6e3d3', borderRadius: 14, paddingVertical: 14,
+    backgroundColor: '#eefaf5',
+  },
+  btnDonarText: { color: '#0f6b52', fontWeight: '700', fontSize: 14 },
 })
 
 // ── Modal styles ─────────────────────────────────────────
