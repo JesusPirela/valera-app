@@ -22,7 +22,7 @@ Pautas:
 - Responde siempre en español, de forma concisa y directa
 - Usa emojis y listas para presentar datos de forma legible
 - Si no tienes datos suficientes, dilo claramente
-- Si el usuario envía una imagen de una propiedad, analízala visualmente (tipo, color, tamaño, características), luego usa buscar_propiedades para encontrar coincidencias en el inventario
+- Si el usuario envía una imagen de una propiedad: (1) identifica visualmente tipo (casa/departamento/terreno), número de recámaras si son visibles, estilo (moderno/clásico/minimalista), color de fachada, y cualquier texto visible en la imagen (nombre de fraccionamiento, calle, señales). (2) Llama buscar_propiedades usando SOLO parámetros estructurados: tipo, recamaras_min, zona (si hay texto visible que indique zona o fraccionamiento). NO uses el campo "descripcion" para buscar por imagen — ese campo hace búsqueda literal de texto y no funciona para comparar imágenes. (3) Muestra los candidatos encontrados con sus datos y pide al usuario que confirme cuál es
 - Cuando uses generar_mensajes_equipo: presenta cada prospectador con su nombre, publicaciones del día y el campo "mensaje" exactamente como viene en el resultado — no lo reescribas ni parafrasees. Ese mensaje ya tiene el tono y el objetivo de 20 publicaciones correctamente calculado
 - Hoy es ${getHoyMX()}`
 
@@ -805,10 +805,10 @@ async function ejecutarHerramienta(
     }
 
     if (nombre === 'buscar_propiedades') {
-      const limite = Math.min(args.limite ?? 6, 10)
+      const limite = Math.min(args.limite ?? 8, 12)
       let query = supabase
         .from('propiedades')
-        .select('codigo, titulo, tipo, operacion, zona, precio, recamaras, banos, m2, estado, direccion, descripcion_corta')
+        .select('codigo, titulo, tipo, operacion, zona, precio, recamaras, banos, m2, estado, direccion, descripcion_corta, propiedad_imagenes(url, orden)')
         .in('estado', ['disponible', 'vendida'])
         .eq('es_inventario', false)
 
@@ -819,17 +819,30 @@ async function ejecutarHerramienta(
       if (args.precio_max != null) query = query.lte('precio', args.precio_max)
       if (args.recamaras_min != null) query = query.gte('recamaras', args.recamaras_min)
       if (args.descripcion) {
-        query = query.or(`titulo.ilike.%${args.descripcion}%,direccion.ilike.%${args.descripcion}%,descripcion_corta.ilike.%${args.descripcion}%`)
+        // Buscar palabra por palabra para mayor flexibilidad
+        const palabras = args.descripcion.trim().split(/\s+/).filter((w: string) => w.length > 3).slice(0, 5)
+        if (palabras.length) {
+          const conds = palabras.map((w: string) => `titulo.ilike.%${w}%,direccion.ilike.%${w}%,descripcion_corta.ilike.%${w}%,zona.ilike.%${w}%`).join(',')
+          query = query.or(conds)
+        }
       }
 
       const { data, error: qErr } = await query.order('created_at', { ascending: false }).limit(limite)
       if (qErr) return { error: qErr.message }
-      if (!data?.length) return { mensaje: 'No se encontraron propiedades con esos criterios. Intenta ampliar los filtros.', total: 0 }
+      if (!data?.length) return { mensaje: 'No se encontraron propiedades con esos criterios. Intenta ampliar los filtros (por ejemplo, sin especificar recámaras o zona).', total: 0 }
+
+      // Incluir solo la portada (imagen de menor orden) para no saturar el contexto
+      const propiedades = (data as any[]).map(p => {
+        const imgs: any[] = p.propiedad_imagenes ?? []
+        imgs.sort((a: any, b: any) => (a.orden ?? 0) - (b.orden ?? 0))
+        const { propiedad_imagenes, ...rest } = p
+        return { ...rest, portada: imgs[0]?.url ?? null }
+      })
 
       return {
-        total_encontradas: data.length,
-        nota: data.length === limite ? `Mostrando las ${limite} más recientes. Ajusta los filtros para mayor precisión.` : undefined,
-        propiedades: data,
+        total_encontradas: propiedades.length,
+        nota: propiedades.length === limite ? `Mostrando las ${limite} más recientes. Ajusta los filtros para mayor precisión.` : undefined,
+        propiedades,
       }
     }
 
