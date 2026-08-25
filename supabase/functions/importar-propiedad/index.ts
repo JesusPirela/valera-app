@@ -1055,15 +1055,43 @@ serve(async (req) => {
     }
 
     // ── 1. EasyBroker: JSON embebido HTML-encoded ─────────────────────────────
-    // Patrón: {"Property ID":"EB-XXXX","Bedrooms":N,...}
-    const ebMatch = html.match(/\{[^{}]*&quot;Property ID&quot;[^{}]*\}/)
-    if (ebMatch) {
+    // El HTML puede contener &quot;Property ID&quot; dentro de un atributo HTML.
+    // Usamos un extractor con contador de profundidad para soportar JSON anidado.
+    let ebData: Record<string, any> | null = null
+    {
+      const KEY = '&quot;Property ID&quot;'
+      const keyIdx = html.indexOf(KEY)
+      if (keyIdx !== -1) {
+        // Buscar la llave de apertura { más cercana hacia atrás
+        let braceStart = keyIdx
+        while (braceStart > 0 && html[braceStart] !== '{') braceStart--
+        if (html[braceStart] === '{') {
+          // Decodificar entidades HTML en la subcadena
+          const raw = html.slice(braceStart, Math.min(braceStart + 30000, html.length))
+          const dec = raw.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'")
+          // Encontrar la llave de cierre } correspondiente contando profundidad
+          let depth = 0, i = 0, inStr = false
+          for (; i < dec.length; i++) {
+            const c = dec[i]
+            if (inStr) {
+              if (c === '\\') { i++; continue }
+              if (c === '"') inStr = false
+            } else {
+              if (c === '"') inStr = true
+              else if (c === '{') depth++
+              else if (c === '}') { depth--; if (depth === 0) break }
+            }
+          }
+          if (depth === 0) {
+            try { ebData = JSON.parse(dec.slice(0, i + 1)) } catch { /* continúa */ }
+          }
+        }
+      }
+    }
+    const ebMatch = ebData !== null
+    if (ebData) {
       try {
-        const decoded = ebMatch[0]
-          .replace(/&quot;/g, '"')
-          .replace(/&amp;/g, '&')
-          .replace(/&#39;/g, "'")
-        const eb = JSON.parse(decoded)
+        const eb = ebData
 
         recamaras       = cap(parseNum(eb['Bedrooms']), 5)
         banos           = cap(parseNum(eb['Bathrooms'] ?? eb['Full Bathrooms']), 4)
@@ -1075,8 +1103,14 @@ serve(async (req) => {
         const lotArea = parseNum(eb['Lot M2'] ?? eb['Lot Size M2'] ?? eb['Land M2'])
         if (lotArea) m2Terreno = String(lotArea)
 
-        const saleP = parseNum(eb['Sale Price'])
-        const rentP = parseNum(eb['Rent Price'])
+        // El precio puede venir como número o como objeto { amount, currency }
+        const extractPrice = (v: any): number | null => {
+          if (v == null) return null
+          if (typeof v === 'object') return parseNum(v?.amount ?? v?.Amount)
+          return parseNum(v)
+        }
+        const saleP = extractPrice(eb['Sale Price'] ?? eb['sale_price'])
+        const rentP = extractPrice(eb['Rent Price'] ?? eb['rent_price'])
         if (saleP)      { precio = String(Math.round(saleP)); operacion = operacion || 'venta' }
         else if (rentP) { precio = String(Math.round(rentP)); operacion = operacion || 'renta' }
 
