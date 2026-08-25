@@ -276,7 +276,11 @@ export default function ValeraAIChatAdmin() {
               )}
 
               {mensajes.map(m => (
-                <View key={m.id} style={[s.burbuja, m.role === 'user' ? s.burbujaUser : s.burbujaAI]}>
+                <View key={m.id} style={[
+                  s.burbuja,
+                  m.role === 'user' ? s.burbujaUser : s.burbujaAI,
+                  m.tarjetas && s.burbujaAncha,
+                ]}>
                   {m.role === 'assistant' && (
                     <Text style={s.burbujaLabel}>✦ Valera IA</Text>
                   )}
@@ -466,6 +470,7 @@ const s = StyleSheet.create({
 
   // ── Burbujas ────────────────────────────────────────────────
   burbuja: { maxWidth: '88%', borderRadius: 14, padding: 12, gap: 4 },
+  burbujaAncha: { maxWidth: '98%' },
   burbujaUser: {
     alignSelf: 'flex-end',
     backgroundColor: '#1a6470',

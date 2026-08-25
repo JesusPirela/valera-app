@@ -23,6 +23,7 @@ Pautas:
 - Usa emojis y listas para presentar datos de forma legible
 - Si no tienes datos suficientes, dilo claramente
 - Si el usuario envía una imagen de una propiedad, analízala visualmente (tipo, color, tamaño, características), luego usa buscar_propiedades para encontrar coincidencias en el inventario
+- Cuando uses generar_mensajes_equipo: presenta cada prospectador con su nombre, publicaciones del día y el campo "mensaje" exactamente como viene en el resultado — no lo reescribas ni parafrasees. Ese mensaje ya tiene el tono y el objetivo de 20 publicaciones correctamente calculado
 - Hoy es ${getHoyMX()}`
 
 const HERRAMIENTAS = [
@@ -213,15 +214,15 @@ function generarMensajeWhatsApp(
   if (citas > 0) extras.push(`coordinaste ${citas} cita${citas > 1 ? 's' : ''}`)
   if (segs > 0) extras.push(`tuviste ${segs} seguimiento${segs > 1 ? 's' : ''}`)
   if (ints > 0 && !segs) extras.push(`${ints} interacción${ints > 1 ? 'es' : ''} con clientes`)
-  const ex = extras.length > 0 ? ` También ${extras.join(' y ')}.` : ''
+  const ex = extras.length > 0 ? ` Además ${extras.join(' y ')}.` : ''
 
-  if (pubs >= 20) return `🔥 ¡${nombre}! Publicaste ${pubs} propiedades hoy — ¡eso es estar al máximo!${ex} ¡Mañana mantenemos ese nivel! 💪`
-  if (pubs >= 15) return `📈 ¡Gran día ${nombre}! ${pubs} publicaciones, ya casi llegas a la meta de ${meta}.${ex} ¿Mañana publicamos ${restante} más y la cerramos? 🎯`
-  if (pubs >= 10) return `👍 Buen día ${nombre}, llegaste a ${pubs} publicaciones.${ex} Estás a ${restante} de la meta — ¿mañana le damos para cerrarla? 💪`
-  if (pubs >= 5)  return `💡 Hola ${nombre}, hoy tuviste ${pubs} publicaciones.${ex} ¡Mañana le damos con todo y publicamos ${Math.min(restante, 15)}+ para acercarnos a ${meta}! 🚀`
-  if (pubs >= 1)  return `⚡ ${nombre}, hoy arrancamos con ${pubs} publicación${pubs > 1 ? 'es' : ''}.${ex} ¡Mañana apuntamos a 10+! 💪`
-  if (extras.length > 0) return `👋 Hey ${nombre}, hoy sin publicaciones pero ${extras.join(' y ')}. ¡Mañana arrancamos con al menos 5! 🙌`
-  return `👋 Hey ${nombre}, hoy estuvo tranquilo — sin publicaciones. ¿Mañana arrancamos con 5? Estoy aquí para lo que necesites 🙌`
+  if (pubs >= 20) return `🔥 ¡${nombre}! Publicaste ${pubs} propiedades hoy — ¡meta cumplida y superada!${ex} ¡Mañana mantenemos ese nivel! 💪`
+  if (pubs >= 15) return `📈 ¡Hola ${nombre}! Llevas ${pubs} publicaciones hoy, ¡muy bien!${ex} Te faltan solo ${restante} para llegar a la meta de 20. ¿Mañana los cerramos? 🎯`
+  if (pubs >= 10) return `👍 ¡Hola ${nombre}! Hoy llevas ${pubs} publicaciones — buen ritmo.${ex} Te faltan ${restante} para llegar a 20. ¿Mañana le damos para cerrarla? 💪`
+  if (pubs >= 5)  return `💡 ¡Hola ${nombre}! Llevas ${pubs} publicaciones hoy.${ex} Te faltan ${restante} para llegar a la meta de 20 — ¿mañana publicamos otras ${Math.min(restante, 15)} y nos acercamos? 🚀`
+  if (pubs >= 1)  return `⚡ ¡Hola ${nombre}! Hoy arrancaste con ${pubs} publicación${pubs > 1 ? 'es' : ''}.${ex} Te faltan ${restante} para la meta de 20. ¡Mañana apuntamos a 10+, podemos! 💪`
+  if (extras.length > 0) return `👋 ¡Hola ${nombre}! Hoy sin publicaciones pero ${extras.join(' y ')}.${''} Te recuerdo que la meta es 20 diarias — ¡mañana arrancamos con al menos 5! 🙌`
+  return `👋 ¡Hola ${nombre}! Hoy no tuvimos publicaciones. La meta del día son 20 — ¿mañana arrancamos con 5? Cualquier duda aquí estoy 🙌`
 }
 
 // Construye un mapa userId → nombre desde profiles.nombre
