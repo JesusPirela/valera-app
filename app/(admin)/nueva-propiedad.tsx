@@ -191,6 +191,7 @@ export default function NuevaPropiedad() {
   const [geoLoading, setGeoLoading] = useState(false)
   const [asesorId, setAsesorId] = useState<string | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
+  const [directa, setDirecta] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
   const [constructorasExistentes, setConstructorasExistentes] = useState<string[]>([])
@@ -808,6 +809,7 @@ export default function NuevaPropiedad() {
         estacionamientos,
         asesor_id: asesorId,
         exclusiva,
+        directa,
         es_constructora: esConstructora,
         nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
         es_inventario: esInventario,
@@ -1280,6 +1282,19 @@ export default function NuevaPropiedad() {
             value={exclusiva}
             onValueChange={setExclusiva}
             trackColor={{ false: '#ddd', true: '#c0392b' }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        <View style={styles.exclusivaRow}>
+          <View>
+            <Text style={styles.exclusivaLabel}>🎯 Propiedad directa</Text>
+            <Text style={styles.exclusivaDesc}>Trato directo con el propietario o desarrollador</Text>
+          </View>
+          <ToggleSwitch
+            value={directa}
+            onValueChange={setDirecta}
+            trackColor={{ false: '#ddd', true: '#1a6470' }}
             thumbColor="#fff"
           />
         </View>

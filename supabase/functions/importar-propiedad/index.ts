@@ -385,12 +385,20 @@ function parseSadasiModelos(html: string, url: string): VinteModelo[] {
   //   /v0/b/sadasi-integraciones.appspot.com/o/products%2F{PRODUCT_ID}%2F...
   // Agrupar por product_id permite recuperar TODAS las fotos de cada modelo
   // desde el HTML completo sin depender del tamaño del snippet local.
+  // Palabras clave en la URL de Firebase que indican imagen NO es foto de la
+  // propiedad: banners promocionales, concursos, logos de marca, etc.
+  // Nota: "ganar" cubre "gana-un-millon", "ganar-premio", etc.
+  //       "modelo-" NO se filtra porque es la fachada principal de cada modelo.
+  const SADASI_JUNK = /concurso|sorteo|ganar?[-_%]|participa|promo[-_%]|banner[-_%]|campa[nñ]|publicidad|newsletter|flyer[-_%]|evento[-_%]/i
   const imgsByProductId = new Map<string, string[]>()
   for (const m of html.matchAll(/https?:\/\/firebasestorage\.googleapis\.com\/[^\s"'<>\\]+/gi)) {
     const raw = m[0].replace(/\\u0026/gi, '&').replace(/\\\//g, '/').replace(/&amp;/gi, '&')
     const idM = raw.match(/products(?:%2F|\/)([a-zA-Z0-9]{15,})/i)
     if (!idM) continue
-    if (!/\.(jpg|jpeg|png|webp)/i.test(raw.split('?')[0])) continue
+    const pathPart = raw.split('?')[0]
+    if (!/\.(jpg|jpeg|png|webp)/i.test(pathPart)) continue
+    // Excluir imágenes promocionales/banners
+    if (SADASI_JUNK.test(decodeURIComponent(pathPart))) continue
     const productId = idM[1]
     const cleaned = limpiarUrlImg(raw)
     if (!cleaned) continue

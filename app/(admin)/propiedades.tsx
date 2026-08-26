@@ -33,6 +33,7 @@ type Propiedad = {
   destacada: boolean
   destacada_mensaje: string | null
   destacada_hasta: string | null
+  directa: boolean
   es_constructora: boolean | null
   nombre_constructora: string | null
   recamaras: number | null
@@ -161,7 +162,7 @@ export default function AdminPropiedades() {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, destacada_hasta, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria), propiedad_imagenes(url, thumb_url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, destacada_hasta, directa, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria), propiedad_imagenes(url, thumb_url, orden)')
         .order('created_at', { ascending: false })
         .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
         .limit(1, { referencedTable: 'propiedad_imagenes' })
@@ -669,6 +670,7 @@ export default function AdminPropiedades() {
           <View style={styles.badgesTop}>
             <Text style={styles.codigoBadge}>{item.codigo ?? '—'}</Text>
             {item.destacada && <Text style={styles.destacadaBadge}>★ Destacada</Text>}
+            {item.directa && <Text style={styles.directaBadge}>🎯 Directa</Text>}
             <View style={[styles.estadoBadge, item.estado === 'vendida' && styles.estadoVendida]}>
               <Text style={[styles.estadoText, item.estado === 'vendida' && styles.estadoTextVendida]}>
                 {item.estado === 'vendida' ? 'Vendida' : 'Disponible'}
@@ -1138,6 +1140,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a2e00',
     backgroundColor: '#c9a84c',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  directaBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+    backgroundColor: '#1a6470',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,

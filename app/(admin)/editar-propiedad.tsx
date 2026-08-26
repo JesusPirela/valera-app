@@ -177,6 +177,7 @@ export default function EditarPropiedad() {
   const [geoLoading, setGeoLoading] = useState(false)
   const [asesorId, setAsesorId] = useState<string | null>(null)
   const [exclusiva, setExclusiva] = useState(false)
+  const [directa, setDirecta] = useState(false)
   const [lonaContactada, setLonaContactada] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
@@ -273,7 +274,7 @@ export default function EditarPropiedad() {
     const [{ data, error }, { data: constrData }] = await Promise.all([
       supabase
         .from('propiedades')
-        .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, lona_contactada, es_constructora, nombre_constructora, es_inventario, inventario_seccion, video_url, url_origen, propiedad_imagenes(id, url, orden)')
+        .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, directa, lona_contactada, es_constructora, nombre_constructora, es_inventario, inventario_seccion, video_url, url_origen, propiedad_imagenes(id, url, orden)')
         .eq('id', id)
         .single(),
       supabase
@@ -314,6 +315,7 @@ export default function EditarPropiedad() {
     setEstacionamientos(data.estacionamientos ?? null)
     setAsesorId(data.asesor_id ?? null)
     setExclusiva(data.exclusiva ?? false)
+    setDirecta((data as any).directa ?? false)
     setLonaContactada((data as any).lona_contactada ?? false)
     setEsConstructora(data.es_constructora ?? false)
     const actualNombre = data.nombre_constructora ?? ''
@@ -866,6 +868,7 @@ export default function EditarPropiedad() {
           estacionamientos,
           asesor_id: asesorId,
           exclusiva,
+          directa,
           lona_contactada: lonaContactada,
           es_constructora: esConstructora,
           nombre_constructora: esConstructora ? nombreConstructora.trim() || null : null,
@@ -1410,6 +1413,19 @@ export default function EditarPropiedad() {
             value={exclusiva}
             onValueChange={setExclusiva}
             trackColor={{ false: '#ddd', true: '#c0392b' }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        <View style={styles.exclusivaRow}>
+          <View>
+            <Text style={styles.exclusivaLabel}>🎯 Propiedad directa</Text>
+            <Text style={styles.exclusivaDesc}>Trato directo con el propietario o desarrollador</Text>
+          </View>
+          <ToggleSwitch
+            value={directa}
+            onValueChange={setDirecta}
+            trackColor={{ false: '#ddd', true: '#1a6470' }}
             thumbColor="#fff"
           />
         </View>
