@@ -1301,7 +1301,7 @@ export default function NuevaPropiedad() {
 
         <View style={styles.exclusivaRow}>
           <View>
-            <Text style={styles.exclusivaLabel}>Propiedad de constructora</Text>
+            <Text style={styles.exclusivaLabel}>Propiedad de constructora [v2]</Text>
             <Text style={styles.exclusivaDesc}>Desarrollo en construcción o con unidades nuevas</Text>
           </View>
           <ToggleSwitch
