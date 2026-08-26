@@ -380,15 +380,40 @@ function parseSadasiModelos(html: string, url: string): VinteModelo[] {
   const ciudadNombre = tituloModelo(ciudadEstado.replace(/-/g, ' ').split(' ').slice(0, -1).join(' ') || ciudadEstado.replace(/-/g, ' '))
   const direccionBase = `${desarrolloNombre}, ${ciudadNombre}`
 
+  // ── Pre-index: todas las imágenes Firebase agrupadas por product_id ──────
+  // Las URLs de Firebase tienen el formato:
+  //   /v0/b/sadasi-integraciones.appspot.com/o/products%2F{PRODUCT_ID}%2F...
+  // Agrupar por product_id permite recuperar TODAS las fotos de cada modelo
+  // desde el HTML completo sin depender del tamaño del snippet local.
+  const imgsByProductId = new Map<string, string[]>()
+  for (const m of html.matchAll(/https?:\/\/firebasestorage\.googleapis\.com\/[^\s"'<>\\]+/gi)) {
+    const raw = m[0].replace(/\\u0026/gi, '&').replace(/\\\//g, '/').replace(/&amp;/gi, '&')
+    const idM = raw.match(/products(?:%2F|\/)([a-zA-Z0-9]{15,})/i)
+    if (!idM) continue
+    if (!/\.(jpg|jpeg|png|webp)/i.test(raw.split('?')[0])) continue
+    const productId = idM[1]
+    const cleaned = limpiarUrlImg(raw)
+    if (!cleaned) continue
+    if (!imgsByProductId.has(productId)) imgsByProductId.set(productId, [])
+    const arr = imgsByProductId.get(productId)!
+    if (!arr.includes(cleaned)) arr.push(cleaned)
+  }
+
+  // Dado un fragmento de texto (cerca de un modelo), extrae su product_id y
+  // devuelve TODAS las imágenes de ese producto del índice completo.
+  function imgsParaContexto(ctx: string): string[] {
+    const m = ctx.match(/products(?:%2F|\/)([a-zA-Z0-9]{15,})/i)
+    if (!m) return []
+    return imgsByProductId.get(m[1]) ?? []
+  }
+
   // ── RUTA 1: JSON embebido en <script> ──────────────────────────────────
   // SADASI inyecta los datos de cada modelo como JSON en el HTML (Remix/SSR).
-  // Buscamos todos los bloques que contengan "model_name" y los parseamos.
   const modelos: VinteModelo[] = []
   const jsonBlocks = html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)
   for (const block of jsonBlocks) {
     const src = block[1]
     if (!src.includes('model_name') && !src.includes('square_meters_of_construction')) continue
-    // Extraer todos los objetos producto del bloque con el parser de profundidad
     for (const objMatch of src.matchAll(/\{[^{}]*"model_name"[^{}]*\}/g)) {
       try {
         const dec = decodeEntities(objMatch[0]).replace(/\\u0026/gi, '&').replace(/\\\//g, '/')
@@ -397,34 +422,26 @@ function parseSadasiModelos(html: string, url: string): VinteModelo[] {
         if (!nombre) continue
         const precio = parseNum(obj.price ?? obj.listing_price ?? 0) ?? 0
         const m2 = obj.square_meters_of_construction
-          ? String(Math.round(parseFloat(obj.square_meters_of_construction)))
-          : null
+          ? String(Math.round(parseFloat(obj.square_meters_of_construction))) : null
         const m2Terreno = obj.square_meters_of_land
-          ? String(Math.round(parseFloat(obj.square_meters_of_land)))
-          : null
+          ? String(Math.round(parseFloat(obj.square_meters_of_land))) : null
         const recamaras = obj.number_of_bedrooms != null ? parseInt(obj.number_of_bedrooms, 10) : null
         const banos = obj.number_of_bathrooms != null ? parseFloat(obj.number_of_bathrooms) : null
         const estacionamientos = obj.parking_spaces != null ? parseInt(obj.parking_spaces, 10) : null
-        // Imágenes: tomar las URLs de Firebase del mismo bloque cercano al objeto
-        const start = objMatch.index! - 100
-        const end = Math.min(src.length, (objMatch.index ?? 0) + objMatch[0].length + 500)
-        const nearby = src.slice(Math.max(0, start), end)
-        const imgs: string[] = []
-        for (const im of nearby.matchAll(/https?:\/\/firebasestorage\.googleapis\.com\/[^\s"'\\]+?\.(?:jpg|jpeg|png|webp)(?:[?%][^\s"'\\]*)?/gi)) {
-          const cleaned = limpiarUrlImg(im[0])
-          if (cleaned && !imgs.includes(cleaned)) imgs.push(cleaned)
-        }
-        // Si no hay imágenes en el objeto cercano, buscar por slug del modelo
-        if (!imgs.length) {
-          const slugModelo = nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '-')
-          for (const im of html.matchAll(new RegExp(`https?://firebasestorage\\.googleapis\\.com/[^\\s"'<>]+?${slugModelo}[^\\s"'<>]+?\\.(?:jpg|jpeg|png|webp)(?:\\?[^\\s"'<>]*)?`, 'gi'))) {
-            const cleaned = limpiarUrlImg(im[0])
-            if (cleaned && !imgs.includes(cleaned)) imgs.push(cleaned)
-          }
-        }
-        // Evitar duplicados
+
+        // Contexto amplio alrededor del objeto para encontrar el product_id
+        const ctxStart = Math.max(0, objMatch.index! - 200)
+        const ctxEnd = Math.min(src.length, objMatch.index! + objMatch[0].length + 1000)
+        const ctx = src.slice(ctxStart, ctxEnd)
+        // Si el product_id está en el JSON mismo (campo "id" o similar), usarlo primero
+        const productIdFromJson = String(obj.id ?? obj.product_id ?? obj.firebase_id ?? '').trim()
+        const imgs = (productIdFromJson && imgsByProductId.has(productIdFromJson))
+          ? imgsByProductId.get(productIdFromJson)!
+          : imgsParaContexto(ctx)
+
         if (!modelos.some(m => m.nombre.toLowerCase() === nombre.toLowerCase())) {
-          modelos.push({ nombre, precio, recamaras, banos: banos ? Math.floor(banos) : null, estacionamientos, m2, m2Terreno, imagenes: imgs, direccion: direccionBase, desarrollo: desarrolloNombre })
+          modelos.push({ nombre, precio, recamaras, banos: banos ? Math.floor(banos) : null,
+            estacionamientos, m2, m2Terreno, imagenes: imgs, direccion: direccionBase, desarrollo: desarrolloNombre })
         }
       } catch { /* JSON malformado — continuar */ }
     }
@@ -434,51 +451,54 @@ function parseSadasiModelos(html: string, url: string): VinteModelo[] {
   // ── RUTA 2: HTML — enlaces a modelos (/ciudad-estado/desarrollo/modelo) ──
   const linkPat = new RegExp(`href=["']\\/${ciudadEstado}\\/${desarrolloSlug}\\/([a-z0-9][a-z0-9-]*)["']`, 'gi')
   const slugsSeen = new Set<string>()
-  for (const m of html.matchAll(linkPat)) {
-    slugsSeen.add(m[1])
-  }
+  for (const m of html.matchAll(linkPat)) slugsSeen.add(m[1])
   if (slugsSeen.size === 0) return []
 
+  // Todos los índices de cada ocurrencia del href para delimitar secciones
+  const hrefOccurrences: { slug: string; idx: number }[] = []
   for (const slug of slugsSeen) {
-    const modelHref = `/${ciudadEstado}/${desarrolloSlug}/${slug}`
-    const idx = html.indexOf(modelHref)
-    if (idx === -1) continue
-    const secStart = Math.max(0, idx - 800)
-    const secEnd = Math.min(html.length, idx + 3000)
-    const sec = html.slice(secStart, secEnd)
-    if (/AGOTADO/i.test(sec.slice(0, 1200))) continue
+    let pos = 0
+    const needle = `/${ciudadEstado}/${desarrolloSlug}/${slug}`
+    while (true) {
+      const i = html.indexOf(needle, pos)
+      if (i === -1) break
+      hrefOccurrences.push({ slug, idx: i })
+      pos = i + 1
+    }
+  }
+  hrefOccurrences.sort((a, b) => a.idx - b.idx)
 
-    // Precio
+  for (let i = 0; i < hrefOccurrences.length; i++) {
+    const { slug, idx } = hrefOccurrences[i]
+    // Tomar la sección desde antes de este href hasta antes del siguiente
+    const secStart = Math.max(0, idx - 600)
+    const nextIdx = hrefOccurrences[i + 1]?.idx ?? html.length
+    const secEnd = Math.min(html.length, Math.max(idx + 4000, nextIdx))
+    const sec = html.slice(secStart, secEnd)
+    if (/AGOTADO/i.test(sec.slice(0, 1500))) continue
+
     const precioM = sec.match(/\$\s*([\d,]+(?:,\d{3})+)/)
     const precio = precioM ? parseInt(precioM[1].replace(/,/g, ''), 10) : 0
 
-    // Nombre: del texto del enlace o heading
-    const tituloM = sec.match(/<h[1-6][^>]*>(?:<a[^>]*>)?([^<]{2,50}?)<\/a?>[\s\S]{0,30}?<\/h[1-6]>/i)
+    const tituloM = sec.match(/<h[1-6][^>]*>(?:<[^>]+>)?([^<]{2,60}?)(?:<\/[^>]+>)?<\/h[1-6]>/i)
     const nombreRaw = tituloM ? decodeEntities(tituloM[1]).trim() : ''
     const nombre = nombreRaw.replace(/^Casa\s+modelo\s+/i, '').trim()
       || tituloModelo(slug.replace(/-/g, ' '))
 
-    // m² (icon alt o texto)
-    const m2M = sec.match(/(?:alt="[^"]*[Mm]etros[^"]*[Cc]onstrucci[oó]n[^"]*"[^>]*>[\s\S]{0,120}?|([\d.]+)\s*m[²2]\s*de\s*construcci[oó]n)([\d.]+)?/i)
     const m2Raw = sec.match(/([\d.]+)\s*m[²2]/i)
     const m2 = m2Raw ? String(Math.round(parseFloat(m2Raw[1]))) : null
-
-    const recM = sec.match(/(?:alt="[^"]*[Rr]ec[aá]mara[^"]*"[^>]*>[\s\S]{0,80}?|)(\d)\s*(?:[Rr]ec[aá]mara|<)/i)
+    const recM = sec.match(/(\d)\s*[Rr]ec[aá]mara/i)
     const banM = sec.match(/([\d.]+)\s*[Bb]a[ñn]o/i)
     const estM = sec.match(/(\d)\s*[Ee]stacionamiento/i)
 
-    // Imágenes Firebase en la sección
-    const imgs: string[] = []
-    for (const im of sec.matchAll(/https?:\/\/firebasestorage\.googleapis\.com\/[^\s"'<>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^\s"'<>]*)?/gi)) {
-      const cleaned = limpiarUrlImg(im[0])
-      if (cleaned && !imgs.includes(cleaned)) imgs.push(cleaned)
-    }
+    // Imágenes: product_id del contexto → todas las fotos del producto
+    const imgs = imgsParaContexto(sec)
 
     if (!modelos.some(m => m.nombre.toLowerCase() === nombre.toLowerCase())) {
       modelos.push({
         nombre,
         precio,
-        recamaras: recM ? parseInt(recM[1] ?? recM[2] ?? '0', 10) || null : null,
+        recamaras: recM ? parseInt(recM[1], 10) : null,
         banos: banM ? Math.floor(parseFloat(banM[1])) : null,
         estacionamientos: estM ? parseInt(estM[1], 10) : null,
         m2,
