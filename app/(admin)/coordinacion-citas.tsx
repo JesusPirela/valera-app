@@ -329,6 +329,10 @@ function ModalEdicion({
   const [propiedadTitulo, setPropTitulo]      = useState<string | null>(cita?.propiedad?.titulo ?? null)
   const [propExterna, setPropExterna]         = useState(cita?.propiedad_externa ?? '')
   const [razonCancelacion, setRazonCancel]    = useState(cita?.razon_cancelacion ?? '')
+  // Operación (venta/renta): arranca del perfil del cliente (auto). Se persiste al
+  // cliente al guardar, ANTES de tocar la cita, para que el trigger de Citas de
+  // Venta lo lea al vuelo. Un cliente de venta → su cita entra a Citas de Venta.
+  const [tipoOperacion, setTipoOperacion]     = useState<'venta' | 'renta'>(cita?.clientes?.tipo_operacion === 'renta' ? 'renta' : 'venta')
   const [guardando, setGuardando]             = useState(false)
 
   async function guardar() {
@@ -336,6 +340,11 @@ function ModalEdicion({
     setGuardando(true)
     if (telefono.trim() && telefono.trim() !== cita.clientes.telefono) {
       const { error } = await supabase.from('clientes').update({ telefono: telefono.trim() }).eq('id', cita.cliente_id)
+      if (error) { alerta(error.message); setGuardando(false); return }
+    }
+    // Guardar la operación en el perfil del cliente (antes de la cita, para el trigger).
+    if (tipoOperacion !== cita.clientes.tipo_operacion) {
+      const { error } = await supabase.from('clientes').update({ tipo_operacion: tipoOperacion }).eq('id', cita.cliente_id)
       if (error) { alerta(error.message); setGuardando(false); return }
     }
     const { data: upd, error } = await supabase.from('citas_coordinacion').update({
@@ -387,6 +396,22 @@ function ModalEdicion({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={s.fieldLabel}>Operación (Venta / Renta)</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+              {(['venta', 'renta'] as const).map(op => {
+                const activo = tipoOperacion === op
+                return (
+                  <TouchableOpacity key={op}
+                    style={[s.estadoChip, activo && { backgroundColor: '#1a6470', borderColor: '#1a6470' }]}
+                    onPress={() => setTipoOperacion(op)}>
+                    <Text style={[s.estadoChipTxt, activo && { color: '#fff', fontWeight: '700' }]}>
+                      {op === 'venta' ? '🏠 Venta' : '🔑 Renta'}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+
             <Text style={s.fieldLabel}>Estado</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
               <View style={{ flexDirection: 'row', gap: 8, paddingRight: 8 }}>
