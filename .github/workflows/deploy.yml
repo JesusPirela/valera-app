@@ -111,7 +111,23 @@ jobs:
           cp -r /tmp/dist-build/. .
           git add -A
           git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
-          git push origin web-build --force
+          # GitHub a veces rechaza el push con "remote: fatal error in commit_refs"
+          # (error transitorio del servidor). Reintentar evita que el deploy entero
+          # falle por un hipo momentáneo — antes se caía al primer intento.
+          n=0
+          until [ "$n" -ge 5 ]; do
+            if git push origin web-build --force; then
+              echo "✅ push a web-build OK"
+              break
+            fi
+            n=$((n+1))
+            echo "⚠️ push falló (intento $n/5), reintentando en 20s..."
+            sleep 20
+          done
+          if [ "$n" -ge 5 ]; then
+            echo "❌ el push a web-build falló tras 5 intentos"
+            exit 1
+          fi
 
 
       - name: Notificar a Hostinger
