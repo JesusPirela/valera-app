@@ -1276,7 +1276,7 @@ export default function NuevaPropiedad() {
         <View style={styles.exclusivaRow}>
           <View>
             <Text style={styles.exclusivaLabel}>Propiedad exclusiva</Text>
-            <Text style={styles.exclusivaDesc}>Solo visible para Prospectadores Plus ✓</Text>
+            <Text style={styles.exclusivaDesc}>Solo visible para Prospectadores Plus</Text>
           </View>
           <ToggleSwitch
             value={exclusiva}
