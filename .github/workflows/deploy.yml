@@ -107,10 +107,12 @@ jobs:
           cp -r dist /tmp/dist-build
           git checkout --orphan web-build
           git rm -rf . > /dev/null 2>&1 || true
+          git clean -fdx > /dev/null 2>&1 || true
           cp -r /tmp/dist-build/. .
           git add -A
           git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
           git push origin web-build --force
+
 
       - name: Notificar a Hostinger
         run: |
