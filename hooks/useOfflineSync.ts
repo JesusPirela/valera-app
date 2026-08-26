@@ -3,6 +3,8 @@ import { AppState } from 'react-native'
 import NetInfo from '@react-native-community/netinfo'
 import { flushQueue, getPendingCount } from '../lib/offline-queue'
 import { queryClient } from '../lib/queryClient'
+import { supabase } from '../lib/supabase'
+import { actualizarMisionesPorCategoria } from '../lib/gamification'
 
 export type OfflineSyncState = {
   isOnline: boolean
@@ -38,9 +40,16 @@ export function useOfflineSync(): OfflineSyncState {
         // Publicaciones encoladas ya aplicadas → refrescar contadores x/10
         queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
         if (hadPublications) {
-          // Las publicaciones offline procesadas actualizan fecha_publicacion a AHORA:
-          // el conteo diario de misiones cambió → refrescar para evitar progreso stale.
-          queryClient.invalidateQueries({ queryKey: ['misiones'] })
+          // Sincronizar misiones diarias y otorgar recompensas pendientes.
+          // Sin esto, las publicaciones encoladas nunca acreditaban XP/coins ni
+          // la racha, porque flushQueue solo llama publicar_propiedad_atomico pero
+          // nunca sincronizar_misiones_diarias_hoy.
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.user) {
+            actualizarMisionesPorCategoria(session.user.id, 'propiedad').catch(() => {})
+          } else {
+            queryClient.invalidateQueries({ queryKey: ['misiones'] })
+          }
         }
       }
       if (failed > 0) {
