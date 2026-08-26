@@ -97,18 +97,20 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
   onRetro: (f: Fila) => void; onDelete: (f: Fila) => void
 }) {
   const c = useColors()
+  const cancelada = (f.estado_seguimiento ?? '').trim().toUpperCase() === 'CANCELADA'
   return (
-    <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
+    <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: cancelada ? '#fdeaea' : (idx % 2 ? c.bg : c.card) }]}>
       {/* Contador de fila (como Excel) */}
       <View style={[st.cell, st.counterCell, { width: NUM_W, borderColor: c.border }]}>
         <Text style={[st.counterTxt, { color: c.textMute }]}>{idx + 1}</Text>
       </View>
       {COLS.map(col => {
         const val = (f[col.key] as string) ?? ''
+        const esEstadoCancelada = col.key === 'estado_seguimiento' && (val).trim().toUpperCase() === 'CANCELADA'
         return (
           <TouchableOpacity key={col.key} style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
             onPress={() => onTap(f.id, col.key, col.tipo, val)}>
-            <Text style={{ color: val ? c.text : c.textMute, fontSize: 12.5 }} numberOfLines={2}>{val || '—'}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
+            <Text style={{ color: esEstadoCancelada ? '#c0392b' : (val ? c.text : c.textMute), fontSize: 12.5, fontWeight: esEstadoCancelada ? '800' : '400' }} numberOfLines={2}>{val || '—'}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
           </TouchableOpacity>
         )
       })}
