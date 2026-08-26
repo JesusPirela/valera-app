@@ -100,35 +100,16 @@ jobs:
           </FilesMatch>
           EOF
 
-      - name: Push dist/ a rama web-build
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          cp -r dist /tmp/dist-build
-          git checkout --orphan web-build
-          git rm -rf . > /dev/null 2>&1 || true
-          git clean -fdx > /dev/null 2>&1 || true
-          cp -r /tmp/dist-build/. .
-          git add -A
-          git commit -m "deploy: build web $(date +'%Y-%m-%d %H:%M')"
-          n=0
-          until [ "$n" -ge 5 ]; do
-            if git push origin web-build --force; then
-              echo "✅ push a web-build OK"
-              break
-            fi
-            n=$((n+1))
-            echo "⚠️ push falló (intento $n/5), reintentando en 20s..."
-            sleep 20
-          done
-          if [ "$n" -ge 5 ]; then
-            echo "❌ el push a web-build falló tras 5 intentos"
-            exit 1
-          fi
-
-      - name: Notificar a Hostinger
-        run: |
-          curl -s -w "\nHTTP: %{http_code}" -X POST \
-            -H "Content-Type: application/json" \
-            -d '{"ref":"refs/heads/web-build"}' \
-            https://webhooks.hostinger.com/deploy/62de3af8ceb4a3832a5b6f3f2351bdc6
+      # Deploy directo por FTP al servidor de Hostinger. Antes se subía a una rama
+      # web-build y Hostinger la "jalaba" con un webhook, pero ese jalado se
+      # atascó (dejó basura .git/node_modules en la raíz web y congeló el sitio):
+      # los cambios llegaban a main pero NO a la web. El FTP sube dist/ directo y
+      # es el método que funcionaba de forma confiable.
+      - name: Deploy a Hostinger por FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: ./
