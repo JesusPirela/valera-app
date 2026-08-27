@@ -76,6 +76,7 @@ const NAV_ITEMS = [
   { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32', grupo: 'Gestión' },
   { label: 'Citas de venta', icon: '📋', route: '/(admin)/citas-venta', color: '#00695C', grupo: 'Gestión' },
   { label: 'Leads campañas', icon: '📢', route: '/(admin)/leads-campanias', color: '#1565C0', grupo: 'Gestión' },
+  { label: 'Donaciones', icon: '🤝', route: '/(admin)/donaciones', color: '#0f6b52', grupo: 'Gestión' },
   { label: 'Proyectos', icon: '💼', route: '/(admin)/proyectos', color: '#c9a84c', grupo: 'Gestión' },
   { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828', grupo: 'Gestión' },
   { label: 'Agenda', icon: '📇', route: '/(admin)/agenda', color: '#00838F', grupo: 'Gestión' },

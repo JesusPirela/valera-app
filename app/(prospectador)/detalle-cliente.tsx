@@ -303,6 +303,7 @@ export default function DetalleCliente() {
   const [donarPersonas, setDonarPersonas] = useState<{ id: string; nombre: string }[]>([])
   const [buscaDonar, setBuscaDonar] = useState('')
   const [donando, setDonando] = useState(false)
+  const [donarCargando, setDonarCargando] = useState(false)
 
   const [modalChatbot, setModalChatbot] = useState(false)
   const [chatbotTelefono, setChatbotTelefono] = useState('')
@@ -524,12 +525,12 @@ export default function DetalleCliente() {
   async function abrirDonar() {
     setDonarModal(true); setDonarModo('menu'); setBuscaDonar('')
     if (donarPersonas.length === 0) {
-      const { data: { user } } = await getUsuarioActual()
-      const { data } = await supabase.from('profiles')
-        .select('id, nombre, role')
-        .in('role', ['prospectador', 'prospectador_plus', 'asesor', 'supervisor'])
-        .order('nombre')
-      setDonarPersonas((data ?? []).filter((p: any) => p.nombre && p.id !== user?.id))
+      // Solo compañeros ACTIVOS (con actividad en la última semana): así no se
+      // donan clientes a gente inactiva y se evita el reparto entre inactivos.
+      setDonarCargando(true)
+      const { data } = await supabase.rpc('get_asesores_activos')
+      setDonarPersonas((data ?? []) as { id: string; nombre: string }[])
+      setDonarCargando(false)
     }
   }
 
@@ -888,7 +889,7 @@ export default function DetalleCliente() {
         <Text style={styles.btnDonarText}>Donar cliente</Text>
       </TouchableOpacity>
       <Text style={styles.donarNota}>
-        Al pool: si el cliente cierra, te toca comisión + 200 coins y 300 XP. A una persona: es un favor (sin comisión). 🤝
+        Si el cliente que donas cierra la compra, te toca comisión + 200 coins y 300 XP — al pool o a un compañero activo. 🤝
       </Text>
 
       {/* ── Eliminar ─────────────────────────────────── */}
@@ -919,7 +920,7 @@ export default function DetalleCliente() {
                   onPress={() => setDonarModo('persona')} disabled={donando}>
                   <Text style={{ fontWeight: '800', color: '#334155', fontSize: 15, marginBottom: 3 }}>👤 Donar a una persona</Text>
                   <Text style={{ color: '#64748b', fontSize: 12.5, lineHeight: 17 }}>
-                    Se lo pasas directo a un compañero. Es un favor: NO da comisión (para que no se repartan clientes entre ustedes).
+                    Se lo pasas directo a un compañero ACTIVO. También te da comisión si lo cierra. (Solo aparecen los activos de la última semana.)
                   </Text>
                 </TouchableOpacity>
 
@@ -929,7 +930,7 @@ export default function DetalleCliente() {
               </>
             ) : (
               <>
-                <Text style={{ color: '#64748b', fontSize: 12.5, marginBottom: 8 }}>Elige a quién donarle este cliente (sin comisión):</Text>
+                <Text style={{ color: '#64748b', fontSize: 12.5, marginBottom: 8 }}>Elige a quién donarle este cliente (solo compañeros activos):</Text>
                 <TextInput
                   style={[modal.input, { marginBottom: 8 }]}
                   placeholder="Buscar por nombre…" value={buscaDonar} onChangeText={setBuscaDonar} autoCapitalize="words" />
@@ -943,7 +944,10 @@ export default function DetalleCliente() {
                         <Text style={{ fontSize: 15, color: '#1e293b' }}>{p.nombre}</Text>
                       </TouchableOpacity>
                     ))}
-                  {donarPersonas.length === 0 && <ActivityIndicator color="#1a6470" style={{ marginTop: 16 }} />}
+                  {donarCargando && <ActivityIndicator color="#1a6470" style={{ marginTop: 16 }} />}
+                  {!donarCargando && donarPersonas.length === 0 && (
+                    <Text style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', marginTop: 16 }}>No hay compañeros activos en este momento.</Text>
+                  )}
                 </ScrollView>
                 <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 14 }} onPress={() => setDonarModo('menu')}>
                   <Text style={{ color: '#94a3b8', fontSize: 14 }}>‹ Regresar</Text>
