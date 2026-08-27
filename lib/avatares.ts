@@ -27,3 +27,6 @@ export const AVATARES_PREMIUM: AvatarPremium[] = [
 export const GIF_AVATAR: Record<string, string> = Object.fromEntries(
   AVATARES_PREMIUM.map(a => [a.emoji, a.gif]),
 )
+
+// Solo los emojis (para vistas que no necesitan el GIF ni el nombre).
+export const EMOJIS_AVATAR: string[] = AVATARES_PREMIUM.map(a => a.emoji)

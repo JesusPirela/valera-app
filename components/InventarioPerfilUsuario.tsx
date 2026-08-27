@@ -2,13 +2,13 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
+import { EMOJIS_AVATAR as AVATARES_PREMIUM } from '../lib/avatares'
 
 // Catálogos que se venden/regalan (mismos que ve el usuario en Perfil/Tienda).
 const COLORES = [
   '#1a6470', '#c9a84c', '#1e3a5f', '#7b1e3a',
   '#2d6a4f', '#4a4a4a', '#5c3d99', '#c45c1a',
 ]
-const AVATARES_PREMIUM = ['🔥','⚡','🌈','🦋','🐉','🦄','👑','💫','🌸','🔮','🌊','🏆','🎉','✨','🦁','🐺']
 
 // Muestra qué avatares y colores YA TIENE un usuario, para no regalarle algo
 // repetido al entregarle un premio. Lo que ya tiene sale marcado con ✓; lo que

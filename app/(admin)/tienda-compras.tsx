@@ -6,24 +6,7 @@ import {
 } from 'react-native'
 import { PATRONES_ANIMADOS, AnimatedGradientView } from '../../lib/patrones'
 
-const AVATARES_PREMIUM = [
-  { emoji: '🔥', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/512.gif' },
-  { emoji: '⚡', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/26a1/512.gif'  },
-  { emoji: '🌈', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f308/512.gif' },
-  { emoji: '🦋', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f98b/512.gif' },
-  { emoji: '🐉', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f409/512.gif' },
-  { emoji: '🦄', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f984/512.gif' },
-  { emoji: '👑', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f451/512.gif' },
-  { emoji: '💫', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f4ab/512.gif' },
-  { emoji: '🌸', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f338/512.gif' },
-  { emoji: '🔮', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f52e/512.gif' },
-  { emoji: '🌊', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f30a/512.gif' },
-  { emoji: '🏆', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f3c6/512.gif' },
-  { emoji: '🎉', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f389/512.gif' },
-  { emoji: '✨', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/2728/512.gif'  },
-  { emoji: '🦁', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f981/512.gif' },
-  { emoji: '🐺', gif: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f43a/512.gif' },
-]
+import { AVATARES_PREMIUM } from '../../lib/avatares'
 // Colores premium = patrones animados (lo que el perfil realmente muestra).
 // Antes eran hex sueltos que se guardaban pero NO se veían en el perfil.
 import { useFocusEffect, router } from 'expo-router'

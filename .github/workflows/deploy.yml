@@ -60,6 +60,10 @@ jobs:
 
           RewriteEngine On
 
+          # Bloquear basura heredada del deploy viejo por Git (node_modules, .git,
+          # etc. quedaron públicos en la raíz web). Devuelven 403 en vez de servirse.
+          RewriteRule ^(node_modules|dist|\.expo|\.git)(/|$) - [F,L]
+
           # Forzar HTTPS
           RewriteCond %{HTTPS} !=on
           RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]

@@ -18,6 +18,7 @@ import ToggleSwitch from '../../components/ToggleSwitch'
 import CambiarCuenta from '../../components/CambiarCuenta'
 import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
 import { marcoPorNivel } from '../../lib/marcos'
+import { AVATARES_PREMIUM, GIF_AVATAR } from '../../lib/avatares'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import { useCargaDatos } from '../../lib/CargaDatos'
 import { queryClient } from '../../lib/queryClient'
@@ -31,32 +32,8 @@ const COLORES_LIBRES = [
 // que no aparezca el mismo ícono en "prediseñados" y en "animados".
 const AVATARES_LIBRES  = ['👤','🏠','⭐','🐻','🐯','🦊','🦅','🌟','💼','🚀','🎯','💎']
 
-const NOTO = (hex: string) => `https://fonts.gstatic.com/s/e/notoemoji/latest/${hex}/512.gif`
-
-type AvatarPremium = { emoji: string; gif: string; nombre: string }
-const AVATARES_PREMIUM: AvatarPremium[] = [
-  { emoji: '🔥', gif: NOTO('1f525'), nombre: 'Fuego'        },
-  { emoji: '⚡', gif: NOTO('26a1'),  nombre: 'Rayo'         },
-  { emoji: '🌈', gif: NOTO('1f308'), nombre: 'Arcoíris'     },
-  { emoji: '🦋', gif: NOTO('1f98b'), nombre: 'Mariposa'     },
-  { emoji: '🐉', gif: NOTO('1f409'), nombre: 'Dragón'       },
-  { emoji: '🦄', gif: NOTO('1f984'), nombre: 'Unicornio'    },
-  { emoji: '👑', gif: NOTO('1f451'), nombre: 'Corona'       },
-  { emoji: '💫', gif: NOTO('1f4ab'), nombre: 'Destello'     },
-  { emoji: '🌸', gif: NOTO('1f338'), nombre: 'Cerezo'       },
-  { emoji: '🔮', gif: NOTO('1f52e'), nombre: 'Bola mágica'  },
-  { emoji: '🌊', gif: NOTO('1f30a'), nombre: 'Ola'          },
-  { emoji: '🏆', gif: NOTO('1f3c6'), nombre: 'Trofeo'       },
-  { emoji: '🎉', gif: NOTO('1f389'), nombre: 'Fiesta'       },
-  { emoji: '✨', gif: NOTO('2728'),  nombre: 'Brillos'      },
-  { emoji: '🦁', gif: NOTO('1f981'), nombre: 'León'         },
-  { emoji: '🐺', gif: NOTO('1f43a'), nombre: 'Lobo'         },
-]
-
-// Mapa rápido emoji → GIF para el header
-const GIF_MAP: Record<string, string> = Object.fromEntries(
-  AVATARES_PREMIUM.map(a => [a.emoji, a.gif])
-)
+// Catálogo de avatares premium: fuente única en lib/avatares.ts (antes duplicado).
+const GIF_MAP = GIF_AVATAR
 
 function _parsePresu(txt: string | null | undefined): number | null {
   if (!txt) return null
