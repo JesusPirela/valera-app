@@ -12,6 +12,7 @@ import { thumb } from '../../lib/img'
 import { useColors } from '../../lib/ThemeContext'
 import CompartirFormulario from '../../components/CompartirFormulario'
 import { FiltrosBusquedaPropiedad, FiltrosPropiedad, FILTROS_VACIOS, hayFiltrosActivos, aplicarFiltrosPropiedad } from '../../components/FiltrosBusquedaPropiedad'
+import { infoEstadoPropiedad, ESTADO_PRINCIPAL } from '../../lib/estados-mexico'
 
 const BASE_LINK = 'https://valeraapp.valerarealestate.com/coleccion/'
 
@@ -36,7 +37,7 @@ function waNumero(tel: string | null | undefined): string | null {
   if (p.length === 10) p = '52' + p
   return p.length >= 12 ? p : null
 }
-type PropBusca = { id: string; codigo: string; titulo: string; precio: number | null; direccion: string; imagen: string | null }
+type PropBusca = { id: string; codigo: string; titulo: string; precio: number | null; direccion: string; estado_mx: string | null; imagen: string | null }
 
 function fmt(p: number | null) {
   if (p == null) return 'Precio a consultar'
@@ -85,7 +86,7 @@ export default function ColeccionDetalle() {
     setBuscando(true)
     try {
       let query = supabase.from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, propiedad_imagenes(url, orden, thumb_url)')
+        .select('id, codigo, titulo, precio, direccion, estado_mx, propiedad_imagenes(url, orden, thumb_url)')
         .eq('estado', 'disponible').eq('es_inventario', false)
       if (q.length >= 2) {
         const like = `%${q}%`
@@ -99,7 +100,7 @@ export default function ColeccionDetalle() {
       const rows = (data ?? []).map((p: any) => {
         const imgs = [...(p.propiedad_imagenes ?? [])].sort((a: any, b: any) => a.orden - b.orden)
         return { id: p.id, codigo: p.codigo, titulo: p.titulo, precio: p.precio, direccion: p.direccion,
-          imagen: imgs[0]?.thumb_url ?? imgs[0]?.url ?? null }
+          estado_mx: p.estado_mx ?? null, imagen: imgs[0]?.thumb_url ?? imgs[0]?.url ?? null }
       }).filter((p: PropBusca) => !yaEn.has(p.id))
       setResultados(rows)
     } catch { /* sin red */ } finally { setBuscando(false) }
@@ -114,7 +115,36 @@ export default function ColeccionDetalle() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addModal, busca, filtros, det?.items?.length])
 
+  // Avisa si el paquete va a MEZCLAR Querétaro con otro estado (el error real es
+  // mandarle a un cliente propiedades de estados distintos sin querer). Solo salta
+  // en el momento en que la mezcla se crea, no en cada propiedad que agregas.
+  function confirmarMezcla(estadoForaneo: string | null): Promise<boolean> {
+    const otro = estadoForaneo && estadoForaneo !== ESTADO_PRINCIPAL ? estadoForaneo : 'otro estado'
+    const msg = `Esta colección mezcla propiedades de Querétaro y de ${otro} en el mismo paquete para tu cliente.\n\n¿Seguro que quieres mezclarlas?`
+    if (Platform.OS === 'web') return Promise.resolve(window.confirm('⚠️ ' + msg))
+    return new Promise(resolve => {
+      Alert.alert('⚠️ Colección de estados mezclados', msg, [
+        { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Sí, mezclar', onPress: () => resolve(true) },
+      ])
+    })
+  }
+
   async function agregar(p: PropBusca) {
+    // Alerta de colección mezclada (Querétaro + foránea).
+    if (det?.items?.length) {
+      const infoNueva = infoEstadoPropiedad({ estado_mx: p.estado_mx, direccion: p.direccion })
+      const actuales = det.items.map(i => infoEstadoPropiedad({ direccion: i.direccion }))
+      const hayQro = actuales.some(e => e.esQueretaro)
+      const hayForaneo = actuales.some(e => e.foraneo)
+      const eraMixto = hayQro && hayForaneo
+      const seraMixto = (hayQro || infoNueva.esQueretaro) && (hayForaneo || infoNueva.foraneo)
+      if (!eraMixto && seraMixto) {
+        const estadoForaneo = infoNueva.foraneo ? infoNueva.estado : (actuales.find(e => e.foraneo)?.estado ?? null)
+        const ok = await confirmarMezcla(estadoForaneo)
+        if (!ok) return
+      }
+    }
     setResultados(r => r.filter(x => x.id !== p.id))
     try {
       await supabase.rpc('coleccion_agregar_item', { p_coleccion_id: id, p_propiedad_id: p.id })
