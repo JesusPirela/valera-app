@@ -1606,7 +1606,7 @@ export default function ProspectadorPropiedades() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 16 }}
             renderItem={({ item }) => renderCard(item)}
-            extraData={publicaciones}
+            extraData={[publicaciones, conteoPubs]}
             removeClippedSubviews
             initialNumToRender={tarjetasIniciales(ahorroActivo)}
             maxToRenderPerBatch={tarjetasPorTanda(ahorroActivo)}
