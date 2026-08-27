@@ -585,9 +585,9 @@ export default function ProspectadorPropiedades() {
       for (const r of data ?? []) m.set(r.propiedad_id, r.total_usuarios)
       return m
     },
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 60 * 2,
     networkMode: 'offlineFirst',
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   })
 
   // Jalar para actualizar: fuerza traer propiedades y publicaciones frescas.
