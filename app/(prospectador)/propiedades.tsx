@@ -87,6 +87,7 @@ type Propiedad = {
   inmobiliaria_id: string | null
   inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
   propiedad_imagenes: { url: string; thumb_url: string | null; orden: number }[]
+  total_publicadores: number
 }
 
 type FiltroOperacion = 'venta' | 'renta' | null
@@ -214,6 +215,11 @@ const PropiedadCard = memo(function PropiedadCard({
           >
             <Text style={styles.lupitaText}>🔍</Text>
           </TouchableOpacity>
+          {totalPublicadores === 0 && item.estado !== 'vendida' && (
+            <View style={styles.nuncaPublicadaBadge}>
+              <Text style={styles.nuncaPublicadaText}>🔥 NADIE LO HA PUBLICADO</Text>
+            </View>
+          )}
         </View>
       )}
       {item.estado === 'vendida' && (
@@ -234,6 +240,11 @@ const PropiedadCard = memo(function PropiedadCard({
               ? `  ·  hasta el ${new Date(item.destacada_hasta).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`
               : ''}
           </Text>
+        </View>
+      )}
+      {!primera?.url && totalPublicadores === 0 && item.estado !== 'vendida' && (
+        <View style={styles.nuncaPublicadaBadgeSinImagen}>
+          <Text style={styles.nuncaPublicadaText}>🔥 NADIE LO HA PUBLICADO</Text>
         </View>
       )}
       <View style={styles.cardBody}>
@@ -286,6 +297,15 @@ const PropiedadCard = memo(function PropiedadCard({
           <View style={styles.precioBajoBadge}>
             <Text style={styles.precioBajoText}>
               ↓ Precio reducido desde ${item.precio_anterior!.toLocaleString('es-MX')}
+            </Text>
+          </View>
+        )}
+        {totalPublicadores < 3 && veces === 0 && item.estado !== 'vendida' && (
+          <View style={styles.primeraVezBadge}>
+            <Text style={styles.primeraVezText}>
+              {totalPublicadores === 0
+                ? '⭐ ¡Nadie la ha publicado aún!'
+                : `⭐ Solo ${totalPublicadores} la ${totalPublicadores === 1 ? 'ha' : 'han'} publicado — ¡sé de los primeros!`}
             </Text>
           </View>
         )}
@@ -462,7 +482,7 @@ export default function ProspectadorPropiedades() {
         const size = i === 0 ? PRIMERA : PAGE
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, estado_mx, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
+          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, estado_mx, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, total_publicadores, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
           .in('estado', ['disponible', 'vendida'])
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -556,22 +576,6 @@ export default function ProspectadorPropiedades() {
     refetchOnWindowFocus: false,
   })
 
-  // Conteo de usuarios distintos que han publicado cada propiedad.
-  // Usa useState+useEffect en vez de useQuery: React Query no estaba
-  // propagando el update al componente (bug con Map/structuralSharing).
-  // Con setState el re-render está garantizado.
-  const [conteoPubs, setConteoPubs] = useState<Map<string, number> | undefined>(undefined)
-  const conteoPubsFetchedAt = useRef<number>(0)
-  useEffect(() => {
-    const ahora = Date.now()
-    if (ahora - conteoPubsFetchedAt.current < 1000 * 60 * 2) return // refresco máx c/2 min
-    conteoPubsFetchedAt.current = ahora
-    supabase.rpc('get_conteo_publicadores_propiedad').then(({ data }) => {
-      const m = new Map<string, number>()
-      for (const r of data ?? []) m.set(r.propiedad_id, r.total_usuarios)
-      setConteoPubs(m)
-    })
-  }, [])
 
   // Jalar para actualizar: fuerza traer propiedades y publicaciones frescas.
   const [refreshing, setRefreshing] = useState(false)
@@ -1011,11 +1015,11 @@ export default function ProspectadorPropiedades() {
   }
 
   if (filtroOrden === 'normal') {
-    // Modo normal (comportamiento original): [destacadas] → [5 nunca publicadas FNV-1] → [resto]
-    if (conteoPubs && userId) {
+    // Modo normal: [destacadas] → [5 nunca publicadas FNV-1] → [resto]
+    if (userId) {
       const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
       const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
-      const nuncaPublicadas = noDestacadas.filter(p => (conteoPubs.get(p.id) ?? 0) === 0)
+      const nuncaPublicadas = noDestacadas.filter(p => p.total_publicadores === 0)
       if (nuncaPublicadas.length > 0) {
         const shuffled = [...nuncaPublicadas].sort((a, b) => fnv(userId, a.id) - fnv(userId, b.id))
         const top5 = shuffled.slice(0, 5)
@@ -1023,30 +1027,26 @@ export default function ProspectadorPropiedades() {
         propiedadesFiltradas = [...destacadas, ...top5, ...noDestacadas.filter(p => !top5Ids.has(p.id))]
       }
     }
-  } else if (filtroOrden === 'mas_publicadas' && conteoPubs) {
+  } else if (filtroOrden === 'mas_publicadas') {
     // Más publicadas primero (conteo global del equipo), destacadas siempre arriba.
     const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
     const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
-    const ordenadas = [...noDestacadas].sort((a, b) =>
-      (conteoPubs.get(b.id) ?? 0) - (conteoPubs.get(a.id) ?? 0)
-    )
+    const ordenadas = [...noDestacadas].sort((a, b) => b.total_publicadores - a.total_publicadores)
     propiedadesFiltradas = [...destacadas, ...ordenadas]
-  } else if (filtroOrden === 'menos_publicadas' && conteoPubs) {
+  } else if (filtroOrden === 'menos_publicadas') {
     // Menos publicadas primero (0 van al inicio), destacadas siempre arriba.
     const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
     const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
-    const ordenadas = [...noDestacadas].sort((a, b) =>
-      (conteoPubs.get(a.id) ?? 0) - (conteoPubs.get(b.id) ?? 0)
-    )
+    const ordenadas = [...noDestacadas].sort((a, b) => a.total_publicadores - b.total_publicadores)
     propiedadesFiltradas = [...destacadas, ...ordenadas]
-  } else if (filtroOrden === 'mix' && conteoPubs && userId) {
+  } else if (filtroOrden === 'mix' && userId) {
     // Mix inteligente: bloques de [2A, 2B, 1C] intercalados, con FNV-1 por usuario.
     // Grupo A: nunca publicadas (0), Grupo B: poco publicadas (1-3), Grupo C: muy publicadas (>3)
     const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
     const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
-    const grupoA = noDestacadas.filter(p => (conteoPubs.get(p.id) ?? 0) === 0)
-    const grupoB = noDestacadas.filter(p => { const ct = conteoPubs.get(p.id) ?? 0; return ct >= 1 && ct <= 3 })
-    const grupoC = noDestacadas.filter(p => (conteoPubs.get(p.id) ?? 0) > 3)
+    const grupoA = noDestacadas.filter(p => p.total_publicadores === 0)
+    const grupoB = noDestacadas.filter(p => p.total_publicadores >= 1 && p.total_publicadores <= 3)
+    const grupoC = noDestacadas.filter(p => p.total_publicadores > 3)
     const sortFnv = (arr: Propiedad[]) => [...arr].sort((a, b) => fnv(userId, a.id) - fnv(userId, b.id))
     const sA = sortFnv(grupoA)
     const sB = sortFnv(grupoB)
@@ -1069,7 +1069,7 @@ export default function ProspectadorPropiedades() {
     propiedades, busqueda, filtroPublicadas, publicaciones, pubData, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
-    viewsData, conteoPubs, userId, filtroEstado, filtroOrden,
+    viewsData, userId, filtroEstado, filtroOrden,
   ])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
@@ -1169,7 +1169,7 @@ export default function ProspectadorPropiedades() {
       isOnline={isOnline}
       imgOpts={imgOpts}
       empresaMatriz={item.nombre_constructora ? (empresaMatrizMap.get(item.nombre_constructora) ?? null) : null}
-      totalPublicadores={conteoPubs?.get(item.id) ?? 0}
+      totalPublicadores={item.total_publicadores}
       isNuevaParaTi={!esAdmin && !viewsData?.get(item.id)}
       isUnlocked={esAdmin || desbloqueadas.has(item.id) || (publicaciones[item.id] ?? 0) > 0}
       onOpen={onOpenCard}
@@ -1589,7 +1589,7 @@ export default function ProspectadorPropiedades() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 16 }}
             renderItem={({ item }) => renderCard(item)}
-            extraData={[publicaciones, conteoPubs]}
+            extraData={[publicaciones]}
             removeClippedSubviews
             initialNumToRender={tarjetasIniciales(ahorroActivo)}
             maxToRenderPerBatch={tarjetasPorTanda(ahorroActivo)}
