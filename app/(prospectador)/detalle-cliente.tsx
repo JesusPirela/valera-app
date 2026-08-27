@@ -297,6 +297,13 @@ export default function DetalleCliente() {
   const [guardandoSeguimiento, setGuardandoSeguimiento] = useState(false)
 
   const [userRole, setUserRole] = useState<string | null>(null)
+  // Donar cliente (menú: al pool o a una persona)
+  const [donarModal, setDonarModal] = useState(false)
+  const [donarModo, setDonarModo] = useState<'menu' | 'persona'>('menu')
+  const [donarPersonas, setDonarPersonas] = useState<{ id: string; nombre: string }[]>([])
+  const [buscaDonar, setBuscaDonar] = useState('')
+  const [donando, setDonando] = useState(false)
+
   const [modalChatbot, setModalChatbot] = useState(false)
   const [chatbotTelefono, setChatbotTelefono] = useState('')
   const [chatbotPresupuesto, setChatbotPresupuesto] = useState('')
@@ -513,29 +520,35 @@ export default function DetalleCliente() {
     }
   }
 
-  // Donar el cliente al pool de leads: sale de tu CRM y queda disponible para que
-  // otro lo tome. Si ese cliente llega a "compró", te toca tu parte de comisión.
-  async function donarCliente() {
-    const volver = () => router.canGoBack() ? router.back() : router.replace('/(prospectador)/crm')
-    const run = async () => {
-      const { data, error } = await supabase.rpc('donar_cliente', { p_cliente_id: id })
-      if (error || !data?.ok) {
-        const msg = error?.message || data?.error || 'No se pudo donar el cliente.'
-        if (Platform.OS === 'web') window.alert('⚠ ' + msg); else Alert.alert('Error', msg)
-        return
-      }
-      queryClient.invalidateQueries({ queryKey: ['clientes'] })
-      queryClient.removeQueries({ queryKey: ['detalle-cliente', id] })
-      const ok = data.mensaje ?? '🤝 ¡Gracias por donar! Si alguien lo cierra, te toca tu parte.'
-      if (Platform.OS === 'web') { window.alert(ok); volver() }
-      else Alert.alert('¡Donado!', ok, [{ text: 'OK', onPress: volver }])
+  // Donar cliente: abre el menú (al pool con comisión, o a una persona sin comisión).
+  async function abrirDonar() {
+    setDonarModal(true); setDonarModo('menu'); setBuscaDonar('')
+    if (donarPersonas.length === 0) {
+      const { data: { user } } = await getUsuarioActual()
+      const { data } = await supabase.from('profiles')
+        .select('id, nombre, role')
+        .in('role', ['prospectador', 'prospectador_plus', 'asesor', 'supervisor'])
+        .order('nombre')
+      setDonarPersonas((data ?? []).filter((p: any) => p.nombre && p.id !== user?.id))
     }
-    const pregunta = '¿Donar este cliente al pool de leads?\n\nSaldrá de tu CRM y alguien más podrá tomarlo. Si ese cliente llega a comprar, te toca tu parte de la comisión.'
-    if (Platform.OS === 'web') { if (window.confirm(pregunta)) run() }
-    else Alert.alert('Donar cliente', pregunta, [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Donar', onPress: run },
-    ])
+  }
+
+  async function ejecutarDonar(destinoId: string | null) {
+    setDonando(true)
+    const { data, error } = await supabase.rpc('donar_cliente', { p_cliente_id: id, p_destino_id: destinoId })
+    setDonando(false)
+    if (error || !data?.ok) {
+      const msg = error?.message || data?.error || 'No se pudo donar el cliente.'
+      if (Platform.OS === 'web') window.alert('⚠ ' + msg); else Alert.alert('Error', msg)
+      return
+    }
+    setDonarModal(false)
+    queryClient.invalidateQueries({ queryKey: ['clientes'] })
+    queryClient.removeQueries({ queryKey: ['detalle-cliente', id] })
+    const volver = () => router.canGoBack() ? router.back() : router.replace('/(prospectador)/crm')
+    const ok = data.mensaje ?? '🤝 ¡Donado!'
+    if (Platform.OS === 'web') { window.alert(ok); volver() }
+    else Alert.alert('¡Donado!', ok, [{ text: 'OK', onPress: volver }])
   }
 
   function abrirWhatsApp(msg: string) {
@@ -870,12 +883,12 @@ export default function DetalleCliente() {
       </TouchableOpacity>
 
       {/* ── Donar al pool ────────────────────────────── */}
-      <TouchableOpacity style={styles.btnDonar} onPress={donarCliente}>
+      <TouchableOpacity style={styles.btnDonar} onPress={abrirDonar}>
         <Ionicons name="gift-outline" size={17} color="#0f6b52" />
         <Text style={styles.btnDonarText}>Donar cliente</Text>
       </TouchableOpacity>
       <Text style={styles.donarNota}>
-        Si el cliente que donas cierra la compra, te toca tu parte de la comisión + 200 coins y 300 XP. 🤝
+        Al pool: si el cliente cierra, te toca comisión + 200 coins y 300 XP. A una persona: es un favor (sin comisión). 🤝
       </Text>
 
       {/* ── Eliminar ─────────────────────────────────── */}
@@ -883,6 +896,64 @@ export default function DetalleCliente() {
         <Ionicons name="trash-outline" size={16} color="#c0392b" />
         <Text style={styles.btnEliminarText}>Eliminar cliente</Text>
       </TouchableOpacity>
+
+      {/* ── Modal: Donar cliente (pool o persona) ────── */}
+      <Modal visible={donarModal} transparent animationType="slide" onRequestClose={() => setDonarModal(false)}>
+        <View style={modal.overlay}>
+          <View style={[modal.sheet, { maxHeight: '80%' }]}>
+            <Text style={modal.title}>Donar cliente</Text>
+
+            {donarModo === 'menu' ? (
+              <>
+                <TouchableOpacity
+                  style={{ borderWidth: 1, borderColor: '#b6e3d3', backgroundColor: '#eefaf5', borderRadius: 12, padding: 14, marginBottom: 12 }}
+                  onPress={() => ejecutarDonar(null)} disabled={donando}>
+                  <Text style={{ fontWeight: '800', color: '#0f6b52', fontSize: 15, marginBottom: 3 }}>🎁 Donar al pool</Text>
+                  <Text style={{ color: '#4b7a6b', fontSize: 12.5, lineHeight: 17 }}>
+                    Va al banco de leads (lo toma alguien al azar). Si ese cliente cierra la compra, TE TOCA tu parte de comisión + coins/XP.
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#f8fafc', borderRadius: 12, padding: 14 }}
+                  onPress={() => setDonarModo('persona')} disabled={donando}>
+                  <Text style={{ fontWeight: '800', color: '#334155', fontSize: 15, marginBottom: 3 }}>👤 Donar a una persona</Text>
+                  <Text style={{ color: '#64748b', fontSize: 12.5, lineHeight: 17 }}>
+                    Se lo pasas directo a un compañero. Es un favor: NO da comisión (para que no se repartan clientes entre ustedes).
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 14 }} onPress={() => setDonarModal(false)}>
+                  <Text style={{ color: '#94a3b8', fontSize: 14 }}>Cancelar</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={{ color: '#64748b', fontSize: 12.5, marginBottom: 8 }}>Elige a quién donarle este cliente (sin comisión):</Text>
+                <TextInput
+                  style={[modal.input, { marginBottom: 8 }]}
+                  placeholder="Buscar por nombre…" value={buscaDonar} onChangeText={setBuscaDonar} autoCapitalize="words" />
+                <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+                  {donarPersonas
+                    .filter(p => !buscaDonar || p.nombre.toLowerCase().includes(buscaDonar.toLowerCase()))
+                    .map(p => (
+                      <TouchableOpacity key={p.id}
+                        style={{ paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#e2e8f0' }}
+                        onPress={() => ejecutarDonar(p.id)} disabled={donando}>
+                        <Text style={{ fontSize: 15, color: '#1e293b' }}>{p.nombre}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  {donarPersonas.length === 0 && <ActivityIndicator color="#1a6470" style={{ marginTop: 16 }} />}
+                </ScrollView>
+                <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 14 }} onPress={() => setDonarModo('menu')}>
+                  <Text style={{ color: '#94a3b8', fontSize: 14 }}>‹ Regresar</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {donando && <ActivityIndicator color="#1a6470" style={{ marginTop: 6 }} />}
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Modal: Registrar interacción ──────────────── */}
       <Modal visible={modalInteraccion} transparent animationType="slide">
