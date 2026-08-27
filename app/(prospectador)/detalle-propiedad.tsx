@@ -444,6 +444,16 @@ export default function DetallePropiedad() {
     setPasoCita('seleccion')
   }
 
+  // Al cambiar de propiedad, limpiar de inmediato el estado de publicación para no
+  // arrastrar el de la propiedad anterior (el componente se reutiliza entre
+  // propiedades). Va aparte del efecto de carga para NO dispararse cuando solo
+  // cambia isOnline (evita el parpadeo al reconectar).
+  useEffect(() => {
+    setPublicada(false)
+    setFechaPublicacion(null)
+    setVecesPublicada(0)
+  }, [id])
+
   useEffect(() => {
     if (!id) return
     // Solo cargar si hay red; si se recupera la conexión (isOnline cambia a true)
@@ -494,6 +504,14 @@ export default function DetallePropiedad() {
         setVecesPublicada(data.veces_publicada ?? 0)
         // Ya publicada antes → desbloquear sin requerir copiar desc. o descargar fotos.
         if ((data.veces_publicada ?? 0) > 0) marcarDesbloqueada(id as string)
+      } else {
+        // Esta propiedad NUNCA la publicó este usuario → estado limpio. Antes se
+        // saltaba este caso y quedaba el "ya publicada 1/10" de la propiedad
+        // anterior (el componente se reutiliza al cambiar de propiedad), lo que
+        // trababa el botón de Publicar en propiedades nuevas.
+        setPublicada(false)
+        setFechaPublicacion(null)
+        setVecesPublicada(0)
       }
     } catch { /* sin red: mantener estado actual, no resetear */ }
   }
