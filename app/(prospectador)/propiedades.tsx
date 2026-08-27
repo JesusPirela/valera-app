@@ -207,11 +207,6 @@ const PropiedadCard = memo(function PropiedadCard({
               resizeMode="cover"
             />
           )}
-          {totalPublicadores === 0 && item.estado !== 'vendida' && (
-            <View style={styles.nuncaPublicadaBadge}>
-              <Text style={styles.nuncaPublicadaText}>🔥 NADIE LO HA PUBLICADO</Text>
-            </View>
-          )}
           <TouchableOpacity
             style={styles.lupitaBtn}
             onPress={(e) => { e.stopPropagation(); onZoom(thumb(primera.url, { width: 1080, quality: 72 }) ?? null) }}
@@ -219,11 +214,6 @@ const PropiedadCard = memo(function PropiedadCard({
           >
             <Text style={styles.lupitaText}>🔍</Text>
           </TouchableOpacity>
-        </View>
-      )}
-      {!primera?.url && totalPublicadores === 0 && item.estado !== 'vendida' && (
-        <View style={styles.nuncaPublicadaBadgeSinImagen}>
-          <Text style={styles.nuncaPublicadaText}>🔥 NADIE LO HA PUBLICADO</Text>
         </View>
       )}
       {item.estado === 'vendida' && (
@@ -296,15 +286,6 @@ const PropiedadCard = memo(function PropiedadCard({
           <View style={styles.precioBajoBadge}>
             <Text style={styles.precioBajoText}>
               ↓ Precio reducido desde ${item.precio_anterior!.toLocaleString('es-MX')}
-            </Text>
-          </View>
-        )}
-        {totalPublicadores < 3 && veces === 0 && item.estado !== 'vendida' && (
-          <View style={styles.primeraVezBadge}>
-            <Text style={styles.primeraVezText}>
-              {totalPublicadores === 0
-                ? '⭐ ¡Nadie la ha publicado aún!'
-                : `⭐ Solo ${totalPublicadores} la ${totalPublicadores === 1 ? 'ha' : 'han'} publicado — ¡sé de los primeros!`}
             </Text>
           </View>
         )}
