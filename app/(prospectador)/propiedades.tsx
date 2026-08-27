@@ -576,27 +576,21 @@ export default function ProspectadorPropiedades() {
   })
 
   // Conteo de usuarios distintos que han publicado cada propiedad.
-  // Alimenta el badge "¡Sé de los primeros!" en propiedades poco publicadas.
-  // Devuelve Record en vez de Map: React Query's structuralSharing compara
-  // objetos planos correctamente; los Map no son comparables y bloqueaban el
-  // re-render aunque los datos llegaran del servidor.
-  const { data: conteoPubsRaw } = useQuery<Record<string, number>>({
-    queryKey: ['publicaciones-conteo'],
-    queryFn: async () => {
-      const { data } = await supabase.rpc('get_conteo_publicadores_propiedad')
-      const rec: Record<string, number> = {}
-      for (const r of data ?? []) rec[r.propiedad_id] = r.total_usuarios
-      return rec
-    },
-    staleTime: 1000 * 60 * 2,
-    networkMode: 'offlineFirst',
-    refetchOnWindowFocus: true,
-    structuralSharing: false,
-  })
-  // Mantener la misma API de Map hacia el resto del componente
-  const conteoPubs = conteoPubsRaw !== undefined
-    ? new Map(Object.entries(conteoPubsRaw))
-    : undefined
+  // Usa useState+useEffect en vez de useQuery: React Query no estaba
+  // propagando el update al componente (bug con Map/structuralSharing).
+  // Con setState el re-render está garantizado.
+  const [conteoPubs, setConteoPubs] = useState<Map<string, number> | undefined>(undefined)
+  const conteoPubsFetchedAt = useRef<number>(0)
+  useEffect(() => {
+    const ahora = Date.now()
+    if (ahora - conteoPubsFetchedAt.current < 1000 * 60 * 2) return // refresco máx c/2 min
+    conteoPubsFetchedAt.current = ahora
+    supabase.rpc('get_conteo_publicadores_propiedad').then(({ data }) => {
+      const m = new Map<string, number>()
+      for (const r of data ?? []) m.set(r.propiedad_id, r.total_usuarios)
+      setConteoPubs(m)
+    })
+  }, [])
 
   // Jalar para actualizar: fuerza traer propiedades y publicaciones frescas.
   const [refreshing, setRefreshing] = useState(false)
@@ -1181,7 +1175,7 @@ export default function ProspectadorPropiedades() {
 
   const renderCard = (item: Propiedad, width?: number) => (
     <PropiedadCard
-      key={`${item.id}-${conteoPubs !== undefined ? 'loaded' : 'loading'}`}
+      key={item.id}
       item={item}
       width={width}
       veces={publicaciones[item.id] ?? 0}
