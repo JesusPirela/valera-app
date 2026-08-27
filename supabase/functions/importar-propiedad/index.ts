@@ -1811,6 +1811,12 @@ serve(async (req) => {
         }
         // Sadasi titula la página con el nombre del modelo (ej. "Milán").
         if (titulo && titulo.length <= 30 && !/\s(en|de)\s/i.test(titulo)) modeloHint = titulo.trim()
+        // Tipo: Sadasi vende DEPARTAMENTOS como "planta baja/alta" y CASAS como
+        // "Casa modelo". La ruta lo delata (ej. .../sevilla-planta-baja → depto).
+        // Antes se quedaba en null y caía a "casa" por defecto.
+        const rutaTit = (new URL(url).pathname + ' ' + (titulo ?? '')).toLowerCase()
+        if (/planta\s*(baja|alta)|departamento|\bdepto\b|\bloft\b|penthouse/.test(rutaTit)) tipo = 'departamento'
+        else if (!tipo && /\bcasa\b/.test(rutaTit)) tipo = 'casa'
       }
     } catch { /* URL inválida */ }
 
