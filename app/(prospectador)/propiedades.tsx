@@ -1173,7 +1173,7 @@ export default function ProspectadorPropiedades() {
 
   const renderCard = (item: Propiedad, width?: number) => (
     <PropiedadCard
-      key={item.id}
+      key={`${item.id}-${conteoPubs !== undefined ? 'loaded' : 'loading'}`}
       item={item}
       width={width}
       veces={publicaciones[item.id] ?? 0}
