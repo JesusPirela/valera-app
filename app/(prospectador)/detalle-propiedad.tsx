@@ -560,6 +560,9 @@ export default function DetallePropiedad() {
       )
       // Refetch eventual para confirmar el estado real del servidor.
       queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', user.id], exact: true })
+      // Actualizar el conteo de publicadores para que el badge "NADIE LO HA PUBLICADO"
+      // desaparezca inmediatamente sin esperar los 15 min de staleTime.
+      queryClient.invalidateQueries({ queryKey: ['publicaciones-conteo'] })
     }
     const encolar = async () => {
       await enqueuePublicacion(id as string, idemKey, user.id).catch(() => {})
@@ -704,6 +707,7 @@ export default function DetallePropiedad() {
           }
         )
         queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario', uidActual], exact: true })
+        queryClient.invalidateQueries({ queryKey: ['publicaciones-conteo'] })
       }
     } else {
       const errMsg = 'No se pudo deshacer la publicación. Intenta de nuevo.'

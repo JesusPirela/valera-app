@@ -40,6 +40,7 @@ export function useOfflineSync(): OfflineSyncState {
         // Publicaciones encoladas ya aplicadas → refrescar contadores x/10
         queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
         if (hadPublications) {
+          queryClient.invalidateQueries({ queryKey: ['publicaciones-conteo'] })
           // Sincronizar misiones diarias y otorgar recompensas pendientes.
           // Sin esto, las publicaciones encoladas nunca acreditaban XP/coins ni
           // la racha, porque flushQueue solo llama publicar_propiedad_atomico pero
