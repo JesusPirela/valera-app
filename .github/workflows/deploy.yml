@@ -109,7 +109,39 @@ jobs:
       # atascó (dejó basura .git/node_modules en la raíz web y congeló el sitio):
       # los cambios llegaban a main pero NO a la web. El FTP sube dist/ directo y
       # es el método que funcionaba de forma confiable.
-      - name: Deploy a Hostinger por FTP
+      # A veces el FTP de Hostinger rechaza la conexión ("Failed to connect") de
+      # forma transitoria y tumbaba el deploy entero. Se intenta hasta 3 veces.
+      - name: Deploy a Hostinger por FTP (intento 1)
+        id: ftp1
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: ./
+
+      - name: Esperar y reintentar (intento 2)
+        if: steps.ftp1.outcome == 'failure'
+        run: sleep 25
+      - name: Deploy a Hostinger por FTP (intento 2)
+        id: ftp2
+        if: steps.ftp1.outcome == 'failure'
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: ./
+
+      - name: Esperar y reintentar (intento 3)
+        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure'
+        run: sleep 30
+      - name: Deploy a Hostinger por FTP (intento 3, final)
+        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_HOST }}
