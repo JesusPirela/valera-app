@@ -1289,15 +1289,23 @@ export default function DetallePropiedad() {
         }
         body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1a1a2e; background: #f5f8fc; }
         /* Header azul, contenido centrado (logo → código → nombre → ciudad → precio → tipo). */
-        .header { background-color: ${colorFicha}; background-image: radial-gradient(circle at 50% -10%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 55%); padding: 34px 32px 26px; text-align: center; }
-        .header-logo { height: 116px; max-width: 220px; object-fit: contain; border-radius: 16px; margin: 0 auto 16px; display: block; }
-        .codigo { font-size: 11px; color: rgba(255,255,255,0.72); font-weight: 700; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 10px; }
-        .titulo { font-size: 27px; font-weight: 800; color: #fff; margin-bottom: 6px; line-height: 1.15; }
-        .ciudad { font-size: 13px; color: rgba(255,255,255,0.72); margin-bottom: 18px; }
+        .header { background-color: ${colorFicha}; text-align: center; }
+        /* Foto principal ARRIBA con el precio encima: es lo que se ve en la
+           miniatura del PDF (WhatsApp/descargas) sin abrirlo. */
+        .hero-top { position: relative; width: 100%; height: 360px; overflow: hidden; background: #12304a; }
+        .hero-top img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .hero-price { position: absolute; left: 0; right: 0; bottom: 0; padding: 34px 30px 16px; text-align: left;
+          background-image: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.40) 55%, rgba(0,0,0,0) 100%); }
+        .hero-price-val { display: block; font-size: 37px; font-weight: 800; color: #FFD700; letter-spacing: 0.5px; }
+        .hero-price-tipo { display: block; font-size: 13px; color: rgba(255,255,255,0.92); font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px; }
+        /* Info debajo de la foto (sobre el azul); el logo va aquí, más chico. */
+        .header-info { padding: 18px 28px 22px; background-image: radial-gradient(circle at 50% -20%, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 60%); }
+        .header-logo { height: 58px; max-width: 150px; object-fit: contain; border-radius: 12px; margin: 6px auto 0; display: block; }
+        .codigo { font-size: 11px; color: rgba(255,255,255,0.72); font-weight: 700; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }
+        .titulo { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 5px; line-height: 1.15; }
+        .ciudad { font-size: 13px; color: rgba(255,255,255,0.72); margin-bottom: 10px; }
         .precio { font-size: 33px; font-weight: 800; color: #FFD700; margin-bottom: 5px; letter-spacing: 0.5px; }
         .tipo-op { font-size: 11px; color: rgba(255,255,255,0.72); font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; }
-        .hero { margin-top: 24px; border-radius: 12px; overflow: hidden; min-height: 220px; display: flex; align-items: center; justify-content: center; }
-        .hero img { width: 100%; max-height: 380px; object-fit: contain; display: block; }
         /* Cuerpo gris claro */
         .body { padding: 26px 32px 30px; background: #f5f8fc; }
         .inmob-logo-wrap { text-align: center; margin-bottom: 20px; }
@@ -1334,13 +1342,21 @@ export default function DetallePropiedad() {
         .footer-eslogan { color: rgba(255,255,255,0.6); font-size: 11px; font-style: italic; margin-top: 9px; }
       </style></head><body>
       <div class="header">
-        ${logoSrc ? `<img src="${logoSrc}" class="header-logo" />` : ''}
-        <div class="codigo">${esc(propiedad.codigo)}</div>
-        <div class="titulo">${esc(tituloTxt)}</div>
-        <div class="ciudad">${esc(propiedad.direccion)}</div>
-        <div class="precio">${precio}</div>
-        <div class="tipo-op">${esc(tipoOp)} • MXN</div>
-        ${imagenPrincipal ? `<div class="hero"><img src="${imagenPrincipal.src}" /></div>` : ''}
+        ${imagenPrincipal ? `
+          <div class="hero-top">
+            <img src="${imagenPrincipal.src}" />
+            <div class="hero-price">
+              <span class="hero-price-val">${precio}</span>
+              <span class="hero-price-tipo">${esc(tipoOp)} • MXN</span>
+            </div>
+          </div>` : ''}
+        <div class="header-info">
+          <div class="codigo">${esc(propiedad.codigo)}</div>
+          <div class="titulo">${esc(tituloTxt)}</div>
+          <div class="ciudad">${esc(propiedad.direccion)}</div>
+          ${!imagenPrincipal ? `<div class="precio">${precio}</div><div class="tipo-op">${esc(tipoOp)} • MXN</div>` : ''}
+          ${logoSrc ? `<img src="${logoSrc}" class="header-logo" />` : ''}
+        </div>
       </div>
       <div class="body">
         ${inmobiliariaLogoSrc ? `<div class="inmob-logo-wrap">
