@@ -421,10 +421,28 @@ export default function DetallePropiedad() {
   const [descripcionCopiada, setDescripcionCopiada] = useState(false)
   const [generandoDescIA, setGenerandoDescIA] = useState(false)
   const [descIAMsg, setDescIAMsg] = useState<string | null>(null)
-  const [, setPublicada] = useState(false)
-  const [fechaPublicacion, setFechaPublicacion] = useState<string | null>(null)
   const [togglingPublicacion, setTogglingPublicacion] = useState(false)
-  const [vecesPublicada, setVecesPublicada] = useState(0)
+  const [uid, setUid] = useState<string | null>(null)
+  // El botón de publicar de DENTRO usa exactamente la misma fuente que el de FUERA
+  // (el listado): la query 'publicaciones-usuario'. Así el conteo es DERIVADO (una
+  // sola fuente de verdad) y ya no puede quedar "pegado" el estado de la propiedad
+  // anterior (bug del "ya publicada 1/10"). Antes usaba estado local + cargarPublicacion.
+  const { data: pubData } = useQuery<{ publicacionesMap: Record<string, number>; publicacionFechasMap: Record<string, string> }>({
+    queryKey: ['publicaciones-usuario', uid],
+    queryFn: async () => {
+      const { data } = await supabase.from('propiedad_publicacion')
+        .select('propiedad_id, veces_publicada, fecha_publicacion')
+        .eq('user_id', uid!).gt('veces_publicada', 0)
+      return {
+        publicacionesMap: Object.fromEntries((data ?? []).map((r: any) => [r.propiedad_id, r.veces_publicada ?? 0])),
+        publicacionFechasMap: Object.fromEntries((data ?? []).filter((r: any) => r.fecha_publicacion).map((r: any) => [r.propiedad_id, r.fecha_publicacion])),
+      }
+    },
+    enabled: !!uid,
+    staleTime: 0, gcTime: 0, networkMode: 'offlineFirst', refetchOnWindowFocus: false,
+  })
+  const vecesPublicada = pubData?.publicacionesMap?.[id as string] ?? 0
+  const fechaPublicacion = pubData?.publicacionFechasMap?.[id as string] ?? null
   const [deshaciendoPub, setDeshaciendoPub] = useState(false)
 
   // Modal "Registrar con constructora"
@@ -444,21 +462,18 @@ export default function DetallePropiedad() {
     setPasoCita('seleccion')
   }
 
-  // Al cambiar de propiedad, limpiar de inmediato el estado de publicación para no
-  // arrastrar el de la propiedad anterior (el componente se reutiliza entre
-  // propiedades). Va aparte del efecto de carga para NO dispararse cuando solo
-  // cambia isOnline (evita el parpadeo al reconectar).
+  // Cargar el uid una vez (para la query de publicaciones, misma que el listado).
   useEffect(() => {
-    setPublicada(false)
-    setFechaPublicacion(null)
-    setVecesPublicada(0)
-  }, [id])
+    supabase.auth.getSession().then(({ data: { session } }) => setUid(session?.user?.id ?? null))
+  }, [])
+
+  // Si esta propiedad ya está publicada, desbloquear (antes lo hacía cargarPublicacion).
+  useEffect(() => {
+    if (vecesPublicada > 0) marcarDesbloqueada(id as string)
+  }, [vecesPublicada, id])
 
   useEffect(() => {
     if (!id) return
-    // Solo cargar si hay red; si se recupera la conexión (isOnline cambia a true)
-    // el efecto re-corre y carga el estado real sin resetear a 0 primero.
-    if (isOnline) cargarPublicacion()
     const timer = setTimeout(() => { if (isOnline) registrarActividad('vista') }, 30_000)
     return () => clearTimeout(timer)
   }, [id, isOnline])
@@ -488,34 +503,6 @@ export default function DetallePropiedad() {
     return () => window.removeEventListener('keydown', onKey)
   }, [lightboxVisible, propiedad])
 
-  async function cargarPublicacion() {
-    try {
-      const { data: { user } } = await getUsuarioActual()
-      if (!user) return
-      const { data } = await supabase
-        .from('propiedad_publicacion')
-        .select('publicada, fecha_publicacion, veces_publicada')
-        .eq('propiedad_id', id)
-        .eq('user_id', user.id)
-        .maybeSingle()
-      if (data) {
-        setPublicada(data.publicada)
-        setFechaPublicacion(data.fecha_publicacion)
-        setVecesPublicada(data.veces_publicada ?? 0)
-        // Ya publicada antes → desbloquear sin requerir copiar desc. o descargar fotos.
-        if ((data.veces_publicada ?? 0) > 0) marcarDesbloqueada(id as string)
-      } else {
-        // Esta propiedad NUNCA la publicó este usuario → estado limpio. Antes se
-        // saltaba este caso y quedaba el "ya publicada 1/10" de la propiedad
-        // anterior (el componente se reutiliza al cambiar de propiedad), lo que
-        // trababa el botón de Publicar en propiedades nuevas.
-        setPublicada(false)
-        setFechaPublicacion(null)
-        setVecesPublicada(0)
-      }
-    } catch { /* sin red: mantener estado actual, no resetear */ }
-  }
-
   async function togglePublicacion() {
     // getSession() es local (no cuelga sin red); getUser() hace un round-trip.
     const { data: { session } } = await supabase.auth.getSession()
@@ -543,9 +530,6 @@ export default function DetallePropiedad() {
     // SIEMPRE se limpia (try/finally).
     const idemKey = generarIdemKey()
     const exito = (veces: number, fecha?: string | null) => {
-      setPublicada(true)
-      setFechaPublicacion(fecha ?? new Date().toISOString())
-      setVecesPublicada(veces)
       actualizarMisionesPorCategoria(user.id, 'propiedad').catch(() => {})
       actualizarProgresoTareasPublicar(user.id)
       // Actualización optimista exacta: igual que publicarPropiedad() en propiedades.tsx.
@@ -566,9 +550,15 @@ export default function DetallePropiedad() {
     }
     const encolar = async () => {
       await enqueuePublicacion(id as string, idemKey, user.id).catch(() => {})
-      // Optimista: se refleja ya; la cola lo hace real al reconectar.
-      setPublicada(true)
-      setVecesPublicada(vecesPublicada + 1)
+      // Optimista: se refleja ya en la MISMA query que el listado; la cola lo hace
+      // real al reconectar.
+      queryClient.setQueryData<{ publicacionesMap: Record<string, number>; publicacionFechasMap: Record<string, string> }>(
+        ['publicaciones-usuario', user.id],
+        (old) => ({
+          publicacionesMap: { ...(old?.publicacionesMap ?? {}), [id as string]: vecesPublicada + 1 },
+          publicacionFechasMap: { ...(old?.publicacionFechasMap ?? {}), [id as string]: new Date().toISOString() },
+        })
+      )
       const msg = 'La conexión está inestable. Tu publicación quedó guardada y se registrará sola en cuanto haya señal — no necesitas volver a intentar.'
       if (Platform.OS === 'web') window.alert(`Publicación pendiente: ${msg}`)
       else Alert.alert('Publicación pendiente', msg)
@@ -693,9 +683,6 @@ export default function DetallePropiedad() {
       const nuevas = resp.veces_publicada ?? 0
       const { data: { session: sesActual } } = await supabase.auth.getSession()
       const uidActual = sesActual?.user?.id
-      setVecesPublicada(nuevas)
-      setPublicada(nuevas > 0)
-      setFechaPublicacion(resp.fecha_publicacion ?? null)
       if (uidActual) {
         queryClient.setQueryData<{ publicacionesMap: Record<string, number>; publicacionFechasMap: Record<string, string> }>(
           ['publicaciones-usuario', uidActual],
