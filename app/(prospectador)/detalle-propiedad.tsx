@@ -1299,7 +1299,7 @@ export default function DetallePropiedad() {
            y lo agrandaba al 100% por ser más específica → salía gigante). */
         .hero-photo { width: 100%; height: auto; display: block; }
         /* Logo PEQUEÑO en la esquina superior derecha de la foto. */
-        .hero-logo-corner { position: absolute; top: 12px; right: 12px; width: 40px; height: auto; border-radius: 8px; }
+        .hero-logo-corner { position: absolute; top: 14px; right: 14px; width: 56px; height: auto; border-radius: 9px; }
         .hero-price { position: absolute; left: 0; right: 0; bottom: 0; padding: 34px 30px 16px; text-align: left;
           background-image: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.40) 55%, rgba(0,0,0,0) 100%); }
         .hero-price-val { display: block; font-size: 37px; font-weight: 800; color: #FFD700; letter-spacing: 0.5px; }
