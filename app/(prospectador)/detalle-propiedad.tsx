@@ -1295,9 +1295,11 @@ export default function DetallePropiedad() {
         /* Sin altura fija ni object-fit (html2canvas NO respeta object-fit y
            estiraba/aplastaba la foto). Alto AUTOMÁTICO = proporción natural. */
         .hero-top { position: relative; width: 100%; overflow: hidden; background: #12304a; }
-        .hero-top img { width: 100%; height: auto; display: block; }
-        /* Logo en la esquina de la foto (estilo listado inmobiliario). */
-        .hero-logo-corner { position: absolute; top: 14px; right: 14px; width: 50px; height: auto; border-radius: 10px; }
+        /* Clase propia para la FOTO (no ".hero-top img", que también pegaba al logo
+           y lo agrandaba al 100% por ser más específica → salía gigante). */
+        .hero-photo { width: 100%; height: auto; display: block; }
+        /* Logo PEQUEÑO en la esquina superior derecha de la foto. */
+        .hero-logo-corner { position: absolute; top: 12px; right: 12px; width: 40px; height: auto; border-radius: 8px; }
         .hero-price { position: absolute; left: 0; right: 0; bottom: 0; padding: 34px 30px 16px; text-align: left;
           background-image: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.40) 55%, rgba(0,0,0,0) 100%); }
         .hero-price-val { display: block; font-size: 37px; font-weight: 800; color: #FFD700; letter-spacing: 0.5px; }
@@ -1348,7 +1350,7 @@ export default function DetallePropiedad() {
       <div class="header">
         ${imagenPrincipal ? `
           <div class="hero-top">
-            <img src="${imagenPrincipal.src}" />
+            <img src="${imagenPrincipal.src}" class="hero-photo" />
             ${logoSrc ? `<img src="${logoSrc}" class="hero-logo-corner" />` : ''}
             <div class="hero-price">
               <span class="hero-price-val">${precio}</span>
