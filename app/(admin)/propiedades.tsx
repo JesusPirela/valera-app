@@ -129,6 +129,7 @@ export default function AdminPropiedades() {
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
   const [ordenPublicaciones, setOrdenPublicaciones] = useState<OrdenPublicaciones>(null)
+  const [filtroDirecta, setFiltroDirecta] = useState(false)
   const [publicacionesMap, setPublicacionesMap] = useState<Record<string, number>>({})
   const [comprasPendientes, setComprasPendientes] = useState(0)
   const [campanasPendientes, setCampanasPendientes] = useState(0)
@@ -232,7 +233,7 @@ export default function AdminPropiedades() {
       ].includes(item.route))
     : NAV_ITEMS
 
-  const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, ordenPublicaciones, busquedaContacto].filter(Boolean).length
+  const filtrosActivos = [filtroOperacion, filtroEstado, filtroTipo, ordenPrecio, ordenPublicaciones, busquedaContacto, filtroDirecta || null].filter(Boolean).length
 
   const inventarioCount = propiedades.filter((p) => p.es_inventario).length
   const { propiedadesFiltradas, propiedadesParaSugerenciasContacto } = useMemo(() => {
@@ -286,6 +287,9 @@ export default function AdminPropiedades() {
       return ordenPublicaciones === 'desc' ? pb - pa : pa - pb
     })
   }
+  if (filtroDirecta) {
+    propiedadesFiltradas = propiedadesFiltradas.filter(p => p.directa === true)
+  }
 
   // Destacadas siempre al tope (dentro de lo que queda tras filtros y sort)
   const ahora = Date.now()
@@ -302,12 +306,12 @@ export default function AdminPropiedades() {
 
   return { propiedadesFiltradas, propiedadesParaSugerenciasContacto }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [propiedades, busqueda, filtroOperacion, filtroEstado, filtroTipo, busquedaContacto, ordenPrecio, ordenPublicaciones, publicacionesMap])
+  }, [propiedades, busqueda, filtroOperacion, filtroEstado, filtroTipo, busquedaContacto, ordenPrecio, ordenPublicaciones, publicacionesMap, filtroDirecta])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
   useEffect(() => { setVisibleCount(PAGE_WEB) }, [
     busqueda, filtroOperacion, filtroEstado, filtroTipo, ordenPrecio,
-    ordenPublicaciones, busquedaContacto,
+    ordenPublicaciones, busquedaContacto, filtroDirecta,
   ])
 
   function ejecutarBorrado(id: string) {
@@ -581,6 +585,10 @@ export default function AdminPropiedades() {
             <FiltroChip label="Sin orden" active={ordenPublicaciones === null} onPress={() => setOrdenPublicaciones(null)}  textSubColor={c.textSub}/>
             <FiltroChip label="🔥 Más publicadas" active={ordenPublicaciones === 'desc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'desc' ? null : 'desc')}  textSubColor={c.textSub}/>
             <FiltroChip label="Menos publicadas" active={ordenPublicaciones === 'asc'} onPress={() => setOrdenPublicaciones(ordenPublicaciones === 'asc' ? null : 'asc')}  textSubColor={c.textSub}/>
+          </ScrollView>
+          <Text style={[styles.filtroLabel, { color: c.textMute }]}>Trato</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="🎯 Directas" active={filtroDirecta} onPress={() => setFiltroDirecta(v => !v)} textSubColor={c.textSub}/>
           </ScrollView>
           {(() => {
             // Sugerencias: etiquetas únicas que coinciden con el texto escrito
