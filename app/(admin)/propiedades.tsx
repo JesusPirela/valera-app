@@ -111,7 +111,6 @@ function FiltroChip({ label, active, onPress, textSubColor }: { label: string; a
 export default function AdminPropiedades() {
   useSupervisorBlock()
   const c = useColors()
-  console.log('[ADMIN-BUILD-CHECK] v2')
   const scrollOperacionRef = useScrollHorizontalConRueda()
   const scrollEstadoRef = useScrollHorizontalConRueda()
   const scrollTipoRef = useScrollHorizontalConRueda()
