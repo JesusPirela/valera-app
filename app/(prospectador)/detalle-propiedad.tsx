@@ -1296,6 +1296,8 @@ export default function DetallePropiedad() {
            estiraba/aplastaba la foto). Alto AUTOMÁTICO = proporción natural. */
         .hero-top { position: relative; width: 100%; overflow: hidden; background: #12304a; }
         .hero-top img { width: 100%; height: auto; display: block; }
+        /* Logo en la esquina de la foto (estilo listado inmobiliario). */
+        .hero-logo-corner { position: absolute; top: 16px; right: 16px; width: 74px; height: auto; border-radius: 12px; }
         .hero-price { position: absolute; left: 0; right: 0; bottom: 0; padding: 34px 30px 16px; text-align: left;
           background-image: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.40) 55%, rgba(0,0,0,0) 100%); }
         .hero-price-val { display: block; font-size: 37px; font-weight: 800; color: #FFD700; letter-spacing: 0.5px; }
@@ -1347,6 +1349,7 @@ export default function DetallePropiedad() {
         ${imagenPrincipal ? `
           <div class="hero-top">
             <img src="${imagenPrincipal.src}" />
+            ${logoSrc ? `<img src="${logoSrc}" class="hero-logo-corner" />` : ''}
             <div class="hero-price">
               <span class="hero-price-val">${precio}</span>
               <span class="hero-price-tipo">${esc(tipoOp)} • MXN</span>
@@ -1356,8 +1359,7 @@ export default function DetallePropiedad() {
           <div class="codigo">${esc(propiedad.codigo)}</div>
           <div class="titulo">${esc(tituloTxt)}</div>
           <div class="ciudad">${esc(propiedad.direccion)}</div>
-          ${!imagenPrincipal ? `<div class="precio">${precio}</div><div class="tipo-op">${esc(tipoOp)} • MXN</div>` : ''}
-          ${logoSrc ? `<img src="${logoSrc}" class="header-logo" />` : ''}
+          ${!imagenPrincipal ? `<div class="precio">${precio}</div><div class="tipo-op">${esc(tipoOp)} • MXN</div>${logoSrc ? `<img src="${logoSrc}" class="header-logo" />` : ''}` : ''}
         </div>
       </div>
       <div class="body">
