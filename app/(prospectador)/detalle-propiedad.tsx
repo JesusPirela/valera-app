@@ -2364,63 +2364,68 @@ export default function DetallePropiedad() {
           )}
         </View>
 
-        {/* Estado de publicación */}
-        <View style={styles.seccion}>
-          <View style={styles.seccionHeader}>
-            <Text style={styles.seccionTitulo}>Estado de publicación</Text>
-            <Text style={[styles.pubContador, vecesPublicada >= 10 && styles.pubContadorLimite]}>
-              {vecesPublicada}/10
-            </Text>
-          </View>
-          <View style={styles.pubRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.pubEstado}>
-                {vecesPublicada >= 10 ? '🚫 Límite alcanzado' : vecesPublicada > 0 ? '✅ Publicada' : '⏳ Pendiente de publicar'}
+        {/* Estado de publicación (tarjeta rediseñada) */}
+        <View style={styles.pubCard}>
+          <View style={styles.pubCardHead}>
+            <Text style={styles.pubCardTitle}>Estado de publicación</Text>
+            <View style={[
+              styles.pubBadge,
+              vecesPublicada >= 10 ? styles.pubBadgeLimite : vecesPublicada > 0 ? styles.pubBadgeOk : styles.pubBadgePend,
+            ]}>
+              <Text style={[
+                styles.pubBadgeTxt,
+                { color: vecesPublicada >= 10 ? '#c0392b' : vecesPublicada > 0 ? '#0f6b52' : '#a5710f' },
+              ]}>
+                {vecesPublicada >= 10 ? '🚫 Límite' : vecesPublicada > 0 ? '✅ Publicada' : '⏳ Pendiente'}
               </Text>
-              {vecesPublicada > 0 && fechaPublicacion && (
-                <Text style={styles.pubFecha}>
-                  Última vez: {new Date(fechaPublicacion).toLocaleDateString('es-MX', {
-                    day: 'numeric', month: 'long', year: 'numeric',
-                  })}
-                </Text>
-              )}
-              {vecesPublicada > 0 && vecesPublicada < 10 && (
-                <Text style={styles.pubFecha}>Te quedan {10 - vecesPublicada} publicaciones</Text>
-              )}
             </View>
-            <TouchableOpacity
-              style={[
-                styles.pubBtn,
-                vecesPublicada > 0 ? styles.pubBtnActiva : styles.pubBtnPendiente,
-                (togglingPublicacion || vecesPublicada >= 10) && styles.btnDisabled,
-              ]}
-              onPress={togglePublicacion}
-              disabled={togglingPublicacion || vecesPublicada >= 10}
-            >
-              {togglingPublicacion
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.pubBtnText} numberOfLines={1}>
-                    {vecesPublicada === 0 ? 'Marcar como publicada' : vecesPublicada >= 10 ? '10/10 ✅' : `✅ ${vecesPublicada}/10`}
-                  </Text>
-              }
-            </TouchableOpacity>
           </View>
 
-          {/* Deshacer publicación (solo para clicks por error) */}
+          {/* Barra de progreso X/10 */}
+          <View style={styles.pubTrack}>
+            <View style={[
+              styles.pubFill,
+              { width: `${Math.min(100, (vecesPublicada / 10) * 100)}%` as any,
+                backgroundColor: vecesPublicada >= 10 ? '#c0392b' : '#1a6855' },
+            ]} />
+          </View>
+          <View style={styles.pubMetaRow}>
+            <Text style={styles.pubMetaMain}>{vecesPublicada} de 10 publicaciones</Text>
+            {vecesPublicada > 0 && vecesPublicada < 10 && (
+              <Text style={styles.pubMetaSub}>Te quedan {10 - vecesPublicada}</Text>
+            )}
+          </View>
+          {vecesPublicada > 0 && fechaPublicacion && (
+            <Text style={styles.pubMetaFecha}>
+              Última vez: {new Date(fechaPublicacion).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </Text>
+          )}
+
+          {/* Botón principal grande */}
+          <TouchableOpacity
+            style={[
+              styles.pubCTA,
+              vecesPublicada >= 10 ? styles.pubCTALimite : vecesPublicada > 0 ? styles.pubCTAOk : styles.pubCTAPend,
+              (togglingPublicacion || vecesPublicada >= 10) && styles.btnDisabled,
+            ]}
+            onPress={togglePublicacion}
+            disabled={togglingPublicacion || vecesPublicada >= 10}
+            activeOpacity={0.85}
+          >
+            {togglingPublicacion
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={styles.pubCTATxt} numberOfLines={1}>
+                  {vecesPublicada === 0 ? '📢  Marcar como publicada' : vecesPublicada >= 10 ? '🚫  Límite alcanzado' : '➕  Marcar otra publicación'}
+                </Text>}
+          </TouchableOpacity>
+
+          {/* Deshacer (sutil, solo si ya se publicó) */}
           {vecesPublicada > 0 && (
-            <View style={styles.deshacerRow}>
-              <Text style={styles.deshacerHint}>¿Le diste click a "Publicar" por error?</Text>
-              <TouchableOpacity
-                style={[styles.deshacerBtn, deshaciendoPub && styles.btnDisabled]}
-                onPress={deshacerPublicacion}
-                disabled={deshaciendoPub}
-              >
-                {deshaciendoPub
-                  ? <ActivityIndicator color="#c0392b" size="small" />
-                  : <Text style={styles.deshacerBtnText}>↩️ Deshacer última publicación</Text>
-                }
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.pubDeshacerBtn} onPress={deshacerPublicacion} disabled={deshaciendoPub} activeOpacity={0.7}>
+              {deshaciendoPub
+                ? <ActivityIndicator color="#94a3b8" size="small" />
+                : <Text style={styles.pubDeshacerTxt}>↩  Deshacer última publicación (si fue por error)</Text>}
+            </TouchableOpacity>
           )}
         </View>
 
@@ -3853,6 +3858,33 @@ const styles = StyleSheet.create({
   },
   deshacerBtnText: { fontSize: 12, fontWeight: '600', color: '#c0392b' },
   pubBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  // ── Tarjeta de publicación rediseñada ──────────────────────────────────────
+  pubCard: {
+    backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e8edf1',
+    padding: 16, marginHorizontal: 16, marginBottom: 10,
+    ...Platform.select({ web: { boxShadow: '0 1px 4px rgba(0,0,0,0.05)' } as any, default: { elevation: 1 } }),
+  },
+  pubCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  pubCardTitle: { fontSize: 16, fontWeight: '800', color: '#1a2e30' },
+  pubBadge: { borderRadius: 20, paddingHorizontal: 11, paddingVertical: 4, borderWidth: 1 },
+  pubBadgePend: { backgroundColor: '#fff8ec', borderColor: '#f0dcae' },
+  pubBadgeOk: { backgroundColor: '#eafaf3', borderColor: '#b6e3d3' },
+  pubBadgeLimite: { backgroundColor: '#fdecea', borderColor: '#f5c6c0' },
+  pubBadgeTxt: { fontSize: 12, fontWeight: '800' },
+  pubTrack: { height: 9, borderRadius: 5, backgroundColor: '#eef2f5', overflow: 'hidden', marginBottom: 8 },
+  pubFill: { height: 9, borderRadius: 5 },
+  pubMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  pubMetaMain: { fontSize: 13.5, fontWeight: '700', color: '#334155' },
+  pubMetaSub: { fontSize: 12.5, color: '#64748b', fontWeight: '600' },
+  pubMetaFecha: { fontSize: 12, color: '#94a3b8', marginTop: 4 },
+  pubCTA: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+  pubCTAPend: { backgroundColor: '#1a6470' },
+  pubCTAOk: { backgroundColor: '#1a6855' },
+  pubCTALimite: { backgroundColor: '#c7ccd1' },
+  pubCTATxt: { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.2 },
+  pubDeshacerBtn: { alignItems: 'center', paddingVertical: 11, marginTop: 2 },
+  pubDeshacerTxt: { fontSize: 12, color: '#94a3b8', fontWeight: '600' },
 
   constructoraBadge: {
     fontSize: 12,
