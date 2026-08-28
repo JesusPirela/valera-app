@@ -1297,7 +1297,7 @@ export default function DetallePropiedad() {
         .hero-top { position: relative; width: 100%; overflow: hidden; background: #12304a; }
         .hero-top img { width: 100%; height: auto; display: block; }
         /* Logo en la esquina de la foto (estilo listado inmobiliario). */
-        .hero-logo-corner { position: absolute; top: 16px; right: 16px; width: 74px; height: auto; border-radius: 12px; }
+        .hero-logo-corner { position: absolute; top: 14px; right: 14px; width: 50px; height: auto; border-radius: 10px; }
         .hero-price { position: absolute; left: 0; right: 0; bottom: 0; padding: 34px 30px 16px; text-align: left;
           background-image: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.40) 55%, rgba(0,0,0,0) 100%); }
         .hero-price-val { display: block; font-size: 37px; font-weight: 800; color: #FFD700; letter-spacing: 0.5px; }
