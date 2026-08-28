@@ -1799,23 +1799,50 @@ serve(async (req) => {
     let modeloHint = ''
     try {
       if (/(^|\.)sadasi\.com$/i.test(new URL(url).hostname)) {
-        const mc = html.match(/square_meters_of_construction"\s*:\s*([\d.]+)/i)
-        if (mc && !m2) m2 = String(Math.round(parseFloat(mc[1])))
-        const ml = html.match(/square_meters_of_land"\s*:\s*([\d.]+)/i)
-        if (ml && !m2Terreno) m2Terreno = String(Math.round(parseFloat(ml[1])))
         const segs = new URL(url).pathname.split('/').filter(Boolean)
         if (segs.length >= 2 && !direccion) {
           const desarrollo = tituloModelo(segs[1].replace(/-/g, ' '))
           const ubic = [...new Set(tituloModelo(segs[0].replace(/-/g, ' ')).split(' '))].join(' ')
           direccion = `${desarrollo}, ${ubic}`
         }
+        // La página embebe VARIOS modelos del desarrollo; hay que tomar los datos
+        // del modelo EXACTO de esta URL (por slug/título), no del primero que
+        // aparezca — si no, salían recámaras/m² de otro modelo (o faltaban).
+        const slugMod = (segs[2] ?? '').replace(/-/g, ' ').toLowerCase().trim()
+        const tituloNorm = (titulo ?? '').toLowerCase().trim()
+        let mejor: any = null
+        for (const om of html.matchAll(/\{[^{}]*"model_name"[^{}]*\}/g)) {
+          try {
+            const obj = JSON.parse(decodeEntities(om[0]).replace(/\\u0026/gi, '&').replace(/\\\//g, '/'))
+            const nm = String(obj.model_name ?? obj.name ?? '').toLowerCase().trim()
+            if (!nm) continue
+            if (nm === slugMod || nm === tituloNorm) { mejor = obj; break }        // match exacto
+            if (!mejor && (slugMod.includes(nm) || nm.includes(slugMod))) mejor = obj // parcial
+          } catch { /* json malformado */ }
+        }
+        if (mejor) {
+          if (mejor.number_of_bedrooms != null)  recamaras = parseInt(String(mejor.number_of_bedrooms), 10) || recamaras
+          if (mejor.number_of_bathrooms != null) banos = Math.floor(parseFloat(String(mejor.number_of_bathrooms))) || banos
+          if (mejor.parking_spaces != null)      estacionamientos = parseInt(String(mejor.parking_spaces), 10) || estacionamientos
+          if (mejor.square_meters_of_construction) m2 = String(Math.round(parseFloat(String(mejor.square_meters_of_construction))))
+          if (mejor.square_meters_of_land)         m2Terreno = String(Math.round(parseFloat(String(mejor.square_meters_of_land))))
+        }
+        // Fallback (sin match): tomar el primer valor del HTML, como con m².
+        if (!m2)       { const mc = html.match(/square_meters_of_construction"\s*:\s*([\d.]+)/i); if (mc) m2 = String(Math.round(parseFloat(mc[1]))) }
+        if (!m2Terreno){ const ml = html.match(/square_meters_of_land"\s*:\s*([\d.]+)/i);         if (ml) m2Terreno = String(Math.round(parseFloat(ml[1]))) }
+        if (recamaras == null)       { const nb = html.match(/number_of_bedrooms"\s*:\s*"?(\d+)/i);        if (nb) recamaras = parseInt(nb[1], 10) || null }
+        // Sadasi describe los deptos como "X habitaciones" (no "recámaras"); tomar
+        // el número de la descripción del modelo. Ej: "Departamento de 2 habitaciones".
+        if (recamaras == null)       { const rm = ((descripcion || '') + ' ' + html).match(/(\d+)\s*(?:rec[aá]maras?|habitaci[oó]n(?:es)?)/i); if (rm) recamaras = parseInt(rm[1], 10) || null }
+        if (banos == null)           { const nba = html.match(/number_of_bathrooms"\s*:\s*"?([\d.]+)/i);   if (nba) banos = Math.floor(parseFloat(nba[1])) || null }
+        if (estacionamientos == null){ const np = html.match(/parking_spaces"\s*:\s*"?(\d+)/i);            if (np) estacionamientos = parseInt(np[1], 10) || null }
+
         // Sadasi titula la página con el nombre del modelo (ej. "Milán").
         if (titulo && titulo.length <= 30 && !/\s(en|de)\s/i.test(titulo)) modeloHint = titulo.trim()
-        // Tipo: Sadasi vende DEPARTAMENTOS como "planta baja/alta" y CASAS como
-        // "Casa modelo". La ruta lo delata (ej. .../sevilla-planta-baja → depto).
-        // Antes se quedaba en null y caía a "casa" por defecto.
+        // Tipo: Sadasi vende DEPARTAMENTOS como "planta baja/alta", "roof top",
+        // loft, penthouse; y CASAS como "Casa modelo". La ruta/título lo delata.
         const rutaTit = (new URL(url).pathname + ' ' + (titulo ?? '')).toLowerCase()
-        if (/planta\s*(baja|alta)|departamento|\bdepto\b|\bloft\b|penthouse/.test(rutaTit)) tipo = 'departamento'
+        if (/planta\s*(baja|alta)|departamento|\bdepto\b|\bloft\b|penthouse|roof\s*top|roof\s*garden/.test(rutaTit)) tipo = 'departamento'
         else if (!tipo && /\bcasa\b/.test(rutaTit)) tipo = 'casa'
       }
     } catch { /* URL inválida */ }
