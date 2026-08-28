@@ -72,6 +72,7 @@ type Propiedad = {
   destacada_mensaje: string | null
   destacada_hasta: string | null
   exclusiva: boolean
+  directa: boolean | null
   es_constructora: boolean | null
   nombre_constructora: string | null
   recamaras: number | null
@@ -393,6 +394,7 @@ export default function ProspectadorPropiedades() {
     AsyncStorage.setItem('filtroEstadoProps', v).catch(() => {})
   }, [])
   const [filtroDestacada, setFiltroDestacada] = useState(false)
+  const [filtroDirecta, setFiltroDirecta] = useState(false)
   const [filtroFechaPreset, setFiltroFechaPreset] = useState<7 | 30 | 90 | 180 | null>(null)
   const [fechaDesdeCustom, setFechaDesdeCustom] = useState('')
   const [fechaHastaCustom, setFechaHastaCustom] = useState('')
@@ -482,7 +484,7 @@ export default function ProspectadorPropiedades() {
         const size = i === 0 ? PRIMERA : PAGE
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, estado_mx, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, total_publicadores, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
+          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, estado_mx, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, directa, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, total_publicadores, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
           .in('estado', ['disponible', 'vendida'])
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -862,6 +864,7 @@ export default function ProspectadorPropiedades() {
     filtroNueva ? 'nueva' : null,
     filtroExclusiva ? 'exclusiva' : null,
     filtroDestacada ? 'destacada' : null,
+    (esAdmin && filtroDirecta) ? 'directa' : null,
     (filtroFechaPreset || fechaDesdeCustom || fechaHastaCustom) ? 'fecha' : null,
     filtroOrden !== 'normal' ? 'orden' : null,
   ].filter(Boolean).length
@@ -907,6 +910,9 @@ export default function ProspectadorPropiedades() {
   }
   if (filtroExclusiva) {
     propiedadesFiltradas = propiedadesFiltradas.filter(p => p.exclusiva || p.inmobiliarias?.exclusiva)
+  }
+  if (esAdmin && filtroDirecta) {
+    propiedadesFiltradas = propiedadesFiltradas.filter(p => p.directa === true)
   }
   // Filtro por estado (Querétaro / Otros estados / Todas). "Desconocido" se
   // considera FUERA de Querétaro para no ocultar una foránea sin dato.
@@ -1067,7 +1073,7 @@ export default function ProspectadorPropiedades() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     propiedades, busqueda, filtroPublicadas, publicaciones, pubData, filtroNueva,
-    filtroExclusiva, filtroDestacada, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
+    filtroExclusiva, filtroDestacada, filtroDirecta, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
     viewsData, userId, filtroEstado, filtroOrden,
   ])
@@ -1200,6 +1206,9 @@ export default function ProspectadorPropiedades() {
           // Acceso rápido a "Sin publicar" (antes solo estaba escondido en el
           // panel de filtros avanzados, bajo "Mis propiedades").
           { key: 'sin_publicar', label: 'Sin publicar', icon: 'cloud-upload-outline' as const, activo: filtroPublicadas === 'sin_publicar', onPress: () => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar') },
+          ...(esAdmin ? [
+            { key: 'directas', label: 'Directas', icon: 'person-outline' as const, activo: filtroDirecta, onPress: () => setFiltroDirecta(v => !v) },
+          ] : []),
         ]).map(btn => (
           <TouchableOpacity
             key={btn.key}
