@@ -920,7 +920,7 @@ export default function DetalleCliente() {
                   onPress={() => setDonarModo('persona')} disabled={donando}>
                   <Text style={{ fontWeight: '800', color: '#334155', fontSize: 15, marginBottom: 3 }}>👤 Donar a una persona</Text>
                   <Text style={{ color: '#64748b', fontSize: 12.5, lineHeight: 17 }}>
-                    Se lo pasas directo a un compañero ACTIVO. También te da comisión si lo cierra. (Solo aparecen los activos de la última semana.)
+                    Se lo pasas directo a un compañero ACTIVO. También te da comisión si lo cierra. (Solo aparecen los activos de los últimos 30 días.)
                   </Text>
                 </TouchableOpacity>
 
