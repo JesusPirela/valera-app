@@ -2399,8 +2399,8 @@ export default function DetallePropiedad() {
             >
               {togglingPublicacion
                 ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.pubBtnText}>
-                    {vecesPublicada === 0 ? 'Publicar' : vecesPublicada >= 10 ? '10/10 ✅' : `${vecesPublicada}/10`}
+                : <Text style={styles.pubBtnText} numberOfLines={1}>
+                    {vecesPublicada === 0 ? 'Marcar como publicada' : vecesPublicada >= 10 ? '10/10 ✅' : `✅ ${vecesPublicada}/10`}
                   </Text>
               }
             </TouchableOpacity>
@@ -3841,7 +3841,7 @@ const styles = StyleSheet.create({
   pubContadorLimite: { color: '#c0392b' },
   pubBtn: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   pubBtnPendiente: { backgroundColor: '#1a6470' },
-  pubBtnActiva: { backgroundColor: '#888' },
+  pubBtnActiva: { backgroundColor: '#1a6855' },   // verde éxito (antes gris tristón)
   deshacerRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f0e8e8', gap: 10,
