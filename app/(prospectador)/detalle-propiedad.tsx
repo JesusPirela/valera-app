@@ -1361,7 +1361,13 @@ export default function DetallePropiedad() {
       </div>
       </body></html>`
 
-      const nombreArchivo = `${(propiedad.codigo || 'ficha').replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`
+      // Nombre del archivo CON el precio, para verlo sin abrir el PDF (en WhatsApp,
+      // descargas, etc. se ve el nombre del archivo). Ej: "VR-1234 - 2,500,000 MXN.pdf".
+      // Se conservan comas/espacios (válidos en el nombre) y solo se quitan los
+      // caracteres inválidos de archivo.
+      const precioNombre = propiedad.precio != null ? ` - ${precio.replace(/\$/g, '').replace(/\s+/g, ' ').trim()}` : ''
+      const nombreArchivo = `${(propiedad.codigo || 'ficha')}${precioNombre}`
+        .replace(/[\/\\:*?"<>|\x00-\x1f]/g, '').replace(/\s+/g, ' ').trim() + '.pdf'
 
       if (Platform.OS === 'web') {
         const { jsPDF } = await import('jspdf')
@@ -1538,7 +1544,17 @@ export default function DetallePropiedad() {
           Alert.alert('Error', 'Compartir no está disponible en este dispositivo.')
           return
         }
-        await ShareLib.shareAsync(pdfUri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: propiedad.codigo ?? 'ficha' })
+        // Renombrar el PDF temporal (nombre aleatorio) al nombre con el precio, para
+        // que al compartirlo por WhatsApp se vea el precio sin abrirlo. Si la copia
+        // falla por lo que sea, se comparte el temporal (nunca se rompe el flujo).
+        let compartirUri = pdfUri
+        try {
+          const destino = FileSystem.cacheDirectory + nombreArchivo
+          await FileSystem.deleteAsync(destino, { idempotent: true }).catch(() => {})
+          await FileSystem.copyAsync({ from: pdfUri, to: destino })
+          compartirUri = destino
+        } catch { /* usar el temporal */ }
+        await ShareLib.shareAsync(compartirUri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: nombreArchivo })
       }
       // El PDF también premia, igual que descargar las fotos: 3 XP una sola vez
       // por ficha generada (y sujeto al tope diario de descargas).
