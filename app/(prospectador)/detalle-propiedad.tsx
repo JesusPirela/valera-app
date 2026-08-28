@@ -1292,8 +1292,10 @@ export default function DetallePropiedad() {
         .header { background-color: ${colorFicha}; text-align: center; }
         /* Foto principal ARRIBA con el precio encima: es lo que se ve en la
            miniatura del PDF (WhatsApp/descargas) sin abrirlo. */
-        .hero-top { position: relative; width: 100%; height: 520px; overflow: hidden; background: #12304a; }
-        .hero-top img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        /* Sin altura fija ni object-fit (html2canvas NO respeta object-fit y
+           estiraba/aplastaba la foto). Alto AUTOMÁTICO = proporción natural. */
+        .hero-top { position: relative; width: 100%; overflow: hidden; background: #12304a; }
+        .hero-top img { width: 100%; height: auto; display: block; }
         .hero-price { position: absolute; left: 0; right: 0; bottom: 0; padding: 34px 30px 16px; text-align: left;
           background-image: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.40) 55%, rgba(0,0,0,0) 100%); }
         .hero-price-val { display: block; font-size: 37px; font-weight: 800; color: #FFD700; letter-spacing: 0.5px; }
