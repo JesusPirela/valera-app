@@ -343,7 +343,7 @@ function ModalEdicion({
       if (error) { alerta(error.message); setGuardando(false); return }
     }
     // Guardar la operación en el perfil del cliente (antes de la cita, para el trigger).
-    if (tipoOperacion !== cita.clientes.tipo_operacion) {
+    if (tipoOperacion !== (cita.clientes?.tipo_operacion ?? null)) {
       const { error } = await supabase.from('clientes').update({ tipo_operacion: tipoOperacion }).eq('id', cita.cliente_id)
       if (error) { alerta(error.message); setGuardando(false); return }
     }
@@ -365,7 +365,7 @@ function ModalEdicion({
 
   if (!cita) return null
   const inf = ESTADOS_CITA[estado]
-  const opcionesEstado = vistaAsesor ? ordenPorOperacion(cita.clientes.tipo_operacion) : ORDEN_ESTADOS
+  const opcionesEstado = vistaAsesor ? ordenPorOperacion(cita.clientes?.tipo_operacion ?? null) : ORDEN_ESTADOS
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -757,7 +757,7 @@ function ModalMover({ cita, vistaAsesor, onClose, onMover }: {
   cita: Cita | null; vistaAsesor?: boolean; onClose: () => void; onMover: (cita: Cita, estado: EstadoCita) => void
 }) {
   if (!cita) return null
-  const opcionesEstado = vistaAsesor ? ordenPorOperacion(cita.clientes.tipo_operacion) : ORDEN_ESTADOS
+  const opcionesEstado = vistaAsesor ? ordenPorOperacion(cita.clientes?.tipo_operacion ?? null) : ORDEN_ESTADOS
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={onClose}>
