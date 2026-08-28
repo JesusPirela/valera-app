@@ -7,7 +7,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 // b4 (07/jul): descarta el cache inflado que causaba arranque lento (ver abajo).
 // b5 (09/jul): descarta los detalles sembrados con la descripción cortada a 180.
 // b6 (14/jul): staleTime global cambiado a 30 min; descarta metadatos viejos.
-const CACHE_BUSTER = '6'
+// b7 (28/ago): fuerza un hash de bundle NUEVO (el build reusó el nombre bc13ba05
+// de una versión vieja congelada → navegadores servían el JS viejo cacheado como
+// immutable). Cambiar este archivo cambia el nombre del bundle y todos lo re-bajan.
+const CACHE_BUSTER = '7'
 
 export const queryClient = new QueryClient({
   defaultOptions: {
