@@ -3861,9 +3861,11 @@ const styles = StyleSheet.create({
 
   // ── Tarjeta de publicación rediseñada ──────────────────────────────────────
   pubCard: {
-    backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e8edf1',
-    padding: 16, marginHorizontal: 16, marginBottom: 10,
-    ...Platform.select({ web: { boxShadow: '0 1px 4px rgba(0,0,0,0.05)' } as any, default: { elevation: 1 } }),
+    // Destaca de TODO lo demás: marco dorado (color de marca que ningún otro
+    // botón usa) + fondo cálido + sombra marcada, para que sea EL bloque importante.
+    backgroundColor: '#fffdf6', borderRadius: 16, borderWidth: 2, borderColor: '#d9b85c',
+    padding: 18, marginHorizontal: 12, marginBottom: 14, marginTop: 6,
+    ...Platform.select({ web: { boxShadow: '0 4px 16px rgba(201,168,76,0.28)' } as any, default: { elevation: 5, shadowColor: '#c9a84c', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } } }),
   },
   pubCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   pubCardTitle: { fontSize: 16, fontWeight: '800', color: '#1a2e30' },
@@ -3878,11 +3880,14 @@ const styles = StyleSheet.create({
   pubMetaMain: { fontSize: 13.5, fontWeight: '700', color: '#334155' },
   pubMetaSub: { fontSize: 12.5, color: '#64748b', fontWeight: '600' },
   pubMetaFecha: { fontSize: 12, color: '#94a3b8', marginTop: 4 },
-  pubCTA: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
-  pubCTAPend: { backgroundColor: '#1a6470' },
-  pubCTAOk: { backgroundColor: '#1a6855' },
+  pubCTA: {
+    borderRadius: 12, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', marginTop: 14,
+    ...Platform.select({ web: { boxShadow: '0 3px 10px rgba(184,140,20,0.35)' } as any, default: { elevation: 3 } }),
+  },
+  pubCTAPend: { backgroundColor: '#c9931f' },   // dorado fuerte: EL botón que destaca
+  pubCTAOk: { backgroundColor: '#1a6855' },      // verde: ya publicada
   pubCTALimite: { backgroundColor: '#c7ccd1' },
-  pubCTATxt: { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.2 },
+  pubCTATxt: { color: '#fff', fontSize: 16, fontWeight: '900', letterSpacing: 0.2 },
   pubDeshacerBtn: { alignItems: 'center', paddingVertical: 11, marginTop: 2 },
   pubDeshacerTxt: { fontSize: 12, color: '#94a3b8', fontWeight: '600' },
 
