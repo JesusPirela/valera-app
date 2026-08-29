@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, createElement, useMemo } from
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
   TextInput, ActivityIndicator, ScrollView, Platform, Alert, Linking, useWindowDimensions,
+  KeyboardAvoidingView,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect, router } from 'expo-router'
@@ -220,41 +221,49 @@ function DropdownSelector({
         <Ionicons name="chevron-down" size={16} color="#94a3b8" />
       </TouchableOpacity>
       <Modal visible={open} transparent animationType="fade" onRequestClose={cerrar}>
-        <TouchableOpacity style={s.ddOverlay} activeOpacity={1} onPress={cerrar}>
-          {/* activeOpacity={1} + stopPropagation: sin esto, cualquier toque
-              dentro de la hoja (incluido escribir en el buscador, que en
-              Android reacomoda la vista al abrir el teclado) se propaga al
-              overlay y cierra el modal en el primer caracter. */}
-          <TouchableOpacity activeOpacity={1} style={s.ddSheet} onPress={e => e.stopPropagation()}>
-            <Text style={s.ddTitle}>{label}</Text>
-            {searchable && (
-              <TextInput
-                style={[s.input, { marginBottom: 10 }]}
-                placeholder="Buscar..."
-                value={busquedaDD}
-                onChangeText={setBusquedaDD}
-                autoFocus
-              />
-            )}
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <TouchableOpacity style={s.ddOption} onPress={() => { onSelect(''); cerrar() }}>
-                <Text style={[s.ddOptionTxt, !value && { color: '#1a6470', fontWeight: '700' }]}>{placeholder}</Text>
-                {!value && <Ionicons name="checkmark" size={16} color="#1a6470" />}
-              </TouchableOpacity>
-              {opcionesFiltradas.filter(o => o.nombre?.trim()).map(o => (
-                <TouchableOpacity key={o.id} style={s.ddOption} onPress={() => { onSelect(o.id); cerrar() }}>
-                  <Text style={[s.ddOptionTxt, value === o.id && { color: '#1a6470', fontWeight: '700' }]}>{o.nombre}</Text>
-                  {value === o.id && <Ionicons name="checkmark" size={16} color="#1a6470" />}
-                </TouchableOpacity>
-              ))}
-              {searchable && opcionesFiltradas.length === 0 && (
-                <Text style={{ fontSize: 13, color: '#94a3b8', paddingVertical: 12, textAlign: 'center' }}>
-                  Sin resultados
-                </Text>
+        {/* KeyboardAvoidingView: la hoja se pega abajo (flex-end) y el buscador
+            tiene autoFocus, así que sin esto el teclado tapaba TODA la lista y
+            no se podía ver a quién elegir. Con padding (iOS) la hoja sube. */}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableOpacity style={s.ddOverlay} activeOpacity={1} onPress={cerrar}>
+            {/* activeOpacity={1} + stopPropagation: sin esto, cualquier toque
+                dentro de la hoja (incluido escribir en el buscador, que en
+                Android reacomoda la vista al abrir el teclado) se propaga al
+                overlay y cierra el modal en el primer caracter. */}
+            <TouchableOpacity activeOpacity={1} style={s.ddSheet} onPress={e => e.stopPropagation()}>
+              <Text style={s.ddTitle}>{label}</Text>
+              {searchable && (
+                <TextInput
+                  style={[s.input, { marginBottom: 10 }]}
+                  placeholder="Buscar..."
+                  value={busquedaDD}
+                  onChangeText={setBusquedaDD}
+                  autoFocus
+                />
               )}
-            </ScrollView>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <TouchableOpacity style={s.ddOption} onPress={() => { onSelect(''); cerrar() }}>
+                  <Text style={[s.ddOptionTxt, !value && { color: '#1a6470', fontWeight: '700' }]}>{placeholder}</Text>
+                  {!value && <Ionicons name="checkmark" size={16} color="#1a6470" />}
+                </TouchableOpacity>
+                {opcionesFiltradas.filter(o => o.nombre?.trim()).map(o => (
+                  <TouchableOpacity key={o.id} style={s.ddOption} onPress={() => { onSelect(o.id); cerrar() }}>
+                    <Text style={[s.ddOptionTxt, value === o.id && { color: '#1a6470', fontWeight: '700' }]}>{o.nombre}</Text>
+                    {value === o.id && <Ionicons name="checkmark" size={16} color="#1a6470" />}
+                  </TouchableOpacity>
+                ))}
+                {searchable && opcionesFiltradas.length === 0 && (
+                  <Text style={{ fontSize: 13, color: '#94a3b8', paddingVertical: 12, textAlign: 'center' }}>
+                    Sin resultados
+                  </Text>
+                )}
+              </ScrollView>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   )
