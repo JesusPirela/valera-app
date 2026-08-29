@@ -121,6 +121,13 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: ./
+          # El estado de sincronización viejo (.ftp-deploy-sync-state.json) quedó
+          # desincronizado: alguien subió un build viejo por FTP fuera de esta
+          # Action, así que index.html apuntaba al bundle antiguo pero la Action
+          # creía que ya estaba al día ("File content is the same, doing nothing")
+          # y NO subía nada. Cada deploy salía "success" pero la web no cambiaba.
+          # Con un state-name nuevo la Action re-sube TODO y corrige index.html.
+          state-name: .deploy-state-v2.json
 
       - name: Esperar y reintentar (intento 2)
         if: steps.ftp1.outcome == 'failure'
@@ -136,6 +143,7 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: ./
+          state-name: .deploy-state-v2.json
 
       - name: Esperar y reintentar (intento 3)
         if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure'
@@ -149,3 +157,4 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: ./
+          state-name: .deploy-state-v2.json
