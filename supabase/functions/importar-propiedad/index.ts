@@ -1875,6 +1875,49 @@ serve(async (req) => {
       }
     }
 
+    // ── casasplatino.com — specs autoritativos del modelo principal ───────────
+    // El HTML genérico saca bien título/precio/imágenes, pero los specs viven en
+    // un bloque "Otras características" ("2 Habitaciones", "2 Lugares de
+    // estacionamiento") y en <b class="terrain"> (Construcción / Terreno, con el
+    // número DESPUÉS del ícono SVG). Sobrescribimos aquí con esos valores reales.
+    try {
+      if (/(^|\.)casasplatino\.com$/i.test(new URL(url).hostname)) {
+        const carM = dhtml.match(/Otras\s+características([\s\S]*?)(?:<span class="price"|<\/section)/i)
+        const carTxt = carM ? carM[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ') : ''
+        if (carTxt) {
+          const rec = carTxt.match(/(\d+)\s*(?:Habitacion|Rec[aá]mara|Dormitor)/i)
+          recamaras = rec ? cap(parseInt(rec[1], 10), 8) : null
+          const est = carTxt.match(/(\d+)\s*Lugares?\s+de\s+estacionamiento/i)
+          estacionamientos = est ? cap(parseInt(est[1], 10), 5) : estacionamientos
+          // El sitio no siempre publica baños; si no está, no lo inventamos.
+          const ba = carTxt.match(/(\d+(?:\.\d+)?)\s*Ba[nñ]os?/i)
+          if (ba) { const bv = parseFloat(ba[1]); banos = Math.floor(bv); mediosBanos = (bv - Math.floor(bv) >= 0.5) ? 1 : null }
+          else { banos = null; mediosBanos = null }
+        }
+        // Construcción / Terreno: primer par (= modelo principal); el número va
+        // después del <svg> del ícono, así que lo quitamos antes de leerlo.
+        m2 = ''; m2Terreno = ''
+        for (const tb of dhtml.matchAll(/<b class="terrain">([\s\S]*?)<\/b>/gi)) {
+          const inner = tb[1].replace(/<svg[\s\S]*?<\/svg>/gi, ' ').replace(/<[^>]+>/g, ' ')
+          const numM = inner.match(/([\d.]+)\s*(?:㎡|m²|m2)/i)
+          if (!numM) continue
+          const val = String(Math.round(parseFloat(numM[1])))
+          if (/construcci/i.test(inner) && !m2) m2 = val
+          else if (/terreno/i.test(inner) && !m2Terreno) m2Terreno = val
+        }
+        // Tipo: casa (tiene terreno) salvo que el modelo se anuncie como depto.
+        tipo = /departamento|\bdepto\b|planta\s*(?:baja|alta)|penthouse|\bloft\b/i.test(`${titulo} ${url}`)
+          ? 'departamento' : 'casa'
+        if (!operacion) operacion = 'venta'
+        // Dirección: nombre del desarrollo desde el breadcrumb (posición 2). No
+        // fijamos ciudad/estado porque Casas Platino vende en varias plazas.
+        if (!direccion) {
+          const bc = html.match(/"position"\s*:\s*2\s*,\s*"name"\s*:\s*"([^"]+)"/)
+          if (bc) direccion = decodeEntities(bc[1])
+        }
+      }
+    } catch { /* URL inválida */ }
+
     return new Response(JSON.stringify({
       titulo, descripcion, precio, direccion, zona, modelo,
       recamaras, banos, mediosBanos, estacionamientos,
