@@ -99,7 +99,7 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
   const c = useColors()
   const cancelada = (f.estado_seguimiento ?? '').trim().toUpperCase() === 'CANCELADA'
   return (
-    <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: cancelada ? '#fdeaea' : (idx % 2 ? c.bg : c.card) }]}>
+    <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
       {/* Contador de fila (como Excel); en rojo si está cancelada */}
       <View style={[st.cell, st.counterCell, { width: NUM_W, borderColor: c.border }]}>
         <Text style={[st.counterTxt, { color: cancelada ? '#c0392b' : c.textMute, fontWeight: cancelada ? '800' : '400' }]}>{cancelada ? '🚫' : idx + 1}</Text>
