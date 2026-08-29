@@ -100,17 +100,21 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
   const cancelada = (f.estado_seguimiento ?? '').trim().toUpperCase() === 'CANCELADA'
   return (
     <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: cancelada ? '#fdeaea' : (idx % 2 ? c.bg : c.card) }]}>
-      {/* Contador de fila (como Excel) */}
+      {/* Contador de fila (como Excel); en rojo si está cancelada */}
       <View style={[st.cell, st.counterCell, { width: NUM_W, borderColor: c.border }]}>
-        <Text style={[st.counterTxt, { color: c.textMute }]}>{idx + 1}</Text>
+        <Text style={[st.counterTxt, { color: cancelada ? '#c0392b' : c.textMute, fontWeight: cancelada ? '800' : '400' }]}>{cancelada ? '🚫' : idx + 1}</Text>
       </View>
       {COLS.map(col => {
         const val = (f[col.key] as string) ?? ''
         const esEstadoCancelada = col.key === 'estado_seguimiento' && (val).trim().toUpperCase() === 'CANCELADA'
+        // En la columna del CLIENTE (siempre visible) mostrar "🚫 CANCELADA" para
+        // que se note aunque la columna de estado esté scrolleada a la derecha.
+        const esClienteCancelada = cancelada && col.key === 'cliente_nombre'
+        const rojo = esEstadoCancelada || esClienteCancelada
         return (
           <TouchableOpacity key={col.key} style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
             onPress={() => onTap(f.id, col.key, col.tipo, val)}>
-            <Text style={{ color: esEstadoCancelada ? '#c0392b' : (val ? c.text : c.textMute), fontSize: 12.5, fontWeight: esEstadoCancelada ? '800' : '400' }} numberOfLines={2}>{val || '—'}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
+            <Text style={{ color: rojo ? '#c0392b' : (val ? c.text : c.textMute), fontSize: 12.5, fontWeight: rojo ? '800' : '400' }} numberOfLines={2}>{esClienteCancelada ? `🚫 CANCELADA · ${val || '—'}` : (val || '—')}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
           </TouchableOpacity>
         )
       })}
