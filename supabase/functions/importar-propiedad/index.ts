@@ -1834,6 +1834,21 @@ serve(async (req) => {
         // Sadasi describe los deptos como "X habitaciones" (no "recámaras"); tomar
         // el número de la descripción del modelo. Ej: "Departamento de 2 habitaciones".
         if (recamaras == null)       { const rm = ((descripcion || '') + ' ' + html).match(/(\d+)\s*(?:rec[aá]maras?|habitaci[oó]n(?:es)?)/i); if (rm) recamaras = parseInt(rm[1], 10) || null }
+        // FUENTE AUTORITATIVA de Sadasi: array de features del modelo, ej.
+        // {"feature":"Recamaras","quantity":3}, {"feature":"Baños","quantity":3.5}
+        // (3.5 = 3 baños + 1 medio baño), {"feature":"Espacios para auto","quantity":2}.
+        // Sobrescribe lo demás porque describe EXACTAMENTE este modelo (la descripción
+        // a veces trae el número como palabra "tres" y otros "N recámaras" son de otro modelo).
+        for (const fm of html.matchAll(/"feature"\s*:\s*"([^"]+)"\s*,\s*"quantity"\s*:\s*([\d.]+)/g)) {
+          const fn = fm[1].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+          const q = parseFloat(fm[2])
+          if (!isFinite(q) || q <= 0) continue
+          if (/recamara|habitacion|dormitor/.test(fn)) recamaras = Math.round(q)
+          else if (/bano/.test(fn)) { banos = Math.floor(q); if (q - Math.floor(q) >= 0.5) mediosBanos = 1 }
+          else if (/espacio|auto|estacionamiento|cajon|cochera|garage/.test(fn)) estacionamientos = Math.round(q)
+          else if (/construccion/.test(fn)) m2 = String(Math.round(q))
+          else if (/terreno/.test(fn)) m2Terreno = String(Math.round(q))
+        }
         if (banos == null)           { const nba = html.match(/number_of_bathrooms"\s*:\s*"?([\d.]+)/i);   if (nba) banos = Math.floor(parseFloat(nba[1])) || null }
         if (estacionamientos == null){ const np = html.match(/parking_spaces"\s*:\s*"?(\d+)/i);            if (np) estacionamientos = parseInt(np[1], 10) || null }
 
