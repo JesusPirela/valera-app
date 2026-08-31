@@ -386,6 +386,7 @@ export default function NuevaPropiedad() {
       precio: modelo.precio > 0 ? String(modelo.precio) : '',
       recamaras: modelo.recamaras,
       banos: modelo.banos,
+      mediosBanos: modelo.mediosBanos ?? null,
       estacionamientos: modelo.estacionamientos,
       m2: modelo.m2 ?? '',
       modelo: modelo.nombre,

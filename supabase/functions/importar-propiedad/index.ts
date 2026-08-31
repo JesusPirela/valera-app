@@ -159,6 +159,7 @@ interface VinteModelo {
   precio: number
   recamaras: number | null
   banos: number | null
+  mediosBanos?: number | null
   estacionamientos: number | null
   m2: string | null
   m2Terreno?: string | null
@@ -351,6 +352,68 @@ function parseVinteModelos(html: string, url: string): VinteModelo[] {
     modelos.push({ nombre, precio, recamaras, banos, estacionamientos, m2, imagenes: imgs, direccion: direccionBase, desarrollo })
   }
 
+  return modelos
+}
+
+// ── BPC Casa (bpccasa.com.mx) — fraccionamientos con varios modelos ──────────
+// La página /fraccionamientos/{slug}/ es un SPA de Vite pre-renderizado: cada
+// modelo aparece como una tarjeta con el patrón de texto
+//   "<Nombre> Desde $X MXN  Y m²  Z recámaras  W baños"
+// (W.5 = W baños + 1 medio). La ubicación y el nombre del fraccionamiento vienen
+// en el JSON-LD (ApartmentComplex), y "Cochera para N autos" es la cochera común
+// a todos los modelos. Devuelve un modelo por tarjeta para que la app deje
+// elegir e importar uno por uno.
+function parseBpcCasaModelos(html: string, url: string): VinteModelo[] {
+  try {
+    if (!/(^|\.)bpccasa\.com\.mx$/i.test(new URL(url).hostname)) return []
+  } catch { return [] }
+  const modelos: VinteModelo[] = []
+
+  // Nombre del fraccionamiento + dirección desde el JSON-LD.
+  let desarrollo = ''
+  let direccion = ''
+  const ld = html.match(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/i)
+  if (ld) {
+    try {
+      const j = JSON.parse(ld[1])
+      desarrollo = String(j.name ?? '')
+      const a = j.address ?? {}
+      direccion = [a.streetAddress, a.addressLocality].filter(Boolean).join(', ')
+    } catch { /* JSON-LD no parseable */ }
+  }
+
+  // Cochera común: "Cochera para N autos".
+  const coch = html.replace(/<[^>]+>/g, ' ').match(/Cochera\s+para\s+(\d+)\s+autos?/i)
+  const estac = coch ? parseInt(coch[1], 10) : null
+
+  // Imágenes por modelo: /images/fraccionamientos/<fracc>/modelos/<slug>/…webp
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const imgsPorSlug = new Map<string, string[]>()
+  for (const m of html.matchAll(/\/images\/fraccionamientos\/[^"'\s]+\/modelos\/([a-z0-9-]+)\/[^"'\s]+\.(?:webp|jpe?g|png)/gi)) {
+    const slug = m[1].toLowerCase()
+    const full = 'https://bpccasa.com.mx' + m[0]
+    const arr = imgsPorSlug.get(slug) ?? []
+    if (!arr.includes(full)) arr.push(full)
+    imgsPorSlug.set(slug, arr)
+  }
+
+  // Texto plano (sin svg ni tags) para leer las tarjetas.
+  const texto = html.replace(/<svg[\s\S]*?<\/svg>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  const re = /([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s+Desde\s*\$([\d,]+)\s*MXN\s+([\d.]+)\s*m²\s+(\d+)\s*rec[aá]maras?\s+([\d.]+)\s*ba[nñ]os?/gi
+  let mm: RegExpExecArray | null
+  while ((mm = re.exec(texto)) !== null) {
+    const nombre = mm[1].trim()
+    const precio = parseInt(mm[2].replace(/,/g, ''), 10) || 0
+    const m2 = String(Math.round(parseFloat(mm[3])))
+    const recamaras = parseInt(mm[4], 10) || null
+    const banoF = parseFloat(mm[5])
+    const banos = Math.floor(banoF)
+    const mediosBanos = (banoF - Math.floor(banoF)) >= 0.5 ? 1 : null
+    modelos.push({
+      nombre, precio, recamaras, banos, mediosBanos, estacionamientos: estac,
+      m2, imagenes: imgsPorSlug.get(norm(nombre)) ?? [], direccion, desarrollo,
+    })
+  }
   return modelos
 }
 
@@ -1067,6 +1130,35 @@ serve(async (req) => {
         operacion: 'venta',
         imagenes: primero.imagenes,
         _modelos: sadasiModelos,
+        _desarrollo: primero.desarrollo,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── BPC Casa: devuelve todos los modelos del fraccionamiento ──────────────
+    const bpcModelos = parseBpcCasaModelos(html, url)
+    if (bpcModelos.length > 0) {
+      const primero = bpcModelos[0]
+      const loc = (primero.direccion || '').toLowerCase()
+      const zonaBpc = /quer[eé]taro/.test(loc) ? 'queretaro'
+        : /monterrey|nuevo\s*le[oó]n/.test(loc) ? 'monterrey'
+        : /puebla/.test(loc) ? 'puebla' : null
+      return new Response(JSON.stringify({
+        titulo: '',
+        descripcion: '',
+        precio: primero.precio > 0 ? String(primero.precio) : '',
+        direccion: primero.direccion,
+        zona: zonaBpc,
+        modelo: primero.nombre,
+        recamaras: primero.recamaras,
+        banos: primero.banos,
+        mediosBanos: primero.mediosBanos ?? null,
+        estacionamientos: primero.estacionamientos,
+        m2: primero.m2 ?? '',
+        m2Terreno: null,
+        tipo: 'casa',
+        operacion: 'venta',
+        imagenes: primero.imagenes,
+        _modelos: bpcModelos,
         _desarrollo: primero.desarrollo,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
