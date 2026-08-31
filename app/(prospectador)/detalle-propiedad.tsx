@@ -1305,7 +1305,7 @@ export default function DetallePropiedad() {
         .hero-price-val { display: block; font-size: 37px; font-weight: 800; color: #FFD700; letter-spacing: 0.5px; }
         .hero-price-tipo { display: block; font-size: 13px; color: rgba(255,255,255,0.92); font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px; }
         /* Info debajo de la foto (sobre el azul); el logo va aquí, más chico. */
-        .header-info { padding: 18px 28px 22px; background-image: radial-gradient(circle at 50% -20%, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 60%); }
+        .header-info { padding: 18px 28px 22px; }
         .header-logo { height: 58px; max-width: 150px; object-fit: contain; border-radius: 12px; margin: 6px auto 0; display: block; }
         .codigo { font-size: 11px; color: rgba(255,255,255,0.72); font-weight: 700; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }
         .titulo { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 5px; line-height: 1.15; }
