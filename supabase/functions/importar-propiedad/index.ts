@@ -363,9 +363,11 @@ function parseVinteModelos(html: string, url: string): VinteModelo[] {
 // en el JSON-LD (ApartmentComplex), y "Cochera para N autos" es la cochera común
 // a todos los modelos. Devuelve un modelo por tarjeta para que la app deje
 // elegir e importar uno por uno.
-function parseBpcCasaModelos(html: string, url: string): VinteModelo[] {
+async function parseBpcCasaModelos(html: string, url: string): Promise<VinteModelo[]> {
+  let fracc = ''
   try {
     if (!/(^|\.)bpccasa\.com\.mx$/i.test(new URL(url).hostname)) return []
+    fracc = (new URL(url).pathname.match(/\/fraccionamientos\/([^/]+)/i)?.[1] ?? '').toLowerCase()
   } catch { return [] }
   const modelos: VinteModelo[] = []
 
@@ -386,16 +388,46 @@ function parseBpcCasaModelos(html: string, url: string): VinteModelo[] {
   const coch = html.replace(/<[^>]+>/g, ' ').match(/Cochera\s+para\s+(\d+)\s+autos?/i)
   const estac = coch ? parseInt(coch[1], 10) : null
 
-  // Imágenes por modelo: /images/fraccionamientos/<fracc>/modelos/<slug>/…webp
   const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+
+  // Galería completa por modelo: el HTML del listado solo trae la fachada; las
+  // demás fotos (sala, cocina, recámaras…) están en el bundle JS de Vite, en
+  // objetos con src:`/images/fraccionamientos/<fracc>/modelos/<slug>/…webp`. Se
+  // descarga el bundle y se extraen SOLO las de ESTE fraccionamiento (así no se
+  // mezcla con otro que reuse el mismo nombre de modelo).
   const imgsPorSlug = new Map<string, string[]>()
-  for (const m of html.matchAll(/\/images\/fraccionamientos\/[^"'\s]+\/modelos\/([a-z0-9-]+)\/[^"'\s]+\.(?:webp|jpe?g|png)/gi)) {
-    const slug = m[1].toLowerCase()
-    const full = 'https://bpccasa.com.mx' + m[0]
+  const addImg = (slug: string, path: string) => {
+    const full = 'https://bpccasa.com.mx' + path
     const arr = imgsPorSlug.get(slug) ?? []
     if (!arr.includes(full)) arr.push(full)
     imgsPorSlug.set(slug, arr)
   }
+  // Fallback: la fachada que ya viene en el HTML del listado.
+  for (const m of html.matchAll(/\/images\/fraccionamientos\/[^"'\s]+\/modelos\/([a-z0-9-]+)\/[^"'\s?]+\.(?:webp|jpe?g|png)/gi)) {
+    addImg(m[1].toLowerCase(), m[0])
+  }
+  try {
+    const jsRef = html.match(/<script[^>]*src="(\/assets\/[^"]+\.js)"/i)?.[1]
+    if (jsRef && fracc) {
+      const jsRes = await fetch('https://bpccasa.com.mx' + jsRef, { headers: BROWSER_HEADERS })
+      if (jsRes.ok) {
+        const js = await jsRes.text()
+        const reJs = new RegExp(`/images/fraccionamientos/${fracc}/modelos/([a-z0-9-]+)/[^"'\\\`?\\s]+\\.(?:webp|jpe?g|png)`, 'gi')
+        const nuevas = new Map<string, string[]>()
+        for (const m of js.matchAll(reJs)) {
+          const slug = m[1].toLowerCase()
+          const arr = nuevas.get(slug) ?? []
+          if (!arr.includes(m[0])) arr.push(m[0])
+          nuevas.set(slug, arr)
+        }
+        // El bundle trae la galería completa → reemplaza la fachada suelta.
+        for (const [slug, paths] of nuevas) {
+          paths.sort()  // 01-fachada, 02-…, orden natural con fachada primero
+          imgsPorSlug.set(slug, paths.map(p => 'https://bpccasa.com.mx' + p))
+        }
+      }
+    }
+  } catch { /* si falla el bundle, queda al menos la fachada del HTML */ }
 
   // Texto plano (sin svg ni tags) para leer las tarjetas.
   const texto = html.replace(/<svg[\s\S]*?<\/svg>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
@@ -1135,7 +1167,7 @@ serve(async (req) => {
     }
 
     // ── BPC Casa: devuelve todos los modelos del fraccionamiento ──────────────
-    const bpcModelos = parseBpcCasaModelos(html, url)
+    const bpcModelos = await parseBpcCasaModelos(html, url)
     if (bpcModelos.length > 0) {
       const primero = bpcModelos[0]
       const loc = (primero.direccion || '').toLowerCase()
