@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "com.valerarealestate.app",
-      "versionCode": 13,
+      "versionCode": 14,
       "softwareKeyboardLayoutMode": "pan",
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
