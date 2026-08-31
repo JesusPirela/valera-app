@@ -389,6 +389,7 @@ export default function NuevaPropiedad() {
       mediosBanos: modelo.mediosBanos ?? null,
       estacionamientos: modelo.estacionamientos,
       m2: modelo.m2 ?? '',
+      m2Terreno: modelo.m2Terreno ?? '',
       modelo: modelo.nombre,
       imagenes: modelo.imagenes,
     })

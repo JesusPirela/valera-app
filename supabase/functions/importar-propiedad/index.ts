@@ -406,15 +406,16 @@ async function parseBpcCasaModelos(html: string, url: string): Promise<VinteMode
   for (const m of html.matchAll(/\/images\/fraccionamientos\/[^"'\s]+\/modelos\/([a-z0-9-]+)\/[^"'\s?]+\.(?:webp|jpe?g|png)/gi)) {
     addImg(m[1].toLowerCase(), m[0])
   }
+  let jsText = ''
   try {
     const jsRef = html.match(/<script[^>]*src="(\/assets\/[^"]+\.js)"/i)?.[1]
     if (jsRef && fracc) {
       const jsRes = await fetch('https://bpccasa.com.mx' + jsRef, { headers: BROWSER_HEADERS })
       if (jsRes.ok) {
-        const js = await jsRes.text()
+        jsText = await jsRes.text()
         const reJs = new RegExp(`/images/fraccionamientos/${fracc}/modelos/([a-z0-9-]+)/[^"'\\\`?\\s]+\\.(?:webp|jpe?g|png)`, 'gi')
         const nuevas = new Map<string, string[]>()
-        for (const m of js.matchAll(reJs)) {
+        for (const m of jsText.matchAll(reJs)) {
           const slug = m[1].toLowerCase()
           const arr = nuevas.get(slug) ?? []
           if (!arr.includes(m[0])) arr.push(m[0])
@@ -433,17 +434,30 @@ async function parseBpcCasaModelos(html: string, url: string): Promise<VinteMode
   const texto = html.replace(/<svg[\s\S]*?<\/svg>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
   const re = /([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s+Desde\s*\$([\d,]+)\s*MXN\s+([\d.]+)\s*m²\s+(\d+)\s*rec[aá]maras?\s+([\d.]+)\s*ba[nñ]os?/gi
   let mm: RegExpExecArray | null
+  const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   while ((mm = re.exec(texto)) !== null) {
     const nombre = mm[1].trim()
     const precio = parseInt(mm[2].replace(/,/g, ''), 10) || 0
-    const m2 = String(Math.round(parseFloat(mm[3])))
+    const m2raw = mm[3]                       // "136.10" (para emparejar en el JS)
+    const m2 = String(Math.round(parseFloat(m2raw)))
     const recamaras = parseInt(mm[4], 10) || null
     const banoF = parseFloat(mm[5])
     const banos = Math.floor(banoF)
     const mediosBanos = (banoF - Math.floor(banoF)) >= 0.5 ? 1 : null
+
+    // Terreno: el bundle JS tiene {nombre:`X`,terreno:`A m²`,m2:`B m²`,…}. Se
+    // empareja por nombre + m² de construcción (único: otro fraccionamiento
+    // reusa el nombre "Lisboa" pero con otro m²), para no tomar el terreno ajeno.
+    let m2Terreno: string | null = null
+    if (jsText) {
+      const reT = new RegExp('nombre:`' + escRe(nombre) + '`,\\s*terreno:`([\\d.]+)\\s*m²`,\\s*m2:`' + escRe(m2raw) + '\\s*m²`', 'i')
+      const tm = jsText.match(reT)
+      if (tm) m2Terreno = String(Math.round(parseFloat(tm[1])))
+    }
+
     modelos.push({
       nombre, precio, recamaras, banos, mediosBanos, estacionamientos: estac,
-      m2, imagenes: imgsPorSlug.get(norm(nombre)) ?? [], direccion, desarrollo,
+      m2, m2Terreno, imagenes: imgsPorSlug.get(norm(nombre)) ?? [], direccion, desarrollo,
     })
   }
   return modelos
@@ -1186,7 +1200,7 @@ serve(async (req) => {
         mediosBanos: primero.mediosBanos ?? null,
         estacionamientos: primero.estacionamientos,
         m2: primero.m2 ?? '',
-        m2Terreno: null,
+        m2Terreno: primero.m2Terreno ?? null,
         tipo: 'casa',
         operacion: 'venta',
         imagenes: primero.imagenes,
