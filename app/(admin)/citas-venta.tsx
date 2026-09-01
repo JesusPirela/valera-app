@@ -142,16 +142,55 @@ function fmtFecha(d: Date): string {
   return `${d.getDate()} de ${MESES[d.getMonth()]} ${d.getFullYear()}, ${h12}:${String(d.getMinutes()).padStart(2, '0')} ${ampm}`
 }
 
+// Mapa de nombre de mes → índice (español + inglés + prefijos, tolerante a
+// typos como "febreo"/"setiembre" y a meses abreviados).
+const MES_IDX: Record<string, number> = {}
+;['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+  .forEach((m, i) => { MES_IDX[m] = i; MES_IDX[m.slice(0, 4)] = i; MES_IDX[m.slice(0, 3)] = i })
+;['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+  .forEach((m, i) => { MES_IDX[m] = i; MES_IDX[m.slice(0, 4)] = i; MES_IDX[m.slice(0, 3)] = i })
+MES_IDX['setiembre'] = 8
+
+// Intenta sacar {día, mes} de un texto libre ("26/07 4:30", "1ero mayo",
+// "domingo 1 de febreo"). TODAS las citas fueron en 2026.
+function parseDiaTexto(txt: string): { day: number; mes: number } | null {
+  const t = txt.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  // 1) formato numérico DD/MM(/AA) — en México el primero es el día.
+  let m = t.match(/\b(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*\d{2,4})?/)
+  if (m) {
+    const day = +m[1], mes = +m[2] - 1
+    if (day >= 1 && day <= 31 && mes >= 0 && mes <= 11) return { day, mes }
+  }
+  // 2) "D (de) mes" — admite 1ero/1o/1er.
+  m = t.match(/\b(\d{1,2})(?:ero|er|o|a)?\s*(?:de\s+)?([a-z]{3,})/)
+  if (m) {
+    const day = +m[1], name = m[2]
+    const mes = MES_IDX[name] ?? MES_IDX[name.slice(0, 4)] ?? MES_IDX[name.slice(0, 3)]
+    if (mes != null && day >= 1 && day <= 31) return { day, mes }
+  }
+  return null
+}
+
 // Fecha de la cita SIEMPRE en español y con día de la semana ("Miércoles 30 de
-// diciembre"), derivada del timestamp real (fecha_cita). Así se corrigen las que
-// quedaron en inglés ("Sunday 30 de August") o con el día mal escrito. Se lee en
-// hora de México (UTC-6 fijo, sin horario de verano) sin depender del dispositivo.
+// diciembre"). Con fecha_cita (ISO) se deriva del timestamp real (hora de México,
+// UTC-6 fijo). Sin ISO, se intenta parsear el texto libre asumiendo 2026 y se
+// calcula el día de la semana; si no hay una fecha clara, se deja el texto tal cual.
 function fmtFechaCitaEs(iso: string | null | undefined, fallback: string): string {
-  if (!iso) return fallback || '—'
-  const t = new Date(iso)
-  if (isNaN(t.getTime())) return fallback || '—'
-  const mx = new Date(t.getTime() - 6 * 3600 * 1000)
-  return `${DIAS[mx.getUTCDay()]} ${mx.getUTCDate()} de ${MESES[mx.getUTCMonth()]}`
+  if (iso) {
+    const t = new Date(iso)
+    if (!isNaN(t.getTime())) {
+      const mx = new Date(t.getTime() - 6 * 3600 * 1000)
+      return `${DIAS[mx.getUTCDay()]} ${mx.getUTCDate()} de ${MESES[mx.getUTCMonth()]}`
+    }
+  }
+  if (fallback) {
+    const p = parseDiaTexto(fallback)
+    if (p) {
+      const d = new Date(Date.UTC(2026, p.mes, p.day))
+      return `${DIAS[d.getUTCDay()]} ${p.day} de ${MESES[p.mes]}`
+    }
+  }
+  return fallback || '—'
 }
 function CalendarioHora({ onConfirm, onClose }: { onConfirm: (display: string, iso: string) => void; onClose: () => void }) {
   const c = useColors()
