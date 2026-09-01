@@ -106,6 +106,9 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
       </View>
       {COLS.map(col => {
         const val = (f[col.key] as string) ?? ''
+        // La fecha de la cita se muestra en español con día de la semana,
+        // derivada del timestamp real (no del texto guardado, que venía en inglés).
+        const display = col.key === 'dia_cita' ? fmtFechaCitaEs(f.fecha_cita, val) : val
         const esEstadoCancelada = col.key === 'estado_seguimiento' && (val).trim().toUpperCase() === 'CANCELADA'
         // En la columna del CLIENTE (siempre visible) mostrar "🚫 CANCELADA" para
         // que se note aunque la columna de estado esté scrolleada a la derecha.
@@ -114,7 +117,7 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
         return (
           <TouchableOpacity key={col.key} style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
             onPress={() => onTap(f.id, col.key, col.tipo, val)}>
-            <Text style={{ color: rojo ? '#c0392b' : (val ? c.text : c.textMute), fontSize: 12.5, fontWeight: rojo ? '800' : '400' }} numberOfLines={2}>{esClienteCancelada ? `🚫 CANCELADA · ${val || '—'}` : (val || '—')}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
+            <Text style={{ color: rojo ? '#c0392b' : (val ? c.text : c.textMute), fontSize: 12.5, fontWeight: rojo ? '800' : '400' }} numberOfLines={2}>{esClienteCancelada ? `🚫 CANCELADA · ${val || '—'}` : (display || '—')}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
           </TouchableOpacity>
         )
       })}
@@ -133,9 +136,22 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
 }, (a, b) => a.f === b.f && a.idx === b.idx)
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 function fmtFecha(d: Date): string {
   const h = d.getHours(); const ampm = h < 12 ? 'am' : 'pm'; const h12 = h % 12 || 12
   return `${d.getDate()} de ${MESES[d.getMonth()]} ${d.getFullYear()}, ${h12}:${String(d.getMinutes()).padStart(2, '0')} ${ampm}`
+}
+
+// Fecha de la cita SIEMPRE en español y con día de la semana ("Miércoles 30 de
+// diciembre"), derivada del timestamp real (fecha_cita). Así se corrigen las que
+// quedaron en inglés ("Sunday 30 de August") o con el día mal escrito. Se lee en
+// hora de México (UTC-6 fijo, sin horario de verano) sin depender del dispositivo.
+function fmtFechaCitaEs(iso: string | null | undefined, fallback: string): string {
+  if (!iso) return fallback || '—'
+  const t = new Date(iso)
+  if (isNaN(t.getTime())) return fallback || '—'
+  const mx = new Date(t.getTime() - 6 * 3600 * 1000)
+  return `${DIAS[mx.getUTCDay()]} ${mx.getUTCDate()} de ${MESES[mx.getUTCMonth()]}`
 }
 function CalendarioHora({ onConfirm, onClose }: { onConfirm: (display: string, iso: string) => void; onClose: () => void }) {
   const c = useColors()
