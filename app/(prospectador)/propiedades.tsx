@@ -900,7 +900,7 @@ export default function ProspectadorPropiedades() {
   // Solo filtrar cuando el query de publicaciones ya cargó correctamente.
   // Si pubData es undefined (cargando o error de red), mostrar todo para evitar
   // falsos positivos donde propiedades publicadas aparecen como "sin publicar".
-  if (filtroPublicadas === 'sin_publicar' && pubData != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0 || recienPublicadosRef.current.has(p.id))
+  if (filtroPublicadas === 'sin_publicar' && pubData != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0)
   if (filtroNueva) {
     const haceUnaS = Date.now() - 7 * 24 * 60 * 60 * 1000
     propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() > haceUnaS)
