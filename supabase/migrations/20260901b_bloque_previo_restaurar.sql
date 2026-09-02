@@ -33,15 +33,13 @@ begin
       end if;
       NEW.bloque_id := v_inhab;
 
-    -- Se RE-HABILITA: regresar al bloque donde estaba (bloque_id_previo). Si no
-    -- hay guardado, cae al default por antigüedad (Nuevos si es reciente, si no null).
+    -- Se RE-HABILITA: regresar EXACTAMENTE al bloque donde estaba
+    -- (bloque_id_previo). Si no tenía bloque, queda en "sin asignar" (null) —
+    -- no se manda a "Nuevos".
     elsif (NEW.activo is true and OLD.activo is distinct from NEW.activo)
        or (NEW.inhabilitada_en is null and OLD.inhabilitada_en is not null) then
       if NEW.bloque_id = v_inhab then
-        NEW.bloque_id := coalesce(
-          NEW.bloque_id_previo,
-          case when NEW.created_at >= sabado then v_nuevos else null end
-        );
+        NEW.bloque_id := NEW.bloque_id_previo;   -- null => sin asignar
       end if;
       NEW.bloque_id_previo := null;   -- ya restaurado
     end if;
