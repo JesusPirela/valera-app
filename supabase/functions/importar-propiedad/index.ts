@@ -402,18 +402,22 @@ async function parseBpcCasaModelos(html: string, url: string): Promise<VinteMode
     if (!arr.includes(full)) arr.push(full)
     imgsPorSlug.set(slug, arr)
   }
-  // Fallback: la fachada que ya viene en el HTML del listado.
-  for (const m of html.matchAll(/\/images\/fraccionamientos\/[^"'\s]+\/modelos\/([a-z0-9-]+)\/[^"'\s?]+\.(?:webp|jpe?g|png)/gi)) {
-    addImg(m[1].toLowerCase(), m[0])
+  // Fallback: la fachada que ya viene en el HTML del listado. De paso se detecta
+  // el slug REAL del fraccionamiento en el path de imágenes: puede diferir del de
+  // la URL (ej. URL /kiara-residencial pero imágenes /images/…/kiara/…).
+  let imgFracc = fracc
+  for (const m of html.matchAll(/\/images\/fraccionamientos\/([a-z0-9-]+)\/modelos\/([a-z0-9-]+)\/[^"'\s?]+\.(?:webp|jpe?g|png)/gi)) {
+    if (!imgFracc || imgFracc === fracc) imgFracc = m[1].toLowerCase()
+    addImg(m[2].toLowerCase(), m[0])
   }
   let jsText = ''
   try {
     const jsRef = html.match(/<script[^>]*src="(\/assets\/[^"]+\.js)"/i)?.[1]
-    if (jsRef && fracc) {
+    if (jsRef && imgFracc) {
       const jsRes = await fetch('https://bpccasa.com.mx' + jsRef, { headers: BROWSER_HEADERS })
       if (jsRes.ok) {
         jsText = await jsRes.text()
-        const reJs = new RegExp(`/images/fraccionamientos/${fracc}/modelos/([a-z0-9-]+)/[^"'\\\`?\\s]+\\.(?:webp|jpe?g|png)`, 'gi')
+        const reJs = new RegExp(`/images/fraccionamientos/${imgFracc}/modelos/([a-z0-9-]+)/[^"'\\\`?\\s]+\\.(?:webp|jpe?g|png)`, 'gi')
         const nuevas = new Map<string, string[]>()
         for (const m of jsText.matchAll(reJs)) {
           const slug = m[1].toLowerCase()
@@ -432,12 +436,16 @@ async function parseBpcCasaModelos(html: string, url: string): Promise<VinteMode
 
   // Texto plano (sin svg ni tags) para leer las tarjetas.
   const texto = html.replace(/<svg[\s\S]*?<\/svg>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
-  const re = /([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s+Desde\s*\$([\d,]+)\s*MXN\s+([\d.]+)\s*m²\s+(\d+)\s*rec[aá]maras?\s+([\d.]+)\s*ba[nñ]os?/gi
+  // El precio (y la palabra "Desde") son OPCIONALES: algunos modelos muestran
+  // "$1,673,000 MXN" sin "Desde", y otros no traen precio (ej. Tulipán). Se ancla
+  // en los specs (m²/recámaras/baños), que sí traen todas las tarjetas, para no
+  // perder modelos.
+  const re = /([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s+(?:(?:Desde\s+)?\$([\d,]+)\s*MXN\s+)?([\d.]+)\s*m²\s+(\d+)\s*rec[aá]maras?\s+([\d.]+)\s*ba[nñ]os?/gi
   let mm: RegExpExecArray | null
   const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   while ((mm = re.exec(texto)) !== null) {
     const nombre = mm[1].trim()
-    const precio = parseInt(mm[2].replace(/,/g, ''), 10) || 0
+    const precio = mm[2] ? (parseInt(mm[2].replace(/,/g, ''), 10) || 0) : 0
     const m2raw = mm[3]                       // "136.10" (para emparejar en el JS)
     const m2 = String(Math.round(parseFloat(m2raw)))
     const recamaras = parseInt(mm[4], 10) || null
