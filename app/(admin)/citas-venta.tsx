@@ -481,6 +481,20 @@ export default function CitasVenta() {
     vbarRef.current?.scrollTo({ y: 0, animated: false })
   }
 
+  function irAHoy() {
+    const hoy = new Date().toISOString().slice(0, 10)
+    let idx = -1
+    for (let i = visibles.length - 1; i >= 0; i--) {
+      const fc = visibles[i].fecha_cita?.slice(0, 10)
+      if (!fc) continue
+      if (fc === hoy) { idx = i; break }
+      if (fc < hoy && idx === -1) { idx = i; break }
+    }
+    if (idx < 0) return
+    listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 })
+    vbarRef.current?.scrollTo({ y: idx * ROW_H, animated: true })
+  }
+
   // Presets de rango (últimos N días, hasta hoy).
   const hoyISO = () => new Date().toISOString().slice(0, 10)
   const haceDias = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10) }
@@ -590,6 +604,7 @@ export default function CitasVenta() {
           <Text style={[st.sub, { color: c.textMute }]}>{filas.length} citas · {visibles.length} visibles · exclusiva admin/supervisor</Text>
         </View>
         {Object.keys(filtrosSel).length > 0 && <TouchableOpacity style={st.btnLimpiar} onPress={() => setFiltrosSel({})}><Text style={st.btnLimpiarTxt}>✕ Quitar filtros</Text></TouchableOpacity>}
+        <TouchableOpacity style={st.btnHoy} onPress={irAHoy}><Text style={st.btnHoyTxt}>📅 Ir a hoy</Text></TouchableOpacity>
         <TouchableOpacity style={st.btnAgregar} onPress={() => setAgregar(true)}><Text style={st.btnAgregarTxt}>＋ Añadir cita</Text></TouchableOpacity>
         <TouchableOpacity style={st.btnExport} onPress={exportarCSV}><Text style={st.btnExportTxt}>⬇ Exportar</Text></TouchableOpacity>
         <TouchableOpacity style={[st.btnImport, importando && { opacity: 0.6 }]} onPress={importarCSV} disabled={importando}>
@@ -775,6 +790,8 @@ const st = StyleSheet.create({
   btnLimpiarTxt: { color: '#c0392b', fontWeight: '800', fontSize: 12.5 },
   btnImport: { backgroundColor: '#7a4f00', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   btnImportTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  btnHoy: { borderWidth: 1.5, borderColor: '#1a6470', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 8 },
+  btnHoyTxt: { color: '#1a6470', fontWeight: '800', fontSize: 13 },
   btnAgregar: { backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
   btnAgregarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   btnExport: { backgroundColor: '#1a6855', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
