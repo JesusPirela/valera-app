@@ -357,7 +357,7 @@ const s = StyleSheet.create({
   // ── Botón flotante ──────────────────────────────────────────
   fab: {
     position: 'absolute',
-    bottom: 28,
+    bottom: 100,
     right: 20,
     width: 58,
     height: 58,
