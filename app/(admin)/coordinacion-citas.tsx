@@ -55,7 +55,7 @@ type Profile = { id: string; nombre: string }
 export const ESTADOS_CITA: Record<EstadoCita, {
   label: string; color: string; bg: string; icon: string; emoji: string; dark: string
 }> = {
-  por_contactar:            { label: 'Prospecto',                  color: '#3b82f6', bg: '#eff6ff', dark: '#1d4ed8', icon: 'person-outline',              emoji: '🔵' },
+  por_contactar:            { label: 'Perfilado sin fecha',        color: '#3b82f6', bg: '#eff6ff', dark: '#1d4ed8', icon: 'person-outline',              emoji: '🔵' },
   primer_contacto:          { label: 'Lo estamos contactando',     color: '#8b5cf6', bg: '#f5f3ff', dark: '#6d28d9', icon: 'call-outline',                emoji: '🟣' },
   buscando_opciones:        { label: 'Buscando opciones',          color: '#ca8a04', bg: '#fefce8', dark: '#92400e', icon: 'search-outline',              emoji: '🟡' },
   en_coordinacion:          { label: 'En coordinación',            color: '#f97316', bg: '#fff7ed', dark: '#c2410c', icon: 'sync-outline',                emoji: '🟠' },
