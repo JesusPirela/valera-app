@@ -55,13 +55,13 @@ type Profile = { id: string; nombre: string }
 export const ESTADOS_CITA: Record<EstadoCita, {
   label: string; color: string; bg: string; icon: string; emoji: string; dark: string
 }> = {
-  por_contactar:            { label: 'Por contactar',              color: '#3b82f6', bg: '#eff6ff', dark: '#1d4ed8', icon: 'person-outline',              emoji: '🔵' },
-  primer_contacto:          { label: 'Primer contacto',            color: '#8b5cf6', bg: '#f5f3ff', dark: '#6d28d9', icon: 'call-outline',                emoji: '🟣' },
+  por_contactar:            { label: 'Prospecto',                  color: '#3b82f6', bg: '#eff6ff', dark: '#1d4ed8', icon: 'person-outline',              emoji: '🔵' },
+  primer_contacto:          { label: 'Lo estamos contactando',     color: '#8b5cf6', bg: '#f5f3ff', dark: '#6d28d9', icon: 'call-outline',                emoji: '🟣' },
   buscando_opciones:        { label: 'Buscando opciones',          color: '#ca8a04', bg: '#fefce8', dark: '#92400e', icon: 'search-outline',              emoji: '🟡' },
   en_coordinacion:          { label: 'En coordinación',            color: '#f97316', bg: '#fff7ed', dark: '#c2410c', icon: 'sync-outline',                emoji: '🟠' },
   coordinada:               { label: 'Coordinada',                 color: '#16a34a', bg: '#f0fdf4', dark: '#15803d', icon: 'calendar-outline',            emoji: '🟢' },
   reagendada:               { label: 'Reagendada',                 color: '#b45309', bg: '#fef3c7', dark: '#92400e', icon: 'refresh-outline',             emoji: '🟤' },
-  no_responde_asesor:       { label: 'No responde el asesor',      color: '#dc2626', bg: '#fef2f2', dark: '#b91c1c', icon: 'notifications-off-outline',   emoji: '🔴' },
+  no_responde_asesor:       { label: 'No responde el cliente',     color: '#dc2626', bg: '#fef2f2', dark: '#b91c1c', icon: 'notifications-off-outline',   emoji: '🔴' },
   realizada:                { label: 'Realizada',                  color: '#0d9488', bg: '#f0fdfa', dark: '#0f766e', icon: 'checkmark-circle-outline',    emoji: '✅' },
   aparto:                   { label: 'Apartó / Trato cerrado',      color: '#c87f0a', bg: '#fef9eb', dark: '#92400e', icon: 'trophy-outline',              emoji: '🏆' },
   recaudando_documentacion: { label: 'Recaudando documentación',   color: '#0369a1', bg: '#e0f2fe', dark: '#075985', icon: 'document-text-outline',       emoji: '📄' },
