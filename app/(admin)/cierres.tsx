@@ -157,6 +157,8 @@ export default function Cierres() {
   const [fEtapa, setFEtapa] = useState<string | null>(null)
   const [edit, setEdit] = useState<{ id: string; key: ColKey; tipo: Tipo; val: string } | null>(null)
   const [busca, setBusca] = useState('')
+  const [contH, setContH] = useState(0)   // alto del área de tabla (para scroll interno)
+  const [headH, setHeadH] = useState(44)  // alto del encabezado medido
 
   const cargar = useCallback(async () => {
     const { data } = await supabase.from('cierres').select('*')
@@ -271,25 +273,30 @@ export default function Cierres() {
       </View>
 
       {loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : (
-        <ScrollView style={{ flex: 1, marginTop: 8 }} contentContainerStyle={{ paddingBottom: 40 }}>
-          <ScrollView horizontal showsHorizontalScrollIndicator>
+        // Contenedor con alto acotado: el scroll HORIZONTAL vive aquí (su barra
+        // queda al fondo del área visible, no hasta el final de todas las filas),
+        // y las filas hacen su propio scroll VERTICAL adentro. Encabezado fijo.
+        <View style={{ flex: 1, marginTop: 8 }} onLayout={e => setContH(e.nativeEvent.layout.height)}>
+          <ScrollView horizontal showsHorizontalScrollIndicator style={{ flex: 1 }}>
             <View style={{ width: totalW }}>
-              {/* Encabezado */}
-              <View style={[st.headRow, { backgroundColor: '#0f4c58' }]}>
+              {/* Encabezado (fijo, se desplaza solo en horizontal) */}
+              <View onLayout={e => setHeadH(e.nativeEvent.layout.height)} style={[st.headRow, { backgroundColor: '#0f4c58' }]}>
                 <View style={[st.headCell, { width: NUM_W }]}><Text style={st.headTxt}>#</Text></View>
                 {COLS.map(col => (
                   <View key={col.key} style={[st.headCell, { width: col.w }]}><Text style={st.headTxt} numberOfLines={2}>{col.label}</Text></View>
                 ))}
                 <View style={[st.headCell, { width: DEL_W }]}><Text style={st.headTxt}> </Text></View>
               </View>
-              {/* Filas */}
-              {visibles.map((f, i) => <FilaRow key={f.id} f={f} idx={i} onTap={onTap} onDel={borrar} />)}
-              {visibles.length === 0 && (
-                <Text style={[st.vacio, { color: c.textMute }]}>Sin cierres{fEtapa ? ` en "${fEtapa}"` : ''}. Toca “+ Cierre” para agregar.</Text>
-              )}
+              {/* Filas: scroll vertical dentro del área visible */}
+              <ScrollView style={{ height: Math.max(120, contH - headH) }} showsVerticalScrollIndicator contentContainerStyle={{ paddingBottom: 24 }}>
+                {visibles.map((f, i) => <FilaRow key={f.id} f={f} idx={i} onTap={onTap} onDel={borrar} />)}
+                {visibles.length === 0 && (
+                  <Text style={[st.vacio, { color: c.textMute }]}>Sin cierres{fEtapa ? ` en "${fEtapa}"` : ''}. Toca “+ Cierre” para agregar.</Text>
+                )}
+              </ScrollView>
             </View>
           </ScrollView>
-        </ScrollView>
+        </View>
       )}
 
       {/* ─── Editor ─── */}
