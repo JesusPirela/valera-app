@@ -15,8 +15,9 @@ type Tipo = 'texto' | 'op' | 'etapa' | 'fecha' | 'dinero' | 'usuario'
 type Fila = {
   id: string; orden: number | null; cliente_nombre: string | null; telefono: string | null
   tipo_operacion: string | null; interesado_en: string | null; etapa: string | null
-  fecha_escrituracion: string | null; comision: number | null
+  fecha_cita: string | null; fecha_escrituracion: string | null; comision: number | null
   prospecto: string | null; coordino: string | null; atendio: string | null; notas: string | null
+  created_at: string | null
 }
 type ColKey = keyof Fila
 
@@ -24,6 +25,7 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   { key: 'cliente_nombre', label: 'Cliente', w: 180, tipo: 'texto' },
   { key: 'telefono', label: 'Teléfono', w: 130, tipo: 'texto' },
   { key: 'tipo_operacion', label: 'Operación', w: 110, tipo: 'op' },
+  { key: 'fecha_cita', label: 'Registro / cita', w: 150, tipo: 'fecha' },
   { key: 'interesado_en', label: 'Propiedad / interés', w: 230, tipo: 'texto' },
   { key: 'etapa', label: 'Cómo vamos', w: 150, tipo: 'etapa' },
   { key: 'fecha_escrituracion', label: 'Escrituración', w: 150, tipo: 'fecha' },
@@ -110,13 +112,18 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onDel }: {
       {COLS.map(col => {
         const raw = f[col.key]
         let display = ''
+        let esRegistro = false
         if (col.tipo === 'dinero') display = fmtMoney(raw as number)
-        else if (col.tipo === 'fecha') display = fmtFecha(raw as string)
+        else if (col.tipo === 'fecha') {
+          display = fmtFecha(raw as string)
+          // Sin fecha de cita: mostrar cuándo se registró el cierre (created_at).
+          if (!display && col.key === 'fecha_cita' && f.created_at) { display = fmtFecha(f.created_at) + ' · registro'; esRegistro = true }
+        }
         else if (col.tipo === 'op') display = raw ? (String(raw)[0].toUpperCase() + String(raw).slice(1)) : ''
         else display = (raw as string) ?? ''
         const esEtapa = col.tipo === 'etapa' && raw
         const esOp = col.tipo === 'op' && raw
-        const col1 = esEtapa ? ETAPA_COLOR[String(raw)] : (esOp ? (raw === 'renta' ? '#0369a1' : '#7a4f00') : (display ? c.text : c.textMute))
+        const col1 = esEtapa ? ETAPA_COLOR[String(raw)] : (esOp ? (raw === 'renta' ? '#0369a1' : '#7a4f00') : (esRegistro ? c.textMute : (display ? c.text : c.textMute)))
         return (
           <TouchableOpacity key={col.key} style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
             onPress={() => onTap(f.id, col.key, col.tipo)}>

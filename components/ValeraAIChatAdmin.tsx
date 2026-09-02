@@ -151,13 +151,29 @@ export default function ValeraAIChatAdmin() {
     return () => { if (fadeTimer.current) clearTimeout(fadeTimer.current) }
   }, [])
 
+  // En web, arrastrar el mouse selecciona el texto de la página y el botón salta.
+  // Se desactiva la selección del body mientras se arrastra y se reactiva al soltar.
+  const bloquearSeleccion = (bloquear: boolean) => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return
+    const b: any = document.body.style
+    b.userSelect = b.webkitUserSelect = b.msUserSelect = bloquear ? 'none' : ''
+    b.cursor = bloquear ? 'grabbing' : ''
+  }
+
   const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponderCapture: () => true,
     // Solo arrastra si de verdad se movió (así un toque simple abre el chat).
     onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
-    onPanResponderGrant: () => { despertar(); pan.setOffset(pos.current); pan.setValue({ x: 0, y: 0 }) },
+    onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: (e) => {
+      ;(e as any)?.preventDefault?.(); bloquearSeleccion(true)
+      despertar(); pan.setOffset(pos.current); pan.setValue({ x: 0, y: 0 })
+    },
     onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
     onPanResponderRelease: (_e, g) => {
+      bloquearSeleccion(false)
       pan.flattenOffset()
       const esToque = Math.abs(g.dx) < 5 && Math.abs(g.dy) < 5
       if (esToque) { setAbierto(true); despertar(); programarFade(); return }
@@ -170,6 +186,7 @@ export default function ValeraAIChatAdmin() {
       AsyncStorage.setItem(POS_KEY, JSON.stringify({ x, y })).catch(() => {})
       programarFade()
     },
+    onPanResponderTerminate: () => { bloquearSeleccion(false); pan.flattenOffset(); programarFade() },
   }), [W, H, despertar, programarFade])
 
   const scrollAbajo = useCallback(() => {
@@ -276,6 +293,7 @@ export default function ValeraAIChatAdmin() {
           left: 0, top: 0, right: undefined, bottom: undefined,
           opacity: opacidad,
           transform: pan.getTranslateTransform(),
+          ...(Platform.OS === 'web' ? { userSelect: 'none', cursor: 'grab', touchAction: 'none' } as any : {}),
         }]}
       >
         <Text style={s.fabIcon}>✦</Text>
