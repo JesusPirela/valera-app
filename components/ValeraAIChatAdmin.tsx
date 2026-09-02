@@ -1,9 +1,11 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import {
   View, Text, TouchableOpacity, Modal, StyleSheet,
   TextInput, ScrollView, KeyboardAvoidingView, Platform,
   ActivityIndicator, SafeAreaView, Image, Alert, Linking,
+  Animated, PanResponder, Dimensions,
 } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as ImagePicker from 'expo-image-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import { supabase } from '../lib/supabase'
@@ -109,6 +111,67 @@ export default function ValeraAIChatAdmin() {
   const [imagenPendiente, setImagenPendiente] = useState<ImagenPendiente | null>(null)
   const scrollRef = useRef<ScrollView>(null)
 
+  // ── FAB arrastrable ────────────────────────────────────────────────────────
+  // El botón estorbaba en la esquina; ahora se arrastra a donde el usuario quiera
+  // (se pega al borde izq/der y recuerda la posición), y se pone semitransparente
+  // en reposo para no tapar contenido. Un toque simple abre el chat.
+  const FAB = 58, MARGEN = 14, TOPE = 64, PISO = 24
+  const POS_KEY = 'valera_fab_pos_admin'
+  const { width: W, height: H } = Dimensions.get('window')
+  const posDefault = { x: W - FAB - 20, y: H - FAB - 110 }
+  const pos = useRef(posDefault)
+  const pan = useRef(new Animated.ValueXY(posDefault)).current
+  const opacidad = useRef(new Animated.Value(1)).current
+  const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clampX = (x: number) => Math.max(MARGEN, Math.min(W - FAB - MARGEN, x))
+  const clampY = (y: number) => Math.max(TOPE, Math.min(H - FAB - PISO, y))
+  const programarFade = useCallback(() => {
+    if (fadeTimer.current) clearTimeout(fadeTimer.current)
+    fadeTimer.current = setTimeout(() => {
+      Animated.timing(opacidad, { toValue: 0.4, duration: 600, useNativeDriver: false }).start()
+    }, 2800)
+  }, [opacidad])
+  const despertar = useCallback(() => {
+    if (fadeTimer.current) clearTimeout(fadeTimer.current)
+    Animated.timing(opacidad, { toValue: 1, duration: 120, useNativeDriver: false }).start()
+  }, [opacidad])
+
+  useEffect(() => {
+    AsyncStorage.getItem(POS_KEY).then(v => {
+      if (v) {
+        try {
+          const p = JSON.parse(v)
+          const x = clampX(p.x), y = clampY(p.y)
+          pos.current = { x, y }; pan.setValue({ x, y })
+        } catch { /* posición inválida: se queda el default */ }
+      }
+    })
+    programarFade()
+    return () => { if (fadeTimer.current) clearTimeout(fadeTimer.current) }
+  }, [])
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    // Solo arrastra si de verdad se movió (así un toque simple abre el chat).
+    onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
+    onPanResponderGrant: () => { despertar(); pan.setOffset(pos.current); pan.setValue({ x: 0, y: 0 }) },
+    onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+    onPanResponderRelease: (_e, g) => {
+      pan.flattenOffset()
+      const esToque = Math.abs(g.dx) < 5 && Math.abs(g.dy) < 5
+      if (esToque) { setAbierto(true); despertar(); programarFade(); return }
+      // Soltar: pegar al borde más cercano (izq/der) y mantener dentro de pantalla.
+      const rawX = pos.current.x + g.dx, rawY = pos.current.y + g.dy
+      const x = (rawX + FAB / 2 < W / 2) ? MARGEN : W - FAB - MARGEN
+      const y = clampY(rawY)
+      pos.current = { x, y }
+      Animated.spring(pan, { toValue: { x, y }, useNativeDriver: false, friction: 7, tension: 60 }).start()
+      AsyncStorage.setItem(POS_KEY, JSON.stringify({ x, y })).catch(() => {})
+      programarFade()
+    },
+  }), [W, H, despertar, programarFade])
+
   const scrollAbajo = useCallback(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100)
   }, [])
@@ -206,15 +269,18 @@ export default function ValeraAIChatAdmin() {
 
   return (
     <>
-      {/* Botón flotante */}
-      <TouchableOpacity
-        style={s.fab}
-        onPress={() => setAbierto(true)}
-        activeOpacity={0.85}
+      {/* Botón flotante ARRASTRABLE (mantén presionado y muévelo; toca para abrir) */}
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[s.fab, {
+          left: 0, top: 0, right: undefined, bottom: undefined,
+          opacity: opacidad,
+          transform: pan.getTranslateTransform(),
+        }]}
       >
         <Text style={s.fabIcon}>✦</Text>
         <Text style={s.fabLabel}>IA</Text>
-      </TouchableOpacity>
+      </Animated.View>
 
       {/* Modal del chat */}
       <Modal
