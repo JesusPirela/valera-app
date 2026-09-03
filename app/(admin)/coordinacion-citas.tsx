@@ -60,7 +60,7 @@ export const ESTADOS_CITA: Record<EstadoCita, {
   buscando_opciones:        { label: 'Buscando opciones',          color: '#ca8a04', bg: '#fefce8', dark: '#92400e', icon: 'search-outline',              emoji: '🟡' },
   en_coordinacion:          { label: 'En coordinación',            color: '#f97316', bg: '#fff7ed', dark: '#c2410c', icon: 'sync-outline',                emoji: '🟠' },
   coordinada:               { label: 'Coordinada',                 color: '#16a34a', bg: '#f0fdf4', dark: '#15803d', icon: 'calendar-outline',            emoji: '🟢' },
-  reagendada:               { label: 'Reagendada',                 color: '#b45309', bg: '#fef3c7', dark: '#92400e', icon: 'refresh-outline',             emoji: '🟤' },
+  reagendada:               { label: 'Reagendada/cancelada',       color: '#b45309', bg: '#fef3c7', dark: '#92400e', icon: 'refresh-outline',             emoji: '🟤' },
   no_responde_asesor:       { label: 'No responde el cliente',     color: '#dc2626', bg: '#fef2f2', dark: '#b91c1c', icon: 'notifications-off-outline',   emoji: '🔴' },
   realizada:                { label: 'Realizada',                  color: '#0d9488', bg: '#f0fdfa', dark: '#0f766e', icon: 'checkmark-circle-outline',    emoji: '✅' },
   aparto:                   { label: 'Apartó / Trato cerrado',      color: '#c87f0a', bg: '#fef9eb', dark: '#92400e', icon: 'trophy-outline',              emoji: '🏆' },
@@ -68,7 +68,7 @@ export const ESTADOS_CITA: Record<EstadoCita, {
   aprobando_credito:        { label: 'Aprobando crédito',          color: '#d97706', bg: '#fef3c7', dark: '#b45309', icon: 'card-outline',                emoji: '💳' },
   firma_contrato:           { label: 'Firma de contrato',          color: '#059669', bg: '#ecfdf5', dark: '#047857', icon: 'pencil-outline',              emoji: '✍️' },
   escrituracion:            { label: 'Escrituración',              color: '#c2410c', bg: '#fff7ed', dark: '#9a3412', icon: 'ribbon-outline',               emoji: '🏠' },
-  cancelada:                { label: 'Cancelada',                  color: '#64748b', bg: '#f8fafc', dark: '#475569', icon: 'close-circle-outline',        emoji: '⚫' },
+  cancelada:                { label: 'Descartados',                color: '#64748b', bg: '#f8fafc', dark: '#475569', icon: 'close-circle-outline',        emoji: '⚫' },
 }
 
 // Pipeline del admin: las 5 etapas posteriores al cierre (aparto,
@@ -76,7 +76,7 @@ export const ESTADOS_CITA: Record<EstadoCita, {
 // ahora son exclusivas de la vista de asesor (ver ORDEN_ESTADOS_VENTA/RENTA
 // abajo) — el admin se queda con el resto del embudo de coordinación.
 const ORDEN_ESTADOS: EstadoCita[] = [
-  'por_contactar', 'primer_contacto', 'buscando_opciones',
+  'primer_contacto', 'buscando_opciones',
   'en_coordinacion', 'coordinada', 'reagendada',
   'no_responde_asesor', 'realizada',
   'aparto',
@@ -328,7 +328,7 @@ function ModalEdicion({
 }: {
   cita: Cita | null; admins: Profile[]; asesores: Profile[]; vistaAsesor?: boolean; onClose: () => void; onGuardar: () => void; onEliminar: (cita: Cita) => void
 }) {
-  const [estado, setEstado]                   = useState<EstadoCita>(cita?.estado ?? 'por_contactar')
+  const [estado, setEstado]                   = useState<EstadoCita>(cita?.estado === 'por_contactar' ? 'primer_contacto' : (cita?.estado ?? 'primer_contacto'))
   const [notas, setNotas]                     = useState(cita?.notas ?? '')
   const [fechaTexto, setFechaTexto]           = useState(aFechaLocalInput(cita?.fecha_cita ?? null))
   const [coordinadorId, setCoordinadorId]     = useState(cita?.coordinado_por ?? '')
@@ -525,7 +525,7 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
   const [nuevoNombre, setNuevoNombre]         = useState('')
   const [nuevoTelefono, setNuevoTelefono]     = useState('')
   const [tipoOperacion, setTipoOperacion]     = useState<'venta' | 'renta'>('venta')
-  const [estado, setEstado]                   = useState<EstadoCita>(vistaAsesor ? 'aparto' : 'por_contactar')
+  const [estado, setEstado]                   = useState<EstadoCita>(vistaAsesor ? 'aparto' : 'primer_contacto')
   const [notas, setNotas]                     = useState('')
   const [propiedadId, setPropiedadId]         = useState<string | null>(null)
   const [propiedadTitulo, setPropTitulo]      = useState<string | null>(null)
@@ -1850,7 +1850,7 @@ export default function CoordinacionCitas() {
                   estado={estado}
                   highlight={estado === 'aparto'}
                   pct={pcts[estado]}
-                  citas={citasFiltradas.filter(c => c.estado === estado).sort((a, b) => {
+                  citas={citasFiltradas.filter(c => c.estado === estado || (estado === 'primer_contacto' && c.estado === 'por_contactar')).sort((a, b) => {
                     if (!a.fecha_cita && !b.fecha_cita) return 0
                     if (!a.fecha_cita) return 1
                     if (!b.fecha_cita) return -1
