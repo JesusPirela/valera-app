@@ -1185,6 +1185,7 @@ serve(async (req) => {
         imagenes: primero.imagenes,
         _modelos: sadasiModelos,
         _desarrollo: primero.desarrollo,
+        _empresa_matriz: 'Sadasi',   // marca la constructora al importar
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
@@ -1214,6 +1215,7 @@ serve(async (req) => {
         imagenes: primero.imagenes,
         _modelos: bpcModelos,
         _desarrollo: primero.desarrollo,
+        _empresa_matriz: 'BPC Casa',   // marca la constructora al importar
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 

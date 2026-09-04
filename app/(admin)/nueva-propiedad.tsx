@@ -194,6 +194,9 @@ export default function NuevaPropiedad() {
   const [directa, setDirecta] = useState(false)
   const [esConstructora, setEsConstructora] = useState(false)
   const [nombreConstructora, setNombreConstructora] = useState('')
+  // Empresa matriz detectada al importar (ej. 'Sadasi', 'BPC Casa') → se guarda
+  // en la tabla constructoras para que salga el badge 🏢 automáticamente.
+  const [matrizImport, setMatrizImport] = useState<string | null>(null)
   const [constructorasExistentes, setConstructorasExistentes] = useState<string[]>([])
   const [modoNuevaConstructora, setModoNuevaConstructora] = useState(false)
   const [esInventario, setEsInventario] = useState(false)
@@ -377,6 +380,14 @@ export default function NuevaPropiedad() {
     if (d.zona)      setZona(d.zona)
     if (d.modelo)    setModeloDesarrollo(d.modelo)
     if (d.imagenes?.length > 0) setImagenes(d.imagenes)
+    // Constructora: si el importador reconoció el desarrollo (Sadasi, BPC Casa,
+    // Vinte…), marca la propiedad como de constructora y precarga su nombre; si
+    // además trae empresa matriz, se guardará para que salga el badge 🏢.
+    if (d._desarrollo) {
+      setEsConstructora(true)
+      setNombreConstructora(d._desarrollo)
+      setMatrizImport(d._empresa_matriz ?? null)
+    }
   }
 
   function aplicarModeloVinte(modelo: any) {
@@ -412,6 +423,7 @@ export default function NuevaPropiedad() {
     setImportMsg('Descargando información…')
     setModelosVinte(null)
     setModeloVinteSeleccionado(null)
+    setMatrizImport(null)
     try {
       const { data, error } = await supabase.functions.invoke('importar-propiedad', {
         body: { url },
@@ -860,8 +872,12 @@ export default function NuevaPropiedad() {
       // teléfono de contacto después — sin esto, solo viviría en el nombre
       // de texto libre de la propiedad y no aparecería en esa pantalla.
       if (esConstructora && nombreConstructora.trim()) {
+        const filaConstructora: { nombre: string; empresa_matriz?: string } = { nombre: nombreConstructora.trim() }
+        if (matrizImport) filaConstructora.empresa_matriz = matrizImport
+        // Con empresa matriz (import Sadasi/BPC Casa) SÍ actualizamos el registro
+        // existente para fijar la matriz; sin ella solo garantizamos que exista.
         await supabase.from('constructoras')
-          .upsert({ nombre: nombreConstructora.trim() }, { onConflict: 'nombre', ignoreDuplicates: true })
+          .upsert(filaConstructora, { onConflict: 'nombre', ignoreDuplicates: !matrizImport })
       }
 
       if (imagenes.length > 0) {
