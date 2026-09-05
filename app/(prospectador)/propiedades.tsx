@@ -546,7 +546,7 @@ export default function ProspectadorPropiedades() {
     },
     enabled: !!queryData?.userId,
     staleTime: 0,
-    gcTime: 0,
+    gcTime: 1000 * 60 * 5,
     networkMode: 'offlineFirst',
     refetchOnWindowFocus: false,
   })
