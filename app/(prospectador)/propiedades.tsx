@@ -95,7 +95,7 @@ type FiltroOperacion = 'venta' | 'renta' | null
 type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
 type FiltroPublicadas = 'publicadas' | 'sin_publicar' | null
-type FiltroNueva = boolean
+type FiltroNueva = 3 | 7 | 15 | 30 | null
 type FiltroOrden = 'normal' | 'mas_publicadas' | 'menos_publicadas' | 'mix'
 
 // Scroll offset persistente entre mounts (vive mientras el bundle JS esté cargado).
@@ -378,7 +378,7 @@ export default function ProspectadorPropiedades() {
   // IDs publicados en esta sesión: se quedan visibles en el filtro "sin publicar"
   // hasta que el usuario quite el filtro, evitando que desaparezcan al instante.
   const recienPublicadosRef = useRef<Set<string>>(new Set())
-  const [filtroNueva, setFiltroNueva] = useState(false)
+  const [filtroNueva, setFiltroNueva] = useState<FiltroNueva>(null)
   const [filtroExclusiva, setFiltroExclusiva] = useState(false)
   const [filtroOrden, setFiltroOrden] = useState<FiltroOrden>('normal')
   // Filtro por estado: arranca en Querétaro (el mercado principal) para que por
@@ -861,7 +861,7 @@ export default function ProspectadorPropiedades() {
     ordenPrecio,
     (precioMinNum != null || precioMaxNum != null) ? 'precio' : null,
     filtroPublicadas,
-    filtroNueva ? 'nueva' : null,
+    filtroNueva != null ? 'nueva' : null,
     filtroExclusiva ? 'exclusiva' : null,
     filtroDestacada ? 'destacada' : null,
     (esAdmin && filtroDirecta) ? 'directa' : null,
@@ -901,9 +901,9 @@ export default function ProspectadorPropiedades() {
   // Si pubData es undefined (cargando o error de red), mostrar todo para evitar
   // falsos positivos donde propiedades publicadas aparecen como "sin publicar".
   if (filtroPublicadas === 'sin_publicar' && pubData != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0)
-  if (filtroNueva) {
-    const haceUnaS = Date.now() - 7 * 24 * 60 * 60 * 1000
-    propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() > haceUnaS)
+  if (filtroNueva != null) {
+    const haceDias = Date.now() - filtroNueva * 24 * 60 * 60 * 1000
+    propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() > haceDias)
   }
   if (filtroDestacada) {
     propiedadesFiltradas = propiedadesFiltradas.filter(p => _estaDestacada(p))
@@ -966,7 +966,7 @@ export default function ProspectadorPropiedades() {
         ? (a.precio ?? Infinity) - (b.precio ?? Infinity)
         : (b.precio ?? -Infinity) - (a.precio ?? -Infinity)
     )
-  } else if (filtroNueva) {
+  } else if (filtroNueva != null) {
     // El botón "Nuevas" sí debe ordenar por más reciente primero — el orden
     // aleatorio es solo el default, no aplica cuando este filtro está activo.
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
@@ -987,7 +987,7 @@ export default function ProspectadorPropiedades() {
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
       (destacadaPendiente(b) ? 1 : 0) - (destacadaPendiente(a) ? 1 : 0)
     )
-  } else if (!ordenPrecio && !filtroNueva) {
+  } else if (!ordenPrecio && filtroNueva == null) {
     // Usuarios: destacadas pendientes primero, luego por vistas personalizadas.
     // Nunca vistas → menos vistas → hace más tiempo no visitadas.
     propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) => {
@@ -1114,7 +1114,7 @@ export default function ProspectadorPropiedades() {
     setFiltroRecamaras(null)
     setOrdenPrecio(null)
     setFiltroPublicadas(null)
-    setFiltroNueva(false)
+    setFiltroNueva(null)
     setPrecioMin('')
     setPrecioMax('')
     setFiltroFechaPreset(null)
@@ -1143,7 +1143,7 @@ export default function ProspectadorPropiedades() {
     setFiltroRecamaras(b.recamaras ?? null)
     setPrecioMin(b.precioMin ?? '')
     setPrecioMax(b.precioMax ?? '')
-    setFiltroNueva(!!b.nueva)
+    setFiltroNueva((b.nueva as FiltroNueva) ?? null)
     setFiltroExclusiva(!!b.exclusiva)
     setFiltroDestacada(!!b.destacada)
   }
@@ -1200,7 +1200,7 @@ export default function ProspectadorPropiedades() {
         {([
           { key: 'venta',      label: 'Venta',      icon: 'home'      as const, activo: filtroOperacion === 'venta', onPress: () => setFiltroOperacion(filtroOperacion === 'venta' ? null : 'venta') },
           { key: 'renta',      label: 'Renta',      icon: 'key'       as const, activo: filtroOperacion === 'renta', onPress: () => setFiltroOperacion(filtroOperacion === 'renta' ? null : 'renta') },
-          { key: 'nuevas',     label: 'Nuevas',     icon: 'sparkles'  as const, activo: filtroNueva,                 onPress: () => setFiltroNueva(v => !v) },
+          { key: 'nuevas', label: filtroNueva != null ? `Nuevas · ${filtroNueva}d` : 'Nuevas', icon: 'sparkles' as const, activo: filtroNueva != null, onPress: () => setFiltroNueva(v => v == null ? 3 : v === 3 ? 7 : v === 7 ? 15 : v === 15 ? 30 : null) },
           { key: 'exclusivas', label: 'Exclusivas', icon: 'star'      as const, activo: filtroExclusiva,             onPress: () => setFiltroExclusiva(v => !v) },
           { key: 'destacadas', label: 'Destacadas', icon: 'megaphone-outline' as const, activo: filtroDestacada,    onPress: () => setFiltroDestacada(v => !v) },
           // Acceso rápido a "Sin publicar" (antes solo estaba escondido en el
