@@ -506,7 +506,7 @@ export default function ProspectadorPropiedades() {
       return construir(propsData)
     },
     networkMode: 'offlineFirst',
-    staleTime: 1000 * 60 * 30,
+    staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
   })
 
@@ -609,7 +609,7 @@ export default function ProspectadorPropiedades() {
     }
     if (togglingRef.current.size === 0) {
       const state = queryClient.getQueryState(['prospectador-propiedades', vistaComo])
-      const isStale = !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt > 1000 * 60 * 30
+      const isStale = !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt > 1000 * 60 * 5
       if (isStale) refetch()
       // Las publicaciones siempre se refresca en focus: el query tiene gcTime=0
       // (nunca persiste) y staleTime=0, así cualquier estado optimista perdido
