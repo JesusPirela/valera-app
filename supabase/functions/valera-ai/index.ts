@@ -39,6 +39,18 @@ const HERRAMIENTAS = [
     },
   },
   {
+    name: 'consultar_actividad_prospectador',
+    description: 'Obtiene la actividad diaria detallada de un prospectador específico: publicaciones, seguimientos y clientes nuevos día por día. Úsala para analizar el rendimiento individual, detectar patrones de trabajo, comparar períodos, generar mensajes motivacionales personalizados con sus números reales, o responder "¿cómo va [nombre]?", "¿cuánto publicó [nombre] esta semana?".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre: { type: 'string', description: 'Nombre completo o parcial del prospectador a consultar' },
+        dias: { type: 'integer', description: 'Período en días hacia atrás. Default 30' },
+      },
+      required: ['nombre'],
+    },
+  },
+  {
     name: 'consultar_inventario',
     description: 'Estadísticas del inventario de propiedades: totales, publicadas, por tipo y operación. Opcionalmente filtra por zona o tipo.',
     parameters: {
@@ -886,6 +898,73 @@ async function ejecutarHerramienta(
         .slice(0, 15)
 
       return { total_zonas: zonas.length, zonas }
+    }
+
+    if (nombre === 'consultar_actividad_prospectador') {
+      const busqueda = args.nombre as string
+      const dias = args.dias ?? 30
+
+      const { data: perfiles } = await supabase
+        .from('profiles')
+        .select('id, nombre')
+        .ilike('nombre', `%${busqueda}%`)
+        .in('role', ['prospectador', 'prospectador_plus', 'supervisor', 'nuevo'])
+        .limit(5)
+
+      if (!perfiles?.length) {
+        return { error: `No se encontró ningún prospectador con el nombre "${busqueda}"` }
+      }
+
+      if (perfiles.length > 1) {
+        return {
+          mensaje: `Se encontraron varios prospectadores. ¿A cuál te refieres?`,
+          opciones: perfiles.map((p: any) => p.nombre),
+        }
+      }
+
+      const prospectador = perfiles[0]
+      const hasta = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+      const desdeDate = new Date()
+      desdeDate.setDate(desdeDate.getDate() - (dias - 1))
+      const desde = desdeDate.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+
+      const { data: actividadDiaria } = await supabase.rpc('get_actividad_diaria_serie', {
+        p_user_id: prospectador.id,
+        p_desde: desde,
+        p_hasta: hasta,
+      })
+
+      const datos = (actividadDiaria ?? []) as Array<{
+        dia: string; publicaciones: number; seguimientos: number; clientes: number
+      }>
+
+      const totalPubs = datos.reduce((a, d) => a + d.publicaciones, 0)
+      const totalSegs = datos.reduce((a, d) => a + d.seguimientos, 0)
+      const totalClis = datos.reduce((a, d) => a + d.clientes, 0)
+      const diasActivos = datos.filter(d => d.publicaciones + d.seguimientos + d.clientes > 0).length
+      const mejorDia = [...datos].sort((a, b) => b.publicaciones - a.publicaciones)[0]
+      const mitad = Math.floor(datos.length / 2)
+      const prim = datos.slice(0, mitad).reduce((a, d) => a + d.publicaciones, 0)
+      const seg = datos.slice(mitad).reduce((a, d) => a + d.publicaciones, 0)
+      const tendencia = seg > prim * 1.1 ? 'subiendo' : seg < prim * 0.9 ? 'bajando' : 'estable'
+
+      return {
+        prospectador: prospectador.nombre,
+        periodo_dias: dias,
+        desde,
+        hasta,
+        resumen: {
+          total_publicaciones: totalPubs,
+          total_seguimientos: totalSegs,
+          total_clientes: totalClis,
+          promedio_publicaciones_dia: datos.length ? +(totalPubs / datos.length).toFixed(1) : 0,
+          dias_activos: diasActivos,
+          dias_totales: datos.length,
+          mejor_dia: mejorDia ? { fecha: mejorDia.dia, publicaciones: mejorDia.publicaciones } : null,
+          tendencia_publicaciones: tendencia,
+        },
+        datos_por_dia: datos,
+      }
     }
 
     return { error: `Herramienta desconocida: ${nombre}` }
