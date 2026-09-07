@@ -973,7 +973,7 @@ async function ejecutarHerramienta(
   }
 }
 
-const MODELOS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+const MODELOS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash']
 
 async function llamarGemini(
   apiKey: string,
@@ -1045,8 +1045,8 @@ serve(async (req) => {
       for (const modelo of MODELOS) {
         resultado = await llamarGemini(geminiKey, modelo, contents, contexto)
         if (resultado.ok) break
-        // Si es quota con tiempo de espera corto, esperamos y reintentamos una vez
-        if (resultado.retryAfter && resultado.retryAfter <= 25) {
+        // Si es quota con tiempo de espera razonable, esperamos y reintentamos
+        if (resultado.retryAfter && resultado.retryAfter <= 60) {
           console.log(`[valera-ai] ${modelo} quota, esperando ${resultado.retryAfter}s...`)
           await new Promise(r => setTimeout(r, resultado.retryAfter! * 1000))
           resultado = await llamarGemini(geminiKey, modelo, contents, contexto)
