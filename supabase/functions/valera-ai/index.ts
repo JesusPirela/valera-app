@@ -979,6 +979,7 @@ async function llamarGemini(
   apiKey: string,
   model: string,
   contents: unknown[],
+  contexto?: string,
 ): Promise<{ ok: boolean; json?: any; err?: string; retryAfter?: number }> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
@@ -1042,13 +1043,13 @@ serve(async (req) => {
       let resultado: { ok: boolean; json?: any; err?: string; retryAfter?: number } = { ok: false, err: 'Sin modelos' }
       let primerError = ''
       for (const modelo of MODELOS) {
-        resultado = await llamarGemini(geminiKey, modelo, contents)
+        resultado = await llamarGemini(geminiKey, modelo, contents, contexto)
         if (resultado.ok) break
         // Si es quota con tiempo de espera corto, esperamos y reintentamos una vez
         if (resultado.retryAfter && resultado.retryAfter <= 25) {
           console.log(`[valera-ai] ${modelo} quota, esperando ${resultado.retryAfter}s...`)
           await new Promise(r => setTimeout(r, resultado.retryAfter! * 1000))
-          resultado = await llamarGemini(geminiKey, modelo, contents)
+          resultado = await llamarGemini(geminiKey, modelo, contents, contexto)
           if (resultado.ok) break
         }
         if (!primerError) primerError = `${modelo}: ${resultado.err}`
