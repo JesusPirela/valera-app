@@ -907,7 +907,7 @@ async function llamarGemini(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        system_instruction: { parts: [{ text: contexto ? `${SYSTEM_PROMPT}\n\n---\nCONTEXTO ADICIONAL PARA ESTA CONSULTA:\n${contexto}` : SYSTEM_PROMPT }] },
         contents,
         tools: [{ function_declarations: HERRAMIENTAS }],
         tool_config: { function_calling_config: { mode: 'AUTO' } },
@@ -937,7 +937,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const { mensaje, historial = [], imagen } = await req.json()
+    const { mensaje, historial = [], imagen, contexto } = await req.json()
     if (!mensaje?.trim() && !imagen?.base64) throw new Error('Se requiere un mensaje o una imagen')
 
     const contents: any[] = []

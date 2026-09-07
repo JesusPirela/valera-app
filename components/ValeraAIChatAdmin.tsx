@@ -103,7 +103,7 @@ const SUGERENCIAS = [
   'Genera mensajes para el equipo de hoy',
 ]
 
-export default function ValeraAIChatAdmin() {
+export default function ValeraAIChatAdmin({ contexto }: { contexto?: string } = {}) {
   const [abierto, setAbierto] = useState(false)
   const [mensajes, setMensajes] = useState<Mensaje[]>([])
   const [input, setInput] = useState('')
@@ -253,6 +253,7 @@ export default function ValeraAIChatAdmin() {
       if (msg) body.mensaje = msg
       if (imgData) body.imagen = { base64: imgData.base64, mimeType: imgData.mimeType }
       if (!msg && imgData) body.mensaje = ''
+      if (contexto) body.contexto = contexto
 
       const { data, error } = await supabase.functions.invoke('valera-ai', { body })
 

@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
+import ValeraAIChatAdmin from '../../components/ValeraAIChatAdmin'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
   TouchableOpacity, useWindowDimensions, Modal, Platform,
@@ -118,8 +119,32 @@ export default function UsuarioActividad() {
   const fmtDiaMes = (fecha: string) =>
     new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 
+  const contextoIA = useMemo(() => {
+    if (!dias.length || !nombre) return undefined
+    const tend = resumen.tendencia === 'sube' ? 'en subida 📈' : resumen.tendencia === 'baja' ? 'en bajada 📉' : 'estable ➡️'
+    const diasActivos = dias.filter(d => d[metrica] > 0).length
+    const mejorDia = [...dias].sort((a, b) => b[metrica] - a[metrica])[0]
+    const datosPorDia = dias.map(d =>
+      `  ${d.dia}: ${d.publicaciones} pub · ${d.seguimientos} seg · ${d.clientes} clientes`
+    ).join('\n')
+    return `El admin está viendo el perfil individual de este prospectador:
+- Nombre: ${nombre}
+- Período analizado: últimos ${rango} días
+- Métrica activa: ${LABEL_METRICA[metrica]}
+- Total ${LABEL_METRICA[metrica]}: ${resumen.total}
+- Promedio diario: ${resumen.promedio.toFixed(1)}/día
+- Tendencia: ${tend}
+- Días con actividad: ${diasActivos} de ${dias.length}
+- Mejor día: ${mejorDia?.dia ?? 'N/A'} con ${mejorDia?.[metrica] ?? 0}
+- Datos completos por día:
+${datosPorDia}
+
+Usa estos datos para responder preguntas sobre el rendimiento de este prospectador. Puedes generar mensajes motivacionales personalizados con su nombre real y sus números reales, detectar patrones, o hacer cualquier análisis que el admin solicite.`
+  }, [dias, nombre, rango, metrica, resumen])
+
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
+      {contextoIA && <ValeraAIChatAdmin contexto={contextoIA} />}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/prospectadores')}>
           <Text style={{ color: '#fff', fontSize: 20 }}>←</Text>
