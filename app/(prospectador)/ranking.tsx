@@ -105,6 +105,7 @@ export default function Ranking() {
   const [sel, setSel] = useState<RankEntry | null>(null)
   // Histórico = XP de siempre; Mensual = XP ganado en el mes en curso.
   const [modo, setModo] = useState<'historico' | 'mensual'>('historico')
+  const [tipo, setTipo] = useState<'xp' | 'propiedades' | 'clientes' | 'seguimientos'>('xp')
 
   // React Query: el ranking cacheado aparece al instante al volver a la pantalla;
   // solo se vuelve a pedir en segundo plano si pasaron >2 min (antes recargaba
@@ -146,6 +147,24 @@ export default function Ranking() {
   })
   const miPresupuesto = presuData ?? 0
 
+  const { data: segsMap } = useQuery({
+    queryKey: ['ranking-seguimientos', modo],
+    queryFn: async () => {
+      let query = supabase.from('seguimientos_dia').select('user_id')
+      if (modo === 'mensual') {
+        const ini = new Date(); ini.setDate(1); ini.setHours(0, 0, 0, 0)
+        query = query.gte('created_at', ini.toISOString())
+      }
+      const { data: rows } = await query.limit(10000)
+      const m: Record<string, number> = {}
+      for (const r of rows ?? []) m[r.user_id] = (m[r.user_id] || 0) + 1
+      return m
+    },
+    staleTime: 1000 * 60 * 2,
+    enabled: tipo === 'seguimientos',
+    networkMode: 'offlineFirst',
+  })
+
   // Jalar para actualizar
   const [refreshing, setRefreshing] = useState(false)
   const onPull = useCallback(async () => {
@@ -161,6 +180,16 @@ export default function Ranking() {
   }, [queryClient, modo]))
 
   const miEntry = entries.find(e => e.id === userId)
+
+  const entriesOrdenadas = (() => {
+    if (tipo === 'propiedades') return [...entries].sort((a, b) => b.propiedades_publicadas - a.propiedades_publicadas)
+    if (tipo === 'clientes')    return [...entries].sort((a, b) => b.clientes_registrados   - a.clientes_registrados)
+    if (tipo === 'seguimientos') {
+      const m = segsMap ?? {}
+      return [...entries].sort((a, b) => (m[b.id] ?? 0) - (m[a.id] ?? 0))
+    }
+    return entries
+  })()
 
   // Liga del usuario (solo en modo mensual) + cuánto le falta para subir.
   const miIdx = entries.findIndex(e => e.id === userId)
@@ -222,6 +251,26 @@ export default function Ranking() {
         </TouchableOpacity>
       </View>
 
+      {/* Selector de métrica */}
+      <View style={s.metricaRow}>
+        {([
+          ['xp',           '🏆', 'XP'],
+          ['propiedades',  '🏠', 'Propiedades'],
+          ['clientes',     '👥', 'Clientes'],
+          ['seguimientos', '✅', 'Seguimientos'],
+        ] as const).map(([t, ico, lbl]) => (
+          <TouchableOpacity
+            key={t}
+            style={[s.metricaBtn, tipo === t && s.metricaBtnActivo]}
+            onPress={() => setTipo(t)}
+            activeOpacity={0.8}
+          >
+            <Text style={s.metricaIco}>{ico}</Text>
+            <Text style={[s.metricaTxt, tipo === t && s.metricaTxtActivo]}>{lbl}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {modo === 'mensual' && entries.length === 0 && !loading && (
         <Text style={s.emptyHint}>Aún nadie ha ganado XP este mes.</Text>
       )}
@@ -268,23 +317,26 @@ export default function Ranking() {
       )}
 
       {/* Lista */}
-      {entries.length === 0 ? (
+      {entriesOrdenadas.length === 0 ? (
         <View style={s.emptyBox}>
           <Text style={s.emptyTxt}>Aún no hay datos en el ranking.</Text>
           <Text style={s.emptyHint}>¡Sé el primero en acumular XP!</Text>
         </View>
       ) : (
-        entries.map((e, idx) => {
-          const esYo   = e.id === userId
-          const nivel  = calcularNivel(e.xp)
-          const medal  = idx < 3 ? MEDAL[idx] : null
+        entriesOrdenadas.map((e, idx) => {
+          const esYo  = e.id === userId
+          const nivel = calcularNivel(e.xp)
+          const medal = idx < 3 ? MEDAL[idx] : null
+          const valMetrica = tipo === 'propiedades'  ? `${e.propiedades_publicadas} 🏠`
+                           : tipo === 'clientes'     ? `${e.clientes_registrados} 👥`
+                           : tipo === 'seguimientos' ? `${segsMap?.[e.id] ?? 0} ✅`
+                           : `${e.xp.toLocaleString()} XP`
           return (
             <TouchableOpacity key={e.id} style={[s.entryCard, esYo && s.miCard]} activeOpacity={0.7} onPress={() => setSel(e)}>
-              {/* Posición */}
               <View style={s.posWrap}>
                 {medal
                   ? <Text style={s.medalText}>{medal}</Text>
-                  : <Text style={[s.posNum, esYo && { color: '#c9a84c' }]}>#{e.posicion}</Text>
+                  : <Text style={[s.posNum, esYo && { color: '#c9a84c' }]}>#{idx + 1}</Text>
                 }
               </View>
 
@@ -295,15 +347,14 @@ export default function Ranking() {
                   {e.nombre}{esYo ? ' 👈' : ''}
                 </Text>
                 <Text style={s.entryTitulo}>{tituloPorNivel(nivel)} · Nv. {nivel}</Text>
-                {/* Resultados reales, de un vistazo */}
                 <Text style={s.entryStats} numberOfLines={1}>
                   💰 {e.ventas_cerradas}  🔑 {e.rentas_cerradas}  📅 {e.citas_realizadas}  🏠 {e.propiedades_publicadas}
                 </Text>
               </View>
 
               <View style={s.entryRight}>
-                <Text style={s.entryXP}>{e.xp.toLocaleString()} XP</Text>
-                {e.streak_dias > 0 && (
+                <Text style={s.entryXP}>{valMetrica}</Text>
+                {tipo === 'xp' && e.streak_dias > 0 && (
                   <Text style={s.entryStreak}>🔥 {e.streak_dias}d</Text>
                 )}
               </View>
@@ -431,6 +482,16 @@ const s = StyleSheet.create({
   ligaTitulo: { fontSize: 15, fontWeight: '900', color: '#fff' },
   ligaSub: { fontSize: 12.5, color: '#9fb3c0', marginTop: 2, fontWeight: '600' },
   ligaLeyenda: { fontSize: 11, color: '#5a7085', textAlign: 'center', marginTop: 8, marginHorizontal: 14 },
+
+  metricaRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 4 },
+  metricaBtn: {
+    flex: 1, alignItems: 'center', paddingVertical: 8,
+    borderRadius: 11, backgroundColor: '#122030', borderWidth: 1.5, borderColor: '#1e3448',
+  },
+  metricaBtnActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  metricaIco: { fontSize: 14 },
+  metricaTxt: { fontSize: 10, fontWeight: '700', color: '#7a9ab5', marginTop: 2 },
+  metricaTxtActivo: { color: '#fff' },
 
   presuBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
