@@ -1105,15 +1105,22 @@ async function importarEasyBroker(url: string): Promise<Response | null> {
     return null
   }
 
-  // URL de agente o MLS → buscar en el catálogo por slug
   const segments = parsed.pathname.split('/').filter(Boolean)
+
+  // /agent/mls_properties/... es SIEMPRE una propiedad de OTRO agente
+  // compartida por la red MLS: nunca va a estar en el catálogo propio.
+  // Buscarla ahí (hasta 20 páginas secuenciales a la API) solo tarda y
+  // termina en timeout — vamos directo al scraping genérico de HTML.
+  if (segments.includes('mls_properties')) return null
+
+  // URL de agente → buscar en el catálogo por slug
   const urlSlug = segments[segments.length - 1] ?? ''
   if (urlSlug.length < 10) return null // No parece un slug de propiedad
 
-  // Sin API key, o si la propiedad no está en el catálogo propio (p.ej. es de
-  // otro agente vía MLS): no cortamos aquí, dejamos caer al scraping genérico
-  // de HTML más abajo, que tiene un parser dedicado para el JSON embebido que
-  // EasyBroker pone en toda página pública de propiedad.
+  // Sin API key, o si la propiedad no está en el catálogo propio: no
+  // cortamos aquí, dejamos caer al scraping genérico de HTML más abajo, que
+  // tiene un parser dedicado para el JSON embebido que EasyBroker pone en
+  // toda página pública de propiedad.
   if (!apiKey) return null
 
   const match = await buscarEbPorSlug(apiKey, urlSlug)
