@@ -848,7 +848,8 @@ async function fetchViaUnblocker(url: string): Promise<string | null> {
   // plan free es intermitente (Cloudflare bloquea la IP de datacenter y devuelve
   // 500), pero el async reintenta/rota internamente hasta lograrlo. Se envía el
   // job con render (ejecuta el reto de Cloudflare) e IP de México, y se sondea el
-  // resultado hasta ~130s (dentro del límite de la función).
+  // resultado hasta ~90s (las 3 capas previas ya pudieron gastar hasta ~40s,
+  // dejando margen para no acercarse al límite de ejecución de la función).
   try {
     const sub = await fetch('https://async.scraperapi.com/jobs', {
       method: 'POST',
@@ -859,7 +860,7 @@ async function fetchViaUnblocker(url: string): Promise<string | null> {
     const job = await sub.json()
     const statusUrl = job?.statusUrl
     if (!statusUrl) return null
-    const deadline = Date.now() + 130_000
+    const deadline = Date.now() + 90_000
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 6000))
       let sj: any
@@ -878,24 +879,39 @@ async function fetchViaUnblocker(url: string): Promise<string | null> {
   return null
 }
 
+// fetch con límite de tiempo: si un portal se cuelga sin responder, no
+// queremos que arrastre a la función entera hasta el timeout de la plataforma.
+async function fetchConTimeout(url: string, opts: any, timeoutMs: number): Promise<Response> {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal })
+  } finally {
+    clearTimeout(t)
+  }
+}
+
 // Descarga el HTML. Estrategia en capas:
 //  1) fetch directo (con CA extra para portales con cadena TLS incompleta).
 //  2) proxy de lectura simple (allorigins) para sitios sin anti-bot fuerte.
 //  3) unblocker con render (ScraperAPI) para Cloudflare/anti-bot — requiere key.
 // En cada capa se descarta la página-desafío para no pasar contenido falso.
+// Cada capa tiene su propio timeout para que la suma nunca acerque a la
+// función al límite de ejecución de la plataforma (antes una capa colgada
+// sin responder podía arrastrar todo hasta un timeout silencioso).
 async function fetchHtml(url: string): Promise<string> {
   let huboDesafio = false
   try {
     const opts: any = { headers: BROWSER_HEADERS }
     if (extraCaClient) opts.client = extraCaClient
-    const res = await fetch(url, opts)
+    const res = await fetchConTimeout(url, opts, 12_000)
     if (res.ok) {
       const t = await res.text()
       if (!esDesafioBot(t)) return t
       huboDesafio = true
     }
   } catch (_) {
-    // Error de red/TLS: caer a las siguientes capas.
+    // Error de red/TLS/timeout: caer a las siguientes capas.
   }
 
   // Capa 1b: reintento con UA de Googlebot. Portales tras AWS WAF (pincali) o
@@ -903,7 +919,7 @@ async function fetchHtml(url: string): Promise<string> {
   try {
     const opts: any = { headers: BOT_HEADERS }
     if (extraCaClient) opts.client = extraCaClient
-    const res = await fetch(url, opts)
+    const res = await fetchConTimeout(url, opts, 12_000)
     if (res.ok) {
       const t = await res.text()
       if (t && t.length > 500 && !esDesafioBot(t)) return t
@@ -913,7 +929,7 @@ async function fetchHtml(url: string): Promise<string> {
 
   try {
     const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
-    const res2 = await fetch(proxy, { headers: BROWSER_HEADERS })
+    const res2 = await fetchConTimeout(proxy, { headers: BROWSER_HEADERS }, 15_000)
     if (res2.ok) {
       const t = await res2.text()
       if (t && t.length > 200 && !esDesafioBot(t)) return t
