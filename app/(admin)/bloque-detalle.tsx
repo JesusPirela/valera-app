@@ -9,9 +9,16 @@ import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 const hoyISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
+const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+function fmtFechaCorta(iso: string | null): string {
+  if (!iso) return ''
+  const m = iso.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return m ? `${parseInt(m[3], 10)} ${MESES_C[parseInt(m[2], 10) - 1]}` : iso
+}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 type Periodo = '24h' | 'ayer' | '7dias' | '30dias'
+type NotaRow = { id: string; user_id: string; texto: string; tipo: 'diaria' | 'permanente'; fecha: string; created_at: string }
 
 type UsuarioMetricas = {
   id: string
@@ -123,11 +130,15 @@ const mS = StyleSheet.create({
 })
 
 function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo,
-  notaEdit, onNotaChange, onNotaGuardar, notaGuardando,
+  notas, nuevaNotaTexto, onNuevaNotaChange, tipoSel, onTipoChange, onAgregarNota, onBorrarNota,
+  histOpen, onToggleHist, agregando,
   contestoGuardando, onToggleContesto,
 }: {
   u: UsuarioMetricas; rank: number; maxActividad: number; expanded: boolean; onToggle: () => void; periodo: Periodo
-  notaEdit: string; onNotaChange: (v: string) => void; onNotaGuardar: () => void; notaGuardando: boolean
+  notas: NotaRow[]; nuevaNotaTexto: string; onNuevaNotaChange: (v: string) => void
+  tipoSel: 'diaria' | 'permanente'; onTipoChange: (t: 'diaria' | 'permanente') => void
+  onAgregarNota: () => void; onBorrarNota: (id: string) => void
+  histOpen: boolean; onToggleHist: () => void; agregando: boolean
   contestoGuardando: boolean; onToggleContesto: (v: boolean) => void
 }) {
   const st = statusConfig(u.actividad_total, maxActividad)
@@ -135,7 +146,10 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo,
   const horas = Math.floor(u.minutos_conexion / 60), mins = u.minutos_conexion % 60
   const contestoSi = u.contesto_hoy === true
   const contestoNo = u.contesto_hoy === false
-  const notaCambio = notaEdit !== (u.nota_hoy ?? '')
+  const hoy = hoyISO()
+  const permanentes = notas.filter(n => n.tipo === 'permanente')
+  const diariasHoy = notas.filter(n => n.tipo === 'diaria' && n.fecha === hoy)
+  const historial = notas.filter(n => n.tipo === 'diaria' && n.fecha !== hoy)
 
   return (
     <View style={uS.card}>
@@ -186,30 +200,57 @@ function UserCard({ u, rank, maxActividad, expanded, onToggle, periodo,
           </View>
         )}
 
-        {/* Nota inline */}
-        <View style={uS.notaInlineWrap}>
-          <TextInput
-            style={uS.notaInline}
-            placeholder="Nota..."
-            placeholderTextColor="#3a5468"
-            value={notaEdit}
-            onChangeText={onNotaChange}
-            onBlur={() => { if (notaCambio) onNotaGuardar() }}
-            returnKeyType="done"
-            onSubmitEditing={() => { if (notaCambio) onNotaGuardar() }}
-          />
-          {notaCambio && (
-            <TouchableOpacity
-              style={[uS.notaSaveBtn, { opacity: notaGuardando ? 0.5 : 1 }]}
-              onPress={onNotaGuardar}
-              disabled={notaGuardando}
-            >
-              {notaGuardando
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={uS.notaSaveTxt}>✓</Text>}
-            </TouchableOpacity>
-          )}
+      </View>
+
+      {/* ── Notas: permanentes (📌), de hoy (📝), agregar (diaria/permanente) e historial ── */}
+      <View style={uS.notasBox}>
+        {permanentes.map(n => (
+          <View key={n.id} style={[uS.notaItem, uS.notaPerm]}>
+            <Text style={uS.notaPin}>📌</Text>
+            <Text style={uS.notaTxt}>{n.texto}</Text>
+            <TouchableOpacity onPress={() => onBorrarNota(n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={uS.notaDel}>✕</Text></TouchableOpacity>
+          </View>
+        ))}
+        {diariasHoy.map(n => (
+          <View key={n.id} style={uS.notaItem}>
+            <Text style={uS.notaPin}>📝</Text>
+            <Text style={uS.notaTxt}>{n.texto} <Text style={uS.notaHoy}>· hoy</Text></Text>
+            <TouchableOpacity onPress={() => onBorrarNota(n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={uS.notaDel}>✕</Text></TouchableOpacity>
+          </View>
+        ))}
+        <TextInput
+          style={uS.notaAddInput}
+          placeholder="Escribe una nota…"
+          placeholderTextColor="#3a5468"
+          value={nuevaNotaTexto}
+          onChangeText={onNuevaNotaChange}
+          multiline
+        />
+        <View style={uS.addRow}>
+          <View style={uS.tipoGroup}>
+            {(['diaria', 'permanente'] as const).map(t => (
+              <TouchableOpacity key={t} onPress={() => onTipoChange(t)} style={[uS.tipoBtn, tipoSel === t && uS.tipoBtnOn]}>
+                <Text style={[uS.tipoBtnTxt, tipoSel === t && uS.tipoBtnTxtOn]}>{t === 'diaria' ? '📅 Diaria' : '📌 Permanente'}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity style={[uS.addBtn, { opacity: nuevaNotaTexto.trim() && !agregando ? 1 : 0.45 }]}
+            disabled={!nuevaNotaTexto.trim() || agregando} onPress={onAgregarNota}>
+            {agregando ? <ActivityIndicator size="small" color="#fff" /> : <Text style={uS.addBtnTxt}>+ Agregar</Text>}
+          </TouchableOpacity>
         </View>
+        {historial.length > 0 && (
+          <>
+            <TouchableOpacity onPress={onToggleHist}><Text style={uS.histBtn}>🕘 Historial de notas ({historial.length}) {histOpen ? '▲' : '▼'}</Text></TouchableOpacity>
+            {histOpen && historial.map(n => (
+              <View key={n.id} style={uS.histItem}>
+                <Text style={uS.histFecha}>{fmtFechaCorta(n.fecha)}</Text>
+                <Text style={uS.histTxt}>{n.texto}</Text>
+                <TouchableOpacity onPress={() => onBorrarNota(n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={uS.notaDel}>✕</Text></TouchableOpacity>
+              </View>
+            ))}
+          </>
+        )}
       </View>
 
       {/* ── Detalle expandido — solo métricas (como antes) ── */}
@@ -306,6 +347,28 @@ const uS = StyleSheet.create({
   },
   notaSaveTxt: { color: '#fff', fontSize: 14, fontWeight: '900' },
 
+  // Notas diarias / permanentes + historial
+  notasBox: { paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#182636', gap: 6 },
+  notaItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 7, backgroundColor: '#111f2e', borderWidth: 1, borderColor: '#1e3448', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 9 },
+  notaPerm: { backgroundColor: '#20182e', borderColor: '#5e35b166' },
+  notaPin: { fontSize: 12, marginTop: 1 },
+  notaTxt: { flex: 1, fontSize: 12.5, lineHeight: 17, color: '#c0d0dc' },
+  notaHoy: { fontSize: 10.5, color: '#2ecc71', fontWeight: '700' },
+  notaDel: { fontSize: 13, color: '#e74c3c', fontWeight: '900', paddingHorizontal: 2 },
+  notaAddInput: { minHeight: 34, backgroundColor: '#111f2e', borderWidth: 1, borderColor: '#1e3448', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 7, fontSize: 12.5, color: '#c0d0dc', textAlignVertical: 'top' },
+  addRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
+  tipoGroup: { flexDirection: 'row', gap: 6 },
+  tipoBtn: { borderWidth: 1, borderColor: '#2a475e', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5 },
+  tipoBtnOn: { backgroundColor: '#5e35b1', borderColor: '#5e35b1' },
+  tipoBtnTxt: { fontSize: 11, fontWeight: '700', color: '#7f95a8' },
+  tipoBtnTxtOn: { color: '#fff' },
+  addBtn: { backgroundColor: '#1a6470', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', minWidth: 84 },
+  addBtnTxt: { color: '#fff', fontSize: 12.5, fontWeight: '800' },
+  histBtn: { fontSize: 12, fontWeight: '700', color: '#b39ddb', paddingVertical: 3 },
+  histItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 4, paddingLeft: 4 },
+  histFecha: { fontSize: 10.5, fontWeight: '700', color: '#7f95a8', minWidth: 40 },
+  histTxt: { flex: 1, fontSize: 12, color: '#8fa3b3', lineHeight: 16 },
+
   detail:     { padding: 14, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#1e3448' },
   detailGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   detailCol:  { flex: 1 },
@@ -326,7 +389,10 @@ export default function BloqueDetalle() {
   const [usuarios, setUsuarios] = useState<UsuarioMetricas[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [notasEdit, setNotasEdit] = useState<Record<string, string>>({})
+  const [notasPorUsuario, setNotasPorUsuario] = useState<Record<string, NotaRow[]>>({})
+  const [nuevaNota, setNuevaNota] = useState<Record<string, string>>({})
+  const [nuevaNotaTipo, setNuevaNotaTipo] = useState<Record<string, 'diaria' | 'permanente'>>({})
+  const [histAbierto, setHistAbierto] = useState<Set<string>>(new Set())
   const [notasGuardando, setNotasGuardando] = useState<Set<string>>(new Set())
   const [contestoGuardando, setContesoGuardando] = useState<Set<string>>(new Set())
   const yaCargoRef = useRef(false)
@@ -347,10 +413,11 @@ export default function BloqueDetalle() {
     periodoPedidoRef.current = p
     if (!yaCargoRef.current) setLoading(true)
     const { inicio, fin } = getRango(p)
-    const [miembrosRes, prodRes, diariosRes] = await Promise.all([
+    const [miembrosRes, prodRes, diariosRes, notasRes] = await Promise.all([
       supabase.from('profiles').select('id').eq('bloque_id', id),
       supabase.rpc('get_productividad_equipo', { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
       supabase.from('bloque_diario').select('user_id, contesto, nota').eq('fecha', hoyISO()),
+      supabase.from('bloque_notas').select('id, user_id, texto, tipo, fecha, created_at').order('created_at', { ascending: false }),
     ])
     // Llegó una petición de otro periodo mientras cargaba: descartar esta.
     if (periodoPedidoRef.current !== p) return
@@ -369,21 +436,35 @@ export default function BloqueDetalle() {
       }))
       .sort((a, b) => b.actividad_total - a.actividad_total)
     setUsuarios(delBloque)
-    setNotasEdit(prev => {
-      const n: Record<string, string> = {}
-      for (const u of delBloque) n[u.id] = prev[u.id] ?? (u.nota_hoy ?? '')
-      return n
-    })
+    // Notas (diarias/permanentes) agrupadas por usuario.
+    const notasMap: Record<string, NotaRow[]> = {}
+    for (const nt of (notasRes.data ?? []) as NotaRow[]) {
+      ;(notasMap[nt.user_id] ??= []).push(nt)
+    }
+    setNotasPorUsuario(notasMap)
     yaCargoRef.current = true
     setLoading(false)
   }
 
-  async function guardarNota(userId: string) {
-    const nota = (notasEdit[userId] ?? '').trim()
+  async function agregarNota(userId: string) {
+    const texto = (nuevaNota[userId] ?? '').trim()
+    if (!texto) return
+    const tipo = nuevaNotaTipo[userId] ?? 'diaria'
     setNotasGuardando(prev => new Set([...prev, userId]))
-    const { error } = await supabase.rpc('guardar_nota_bloque', { p_user_id: userId, p_nota: nota })
-    if (!error) setUsuarios(prev => prev.map(u => u.id === userId ? { ...u, nota_hoy: nota || null } : u))
+    const { data, error } = await supabase.from('bloque_notas')
+      .insert({ user_id: userId, texto, tipo }).select('id, user_id, texto, tipo, fecha, created_at').single()
+    if (!error && data) {
+      setNotasPorUsuario(prev => ({ ...prev, [userId]: [data as NotaRow, ...(prev[userId] ?? [])] }))
+      setNuevaNota(prev => ({ ...prev, [userId]: '' }))
+    }
     setNotasGuardando(prev => { const n = new Set(prev); n.delete(userId); return n })
+  }
+  async function borrarNota(userId: string, notaId: string) {
+    setNotasPorUsuario(prev => ({ ...prev, [userId]: (prev[userId] ?? []).filter(n => n.id !== notaId) }))
+    await supabase.from('bloque_notas').delete().eq('id', notaId)
+  }
+  function toggleHist(userId: string) {
+    setHistAbierto(prev => { const n = new Set(prev); n.has(userId) ? n.delete(userId) : n.add(userId); return n })
   }
 
   async function toggleContesto(userId: string, valorActual: boolean | null, nuevoValor: boolean) {
@@ -407,6 +488,7 @@ export default function BloqueDetalle() {
   const inactivos = usuarios.length - activos
   const totalClientes = usuarios.reduce((s, u) => s + u.clientes_nuevos, 0)
   const totalSegui = usuarios.reduce((s, u) => s + u.seguimientos, 0)
+  const totalPublicadas = usuarios.reduce((s, u) => s + u.propiedades_publicadas, 0)
 
   return (
     <View style={{ flex: 1, backgroundColor: '#0d1b2a' }}>
@@ -453,12 +535,12 @@ export default function BloqueDetalle() {
             </TouchableOpacity>
           </View>
 
-          {/* KPIs generales del bloque */}
+          {/* KPIs generales del bloque (según el periodo elegido: Hoy / 7d / 30d) */}
           <View style={s.kpiRow}>
-            <KpiCard icono="👥" label="Activos"        valor={activos}       color="#2ecc71" sub={`${inactivos} inactivos`} />
-            <KpiCard icono="🏆" label="Top performer"  valor={usuarios[0]?.nombre?.split(' ')[0] ?? '—'} color="#c9a84c" sub={`${maxActividad} pts`} />
-            <KpiCard icono="👤" label="Clientes nuevos" valor={totalClientes} color="#1a6470" />
+            <KpiCard icono="🏠" label="Casas publicadas" valor={totalPublicadas} color="#c9a84c" />
             <KpiCard icono="✅" label="Seguimientos"    valor={totalSegui}    color="#3498db" />
+            <KpiCard icono="👤" label="Clientes nuevos" valor={totalClientes} color="#1a6470" />
+            <KpiCard icono="👥" label="Activos"        valor={activos}       color="#2ecc71" sub={`${inactivos} inactivos`} />
           </View>
 
           {/* Resumen de estado */}
@@ -492,10 +574,16 @@ export default function BloqueDetalle() {
                 expanded={expandedId === u.id}
                 onToggle={() => setExpandedId(expandedId === u.id ? null : u.id)}
                 periodo={periodo}
-                notaEdit={notasEdit[u.id] ?? (u.nota_hoy ?? '')}
-                onNotaChange={v => setNotasEdit(prev => ({ ...prev, [u.id]: v }))}
-                onNotaGuardar={() => guardarNota(u.id)}
-                notaGuardando={notasGuardando.has(u.id)}
+                notas={notasPorUsuario[u.id] ?? []}
+                nuevaNotaTexto={nuevaNota[u.id] ?? ''}
+                onNuevaNotaChange={v => setNuevaNota(prev => ({ ...prev, [u.id]: v }))}
+                tipoSel={nuevaNotaTipo[u.id] ?? 'diaria'}
+                onTipoChange={t => setNuevaNotaTipo(prev => ({ ...prev, [u.id]: t }))}
+                onAgregarNota={() => agregarNota(u.id)}
+                onBorrarNota={(nid) => borrarNota(u.id, nid)}
+                histOpen={histAbierto.has(u.id)}
+                onToggleHist={() => toggleHist(u.id)}
+                agregando={notasGuardando.has(u.id)}
                 contestoGuardando={contestoGuardando.has(u.id)}
                 onToggleContesto={(v) => toggleContesto(u.id, u.contesto_hoy, v)}
               />
