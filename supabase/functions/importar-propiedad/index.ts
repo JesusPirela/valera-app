@@ -1110,19 +1110,16 @@ async function importarEasyBroker(url: string): Promise<Response | null> {
   const urlSlug = segments[segments.length - 1] ?? ''
   if (urlSlug.length < 10) return null // No parece un slug de propiedad
 
-  if (!apiKey) {
-    // Sin API key no podemos buscar: avisamos sin timeout
-    return new Response(JSON.stringify({
-      error: 'No se puede importar desde el portal de agente de EasyBroker sin la API key configurada en el servidor.',
-    }), { status: 200, headers: corsH })
-  }
+  // Sin API key, o si la propiedad no está en el catálogo propio (p.ej. es de
+  // otro agente vía MLS): no cortamos aquí, dejamos caer al scraping genérico
+  // de HTML más abajo, que tiene un parser dedicado para el JSON embebido que
+  // EasyBroker pone en toda página pública de propiedad.
+  if (!apiKey) return null
 
   const match = await buscarEbPorSlug(apiKey, urlSlug)
   if (match) return buildEbApiResponse(match, corsH)
 
-  return new Response(JSON.stringify({
-    error: 'No se encontró esta propiedad en el catálogo de EasyBroker. Prueba con la URL pública de Lamudi, Inmuebles24 u otro portal.',
-  }), { status: 200, headers: corsH })
+  return null
 }
 
 serve(async (req) => {
