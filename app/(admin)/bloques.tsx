@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator,
-  TouchableOpacity, TextInput, Switch,
+  TouchableOpacity, TextInput,
 } from 'react-native'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
@@ -14,7 +14,14 @@ const PURPLE = '#5e35b1'
 const SIN_ASIGNAR = '__sin__'
 
 const hoyISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
+const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+function fmtFechaCorta(iso: string | null): string {
+  if (!iso) return ''
+  const m = iso.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return m ? `${parseInt(m[3], 10)} ${MESES_C[parseInt(m[2], 10) - 1]}` : iso
+}
 
+type NotaRow = { id: string; user_id: string; texto: string; tipo: 'diaria' | 'permanente'; fecha: string; created_at: string }
 type Bloque = { id: string; nombre: string; orden: number }
 type ResumenRow = {
   user_id: string
@@ -43,7 +50,10 @@ export default function Bloques() {
   const [loading, setLoading] = useState(true)
   const [asignando, setAsignando] = useState<string | null>(null)
   const [expandidas, setExpandidas] = useState<Record<string, boolean>>({})
-  const [notasEdit, setNotasEdit] = useState<Record<string, string>>({})
+  const [notasPorUsuario, setNotasPorUsuario] = useState<Record<string, NotaRow[]>>({})
+  const [nuevaNota, setNuevaNota] = useState<Record<string, string>>({})
+  const [nuevaNotaTipo, setNuevaNotaTipo] = useState<Record<string, 'diaria' | 'permanente'>>({})
+  const [histAbierto, setHistAbierto] = useState<Set<string>>(new Set())
   const [notasGuardando, setNotasGuardando] = useState<Set<string>>(new Set())
   const [contestoGuardando, setContesoGuardando] = useState<Set<string>>(new Set())
   const yaCargoRef = useRef(false)
@@ -58,10 +68,11 @@ export default function Bloques() {
 
   async function cargar(p: Periodo, silencioso = false) {
     if (!silencioso) setLoading(true)
-    const [blqRes, resRes, perfilRes] = await Promise.all([
+    const [blqRes, resRes, perfilRes, notasRes] = await Promise.all([
       supabase.from('bloques').select('id, nombre, orden').order('orden'),
       supabase.rpc('get_bloques_resumen', { p_dias: p }),
       supabase.from('profiles').select('id, notas_bloque, contesto_fecha, contesto_ok').neq('role', 'admin'),
+      supabase.from('bloque_notas').select('id, user_id, texto, tipo, fecha, created_at').order('created_at', { ascending: false }),
     ])
     // Si el usuario cambió de periodo mientras esta carga estaba en vuelo,
     // descartar la respuesta vieja (evita que una respuesta lenta pise a la nueva).
@@ -78,12 +89,12 @@ export default function Bloques() {
       contesto_ok: perfilMap[r.user_id]?.contesto_ok ?? false,
     }))
     setUsuarios(rows)
-    // Inicializar estado de notas con valores del servidor (sin sobreescribir edits en curso)
-    setNotasEdit(prev => {
-      const nuevo: Record<string, string> = {}
-      for (const u of rows) nuevo[u.user_id] = prev[u.user_id] ?? (u.notas_bloque ?? '')
-      return nuevo
-    })
+    // Agrupar las notas por usuario (ya vienen ordenadas por fecha desc).
+    const notasMap: Record<string, NotaRow[]> = {}
+    for (const n of (notasRes.data ?? []) as NotaRow[]) {
+      ;(notasMap[n.user_id] ??= []).push(n)
+    }
+    setNotasPorUsuario(notasMap)
     yaCargoRef.current = true
     setLoading(false)
   }
@@ -103,14 +114,25 @@ export default function Bloques() {
     setAsignando(null)
   }
 
-  async function guardarNota(userId: string) {
-    const nota = (notasEdit[userId] ?? '').trim()
+  async function agregarNota(userId: string) {
+    const texto = (nuevaNota[userId] ?? '').trim()
+    if (!texto) return
+    const tipo = nuevaNotaTipo[userId] ?? 'diaria'
     setNotasGuardando(prev => new Set([...prev, userId]))
-    const { error } = await supabase.rpc('guardar_nota_bloque', { p_user_id: userId, p_nota: nota })
-    if (!error) {
-      setUsuarios(prev => prev.map(u => u.user_id === userId ? { ...u, notas_bloque: nota || null } : u))
+    const { data, error } = await supabase.from('bloque_notas')
+      .insert({ user_id: userId, texto, tipo }).select('id, user_id, texto, tipo, fecha, created_at').single()
+    if (!error && data) {
+      setNotasPorUsuario(prev => ({ ...prev, [userId]: [data as NotaRow, ...(prev[userId] ?? [])] }))
+      setNuevaNota(prev => ({ ...prev, [userId]: '' }))
     }
     setNotasGuardando(prev => { const n = new Set(prev); n.delete(userId); return n })
+  }
+  async function borrarNota(userId: string, id: string) {
+    setNotasPorUsuario(prev => ({ ...prev, [userId]: (prev[userId] ?? []).filter(n => n.id !== id) }))
+    await supabase.from('bloque_notas').delete().eq('id', id)
+  }
+  function toggleHist(userId: string) {
+    setHistAbierto(prev => { const n = new Set(prev); n.has(userId) ? n.delete(userId) : n.add(userId); return n })
   }
 
   async function toggleContesto(userId: string, valorActual: boolean) {
@@ -219,8 +241,13 @@ export default function Bloques() {
                         const contestoHoy = u.contesto_fecha === hoy && u.contesto_ok
                         const cargandoContesto = contestoGuardando.has(u.user_id)
                         const cargandoNota = notasGuardando.has(u.user_id)
-                        const notaActual = notasEdit[u.user_id] ?? (u.notas_bloque ?? '')
-                        const notaCambio = notaActual !== (u.notas_bloque ?? '')
+                        const notas = notasPorUsuario[u.user_id] ?? []
+                        const permanentes = notas.filter(n => n.tipo === 'permanente')
+                        const diariasHoy = notas.filter(n => n.tipo === 'diaria' && n.fecha === hoy)
+                        const historial = notas.filter(n => n.tipo === 'diaria' && n.fecha !== hoy)
+                        const histOpen = histAbierto.has(u.user_id)
+                        const tipoSel = nuevaNotaTipo[u.user_id] ?? 'diaria'
+                        const textoNuevo = (nuevaNota[u.user_id] ?? '').trim()
 
                         return (
                           <View key={u.user_id} style={[s.userRow, { borderTopColor: c.border }]}>
@@ -228,53 +255,89 @@ export default function Bloques() {
                             <View style={s.userTop}>
                               <Text style={[s.userNombre, { color: c.text }]} numberOfLines={1}>{u.nombre ?? 'Sin nombre'}</Text>
                               <View style={s.userStats}>
-                                <Text style={[s.userStat, { color: TEAL }]}>📤 {u.publicaciones}</Text>
-                                <Text style={[s.userStat, { color: '#2e7d32' }]}>👤 {u.clientes_nuevos}</Text>
-                                <Text style={[s.userStat, { color: '#c8960c' }]}>✅ {u.seguimientos}</Text>
+                                <View style={[s.metricChip, { backgroundColor: TEAL + '18' }]}><Text style={[s.metricTxt, { color: TEAL }]}>📤 {u.publicaciones}</Text></View>
+                                <View style={[s.metricChip, { backgroundColor: '#2e7d3218' }]}><Text style={[s.metricTxt, { color: '#2e7d32' }]}>👤 {u.clientes_nuevos}</Text></View>
+                                <View style={[s.metricChip, { backgroundColor: '#c8960c18' }]}><Text style={[s.metricTxt, { color: '#c8960c' }]}>✅ {u.seguimientos}</Text></View>
                               </View>
                             </View>
 
-                            {/* ¿Contestó hoy? — solo en periodo Hoy */}
+                            {/* Contacté hoy — botón claro (solo periodo Hoy) */}
                             {periodo === 1 && (
-                              <View style={s.contestoRow}>
-                                <Text style={[s.contestoLabel, { color: c.textMute }]}>¿Contestó hoy?</Text>
-                                {cargandoContesto
-                                  ? <ActivityIndicator size="small" color={TEAL} />
-                                  : <Switch
-                                      value={contestoHoy}
-                                      onValueChange={() => toggleContesto(u.user_id, contestoHoy)}
-                                      trackColor={{ false: '#ddd', true: '#2e7d3288' }}
-                                      thumbColor={contestoHoy ? '#2e7d32' : '#aaa'}
-                                    />}
-                                {contestoHoy && <Text style={s.contestoBadge}>✅ Sí</Text>}
+                              <View style={{ marginTop: 8 }}>
+                                <TouchableOpacity
+                                  activeOpacity={0.8}
+                                  disabled={cargandoContesto}
+                                  onPress={() => toggleContesto(u.user_id, contestoHoy)}
+                                  style={[s.contactoBtn, contestoHoy ? s.contactoBtnOn : { borderColor: c.border }]}
+                                >
+                                  {cargandoContesto
+                                    ? <ActivityIndicator size="small" color={contestoHoy ? '#fff' : '#2e7d32'} />
+                                    : <Text style={[s.contactoBtnTxt, { color: contestoHoy ? '#fff' : '#2e7d32' }]}>
+                                        {contestoHoy ? '✓ Lo contacté hoy' : '📞 Marcar que lo contacté hoy'}
+                                      </Text>}
+                                </TouchableOpacity>
                                 {!contestoHoy && u.contesto_fecha && (
-                                  <Text style={[s.contestoFecha, { color: c.textMute }]}>Último: {u.contesto_fecha}</Text>
+                                  <Text style={[s.ultimoContacto, { color: c.textMute }]}>Último contacto: {fmtFechaCorta(u.contesto_fecha)}</Text>
                                 )}
                               </View>
                             )}
 
-                            {/* Notas */}
-                            <View style={s.notaWrap}>
+                            {/* Notas: permanentes (📌), de hoy, agregar (diaria/permanente) e historial */}
+                            <View style={s.notasSection}>
+                              {permanentes.map(n => (
+                                <View key={n.id} style={[s.notaItem, { backgroundColor: '#5e35b114', borderColor: '#5e35b133' }]}>
+                                  <Text style={s.notaPin}>📌</Text>
+                                  <Text style={[s.notaTxt, { color: c.text }]}>{n.texto}</Text>
+                                  <TouchableOpacity onPress={() => borrarNota(u.user_id, n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={s.notaDel}>✕</Text></TouchableOpacity>
+                                </View>
+                              ))}
+                              {diariasHoy.map(n => (
+                                <View key={n.id} style={[s.notaItem, { backgroundColor: c.bg, borderColor: c.border }]}>
+                                  <Text style={s.notaPin}>📝</Text>
+                                  <Text style={[s.notaTxt, { color: c.text }]}>{n.texto} <Text style={s.notaHoy}>· hoy</Text></Text>
+                                  <TouchableOpacity onPress={() => borrarNota(u.user_id, n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={s.notaDel}>✕</Text></TouchableOpacity>
+                                </View>
+                              ))}
+
+                              {/* Agregar nota */}
                               <TextInput
                                 style={[s.notaInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
-                                placeholder="Agregar nota sobre este usuario..."
+                                placeholder="Escribe una nota…"
                                 placeholderTextColor={c.textMute}
-                                value={notaActual}
-                                onChangeText={v => setNotasEdit(prev => ({ ...prev, [u.user_id]: v }))}
+                                value={nuevaNota[u.user_id] ?? ''}
+                                onChangeText={v => setNuevaNota(prev => ({ ...prev, [u.user_id]: v }))}
                                 multiline
-                                numberOfLines={2}
-                                onBlur={() => { if (notaCambio) guardarNota(u.user_id) }}
                               />
-                              {notaCambio && (
-                                <TouchableOpacity
-                                  style={[s.notaGuardar, { opacity: cargandoNota ? 0.5 : 1 }]}
-                                  onPress={() => guardarNota(u.user_id)}
-                                  disabled={cargandoNota}
-                                >
-                                  {cargandoNota
-                                    ? <ActivityIndicator size="small" color="#fff" />
-                                    : <Text style={s.notaGuardarTxt}>Guardar nota</Text>}
+                              <View style={s.addNotaRow}>
+                                <View style={s.tipoToggle}>
+                                  {(['diaria', 'permanente'] as const).map(t => (
+                                    <TouchableOpacity key={t} onPress={() => setNuevaNotaTipo(prev => ({ ...prev, [u.user_id]: t }))}
+                                      style={[s.tipoOpt, tipoSel === t && s.tipoOptOn]}>
+                                      <Text style={[s.tipoOptTxt, tipoSel === t && { color: '#fff' }]}>{t === 'diaria' ? '📅 Diaria' : '📌 Permanente'}</Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                                <TouchableOpacity style={[s.addNotaBtn, { opacity: textoNuevo && !cargandoNota ? 1 : 0.45 }]}
+                                  disabled={!textoNuevo || cargandoNota}
+                                  onPress={() => agregarNota(u.user_id)}>
+                                  {cargandoNota ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addNotaTxt}>+ Agregar</Text>}
                                 </TouchableOpacity>
+                              </View>
+
+                              {/* Historial de notas diarias */}
+                              {historial.length > 0 && (
+                                <View style={{ marginTop: 8 }}>
+                                  <TouchableOpacity onPress={() => toggleHist(u.user_id)}>
+                                    <Text style={s.histToggle}>🕘 Historial de notas ({historial.length}) {histOpen ? '▲' : '▼'}</Text>
+                                  </TouchableOpacity>
+                                  {histOpen && historial.map(n => (
+                                    <View key={n.id} style={s.histItem}>
+                                      <Text style={[s.histFecha, { color: c.textMute }]}>{fmtFechaCorta(n.fecha)}</Text>
+                                      <Text style={[s.notaTxt, { color: c.textSub }]}>{n.texto}</Text>
+                                      <TouchableOpacity onPress={() => borrarNota(u.user_id, n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={s.notaDel}>✕</Text></TouchableOpacity>
+                                    </View>
+                                  ))}
+                                </View>
                               )}
                             </View>
 
@@ -368,6 +431,34 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', minWidth: 100,
   },
   notaGuardarTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  // Métricas como chips
+  metricChip: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  metricTxt: { fontSize: 12.5, fontWeight: '800' },
+
+  // Botón "Contacté hoy"
+  contactoBtn: { borderWidth: 1.5, borderRadius: 10, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
+  contactoBtnOn: { backgroundColor: '#2e7d32', borderColor: '#2e7d32' },
+  contactoBtnTxt: { fontSize: 13, fontWeight: '800' },
+  ultimoContacto: { fontSize: 11, fontStyle: 'italic', marginTop: 4, textAlign: 'center' },
+
+  // Notas
+  notasSection: { marginTop: 10, gap: 6 },
+  notaItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 7, borderWidth: 1, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 },
+  notaPin: { fontSize: 13, marginTop: 1 },
+  notaTxt: { flex: 1, fontSize: 13, lineHeight: 18 },
+  notaHoy: { fontSize: 11, color: '#2e7d32', fontWeight: '700' },
+  notaDel: { fontSize: 14, color: '#c0392b', fontWeight: '800', paddingHorizontal: 2 },
+  addNotaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6, flexWrap: 'wrap' },
+  tipoToggle: { flexDirection: 'row', gap: 6 },
+  tipoOpt: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
+  tipoOptOn: { backgroundColor: PURPLE, borderColor: PURPLE },
+  tipoOptTxt: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  addNotaBtn: { backgroundColor: TEAL, borderRadius: 9, paddingVertical: 8, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', minWidth: 96 },
+  addNotaTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  histToggle: { fontSize: 12.5, fontWeight: '700', color: PURPLE, paddingVertical: 4 },
+  histItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 5, paddingLeft: 4 },
+  histFecha: { fontSize: 11, fontWeight: '700', minWidth: 44 },
 
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 },
   chipsLabel: { fontSize: 11, color: '#94a3b8', fontWeight: '700', marginRight: 2 },
