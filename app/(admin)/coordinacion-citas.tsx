@@ -7,6 +7,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
 
 import { getUsuarioActual } from '../../lib/sesion'
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -959,12 +960,13 @@ function MensajeRapidoBtn({
 
 // ─── KanbanCard ───────────────────────────────────────────────────────────────
 
-function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
+function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging, onRetro }: {
   cita: Cita
   onPress: () => void
   onLongPress: () => void
   onDragStart?: (c: Cita) => void
   isDragging?: boolean
+  onRetro?: (c: Cita) => void
 }) {
   const inf     = ESTADOS_CITA[cita.estado]
   const ahora   = Date.now()
@@ -1096,6 +1098,15 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging }: {
           </View>
         )}
 
+        {/* Retroalimentación (cita realizada) — el admin la escribe y se rellena
+            en la tabla de Citas de venta */}
+        {cita.estado === 'realizada' && onRetro && (
+          <TouchableOpacity style={kc.retroBtn} activeOpacity={0.8} onPress={() => onRetro(cita)}>
+            <Ionicons name="create-outline" size={13} color="#0d9488" />
+            <Text style={kc.retroBtnTxt}>Escribir retroalimentación</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Botón WhatsApp rápido al prospectador */}
         {cita.prospectador?.telefono && (
           <MensajeRapidoBtn
@@ -1131,6 +1142,12 @@ const kc = StyleSheet.create({
   cardUrgente:       { borderWidth: 1.5, borderColor: '#fbbf24' },
   cardInerte:        { borderWidth: 1.5, borderColor: '#f59e0b' },
   cardInerteCritica: { borderWidth: 1.5, borderColor: '#ef4444' },
+  retroBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    marginTop: 8, backgroundColor: '#0d94881a', borderWidth: 1, borderColor: '#0d948855',
+    borderRadius: 8, paddingVertical: 7,
+  },
+  retroBtnTxt: { fontSize: 11.5, fontWeight: '800', color: '#0d9488' },
   tratoBanner: {
     flexDirection: 'row' as const, alignItems: 'center' as const,
     backgroundColor: '#fef3c7', borderRadius: 6,
@@ -1184,11 +1201,12 @@ const kc = StyleSheet.create({
 
 // ─── KanbanColumn ─────────────────────────────────────────────────────────────
 
-function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCita, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, labelOverride, colorOverride, highlight, pct }: {
+function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, onRetro, draggingCita, isDragOver, onDragStart, onDragOver, onDragLeave, onDrop, labelOverride, colorOverride, highlight, pct }: {
   estado: EstadoCita
   citas: Cita[]
   onCardPress: (c: Cita) => void
   onCardLongPress: (c: Cita) => void
+  onRetro?: (c: Cita) => void
   draggingCita?: Cita | null
   isDragOver?: boolean
   onDragStart?: (c: Cita) => void
@@ -1237,6 +1255,7 @@ function KanbanColumn({ estado, citas, onCardPress, onCardLongPress, draggingCit
               onLongPress={() => onCardLongPress(c)}
               onDragStart={onDragStart}
               isDragging={draggingCita?.id === c.id}
+              onRetro={onRetro}
             />
           ))
         )}
@@ -1310,12 +1329,25 @@ export default function CoordinacionCitas() {
   const [dragOverEstado, setDragOverEstado] = useState<EstadoCita | null>(null)
   const [cancelModal, setCancelModal] = useState<Cita | null>(null)
   const [postCitaModal, setPostCitaModal] = useState<Cita | null>(null)
+  const [wizardRetro, setWizardRetro] = useState<CitaRetro | null>(null)
   const [expandirHoy, setExpandirHoy]     = useState(true)
   const [filtroFecha, setFiltroFecha]     = useState<null | 'semana' | 'mes' | 'personalizado'>(null)
   const [fechaDesde, setFechaDesde]       = useState('')
   const [fechaHasta, setFechaHasta]       = useState('')
   const mountedRef = useRef(true)
   const defaultFiltroAplicado = useRef(false)
+
+  // Abre el wizard de retro para una cita: encuentra o crea su fila en la tabla
+  // de Citas de venta (RPC) y muestra las mismas 3 preguntas que llena el asesor.
+  async function abrirRetro(cita: Cita) {
+    const { data, error } = await supabase.rpc('abrir_retro_coordinacion', { p_coord_id: cita.id })
+    const fila = Array.isArray(data) ? data[0] : data
+    if (error || !fila) {
+      Alert.alert('Retroalimentación', error?.message ?? 'No se pudo abrir la retro de esta cita.')
+      return
+    }
+    setWizardRetro(fila as CitaRetro)
+  }
 
   async function cargar() {
     const { data } = await supabase
@@ -1761,6 +1793,7 @@ export default function CoordinacionCitas() {
                   highlight={estado === 'aparto'}
                   citas={citasVenta.filter(c => c.estado === estado)}
                   onCardPress={setCitaEditando}
+                  onRetro={abrirRetro}
                   onCardLongPress={setCitaMoviendo}
                   draggingCita={draggingCita}
                   isDragOver={dragOverEstado === estado}
@@ -1787,6 +1820,7 @@ export default function CoordinacionCitas() {
                   highlight={estado === 'aparto'}
                   citas={citasRenta.filter(c => c.estado === estado)}
                   onCardPress={setCitaEditando}
+                  onRetro={abrirRetro}
                   onCardLongPress={setCitaMoviendo}
                   draggingCita={draggingCita}
                   isDragOver={dragOverEstado === estado}
@@ -1864,6 +1898,7 @@ export default function CoordinacionCitas() {
                     return tb - ta                    // pasadas: más reciente primero
                   })}
                   onCardPress={setCitaEditando}
+                  onRetro={abrirRetro}
                   onCardLongPress={setCitaMoviendo}
                   draggingCita={draggingCita}
                   isDragOver={dragOverEstado === estado}
@@ -1933,6 +1968,13 @@ export default function CoordinacionCitas() {
           vistaAsesor={vistaAsesor}
           onClose={() => setModalNueva(false)}
           onGuardar={cargar}
+        />
+      )}
+      {wizardRetro && (
+        <RetroCitaWizard
+          cita={wizardRetro}
+          onClose={() => setWizardRetro(null)}
+          onSaved={() => { setWizardRetro(null); cargar() }}
         />
       )}
 
