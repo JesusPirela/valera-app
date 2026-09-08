@@ -488,7 +488,6 @@ export default function BloqueDetalle() {
   const inactivos = usuarios.length - activos
   const totalClientes = usuarios.reduce((s, u) => s + u.clientes_nuevos, 0)
   const totalSegui = usuarios.reduce((s, u) => s + u.seguimientos, 0)
-  const totalPublicadas = usuarios.reduce((s, u) => s + u.propiedades_publicadas, 0)
 
   return (
     <View style={{ flex: 1, backgroundColor: '#0d1b2a' }}>
@@ -497,6 +496,16 @@ export default function BloqueDetalle() {
         <Text style={s.headerTitle} numberOfLines={1}>🧩 {nombre ?? 'Bloque'}</Text>
         <View style={{ width: 90 }} />
       </View>
+
+      {/* Sub-apartado de estadísticas en gráficas del bloque */}
+      <TouchableOpacity
+        style={[s.btnCalendario, { backgroundColor: '#1a647022', borderColor: '#1a6470' }]}
+        activeOpacity={0.85}
+        onPress={() => router.push(`/(admin)/bloque-estadisticas?id=${id}&nombre=${encodeURIComponent(String(nombre ?? ''))}`)}
+      >
+        <Text style={[s.btnCalendarioTxt, { color: '#7fd1c4' }]}>📊 Estadísticas en gráficas</Text>
+        <Text style={[s.btnCalendarioChevron, { color: '#7fd1c4' }]}>›</Text>
+      </TouchableOpacity>
 
       {/* Acceso al calendario de actividad (vive dentro del bloque) */}
       <TouchableOpacity
@@ -535,12 +544,12 @@ export default function BloqueDetalle() {
             </TouchableOpacity>
           </View>
 
-          {/* KPIs generales del bloque (según el periodo elegido: Hoy / 7d / 30d) */}
+          {/* KPIs generales del bloque */}
           <View style={s.kpiRow}>
-            <KpiCard icono="🏠" label="Casas publicadas" valor={totalPublicadas} color="#c9a84c" />
-            <KpiCard icono="✅" label="Seguimientos"    valor={totalSegui}    color="#3498db" />
-            <KpiCard icono="👤" label="Clientes nuevos" valor={totalClientes} color="#1a6470" />
             <KpiCard icono="👥" label="Activos"        valor={activos}       color="#2ecc71" sub={`${inactivos} inactivos`} />
+            <KpiCard icono="🏆" label="Top performer"  valor={usuarios[0]?.nombre?.split(' ')[0] ?? '—'} color="#c9a84c" sub={`${maxActividad} pts`} />
+            <KpiCard icono="👤" label="Clientes nuevos" valor={totalClientes} color="#1a6470" />
+            <KpiCard icono="✅" label="Seguimientos"    valor={totalSegui}    color="#3498db" />
           </View>
 
           {/* Resumen de estado */}
