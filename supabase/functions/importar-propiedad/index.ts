@@ -923,6 +923,16 @@ async function intentarCapa(
 // Cada capa tiene su propio timeout para que la suma nunca acerque a la
 // función al límite de ejecución de la plataforma.
 async function fetchHtml(url: string): Promise<string> {
+  // EasyBroker bloquea el fetch directo desde datacenter con Cloudflare y SIEMPRE
+  // requiere el unblocker con render. Se va directo para no perder tiempo en
+  // las capas (directo/bot/allorigins) que aquí siempre fallan.
+  let host = ''
+  try { host = new URL(url).hostname } catch { /* url rara */ }
+  if (/(^|\.)easybroker\.com$/i.test(host)) {
+    const viaApi = await fetchViaUnblocker(url)
+    if (viaApi) return viaApi
+  }
+
   const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
   const resultados = await Promise.allSettled([
     intentarCapa(url, BROWSER_HEADERS, 12_000, 1),

@@ -989,6 +989,22 @@ export default function EditarPropiedad() {
       <ScrollView style={[styles.container, { backgroundColor: c.bg }]} keyboardShouldPersistTaps="handled">
         <Text style={styles.screenTitle}>Editar propiedad</Text>
 
+        {/* Anuncio original (de dónde se importó) — link directo, bien visible */}
+        {urlOrigen ? (
+          <TouchableOpacity
+            style={styles.origenBanner}
+            activeOpacity={0.7}
+            onPress={() => { Platform.OS === 'web' ? window.open(urlOrigen, '_blank') : Linking.openURL(urlOrigen) }}
+          >
+            <Text style={{ fontSize: 18 }}>🔗</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.origenBannerLbl}>Anuncio original · de dónde se importó</Text>
+              <Text style={styles.origenBannerLink} numberOfLines={1}>{urlOrigen}</Text>
+            </View>
+            <Text style={styles.origenBannerCta}>Abrir ›</Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Importar desde URL */}
         <View style={[styles.fichaBox, { borderColor: '#c9a84c44', backgroundColor: '#1c1600' }]}>
           <View style={styles.fichaToggle}>
@@ -1617,6 +1633,10 @@ export default function EditarPropiedad() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24 },
   screenTitle: { fontSize: 24, fontWeight: 'bold', color: '#1a6470', marginTop: 16, marginBottom: 8 },
+  origenBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#1a647014', borderWidth: 1, borderColor: '#1a647055', borderRadius: 12, paddingVertical: 11, paddingHorizontal: 12, marginBottom: 10 },
+  origenBannerLbl: { fontSize: 11, fontWeight: '800', color: '#1a6470', marginBottom: 1 },
+  origenBannerLink: { fontSize: 12.5, color: '#1a6470', textDecorationLine: 'underline' },
+  origenBannerCta: { fontSize: 13, fontWeight: '800', color: '#fff', backgroundColor: '#1a6470', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, overflow: 'hidden' },
   label: { fontSize: 14, fontWeight: '600', color: '#1a6470', marginBottom: 6, marginTop: 16 },
   input: {
     borderRadius: 10,
