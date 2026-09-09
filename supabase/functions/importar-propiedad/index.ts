@@ -901,6 +901,17 @@ async function fetchConTimeout(url: string, opts: any, timeoutMs: number): Promi
 // sin responder podía arrastrar todo hasta un timeout silencioso).
 async function fetchHtml(url: string): Promise<string> {
   let huboDesafio = false
+
+  // EasyBroker bloquea el fetch directo desde datacenter con Cloudflare y SIEMPRE
+  // requiere el unblocker con render. Se va directo para no perder ~4s en las
+  // capas (directo/bot/allorigins) que aquí siempre fallan.
+  let host = ''
+  try { host = new URL(url).hostname } catch { /* url rara */ }
+  if (/(^|\.)easybroker\.com$/i.test(host)) {
+    const viaApi = await fetchViaUnblocker(url)
+    if (viaApi) return viaApi
+  }
+
   try {
     const opts: any = { headers: BROWSER_HEADERS }
     if (extraCaClient) opts.client = extraCaClient
