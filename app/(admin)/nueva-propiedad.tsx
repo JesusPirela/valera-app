@@ -214,6 +214,8 @@ export default function NuevaPropiedad() {
   const [mostrarFicha, setMostrarFicha] = useState(true)
   const [fichaMsg, setFichaMsg] = useState('')
   const [urlImport, setUrlImport] = useState('')
+  const [mostrarPegar, setMostrarPegar] = useState(false)  // recuadro para pegar el código del anuncio
+  const [htmlPegado, setHtmlPegado] = useState('')
   const [urlOrigen, setUrlOrigen] = useState('')  // link de donde se importó (se guarda en la propiedad)
   const [importando, setImportando] = useState(false)
   const [importMsg, setImportMsg] = useState('')
@@ -413,23 +415,24 @@ export default function NuevaPropiedad() {
     setImportMsg(`✓ Modelo ${partes.join(' · ')}`)
   }
 
-  async function importarDesdeUrl() {
+  async function importarDesdeUrl(pastedHtml?: string) {
     const url = urlImport.trim()
-    if (!url || !/^https?:\/\//.test(url)) {
+    if (!pastedHtml && (!url || !/^https?:\/\//.test(url))) {
       setImportMsg('⚠ Pega un URL válido (empieza con https://)')
       return
     }
     setImportando(true)
-    setImportMsg('Descargando información…')
+    setImportMsg(pastedHtml ? 'Procesando el código pegado…' : 'Descargando información…')
     setModelosVinte(null)
     setModeloVinteSeleccionado(null)
     setMatrizImport(null)
     try {
       const { data, error } = await supabase.functions.invoke('importar-propiedad', {
-        body: { url },
+        body: pastedHtml ? { url, html: pastedHtml } : { url },
       })
       if (error) throw error
       if ((data as any)?.error) throw new Error((data as any).error)
+      setMostrarPegar(false)
 
       setUrlOrigen(url)
       const d = data as any
@@ -467,6 +470,8 @@ export default function NuevaPropiedad() {
       }
     } catch (err: any) {
       setImportMsg('✗ Error: ' + (err.message ?? 'No se pudo importar'))
+      // EasyBroker bloquea el scraping desde servidor: ofrecer pegar el código.
+      if (/easybroker\.com/i.test(url) && !pastedHtml) setMostrarPegar(true)
     } finally {
       setImportando(false)
     }
@@ -932,7 +937,7 @@ export default function NuevaPropiedad() {
             />
             <TouchableOpacity
               style={[styles.btnIA, { marginBottom: 0, paddingHorizontal: 14, opacity: importando ? 0.6 : 1, backgroundColor: '#7a4f00' }]}
-              onPress={importarDesdeUrl}
+              onPress={() => importarDesdeUrl()}
               disabled={importando}
             >
               {importando
@@ -946,6 +951,34 @@ export default function NuevaPropiedad() {
               {importMsg}
             </Text>
           ) : null}
+
+          {/* Fallback confiable para EasyBroker (bloquea el scraping desde servidor):
+              el usuario abre el anuncio en SU navegador, copia el código y lo pega. */}
+          {mostrarPegar && (
+            <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: '#c9a84c33', paddingTop: 10 }}>
+              <Text style={{ fontSize: 12, color: '#c9a84c', fontWeight: '700', marginBottom: 4 }}>
+                EasyBroker bloqueó la lectura automática. Impórtalo así (rápido y seguro):
+              </Text>
+              <Text style={{ fontSize: 11.5, color: '#c9c9c9', lineHeight: 17, marginBottom: 8 }}>
+                1) Abre el anuncio en tu navegador.  2) Presiona <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+U</Text> (ver código fuente).  3) <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+A</Text> y <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+C</Text> (copiar todo).  4) Pégalo aquí:
+              </Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText, minHeight: 70, textAlignVertical: 'top' }]}
+                placeholder="Pega aquí el código del anuncio…"
+                placeholderTextColor={c.placeholder}
+                value={htmlPegado}
+                onChangeText={setHtmlPegado}
+                multiline
+              />
+              <TouchableOpacity
+                style={[styles.btnIA, { marginTop: 8, marginBottom: 0, opacity: (importando || htmlPegado.trim().length < 500) ? 0.5 : 1, backgroundColor: '#1a6470' }]}
+                onPress={() => importarDesdeUrl(htmlPegado)}
+                disabled={importando || htmlPegado.trim().length < 500}
+              >
+                {importando ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnIAText}>Importar del código pegado</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
           {modelosVinte && modelosVinte.length > 1 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
               <View style={{ flexDirection: 'row', gap: 8 }}>

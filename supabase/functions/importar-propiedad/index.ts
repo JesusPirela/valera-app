@@ -860,9 +860,11 @@ async function fetchViaUnblocker(url: string): Promise<string | null> {
     const job = await sub.json()
     const statusUrl = job?.statusUrl
     if (!statusUrl) return null
-    const deadline = Date.now() + 90_000
+    const deadline = Date.now() + 55_000
+    let espera = 3000  // primer chequeo pronto; luego cada 4s
     while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 6000))
+      await new Promise((r) => setTimeout(r, espera))
+      espera = 4000
       let sj: any
       try {
         const st = await fetch(statusUrl)
@@ -1179,14 +1181,23 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { url } = await req.json()
-    if (!url || !/^https?:\/\//.test(url)) throw new Error('URL inválida')
+    const body = await req.json()
+    const url: string = body?.url ?? ''
+    // HTML pegado: cuando un portal bloquea el scraping desde servidor (EasyBroker
+    // con AWS WAF), el usuario abre el anuncio en SU navegador (IP residencial que
+    // sí pasa), copia el código y lo pega. Aquí se parsea directo, sin fetch.
+    const htmlPegado: string | null = (typeof body?.html === 'string' && body.html.length > 500) ? body.html : null
+
+    if (!htmlPegado && (!url || !/^https?:\/\//.test(url))) throw new Error('URL inválida')
 
     // ── EasyBroker nativo (API o error temprano para URLs de agente) ──────────
-    const ebApiResp = await importarEasyBroker(url)
-    if (ebApiResp) return ebApiResp
+    // Solo si NO viene HTML pegado (con HTML pegado se va directo al parser).
+    if (!htmlPegado && url) {
+      const ebApiResp = await importarEasyBroker(url)
+      if (ebApiResp) return ebApiResp
+    }
 
-    const html = await fetchHtml(url)
+    const html = htmlPegado ?? await fetchHtml(url)
 
     // ── Vinte: devuelve todos los modelos del desarrollo ──────────────────────
     const vinteModelos = parseVinteModelos(html, url)
