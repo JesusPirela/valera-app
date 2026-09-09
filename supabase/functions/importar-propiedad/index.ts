@@ -924,13 +924,17 @@ async function intentarCapa(
 // función al límite de ejecución de la plataforma.
 async function fetchHtml(url: string): Promise<string> {
   // EasyBroker bloquea el fetch directo desde datacenter con Cloudflare y SIEMPRE
-  // requiere el unblocker con render. Se va directo para no perder tiempo en
-  // las capas (directo/bot/allorigins) que aquí siempre fallan.
+  // requiere el unblocker con render. Se va directo y, si falla, se corta ahí
+  // mismo — NO caer a las capas de abajo (que aquí siempre fallan igual) ni
+  // reintentar el unblocker de nuevo: sumar ambos intentos (~90s c/u) puede
+  // acercarse a 200s y hacer que la plataforma mate la función a medias,
+  // dando "Failed to send a request" en vez de un error legible.
   let host = ''
   try { host = new URL(url).hostname } catch { /* url rara */ }
   if (/(^|\.)easybroker\.com$/i.test(host)) {
     const viaApi = await fetchViaUnblocker(url)
     if (viaApi) return viaApi
+    throw new Error('No se pudo acceder a este anuncio de EasyBroker (el servicio de desbloqueo no respondió a tiempo o no está configurado). Copia la ficha y pégala manualmente en el campo de descripción.')
   }
 
   const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
