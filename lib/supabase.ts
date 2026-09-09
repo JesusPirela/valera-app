@@ -68,7 +68,15 @@ const TIMEOUT_MS = 30000
 // termina y de que el lock no se queda tomado (ver lockSerial). 12 s es de
 // sobra para un refresh incluso en red móvil lenta.
 const TIMEOUT_AUTH_MS = 12000
+// Las Edge Functions (importar-propiedad, valera-ai, etc.) pueden hacer trabajo
+// pesado del lado del servidor (scraping con reintentos, llamadas a IA) que
+// legítimamente tarda más de 30s. Con el tope general, esas llamadas se
+// abortaban del lado del cliente ANTES de que el servidor alcanzara a
+// responder, mostrando "Failed to send a request to the Edge Function" sin
+// importar cuánto se optimizara el servidor.
+const TIMEOUT_FUNCTIONS_MS = 120000
 function esAuth(url: string): boolean { return url.includes('/auth/v1/') }
+function esFunction(url: string): boolean { return url.includes('/functions/v1/') }
 
 function fetchConTimeout(input: any, init: RequestInit | undefined, ms: number): Promise<Response> {
   const ctrl = new AbortController()
@@ -85,7 +93,8 @@ const fetchConAuth: typeof fetch = async (input, init) => {
   const url = typeof input === 'string' ? input
     : input instanceof URL ? input.href
     : (input as Request).url ?? ''
-  const res = await fetchConTimeout(input as any, init, esAuth(url) ? TIMEOUT_AUTH_MS : TIMEOUT_MS)
+  const ms = esAuth(url) ? TIMEOUT_AUTH_MS : esFunction(url) ? TIMEOUT_FUNCTIONS_MS : TIMEOUT_MS
+  const res = await fetchConTimeout(input as any, init, ms)
   if (res.status !== 401) return res
   if (!url || !url.includes('/rest/v1/')) return res
 
