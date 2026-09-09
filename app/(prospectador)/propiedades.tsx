@@ -54,6 +54,7 @@ import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import MiniMapa from '../../components/MiniMapa'
 import { getDesbloqueadas } from '../../lib/publicarUnlock'
+import { fetchPublicacionesUsuario, type PublicacionesData } from '../../lib/publicaciones'
 
 type Propiedad = {
   id: string
@@ -110,10 +111,7 @@ type PropiedadesData = {
   propiedades: Propiedad[]
 }
 
-type PublicacionesData = {
-  publicacionesMap: Record<string, number>
-  publicacionFechasMap: Record<string, string>
-}
+// El tipo vive junto a la query compartida (lib/publicaciones.ts).
 
 const ZONAS_CONFIG = [
   { key: 'queretaro' as const, label: 'Querétaro', coords: [20.5888, -100.3899] as [number, number], color: '#1976D2' },
@@ -528,21 +526,10 @@ export default function ProspectadorPropiedades() {
       const { data: { session } } = await supabase.auth.getSession()
       const uid = session?.user?.id
       if (!uid) throw new Error('No user')
-      const { data } = await supabase
-        .from('propiedad_publicacion')
-        .select('propiedad_id, veces_publicada, fecha_publicacion')
-        .eq('user_id', uid)
-        .gt('veces_publicada', 0)
-      return {
-        publicacionesMap: Object.fromEntries(
-          (data ?? []).map((r: { propiedad_id: string; veces_publicada: number }) => [r.propiedad_id, r.veces_publicada ?? 0])
-        ),
-        publicacionFechasMap: Object.fromEntries(
-          (data ?? [])
-            .filter((r: { fecha_publicacion: string | null }) => r.fecha_publicacion)
-            .map((r: { propiedad_id: string; fecha_publicacion: string }) => [r.propiedad_id, r.fecha_publicacion])
-        ),
-      }
+      // Implementación compartida con detalle-propiedad.tsx (misma queryKey →
+      // misma caché). Ver lib/publicaciones.ts: pagina el límite de 1000 filas
+      // de PostgREST, que era la causa del bug de "Sin publicar".
+      return fetchPublicacionesUsuario(uid)
     },
     enabled: !!queryData?.userId,
     staleTime: 0,
@@ -559,16 +546,26 @@ export default function ProspectadorPropiedades() {
       const { data: { session } } = await supabase.auth.getSession()
       const uid = session?.user?.id
       if (!uid) return new Map()
-      const { data } = await supabase
-        .from('property_views')
-        .select('propiedad_id, view_count, last_viewed_at')
-        .eq('user_id', uid)
+      // Paginado por el mismo límite de 1000 filas de PostgREST: un usuario
+      // muy activo supera esa cifra y, truncado, el orden personalizado
+      // trataba como "nunca vistas" las propiedades fuera de la primera página.
+      const PAGE = 1000
       const map = new Map<string, { count: number; lastViewed: number }>()
-      for (const r of data ?? []) {
-        map.set(r.propiedad_id, {
-          count: r.view_count,
-          lastViewed: new Date(r.last_viewed_at).getTime(),
-        })
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('property_views')
+          .select('propiedad_id, view_count, last_viewed_at')
+          .eq('user_id', uid)
+          .order('propiedad_id', { ascending: true })
+          .range(from, from + PAGE - 1)
+        if (error) throw error
+        for (const r of data ?? []) {
+          map.set(r.propiedad_id, {
+            count: r.view_count,
+            lastViewed: new Date(r.last_viewed_at).getTime(),
+          })
+        }
+        if (!data || data.length < PAGE) break
       }
       return map
     },

@@ -41,6 +41,7 @@ import { conReintentoData, generarIdemKey, conTimeout } from '../../lib/redInten
 import PropMapa from '../../components/PropMapa'
 import { actualizarMisionesPorCategoria, registrarAccion } from '../../lib/gamification'
 import { marcarDesbloqueada, estaDesbloqueada } from '../../lib/publicarUnlock'
+import { fetchPublicacionesUsuario, type PublicacionesData } from '../../lib/publicaciones'
 
 
 type Propiedad = {
@@ -427,17 +428,14 @@ export default function DetallePropiedad() {
   // (el listado): la query 'publicaciones-usuario'. Así el conteo es DERIVADO (una
   // sola fuente de verdad) y ya no puede quedar "pegado" el estado de la propiedad
   // anterior (bug del "ya publicada 1/10"). Antes usaba estado local + cargarPublicacion.
-  const { data: pubData } = useQuery<{ publicacionesMap: Record<string, number>; publicacionFechasMap: Record<string, string> }>({
+  // Misma queryKey que el listado → MISMA caché. Por eso la implementación es
+  // compartida (lib/publicaciones.ts): cuando esta pantalla tenía su propia
+  // versión sin paginar, al abrir una propiedad sobrescribía en caché el mapa
+  // completo del listado con solo las primeras 1000 filas y reaparecía el bug
+  // de "Sin publicar" en usuarios con más de 1000 publicaciones.
+  const { data: pubData } = useQuery<PublicacionesData>({
     queryKey: ['publicaciones-usuario', uid],
-    queryFn: async () => {
-      const { data } = await supabase.from('propiedad_publicacion')
-        .select('propiedad_id, veces_publicada, fecha_publicacion')
-        .eq('user_id', uid!).gt('veces_publicada', 0)
-      return {
-        publicacionesMap: Object.fromEntries((data ?? []).map((r: any) => [r.propiedad_id, r.veces_publicada ?? 0])),
-        publicacionFechasMap: Object.fromEntries((data ?? []).filter((r: any) => r.fecha_publicacion).map((r: any) => [r.propiedad_id, r.fecha_publicacion])),
-      }
-    },
+    queryFn: () => fetchPublicacionesUsuario(uid!),
     enabled: !!uid,
     staleTime: 0, gcTime: 0, networkMode: 'offlineFirst', refetchOnWindowFocus: false,
   })
@@ -535,7 +533,7 @@ export default function DetallePropiedad() {
       // Actualización optimista exacta: igual que publicarPropiedad() en propiedades.tsx.
       // Solo toca ESTA propiedad en el mapa; no depende de que el refetch llegue
       // con la sesión en buen estado (en iOS el refresh de token puede solaparse).
-      queryClient.setQueryData<{ publicacionesMap: Record<string, number>; publicacionFechasMap: Record<string, string> }>(
+      queryClient.setQueryData<PublicacionesData>(
         ['publicaciones-usuario', user.id],
         (old) => ({
           publicacionesMap: { ...(old?.publicacionesMap ?? {}), [id as string]: veces },
@@ -552,7 +550,7 @@ export default function DetallePropiedad() {
       await enqueuePublicacion(id as string, idemKey, user.id).catch(() => {})
       // Optimista: se refleja ya en la MISMA query que el listado; la cola lo hace
       // real al reconectar.
-      queryClient.setQueryData<{ publicacionesMap: Record<string, number>; publicacionFechasMap: Record<string, string> }>(
+      queryClient.setQueryData<PublicacionesData>(
         ['publicaciones-usuario', user.id],
         (old) => ({
           publicacionesMap: { ...(old?.publicacionesMap ?? {}), [id as string]: vecesPublicada + 1 },
@@ -684,7 +682,7 @@ export default function DetallePropiedad() {
       const { data: { session: sesActual } } = await supabase.auth.getSession()
       const uidActual = sesActual?.user?.id
       if (uidActual) {
-        queryClient.setQueryData<{ publicacionesMap: Record<string, number>; publicacionFechasMap: Record<string, string> }>(
+        queryClient.setQueryData<PublicacionesData>(
           ['publicaciones-usuario', uidActual],
           (old) => {
             const mapa = { ...(old?.publicacionesMap ?? {}) }

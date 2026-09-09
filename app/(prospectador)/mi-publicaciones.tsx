@@ -41,14 +41,26 @@ export default function MisPublicaciones() {
     setLoading(true)
     const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
-    const { data } = await supabase
-      .from('propiedad_publicacion')
-      .select('propiedad_id, veces_publicada, fecha_publicacion, propiedades(codigo, titulo, precio, tipo, operacion, estado, propiedad_imagenes(url, thumb_url, orden))')
-      .eq('user_id', user.id)
-      .gt('veces_publicada', 0)
-      .order('fecha_publicacion', { ascending: false })
+    // Paginado por el límite de 1000 filas de PostgREST: sin esto, un usuario
+    // con más de 1000 propiedades publicadas solo veía aquí las primeras 1000
+    // (y el total de veces publicadas salía incompleto).
+    const PAGE = 1000
+    let filas: any[] = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('propiedad_publicacion')
+        .select('propiedad_id, veces_publicada, fecha_publicacion, propiedades(codigo, titulo, precio, tipo, operacion, estado, propiedad_imagenes(url, thumb_url, orden))')
+        .eq('user_id', user.id)
+        .gt('veces_publicada', 0)
+        .order('fecha_publicacion', { ascending: false })
+        .order('propiedad_id', { ascending: true })  // desempate estable entre páginas
+        .range(from, from + PAGE - 1)
+      if (error) break
+      filas = filas.concat(data ?? [])
+      if (!data || data.length < PAGE) break
+    }
 
-    const lista = ((data ?? []) as any[]).map(r => ({
+    const lista = filas.map(r => ({
       ...r,
       propiedades: Array.isArray(r.propiedades) ? r.propiedades[0] ?? null : r.propiedades,
     })) as Pub[]

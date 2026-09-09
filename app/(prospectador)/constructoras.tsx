@@ -144,21 +144,30 @@ export default function Constructoras() {
     setLoading(false)
 
     // Cargar historial de vistas del usuario para el orden personalizado.
+    // Paginado por el límite de 1000 filas de PostgREST: truncado, un usuario
+    // muy activo tenía como "nunca vistas" las propiedades fuera de la 1ª página.
     if (userId) {
-      supabase
-        .from('property_views')
-        .select('propiedad_id, view_count, last_viewed_at')
-        .eq('user_id', userId)
-        .then(({ data: vData }) => {
-          const m = new Map<string, { count: number; lastViewed: number }>()
+      void (async () => {
+        const PAGE = 1000
+        const m = new Map<string, { count: number; lastViewed: number }>()
+        for (let from = 0; ; from += PAGE) {
+          const { data: vData, error } = await supabase
+            .from('property_views')
+            .select('propiedad_id, view_count, last_viewed_at')
+            .eq('user_id', userId)
+            .order('propiedad_id', { ascending: true })
+            .range(from, from + PAGE - 1)
+          if (error) break
           for (const r of vData ?? []) {
             m.set(r.propiedad_id, {
               count: r.view_count,
               lastViewed: new Date(r.last_viewed_at).getTime(),
             })
           }
-          setViewsMap(m)
-        })
+          if (!vData || vData.length < PAGE) break
+        }
+        setViewsMap(m)
+      })()
     }
   }
 
