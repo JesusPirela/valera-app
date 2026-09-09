@@ -1060,16 +1060,20 @@ function extractNocNokProperty(html: string): Record<string, unknown> | null {
 
 // ── EasyBroker: construir respuesta a partir de un objeto de la API ──────────
 function buildEbApiResponse(p: any, corsH: Record<string, string>): Response {
-  const opObj = Array.isArray(p.operations) ? p.operations.find((o: any) => o.active) : null
+  // La API de EB NO marca la operación con `active`: se toma la primera (o la que
+  // traiga monto). type 'rental' → renta.
+  const ops: any[] = Array.isArray(p.operations) ? p.operations : []
+  const opObj = ops.find((o: any) => o?.amount) ?? ops[0] ?? null
   const opType = opObj?.type === 'rental' ? 'renta' : 'venta'
   const precio = opObj?.amount ? String(Math.round(Number(opObj.amount))) : ''
   const tipo = mapTipo(String(p.property_type ?? ''))
   const loc = p.location ?? {}
-  const direccion = [loc.neighborhood, loc.city, loc.state].filter(Boolean).join(', ')
+  // location trae `name` ("Colonia, Municipio, Estado") y `street`, NO city/state.
+  const direccion = String(loc.name ?? loc.street ?? '').trim()
   let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
-  const locStr = [loc.city ?? '', loc.state ?? ''].join(' ').toLowerCase()
-  if (/quer[eé]taro/.test(locStr))                zona = 'queretaro'
-  else if (/monterrey|nuevo\s*le[oó]n/.test(locStr)) zona = 'monterrey'
+  const locStr = `${loc.name ?? ''} ${loc.street ?? ''}`.toLowerCase()
+  if (/quer[eé]taro|\bqro\b/.test(locStr))          zona = 'queretaro'
+  else if (/monterrey|nuevo\s*le[oó]n|\bmty\b/.test(locStr)) zona = 'monterrey'
   else if (/puebla/.test(locStr))                 zona = 'puebla'
   const imagenes: string[] = (p.images ?? [])
     .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
@@ -1087,33 +1091,53 @@ function buildEbApiResponse(p: any, corsH: Record<string, string>): Response {
   }), { headers: corsH })
 }
 
-// Busca una propiedad en el catálogo de EasyBroker comparando el slug de la URL
-// contra el slug del public_url de cada propiedad. Pagina hasta 20 páginas (1000 props).
+// Busca una propiedad en el catálogo de EasyBroker por el slug de la URL. La API
+// de EB en la LISTA ya NO devuelve public_url, así que se compara contra el
+// TÍTULO de cada propiedad (que sí viene y del que se genera el slug). Con eso el
+// catálogo propio (~5 páginas para 199 props, <1s) vuelve a resolverse por API
+// rápido, sin caer al scraping. Devuelve la propiedad COMPLETA (fetch por id) para
+// que buildEbApiResponse tenga todos los campos (imágenes, descripción, etc.).
+const _norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 async function buscarEbPorSlug(apiKey: string, urlSlug: string): Promise<any | null> {
-  const slugWords = new Set(urlSlug.toLowerCase().split('-').filter(w => w.length > 3))
+  const slugWords = new Set(_norm(urlSlug).split('-').filter(w => w.length > 3))
+  if (slugWords.size < 3) return null
+  const H = { accept: 'application/json', 'X-Authorization': apiKey }
   for (let page = 1; page <= 20; page++) {
     let j: any
     try {
-      const r = await fetch(`https://api.easybroker.com/v1/properties?limit=50&page=${page}`, {
-        headers: { accept: 'application/json', 'X-Authorization': apiKey },
-      })
+      const r = await fetch(`https://api.easybroker.com/v1/properties?limit=50&page=${page}`, { headers: H })
       if (!r.ok) break
       j = await r.json()
     } catch { break }
     const props: any[] = j?.content ?? []
     if (!props.length) break
+    let mejor: any = null; let mejorComun = 0
     for (const p of props) {
-      // Comparar contra el slug del public_url de la propiedad
+      // 1) por public_url (por si algún día lo devuelve). 2) por TÍTULO.
       const propSlug = (p.public_url ?? '').split('/').filter(Boolean).pop()?.toLowerCase() ?? ''
-      if (propSlug && propSlug === urlSlug) return p
-      // Coincidencia por palabras comunes (mínimo 4 palabras de >3 letras en común)
-      const propWords = new Set(propSlug.split('-').filter((w: string) => w.length > 3))
-      const common = [...slugWords].filter(w => propWords.has(w)).length
-      if (common >= 4) return p
+      if (propSlug && propSlug === urlSlug) return await ebPropCompleta(apiKey, p)
+      const titleWords = new Set(_norm(p.title ?? '').split(/[^a-z0-9]+/).filter((w: string) => w.length > 3))
+      const common = [...slugWords].filter(w => titleWords.has(w)).length
+      if (common > mejorComun) { mejorComun = common; mejor = p }
+    }
+    // Match fuerte: comparten ≥4 palabras (o ≥60% de las del slug) con el título.
+    if (mejor && (mejorComun >= 4 || mejorComun >= Math.ceil(slugWords.size * 0.6))) {
+      return await ebPropCompleta(apiKey, mejor)
     }
     if (props.length < 50) break // Última página
   }
   return null
+}
+// La lista trae campos resumidos; para el detalle completo (imágenes, descripción)
+// se pide la propiedad por su public_id.
+async function ebPropCompleta(apiKey: string, p: any): Promise<any> {
+  try {
+    const r = await fetch(`https://api.easybroker.com/v1/properties/${p.public_id}`, {
+      headers: { accept: 'application/json', 'X-Authorization': apiKey },
+    })
+    if (r.ok) return await r.json()
+  } catch { /* usa el resumen */ }
+  return p
 }
 
 // ── EasyBroker: importar desde URL de easybroker.com ───────────────────────
@@ -1138,20 +1162,11 @@ async function importarEasyBroker(url: string): Promise<Response | null> {
 
   const segments = parsed.pathname.split('/').filter(Boolean)
 
-  // /agent/mls_properties/... es SIEMPRE una propiedad de OTRO agente
-  // compartida por la red MLS: nunca va a estar en el catálogo propio.
-  // Buscarla ahí (hasta 20 páginas secuenciales a la API) solo tarda y
-  // termina en timeout — vamos directo al scraping genérico de HTML.
-  if (segments.includes('mls_properties')) return null
-
-  // URL de agente → buscar en el catálogo por slug
+  // URL de agente/MLS/listing → buscar por TÍTULO en el catálogo propio (rápido,
+  // <1s). Si está (propiedad propia) se devuelve al instante por API. Si NO está
+  // (propiedad de otro agente en la red MLS) se cae al scraping genérico de HTML.
   const urlSlug = segments[segments.length - 1] ?? ''
   if (urlSlug.length < 10) return null // No parece un slug de propiedad
-
-  // Sin API key, o si la propiedad no está en el catálogo propio: no
-  // cortamos aquí, dejamos caer al scraping genérico de HTML más abajo, que
-  // tiene un parser dedicado para el JSON embebido que EasyBroker pone en
-  // toda página pública de propiedad.
   if (!apiKey) return null
 
   const match = await buscarEbPorSlug(apiKey, urlSlug)
