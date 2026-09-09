@@ -952,12 +952,20 @@ export default function NuevaPropiedad() {
             </Text>
           ) : null}
 
+          {/* Alternativa SIEMPRE disponible: importar pegando el código del anuncio
+              (útil cuando el portal bloquea la lectura por URL, como EasyBroker). */}
+          <TouchableOpacity onPress={() => setMostrarPegar(v => !v)} style={{ marginTop: 8 }}>
+            <Text style={{ fontSize: 12, color: '#c9a84c', fontWeight: '700' }}>
+              {mostrarPegar ? '▲ Ocultar' : '📋 ¿El link no jala? Importar pegando el código del anuncio'}
+            </Text>
+          </TouchableOpacity>
+
           {/* Fallback confiable para EasyBroker (bloquea el scraping desde servidor):
               el usuario abre el anuncio en SU navegador, copia el código y lo pega. */}
           {mostrarPegar && (
             <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: '#c9a84c33', paddingTop: 10 }}>
               <Text style={{ fontSize: 12, color: '#c9a84c', fontWeight: '700', marginBottom: 4 }}>
-                EasyBroker bloqueó la lectura automática. Impórtalo así (rápido y seguro):
+                Importar pegando el código (rápido y seguro, funciona con cualquier anuncio):
               </Text>
               <Text style={{ fontSize: 11.5, color: '#c9c9c9', lineHeight: 17, marginBottom: 8 }}>
                 1) Abre el anuncio en tu navegador.  2) Presiona <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+U</Text> (ver código fuente).  3) <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+A</Text> y <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+C</Text> (copiar todo).  4) Pégalo aquí:
