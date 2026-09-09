@@ -891,51 +891,52 @@ async function fetchConTimeout(url: string, opts: any, timeoutMs: number): Promi
   }
 }
 
+// Intenta una capa de descarga y normaliza el resultado: null si no sirvió,
+// { html, desafio } si sí (desafio=true cuando lo que llegó es una página
+// anti-bot, para distinguir "bloqueado" de "no se pudo conectar").
+async function intentarCapa(
+  url: string, headers: Record<string, string>, timeoutMs: number, minLen: number,
+): Promise<{ html: string; desafio: boolean } | null> {
+  try {
+    const opts: any = { headers }
+    if (extraCaClient) opts.client = extraCaClient
+    const res = await fetchConTimeout(url, opts, timeoutMs)
+    if (!res.ok) return null
+    const t = await res.text()
+    if (!t || t.length < minLen) return null
+    if (esDesafioBot(t)) return { html: '', desafio: true }
+    return { html: t, desafio: false }
+  } catch (_) {
+    return null
+  }
+}
+
 // Descarga el HTML. Estrategia en capas:
 //  1) fetch directo (con CA extra para portales con cadena TLS incompleta).
+//  1b) reintento con UA de Googlebot: portales tras AWS WAF (pincali) o
+//      firewalls que sólo filtran por UA sirven el HTML completo a buscadores.
 //  2) proxy de lectura simple (allorigins) para sitios sin anti-bot fuerte.
 //  3) unblocker con render (ScraperAPI) para Cloudflare/anti-bot — requiere key.
-// En cada capa se descarta la página-desafío para no pasar contenido falso.
+// Las capas 1, 1b y 2 son intentos independientes contra la misma página, así
+// que se lanzan EN PARALELO (antes eran secuenciales: si la 1 tardaba en fallar,
+// la 1b y la 2 ni siquiera habían empezado). Se usa la primera que sirva.
 // Cada capa tiene su propio timeout para que la suma nunca acerque a la
-// función al límite de ejecución de la plataforma (antes una capa colgada
-// sin responder podía arrastrar todo hasta un timeout silencioso).
+// función al límite de ejecución de la plataforma.
 async function fetchHtml(url: string): Promise<string> {
+  const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+  const resultados = await Promise.allSettled([
+    intentarCapa(url, BROWSER_HEADERS, 12_000, 1),
+    intentarCapa(url, BOT_HEADERS, 12_000, 500),
+    intentarCapa(proxy, BROWSER_HEADERS, 15_000, 200),
+  ])
+
   let huboDesafio = false
-  try {
-    const opts: any = { headers: BROWSER_HEADERS }
-    if (extraCaClient) opts.client = extraCaClient
-    const res = await fetchConTimeout(url, opts, 12_000)
-    if (res.ok) {
-      const t = await res.text()
-      if (!esDesafioBot(t)) return t
-      huboDesafio = true
+  for (const r of resultados) {
+    if (r.status === 'fulfilled' && r.value) {
+      if (r.value.desafio) huboDesafio = true
+      else return r.value.html
     }
-  } catch (_) {
-    // Error de red/TLS/timeout: caer a las siguientes capas.
   }
-
-  // Capa 1b: reintento con UA de Googlebot. Portales tras AWS WAF (pincali) o
-  // firewalls que sólo filtran por UA sirven el HTML completo a los buscadores.
-  try {
-    const opts: any = { headers: BOT_HEADERS }
-    if (extraCaClient) opts.client = extraCaClient
-    const res = await fetchConTimeout(url, opts, 12_000)
-    if (res.ok) {
-      const t = await res.text()
-      if (t && t.length > 500 && !esDesafioBot(t)) return t
-      if (esDesafioBot(t)) huboDesafio = true
-    }
-  } catch (_) { /* el UA de bot tampoco pasó */ }
-
-  try {
-    const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
-    const res2 = await fetchConTimeout(proxy, { headers: BROWSER_HEADERS }, 15_000)
-    if (res2.ok) {
-      const t = await res2.text()
-      if (t && t.length > 200 && !esDesafioBot(t)) return t
-      if (esDesafioBot(t)) huboDesafio = true
-    }
-  } catch (_) { /* el proxy también falló */ }
 
   // Última capa: unblocker con render (inmuebles24 y otros con Cloudflare).
   const viaApi = await fetchViaUnblocker(url)
