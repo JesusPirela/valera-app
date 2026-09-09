@@ -1451,6 +1451,14 @@ export default function ProspectadorPropiedades() {
     </View>
   )
 
+  // Mientras "Sin publicar" está activo y pubData todavía no llegó (p.ej.
+  // justo al abrir la app: la lista de propiedades viene de caché en disco y
+  // aparece al instante, pero las publicaciones del usuario SIEMPRE se piden
+  // frescas por red — ver el comentario en el useQuery de pubData), NO hay
+  // que mostrar la lista sin filtrar — eso era lo que hacía ver propiedades
+  // ya publicadas bajo "Sin publicar" justo al abrir la app o con red lenta.
+  const esperandoPub = filtroPublicadas === 'sin_publicar' && pubData == null
+
   return (
     <View style={{ flex: 1, backgroundColor: primaryColor }}>
       <OfflineBanner />
@@ -1524,9 +1532,9 @@ export default function ProspectadorPropiedades() {
 
         {/* Filtros visibles encima del estado de carga / mapa; en la lista y en
             el estado vacío van DENTRO de un scroll para poder bajar y ajustarlos */}
-        {(isLoading || vistaZonas) && filtrosHeader}
+        {(isLoading || esperandoPub || vistaZonas) && filtrosHeader}
 
-        {isLoading ? (
+        {isLoading || esperandoPub ? (
           <SkeletonListaPropiedades n={4} />
         ) : propiedadesFiltradas.length === 0 ? (
           // Antes esto era un View sin scroll: al dejar 0 resultados (ej. "sin
