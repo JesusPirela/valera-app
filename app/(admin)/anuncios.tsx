@@ -26,6 +26,16 @@ const PRIORIDADES: { id: Prioridad; label: string; desc: string; color: string; 
   { id: 'critica', label: 'Crítica', desc: 'Popup insistente hasta que lo vea', color: '#C62828', emoji: '🚨' },
 ]
 
+// El picker da "2026-09-12T17:00"; lo mostramos y guardamos en español legible.
+function formatoEventoEs(valor: string): string {
+  const d = new Date(valor)
+  if (isNaN(d.getTime())) return valor
+  const s = d.toLocaleString('es-MX', {
+    weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit', hour12: true,
+  })
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
 type Usuario = { id: string; nombre: string | null; role: string; avatar_url: string | null }
 
 type AnuncioRow = {
@@ -113,7 +123,7 @@ export default function AnunciosAdmin() {
       p_cuerpo: cuerpo.trim(),
       p_prioridad: prioridad,
       p_es_reunion: esReunion,
-      p_evento_cuando: esReunion ? eventoCuando.trim() || null : null,
+      p_evento_cuando: esReunion && eventoCuando.trim() ? formatoEventoEs(eventoCuando.trim()) : null,
       p_pide_confirmacion: esReunion && pideConfirmacion,
       p_roles: todos ? [] : Array.from(rolesSel),
       p_user_ids: todos ? [] : Array.from(userIds),
@@ -196,8 +206,19 @@ export default function AnunciosAdmin() {
         {esReunion && (
           <View style={{ marginLeft: 6, marginTop: 4 }}>
             <Text style={[styles.lbl, { color: c.textSub }]}>¿Cuándo?</Text>
-            <TextInput style={inp} value={eventoCuando} onChangeText={setEventoCuando}
-              placeholder="Ej: Viernes 12 de sept, 5:00 PM" placeholderTextColor={c.placeholder} />
+            {Platform.OS === 'web' ? (
+              /* @ts-ignore – input nativo del navegador, igual que en el dashboard de citas */
+              <input type="datetime-local" value={eventoCuando} onChange={(e: any) => setEventoCuando(e.target.value)}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: `1px solid ${c.inputBorder}`,
+                  fontSize: 14.5, color: c.inputText, backgroundColor: c.input, outline: 'none', boxSizing: 'border-box' }} />
+            ) : (
+              <TextInput style={inp} value={eventoCuando} onChangeText={setEventoCuando}
+                placeholder="YYYY-MM-DD HH:MM" placeholderTextColor={c.placeholder}
+                keyboardType="numbers-and-punctuation" />
+            )}
+            {eventoCuando ? (
+              <Text style={{ color: c.textMute, fontSize: 12.5, marginTop: 6 }}>🗓️ {formatoEventoEs(eventoCuando)}</Text>
+            ) : null}
             <TouchableOpacity style={styles.switchRow} onPress={() => setPideConfirmacion(v => !v)}>
               <View style={[styles.check, pideConfirmacion && styles.checkOn]}>{pideConfirmacion && <Text style={styles.checkTxt}>✓</Text>}</View>
               <Text style={[styles.switchLbl, { color: c.text }]}>✋ Pedir confirmación de asistencia</Text>
@@ -224,13 +245,16 @@ export default function AnunciosAdmin() {
           <TouchableOpacity onPress={() => setMostrarUsuarios(v => !v)}
             style={[styles.chip, { borderColor: userIds.size > 0 ? TEAL : c.border, backgroundColor: userIds.size > 0 ? TEAL : 'transparent' }]}>
             <Text style={{ color: userIds.size > 0 ? '#fff' : c.text, fontWeight: '700', fontSize: 13 }}>
-              🙋 Personas{userIds.size > 0 ? ` (${userIds.size})` : ''}
+              🙋 Personas específicas{userIds.size > 0 ? ` (${userIds.size})` : ''}
             </Text>
           </TouchableOpacity>
         </View>
 
         {mostrarUsuarios && (
           <View style={[styles.userBox, { borderColor: c.border }]}>
+            <Text style={{ color: c.textMute, fontSize: 12, marginBottom: 8 }}>
+              Elige una o más personas por nombre (útil cuando el anuncio no es para un grupo entero).
+            </Text>
             <TextInput style={inp} value={buscarUsuario} onChangeText={setBuscarUsuario}
               placeholder="Buscar por nombre…" placeholderTextColor={c.placeholder} />
             <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
