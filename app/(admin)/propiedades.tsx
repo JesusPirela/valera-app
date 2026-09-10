@@ -76,6 +76,7 @@ const NAV_ITEMS = [
   { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32', grupo: 'Gestión' },
   { label: 'Citas de venta', icon: '📋', route: '/(admin)/citas-venta', color: '#00695C', grupo: 'Gestión' },
   { label: 'Cierres', icon: '🤝', route: '/(admin)/cierres', color: '#1a6470', grupo: 'Gestión' },
+  { label: 'Anuncios', icon: '📣', route: '/(admin)/anuncios', color: '#C62828', grupo: 'Gestión' },
   { label: 'Leads campañas', icon: '📢', route: '/(admin)/leads-campanias', color: '#1565C0', grupo: 'Gestión' },
   { label: 'Donaciones', icon: '🤝', route: '/(admin)/donaciones', color: '#0f6b52', grupo: 'Gestión' },
   { label: 'Proyectos', icon: '💼', route: '/(admin)/proyectos', color: '#c9a84c', grupo: 'Gestión' },
@@ -223,6 +224,7 @@ export default function AdminPropiedades() {
     ? NAV_ITEMS.filter((item) => ![
         '/(admin)/citas-venta',
         '/(admin)/cierres',
+        '/(admin)/anuncios',
         '/(admin)/nueva-propiedad',
         '/(admin)/university',
         '/(admin)/tienda-compras',

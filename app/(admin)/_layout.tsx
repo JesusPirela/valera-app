@@ -11,6 +11,7 @@ import { useTheme } from '../../lib/ThemeContext'
 import { useVistaComo } from '../../lib/VistaComo'
 import HeaderBack from '../../components/HeaderBack'
 import RetroPendientesPopup from '../../components/RetroPendientesPopup'
+import AnunciosPopup from '../../components/AnunciosPopup'
 
 const LOGO = require('../../assets/logo-recortado.png')
 
@@ -139,6 +140,7 @@ export default function AdminLayout() {
   return (
     <View style={{ flex: 1 }}>
     <RetroPendientesPopup enabled />
+    <AnunciosPopup />
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: '#1a6470' },
