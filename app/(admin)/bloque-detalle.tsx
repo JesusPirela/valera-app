@@ -359,7 +359,7 @@ const uS = StyleSheet.create({
   addRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
   tipoGroup: { flexDirection: 'row', gap: 6 },
   tipoBtn: { borderWidth: 1, borderColor: '#2a475e', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5 },
-  tipoBtnOn: { backgroundColor: '#5e35b1', borderColor: '#5e35b1' },
+  tipoBtnOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   tipoBtnTxt: { fontSize: 11, fontWeight: '700', color: '#7f95a8' },
   tipoBtnTxtOn: { color: '#fff' },
   addBtn: { backgroundColor: '#1a6470', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', minWidth: 84 },
