@@ -318,6 +318,8 @@ export default function ProspectadorLayout() {
         options={{
           title: 'Misiones',
           tabBarIcon: tabIcon('flash-outline', 'flash'),
+          // Los asesores no usan Misiones: se les oculta la pestaña.
+          href: esAsesor ? null : undefined,
         }}
       />
       <Tabs.Screen
@@ -375,6 +377,7 @@ export default function ProspectadorLayout() {
       <Tabs.Screen name="mapa"                  options={{ href: null, title: 'Mapa de lonas',    headerLeft: () => <HeaderBack to="/(prospectador)/propiedades" /> }} />
       <Tabs.Screen name="historial-publicaciones" options={{ href: null, title: 'Historial publicaciones', headerLeft: () => <HeaderBack to="/(prospectador)/propiedades" /> }} />
       <Tabs.Screen name="mis-retros"            options={{ href: null, title: 'Mis citas por responder', headerLeft: () => <HeaderBack to="/(prospectador)/propiedades" /> }} />
+      <Tabs.Screen name="asesor-citas"          options={{ href: null, title: 'Mis citas', headerLeft: () => <HeaderBack to="/(prospectador)/asesor" /> }} />
       <Tabs.Screen name="cliente-form"       options={{ href: null, title: 'Cliente', headerLeft: () => <ClienteFormBack /> }} />
       <Tabs.Screen name="detalle-cliente"    options={{ href: null, title: 'Cliente', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
       <Tabs.Screen name="colecciones"        options={{ href: null, title: 'Colecciones', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />

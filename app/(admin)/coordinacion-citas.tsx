@@ -40,6 +40,8 @@ type Cita = {
   fecha_cita: string | null
   notas: string | null
   razon_cancelacion: string | null
+  pendiente_aprobacion?: boolean
+  creada_por?: string | null
   created_at: string
   updated_at: string
   clientes: { nombre: string; telefono: string; tipo_operacion: string | null; estado: string }
@@ -1453,9 +1455,30 @@ export default function CoordinacionCitas() {
     setCitaEditando(null)
   }
 
+  // Aprobar una cita que agregó un asesor: queda como cita oficial.
+  async function aprobarCita(cita: Cita) {
+    setCitas(prev => prev.map(c => c.id === cita.id ? { ...c, pendiente_aprobacion: false } : c))
+    const { error } = await supabase.from('citas_coordinacion').update({ pendiente_aprobacion: false }).eq('id', cita.id)
+    if (error) { alerta(error.message); cargar() }
+  }
+  // Rechazar: se elimina la cita propuesta por el asesor.
+  function rechazarCita(cita: Cita) {
+    const msg = `¿Rechazar la cita de "${cita.clientes.nombre}" que propuso el asesor? Se eliminará.`
+    const go = async () => {
+      setCitas(prev => prev.filter(c => c.id !== cita.id))
+      await supabase.from('citas_coordinacion').delete().eq('id', cita.id)
+    }
+    if (Platform.OS === 'web') { if (window.confirm(msg)) go() }
+    else Alert.alert('Rechazar cita', msg, [{ text: 'Cancelar', style: 'cancel' }, { text: 'Rechazar', style: 'destructive', onPress: go }])
+  }
+  const pendientesAprob = citas.filter(c => c.pendiente_aprobacion)
+
   // ── Filtros + conteos (todos en un solo useMemo para evitar 5 recálculos) ──
   const { citasFiltradas, conteos, pcts, urgentes, citasVenta, citasRenta, citasHoyManana, kpiActivas, kpiRealizadasHoy, kpiConversion, kpiCanceladasMes } = useMemo(() => {
     const filtradas = citas.filter(c => {
+      // Las propuestas por asesores sin aprobar solo salen en el banner de arriba,
+      // no en el tablero (para el asesor sí se muestran en su propia pantalla).
+      if (c.pendiente_aprobacion && miRole !== 'asesor') return false
       if (filtroAdmin) {
         if (filtroAdmin === 'sin_asignar' && c.coordinado_por) return false
         if (filtroAdmin !== 'sin_asignar' && c.coordinado_por !== filtroAdmin) return false
@@ -1546,7 +1569,7 @@ export default function CoordinacionCitas() {
         return filtradas.filter(c => c.coordinado_por && c.estado === 'cancelada' && new Date(c.updated_at) >= ini).length
       })(),
     }
-  }, [citas, filtroAdmin, filtroOperacion, busqueda, filtroFecha, fechaDesde, fechaHasta])
+  }, [citas, filtroAdmin, filtroOperacion, busqueda, filtroFecha, fechaDesde, fechaHasta, miRole])
 
   // El rol "asesor" usa una vista simplificada (solo etapas posteriores al
   // cierre, separadas en dos tableros Venta/Renta) — admin sigue viendo el
@@ -1591,6 +1614,27 @@ export default function CoordinacionCitas() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* ── Citas propuestas por asesores, pendientes de aprobación ── */}
+      {!vistaAsesor && pendientesAprob.length > 0 && (
+        <View style={ap.box}>
+          <Text style={ap.titulo}>⏳ {pendientesAprob.length} cita{pendientesAprob.length !== 1 ? 's' : ''} por aprobar (propuestas por asesores)</Text>
+          {pendientesAprob.map(cita => (
+            <View key={cita.id} style={ap.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={ap.cli} numberOfLines={1}>{cita.clientes?.nombre || 'Cliente'}</Text>
+                <Text style={ap.meta} numberOfLines={1}>
+                  {cita.asesor?.nombre ? `👤 ${cita.asesor.nombre}` : ''}
+                  {cita.fecha_cita ? `  ·  📅 ${new Date(cita.fecha_cita).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
+                  {cita.propiedad?.titulo || cita.propiedad_externa ? `  ·  🏠 ${cita.propiedad?.titulo || cita.propiedad_externa}` : ''}
+                </Text>
+              </View>
+              <TouchableOpacity style={ap.aprobar} onPress={() => aprobarCita(cita)}><Text style={ap.aprobarTxt}>✓ Aprobar</Text></TouchableOpacity>
+              <TouchableOpacity style={ap.rechazar} onPress={() => rechazarCita(cita)}><Text style={ap.rechazarTxt}>✕</Text></TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* ── Filtro de fechas ── */}
       <View style={ff.wrap}>
@@ -2171,6 +2215,19 @@ const ff = StyleSheet.create({
   inputs:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
   inputDate:     { flex: 1, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#1e293b' },
   inputSep:      { fontSize: 14, color: '#94a3b8', fontWeight: '700' },
+})
+
+// ─── Banner de citas por aprobar (propuestas por asesores) ───────────────────
+const ap = StyleSheet.create({
+  box:        { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#c9a84c', borderRadius: 12, margin: 10, padding: 12 },
+  titulo:     { fontSize: 13.5, fontWeight: '900', color: '#92400e', marginBottom: 8 },
+  row:        { flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#c9a84c55', paddingVertical: 8 },
+  cli:        { fontSize: 14, fontWeight: '800', color: '#1e293b' },
+  meta:       { fontSize: 11.5, color: '#64748b', marginTop: 1 },
+  aprobar:    { backgroundColor: '#16a34a', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8 },
+  aprobarTxt: { color: '#fff', fontWeight: '800', fontSize: 12.5 },
+  rechazar:   { backgroundColor: '#fee2e2', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8 },
+  rechazarTxt:{ color: '#c0392b', fontWeight: '900', fontSize: 13 },
 })
 
 // ─── KPI resumen ──────────────────────────────────────────────────────────────
