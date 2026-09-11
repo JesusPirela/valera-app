@@ -565,7 +565,19 @@ export default function AdminCRM() {
                       <Text style={styles.secSub}>{sec.data.length} mostrando · {totalSec} total</Text>
                     </View>
                   </View>
-                  <Ionicons name={colapsada ? 'chevron-forward' : 'chevron-down'} size={16} color="#c0cdd0" />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {sec.responsableId !== 'sin_asignar' && (
+                      <TouchableOpacity
+                        style={styles.verCrmBtn}
+                        onPress={() => router.push(`/(prospectador)/crm?verUid=${sec.responsableId}`)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="eye-outline" size={14} color="#1a6470" />
+                        <Text style={styles.verCrmBtnTxt}>Ver su CRM</Text>
+                      </TouchableOpacity>
+                    )}
+                    <Ionicons name={colapsada ? 'chevron-forward' : 'chevron-down'} size={16} color="#c0cdd0" />
+                  </View>
                 </TouchableOpacity>
 
                 {/* Cards de clientes */}
@@ -874,6 +886,8 @@ const styles = StyleSheet.create({
     shadowColor: '#1a2e30', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 5, elevation: 2,
   },
   secHeaderPropia: { borderWidth: 1.5, borderColor: '#c9a84c' },
+  verCrmBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#1a6470', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6 },
+  verCrmBtnTxt: { color: '#1a6470', fontWeight: '800', fontSize: 12 },
   secPropiaBadge: { backgroundColor: '#c9a84c', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   secPropiaBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   secHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },

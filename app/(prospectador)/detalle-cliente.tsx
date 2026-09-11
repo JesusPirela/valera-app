@@ -253,7 +253,8 @@ const irStyles = StyleSheet.create({
 // ── Pantalla principal ───────────────────────────────────
 export default function DetalleCliente() {
   const c = useColors()
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, ro } = useLocalSearchParams<{ id: string; ro?: string }>()
+  const soloLectura = ro === '1'  // viendo el cliente de otra persona: no se edita
   const queryClient = useQueryClient()
 
   const { data, isLoading, refetch } = useQuery({
@@ -331,6 +332,7 @@ export default function DetalleCliente() {
   }
 
   async function enviarClienteAChatbot() {
+    if (soloLectura) return
     if (!cliente) return
     setChatbotError(null)
     const presupuestoNum = Number(chatbotPresupuesto)
@@ -383,6 +385,7 @@ export default function DetalleCliente() {
   }
 
   async function agregarInteraccion() {
+    if (soloLectura) return
     if (!textoInteraccion.trim()) { Alert.alert('Requerido', 'Escribe una descripción.'); return }
     setGuardandoInteraccion(true)
     const { data: { user } } = await getUsuarioActual()
@@ -397,6 +400,7 @@ export default function DetalleCliente() {
   }
 
   async function agregarRecordatorio() {
+    if (soloLectura) return
     if (!tituloRec.trim()) { Alert.alert('Requerido', 'El título es obligatorio.'); return }
     if (!fechaRec) { Alert.alert('Requerido', 'Selecciona una fecha y hora.'); return }
     setGuardandoRec(true)
@@ -423,6 +427,7 @@ export default function DetalleCliente() {
   }
 
   async function aplazar15min(recId: string, fechaActual: string) {
+    if (soloLectura) return
     const nueva = new Date(new Date(fechaActual).getTime() + 15 * 60 * 1000)
     const { error } = await supabase.from('recordatorios')
       .update({ fecha_hora: nueva.toISOString() }).eq('id', recId)
@@ -434,6 +439,7 @@ export default function DetalleCliente() {
   }
 
   async function hacerManana(recId: string, fechaActual: string) {
+    if (soloLectura) return
     const base = new Date(fechaActual)
     const manana = new Date()
     manana.setDate(manana.getDate() + 1)
@@ -448,6 +454,7 @@ export default function DetalleCliente() {
   }
 
   async function completarRecordatorio(recId: string) {
+    if (soloLectura) return
     const { error } = await supabase.from('recordatorios').update({ completado: true }).eq('id', recId)
     queryClient.setQueryData(['detalle-cliente', id, 'v2'], (old: typeof data) => {
       if (!old) return old
@@ -461,6 +468,7 @@ export default function DetalleCliente() {
   }
 
   async function registrarSeguimientoRapido() {
+    if (soloLectura) return
     const titulo = tituloSeguimiento.trim() || 'Seguimiento'
     setGuardandoSeguimiento(true)
     try {
@@ -486,6 +494,7 @@ export default function DetalleCliente() {
   }
 
   async function eliminarCliente() {
+    if (soloLectura) return
     const volver = () => router.canGoBack() ? router.back() : router.replace('/(prospectador)/crm')
     const run = async () => {
       // RPC SECURITY DEFINER: borra de verdad y devuelve cuántas filas eliminó.
@@ -523,6 +532,7 @@ export default function DetalleCliente() {
 
   // Donar cliente: abre el menú (al pool con comisión, o a una persona sin comisión).
   async function abrirDonar() {
+    if (soloLectura) return
     setDonarModal(true); setDonarModo('menu'); setBuscaDonar('')
     if (donarPersonas.length === 0) {
       // Solo compañeros ACTIVOS (con actividad en la última semana): así no se
@@ -535,6 +545,7 @@ export default function DetalleCliente() {
   }
 
   async function ejecutarDonar(destinoId: string | null) {
+    if (soloLectura) return
     setDonando(true)
     const { data, error } = await supabase.rpc('donar_cliente', { p_cliente_id: id, p_destino_id: destinoId })
     setDonando(false)
@@ -586,11 +597,15 @@ export default function DetalleCliente() {
   return (
     <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
       <OfflineBanner />
+      {soloLectura && (
+        <View style={styles.roBanner}><Text style={styles.roBannerTxt}>👁 Cliente de otra persona — solo lectura</Text></View>
+      )}
 
       {/* ── Hero ──────────────────────────────────────── */}
       <View style={[styles.hero, { backgroundColor: info.color }]}>
         <View style={styles.heroTopRow}>
           <View />
+          {!soloLectura && (
           <TouchableOpacity
             style={styles.heroEditBtn}
             onPress={() => router.push(`/(prospectador)/cliente-form?id=${id}`)}
@@ -598,6 +613,7 @@ export default function DetalleCliente() {
             <Ionicons name="create-outline" size={16} color="rgba(255,255,255,0.95)" />
             <Text style={styles.heroEditText}>Editar</Text>
           </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.heroBody}>
@@ -1194,6 +1210,8 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 28,
   },
   heroTopRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 16 },
+  roBanner: { backgroundColor: '#1a6470', paddingVertical: 9, paddingHorizontal: 14, alignItems: 'center' },
+  roBannerTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   heroEditBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20,

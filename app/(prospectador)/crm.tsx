@@ -330,12 +330,13 @@ const SORT_LABELS: Record<SortBy, string> = {
 }
 
 type ColoresCard = ReturnType<typeof import('../../lib/ThemeContext').useColors>
-const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onChatbot }: {
+const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onChatbot, soloLectura }: {
   item: Cliente
   c: ColoresCard
   darkMode: boolean
   userRole: string | null
   onChatbot: (item: Cliente) => void
+  soloLectura?: boolean
 }) {
   const info    = estadoInfo(item.estado)
   const rec     = proximoRec(item.recordatorios ?? [])
@@ -345,7 +346,7 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
   return (
     <TouchableOpacity
       style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}
-      onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}`)}
+      onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${item.id}${soloLectura ? '&ro=1' : ''}`)}
       activeOpacity={0.8}
     >
       <View style={[s.cardBar, { backgroundColor: info.color }]} />
@@ -482,8 +483,14 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
 export default function CRM() {
   // ?mios=1 → "Mi CRM": solo los clientes de los que el usuario es responsable.
   // (Para supervisores, que por RLS ven los de todo el equipo.)
-  const { mios } = useLocalSearchParams<{ mios?: string }>()
+  // ?verUid=<id> → ver el CRM de OTRO usuario en SOLO LECTURA (para quien puede
+  // ver el CRM de los demás: admin/supervisor). Muestra tal cual lo ve esa
+  // persona (incluida la pestaña de campaña) pero sin poder editar nada.
+  const { mios, verUid } = useLocalSearchParams<{ mios?: string; verUid?: string }>()
   const soloMios = mios === '1'
+  const soloLectura = !!verUid
+  const claveCrm = verUid ? `ver:${verUid}` : (soloMios ? 'mios' : 'all')
+  const [nombreVer, setNombreVer] = useState('')
   const c = useColors()
   const { darkMode, primaryColor } = useTheme()
   const queryClient = useQueryClient()
@@ -548,6 +555,7 @@ export default function CRM() {
     setClienteChatbot(null)
   }
   async function enviarClienteAChatbot() {
+    if (soloLectura) return
     if (!clienteChatbot) return
     setChatbotError(null)
     const presupuestoNum = Number(chatbotPresupuesto)
@@ -628,14 +636,16 @@ export default function CRM() {
     // (30/jun/2026) porque algunos usuarios quedaron con una lista VACÍA cacheada
     // que no se reemplazaba, viendo su CRM en blanco pese a tener sus clientes
     // intactos en el servidor. Cambiar la clave fuerza una recarga fresca.
-    queryKey: ['clientes', soloMios ? 'mios' : 'all', 'v5'],
+    queryKey: ['clientes', claveCrm, 'v5'],
     queryFn: async () => {
       let q = supabase
         .from('clientes')
         .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, es_lead_campania, enviado_crm, donado_por_nombre, recordatorios(id, titulo, fecha_hora, completado)')
         .is('eliminado_at', null)
         .order('updated_at', { ascending: false })
-      if (soloMios) {
+      if (verUid) {
+        q = q.eq('responsable_id', verUid)   // CRM de otra persona (solo lectura)
+      } else if (soloMios) {
         const { data: { user } } = await getUsuarioActual()
         if (user) q = q.eq('responsable_id', user.id)
       }
@@ -660,7 +670,7 @@ export default function CRM() {
   // lento sin necesidad. Ahora la lista cacheada aparece al instante y solo se
   // vuelve a pedir si pasaron >5 min.
   useFocusEffect(useCallback(() => {
-    const st = queryClient.getQueryState(['clientes', soloMios ? 'mios' : 'all', 'v5'])
+    const st = queryClient.getQueryState(['clientes', claveCrm, 'v5'])
     // Refetch si pasaron >5 min O si detalle-cliente invalidó el caché
     // (ej. el usuario actualizó proximo_contacto y el banner debe quitarlo).
     const viejo = !st?.dataUpdatedAt || (Date.now() - st.dataUpdatedAt) > 1000 * 60 * 5
@@ -676,6 +686,13 @@ export default function CRM() {
       )
     }
   }, [clientes])
+
+  // Nombre de la persona cuyo CRM se está viendo (para el banner de solo lectura).
+  useEffect(() => {
+    if (!verUid) return
+    supabase.from('profiles').select('nombre').eq('id', verUid).maybeSingle()
+      .then(({ data }) => setNombreVer(data?.nombre ?? ''))
+  }, [verUid])
 
   // ── Leads de campaña ──────────────────────────────────────────
   // Los clientes de origen "Campaña FB" viven en su PROPIA tabla-apartado y se
@@ -931,6 +948,7 @@ export default function CRM() {
   }
 
   async function guardarCelda(id: string, col: string, value: string | null) {
+    if (soloLectura) return  // viendo el CRM de otro: no se edita nada
     const campo = COL_FIELD[col]
     if (!campo) return
     const clientePrev = clientes.find(cl => cl.id === id)
@@ -940,7 +958,7 @@ export default function CRM() {
     // Actualización optimista inmediata en la cache activa (v3).
     // Se incluye updated_at para que necesitaSeguimiento() lo saque del banner.
     const ahoraInline = new Date().toISOString()
-    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v5'], (old) =>
+    queryClient.setQueryData<Cliente[]>(['clientes', claveCrm, 'v5'], (old) =>
       (old ?? []).map(cl => cl.id === id ? { ...cl, [campo]: value, updated_at: ahoraInline } as Cliente : cl)
     )
 
@@ -1144,6 +1162,7 @@ export default function CRM() {
   }
 
   async function abrirImport() {
+    if (soloLectura) return
     const procesar = (texto: string) => {
       const matriz = parsearCSV(texto)
       if (matriz.length < 2) return
@@ -1175,6 +1194,7 @@ export default function CRM() {
   }
 
   async function eliminarClienteTabla(item: Cliente) {
+    if (soloLectura) return
     const confirmar = Platform.OS === 'web'
       ? window.confirm(`¿Eliminar a "${item.nombre}"? Esta acción no se puede deshacer.`)
       : await new Promise<boolean>(resolve =>
@@ -1185,7 +1205,7 @@ export default function CRM() {
         )
     if (!confirmar) return
     // Actualización optimista
-    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v5'], (old) =>
+    queryClient.setQueryData<Cliente[]>(['clientes', claveCrm, 'v5'], (old) =>
       (old ?? []).filter(cl => cl.id !== item.id)
     )
     const { error } = await supabase
@@ -1200,6 +1220,7 @@ export default function CRM() {
   }
 
   async function handleImportConfirm(rows: ImportedRow[]) {
+    if (soloLectura) return
     const { data: { user } } = await getUsuarioActual()
     if (!user) throw new Error('Sesión expirada')
     const { error } = await supabase.from('clientes').insert(rows.map(r => ({
@@ -1215,8 +1236,9 @@ export default function CRM() {
   }
 
   async function eliminarDuplicado(item: Cliente) {
+    if (soloLectura) return
     // Actualización optimista — el grupo desaparece de inmediato en el modal
-    queryClient.setQueryData<Cliente[]>(['clientes', soloMios ? 'mios' : 'all', 'v5'], (old) =>
+    queryClient.setQueryData<Cliente[]>(['clientes', claveCrm, 'v5'], (old) =>
       (old ?? []).filter(cl => cl.id !== item.id)
     )
     const { error } = await supabase
@@ -1266,8 +1288,8 @@ export default function CRM() {
   // during the previous render" → la pantalla se quedaba en blanco/negro. Un
   // hook debe llamarse siempre, al nivel del componente, sin condicionales.
   const renderCliente = useCallback(({ item }: { item: Cliente }) => (
-    <ClienteCard item={item} c={c} darkMode={darkMode} userRole={userRole} onChatbot={abrirModalChatbot} />
-  ), [c, darkMode, userRole, abrirModalChatbot])
+    <ClienteCard item={item} c={c} darkMode={darkMode} userRole={userRole} onChatbot={abrirModalChatbot} soloLectura={soloLectura} />
+  ), [c, darkMode, userRole, abrirModalChatbot, soloLectura])
 
   // Header que se desplaza con el scroll en vista lista.
   // Se usa View en lugar de Fragment porque ListHeaderComponent necesita un único nodo raíz.
@@ -1459,9 +1481,16 @@ export default function CRM() {
         </TouchableOpacity>
       </View>
 
+      {/* ── Banner de solo lectura (viendo el CRM de otra persona) ── */}
+      {soloLectura && (
+        <View style={s.roBanner}>
+          <Text style={s.roBannerTxt}>👁 Viendo el CRM de {nombreVer || 'este usuario'} — solo lectura</Text>
+        </View>
+      )}
+
       {/* ── Botón: Leads de campaña ── */}
       {leadsCampania.length > 0 && (
-        <TouchableOpacity style={s.btnLeadsCamp} onPress={() => router.push('/(prospectador)/leads-campania')} activeOpacity={0.88}>
+        <TouchableOpacity style={s.btnLeadsCamp} onPress={() => router.push(`/(prospectador)/leads-campania${verUid ? `?verUid=${verUid}` : ''}`)} activeOpacity={0.88}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
             <Text style={{ fontSize: 28 }}>📣</Text>
             <View style={{ flex: 1 }}>
@@ -1502,11 +1531,13 @@ export default function CRM() {
             <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
           </TouchableOpacity>
         </Tooltip>
+        {!soloLectura && (
         <Tooltip label="Importar clientes (CSV)">
           <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
             <Ionicons name="cloud-upload-outline" size={15} color="#1a6470" />
           </TouchableOpacity>
         </Tooltip>
+        )}
         <Tooltip label="Exportar clientes (CSV)">
           <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={exportarCSV} disabled={exportando}>
             {exportando
@@ -1515,11 +1546,13 @@ export default function CRM() {
             }
           </TouchableOpacity>
         </Tooltip>
+        {!soloLectura && (
         <Tooltip label="Nuevo cliente">
           <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
             <Ionicons name="add" size={20} color="#fff" />
           </TouchableOpacity>
         </Tooltip>
+        )}
       </View>
 
       {/* ── Operacion tabs ── */}
@@ -2430,6 +2463,8 @@ const s = StyleSheet.create({
   btnCampanaTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
   badgeCampania: { backgroundColor: 'rgba(255,255,255,0.9)', minWidth: 22, height: 20, borderRadius: 10, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
   badgeCampaniaTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  roBanner: { backgroundColor: '#1a6470', paddingVertical: 9, paddingHorizontal: 14, marginHorizontal: 12, marginTop: 8, borderRadius: 10, alignItems: 'center' },
+  roBannerTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   btnLeadsCamp: {
     marginHorizontal: 12, marginTop: 10, backgroundColor: '#7c3aed', borderRadius: 16,
     paddingVertical: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center',

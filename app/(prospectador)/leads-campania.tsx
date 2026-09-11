@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useFocusEffect, router } from 'expo-router'
+import { useFocusEffect, router, useLocalSearchParams } from 'expo-router'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
@@ -98,6 +98,9 @@ function normalizar(s: string | null): string {
 export default function LeadsCampania() {
   const c = useColors()
   const qc = useQueryClient()
+  // ?verUid=<id> → ver el CRM de campaña de OTRA persona, en solo lectura.
+  const { verUid } = useLocalSearchParams<{ verUid?: string }>()
+  const soloLectura = !!verUid
   const [sort, setSort] = useState<Sort>({ col: 'ingreso', dir: 'desc' })
   const [busqueda, setBusqueda] = useState('')
   const [tab, setTab] = useState<'activos' | 'historial'>('activos')
@@ -105,15 +108,19 @@ export default function LeadsCampania() {
   const [guardandoNota, setGuardandoNota] = useState(false)
 
   const { data: leads = [], isLoading, refetch } = useQuery<Lead[]>({
-    queryKey: ['leads-campania'],
+    queryKey: ['leads-campania', verUid ?? 'mio'],
     queryFn: async () => {
-      const { data: { user } } = await getUsuarioActual()
-      if (!user) return []
+      let respId = verUid
+      if (!respId) {
+        const { data: { user } } = await getUsuarioActual()
+        if (!user) return []
+        respId = user.id
+      }
       const { data, error } = await supabase
         .from('clientes')
         .select('id, nombre, telefono, zona_busqueda, presupuesto, estado, notas, wa_count, call_count, enviado_crm, enviado_crm_at, created_at')
         .eq('es_lead_campania', true)
-        .eq('responsable_id', user.id)
+        .eq('responsable_id', respId)
         .is('eliminado_at', null)
         .order('created_at', { ascending: false })
       if (error) throw error
@@ -171,7 +178,8 @@ export default function LeadsCampania() {
 
   // Actualiza un campo del lead en el caché (optimista) y en la BD.
   function patchLead(id: string, patch: Partial<Lead>) {
-    qc.setQueryData<Lead[]>(['leads-campania'], old =>
+    if (soloLectura) return  // viendo el CRM de campaña de otro: no se edita
+    qc.setQueryData<Lead[]>(['leads-campania', verUid ?? 'mio'], old =>
       (old ?? []).map(l => l.id === id ? { ...l, ...patch } : l))
     supabase.from('clientes').update(patch).eq('id', id).then(undefined, () => {})
   }
@@ -179,14 +187,14 @@ export default function LeadsCampania() {
   function contactarWhatsApp(l: Lead) {
     patchLead(l.id, { wa_count: (l.wa_count ?? 0) + 1 })
     abrirWhatsApp(l.telefono, l.nombre)
-    getUsuarioActual().then(({ data: { user } }) => {
+    if (!soloLectura) getUsuarioActual().then(({ data: { user } }) => {
       if (user) registrarContacto(user.id, l.id, 'whatsapp').catch(() => {})
     })
   }
   function contactarLlamada(l: Lead) {
     patchLead(l.id, { call_count: (l.call_count ?? 0) + 1 })
     llamar(l.telefono)
-    getUsuarioActual().then(({ data: { user } }) => {
+    if (!soloLectura) getUsuarioActual().then(({ data: { user } }) => {
       if (user) registrarContacto(user.id, l.id, 'llamada').catch(() => {})
     })
   }
@@ -238,6 +246,9 @@ export default function LeadsCampania() {
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
+      {soloLectura && (
+        <View style={styles.roBanner}><Text style={styles.roBannerTxt}>👁 CRM de campaña de otra persona — solo lectura</Text></View>
+      )}
       <View style={styles.headerBar}>
         <Text style={[styles.title, { color: c.text }]}>📣 Leads de campaña</Text>
         <View style={styles.subRow}>
@@ -431,6 +442,8 @@ export default function LeadsCampania() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  roBanner: { backgroundColor: '#1a6470', paddingVertical: 9, paddingHorizontal: 14, alignItems: 'center' },
+  roBannerTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   headerBar: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, width: '100%', maxWidth: 1052, alignSelf: 'center' },
   title: { fontSize: 20, fontWeight: '800' },
   subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, gap: 10, flexWrap: 'wrap' },
