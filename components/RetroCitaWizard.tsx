@@ -29,7 +29,16 @@ const PASOS = [
   { key: 'como', icono: '🗣️', titulo: '¿Cómo estuvo la cita?', hint: 'Cuéntanos cómo se dio: interés del cliente, ambiente, qué le mostraste, cómo reaccionó…' },
   { key: 'info', icono: '🔎', titulo: '¿Qué información extra conseguimos?', hint: 'Datos nuevos del prospecto: presupuesto real, tiempos, situación de crédito, lo que sea útil.' },
   { key: 'plan', icono: '🎯', titulo: '¿Cuál es el plan de acción?', hint: 'El siguiente paso concreto: qué opciones mandarle, cuándo darle seguimiento, qué necesita para avanzar.' },
+  { key: 'prox', icono: '📆', titulo: '¿Cuándo es el próximo seguimiento?', hint: 'Elige la fecha y hora del siguiente contacto. Se guarda solo en “Próximo seguimiento”. (Opcional)' },
 ] as const
+
+const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+// El calendario da "2026-09-15T17:00"; se guarda legible en "Próximo seguimiento".
+function fmtProx(v: string): string {
+  const d = new Date(v); if (isNaN(d.getTime())) return v
+  const h = d.getHours(); const ampm = h < 12 ? 'am' : 'pm'; const h12 = h % 12 || 12
+  return `${d.getDate()} ${MESES_C[d.getMonth()]} ${d.getFullYear()}, ${h12}:${String(d.getMinutes()).padStart(2, '0')} ${ampm}`
+}
 
 export default function RetroCitaWizard({ cita, onClose, onSaved }: {
   cita: CitaRetro
@@ -42,6 +51,7 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
   const [resp, setResp] = useState<[string, string, string]>([
     cita.retro_como_estuvo ?? '', cita.retro_info_extra ?? '', cita.retro_plan_accion ?? '',
   ])
+  const [prox, setProx] = useState('')  // valor del calendario (datetime-local)
 
   // Animación de transición entre pasos
   const anim = useRef(new Animated.Value(0)).current  // 0 = en su lugar
@@ -73,6 +83,7 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
         p_como_estuvo: resp[0].trim() || null,
         p_info_extra: resp[1].trim() || null,
         p_plan_accion: resp[2].trim() || null,
+        p_prox_seguimiento: prox ? fmtProx(prox) : null,
       })
       if (error) throw error
       onSaved?.()
@@ -132,16 +143,30 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
             <Text style={s.icono}>{P.icono}</Text>
             <Text style={[s.pregunta, { color: c.text }]}>{P.titulo}</Text>
             <Text style={[s.hint, { color: c.textMute }]}>{P.hint}</Text>
-            <TextInput
-              style={[s.input, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
-              value={resp[paso]}
-              onChangeText={setRespPaso}
-              placeholder="Escribe aquí…"
-              placeholderTextColor={c.textMute}
-              multiline
-              autoFocus
-              textAlignVertical="top"
-            />
+            {P.key === 'prox' ? (
+              <View>
+                {Platform.OS === 'web' ? (
+                  /* @ts-ignore – input nativo del navegador (calendario), igual que en el dashboard de citas */
+                  <input type="datetime-local" value={prox} onChange={(e: any) => setProx(e.target.value)}
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: `1px solid ${c.border}`, fontSize: 15, color: c.text, backgroundColor: c.bg, outline: 'none', boxSizing: 'border-box' }} />
+                ) : (
+                  <TextInput style={[s.input, { color: c.text, borderColor: c.border, backgroundColor: c.bg, minHeight: 0, paddingVertical: 12 }]}
+                    value={prox} onChangeText={setProx} placeholder="YYYY-MM-DD HH:MM" placeholderTextColor={c.textMute} keyboardType="numbers-and-punctuation" />
+                )}
+                {prox ? <Text style={[s.proxPreview, { color: '#1a6470' }]}>📆 Próximo seguimiento: {fmtProx(prox)}</Text> : null}
+              </View>
+            ) : (
+              <TextInput
+                style={[s.input, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
+                value={resp[paso]}
+                onChangeText={setRespPaso}
+                placeholder="Escribe aquí…"
+                placeholderTextColor={c.textMute}
+                multiline
+                autoFocus
+                textAlignVertical="top"
+              />
+            )}
           </Animated.View>
 
           {/* Acciones */}
@@ -191,6 +216,7 @@ const s = StyleSheet.create({
   pregunta: { fontSize: 19, fontWeight: '800', textAlign: 'center', marginBottom: 6 },
   hint: { fontSize: 12.5, textAlign: 'center', lineHeight: 18, marginBottom: 14, paddingHorizontal: 4 },
   input: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 15, minHeight: 120 },
+  proxPreview: { fontSize: 13.5, fontWeight: '800', marginTop: 12, textAlign: 'center' },
   acciones: { flexDirection: 'row', alignItems: 'center', marginTop: 18 },
   btnAtras: { paddingVertical: 11, paddingHorizontal: 8 },
   btnAtrasTxt: { fontSize: 15, fontWeight: '700' },
