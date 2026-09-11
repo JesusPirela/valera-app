@@ -21,7 +21,7 @@ import CrmMetricasPanel from '../../components/CrmMetricasPanel'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
-type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus' | 'supervisor' | 'asesor'
+type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus' | 'supervisor' | 'asesor' | 'gerente'
 
 type Prospectador = {
   id: string
@@ -65,7 +65,7 @@ type CoinsModal = {
 // Orden jerárquico para listar usuarios
 const ListSeparator8 = () => <View style={{ height: 8 }} />
 const RANGO_ROL: Record<string, number> = {
-  admin: 0, supervisor: 1, asesor: 2, prospectador_plus: 3, prospectador: 4, nuevo: 5,
+  admin: 0, gerente: 1, supervisor: 2, asesor: 3, prospectador_plus: 4, prospectador: 5, nuevo: 6,
 }
 
 const ROL_LABEL: Record<string, string> = {
@@ -74,6 +74,7 @@ const ROL_LABEL: Record<string, string> = {
   prospectador_plus: 'Plus',
   supervisor:        'Supervisor',
   asesor:            'Asesor',
+  gerente:           'Gerente',
 }
 
 const ROL_BADGE: Record<string, object> = {
@@ -82,6 +83,7 @@ const ROL_BADGE: Record<string, object> = {
   prospectador_plus: { backgroundColor: '#fdecea' },
   supervisor:        { backgroundColor: '#e3e0fb' },
   asesor:            { backgroundColor: '#dcedf7' },
+  gerente:           { backgroundColor: '#d7f0e6' },
 }
 
 const ROL_TEXT: Record<string, object> = {
@@ -90,6 +92,7 @@ const ROL_TEXT: Record<string, object> = {
   prospectador_plus: { color: '#c0392b' },
   supervisor:        { color: '#5e35b1' },
   asesor:            { color: '#1565c0' },
+  gerente:           { color: '#00695c' },
 }
 
 const ROLES_SELECTOR: { value: RolUsuario; label: string }[] = [
@@ -102,6 +105,7 @@ const ROLES_SELECTOR_CAMBIO: { value: RolUsuario; label: string }[] = [
   ...ROLES_SELECTOR,
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'asesor', label: 'Asesor' },
+  { value: 'gerente', label: 'Gerente' },
 ]
 
 function tiempoConcreto(fechaISO: string): string {
@@ -227,7 +231,7 @@ export default function Prospectadores() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.user?.id) return
       supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
-        if (data?.role === 'supervisor' || data?.role === 'asesor') router.replace('/(prospectador)/propiedades')
+        if (data?.role === 'supervisor' || data?.role === 'asesor' || data?.role === 'gerente') router.replace('/(prospectador)/propiedades')
       })
     })
     cargar()

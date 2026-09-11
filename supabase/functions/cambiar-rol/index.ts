@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const ROLES_VALIDOS = ['nuevo', 'prospectador', 'prospectador_plus', 'supervisor', 'asesor']
+const ROLES_VALIDOS = ['nuevo', 'prospectador', 'prospectador_plus', 'supervisor', 'asesor', 'gerente']
 
 // Solo estos roles generan notificación de ascenso dentro de la app.
 const ROLES_CON_NOTIF_ASCENSO = ['prospectador', 'prospectador_plus']
