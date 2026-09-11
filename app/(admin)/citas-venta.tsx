@@ -10,6 +10,7 @@ import {
   TextInput, Platform, Modal, Alert, Animated, Easing, KeyboardAvoidingView,
 } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
+import * as Clipboard from 'expo-clipboard'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
@@ -42,7 +43,19 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
 ]
 const NUM_W = 48    // contador de fila (izquierda)
 const RETRO_W = 100 // columna de retroalimentación
+const COPY_W = 80   // columna de copiar datos (antes de borrar)
 const DEL_W = 80    // columna de borrar (aparte)
+
+// Texto legible para pegar en otro lado (solo campos con valor).
+function textoCita(f: Fila): string {
+  const lineas: string[] = ['📋 CITA DE VENTA', '']
+  for (const col of COLS) {
+    const raw = (f[col.key] as string) ?? ''
+    const val = col.key === 'dia_cita' ? fmtFechaCitaEs(f.fecha_cita, raw) : raw
+    if (val && val.trim() && val.trim() !== '—') lineas.push(`${col.label}: ${val.trim()}`)
+  }
+  return lineas.join('\n')
+}
 
 const MAPEO: Record<string, string> = {
   andres: 'Andres Asesor', andre: 'André Tenorio', ruben: 'Rayo⚡', rayo: 'Rayo⚡',
@@ -91,10 +104,10 @@ function confirmar(msg: string, onSi: () => void) {
 }
 
 // ── Fila (solo muestra; memoizada y de altura fija → virtualización sin lag) ──
-const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
+const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete }: {
   f: Fila; idx: number
   onTap: (id: string, k: ColKey, t: Tipo, val: string) => void
-  onRetro: (f: Fila) => void; onDelete: (f: Fila) => void
+  onRetro: (f: Fila) => void; onCopy: (f: Fila) => void; onDelete: (f: Fila) => void
 }) {
   const c = useColors()
   const cancelada = (f.estado_seguimiento ?? '').trim().toUpperCase() === 'CANCELADA'
@@ -125,6 +138,12 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onDelete }: {
       <View style={[st.cell, { width: RETRO_W, borderColor: c.border, alignItems: 'center' }]}>
         <TouchableOpacity style={[st.retroBtn, f.retro_completada_at ? st.retroHecha : st.retroPend]} onPress={() => onRetro(f)}>
           <Text style={[st.retroBtnTxt, { color: f.retro_completada_at ? '#1a6855' : '#fff' }]}>{f.retro_completada_at ? '✓ Retro' : '📝 Retro'}</Text>
+        </TouchableOpacity>
+      </View>
+      {/* Copiar datos (columna aparte, antes de borrar) */}
+      <View style={[st.cell, { width: COPY_W, borderColor: c.border, alignItems: 'center' }]}>
+        <TouchableOpacity style={st.copyBtn} onPress={() => onCopy(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+          <Text style={st.copyBtnTxt}>📋 Copiar</Text>
         </TouchableOpacity>
       </View>
       {/* Borrar (columna aparte) */}
@@ -253,9 +272,11 @@ const PASOS_ADD: { key: string; label: string; icono: string; tipo: Tipo; kb?: '
   { key: 'estado_seguimiento', label: 'Estado de seguimiento', icono: '📌', tipo: 'texto' },
 ]
 
-function AgregarCitaModal({ profiles, clientes, onClose, onSaved }: {
+function AgregarCitaModal({ profiles, clientes, miId, onCrearCliente, onClose, onSaved }: {
   profiles: { id: string; nombre: string }[]
   clientes: { id: string; nombre: string; telefono: string | null }[]
+  miId: string | null
+  onCrearCliente: (nombre: string, telefono: string | null, responsableId: string | null) => Promise<boolean>
   onClose: () => void; onSaved: () => void
 }) {
   const c = useColors()
@@ -285,8 +306,14 @@ function AgregarCitaModal({ profiles, clientes, onClose, onSaved }: {
   }
   async function guardar(base: Record<string, any>) {
     setGuardando(true)
-    try { await supabase.from('citas_venta').insert({ ...base, origen: 'manual' }); onSaved(); onClose() }
-    catch { setGuardando(false) }
+    try {
+      // _clienteNuevo y prospecto_id son ayudantes: no son columnas de citas_venta.
+      const { _clienteNuevo, prospecto_id, ...limpio } = base
+      if (_clienteNuevo && limpio.cliente_nombre) {
+        await onCrearCliente(limpio.cliente_nombre, limpio.telefono ?? null, prospecto_id ?? null)
+      }
+      await supabase.from('citas_venta').insert({ ...limpio, origen: 'manual' }); onSaved(); onClose()
+    } catch { setGuardando(false) }
   }
   function avanzar(patch?: Record<string, any>) {
     const base = patch ? { ...datos, ...patch } : datos
@@ -326,18 +353,29 @@ function AgregarCitaModal({ profiles, clientes, onClose, onSaved }: {
 
             {(P.tipo === 'cliente' || P.tipo === 'usuario') && (
               <>
-                <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={busca} onChangeText={setBusca} placeholder={P.tipo === 'usuario' ? 'Buscar o escribir un nombre…' : 'Buscar…'} placeholderTextColor={c.textMute} autoFocus />
+                <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={busca} onChangeText={setBusca} placeholder={P.tipo === 'usuario' ? 'Buscar o escribir un nombre…' : 'Buscar o escribir uno nuevo…'} placeholderTextColor={c.textMute} autoFocus />
                 {P.tipo === 'usuario' && busca.trim().length > 0 && (
-                  <TouchableOpacity style={st.otroBtn} onPress={() => avanzar(P.key === 'atendio' ? { atendio: busca.trim(), asesor_id: null } : { [P.key]: busca.trim() })}>
+                  <TouchableOpacity style={st.otroBtn} onPress={() => avanzar(
+                    P.key === 'atendio' ? { atendio: busca.trim(), asesor_id: null }
+                    : P.key === 'prospecto' ? { prospecto: busca.trim(), prospecto_id: null }
+                    : { [P.key]: busca.trim() })}>
                     <Text style={st.otroBtnTxt}>✏️ Usar «{busca.trim()}» (fuera de la app)</Text>
                   </TouchableOpacity>
                 )}
+                {P.tipo === 'cliente' && busca.trim().length > 1 &&
+                  !clientes.some(x => (x.nombre ?? '').toLowerCase() === busca.trim().toLowerCase()) && (
+                  <TouchableOpacity style={st.otroBtn} onPress={() => avanzar({ cliente_nombre: busca.trim(), _clienteNuevo: true })}>
+                    <Text style={st.otroBtnTxt}>➕ Crear cliente nuevo «{busca.trim()}» (se asigna a quien prospectó)</Text>
+                  </TouchableOpacity>
+                )}
                 <ScrollView style={{ maxHeight: 260, marginTop: 8 }} keyboardShouldPersistTaps="handled">
-                  {P.tipo === 'usuario' && <TouchableOpacity style={st.dropItem} onPress={() => avanzar({ [P.key]: null })}><Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin asignar —</Text></TouchableOpacity>}
+                  {P.tipo === 'usuario' && <TouchableOpacity style={st.dropItem} onPress={() => avanzar(P.key === 'prospecto' ? { prospecto: null, prospecto_id: null } : { [P.key]: null })}><Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin asignar —</Text></TouchableOpacity>}
                   {(lista as any[]).map((x: any) => (
                     <TouchableOpacity key={x.id} style={st.dropItem} onPress={() => P.tipo === 'cliente'
                       ? avanzar({ cliente_nombre: x.nombre, ...(x.telefono ? { telefono: x.telefono } : {}) })
-                      : avanzar(P.key === 'atendio' ? { atendio: x.nombre, asesor_id: x.id } : { [P.key]: x.nombre })}>
+                      : avanzar(P.key === 'atendio' ? { atendio: x.nombre, asesor_id: x.id }
+                        : P.key === 'prospecto' ? { prospecto: x.nombre, prospecto_id: x.id }
+                        : { [P.key]: x.nombre })}>
                       <Text style={[st.dropItemTxt, { color: c.text }]} numberOfLines={1}>{x.nombre}{P.tipo === 'cliente' && x.telefono ? `  ·  ${x.telefono}` : ''}</Text>
                     </TouchableOpacity>
                   ))}
@@ -379,6 +417,9 @@ export default function CitasVenta() {
   const [profiles, setProfiles] = useState<{ id: string; nombre: string }[]>([])
   const [clientes, setClientes] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
   const [filtrosSel, setFiltrosSel] = useState<Record<string, Set<string>>>({})
+  const [sinAsignar, setSinAsignar] = useState<null | 'any' | 'prospecto' | 'coordino' | 'atendio'>(null)
+  const [miId, setMiId] = useState<string | null>(null)
+  const [copiadoId, setCopiadoId] = useState<string | null>(null)
   const [rango, setRango] = useState<{ desde: string; hasta: string } | null>(null)  // YYYY-MM-DD
   const [ordenFecha, setOrdenFecha] = useState<'desc' | 'asc' | null>(null)  // orden por fecha de la cita (clic en la columna)
   const [dropCol, setDropCol] = useState<ColKey | null>(null)
@@ -430,6 +471,7 @@ export default function CitasVenta() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
+      setMiId(session.user.id)
       supabase.from('profiles').select('role').eq('id', session.user.id).single()
         .then(({ data }) => { if (data && data.role !== 'admin') router.replace('/(admin)/propiedades') })
     })
@@ -451,8 +493,13 @@ export default function CitasVenta() {
 
   const valorDe = (f: Fila, key: ColKey) => String((f[key] as string) ?? '').trim() || VACIO
   const visibles = useMemo(() => {
+    const vacio = (f: Fila, k: ColKey) => String((f[k] as string) ?? '').trim() === ''
     const arr = filas.filter(f => {
       if (!Object.entries(filtrosSel).every(([k, set]) => set.has(valorDe(f, k as ColKey)))) return false
+      if (sinAsignar) {
+        if (sinAsignar === 'any') { if (!(vacio(f, 'prospecto') || vacio(f, 'coordino') || vacio(f, 'atendio'))) return false }
+        else if (!vacio(f, sinAsignar)) return false
+      }
       if (rango) {
         if (!f.fecha_cita) return false                     // sin fecha real → fuera del filtro de fechas
         const d = f.fecha_cita.slice(0, 10)                 // YYYY-MM-DD
@@ -472,7 +519,7 @@ export default function CitasVenta() {
       })
     }
     return arr
-  }, [filas, filtrosSel, rango, ordenFecha])
+  }, [filas, filtrosSel, sinAsignar, rango, ordenFecha])
 
   // Cicla: sin orden → más reciente primero → más antigua primero → sin orden.
   function toggleOrdenFecha() {
@@ -535,6 +582,23 @@ export default function CitasVenta() {
     else { setPickBusca(''); setPicker({ id, key: k, tipo: t }) }
   }, [])
   const onRetro = useCallback((f: Fila) => setWizard(f), [])
+  const onCopy = useCallback(async (f: Fila) => {
+    try { await Clipboard.setStringAsync(textoCita(f)) } catch {}
+    setCopiadoId(f.id)
+    setTimeout(() => setCopiadoId(id => (id === f.id ? null : id)), 1800)
+  }, [])
+  // Crea un cliente nuevo y lo asigna (responsable_id) al prospectador dado.
+  // Devuelve true si se creó. telefono es NOT NULL → se usa el de la cita o ''.
+  const crearCliente = useCallback(async (nombre: string, telefono: string | null, responsableId: string | null) => {
+    const owner = responsableId ?? miId
+    if (!owner) return false
+    const { data, error } = await supabase.from('clientes')
+      .insert({ nombre: nombre.trim(), telefono: (telefono ?? '').trim(), responsable_id: owner })
+      .select('id, nombre, telefono').single()
+    if (error || !data) return false
+    setClientes(prev => [...prev, data as any].sort((a, b) => (a.nombre ?? '').localeCompare(b.nombre ?? '', 'es')))
+    return true
+  }, [miId])
   const onDelete = useCallback((f: Fila) => {
     confirmar(`¿Borrar la cita de "${f.cliente_nombre ?? 'sin nombre'}"?`, async () => {
       setFilas(fs => fs.filter(x => x.id !== f.id))
@@ -553,6 +617,23 @@ export default function CitasVenta() {
     const patch: Record<string, any> = { cliente_nombre: nombre }
     if (tel) patch.telefono = tel
     aplicarCambio(picker.id, patch); setPicker(null)
+  }
+  // Crear cliente nuevo desde la celda de cliente y asignarlo (responsable_id) al
+  // prospectador que ya tiene esa fila (mapeando su nombre → perfil).
+  async function crearClienteInline() {
+    if (!picker) return
+    const nombre = pickBusca.trim()
+    const fila = filas.find(f => f.id === picker.id)
+    const prospectoId = profiles.find(p => p.nombre === (fila?.prospecto ?? ''))?.id ?? null
+    const ok = await crearCliente(nombre, fila?.telefono ?? null, prospectoId)
+    if (ok) {
+      aplicarCambio(picker.id, { cliente_nombre: nombre })
+      setMsg(prospectoId ? '✓ Cliente creado y asignado al prospectador de la fila.' : '✓ Cliente creado (la fila no tenía un prospectador de la app; quedó a tu nombre).')
+      setTimeout(() => setMsg(''), 3500)
+    } else {
+      setMsg('✗ No se pudo crear el cliente.'); setTimeout(() => setMsg(''), 3500)
+    }
+    setPicker(null)
   }
 
   async function importarCSV() {
@@ -588,7 +669,7 @@ export default function CitasVenta() {
     } catch (e: any) { setMsg('✗ Error al importar: ' + (e?.message ?? 'desconocido')) } finally { setImportando(false) }
   }
 
-  const totalW = NUM_W + COLS.reduce((s, col) => s + col.w, 0) + RETRO_W + DEL_W
+  const totalW = NUM_W + COLS.reduce((s, col) => s + col.w, 0) + RETRO_W + COPY_W + DEL_W
   const dropValores = dropCol ? valoresColumna(dropCol).filter(v => !dropBusca.trim() || v.toLowerCase().includes(dropBusca.toLowerCase())) : []
   const pickLista = picker
     ? (picker.tipo === 'cliente'
@@ -634,6 +715,26 @@ export default function CitasVenta() {
         {rango && <TouchableOpacity onPress={() => setRango(null)}><Text style={st.fechaLimpiar}>✕ Quitar fecha</Text></TouchableOpacity>}
       </View>
 
+      {/* Filtro de citas sin asignar (campo vacío). Al activarlo, elige cuál. */}
+      <View style={st.fechaBar}>
+        <TouchableOpacity style={[st.fechaChip, { borderColor: '#c0392b' }, sinAsignar != null && st.sinAsignarOn]}
+          onPress={() => setSinAsignar(v => (v == null ? 'any' : null))}>
+          <Text style={[st.fechaChipTxt, { color: sinAsignar != null ? '#fff' : '#c0392b' }]}>🚩 Sin asignar</Text>
+        </TouchableOpacity>
+        {sinAsignar != null && ([
+          { k: 'any', l: 'Cualquiera' }, { k: 'prospecto', l: 'Prospectó' },
+          { k: 'coordino', l: 'Coordinó' }, { k: 'atendio', l: 'Atendió' },
+        ] as const).map(o => {
+          const on = sinAsignar === o.k
+          return (
+            <TouchableOpacity key={o.k} style={[st.fechaChip, { borderColor: c.border }, on && st.fechaChipOn]} onPress={() => setSinAsignar(o.k)}>
+              <Text style={[st.fechaChipTxt, { color: on ? '#fff' : c.textSub }]}>{o.l}</Text>
+            </TouchableOpacity>
+          )
+        })}
+        {sinAsignar != null && <Text style={{ color: c.textMute, fontSize: 12 }}>· {visibles.length} sin asignar</Text>}
+      </View>
+
       {loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : (
         <View style={{ flex: 1, marginTop: 8, flexDirection: 'row' }}>
           <View style={{ flex: 1 }}>
@@ -662,6 +763,7 @@ export default function CitasVenta() {
                   )
                 })}
                 <Text style={[st.headCell, st.headTxt, { width: RETRO_W, textAlign: 'center' }]}>Retro</Text>
+                <Text style={[st.headCell, st.headTxt, { width: COPY_W, textAlign: 'center' }]}>Copiar</Text>
                 <Text style={[st.headCell, st.headTxt, { width: DEL_W, textAlign: 'center' }]}>Borrar</Text>
               </View>
             </ScrollView>
@@ -678,7 +780,7 @@ export default function CitasVenta() {
                 data={visibles}
                 keyExtractor={f => f.id}
                 getItemLayout={(_, i) => ({ length: ROW_H, offset: ROW_H * i, index: i })}
-                renderItem={({ item, index }) => <FilaRow f={item} idx={index} onTap={onTap} onRetro={onRetro} onDelete={onDelete} />}
+                renderItem={({ item, index }) => <FilaRow f={item} idx={index} onTap={onTap} onRetro={onRetro} onCopy={onCopy} onDelete={onDelete} />}
                 initialNumToRender={25} maxToRenderPerBatch={25} windowSize={11} removeClippedSubviews
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
@@ -759,6 +861,12 @@ export default function CitasVenta() {
                     <Text style={st.otroBtnTxt}>✏️ Usar «{pickBusca.trim()}» (fuera de la app)</Text>
                   </TouchableOpacity>
                 )}
+                {picker?.tipo === 'cliente' && pickBusca.trim().length > 1 &&
+                  !clientes.some(x => (x.nombre ?? '').toLowerCase() === pickBusca.trim().toLowerCase()) && (
+                  <TouchableOpacity style={st.otroBtn} onPress={crearClienteInline}>
+                    <Text style={st.otroBtnTxt}>➕ Crear cliente «{pickBusca.trim()}» y asignarlo al prospectador de la fila</Text>
+                  </TouchableOpacity>
+                )}
                 <ScrollView style={{ maxHeight: 340, marginTop: 8 }} keyboardShouldPersistTaps="handled">
                   {picker?.tipo === 'usuario' && <TouchableOpacity style={st.dropItem} onPress={() => elegirUsuario('', null)}><Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin asignar —</Text></TouchableOpacity>}
                   {(pickLista as any[]).map((x: any) => (
@@ -776,7 +884,11 @@ export default function CitasVenta() {
       </Modal>
 
       {wizard && <RetroCitaWizard cita={wizard} onClose={() => setWizard(null)} onSaved={cargar} />}
-      {agregar && <AgregarCitaModal profiles={profiles} clientes={clientes} onClose={() => setAgregar(false)} onSaved={cargar} />}
+      {agregar && <AgregarCitaModal profiles={profiles} clientes={clientes} miId={miId} onCrearCliente={crearCliente} onClose={() => setAgregar(false)} onSaved={cargar} />}
+
+      {copiadoId && (
+        <View style={st.toast} pointerEvents="none"><Text style={st.toastTxt}>📋 Datos copiados al portapapeles</Text></View>
+      )}
     </View>
   )
 }
@@ -800,6 +912,7 @@ const st = StyleSheet.create({
   fechaLabel: { fontSize: 12.5, fontWeight: '700' },
   fechaChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
   fechaChipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  sinAsignarOn: { backgroundColor: '#c0392b', borderColor: '#c0392b' },
   fechaChipTxt: { fontSize: 12.5, fontWeight: '700' },
   fechaLimpiar: { color: '#c0392b', fontWeight: '800', fontSize: 12.5 },
   msg: { fontSize: 12.5, fontWeight: '600', marginTop: 4 },
@@ -817,6 +930,8 @@ const st = StyleSheet.create({
   retroPend: { backgroundColor: '#1a6470' },
   retroHecha: { backgroundColor: '#1a685522', borderWidth: 1, borderColor: '#1a6855' },
   retroBtnTxt: { fontSize: 11.5, fontWeight: '800' },
+  copyBtn: { backgroundColor: '#1a685522', borderWidth: 1, borderColor: '#1a6855', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6 },
+  copyBtnTxt: { fontSize: 11, fontWeight: '800', color: '#1a6855' },
   delTxt: { fontSize: 16 },
   counterCell: { alignItems: 'center', backgroundColor: '#0f4c580d' },
   counterTxt: { fontSize: 11, fontWeight: '700' },
@@ -847,4 +962,6 @@ const st = StyleSheet.create({
   calCell: { width: `${100 / 7}%`, height: 34, alignItems: 'center', justifyContent: 'center' },
   calDia: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   calStep: { fontSize: 20, color: '#1a6470', fontWeight: '800', paddingHorizontal: 8 },
+  toast: { position: 'absolute', bottom: 28, alignSelf: 'center', left: 0, right: 0, alignItems: 'center' },
+  toastTxt: { backgroundColor: '#1a6855', color: '#fff', fontWeight: '800', fontSize: 13, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 22, overflow: 'hidden' },
 })
