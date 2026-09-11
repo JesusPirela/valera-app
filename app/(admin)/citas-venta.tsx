@@ -77,6 +77,9 @@ function normalizar(s: string): string {
   return (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim().replace(/\s+/g, ' ')
 }
 function mapear(n: string | undefined): string { const v = (n ?? '').trim(); return v ? (MAPEO[normalizar(v)] ?? v) : v }
+// Una cita cuenta como cancelada si su estado menciona "cancel" (cubre
+// CANCELADA, cancelada, canceló, "cancelada por cliente", etc.).
+function esCancelada(s: string | null | undefined): boolean { return normalizar(s ?? '').includes('cancel') }
 function arreglarEncoding(s: string): string {
   if (!s || !/[ÃÂ]/.test(s)) return s
   try {
@@ -110,7 +113,7 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
   onRetro: (f: Fila) => void; onCopy: (f: Fila) => void; onDelete: (f: Fila) => void
 }) {
   const c = useColors()
-  const cancelada = (f.estado_seguimiento ?? '').trim().toUpperCase() === 'CANCELADA'
+  const cancelada = esCancelada(f.estado_seguimiento)
   return (
     <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
       {/* Contador de fila (como Excel); en rojo si está cancelada */}
@@ -122,7 +125,7 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
         // La fecha de la cita se muestra en español con día de la semana,
         // derivada del timestamp real (no del texto guardado, que venía en inglés).
         const display = col.key === 'dia_cita' ? fmtFechaCitaEs(f.fecha_cita, val) : val
-        const esEstadoCancelada = col.key === 'estado_seguimiento' && (val).trim().toUpperCase() === 'CANCELADA'
+        const esEstadoCancelada = col.key === 'estado_seguimiento' && esCancelada(val)
         // En la columna del CLIENTE (siempre visible) mostrar "🚫 CANCELADA" para
         // que se note aunque la columna de estado esté scrolleada a la derecha.
         const esClienteCancelada = cancelada && col.key === 'cliente_nombre'
