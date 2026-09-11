@@ -172,7 +172,7 @@ export default function Cierres() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
       supabase.from('profiles').select('role').eq('id', session.user.id).single()
-        .then(({ data }) => { if (data && data.role !== 'admin') router.replace('/(admin)/propiedades') })
+        .then(({ data }) => { if (data && data.role !== 'admin' && data.role !== 'gerente') router.replace('/(admin)/propiedades') })
     })
   }, [])
   useEffect(() => {

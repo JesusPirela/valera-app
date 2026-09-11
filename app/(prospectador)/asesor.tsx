@@ -3,27 +3,55 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { useVistaComo } from '../../lib/VistaComo'
 
 const ITEMS = [
   { label: 'CRM y Pipeline comercial', desc: 'Clientes y prospectos de todo el equipo, por etapa', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
   { label: 'Mis citas', desc: 'Las citas que te asignaron · agrégalas y da seguimiento', icon: '📅', route: '/(prospectador)/asesor-citas', color: '#2E7D32' },
   { label: 'Mis estadísticas', desc: 'Tu desempeño: leads, cierres y actividad', icon: '📊', route: '/(prospectador)/asesor-estadisticas?modo=propio', color: '#1565c0' },
   { label: 'Estadísticas de equipo', desc: 'Desempeño de todo el equipo de prospectadores', icon: '📈', route: '/(prospectador)/asesor-estadisticas?modo=equipo', color: '#00838F' },
+  { label: 'Tabla de precios', desc: 'Precios por zona y desarrollo, en vivo', icon: '🏷️', route: '/(prospectador)/tabla-equipo', color: '#c9a84c' },
+]
+
+// Opciones de administración exclusivas del rol GERENTE (además de todo lo del
+// asesor). El gerente pasa el guard del layout admin, así que estas rutas
+// abren la versión de administración de cada pantalla.
+const GERENCIA_ITEMS = [
+  { label: 'Bloques', desc: 'Grupos de prospectadores y su actividad en vivo', icon: '🧱', route: '/(admin)/bloques', color: '#5E35B1' },
+  { label: 'Citas de venta', desc: 'Registro (Excel) de citas de venta del equipo', icon: '📗', route: '/(admin)/citas-venta', color: '#1B5E20' },
+  { label: 'Coordinación de citas', desc: 'Panel de coordinación de citas del equipo', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32' },
+  { label: 'Cierres', desc: 'Apartado de cierres del equipo', icon: '🤝', route: '/(admin)/cierres', color: '#00695C' },
+  { label: 'CRM de prospectadores', desc: 'CRM de todos los prospectadores', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
+  { label: 'Proyectos', desc: 'Desarrollos y proyectos', icon: '🏗️', route: '/(admin)/proyectos', color: '#455A64' },
+  { label: 'Tabla de precios (inventario)', desc: 'Inventario por zona con precios en vivo', icon: '🏷️', route: '/(admin)/inventario-tabla', color: '#00838F' },
 ]
 
 export default function Asesor() {
   const c = useColors()
+  const { vistaComo } = useVistaComo()
   const [pendientes, setPendientes] = useState<number | null>(null)
+  const [role, setRole] = useState<string | null>(null)
 
   useFocusEffect(useCallback(() => {
     supabase.rpc('get_mis_citas_pendientes_retro').then(({ data }) => setPendientes((data ?? []).length))
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user?.id) return
+      supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle()
+        .then(({ data }) => setRole(data?.role ?? null))
+    })
   }, []))
+
+  // Rol efectivo: respeta la simulación "ver como" de un admin.
+  const rolEf = vistaComo ?? role
+  const esGerente = rolEf === 'gerente'
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-      <Text style={[styles.titulo, { color: c.text }]}>Asesor</Text>
+      <Text style={[styles.titulo, { color: c.text }]}>{esGerente ? 'Gerencia' : 'Asesor'}</Text>
       <Text style={[styles.subtitulo, { color: c.textSub }]}>
-        Herramientas adicionales de atención a clientes y seguimiento comercial.
+        {esGerente
+          ? 'Tus herramientas de asesor más el panel de administración del equipo.'
+          : 'Herramientas adicionales de atención a clientes y seguimiento comercial.'}
       </Text>
 
       {/* Retroalimentaciones pendientes: siempre visible para que lo encuentren.
@@ -69,6 +97,30 @@ export default function Asesor() {
           <Text style={[styles.chevron, { color: c.textMute }]}>›</Text>
         </TouchableOpacity>
       ))}
+
+      {/* Panel de administración — solo para el rol gerente. */}
+      {esGerente && (
+        <>
+          <Text style={[styles.seccion, { color: c.textSub }]}>PANEL DE ADMINISTRACIÓN</Text>
+          {GERENCIA_ITEMS.map(item => (
+            <TouchableOpacity
+              key={item.route}
+              style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}
+              onPress={() => router.push(item.route as any)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.iconWrap, { backgroundColor: item.color }]}>
+                <Text style={styles.icon}>{item.icon}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.cardTitulo, { color: c.text }]}>{item.label}</Text>
+                <Text style={[styles.cardDesc, { color: c.textSub }]}>{item.desc}</Text>
+              </View>
+              <Text style={[styles.chevron, { color: c.textMute }]}>›</Text>
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
     </ScrollView>
   )
 }
@@ -77,6 +129,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   titulo: { fontSize: 22, fontWeight: '800', marginBottom: 4 },
   subtitulo: { fontSize: 13, marginBottom: 20 },
+  seccion: { fontSize: 12, fontWeight: '800', letterSpacing: 0.6, marginTop: 10, marginBottom: 10 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',

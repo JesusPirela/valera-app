@@ -73,6 +73,9 @@ export default function MiDia() {
   const [misiones, setMisiones] = useState<Mision[]>([])
   const [pubsHoy, setPubsHoy] = useState(0)
   const [nombreUsuario, setNombreUsuario] = useState('')
+  // Asesores y gerentes no usan Misiones: se ocultan de esta pantalla.
+  const [role, setRole] = useState<string | null>(null)
+  const ocultarMisiones = role === 'asesor' || role === 'gerente'
 
   async function cargar(silent = false) {
     if (!silent) setLoading(true)
@@ -85,7 +88,7 @@ export default function MiDia() {
     const hace7dias = new Date(Date.now() - 7 * 86_400_000)
 
     const [perfilRes, recsRes, dormidosRes, segHoyRes, misionesRes, pubsRes] = await Promise.all([
-      supabase.from('profiles').select('nombre').eq('id', user.id).maybeSingle(),
+      supabase.from('profiles').select('nombre, role').eq('id', user.id).maybeSingle(),
       supabase.from('recordatorios')
         .select('id, titulo, descripcion, fecha_hora, cliente_id, clientes(nombre)')
         .eq('user_id', user.id)
@@ -123,6 +126,7 @@ export default function MiDia() {
     ])
 
     setNombreUsuario((perfilRes.data as any)?.nombre?.split(' ')[0] ?? '')
+    setRole((perfilRes.data as any)?.role ?? null)
     setRecordatorios((recsRes.data ?? []) as unknown as Recordatorio[])
     setDormidos((dormidosRes.data ?? []) as ClienteDormido[])
     setSeguimientosHoy((segHoyRes.data ?? []) as ClienteSeguimientoHoy[])
@@ -179,10 +183,12 @@ export default function MiDia() {
           <Text style={[st.statNum, { color: '#16a34a' }]}>{pubsHoy}</Text>
           <Text style={[st.statLbl, { color: c.textMute }]}>publicaciones{'\n'}hoy</Text>
         </View>
-        <View style={[st.statBox, { backgroundColor: c.card, borderColor: c.border }]}>
-          <Text style={[st.statNum, { color: '#d97706' }]}>{misiones.length}</Text>
-          <Text style={[st.statLbl, { color: c.textMute }]}>misiones{'\n'}pendientes</Text>
-        </View>
+        {!ocultarMisiones && (
+          <View style={[st.statBox, { backgroundColor: c.card, borderColor: c.border }]}>
+            <Text style={[st.statNum, { color: '#d97706' }]}>{misiones.length}</Text>
+            <Text style={[st.statLbl, { color: c.textMute }]}>misiones{'\n'}pendientes</Text>
+          </View>
+        )}
       </View>
 
       {/* Recordatorios de hoy */}
@@ -265,8 +271,8 @@ export default function MiDia() {
         </View>
       )}
 
-      {/* Misiones pendientes */}
-      {misiones.length > 0 && (
+      {/* Misiones pendientes (ocultas para asesor/gerente) */}
+      {!ocultarMisiones && misiones.length > 0 && (
         <View style={[st.section, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={st.sectionHead}>
             <Text style={[st.sectionTitle, { color: c.text }]}>⚡ Misiones pendientes</Text>
@@ -346,7 +352,7 @@ export default function MiDia() {
         {[
           { icon: '📤', label: 'Publicar', route: '/(prospectador)/propiedades' },
           { icon: '👥', label: 'Clientes', route: '/(prospectador)/crm' },
-          { icon: '⚡', label: 'Misiones', route: '/(prospectador)/misiones' },
+          ...(ocultarMisiones ? [] : [{ icon: '⚡', label: 'Misiones', route: '/(prospectador)/misiones' }]),
         ].map(item => (
           <TouchableOpacity
             key={item.route}

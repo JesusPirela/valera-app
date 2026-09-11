@@ -229,6 +229,11 @@ export default function ProspectadorLayout() {
   const ocultarTabBar = esAdminGlobal && pathname.includes('detalle-propiedad')
   const esSupervisor = rolEf === 'supervisor'
   const esAsesor = rolEf === 'asesor'
+  // Gerente: perfil basado en asesor que además ve un bloque de opciones de
+  // administración (bloques, citas de venta, coordinación, cierres, CRM,
+  // proyectos, tabla de precios). Comparte la pestaña "Asesor" (renombrada
+  // "Gerencia") y, como el asesor, no usa Misiones.
+  const esGerente = rolEf === 'gerente'
 
   return (
     <>
@@ -318,8 +323,8 @@ export default function ProspectadorLayout() {
         options={{
           title: 'Misiones',
           tabBarIcon: tabIcon('flash-outline', 'flash'),
-          // Los asesores no usan Misiones: se les oculta la pestaña.
-          href: esAsesor ? null : undefined,
+          // Asesores y gerentes no usan Misiones: se les oculta la pestaña.
+          href: (esAsesor || esGerente) ? null : undefined,
         }}
       />
       <Tabs.Screen
@@ -340,9 +345,13 @@ export default function ProspectadorLayout() {
       <Tabs.Screen
         name="asesor"
         options={{
-          title: 'Asesor',
-          tabBarIcon: tabIcon('briefcase-outline', 'briefcase'),
-          href: (esAsesor || rolEf === 'admin') ? undefined : null,
+          // El gerente reutiliza esta pestaña, renombrada "Gerencia".
+          title: esGerente ? 'Gerencia' : 'Asesor',
+          tabBarIcon: tabIcon(
+            esGerente ? 'business-outline' : 'briefcase-outline',
+            esGerente ? 'business' : 'briefcase',
+          ),
+          href: (esAsesor || esGerente || rolEf === 'admin') ? undefined : null,
         }}
       />
       <Tabs.Screen

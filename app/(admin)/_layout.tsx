@@ -64,7 +64,7 @@ export default function AdminLayout() {
       supabase.from('profiles').select('role').eq('id', session.user.id).single()
         .then(({ data }) => {
           if (!activo || !data) return
-          if (data.role !== 'admin' && data.role !== 'supervisor') {
+          if (data.role !== 'admin' && data.role !== 'supervisor' && data.role !== 'gerente') {
             router.replace(destinoProspectador() as any)
           }
         })
