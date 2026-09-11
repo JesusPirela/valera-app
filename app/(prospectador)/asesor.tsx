@@ -1,5 +1,7 @@
+import { useCallback, useState } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
+import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 
 const ITEMS = [
@@ -11,6 +13,11 @@ const ITEMS = [
 
 export default function Asesor() {
   const c = useColors()
+  const [pendientes, setPendientes] = useState<number | null>(null)
+
+  useFocusEffect(useCallback(() => {
+    supabase.rpc('get_mis_citas_pendientes_retro').then(({ data }) => setPendientes((data ?? []).length))
+  }, []))
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
@@ -18,6 +25,32 @@ export default function Asesor() {
       <Text style={[styles.subtitulo, { color: c.textSub }]}>
         Herramientas adicionales de atención a clientes y seguimiento comercial.
       </Text>
+
+      {/* Retroalimentaciones pendientes: siempre visible para que lo encuentren.
+          Se resalta cuando hay citas por responder. */}
+      <TouchableOpacity
+        style={[
+          styles.card, styles.retroCard,
+          { backgroundColor: c.card, borderColor: (pendientes ?? 0) > 0 ? '#c9a84c' : c.border },
+        ]}
+        onPress={() => router.push('/(prospectador)/mis-retros')}
+        activeOpacity={0.85}
+      >
+        <View style={[styles.iconWrap, { backgroundColor: (pendientes ?? 0) > 0 ? '#c9a84c' : '#8a7a3a' }]}>
+          <Text style={styles.icon}>📝</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.cardTitulo, { color: c.text }]}>Cuéntanos cómo te fue</Text>
+          <Text style={[styles.cardDesc, { color: c.textSub }]}>
+            {pendientes == null ? 'Retroalimentación de tus citas atendidas'
+              : pendientes === 0 ? '¡Estás al día! No tienes citas por responder 🎉'
+              : `Tienes ${pendientes} cita${pendientes !== 1 ? 's' : ''} por responder · 3 preguntas rápidas`}
+          </Text>
+        </View>
+        {(pendientes ?? 0) > 0
+          ? <View style={styles.badge}><Text style={styles.badgeTxt}>{pendientes}</Text></View>
+          : <Text style={[styles.chevron, { color: c.textMute }]}>›</Text>}
+      </TouchableOpacity>
 
       {ITEMS.map(item => (
         <TouchableOpacity
@@ -66,4 +99,7 @@ const styles = StyleSheet.create({
   cardTitulo: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
   cardDesc: { fontSize: 12 },
   chevron: { fontSize: 24, fontWeight: '300' },
+  retroCard: { borderWidth: 1.5 },
+  badge: { backgroundColor: '#e53935', borderRadius: 13, minWidth: 26, height: 26, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center' },
+  badgeTxt: { color: '#fff', fontWeight: '900', fontSize: 14 },
 })
