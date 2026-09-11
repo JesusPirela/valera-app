@@ -32,9 +32,9 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   { key: 'detalles_pago', label: 'Forma de pago', w: 230, tipo: 'texto' },
   { key: 'interesado_en', label: 'Interesado en', w: 250, tipo: 'texto' },
   { key: 'dia_cita', label: 'Día de la cita', w: 170, tipo: 'fecha' },
-  { key: 'prospecto', label: 'Prospectó', w: 160, tipo: 'usuario' },
-  { key: 'coordino', label: 'Coordinó', w: 150, tipo: 'usuario' },
-  { key: 'atendio', label: 'Atendió', w: 160, tipo: 'usuario' },
+  { key: 'prospecto', label: 'Prospectador', w: 160, tipo: 'usuario' },
+  { key: 'coordino', label: 'Coordinada por', w: 150, tipo: 'usuario' },
+  { key: 'atendio', label: 'Asesor que atendió', w: 160, tipo: 'usuario' },
   { key: 'retro_como_estuvo', label: 'Cómo estuvo la cita', w: 250, tipo: 'texto' },
   { key: 'retro_info_extra', label: 'Info extra del cliente', w: 250, tipo: 'texto' },
   { key: 'retro_plan_accion', label: 'Plan de acción', w: 250, tipo: 'texto' },
@@ -722,8 +722,8 @@ export default function CitasVenta() {
           <Text style={[st.fechaChipTxt, { color: sinAsignar != null ? '#fff' : '#c0392b' }]}>🚩 Sin asignar</Text>
         </TouchableOpacity>
         {sinAsignar != null && ([
-          { k: 'any', l: 'Cualquiera' }, { k: 'prospecto', l: 'Prospectó' },
-          { k: 'coordino', l: 'Coordinó' }, { k: 'atendio', l: 'Atendió' },
+          { k: 'any', l: 'Cualquiera' }, { k: 'prospecto', l: 'Prospectador' },
+          { k: 'coordino', l: 'Coordinada por' }, { k: 'atendio', l: 'Asesor' },
         ] as const).map(o => {
           const on = sinAsignar === o.k
           return (
