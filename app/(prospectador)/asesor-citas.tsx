@@ -3,7 +3,7 @@
 // (coordinada, en_coordinacion, primer_contacto…) se agrupan en "Por atender".
 // - Vista Tablero: columnas estilo dashboard de citas (PC).
 // - Vista Lista: tarjetas estilo CRM.
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, createElement } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput,
   ActivityIndicator, Platform, Linking, useWindowDimensions,
@@ -59,6 +59,8 @@ export default function AsesorCitas() {
   const [vista, setVista] = useState<'lista' | 'tablero'>('lista')
   const [busca, setBusca] = useState('')
   const [detalle, setDetalle] = useState<Cita | null>(null)
+  const [dragCita, setDragCita] = useState<Cita | null>(null)   // arrastre (web)
+  const [dragOver, setDragOver] = useState<Estado | null>(null)
 
   const cargar = useCallback(async () => {
     const { data: { user } } = await getUsuarioActual()
@@ -126,7 +128,7 @@ export default function AsesorCitas() {
   function TarjetaTablero({ ci }: { ci: Cita }) {
     const est = ESTADOS[colDe(ci.estado)]
     const tel = limpiarTel(ci.clientes?.telefono)
-    return (
+    const card = (
       <TouchableOpacity style={kc.card} activeOpacity={0.85} onPress={() => setDetalle(ci)}>
         <View style={[kc.colorBar, { backgroundColor: est.color }]} />
         <View style={kc.body}>
@@ -144,6 +146,16 @@ export default function AsesorCitas() {
         </View>
       </TouchableOpacity>
     )
+    // Web: arrastrable (idéntico al dashboard); móvil: se mueve tocando la cita.
+    if (Platform.OS === 'web') {
+      return createElement('div', {
+        draggable: true,
+        onDragStart: (ev: any) => { ev.dataTransfer.effectAllowed = 'move'; setDragCita(ci) },
+        onDragEnd: () => { setDragCita(null); setDragOver(null) },
+        style: { cursor: 'grab', opacity: dragCita?.id === ci.id ? 0.45 : 1 },
+      }, card)
+    }
+    return card
   }
 
   return (
@@ -173,18 +185,30 @@ export default function AsesorCitas() {
         </ScrollView>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ padding: 10, gap: 10 }}>
-          {ORDEN.map(e => (
-            <View key={e} style={[tb.col, { width: Math.min(COL_W, width - 40) }]}>
-              <View style={[tb.colHead, { backgroundColor: ESTADOS[e].bg, borderColor: ESTADOS[e].color }]}>
-                <Text style={[tb.colHeadTxt, { color: ESTADOS[e].color }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
-                <View style={[tb.colCount, { backgroundColor: ESTADOS[e].color }]}><Text style={tb.colCountTxt}>{porEstado[e].length}</Text></View>
+          {ORDEN.map(e => {
+            const colW = Math.min(COL_W, width - 40)
+            const resaltar = dragOver === e && dragCita && colDe(dragCita.estado) !== e
+            const inner = (
+              <View style={[tb.col, { width: colW }, resaltar && { borderWidth: 2, borderColor: ESTADOS[e].color }]}>
+                <View style={[tb.colHead, { backgroundColor: ESTADOS[e].bg, borderColor: ESTADOS[e].color }]}>
+                  <Text style={[tb.colHeadTxt, { color: ESTADOS[e].color }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
+                  <View style={[tb.colCount, { backgroundColor: ESTADOS[e].color }]}><Text style={tb.colCountTxt}>{porEstado[e].length}</Text></View>
+                </View>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
+                  {porEstado[e].map(ci => <TarjetaTablero key={ci.id} ci={ci} />)}
+                  {porEstado[e].length === 0 && <Text style={tb.colVacio}>{Platform.OS === 'web' ? 'Suelta aquí' : '—'}</Text>}
+                </ScrollView>
               </View>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
-                {porEstado[e].map(ci => <TarjetaTablero key={ci.id} ci={ci} />)}
-                {porEstado[e].length === 0 && <Text style={tb.colVacio}>—</Text>}
-              </ScrollView>
-            </View>
-          ))}
+            )
+            if (Platform.OS !== 'web') return <View key={e}>{inner}</View>
+            return createElement('div', {
+              key: e,
+              onDragEnter: (ev: any) => { ev.preventDefault(); setDragOver(e) },
+              onDragOver: (ev: any) => ev.preventDefault(),
+              onDrop: (ev: any) => { ev.preventDefault(); if (dragCita && colDe(dragCita.estado) !== e) mover(dragCita, e); setDragCita(null); setDragOver(null) },
+              style: { flexShrink: 0 },
+            }, inner)
+          })}
         </ScrollView>
       )}
 
