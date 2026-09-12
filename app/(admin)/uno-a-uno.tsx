@@ -19,7 +19,7 @@ const TEAL = '#1a6470'
 
 type Persona = { id: string; nombre: string; role: string }
 type Punto = { id: string; texto: string; nota: string | null; hecho: boolean; orden: number }
-type Sesion = { id: string; prospectador_id: string; duracion_seg: number; notas: string | null; created_at: string }
+type Sesion = { id: string; prospectador_id: string; duracion_seg: number; notas: string | null; problema: string | null; compromiso: string | null; created_at: string }
 
 function fmtDur(s: number): string {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
@@ -44,6 +44,8 @@ export default function UnoAUno() {
   const [puntos, setPuntos] = useState<Punto[]>([])
   const [cargando, setCargando] = useState(false)
   const [nuevoPunto, setNuevoPunto] = useState('')
+  const [problema, setProblema] = useState('')
+  const [compromiso, setCompromiso] = useState('')
 
   const [sesiones, setSesiones] = useState<Sesion[]>([])
   const [abierta, setAbierta] = useState<string | null>(null)
@@ -74,7 +76,7 @@ export default function UnoAUno() {
   const cargarHistorial = useCallback(async () => {
     if (!miId) return
     const { data } = await supabase.from('uno_a_uno_sesiones')
-      .select('id, prospectador_id, duracion_seg, notas, created_at')
+      .select('id, prospectador_id, duracion_seg, notas, problema, compromiso, created_at')
       .eq('owner_id', miId).order('created_at', { ascending: false }).limit(200)
     setSesiones((data ?? []) as Sesion[])
   }, [miId])
@@ -102,7 +104,7 @@ export default function UnoAUno() {
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Copiado', msg)
       return
     }
-    setSel(p); setPickerAbierto(false); setSeg(0); setCorriendo(false)
+    setSel(p); setPickerAbierto(false); setSeg(0); setCorriendo(false); setProblema(''); setCompromiso('')
     cargarDe(p)
   }
 
@@ -141,8 +143,9 @@ export default function UnoAUno() {
     const snapshot = puntos.map(p => `• ${p.texto}${p.hecho ? ' ✓' : ''}${p.nota ? `\n   ${p.nota}` : ''}`).join('\n')
     await supabase.from('uno_a_uno_sesiones').insert({
       owner_id: miId, prospectador_id: sel.id, duracion_seg: seg, notas: snapshot || null,
+      problema: problema.trim() || null, compromiso: compromiso.trim() || null,
     })
-    setSeg(0); setCorriendo(false)
+    setSeg(0); setCorriendo(false); setProblema(''); setCompromiso('')
     const msg = `Charla con ${sel.nombre} guardada en el historial.`
     Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Guardado', msg)
   }
@@ -243,11 +246,18 @@ export default function UnoAUno() {
                 </TouchableOpacity>
               </View>
 
-              {puntos.length > 0 && (
-                <TouchableOpacity style={s.guardar} onPress={guardarEnHistorial}>
-                  <Text style={s.guardarTxt}>✓ Guardar charla en el historial{seg > 0 ? ` · ⏱ ${fmtDur(seg)}` : ''}</Text>
-                </TouchableOpacity>
-              )}
+              {/* Notas finales de la reunión */}
+              <Text style={[s.h2, { color: c.text, marginTop: 22 }]}>Al terminar la reunión</Text>
+              <Text style={[s.lbl, { color: '#c0392b' }]}>❗ Problema</Text>
+              <TextInput style={[...inp, s.finalArea]} value={problema} onChangeText={setProblema}
+                placeholder="¿Cuál es el problema principal detectado?" placeholderTextColor={c.placeholder} multiline textAlignVertical="top" />
+              <Text style={[s.lbl, { color: '#16a34a' }]}>🤝 Compromiso</Text>
+              <TextInput style={[...inp, s.finalArea]} value={compromiso} onChangeText={setCompromiso}
+                placeholder="¿A qué se comprometió / cuál es el acuerdo?" placeholderTextColor={c.placeholder} multiline textAlignVertical="top" />
+
+              <TouchableOpacity style={s.guardar} onPress={guardarEnHistorial}>
+                <Text style={s.guardarTxt}>✓ Guardar charla en el historial{seg > 0 ? ` · ⏱ ${fmtDur(seg)}` : ''}</Text>
+              </TouchableOpacity>
             </>
           )}
         </>
@@ -284,9 +294,12 @@ export default function UnoAUno() {
                   <Text style={{ color: TEAL, fontWeight: '800' }}>{open ? '▲' : '▼'}</Text>
                 </View>
                 {open && (
-                  <Text style={{ color: c.textSub, fontSize: 13.5, lineHeight: 19, marginTop: 10 }}>
-                    {x.notas || 'Sin notas en esta charla.'}
-                  </Text>
+                  <View style={{ marginTop: 10, gap: 8 }}>
+                    {x.notas ? <Text style={{ color: c.textSub, fontSize: 13.5, lineHeight: 19 }}>{x.notas}</Text> : null}
+                    {x.problema ? <View style={[s.finalBox, { borderColor: '#c0392b', backgroundColor: '#c0392b11' }]}><Text style={s.finalBoxLbl}>❗ Problema</Text><Text style={{ color: c.textSub, fontSize: 13.5, lineHeight: 19 }}>{x.problema}</Text></View> : null}
+                    {x.compromiso ? <View style={[s.finalBox, { borderColor: '#16a34a', backgroundColor: '#16a34a11' }]}><Text style={[s.finalBoxLbl, { color: '#16a34a' }]}>🤝 Compromiso</Text><Text style={{ color: c.textSub, fontSize: 13.5, lineHeight: 19 }}>{x.compromiso}</Text></View> : null}
+                    {!x.notas && !x.problema && !x.compromiso ? <Text style={{ color: c.textMute, fontSize: 13 }}>Sin notas en esta charla.</Text> : null}
+                  </View>
                 )}
               </TouchableOpacity>
             )
@@ -349,6 +362,10 @@ const s = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14.5, width: '100%' },
   addBtn: { backgroundColor: TEAL, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14 },
   addBtnTxt: { color: '#fff', fontWeight: '800', fontSize: 13.5 },
+  lbl: { fontSize: 12.5, fontWeight: '800', marginTop: 12, marginBottom: 5 },
+  finalArea: { minHeight: 56, textAlignVertical: 'top' },
+  finalBox: { borderWidth: 1, borderRadius: 9, padding: 9 },
+  finalBoxLbl: { fontSize: 11.5, fontWeight: '900', color: '#c0392b', marginBottom: 3 },
   guardar: { borderWidth: 1.5, borderColor: '#16a34a', borderRadius: 11, paddingVertical: 12, alignItems: 'center', marginTop: 16 },
   guardarTxt: { color: '#16a34a', fontWeight: '800', fontSize: 14 },
   sesCard: { borderWidth: 1, borderRadius: 12, padding: 13, marginBottom: 10 },
