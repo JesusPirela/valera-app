@@ -47,6 +47,10 @@ export default function UnoAUno() {
 
   const [sesiones, setSesiones] = useState<Sesion[]>([])
   const [abierta, setAbierta] = useState<string | null>(null)
+  const [filtroHist, setFiltroHist] = useState<string | null>(null)
+  // Espejo de puntos para leer el valor más reciente al persistir (onBlur).
+  const puntosRef = useRef<Punto[]>([])
+  puntosRef.current = puntos
 
   // Cronómetro simple (opcional, aparte)
   const [seg, setSeg] = useState(0)
@@ -113,6 +117,17 @@ export default function UnoAUno() {
   async function actualizarPunto(id: string, patch: Partial<Punto>) {
     setPuntos(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p))
     await supabase.from('uno_a_uno_puntos').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  }
+  // Edita SOLO en memoria mientras escribe (para no perder texto ni depender de
+  // onEndEditing, que en web no siempre dispara).
+  function editarLocal(id: string, patch: Partial<Punto>) {
+    setPuntos(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p))
+  }
+  // Persiste el punto (título + nota) al salir del campo, leyendo el valor actual.
+  async function persistirPunto(id: string) {
+    const p = puntosRef.current.find(x => x.id === id); if (!p) return
+    await supabase.from('uno_a_uno_puntos')
+      .update({ texto: p.texto, nota: p.nota, updated_at: new Date().toISOString() }).eq('id', id)
   }
   function borrarPunto(id: string) {
     const go = async () => { setPuntos(prev => prev.filter(p => p.id !== id)); await supabase.from('uno_a_uno_puntos').delete().eq('id', id) }
@@ -207,15 +222,15 @@ export default function UnoAUno() {
                     </TouchableOpacity>
                     <TextInput
                       style={[s.puntoTitulo, { color: p.hecho ? c.textMute : c.text, textDecorationLine: p.hecho ? 'line-through' : 'none' }]}
-                      defaultValue={p.texto} placeholder="Título del punto" placeholderTextColor={c.placeholder}
-                      onEndEditing={e => { const v = e.nativeEvent.text.trim(); if (v && v !== p.texto) actualizarPunto(p.id, { texto: v }) }} />
+                      value={p.texto} placeholder="Título del punto" placeholderTextColor={c.placeholder}
+                      onChangeText={v => editarLocal(p.id, { texto: v })} onBlur={() => persistirPunto(p.id)} />
                     <TouchableOpacity onPress={() => borrarPunto(p.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={{ color: '#c0392b', fontSize: 15 }}>🗑</Text></TouchableOpacity>
                   </View>
                   <TextInput
                     style={[s.puntoNota, { color: c.textSub, borderColor: c.border, backgroundColor: c.bg }]}
-                    defaultValue={p.nota ?? ''} placeholder="Nota de este punto…" placeholderTextColor={c.placeholder}
+                    value={p.nota ?? ''} placeholder="Nota de este punto…" placeholderTextColor={c.placeholder}
                     multiline textAlignVertical="top"
-                    onEndEditing={e => actualizarPunto(p.id, { nota: e.nativeEvent.text.trim() || null })} />
+                    onChangeText={v => editarLocal(p.id, { nota: v || null })} onBlur={() => persistirPunto(p.id)} />
                 </View>
               ))}
 
@@ -240,7 +255,20 @@ export default function UnoAUno() {
         <View style={{ marginTop: 14 }}>
           {sesiones.length === 0 ? (
             <View style={s.vacio}><Text style={{ fontSize: 44 }}>📭</Text><Text style={[s.vacioTxt, { color: c.textMute }]}>Aún no guardas charlas. En "Preparar", al terminar un 1 a 1, toca "Guardar esta charla en el historial".</Text></View>
-          ) : sesiones.map(x => {
+          ) : (
+          <>
+          {/* Filtro por persona */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7, paddingBottom: 10 }}>
+            <TouchableOpacity onPress={() => setFiltroHist(null)} style={[s.fChip, { borderColor: c.border }, filtroHist === null && s.fChipOn]}>
+              <Text style={[s.fChipTxt, { color: filtroHist === null ? '#fff' : c.textSub }]}>Todas</Text>
+            </TouchableOpacity>
+            {[...new Set(sesiones.map(x => x.prospectador_id))].map(pid => (
+              <TouchableOpacity key={pid} onPress={() => setFiltroHist(f => f === pid ? null : pid)} style={[s.fChip, { borderColor: c.border }, filtroHist === pid && s.fChipOn]}>
+                <Text style={[s.fChipTxt, { color: filtroHist === pid ? '#fff' : c.textSub }]}>{nombreDe(pid)}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          {sesiones.filter(x => !filtroHist || x.prospectador_id === filtroHist).map(x => {
             const open = abierta === x.id
             return (
               <TouchableOpacity key={x.id} activeOpacity={0.85} onPress={() => setAbierta(open ? null : x.id)}
@@ -262,6 +290,8 @@ export default function UnoAUno() {
               </TouchableOpacity>
             )
           })}
+          </>
+          )}
         </View>
       )}
 
@@ -321,6 +351,9 @@ const s = StyleSheet.create({
   guardar: { borderWidth: 1.5, borderColor: '#16a34a', borderRadius: 11, paddingVertical: 12, alignItems: 'center', marginTop: 16 },
   guardarTxt: { color: '#16a34a', fontWeight: '800', fontSize: 14 },
   sesCard: { borderWidth: 1, borderRadius: 12, padding: 13, marginBottom: 10 },
+  fChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
+  fChipOn: { backgroundColor: TEAL, borderColor: TEAL },
+  fChipTxt: { fontSize: 12.5, fontWeight: '700' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalCard: { width: '100%', maxWidth: 440, borderRadius: 16, padding: 16 },
   personaItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#88888822' },
