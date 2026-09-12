@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 // "Ver como": permite a un ADMIN simular la vista de otro rol (usuario/plus/
 // supervisor). Solo afecta la app de prospectador (routing + filtrado de
 // contenido). Se persiste para sobrevivir recargas.
-export type RolSimulado = 'nuevo' | 'prospectador' | 'prospectador_plus' | 'asesor' | 'supervisor' | null
+export type RolSimulado = 'nuevo' | 'prospectador' | 'prospectador_plus' | 'asesor' | 'supervisor' | 'gerente' | null
 
 export const VISTA_COMO_KEY = '@valera_vista_como'
 
@@ -22,7 +22,7 @@ export function VistaComoProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     AsyncStorage.getItem(VISTA_COMO_KEY).then(v => {
-      if (v === 'nuevo' || v === 'prospectador' || v === 'prospectador_plus' || v === 'asesor' || v === 'supervisor') setEstado(v)
+      if (v === 'nuevo' || v === 'prospectador' || v === 'prospectador_plus' || v === 'asesor' || v === 'supervisor' || v === 'gerente') setEstado(v)
     }).catch(() => {}).finally(() => setListo(true))
   }, [])
 

@@ -11,6 +11,7 @@ const VISTAS: { rol: Exclude<RolSimulado, null>; label: string; desc: string; ic
   { rol: 'prospectador_plus', label: 'Ver como Usuario Plus', desc: 'Incluye propiedades exclusivas',          icon: '⭐', color: '#7B1FA2' },
   { rol: 'asesor',            label: 'Ver como Asesor',       desc: 'Con el apartado de citas del asesor',     icon: '🤝', color: '#2E7D32' },
   { rol: 'supervisor',        label: 'Ver como Supervisor',   desc: 'Con el apartado de Supervisión',          icon: '🛡️', color: '#00838F' },
+  { rol: 'gerente',           label: 'Ver como Gerente',      desc: 'Con el apartado de Gerencia',             icon: '💼', color: '#4527A0' },
 ]
 
 export default function Cuenta() {

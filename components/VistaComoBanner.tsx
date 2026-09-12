@@ -8,6 +8,7 @@ const LABEL: Record<string, string> = {
   prospectador_plus: 'Usuario Plus',
   asesor: 'Asesor',
   supervisor: 'Supervisor',
+  gerente: 'Gerente',
 }
 
 // Barra flotante que indica al admin que está viendo la app como otro rol,
