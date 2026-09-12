@@ -109,8 +109,15 @@ jobs:
       # atascó (dejó basura .git/node_modules en la raíz web y congeló el sitio):
       # los cambios llegaban a main pero NO a la web. El FTP sube dist/ directo y
       # es el método que funcionaba de forma confiable.
-      # A veces el FTP de Hostinger rechaza la conexión ("Failed to connect") de
-      # forma transitoria y tumbaba el deploy entero. Se intenta hasta 3 veces.
+      # El FTP de Hostinger rechaza la conexión de forma INTERMITENTE con
+      # "Failed to connect / Timeout (control socket)": el handshake inicial no
+      # alcanza a abrir en el timeout por defecto (30 s) y, si los 3 intentos
+      # caían en un mal momento, el deploy entero fallaba y la web se quedaba
+      # con el bundle viejo. Mitigación: timeout de conexión más largo (120 s,
+      # justo lo que se agotaba) y 5 intentos con esperas crecientes.
+      #
+      # state-name: con un nombre nuevo la Action re-sube TODO (evita el bug de
+      # "File content is the same, doing nothing" que dejaba index.html viejo).
       - name: Deploy a Hostinger por FTP (intento 1)
         id: ftp1
         continue-on-error: true
@@ -121,17 +128,12 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: ./
-          # El estado de sincronización viejo (.ftp-deploy-sync-state.json) quedó
-          # desincronizado: alguien subió un build viejo por FTP fuera de esta
-          # Action, así que index.html apuntaba al bundle antiguo pero la Action
-          # creía que ya estaba al día ("File content is the same, doing nothing")
-          # y NO subía nada. Cada deploy salía "success" pero la web no cambiaba.
-          # Con un state-name nuevo la Action re-sube TODO y corrige index.html.
+          timeout: 120000
           state-name: .deploy-state-v4.json
 
       - name: Esperar y reintentar (intento 2)
         if: steps.ftp1.outcome == 'failure'
-        run: sleep 25
+        run: sleep 30
       - name: Deploy a Hostinger por FTP (intento 2)
         id: ftp2
         if: steps.ftp1.outcome == 'failure'
@@ -143,13 +145,16 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: ./
+          timeout: 120000
           state-name: .deploy-state-v4.json
 
       - name: Esperar y reintentar (intento 3)
         if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure'
-        run: sleep 30
-      - name: Deploy a Hostinger por FTP (intento 3, final)
+        run: sleep 45
+      - name: Deploy a Hostinger por FTP (intento 3)
+        id: ftp3
         if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure'
+        continue-on-error: true
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_HOST }}
@@ -157,4 +162,37 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: ./
+          timeout: 120000
+          state-name: .deploy-state-v4.json
+
+      - name: Esperar y reintentar (intento 4)
+        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure' && steps.ftp3.outcome == 'failure'
+        run: sleep 60
+      - name: Deploy a Hostinger por FTP (intento 4)
+        id: ftp4
+        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure' && steps.ftp3.outcome == 'failure'
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: ./
+          timeout: 120000
+          state-name: .deploy-state-v4.json
+
+      - name: Esperar y reintentar (intento 5)
+        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure' && steps.ftp3.outcome == 'failure' && steps.ftp4.outcome == 'failure'
+        run: sleep 60
+      - name: Deploy a Hostinger por FTP (intento 5, final)
+        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure' && steps.ftp3.outcome == 'failure' && steps.ftp4.outcome == 'failure'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: ./
+          timeout: 120000
           state-name: .deploy-state-v4.json
