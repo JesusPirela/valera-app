@@ -3,8 +3,10 @@ import { router } from 'expo-router'
 import { useVistaComo } from '../lib/VistaComo'
 
 const LABEL: Record<string, string> = {
+  nuevo: 'Nuevo',
   prospectador: 'Usuario',
   prospectador_plus: 'Usuario Plus',
+  asesor: 'Asesor',
   supervisor: 'Supervisor',
 }
 

@@ -6,8 +6,10 @@ import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import CambiarCuenta from '../../components/CambiarCuenta'
 
 const VISTAS: { rol: Exclude<RolSimulado, null>; label: string; desc: string; icon: string; color: string }[] = [
+  { rol: 'nuevo',             label: 'Ver como Nuevo',        desc: 'Vista de una cuenta recién creada',       icon: '🐣', color: '#546E7A' },
   { rol: 'prospectador',      label: 'Ver como Usuario',      desc: 'Vista de un prospectador normal',         icon: '🙍', color: '#1976D2' },
   { rol: 'prospectador_plus', label: 'Ver como Usuario Plus', desc: 'Incluye propiedades exclusivas',          icon: '⭐', color: '#7B1FA2' },
+  { rol: 'asesor',            label: 'Ver como Asesor',       desc: 'Con el apartado de citas del asesor',     icon: '🤝', color: '#2E7D32' },
   { rol: 'supervisor',        label: 'Ver como Supervisor',   desc: 'Con el apartado de Supervisión',          icon: '🛡️', color: '#00838F' },
 ]
 
