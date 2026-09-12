@@ -194,6 +194,7 @@ export default function UnoAUno() {
               </TouchableOpacity>
             </View>
           </View>
+          <Text style={[s.sub, { color: c.textMute, marginTop: 6 }]}>⏱ Inícialo al empezar la llamada; su duración se guarda con la charla en el historial.</Text>
 
           {/* Selector de persona */}
           <TouchableOpacity style={[s.selBtn, { borderColor: sel ? TEAL : c.border, backgroundColor: c.card }]} onPress={abrirSelector}>
@@ -244,7 +245,7 @@ export default function UnoAUno() {
 
               {puntos.length > 0 && (
                 <TouchableOpacity style={s.guardar} onPress={guardarEnHistorial}>
-                  <Text style={s.guardarTxt}>✓ Guardar esta charla en el historial</Text>
+                  <Text style={s.guardarTxt}>✓ Guardar charla en el historial{seg > 0 ? ` · ⏱ ${fmtDur(seg)}` : ''}</Text>
                 </TouchableOpacity>
               )}
             </>
@@ -277,7 +278,7 @@ export default function UnoAUno() {
                   <Text style={{ fontSize: 18 }}>🧑</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: c.text, fontWeight: '800', fontSize: 15 }}>{nombreDe(x.prospectador_id)}</Text>
-                    <Text style={{ color: c.textMute, fontSize: 12 }}>{fmtFecha(x.created_at)}{x.duracion_seg > 0 ? ` · ⏱ ${fmtDur(x.duracion_seg)}` : ''}</Text>
+                    <Text style={{ color: c.textMute, fontSize: 12 }}>{fmtFecha(x.created_at)} · ⏱ {x.duracion_seg > 0 ? fmtDur(x.duracion_seg) : 'sin cronómetro'}</Text>
                   </View>
                   <TouchableOpacity onPress={() => borrarSesion(x.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={{ color: '#c0392b', fontSize: 15 }}>🗑</Text></TouchableOpacity>
                   <Text style={{ color: TEAL, fontWeight: '800' }}>{open ? '▲' : '▼'}</Text>
