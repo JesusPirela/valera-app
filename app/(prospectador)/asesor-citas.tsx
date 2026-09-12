@@ -1,55 +1,34 @@
-// Pantalla de citas para el ASESOR (mobile-first). Muestra SOLO las citas que
-// le asignaron (RLS: asesor_id = él). Dos vistas: Lista (tarjetas, cómoda en
-// teléfono) y Tablero (columnas por etapa, como el dashboard). Puede mover la
-// etapa de sus citas y agregar una nueva, que entra PENDIENTE DE APROBACIÓN
-// hasta que un admin la apruebe.
+// "Mis citas" del ASESOR. Muestra SOLO sus citas ya atendidas/decididas
+// (realizada, reagendada, cancelada) y le deja moverlas entre esos estados.
+// - Vista Tablero: columnas estilo dashboard de citas (PC).
+// - Vista Lista: tarjetas estilo CRM.
 import { useState, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput,
-  ActivityIndicator, Alert, Platform, Linking,
+  ActivityIndicator, Platform, Linking, useWindowDimensions,
 } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 
-type Estado =
-  | 'por_contactar' | 'primer_contacto' | 'buscando_opciones' | 'en_coordinacion'
-  | 'coordinada' | 'reagendada' | 'no_responde_asesor' | 'realizada'
-  | 'aparto' | 'recaudando_documentacion' | 'aprobando_credito' | 'firma_contrato'
-  | 'escrituracion' | 'cancelada'
-
-const ESTADOS: Record<Estado, { label: string; color: string; emoji: string }> = {
-  por_contactar:            { label: 'Perfilado sin fecha',    color: '#3b82f6', emoji: '🔵' },
-  primer_contacto:          { label: 'Contactando',            color: '#8b5cf6', emoji: '🟣' },
-  buscando_opciones:        { label: 'Buscando opciones',      color: '#ca8a04', emoji: '🟡' },
-  en_coordinacion:          { label: 'En coordinación',        color: '#f97316', emoji: '🟠' },
-  coordinada:               { label: 'Coordinada',             color: '#16a34a', emoji: '🟢' },
-  reagendada:               { label: 'Reagendada',             color: '#b45309', emoji: '🟤' },
-  no_responde_asesor:       { label: 'No responde',            color: '#dc2626', emoji: '🔴' },
-  realizada:                { label: 'Realizada',              color: '#0d9488', emoji: '✅' },
-  aparto:                   { label: 'Apartó / cerró',         color: '#c87f0a', emoji: '🏆' },
-  recaudando_documentacion: { label: 'Documentación',          color: '#0369a1', emoji: '📄' },
-  aprobando_credito:        { label: 'Aprobando crédito',      color: '#d97706', emoji: '💳' },
-  firma_contrato:           { label: 'Firma de contrato',      color: '#059669', emoji: '✍️' },
-  escrituracion:            { label: 'Escrituración',          color: '#c2410c', emoji: '🏠' },
-  cancelada:                { label: 'Cancelada',              color: '#64748b', emoji: '⚫' },
+type Estado = 'realizada' | 'reagendada' | 'cancelada'
+const ESTADOS: Record<Estado, { label: string; color: string; bg: string; emoji: string }> = {
+  realizada:  { label: 'Realizada',  color: '#0d9488', bg: '#f0fdfa', emoji: '✅' },
+  reagendada: { label: 'Reagendada', color: '#b45309', bg: '#fef3c7', emoji: '🟤' },
+  cancelada:  { label: 'Cancelada',  color: '#64748b', bg: '#f1f5f9', emoji: '⚫' },
 }
-// Orden de etapas para el tablero y el selector (todas, para no ocultar ninguna).
-const ORDEN: Estado[] = [
-  'por_contactar', 'primer_contacto', 'buscando_opciones', 'en_coordinacion',
-  'coordinada', 'reagendada', 'no_responde_asesor', 'realizada',
-  'aparto', 'recaudando_documentacion', 'aprobando_credito', 'firma_contrato', 'escrituracion', 'cancelada',
-]
+const ORDEN: Estado[] = ['realizada', 'reagendada', 'cancelada']
+const COL_W = 250
 
 type Cita = {
   id: string; cliente_id: string; estado: Estado; fecha_cita: string | null
-  notas: string | null; propiedad_externa: string | null; pendiente_aprobacion: boolean
+  notas: string | null; propiedad_externa: string | null
   clientes: { nombre: string; telefono: string | null; tipo_operacion: string | null } | null
   prospectador: { nombre: string } | null
   propiedad: { titulo: string } | null
 }
-type ClienteMini = { id: string; nombre: string; telefono: string | null }
 
 const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -57,20 +36,23 @@ function fmtFecha(iso: string | null): string {
   if (!iso) return 'Sin fecha'
   const d = new Date(iso); if (isNaN(d.getTime())) return 'Sin fecha'
   const h = d.getHours(); const ampm = h < 12 ? 'am' : 'pm'; const h12 = h % 12 || 12
-  return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}, ${h12}:${String(d.getMinutes()).padStart(2, '0')} ${ampm}`
+  return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${h12}:${String(d.getMinutes()).padStart(2, '0')} ${ampm}`
+}
+function iniciales(n: string | null | undefined): string {
+  const p = (n ?? '').trim().split(/\s+/).filter(Boolean)
+  return ((p[0]?.[0] ?? '') + (p[1]?.[0] ?? '')).toUpperCase() || '?'
 }
 function limpiarTel(t: string | null | undefined): string { return (t ?? '').replace(/[^\d+]/g, '') }
 
 export default function AsesorCitas() {
   const c = useColors()
+  const { width } = useWindowDimensions()
   const [miId, setMiId] = useState<string | null>(null)
   const [citas, setCitas] = useState<Cita[]>([])
   const [loading, setLoading] = useState(true)
   const [vista, setVista] = useState<'lista' | 'tablero'>('lista')
-  const [filtro, setFiltro] = useState<Estado | null>(null)
   const [busca, setBusca] = useState('')
   const [detalle, setDetalle] = useState<Cita | null>(null)
-  const [nueva, setNueva] = useState(false)
 
   const cargar = useCallback(async () => {
     const { data: { user } } = await getUsuarioActual()
@@ -78,12 +60,13 @@ export default function AsesorCitas() {
     setMiId(user.id)
     const { data } = await supabase
       .from('citas_coordinacion')
-      .select(`id, cliente_id, estado, fecha_cita, notas, propiedad_externa, pendiente_aprobacion,
+      .select(`id, cliente_id, estado, fecha_cita, notas, propiedad_externa,
         clientes ( nombre, telefono, tipo_operacion ),
         prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre ),
         propiedad:propiedades ( titulo )`)
       .eq('asesor_id', user.id)
-      .order('fecha_cita', { ascending: true, nullsFirst: false })
+      .in('estado', ORDEN)
+      .order('fecha_cita', { ascending: false, nullsFirst: false })
     setCitas((data ?? []) as unknown as Cita[])
     setLoading(false)
   }, [])
@@ -91,52 +74,68 @@ export default function AsesorCitas() {
 
   const visibles = useMemo(() => {
     const q = busca.trim().toLowerCase()
-    return citas.filter(ci => {
-      if (filtro && ci.estado !== filtro) return false
-      if (q) {
-        const hay = `${ci.clientes?.nombre ?? ''} ${ci.propiedad?.titulo ?? ''} ${ci.propiedad_externa ?? ''}`.toLowerCase()
-        if (!hay.includes(q)) return false
-      }
-      return true
-    })
-  }, [citas, filtro, busca])
+    if (!q) return citas
+    return citas.filter(ci => `${ci.clientes?.nombre ?? ''} ${ci.propiedad?.titulo ?? ''} ${ci.propiedad_externa ?? ''}`.toLowerCase().includes(q))
+  }, [citas, busca])
 
-  const pendientesN = citas.filter(ci => ci.pendiente_aprobacion).length
-
-  async function cambiarEstado(ci: Cita, e: Estado) {
-    setCitas(prev => prev.map(x => x.id === ci.id ? { ...x, estado: e } : x))
-    setDetalle(d => d && d.id === ci.id ? { ...d, estado: e } : d)
-    await supabase.from('citas_coordinacion').update({ estado: e }).eq('id', ci.id)
-  }
-
-  const propNombre = (ci: Cita) => ci.propiedad?.titulo || ci.propiedad_externa || null
-
-  // Conteo por etapa para el tablero
   const porEstado = useMemo(() => {
-    const m: Record<string, Cita[]> = {}
-    for (const e of ORDEN) m[e] = []
+    const m: Record<Estado, Cita[]> = { realizada: [], reagendada: [], cancelada: [] }
     for (const ci of visibles) (m[ci.estado] ??= []).push(ci)
     return m
   }, [visibles])
 
-  function Tarjeta({ ci, compacta }: { ci: Cita; compacta?: boolean }) {
+  async function mover(ci: Cita, e: Estado) {
+    setCitas(prev => prev.map(x => x.id === ci.id ? { ...x, estado: e } : x))
+    setDetalle(d => d && d.id === ci.id ? { ...d, estado: e } : d)
+    await supabase.from('citas_coordinacion').update({ estado: e }).eq('id', ci.id)
+  }
+  const propNombre = (ci: Cita) => ci.propiedad?.titulo || ci.propiedad_externa || null
+
+  // ── Tarjeta estilo CRM (vista lista) ──
+  function TarjetaLista({ ci }: { ci: Cita }) {
     const est = ESTADOS[ci.estado]
     return (
-      <TouchableOpacity
-        style={[st.card, { backgroundColor: c.card, borderColor: ci.pendiente_aprobacion ? '#c9a84c' : c.border }, compacta && st.cardCompacta]}
-        activeOpacity={0.85} onPress={() => setDetalle(ci)}>
-        {ci.pendiente_aprobacion && (
-          <View style={st.ribbon}><Text style={st.ribbonTxt}>⏳ Pendiente de aprobación</Text></View>
-        )}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={[st.cliente, { color: c.text }]} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text>
-          {ci.clientes?.tipo_operacion ? <Text style={[st.opBadge, { color: c.textMute, borderColor: c.border }]}>{ci.clientes.tipo_operacion}</Text> : null}
+      <TouchableOpacity style={cl.card} activeOpacity={0.85} onPress={() => setDetalle(ci)}>
+        <View style={[cl.cardBar, { backgroundColor: est.color }]} />
+        <View style={cl.cardBody}>
+          <View style={cl.cardHead}>
+            <View style={[cl.avatar, { backgroundColor: est.bg }]}><Text style={[cl.avatarTxt, { color: est.color }]}>{iniciales(ci.clientes?.nombre)}</Text></View>
+            <View style={cl.cardHeadInfo}>
+              <Text style={cl.cardNombre} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text>
+              <View style={cl.cardSubRow}>
+                <View style={[cl.estadoChip, { backgroundColor: est.bg, borderColor: est.color }]}><Text style={[cl.estadoChipTxt, { color: est.color }]}>{est.emoji} {est.label}</Text></View>
+                {ci.clientes?.tipo_operacion ? <Text style={cl.op}>{ci.clientes.tipo_operacion}</Text> : null}
+              </View>
+            </View>
+            <Text style={cl.chevron}>›</Text>
+          </View>
+          {propNombre(ci) ? <Text style={cl.linea} numberOfLines={1}>🏠 {propNombre(ci)}</Text> : null}
+          <Text style={cl.linea} numberOfLines={1}>📅 {fmtFecha(ci.fecha_cita)}</Text>
+          {ci.prospectador?.nombre ? <Text style={[cl.linea, { color: '#94a3b8' }]} numberOfLines={1}>🌱 {ci.prospectador.nombre}</Text> : null}
         </View>
-        {!compacta && propNombre(ci) ? <Text style={[st.linea, { color: c.textSub }]} numberOfLines={1}>🏠 {propNombre(ci)}</Text> : null}
-        <Text style={[st.linea, { color: c.textMute }]} numberOfLines={1}>📅 {fmtFecha(ci.fecha_cita)}</Text>
-        {!compacta && ci.prospectador?.nombre ? <Text style={[st.linea, { color: c.textMute }]} numberOfLines={1}>🌱 {ci.prospectador.nombre}</Text> : null}
-        <View style={[st.estadoChip, { backgroundColor: est.color + '22', borderColor: est.color }]}>
-          <Text style={[st.estadoChipTxt, { color: est.color }]}>{est.emoji} {est.label}</Text>
+      </TouchableOpacity>
+    )
+  }
+
+  // ── Tarjeta estilo dashboard (vista tablero) ──
+  function TarjetaTablero({ ci }: { ci: Cita }) {
+    const est = ESTADOS[ci.estado]
+    const tel = limpiarTel(ci.clientes?.telefono)
+    return (
+      <TouchableOpacity style={kc.card} activeOpacity={0.85} onPress={() => setDetalle(ci)}>
+        <View style={[kc.colorBar, { backgroundColor: est.color }]} />
+        <View style={kc.body}>
+          <View style={kc.headRow}>
+            <View style={[kc.avatar, { backgroundColor: est.bg }]}><Text style={[kc.avatarTxt, { color: est.color }]}>{iniciales(ci.clientes?.nombre)}</Text></View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={kc.nombre} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text>
+              {tel ? <Text style={kc.tel}>{tel}</Text> : null}
+            </View>
+          </View>
+          {ci.fecha_cita ? <View style={kc.fechaRow}><Ionicons name="calendar-outline" size={11} color="#1a6470" /><Text style={kc.fechaTxt}>{fmtFecha(ci.fecha_cita)}</Text></View> : null}
+          {propNombre(ci) ? <View style={kc.proyectoRow}><Ionicons name="business-outline" size={10} color="#0d9488" /><Text style={kc.proyectoTxt} numberOfLines={1}>{propNombre(ci)}</Text></View> : null}
+          {ci.notas ? <Text style={kc.notas} numberOfLines={2}>{ci.notas}</Text> : null}
+          {ci.prospectador?.nombre ? <Text style={kc.metaTxt} numberOfLines={1}><Ionicons name="person-outline" size={9} color="#94a3b8" /> {ci.prospectador.nombre.split(' ')[0]}</Text> : null}
         </View>
       </TouchableOpacity>
     )
@@ -144,245 +143,88 @@ export default function AsesorCitas() {
 
   return (
     <View style={[st.page, { backgroundColor: c.bg }]}>
-      {/* Encabezado */}
       <View style={st.top}>
         <View style={{ flex: 1 }}>
           <Text style={[st.h1, { color: c.text }]}>Mis citas</Text>
-          <Text style={[st.sub, { color: c.textMute }]}>
-            {loading ? ' ' : `${citas.length} asignada${citas.length !== 1 ? 's' : ''}${pendientesN ? ` · ${pendientesN} por aprobar` : ''}`}
-          </Text>
+          <Text style={[st.sub, { color: c.textMute }]}>{loading ? ' ' : `${citas.length} cita${citas.length !== 1 ? 's' : ''} · realizadas, reagendadas y canceladas`}</Text>
         </View>
-        <TouchableOpacity style={st.nuevaBtn} onPress={() => setNueva(true)}>
-          <Text style={st.nuevaBtnTxt}>＋ Nueva</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Toggle de vista */}
       <View style={st.toggleRow}>
         {(['lista', 'tablero'] as const).map(v => (
-          <TouchableOpacity key={v} onPress={() => setVista(v)}
-            style={[st.toggleBtn, { borderColor: c.border }, vista === v && st.toggleOn]}>
+          <TouchableOpacity key={v} onPress={() => setVista(v)} style={[st.toggleBtn, { borderColor: c.border }, vista === v && st.toggleOn]}>
             <Text style={[st.toggleTxt, { color: vista === v ? '#fff' : c.textSub }]}>{v === 'lista' ? '☰ Lista' : '▦ Tablero'}</Text>
           </TouchableOpacity>
         ))}
-        <TextInput style={[st.busca, { color: c.text, borderColor: c.border, backgroundColor: c.card }]}
-          value={busca} onChangeText={setBusca} placeholder="Buscar…" placeholderTextColor={c.placeholder} />
+        <TextInput style={[st.busca, { color: c.text, borderColor: c.border, backgroundColor: c.card }]} value={busca} onChangeText={setBusca} placeholder="Buscar…" placeholderTextColor={c.placeholder} />
       </View>
 
-      {/* Filtro por etapa */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.filtroRow} contentContainerStyle={{ gap: 7, paddingRight: 12 }}>
-        <TouchableOpacity onPress={() => setFiltro(null)} style={[st.fChip, { borderColor: c.border }, filtro === null && st.fChipOn]}>
-          <Text style={[st.fChipTxt, { color: filtro === null ? '#fff' : c.textSub }]}>Todas</Text>
-        </TouchableOpacity>
-        {ORDEN.filter(e => citas.some(ci => ci.estado === e)).map(e => (
-          <TouchableOpacity key={e} onPress={() => setFiltro(f => f === e ? null : e)}
-            style={[st.fChip, { borderColor: filtro === e ? ESTADOS[e].color : c.border }, filtro === e && { backgroundColor: ESTADOS[e].color }]}>
-            <Text style={[st.fChipTxt, { color: filtro === e ? '#fff' : c.textSub }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
       {loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : citas.length === 0 ? (
-        <View style={st.vacio}>
-          <Text style={{ fontSize: 46 }}>📭</Text>
-          <Text style={[st.vacioTxt, { color: c.textMute }]}>Aún no tienes citas asignadas. Cuando te asignen una aparecerá aquí; también puedes agregar una con “＋ Nueva”.</Text>
-        </View>
+        <View style={st.vacio}><Text style={{ fontSize: 46 }}>📭</Text><Text style={[st.vacioTxt, { color: c.textMute }]}>Aquí verás tus citas ya realizadas, reagendadas o canceladas.</Text></View>
       ) : vista === 'lista' ? (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
-          {visibles.map(ci => <Tarjeta key={ci.id} ci={ci} />)}
-          {visibles.length === 0 && <Text style={{ color: c.textMute, textAlign: 'center', marginTop: 20 }}>Sin citas con ese filtro.</Text>}
+          {visibles.map(ci => <TarjetaLista key={ci.id} ci={ci} />)}
+          {visibles.length === 0 && <Text style={{ color: c.textMute, textAlign: 'center', marginTop: 20 }}>Sin resultados.</Text>}
         </ScrollView>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ padding: 10, gap: 10 }}>
-          {ORDEN.filter(e => porEstado[e].length > 0).map(e => (
-            <View key={e} style={[st.col, { backgroundColor: c.card, borderColor: c.border }]}>
-              <View style={[st.colHead, { borderColor: ESTADOS[e].color }]}>
-                <Text style={[st.colHeadTxt, { color: ESTADOS[e].color }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
-                <Text style={[st.colCount, { color: c.textMute }]}>{porEstado[e].length}</Text>
+          {ORDEN.map(e => (
+            <View key={e} style={[tb.col, { width: Math.min(COL_W, width - 40) }]}>
+              <View style={[tb.colHead, { backgroundColor: ESTADOS[e].bg, borderColor: ESTADOS[e].color }]}>
+                <Text style={[tb.colHeadTxt, { color: ESTADOS[e].color }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
+                <View style={[tb.colCount, { backgroundColor: ESTADOS[e].color }]}><Text style={tb.colCountTxt}>{porEstado[e].length}</Text></View>
               </View>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
-                {porEstado[e].map(ci => <Tarjeta key={ci.id} ci={ci} compacta />)}
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
+                {porEstado[e].map(ci => <TarjetaTablero key={ci.id} ci={ci} />)}
+                {porEstado[e].length === 0 && <Text style={tb.colVacio}>—</Text>}
               </ScrollView>
             </View>
           ))}
         </ScrollView>
       )}
 
-      {detalle && (
-        <DetalleModal cita={detalle} onClose={() => setDetalle(null)} onCambiarEstado={cambiarEstado} />
-      )}
-      {nueva && miId && (
-        <NuevaCitaModal miId={miId} onClose={() => setNueva(false)} onSaved={() => { setNueva(false); cargar() }} />
-      )}
+      {detalle && <DetalleModal cita={detalle} onClose={() => setDetalle(null)} onMover={mover} c={c} />}
     </View>
   )
 }
 
-// ── Detalle + acciones ───────────────────────────────────────────────────────
-function DetalleModal({ cita, onClose, onCambiarEstado }: {
-  cita: Cita; onClose: () => void; onCambiarEstado: (ci: Cita, e: Estado) => void
+function DetalleModal({ cita, onClose, onMover, c }: {
+  cita: Cita; onClose: () => void; onMover: (ci: Cita, e: Estado) => void; c: ReturnType<typeof useColors>
 }) {
-  const c = useColors()
   const tel = limpiarTel(cita.clientes?.telefono)
   const prop = cita.propiedad?.titulo || cita.propiedad_externa || null
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={st.sheetOverlay}>
-        <View style={[st.sheet, { backgroundColor: c.card }]}>
-          <View style={st.sheetHandle} />
+      <View style={dm.overlay}>
+        <View style={[dm.sheet, { backgroundColor: c.card }]}>
+          <View style={dm.handle} />
           <ScrollView showsVerticalScrollIndicator={false}>
-            {cita.pendiente_aprobacion && (
-              <View style={st.ribbonBig}><Text style={st.ribbonTxt}>⏳ Pendiente de aprobación del admin</Text></View>
-            )}
-            <Text style={[st.sheetTitulo, { color: c.text }]}>{cita.clientes?.nombre || 'Cliente'}</Text>
-            {prop ? <Text style={[st.sheetLinea, { color: c.textSub }]}>🏠 {prop}</Text> : null}
-            <Text style={[st.sheetLinea, { color: c.textSub }]}>📅 {fmtFecha(cita.fecha_cita)}</Text>
-            {cita.prospectador?.nombre ? <Text style={[st.sheetLinea, { color: c.textMute }]}>🌱 Prospectó: {cita.prospectador.nombre}</Text> : null}
-            {cita.notas ? <Text style={[st.sheetLinea, { color: c.textMute }]}>📝 {cita.notas}</Text> : null}
+            <Text style={[dm.titulo, { color: c.text }]}>{cita.clientes?.nombre || 'Cliente'}</Text>
+            {prop ? <Text style={[dm.linea, { color: c.textSub }]}>🏠 {prop}</Text> : null}
+            <Text style={[dm.linea, { color: c.textSub }]}>📅 {fmtFecha(cita.fecha_cita)}</Text>
+            {cita.prospectador?.nombre ? <Text style={[dm.linea, { color: c.textMute }]}>🌱 Prospectó: {cita.prospectador.nombre}</Text> : null}
+            {cita.notas ? <Text style={[dm.linea, { color: c.textMute }]}>📝 {cita.notas}</Text> : null}
 
             {tel ? (
-              <View style={st.accionRow}>
-                <TouchableOpacity style={[st.accion, { backgroundColor: '#16a34a' }]} onPress={() => Linking.openURL(`https://wa.me/52${tel.replace(/^\+?52/, '')}`)}>
-                  <Text style={st.accionTxt}>💬 WhatsApp</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[st.accion, { backgroundColor: '#1a6470' }]} onPress={() => Linking.openURL(`tel:${tel}`)}>
-                  <Text style={st.accionTxt}>📞 Llamar</Text>
-                </TouchableOpacity>
+              <View style={dm.accionRow}>
+                <TouchableOpacity style={[dm.accion, { backgroundColor: '#16a34a' }]} onPress={() => Linking.openURL(`https://wa.me/52${tel.replace(/^\+?52/, '')}`)}><Text style={dm.accionTxt}>💬 WhatsApp</Text></TouchableOpacity>
+                <TouchableOpacity style={[dm.accion, { backgroundColor: '#1a6470' }]} onPress={() => Linking.openURL(`tel:${tel}`)}><Text style={dm.accionTxt}>📞 Llamar</Text></TouchableOpacity>
               </View>
             ) : null}
 
-            <Text style={[st.sheetSub, { color: c.textSub }]}>Cambiar etapa</Text>
-            <View style={st.estadosGrid}>
+            <Text style={[dm.sub, { color: c.textSub }]}>Mover a</Text>
+            <View style={{ gap: 8 }}>
               {ORDEN.map(e => {
                 const on = cita.estado === e
                 return (
-                  <TouchableOpacity key={e} onPress={() => onCambiarEstado(cita, e)}
-                    style={[st.estadoOpt, { borderColor: on ? ESTADOS[e].color : c.border, backgroundColor: on ? ESTADOS[e].color + '22' : 'transparent' }]}>
-                    <Text style={[st.estadoOptTxt, { color: on ? ESTADOS[e].color : c.textSub, fontWeight: on ? '800' : '600' }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
+                  <TouchableOpacity key={e} onPress={() => onMover(cita, e)} style={[dm.estadoOpt, { borderColor: on ? ESTADOS[e].color : c.border, backgroundColor: on ? ESTADOS[e].bg : 'transparent' }]}>
+                    <Text style={[dm.estadoOptTxt, { color: on ? ESTADOS[e].color : c.text }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
+                    {on && <Text style={{ color: ESTADOS[e].color, fontWeight: '900' }}>✓</Text>}
                   </TouchableOpacity>
                 )
               })}
             </View>
-
-            <TouchableOpacity style={st.cerrar} onPress={onClose}><Text style={[st.cerrarTxt, { color: c.textSub }]}>Cerrar</Text></TouchableOpacity>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  )
-}
-
-// ── Nueva cita (entra pendiente de aprobación) ───────────────────────────────
-function NuevaCitaModal({ miId, onClose, onSaved }: { miId: string; onClose: () => void; onSaved: () => void }) {
-  const c = useColors()
-  const [misClientes, setMisClientes] = useState<ClienteMini[]>([])
-  const [clienteId, setClienteId] = useState<string | null>(null)
-  const [clienteNombre, setClienteNombre] = useState('')
-  const [buscaCli, setBuscaCli] = useState('')
-  const [nuevoTel, setNuevoTel] = useState('')
-  const [propiedad, setPropiedad] = useState('')
-  const [fecha, setFecha] = useState('')
-  const [notas, setNotas] = useState('')
-  const [guardando, setGuardando] = useState(false)
-
-  useFocusEffect(useCallback(() => {
-    supabase.from('clientes').select('id, nombre, telefono').is('eliminado_at', null).order('nombre')
-      .then(({ data }) => setMisClientes((data ?? []) as ClienteMini[]))
-  }, []))
-
-  const filtrados = useMemo(() => {
-    const q = buscaCli.trim().toLowerCase()
-    if (!q) return misClientes.slice(0, 30)
-    return misClientes.filter(x => (x.nombre ?? '').toLowerCase().includes(q) || (x.telefono ?? '').includes(q)).slice(0, 30)
-  }, [buscaCli, misClientes])
-
-  const hayExacto = misClientes.some(x => (x.nombre ?? '').toLowerCase() === buscaCli.trim().toLowerCase())
-
-  async function guardar() {
-    if (!clienteId && !clienteNombre.trim() && !buscaCli.trim()) { Alert.alert('Falta el cliente', 'Elige o escribe el nombre del cliente.'); return }
-    setGuardando(true)
-    try {
-      let cid = clienteId
-      // Cliente nuevo → se crea a nombre del asesor (responsable_id).
-      if (!cid) {
-        const nombre = (clienteNombre || buscaCli).trim()
-        const { data, error } = await supabase.from('clientes')
-          .insert({ nombre, telefono: nuevoTel.trim(), responsable_id: miId }).select('id').single()
-        if (error || !data) { throw error || new Error('No se pudo crear el cliente') }
-        cid = data.id
-      }
-      const { error } = await supabase.from('citas_coordinacion').insert({
-        cliente_id: cid, asesor_id: miId, creada_por: miId, pendiente_aprobacion: true,
-        estado: 'coordinada',
-        fecha_cita: fecha ? new Date(fecha).toISOString() : null,
-        propiedad_externa: propiedad.trim() || null,
-        notas: notas.trim() || null,
-      })
-      if (error) throw error
-      Alert.alert('Enviada ✓', 'La cita se envió para aprobación del admin. Aparecerá como pendiente hasta que la aprueben.')
-      onSaved()
-    } catch (e: any) {
-      setGuardando(false)
-      Alert.alert('Error', e?.message ?? 'No se pudo guardar la cita.')
-    }
-  }
-
-  const inp = [st.inp, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]
-  return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={st.sheetOverlay}>
-        <View style={[st.sheet, { backgroundColor: c.card }]}>
-          <View style={st.sheetHandle} />
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={[st.sheetTitulo, { color: c.text }]}>Nueva cita</Text>
-            <Text style={[st.sheetLinea, { color: c.textMute }]}>Se enviará al admin para aprobación.</Text>
-
-            <Text style={[st.lbl, { color: c.textSub }]}>Cliente</Text>
-            {clienteId || clienteNombre ? (
-              <View style={[st.clienteSel, { borderColor: '#16a34a' }]}>
-                <Text style={{ color: c.text, fontWeight: '700', flex: 1 }}>{clienteNombre || misClientes.find(x => x.id === clienteId)?.nombre}</Text>
-                <TouchableOpacity onPress={() => { setClienteId(null); setClienteNombre(''); setBuscaCli('') }}><Text style={{ color: '#c0392b', fontWeight: '800' }}>Cambiar</Text></TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <TextInput style={inp} value={buscaCli} onChangeText={setBuscaCli} placeholder="Buscar o escribir un nombre nuevo…" placeholderTextColor={c.placeholder} />
-                {buscaCli.trim().length > 1 && !hayExacto && (
-                  <TouchableOpacity style={st.crearCli} onPress={() => setClienteNombre(buscaCli.trim())}>
-                    <Text style={st.crearCliTxt}>➕ Crear cliente nuevo «{buscaCli.trim()}»</Text>
-                  </TouchableOpacity>
-                )}
-                <ScrollView style={{ maxHeight: 160, marginTop: 6 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                  {filtrados.map(x => (
-                    <TouchableOpacity key={x.id} style={st.cliItem} onPress={() => setClienteId(x.id)}>
-                      <Text style={{ color: c.text, fontSize: 14 }} numberOfLines={1}>{x.nombre}{x.telefono ? ` · ${x.telefono}` : ''}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            )}
-            {clienteNombre ? (
-              <TextInput style={inp} value={nuevoTel} onChangeText={setNuevoTel} placeholder="Teléfono del cliente nuevo (opcional)" placeholderTextColor={c.placeholder} keyboardType="phone-pad" />
-            ) : null}
-
-            <Text style={[st.lbl, { color: c.textSub }]}>Propiedad</Text>
-            <TextInput style={inp} value={propiedad} onChangeText={setPropiedad} placeholder="¿Qué propiedad va a ver?" placeholderTextColor={c.placeholder} />
-
-            <Text style={[st.lbl, { color: c.textSub }]}>Fecha y hora</Text>
-            {Platform.OS === 'web' ? (
-              /* @ts-ignore */
-              <input type="datetime-local" value={fecha} onChange={(e: any) => setFecha(e.target.value)}
-                style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: `1px solid ${c.border}`, fontSize: 14.5, color: c.inputText, backgroundColor: c.bg, outline: 'none', boxSizing: 'border-box' }} />
-            ) : (
-              <TextInput style={inp} value={fecha} onChangeText={setFecha} placeholder="YYYY-MM-DD HH:MM" placeholderTextColor={c.placeholder} keyboardType="numbers-and-punctuation" />
-            )}
-
-            <Text style={[st.lbl, { color: c.textSub }]}>Notas (opcional)</Text>
-            <TextInput style={[...inp, { minHeight: 60, textAlignVertical: 'top' }]} value={notas} onChangeText={setNotas} placeholder="Detalles…" placeholderTextColor={c.placeholder} multiline />
-
-            <TouchableOpacity style={[st.guardar, guardando && { opacity: 0.6 }]} onPress={guardar} disabled={guardando}>
-              {guardando ? <ActivityIndicator color="#fff" /> : <Text style={st.guardarTxt}>Enviar para aprobación</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={st.cerrar} onPress={onClose}><Text style={[st.cerrarTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
+            <TouchableOpacity style={dm.cerrar} onPress={onClose}><Text style={[dm.cerrarTxt, { color: c.textSub }]}>Cerrar</Text></TouchableOpacity>
           </ScrollView>
         </View>
       </View>
@@ -392,57 +234,73 @@ function NuevaCitaModal({ miId, onClose, onSaved }: { miId: string; onClose: () 
 
 const st = StyleSheet.create({
   page: { flex: 1 },
-  top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 10, gap: 10 },
+  top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 10 },
   h1: { fontSize: 21, fontWeight: '900' },
   sub: { fontSize: 12.5, marginTop: 1 },
-  nuevaBtn: { backgroundColor: '#059669', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
-  nuevaBtnTxt: { color: '#fff', fontWeight: '800', fontSize: 13.5 },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, marginTop: 10 },
   toggleBtn: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 7 },
   toggleOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   toggleTxt: { fontSize: 12.5, fontWeight: '800' },
   busca: { flex: 1, borderWidth: 1, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 7, fontSize: 13.5 },
-  filtroRow: { flexGrow: 0, paddingLeft: 14, marginTop: 10, maxHeight: 40 },
-  fChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 7 },
-  fChipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  fChipTxt: { fontSize: 12, fontWeight: '700' },
-  card: { borderWidth: 1, borderRadius: 14, padding: 13, marginBottom: 10, gap: 3 },
-  cardCompacta: { marginBottom: 0, padding: 10, width: 230 },
-  ribbon: { backgroundColor: '#c9a84c', borderRadius: 7, paddingVertical: 3, paddingHorizontal: 8, alignSelf: 'flex-start', marginBottom: 4 },
-  ribbonBig: { backgroundColor: '#c9a84c', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 10, alignItems: 'center', marginBottom: 10 },
-  ribbonTxt: { color: '#fff', fontWeight: '900', fontSize: 11.5 },
-  cliente: { fontSize: 16, fontWeight: '800', flexShrink: 1 },
-  opBadge: { fontSize: 10, fontWeight: '700', borderWidth: 1, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, textTransform: 'capitalize' },
-  linea: { fontSize: 12.5, marginTop: 2 },
-  estadoChip: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginTop: 6 },
-  estadoChipTxt: { fontSize: 11.5, fontWeight: '800' },
-  col: { width: 250, borderWidth: 1, borderRadius: 14, padding: 8 },
-  colHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 2, paddingBottom: 6, marginBottom: 8 },
-  colHeadTxt: { fontSize: 13, fontWeight: '900' },
-  colCount: { fontSize: 12, fontWeight: '700' },
   vacio: { alignItems: 'center', marginTop: 60, gap: 12, paddingHorizontal: 36 },
   vacioTxt: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  // sheet
-  sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, paddingBottom: 28, maxHeight: '90%' },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#88888855', alignSelf: 'center', marginBottom: 12 },
-  sheetTitulo: { fontSize: 20, fontWeight: '900' },
-  sheetLinea: { fontSize: 14, marginTop: 5, lineHeight: 19 },
-  sheetSub: { fontSize: 13, fontWeight: '800', marginTop: 16, marginBottom: 6 },
+})
+
+// Vista LISTA — estilo CRM
+const cl = StyleSheet.create({
+  card: { backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, flexDirection: 'row', overflow: 'hidden', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2 },
+  cardBar: { width: 4 },
+  cardBody: { flex: 1, padding: 14 },
+  cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
+  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatarTxt: { fontSize: 15, fontWeight: '800' },
+  cardHeadInfo: { flex: 1, minWidth: 0 },
+  cardNombre: { fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 4 },
+  cardSubRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  estadoChip: { borderWidth: 1, borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
+  estadoChipTxt: { fontSize: 11, fontWeight: '800' },
+  op: { fontSize: 11, color: '#94a3b8', textTransform: 'capitalize' },
+  chevron: { fontSize: 22, color: '#c0cdd0', fontWeight: '300' },
+  linea: { fontSize: 12.5, color: '#64748b', marginTop: 2 },
+})
+
+// Vista TABLERO — estilo dashboard
+const tb = StyleSheet.create({
+  col: { backgroundColor: '#f1f5f9', borderRadius: 12, padding: 8 },
+  colHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8 },
+  colHeadTxt: { fontSize: 13, fontWeight: '900' },
+  colCount: { minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  colCountTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  colVacio: { textAlign: 'center', color: '#cbd5e1', fontSize: 20, marginTop: 8 },
+})
+const kc = StyleSheet.create({
+  card: { backgroundColor: '#fff', borderRadius: 10, marginBottom: 8, flexDirection: 'row', overflow: 'hidden', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 2 },
+  colorBar: { width: 4 },
+  body: { flex: 1, padding: 10, gap: 5 },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatarTxt: { fontSize: 11, fontWeight: '800' },
+  nombre: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
+  tel: { fontSize: 11, color: '#64748b' },
+  fechaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f0fdfa', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, alignSelf: 'flex-start' },
+  fechaTxt: { fontSize: 11, color: '#1a6470', fontWeight: '600' },
+  notas: { fontSize: 11, color: '#64748b', lineHeight: 15 },
+  proyectoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  proyectoTxt: { fontSize: 10, color: '#0d9488', fontWeight: '600', flexShrink: 1 },
+  metaTxt: { fontSize: 10, color: '#94a3b8' },
+})
+const dm = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, paddingBottom: 28, maxHeight: '88%' },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#88888855', alignSelf: 'center', marginBottom: 12 },
+  titulo: { fontSize: 20, fontWeight: '900' },
+  linea: { fontSize: 14, marginTop: 5, lineHeight: 19 },
   accionRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   accion: { flex: 1, borderRadius: 11, paddingVertical: 12, alignItems: 'center' },
   accionTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  estadosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  estadoOpt: { borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
-  estadoOptTxt: { fontSize: 12 },
-  cerrar: { alignItems: 'center', paddingVertical: 14, marginTop: 6 },
+  sub: { fontSize: 13, fontWeight: '800', marginTop: 18, marginBottom: 8 },
+  estadoOpt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1.5, borderRadius: 11, paddingHorizontal: 14, paddingVertical: 13 },
+  estadoOptTxt: { fontSize: 14.5, fontWeight: '700' },
+  cerrar: { alignItems: 'center', paddingVertical: 14, marginTop: 8 },
   cerrarTxt: { fontSize: 14, fontWeight: '700' },
-  lbl: { fontSize: 12.5, fontWeight: '700', marginTop: 14, marginBottom: 5 },
-  inp: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14.5, marginBottom: 2 },
-  clienteSel: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderRadius: 10, padding: 11 },
-  crearCli: { marginTop: 8, borderWidth: 1.5, borderColor: '#059669', borderStyle: 'dashed', borderRadius: 9, paddingVertical: 9, alignItems: 'center' },
-  crearCliTxt: { color: '#059669', fontWeight: '800', fontSize: 12.5 },
-  cliItem: { paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#88888822' },
-  guardar: { backgroundColor: '#059669', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 18 },
-  guardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
 })
