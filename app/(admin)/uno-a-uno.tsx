@@ -1,7 +1,10 @@
 // Apartado PRIVADO del admin para sus 1-a-1 con el equipo.
-// - Eliges al prospectador → ves/preparas tus puntos a tratar (con nota por punto).
-// - Cronómetro sin límite para la llamada; al terminar guarda la duración.
-// - Todo es privado tuyo (RLS por owner_id); NUNCA se le manda al prospectador.
+// - Pestaña "Preparar": eliges a la persona, editas ANTES los puntos a tratar
+//   (con nota por punto), copias esa agenda a otras personas, y un cronómetro
+//   simple aparte. Al terminar puedes guardar la charla en el historial.
+// - Pestaña "Historial": bitácora general de TODAS tus charlas (con quién y
+//   cuándo); tocas una y ves las notas que quedaron.
+// Todo es privado tuyo (RLS por owner_id); NUNCA se le envía nada al prospectador.
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity,
@@ -16,36 +19,39 @@ const TEAL = '#1a6470'
 
 type Persona = { id: string; nombre: string; role: string }
 type Punto = { id: string; texto: string; nota: string | null; hecho: boolean; orden: number }
-type Sesion = { id: string; duracion_seg: number; notas: string | null; created_at: string }
+type Sesion = { id: string; prospectador_id: string; duracion_seg: number; notas: string | null; created_at: string }
 
 function fmtDur(s: number): string {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(h)}:${pad(m)}:${pad(sec)}`
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
 }
 function fmtFecha(iso: string): string {
-  return new Date(iso).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('es-MX', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 export default function UnoAUno() {
   const c = useColors()
   const [miId, setMiId] = useState<string | null>(null)
   const [personas, setPersonas] = useState<Persona[]>([])
+  const [vista, setVista] = useState<'preparar' | 'historial'>('preparar')
+
   const [sel, setSel] = useState<Persona | null>(null)
   const [pickerAbierto, setPickerAbierto] = useState(false)
+  const [modoCopiar, setModoCopiar] = useState(false)
   const [busca, setBusca] = useState('')
 
   const [puntos, setPuntos] = useState<Punto[]>([])
-  const [sesiones, setSesiones] = useState<Sesion[]>([])
   const [cargando, setCargando] = useState(false)
   const [nuevoPunto, setNuevoPunto] = useState('')
-  const [notaSesion, setNotaSesion] = useState('')
 
-  // Cronómetro
+  const [sesiones, setSesiones] = useState<Sesion[]>([])
+  const [abierta, setAbierta] = useState<string | null>(null)
+
+  // Cronómetro simple (opcional, aparte)
   const [seg, setSeg] = useState(0)
   const [corriendo, setCorriendo] = useState(false)
   const intRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
   useEffect(() => {
     if (corriendo) {
       intRef.current = setInterval(() => setSeg(s => s + 1), 1000)
@@ -53,33 +59,46 @@ export default function UnoAUno() {
     }
   }, [corriendo])
 
+  const nombreDe = useCallback((id: string) => personas.find(p => p.id === id)?.nombre ?? 'Alguien', [personas])
+
   useFocusEffect(useCallback(() => {
     getUsuarioActual().then(({ data: { user } }) => { if (user) setMiId(user.id) })
     supabase.from('profiles').select('id, nombre, role').eq('activo', true).order('nombre')
       .then(({ data }) => setPersonas((data ?? []).filter((p: any) => p.role !== 'admin' && p.nombre) as Persona[]))
   }, []))
 
+  const cargarHistorial = useCallback(async () => {
+    if (!miId) return
+    const { data } = await supabase.from('uno_a_uno_sesiones')
+      .select('id, prospectador_id, duracion_seg, notas, created_at')
+      .eq('owner_id', miId).order('created_at', { ascending: false }).limit(200)
+    setSesiones((data ?? []) as Sesion[])
+  }, [miId])
+  useEffect(() => { if (vista === 'historial') cargarHistorial() }, [vista, cargarHistorial])
+
   const cargarDe = useCallback(async (persona: Persona) => {
     if (!miId) return
     setCargando(true)
-    const [{ data: pts }, { data: ses }] = await Promise.all([
-      supabase.from('uno_a_uno_puntos').select('id, texto, nota, hecho, orden')
-        .eq('owner_id', miId).eq('prospectador_id', persona.id).order('orden'),
-      supabase.from('uno_a_uno_sesiones').select('id, duracion_seg, notas, created_at')
-        .eq('owner_id', miId).eq('prospectador_id', persona.id).order('created_at', { ascending: false }).limit(20),
-    ])
-    setPuntos((pts ?? []) as Punto[])
-    setSesiones((ses ?? []) as Sesion[])
+    const { data } = await supabase.from('uno_a_uno_puntos').select('id, texto, nota, hecho, orden')
+      .eq('owner_id', miId).eq('prospectador_id', persona.id).order('orden')
+    setPuntos((data ?? []) as Punto[])
     setCargando(false)
   }, [miId])
 
-  function elegir(p: Persona) {
-    if (corriendo || seg > 0) {
-      const ok = Platform.OS === 'web' ? window.confirm('Tienes una llamada en curso o sin guardar. ¿Cambiar de persona y descartar el cronómetro?') : true
-      if (!ok) return
+  function abrirSelector() { setModoCopiar(false); setBusca(''); setPickerAbierto(true) }
+  function abrirCopiar() { setModoCopiar(true); setBusca(''); setPickerAbierto(true) }
+
+  async function onElegirPersona(p: Persona) {
+    if (modoCopiar) {
+      if (!miId || puntos.length === 0) { setPickerAbierto(false); return }
+      const filas = puntos.map((pt, i) => ({ owner_id: miId, prospectador_id: p.id, texto: pt.texto, orden: i }))
+      await supabase.from('uno_a_uno_puntos').insert(filas)
+      setPickerAbierto(false); setModoCopiar(false)
+      const msg = `Se copiaron ${puntos.length} punto${puntos.length !== 1 ? 's' : ''} a ${p.nombre}.`
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Copiado', msg)
+      return
     }
-    setSel(p); setPickerAbierto(false); setBusca('')
-    setSeg(0); setCorriendo(false); setNotaSesion('')
+    setSel(p); setPickerAbierto(false); setSeg(0); setCorriendo(false)
     cargarDe(p)
   }
 
@@ -101,15 +120,22 @@ export default function UnoAUno() {
     else Alert.alert('Borrar punto', '¿Seguro?', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Borrar', style: 'destructive', onPress: go }])
   }
 
-  async function terminarLlamada() {
+  // Guarda una foto de la charla (puntos + notas) en el historial.
+  async function guardarEnHistorial() {
     if (!sel || !miId) return
-    if (seg > 0) {
-      const { data } = await supabase.from('uno_a_uno_sesiones')
-        .insert({ owner_id: miId, prospectador_id: sel.id, duracion_seg: seg, notas: notaSesion.trim() || null })
-        .select('id, duracion_seg, notas, created_at').single()
-      if (data) setSesiones(prev => [data as Sesion, ...prev])
-    }
-    setCorriendo(false); setSeg(0); setNotaSesion('')
+    const snapshot = puntos.map(p => `• ${p.texto}${p.hecho ? ' ✓' : ''}${p.nota ? `\n   ${p.nota}` : ''}`).join('\n')
+    await supabase.from('uno_a_uno_sesiones').insert({
+      owner_id: miId, prospectador_id: sel.id, duracion_seg: seg, notas: snapshot || null,
+    })
+    setSeg(0); setCorriendo(false)
+    const msg = `Charla con ${sel.nombre} guardada en el historial.`
+    Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Guardado', msg)
+  }
+
+  function borrarSesion(id: string) {
+    const go = async () => { setSesiones(prev => prev.filter(x => x.id !== id)); await supabase.from('uno_a_uno_sesiones').delete().eq('id', id) }
+    if (Platform.OS === 'web') { if (window.confirm('¿Borrar esta charla del historial?')) go() }
+    else Alert.alert('Borrar charla', '¿Seguro? Se quita del historial.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Borrar', style: 'destructive', onPress: go }])
   }
 
   const personasFiltradas = useMemo(() => {
@@ -121,101 +147,133 @@ export default function UnoAUno() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
-      <Text style={[s.h1, { color: c.text }]}>🎧 1 a 1</Text>
-      <Text style={[s.sub, { color: c.textMute }]}>Tu espacio privado para las entrevistas con el equipo. Nadie más ve esto.</Text>
+      <Text style={[s.h1, { color: c.text }]}>🗒️ 1 a 1</Text>
+      <Text style={[s.sub, { color: c.textMute }]}>Prepara y registra tus entrevistas. Es privado tuyo; nadie más lo ve.</Text>
 
-      {/* Selector de persona */}
-      <TouchableOpacity style={[s.selBtn, { borderColor: sel ? TEAL : c.border, backgroundColor: c.card }]} onPress={() => setPickerAbierto(true)}>
-        <Text style={{ fontSize: 20 }}>{sel ? '🧑' : '👥'}</Text>
-        <Text style={[s.selTxt, { color: sel ? c.text : c.textMute }]}>{sel ? sel.nombre : 'Elige con quién es el 1 a 1…'}</Text>
-        <Text style={{ color: TEAL, fontWeight: '800' }}>{sel ? 'Cambiar' : 'Elegir ›'}</Text>
-      </TouchableOpacity>
+      {/* Pestañas */}
+      <View style={s.tabs}>
+        {(['preparar', 'historial'] as const).map(v => (
+          <TouchableOpacity key={v} onPress={() => setVista(v)} style={[s.tab, { borderColor: c.border }, vista === v && s.tabOn]}>
+            <Text style={[s.tabTxt, { color: vista === v ? '#fff' : c.textSub }]}>{v === 'preparar' ? '📝 Preparar' : '📖 Historial'}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-      {!sel ? (
-        <View style={s.vacio}><Text style={{ fontSize: 44 }}>🗒️</Text><Text style={[s.vacioTxt, { color: c.textMute }]}>Elige a un prospectador para preparar sus puntos y cronometrar la llamada.</Text></View>
-      ) : cargando ? (
-        <ActivityIndicator color={TEAL} style={{ marginTop: 30 }} />
-      ) : (
+      {vista === 'preparar' ? (
         <>
-          {/* Cronómetro */}
-          <View style={[s.timerCard, { backgroundColor: c.card, borderColor: corriendo ? '#16a34a' : c.border }]}>
-            <Text style={[s.timerTxt, { color: corriendo ? '#16a34a' : c.text }]}>{fmtDur(seg)}</Text>
-            <View style={s.timerBtns}>
+          {/* Cronómetro simple, aparte */}
+          <View style={[s.timerRow, { backgroundColor: c.card, borderColor: c.border }]}>
+            <Text style={[s.timerTxt, { color: c.text }]}>⏱ {fmtDur(seg)}</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
               {!corriendo ? (
-                <TouchableOpacity style={[s.tBtn, { backgroundColor: '#16a34a' }]} onPress={() => setCorriendo(true)}>
-                  <Text style={s.tBtnTxt}>{seg > 0 ? '▶ Reanudar' : '▶ Iniciar llamada'}</Text>
+                <TouchableOpacity style={[s.tBtn, { backgroundColor: TEAL }]} onPress={() => setCorriendo(true)}>
+                  <Text style={s.tBtnTxt}>{seg > 0 ? 'Reanudar' : 'Iniciar'}</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={[s.tBtn, { backgroundColor: '#F57F17' }]} onPress={() => setCorriendo(false)}>
-                  <Text style={s.tBtnTxt}>⏸ Pausar</Text>
+                <TouchableOpacity style={[s.tBtn, { backgroundColor: '#64748b' }]} onPress={() => setCorriendo(false)}>
+                  <Text style={s.tBtnTxt}>Pausar</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={[s.tBtn, { backgroundColor: seg > 0 ? '#c0392b' : c.border }]} disabled={seg === 0} onPress={terminarLlamada}>
-                <Text style={[s.tBtnTxt, { color: seg > 0 ? '#fff' : c.textMute }]}>⏹ Terminar y guardar</Text>
+              <TouchableOpacity style={[s.tBtnGhost, { borderColor: c.border }]} onPress={() => { setCorriendo(false); setSeg(0) }}>
+                <Text style={[s.tBtnGhostTxt, { color: c.textSub }]}>Reiniciar</Text>
               </TouchableOpacity>
             </View>
-            <TextInput style={[...inp, { marginTop: 10, minHeight: 40, textAlignVertical: 'top' }]} value={notaSesion} onChangeText={setNotaSesion}
-              placeholder="Nota general de esta llamada (se guarda al terminar)…" placeholderTextColor={c.placeholder} multiline />
           </View>
 
-          {/* Puntos a tratar */}
-          <Text style={[s.h2, { color: c.text }]}>Puntos a tratar</Text>
-          <Text style={[s.sub, { color: c.textMute, marginTop: 0 }]}>Prepáralos antes y escribe tus notas durante la llamada. Son únicos de {sel.nombre.split(' ')[0]}.</Text>
+          {/* Selector de persona */}
+          <TouchableOpacity style={[s.selBtn, { borderColor: sel ? TEAL : c.border, backgroundColor: c.card }]} onPress={abrirSelector}>
+            <Text style={{ fontSize: 20 }}>{sel ? '🧑' : '👥'}</Text>
+            <Text style={[s.selTxt, { color: sel ? c.text : c.textMute }]}>{sel ? sel.nombre : 'Elige la persona…'}</Text>
+            <Text style={{ color: TEAL, fontWeight: '800' }}>{sel ? 'Cambiar' : 'Elegir ›'}</Text>
+          </TouchableOpacity>
 
-          {puntos.map((p, i) => (
-            <View key={p.id} style={[s.punto, { backgroundColor: c.card, borderColor: p.hecho ? '#16a34a' : c.border }]}>
-              <View style={s.puntoTop}>
-                <TouchableOpacity onPress={() => actualizarPunto(p.id, { hecho: !p.hecho })} style={[s.check, p.hecho && s.checkOn]}>
-                  {p.hecho && <Text style={s.checkTxt}>✓</Text>}
-                </TouchableOpacity>
-                <TextInput
-                  style={[s.puntoTitulo, { color: p.hecho ? c.textMute : c.text, textDecorationLine: p.hecho ? 'line-through' : 'none' }]}
-                  defaultValue={p.texto} placeholder="Título del punto" placeholderTextColor={c.placeholder}
-                  onEndEditing={e => { const v = e.nativeEvent.text.trim(); if (v && v !== p.texto) actualizarPunto(p.id, { texto: v }) }} />
-                <TouchableOpacity onPress={() => borrarPunto(p.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={{ color: '#c0392b', fontSize: 15 }}>🗑</Text></TouchableOpacity>
-              </View>
-              <TextInput
-                style={[s.puntoNota, { color: c.textSub, borderColor: c.border, backgroundColor: c.bg }]}
-                defaultValue={p.nota ?? ''} placeholder="Notas de este punto…" placeholderTextColor={c.placeholder}
-                multiline textAlignVertical="top"
-                onEndEditing={e => actualizarPunto(p.id, { nota: e.nativeEvent.text.trim() || null })} />
-            </View>
-          ))}
-
-          {/* Agregar punto */}
-          <View style={s.addRow}>
-            <TextInput style={[...inp, { flex: 1 }]} value={nuevoPunto} onChangeText={setNuevoPunto}
-              placeholder="Nuevo punto a tratar…" placeholderTextColor={c.placeholder} onSubmitEditing={agregarPunto} />
-            <TouchableOpacity style={[s.addBtn, { opacity: nuevoPunto.trim() ? 1 : 0.5 }]} disabled={!nuevoPunto.trim()} onPress={agregarPunto}>
-              <Text style={s.addBtnTxt}>+ Agregar</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Historial de sesiones */}
-          {sesiones.length > 0 && (
+          {!sel ? (
+            <View style={s.vacio}><Text style={{ fontSize: 44 }}>🗒️</Text><Text style={[s.vacioTxt, { color: c.textMute }]}>Elige a una persona para preparar los puntos que vas a tratar con ella.</Text></View>
+          ) : cargando ? (
+            <ActivityIndicator color={TEAL} style={{ marginTop: 30 }} />
+          ) : (
             <>
-              <Text style={[s.h2, { color: c.text }]}>Llamadas anteriores</Text>
-              {sesiones.map(x => (
-                <View key={x.id} style={[s.ses, { borderColor: c.border }]}>
-                  <Text style={{ color: c.text, fontWeight: '800' }}>⏱ {fmtDur(x.duracion_seg)}</Text>
-                  <Text style={{ color: c.textMute, fontSize: 12 }}>{fmtFecha(x.created_at)}</Text>
-                  {x.notas ? <Text style={{ color: c.textSub, fontSize: 12.5, flexBasis: '100%', marginTop: 3 }}>{x.notas}</Text> : null}
+              <View style={s.puntosHead}>
+                <Text style={[s.h2, { color: c.text }]}>Puntos con {sel.nombre.split(' ')[0]}</Text>
+                {puntos.length > 0 && <TouchableOpacity onPress={abrirCopiar}><Text style={s.copiar}>📋 Copiar a otra persona</Text></TouchableOpacity>}
+              </View>
+              <Text style={[s.sub, { color: c.textMute, marginTop: 0 }]}>Edítalos con calma antes de la llamada. La nota de cada punto es única de esta persona.</Text>
+
+              {puntos.map(p => (
+                <View key={p.id} style={[s.punto, { backgroundColor: c.card, borderColor: p.hecho ? '#16a34a' : c.border }]}>
+                  <View style={s.puntoTop}>
+                    <TouchableOpacity onPress={() => actualizarPunto(p.id, { hecho: !p.hecho })} style={[s.check, p.hecho && s.checkOn]}>
+                      {p.hecho && <Text style={s.checkTxt}>✓</Text>}
+                    </TouchableOpacity>
+                    <TextInput
+                      style={[s.puntoTitulo, { color: p.hecho ? c.textMute : c.text, textDecorationLine: p.hecho ? 'line-through' : 'none' }]}
+                      defaultValue={p.texto} placeholder="Título del punto" placeholderTextColor={c.placeholder}
+                      onEndEditing={e => { const v = e.nativeEvent.text.trim(); if (v && v !== p.texto) actualizarPunto(p.id, { texto: v }) }} />
+                    <TouchableOpacity onPress={() => borrarPunto(p.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={{ color: '#c0392b', fontSize: 15 }}>🗑</Text></TouchableOpacity>
+                  </View>
+                  <TextInput
+                    style={[s.puntoNota, { color: c.textSub, borderColor: c.border, backgroundColor: c.bg }]}
+                    defaultValue={p.nota ?? ''} placeholder="Nota de este punto…" placeholderTextColor={c.placeholder}
+                    multiline textAlignVertical="top"
+                    onEndEditing={e => actualizarPunto(p.id, { nota: e.nativeEvent.text.trim() || null })} />
                 </View>
               ))}
+
+              <View style={s.addRow}>
+                <TextInput style={[...inp, { flex: 1 }]} value={nuevoPunto} onChangeText={setNuevoPunto}
+                  placeholder="Nuevo punto a tratar…" placeholderTextColor={c.placeholder} onSubmitEditing={agregarPunto} />
+                <TouchableOpacity style={[s.addBtn, { opacity: nuevoPunto.trim() ? 1 : 0.5 }]} disabled={!nuevoPunto.trim()} onPress={agregarPunto}>
+                  <Text style={s.addBtnTxt}>+ Agregar</Text>
+                </TouchableOpacity>
+              </View>
+
+              {puntos.length > 0 && (
+                <TouchableOpacity style={s.guardar} onPress={guardarEnHistorial}>
+                  <Text style={s.guardarTxt}>✓ Guardar esta charla en el historial</Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
         </>
+      ) : (
+        /* ── Historial general ── */
+        <View style={{ marginTop: 14 }}>
+          {sesiones.length === 0 ? (
+            <View style={s.vacio}><Text style={{ fontSize: 44 }}>📭</Text><Text style={[s.vacioTxt, { color: c.textMute }]}>Aún no guardas charlas. En "Preparar", al terminar un 1 a 1, toca "Guardar esta charla en el historial".</Text></View>
+          ) : sesiones.map(x => {
+            const open = abierta === x.id
+            return (
+              <TouchableOpacity key={x.id} activeOpacity={0.85} onPress={() => setAbierta(open ? null : x.id)}
+                style={[s.sesCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 18 }}>🧑</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: c.text, fontWeight: '800', fontSize: 15 }}>{nombreDe(x.prospectador_id)}</Text>
+                    <Text style={{ color: c.textMute, fontSize: 12 }}>{fmtFecha(x.created_at)}{x.duracion_seg > 0 ? ` · ⏱ ${fmtDur(x.duracion_seg)}` : ''}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => borrarSesion(x.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={{ color: '#c0392b', fontSize: 15 }}>🗑</Text></TouchableOpacity>
+                  <Text style={{ color: TEAL, fontWeight: '800' }}>{open ? '▲' : '▼'}</Text>
+                </View>
+                {open && (
+                  <Text style={{ color: c.textSub, fontSize: 13.5, lineHeight: 19, marginTop: 10 }}>
+                    {x.notas || 'Sin notas en esta charla.'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )
+          })}
+        </View>
       )}
 
-      {/* Modal selector de persona */}
+      {/* Modal selector de persona (elegir o copiar) */}
       <Modal visible={pickerAbierto} transparent animationType="fade" onRequestClose={() => setPickerAbierto(false)}>
         <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={() => setPickerAbierto(false)}>
           <TouchableOpacity activeOpacity={1} style={[s.modalCard, { backgroundColor: c.card }]} onPress={e => e.stopPropagation?.()}>
-            <Text style={[s.h2, { color: c.text, marginTop: 0 }]}>¿Con quién es el 1 a 1?</Text>
+            <Text style={[s.h2, { color: c.text, marginTop: 0 }]}>{modoCopiar ? 'Copiar los puntos a…' : '¿Con quién es el 1 a 1?'}</Text>
             <TextInput style={inp} value={busca} onChangeText={setBusca} placeholder="Buscar por nombre…" placeholderTextColor={c.placeholder} autoFocus />
             <ScrollView style={{ maxHeight: 340, marginTop: 8 }} keyboardShouldPersistTaps="handled">
               {personasFiltradas.map(p => (
-                <TouchableOpacity key={p.id} style={s.personaItem} onPress={() => elegir(p)}>
+                <TouchableOpacity key={p.id} style={s.personaItem} onPress={() => onElegirPersona(p)}>
                   <Text style={{ color: c.text, fontSize: 14.5 }} numberOfLines={1}>{p.nombre}</Text>
                   <Text style={{ color: c.textMute, fontSize: 11 }}>{p.role.replace('prospectador_plus', 'plus')}</Text>
                 </TouchableOpacity>
@@ -231,19 +289,25 @@ export default function UnoAUno() {
 
 const s = StyleSheet.create({
   h1: { fontSize: 21, fontWeight: '900' },
-  h2: { fontSize: 16, fontWeight: '800', marginTop: 20, marginBottom: 6 },
+  h2: { fontSize: 16, fontWeight: '800' },
   sub: { fontSize: 12.5, marginTop: 3, lineHeight: 17 },
-  selBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1.5, borderRadius: 12, padding: 13, marginTop: 14 },
+  tabs: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  tab: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  tabOn: { backgroundColor: TEAL, borderColor: TEAL },
+  tabTxt: { fontWeight: '800', fontSize: 13.5 },
+  timerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 14 },
+  timerTxt: { fontSize: 24, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  tBtn: { borderRadius: 9, paddingVertical: 9, paddingHorizontal: 14 },
+  tBtnTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  tBtnGhost: { borderWidth: 1, borderRadius: 9, paddingVertical: 9, paddingHorizontal: 12 },
+  tBtnGhostTxt: { fontWeight: '700', fontSize: 13 },
+  selBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1.5, borderRadius: 12, padding: 13, marginTop: 12 },
   selTxt: { flex: 1, fontSize: 15, fontWeight: '700' },
-  vacio: { alignItems: 'center', marginTop: 50, gap: 12, paddingHorizontal: 30 },
+  vacio: { alignItems: 'center', marginTop: 44, gap: 12, paddingHorizontal: 30 },
   vacioTxt: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  timerCard: { borderWidth: 1.5, borderRadius: 16, padding: 16, marginTop: 16, alignItems: 'center' },
-  timerTxt: { fontSize: 46, fontWeight: '900', fontVariant: ['tabular-nums'], letterSpacing: 1 },
-  timerBtns: { flexDirection: 'row', gap: 10, marginTop: 12, flexWrap: 'wrap', justifyContent: 'center' },
-  tBtn: { borderRadius: 11, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' },
-  tBtnTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14.5, width: '100%' },
-  punto: { borderWidth: 1.5, borderRadius: 12, padding: 12, marginBottom: 10 },
+  puntosHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, gap: 10 },
+  copiar: { color: TEAL, fontWeight: '800', fontSize: 12.5 },
+  punto: { borderWidth: 1.5, borderRadius: 12, padding: 12, marginBottom: 10, marginTop: 10 },
   puntoTop: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   check: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: '#94a3b8', alignItems: 'center', justifyContent: 'center' },
   checkOn: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
@@ -251,9 +315,12 @@ const s = StyleSheet.create({
   puntoTitulo: { flex: 1, fontSize: 15, fontWeight: '700', paddingVertical: 2 },
   puntoNota: { borderWidth: 1, borderRadius: 8, padding: 9, fontSize: 13.5, minHeight: 52, marginTop: 8, lineHeight: 18 },
   addRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 4 },
+  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14.5, width: '100%' },
   addBtn: { backgroundColor: TEAL, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14 },
   addBtnTxt: { color: '#fff', fontWeight: '800', fontSize: 13.5 },
-  ses: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap', borderWidth: 1, borderRadius: 10, padding: 11, marginBottom: 8 },
+  guardar: { borderWidth: 1.5, borderColor: '#16a34a', borderRadius: 11, paddingVertical: 12, alignItems: 'center', marginTop: 16 },
+  guardarTxt: { color: '#16a34a', fontWeight: '800', fontSize: 14 },
+  sesCard: { borderWidth: 1, borderRadius: 12, padding: 13, marginBottom: 10 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalCard: { width: '100%', maxWidth: 440, borderRadius: 16, padding: 16 },
   personaItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#88888822' },
