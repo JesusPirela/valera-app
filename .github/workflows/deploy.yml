@@ -129,7 +129,7 @@ jobs:
           local-dir: ./dist/
           server-dir: ./
           timeout: 120000
-          state-name: .deploy-state-v4.json
+          state-name: .deploy-state-v5.json
 
       - name: Esperar y reintentar (intento 2)
         if: steps.ftp1.outcome == 'failure'
@@ -146,7 +146,7 @@ jobs:
           local-dir: ./dist/
           server-dir: ./
           timeout: 120000
-          state-name: .deploy-state-v4.json
+          state-name: .deploy-state-v5.json
 
       - name: Esperar y reintentar (intento 3)
         if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure'
@@ -163,7 +163,7 @@ jobs:
           local-dir: ./dist/
           server-dir: ./
           timeout: 120000
-          state-name: .deploy-state-v4.json
+          state-name: .deploy-state-v5.json
 
       - name: Esperar y reintentar (intento 4)
         if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure' && steps.ftp3.outcome == 'failure'
@@ -180,7 +180,7 @@ jobs:
           local-dir: ./dist/
           server-dir: ./
           timeout: 120000
-          state-name: .deploy-state-v4.json
+          state-name: .deploy-state-v5.json
 
       - name: Esperar y reintentar (intento 5)
         if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure' && steps.ftp3.outcome == 'failure' && steps.ftp4.outcome == 'failure'
@@ -195,4 +195,30 @@ jobs:
           local-dir: ./dist/
           server-dir: ./
           timeout: 120000
-          state-name: .deploy-state-v4.json
+          state-name: .deploy-state-v5.json
+
+      # GARANTÍA ANTI "BUNDLE VIEJO". El sync incremental guarda un archivo de
+      # estado en el servidor; si ese estado se desincroniza (por un corte de FTP
+      # a media subida, o una subida manual por fuera), la Action cree que
+      # index.html "no cambió" y NO lo sube ("File content is the same, doing
+      # nothing"), dejando la web apuntando a un bundle viejo aunque el JS nuevo
+      # ya esté arriba. index.html/.htaccess/ficha.php son diminutos: se fuerzan
+      # SIEMPRE por curl, saltándose el estado, para que el punto de entrada
+      # nunca quede viejo. curl reintenta ante fallos de conexión de Hostinger.
+      - name: Forzar index.html/.htaccess/ficha.php (siempre frescos)
+        run: |
+          ok=0
+          for f in index.html .htaccess ficha.php; do
+            [ -f "dist/$f" ] || continue
+            if curl --silent --show-error --fail --connect-timeout 60 \
+                 --retry 6 --retry-delay 15 --retry-connrefused \
+                 -T "dist/$f" "ftp://${{ secrets.FTP_HOST }}/$f" \
+                 --user "${{ secrets.FTP_USER }}:${{ secrets.FTP_PASSWORD }}"; then
+              echo "✓ forzado: $f"; [ "$f" = "index.html" ] && ok=1
+            else
+              echo "✗ no se pudo forzar: $f"
+            fi
+          done
+          # Si ni siquiera se pudo re-subir index.html, el deploy debe marcarse
+          # como fallido para que se vea y se reintente (no dejar la web vieja en silencio).
+          if [ "$ok" != "1" ]; then echo "::error::No se pudo subir index.html; la web podría quedar en un bundle viejo."; exit 1; fi
