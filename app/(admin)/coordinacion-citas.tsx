@@ -1483,14 +1483,14 @@ export default function CoordinacionCitas() {
         if (filtroAdmin === 'sin_asignar' && c.coordinado_por) return false
         if (filtroAdmin !== 'sin_asignar' && c.coordinado_por !== filtroAdmin) return false
       }
-      if (filtroOperacion && c.clientes.tipo_operacion !== filtroOperacion) return false
+      if (filtroOperacion && c.clientes?.tipo_operacion !== filtroOperacion) return false
       if (busqueda.trim()) {
         const q = busqueda.toLowerCase()
         return (
-          c.clientes.nombre.toLowerCase().includes(q) ||
-          c.clientes.telefono.includes(q) ||
-          c.prospectador?.nombre.toLowerCase().includes(q) ||
-          c.coordinador?.nombre.toLowerCase().includes(q) ||
+          (c.clientes?.nombre ?? '').toLowerCase().includes(q) ||
+          (c.clientes?.telefono ?? '').includes(q) ||
+          c.prospectador?.nombre?.toLowerCase().includes(q) ||
+          c.coordinador?.nombre?.toLowerCase().includes(q) ||
           false
         )
       }
@@ -1539,8 +1539,8 @@ export default function CoordinacionCitas() {
         new Date(c.fecha_cita).getTime() - ahora < 48 * 3600 * 1000 &&
         new Date(c.fecha_cita).getTime() > ahora
       ).length,
-      citasVenta: filtradas.filter(c => c.clientes.tipo_operacion !== 'renta'),
-      citasRenta: filtradas.filter(c => c.clientes.tipo_operacion === 'renta'),
+      citasVenta: filtradas.filter(c => c.clientes?.tipo_operacion !== 'renta'),
+      citasRenta: filtradas.filter(c => c.clientes?.tipo_operacion === 'renta'),
       citasHoyManana: (() => {
         const ini = new Date(); ini.setHours(0, 0, 0, 0)
         const fin = new Date(ini); fin.setDate(fin.getDate() + 2)
@@ -1728,7 +1728,7 @@ export default function CoordinacionCitas() {
                       </View>
                       <Text style={ag.hora}>{formatHora(c.fecha_cita) ?? '–'}</Text>
                     </View>
-                    <Text style={ag.nombre} numberOfLines={1}>{c.clientes.nombre}</Text>
+                    <Text style={ag.nombre} numberOfLines={1}>{c.clientes?.nombre ?? 'Cliente'}</Text>
                     <Text style={ag.estado}>{inf.emoji} {inf.label}</Text>
                     {c.prospectador && (
                       <Text style={ag.sub} numberOfLines={1}>👤 {c.prospectador.nombre.split(' ')[0]}</Text>
@@ -1887,7 +1887,7 @@ export default function CoordinacionCitas() {
             {([null, 'venta', 'renta'] as const).map(op => {
               const activo = filtroOperacion === op
               const label = op === null ? 'Todos' : op.charAt(0).toUpperCase() + op.slice(1)
-              const cnt = op === null ? citasFiltradas.length : citas.filter(c => c.clientes.tipo_operacion === op && (filtroAdmin
+              const cnt = op === null ? citasFiltradas.length : citas.filter(c => c.clientes?.tipo_operacion === op && (filtroAdmin
                 ? filtroAdmin === 'sin_asignar' ? !c.coordinado_por : c.coordinado_por === filtroAdmin
                 : true)).length
               return (
