@@ -1,5 +1,6 @@
-// "Mis citas" del ASESOR. Muestra SOLO sus citas ya atendidas/decididas
-// (realizada, reagendada, cancelada) y le deja moverlas entre esos estados.
+// "Mis citas" del ASESOR. Muestra TODAS las citas asignadas a él (por atender +
+// resultados) y le deja moverlas entre estados. Los estados previos
+// (coordinada, en_coordinacion, primer_contacto…) se agrupan en "Por atender".
 // - Vista Tablero: columnas estilo dashboard de citas (PC).
 // - Vista Lista: tarjetas estilo CRM.
 import { useState, useCallback, useMemo } from 'react'
@@ -13,17 +14,22 @@ import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 
-type Estado = 'realizada' | 'reagendada' | 'cancelada'
+type Estado = 'coordinada' | 'realizada' | 'aparto' | 'reagendada' | 'cancelada'
 const ESTADOS: Record<Estado, { label: string; color: string; bg: string; emoji: string }> = {
-  realizada:  { label: 'Realizada',  color: '#0d9488', bg: '#f0fdfa', emoji: '✅' },
-  reagendada: { label: 'Reagendada', color: '#b45309', bg: '#fef3c7', emoji: '🟤' },
-  cancelada:  { label: 'Cancelada',  color: '#64748b', bg: '#f1f5f9', emoji: '⚫' },
+  coordinada: { label: 'Por atender', color: '#16a34a', bg: '#f0fdf4', emoji: '🟢' },
+  realizada:  { label: 'Realizada',   color: '#0d9488', bg: '#f0fdfa', emoji: '✅' },
+  aparto:     { label: 'Apartó',      color: '#c87f0a', bg: '#fef9eb', emoji: '🏆' },
+  reagendada: { label: 'Reagendada',  color: '#b45309', bg: '#fef3c7', emoji: '🟤' },
+  cancelada:  { label: 'Cancelada',   color: '#64748b', bg: '#f1f5f9', emoji: '⚫' },
 }
-const ORDEN: Estado[] = ['realizada', 'reagendada', 'cancelada']
+const ORDEN: Estado[] = ['coordinada', 'realizada', 'aparto', 'reagendada', 'cancelada']
+// Cualquier estado previo (primer_contacto, en_coordinacion, buscando_opciones…)
+// se muestra como "Por atender" para que la cita asignada SÍ aparezca.
+function colDe(e: string): Estado { return (ESTADOS as any)[e] ? (e as Estado) : 'coordinada' }
 const COL_W = 250
 
 type Cita = {
-  id: string; cliente_id: string; estado: Estado; fecha_cita: string | null
+  id: string; cliente_id: string; estado: string; fecha_cita: string | null
   notas: string | null; propiedad_externa: string | null
   clientes: { nombre: string; telefono: string | null; tipo_operacion: string | null } | null
   prospectador: { nombre: string } | null
@@ -65,7 +71,6 @@ export default function AsesorCitas() {
         prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre ),
         propiedad:propiedades ( titulo )`)
       .eq('asesor_id', user.id)
-      .in('estado', ORDEN)
       .order('fecha_cita', { ascending: false, nullsFirst: false })
     setCitas((data ?? []) as unknown as Cita[])
     setLoading(false)
@@ -79,8 +84,8 @@ export default function AsesorCitas() {
   }, [citas, busca])
 
   const porEstado = useMemo(() => {
-    const m: Record<Estado, Cita[]> = { realizada: [], reagendada: [], cancelada: [] }
-    for (const ci of visibles) (m[ci.estado] ??= []).push(ci)
+    const m: Record<Estado, Cita[]> = { coordinada: [], realizada: [], aparto: [], reagendada: [], cancelada: [] }
+    for (const ci of visibles) m[colDe(ci.estado)].push(ci)
     return m
   }, [visibles])
 
@@ -93,7 +98,7 @@ export default function AsesorCitas() {
 
   // ── Tarjeta estilo CRM (vista lista) ──
   function TarjetaLista({ ci }: { ci: Cita }) {
-    const est = ESTADOS[ci.estado]
+    const est = ESTADOS[colDe(ci.estado)]
     return (
       <TouchableOpacity style={cl.card} activeOpacity={0.85} onPress={() => setDetalle(ci)}>
         <View style={[cl.cardBar, { backgroundColor: est.color }]} />
@@ -119,7 +124,7 @@ export default function AsesorCitas() {
 
   // ── Tarjeta estilo dashboard (vista tablero) ──
   function TarjetaTablero({ ci }: { ci: Cita }) {
-    const est = ESTADOS[ci.estado]
+    const est = ESTADOS[colDe(ci.estado)]
     const tel = limpiarTel(ci.clientes?.telefono)
     return (
       <TouchableOpacity style={kc.card} activeOpacity={0.85} onPress={() => setDetalle(ci)}>
@@ -146,7 +151,7 @@ export default function AsesorCitas() {
       <View style={st.top}>
         <View style={{ flex: 1 }}>
           <Text style={[st.h1, { color: c.text }]}>Mis citas</Text>
-          <Text style={[st.sub, { color: c.textMute }]}>{loading ? ' ' : `${citas.length} cita${citas.length !== 1 ? 's' : ''} · realizadas, reagendadas y canceladas`}</Text>
+          <Text style={[st.sub, { color: c.textMute }]}>{loading ? ' ' : `${citas.length} cita${citas.length !== 1 ? 's' : ''} asignada${citas.length !== 1 ? 's' : ''} a ti`}</Text>
         </View>
       </View>
 
@@ -160,7 +165,7 @@ export default function AsesorCitas() {
       </View>
 
       {loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : citas.length === 0 ? (
-        <View style={st.vacio}><Text style={{ fontSize: 46 }}>📭</Text><Text style={[st.vacioTxt, { color: c.textMute }]}>Aquí verás tus citas ya realizadas, reagendadas o canceladas.</Text></View>
+        <View style={st.vacio}><Text style={{ fontSize: 46 }}>📭</Text><Text style={[st.vacioTxt, { color: c.textMute }]}>Aquí verás las citas que te asignen. Cuando te asignen una, aparecerá en "Por atender".</Text></View>
       ) : vista === 'lista' ? (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
           {visibles.map(ci => <TarjetaLista key={ci.id} ci={ci} />)}
@@ -215,7 +220,7 @@ function DetalleModal({ cita, onClose, onMover, c }: {
             <Text style={[dm.sub, { color: c.textSub }]}>Mover a</Text>
             <View style={{ gap: 8 }}>
               {ORDEN.map(e => {
-                const on = cita.estado === e
+                const on = colDe(cita.estado) === e
                 return (
                   <TouchableOpacity key={e} onPress={() => onMover(cita, e)} style={[dm.estadoOpt, { borderColor: on ? ESTADOS[e].color : c.border, backgroundColor: on ? ESTADOS[e].bg : 'transparent' }]}>
                     <Text style={[dm.estadoOptTxt, { color: on ? ESTADOS[e].color : c.text }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
