@@ -98,27 +98,29 @@ export default function AsesorCitas() {
   }
   const propNombre = (ci: Cita) => ci.propiedad?.titulo || ci.propiedad_externa || null
 
-  // ── Tarjeta estilo CRM (vista lista) ──
+  // ── Tarjeta estilo CRM (vista lista) — misma estructura que el ClienteCard ──
   function TarjetaLista({ ci }: { ci: Cita }) {
     const est = ESTADOS[colDe(ci.estado)]
     return (
-      <TouchableOpacity style={cl.card} activeOpacity={0.85} onPress={() => setDetalle(ci)}>
+      <TouchableOpacity style={[cl.card, { backgroundColor: c.card, borderColor: c.border }]} activeOpacity={0.8} onPress={() => setDetalle(ci)}>
         <View style={[cl.cardBar, { backgroundColor: est.color }]} />
         <View style={cl.cardBody}>
           <View style={cl.cardHead}>
-            <View style={[cl.avatar, { backgroundColor: est.bg }]}><Text style={[cl.avatarTxt, { color: est.color }]}>{iniciales(ci.clientes?.nombre)}</Text></View>
+            <View style={[cl.avatar, { backgroundColor: est.color + '22' }]}><Text style={[cl.avatarTxt, { color: est.color }]}>{iniciales(ci.clientes?.nombre)}</Text></View>
             <View style={cl.cardHeadInfo}>
-              <Text style={cl.cardNombre} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text>
+              <Text style={[cl.cardNombre, { color: c.text }]} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text>
               <View style={cl.cardSubRow}>
-                <View style={[cl.estadoChip, { backgroundColor: est.bg, borderColor: est.color }]}><Text style={[cl.estadoChipTxt, { color: est.color }]}>{est.emoji} {est.label}</Text></View>
-                {ci.clientes?.tipo_operacion ? <Text style={cl.op}>{ci.clientes.tipo_operacion}</Text> : null}
+                {ci.clientes?.tipo_operacion ? <View style={[cl.fuenteTag, { backgroundColor: c.bg }]}><Text style={[cl.fuenteTagTxt, { color: c.textSub }]}>{ci.clientes.tipo_operacion}</Text></View> : null}
+                {propNombre(ci) ? <View style={[cl.fuenteTag, { backgroundColor: c.bg }]}><Text style={[cl.fuenteTagTxt, { color: c.textSub }]} numberOfLines={1}>🏠 {propNombre(ci)}</Text></View> : null}
               </View>
             </View>
-            <Text style={cl.chevron}>›</Text>
+            <View style={[cl.estadoBadge, { backgroundColor: est.color + '22' }]}>
+              <View style={[cl.estadoDot, { backgroundColor: est.color }]} />
+              <Text style={[cl.estadoTxt, { color: est.color }]} numberOfLines={1}>{est.label}</Text>
+            </View>
           </View>
-          {propNombre(ci) ? <Text style={cl.linea} numberOfLines={1}>🏠 {propNombre(ci)}</Text> : null}
-          <Text style={cl.linea} numberOfLines={1}>📅 {fmtFecha(ci.fecha_cita)}</Text>
-          {ci.prospectador?.nombre ? <Text style={[cl.linea, { color: '#94a3b8' }]} numberOfLines={1}>🌱 {ci.prospectador.nombre}</Text> : null}
+          <Text style={[cl.linea, { color: c.textSub }]} numberOfLines={1}>📅 {fmtFecha(ci.fecha_cita)}</Text>
+          {ci.prospectador?.nombre ? <Text style={[cl.linea, { color: c.textMute }]} numberOfLines={1}>🌱 {ci.prospectador.nombre}</Text> : null}
         </View>
       </TouchableOpacity>
     )
@@ -184,31 +186,36 @@ export default function AsesorCitas() {
           {visibles.length === 0 && <Text style={{ color: c.textMute, textAlign: 'center', marginTop: 20 }}>Sin resultados.</Text>}
         </ScrollView>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ padding: 10, gap: 10 }}>
-          {ORDEN.map(e => {
-            const colW = Math.min(COL_W, width - 40)
-            const resaltar = dragOver === e && dragCita && colDe(dragCita.estado) !== e
-            const inner = (
-              <View style={[tb.col, { width: colW }, resaltar && { borderWidth: 2, borderColor: ESTADOS[e].color }]}>
-                <View style={[tb.colHead, { backgroundColor: ESTADOS[e].bg, borderColor: ESTADOS[e].color }]}>
-                  <Text style={[tb.colHeadTxt, { color: ESTADOS[e].color }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
-                  <View style={[tb.colCount, { backgroundColor: ESTADOS[e].color }]}><Text style={tb.colCountTxt}>{porEstado[e].length}</Text></View>
+        // Igual que el dashboard: scroll vertical de la página, dentro un scroll
+        // horizontal de columnas, y CADA columna es una View plana (sin ScrollView
+        // interna) — en RN-Web una ScrollView interna bloquea el arrastre HTML5.
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 10 }} showsVerticalScrollIndicator={false}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+            {ORDEN.map(e => {
+              const colW = Math.min(COL_W, width - 40)
+              const resaltar = dragOver === e && dragCita && colDe(dragCita.estado) !== e
+              const inner = (
+                <View style={[tb.col, { width: colW }, resaltar && { borderWidth: 2, borderColor: ESTADOS[e].color }]}>
+                  <View style={[tb.colHead, { backgroundColor: ESTADOS[e].bg, borderColor: ESTADOS[e].color }]}>
+                    <Text style={[tb.colHeadTxt, { color: ESTADOS[e].color }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
+                    <View style={[tb.colCount, { backgroundColor: ESTADOS[e].color }]}><Text style={tb.colCountTxt}>{porEstado[e].length}</Text></View>
+                  </View>
+                  <View style={{ paddingBottom: 12 }}>
+                    {porEstado[e].map(ci => <TarjetaTablero key={ci.id} ci={ci} />)}
+                    {porEstado[e].length === 0 && <Text style={tb.colVacio}>{Platform.OS === 'web' ? 'Suelta aquí' : '—'}</Text>}
+                  </View>
                 </View>
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
-                  {porEstado[e].map(ci => <TarjetaTablero key={ci.id} ci={ci} />)}
-                  {porEstado[e].length === 0 && <Text style={tb.colVacio}>{Platform.OS === 'web' ? 'Suelta aquí' : '—'}</Text>}
-                </ScrollView>
-              </View>
-            )
-            if (Platform.OS !== 'web') return <View key={e}>{inner}</View>
-            return createElement('div', {
-              key: e,
-              onDragEnter: (ev: any) => { ev.preventDefault(); setDragOver(e) },
-              onDragOver: (ev: any) => ev.preventDefault(),
-              onDrop: (ev: any) => { ev.preventDefault(); if (dragCita && colDe(dragCita.estado) !== e) mover(dragCita, e); setDragCita(null); setDragOver(null) },
-              style: { flexShrink: 0 },
-            }, inner)
-          })}
+              )
+              if (Platform.OS !== 'web') return <View key={e}>{inner}</View>
+              return createElement('div', {
+                key: e,
+                onDragEnter: (ev: any) => { ev.preventDefault(); setDragOver(e) },
+                onDragOver: (ev: any) => ev.preventDefault(),
+                onDrop: (ev: any) => { ev.preventDefault(); if (dragCita && colDe(dragCita.estado) !== e) mover(dragCita, e); setDragCita(null); setDragOver(null) },
+                style: { flexShrink: 0 },
+              }, inner)
+            })}
+          </ScrollView>
         </ScrollView>
       )}
 
@@ -277,20 +284,21 @@ const st = StyleSheet.create({
 
 // Vista LISTA — estilo CRM
 const cl = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, flexDirection: 'row', overflow: 'hidden', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2 },
+  card: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, marginBottom: 10, flexDirection: 'row', overflow: 'hidden', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2 },
   cardBar: { width: 4 },
   cardBody: { flex: 1, padding: 14 },
   cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
   avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   avatarTxt: { fontSize: 15, fontWeight: '800' },
   cardHeadInfo: { flex: 1, minWidth: 0 },
-  cardNombre: { fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 4 },
+  cardNombre: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
   cardSubRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  estadoChip: { borderWidth: 1, borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2 },
-  estadoChipTxt: { fontSize: 11, fontWeight: '800' },
-  op: { fontSize: 11, color: '#94a3b8', textTransform: 'capitalize' },
-  chevron: { fontSize: 22, color: '#c0cdd0', fontWeight: '300' },
-  linea: { fontSize: 12.5, color: '#64748b', marginTop: 2 },
+  fuenteTag: { borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, maxWidth: 180 },
+  fuenteTagTxt: { fontSize: 10, fontWeight: '600', textTransform: 'capitalize' },
+  estadoBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4, flexShrink: 0, maxWidth: 130 },
+  estadoDot: { width: 5, height: 5, borderRadius: 3 },
+  estadoTxt: { fontSize: 11, fontWeight: '700' },
+  linea: { fontSize: 12.5, marginTop: 2 },
 })
 
 // Vista TABLERO — estilo dashboard
