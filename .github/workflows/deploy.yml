@@ -222,3 +222,21 @@ jobs:
           # Si ni siquiera se pudo re-subir index.html, el deploy debe marcarse
           # como fallido para que se vea y se reintente (no dejar la web vieja en silencio).
           if [ "$ok" != "1" ]; then echo "::error::No se pudo subir index.html; la web podría quedar en un bundle viejo."; exit 1; fi
+
+      # ZOMBIE bc13ba05: Hostinger tiene un auto-deploy por Git activo que hace
+      # checkout de la rama `web-build` sobre la raíz web (hay un .git en el
+      # servidor). Esa rama tenía un build VIEJO, así que en cada push pisaba el
+      # index.html que sube el FTP y la web volvía a la versión vieja. Solución
+      # sin tocar hPanel: mantener `web-build` con el build ACTUAL, para que el
+      # checkout de Hostinger sirva lo nuevo en vez de lo viejo. (Lo ideal es
+      # además desactivar el Git deploy en hPanel.)
+      - name: Mantener rama web-build con el build actual (neutraliza el git-deploy)
+        run: |
+          cd dist
+          git init -q
+          git checkout -q -b web-build
+          git config user.email "ci@valera.app"
+          git config user.name "Valera CI"
+          git add -A
+          git commit -qm "build web $(date -u +%FT%TZ)"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" web-build:web-build
