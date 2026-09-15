@@ -3,7 +3,7 @@
 // (coordinada, en_coordinacion, primer_contacto…) se agrupan en "Por atender".
 // - Vista Tablero: columnas estilo dashboard de citas (PC).
 // - Vista Lista: tarjetas estilo CRM.
-import { useState, useCallback, useMemo, createElement } from 'react'
+import { useState, useCallback, useMemo, useRef, createElement } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput,
   ActivityIndicator, Platform, Linking, useWindowDimensions,
@@ -46,8 +46,8 @@ const TABLE_COLS = [
   { id: 'tel',       label: 'Teléfono',  w: 130 },
   { id: 'prop',      label: 'Propiedad', w: 240 },
   { id: 'fecha',     label: 'Fecha',     w: 175 },
-  { id: 'estado',    label: 'Estado',    w: 150 },
-  { id: 'prospecto', label: 'Prospectó', w: 150 },
+  { id: 'estado',    label: 'Estado',    w: 230 },
+  { id: 'prospecto', label: 'Prospectó', w: 160 },
 ]
 
 type Cita = {
@@ -84,6 +84,9 @@ export default function AsesorCitas() {
   const [detalle, setDetalle] = useState<Cita | null>(null)
   const [dragCita, setDragCita] = useState<Cita | null>(null)   // arrastre (web)
   const [dragOver, setDragOver] = useState<Estado | null>(null)
+  const tableroRef = useRef<ScrollView>(null)   // scroll horizontal del tablero
+  const scrollXRef = useRef(0)
+  const scrollTablero = (dir: 1 | -1) => tableroRef.current?.scrollTo({ x: Math.max(0, scrollXRef.current + dir * (COL_W + 10) * 2), animated: true })
 
   const cargar = useCallback(async () => {
     const { data: { user } } = await getUsuarioActual()
@@ -212,8 +215,9 @@ export default function AsesorCitas() {
         // Igual que el dashboard: scroll vertical de la página, dentro un scroll
         // horizontal de columnas, y CADA columna es una View plana (sin ScrollView
         // interna) — en RN-Web una ScrollView interna bloquea el arrastre HTML5.
+        <View style={{ flex: 1 }}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 10 }} showsVerticalScrollIndicator={false}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+          <ScrollView horizontal ref={tableroRef} scrollEventThrottle={16} onScroll={e => { scrollXRef.current = e.nativeEvent.contentOffset.x }} showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
             {ORDEN.map(e => {
               const colW = Math.min(COL_W, width - 40)
               const resaltar = dragOver === e && dragCita && colDe(dragCita.estado) !== e
@@ -240,6 +244,9 @@ export default function AsesorCitas() {
             })}
           </ScrollView>
         </ScrollView>
+        <TouchableOpacity style={[st.flecha, { left: 6 }]} onPress={() => scrollTablero(-1)} activeOpacity={0.85}><Text style={st.flechaTxt}>‹</Text></TouchableOpacity>
+        <TouchableOpacity style={[st.flecha, { right: 6 }]} onPress={() => scrollTablero(1)} activeOpacity={0.85}><Text style={st.flechaTxt}>›</Text></TouchableOpacity>
+        </View>
       ) : (
         /* ── Vista Tabla (estilo tabla del CRM) ── */
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
@@ -262,7 +269,7 @@ export default function AsesorCitas() {
                     <View style={[tbl.td, { width: TABLE_COLS[2].w }]}><Text style={[tbl.tdTxt, { color: c.textSub }]} numberOfLines={1}>{propNombre(ci) || '—'}</Text></View>
                     <View style={[tbl.td, { width: TABLE_COLS[3].w }]}><Text style={[tbl.tdTxt, { color: c.textSub }]} numberOfLines={1}>{fmtFecha(ci.fecha_cita)}</Text></View>
                     <View style={[tbl.td, { width: TABLE_COLS[4].w }]}>
-                      <View style={[tbl.chip, { backgroundColor: est.color + '22' }]}><Text style={[tbl.chipTxt, { color: est.color }]} numberOfLines={1}>{est.emoji} {est.label}</Text></View>
+                      <View style={[tbl.chip, { backgroundColor: est.color + '22', maxWidth: TABLE_COLS[4].w - 24 }]}><Text style={[tbl.chipTxt, { color: est.color }]} numberOfLines={1}>{est.emoji} {est.label}</Text></View>
                     </View>
                     <View style={[tbl.td, { width: TABLE_COLS[5].w }]}><Text style={[tbl.tdTxt, { color: c.textMute }]} numberOfLines={1}>{ci.prospectador?.nombre || '—'}</Text></View>
                   </TouchableOpacity>
@@ -335,6 +342,8 @@ const st = StyleSheet.create({
   busca: { flex: 1, borderWidth: 1, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 7, fontSize: 13.5 },
   vacio: { alignItems: 'center', marginTop: 60, gap: 12, paddingHorizontal: 36 },
   vacioTxt: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  flecha: { position: 'absolute', top: '45%', width: 40, height: 40, borderRadius: 20, backgroundColor: '#1a6470', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
+  flechaTxt: { color: '#fff', fontSize: 26, fontWeight: '900', lineHeight: 28, marginTop: -2 },
 })
 
 // Vista LISTA — estilo CRM
@@ -386,8 +395,8 @@ const tbl = StyleSheet.create({
   trHead: { flexDirection: 'row', backgroundColor: '#1a3547', minHeight: 44, alignItems: 'stretch' },
   th: { justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.08)' },
   thTxt: { color: '#fff', fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
-  tr: { flexDirection: 'row', minHeight: 44, alignItems: 'stretch', borderBottomWidth: 1 },
-  td: { justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 },
+  tr: { flexDirection: 'row', minHeight: 50, alignItems: 'stretch', borderBottomWidth: 1 },
+  td: { justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 10, overflow: 'hidden' },
   tdTxt: { fontSize: 13 },
   tdBold: { fontSize: 13, fontWeight: '700' },
   chip: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 3 },
