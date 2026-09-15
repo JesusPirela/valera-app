@@ -14,15 +14,27 @@ import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors, useTheme } from '../../lib/ThemeContext'
 
-type Estado = 'coordinada' | 'realizada' | 'aparto' | 'reagendada' | 'cancelada'
+type Estado =
+  | 'coordinada' | 'realizada' | 'buscando_opciones'
+  | 'seguimiento_cierre_alto' | 'seguimiento_cierre_bajo'
+  | 'falta_perfilamiento' | 'compra_futuro' | 'aparto' | 'reagendada' | 'cancelada'
 const ESTADOS: Record<Estado, { label: string; color: string; bg: string; emoji: string }> = {
-  coordinada: { label: 'Por atender', color: '#16a34a', bg: '#f0fdf4', emoji: '🟢' },
-  realizada:  { label: 'Realizada',   color: '#0d9488', bg: '#f0fdfa', emoji: '✅' },
-  aparto:     { label: 'Apartó',      color: '#c87f0a', bg: '#fef9eb', emoji: '🏆' },
-  reagendada: { label: 'Reagendada',  color: '#b45309', bg: '#fef3c7', emoji: '🟤' },
-  cancelada:  { label: 'Cancelada',   color: '#64748b', bg: '#f1f5f9', emoji: '⚫' },
+  coordinada:              { label: 'Por atender',                color: '#16a34a', bg: '#f0fdf4', emoji: '🟢' },
+  realizada:               { label: 'Esperando retroalimentación', color: '#0d9488', bg: '#f0fdfa', emoji: '⏳' },
+  buscando_opciones:       { label: 'Buscar más opciones',        color: '#ca8a04', bg: '#fefce8', emoji: '🔎' },
+  seguimiento_cierre_alto: { label: 'Seguim. cierre · alto interés', color: '#dc2626', bg: '#fef2f2', emoji: '🔥' },
+  seguimiento_cierre_bajo: { label: 'Seguim. cierre · bajo interés', color: '#f97316', bg: '#fff7ed', emoji: '🌡️' },
+  falta_perfilamiento:     { label: 'Falta perfilar / crédito',   color: '#8b5cf6', bg: '#f5f3ff', emoji: '📋' },
+  compra_futuro:           { label: 'Compra a futuro',            color: '#0369a1', bg: '#e0f2fe', emoji: '⏭️' },
+  aparto:                  { label: 'Apartó',                     color: '#c87f0a', bg: '#fef9eb', emoji: '🏆' },
+  reagendada:              { label: 'Reagendada',                 color: '#b45309', bg: '#fef3c7', emoji: '🟤' },
+  cancelada:               { label: 'Cancelada',                  color: '#64748b', bg: '#f1f5f9', emoji: '⚫' },
 }
-const ORDEN: Estado[] = ['coordinada', 'realizada', 'aparto', 'reagendada', 'cancelada']
+const ORDEN: Estado[] = [
+  'coordinada', 'realizada', 'buscando_opciones',
+  'seguimiento_cierre_alto', 'seguimiento_cierre_bajo',
+  'falta_perfilamiento', 'compra_futuro', 'aparto', 'reagendada', 'cancelada',
+]
 // Cualquier estado previo (primer_contacto, en_coordinacion, buscando_opciones…)
 // se muestra como "Por atender" para que la cita asignada SÍ aparezca.
 function colDe(e: string): Estado { return (ESTADOS as any)[e] ? (e as Estado) : 'coordinada' }
@@ -97,7 +109,7 @@ export default function AsesorCitas() {
   }, [citas, busca])
 
   const porEstado = useMemo(() => {
-    const m: Record<Estado, Cita[]> = { coordinada: [], realizada: [], aparto: [], reagendada: [], cancelada: [] }
+    const m = Object.fromEntries(ORDEN.map(e => [e, [] as Cita[]])) as Record<Estado, Cita[]>
     for (const ci of visibles) m[colDe(ci.estado)].push(ci)
     return m
   }, [visibles])

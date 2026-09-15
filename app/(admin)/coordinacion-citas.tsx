@@ -21,6 +21,10 @@ type EstadoCita =
   | 'reagendada'
   | 'no_responde_asesor'
   | 'realizada'
+  | 'seguimiento_cierre_alto'
+  | 'seguimiento_cierre_bajo'
+  | 'falta_perfilamiento'
+  | 'compra_futuro'
   | 'aparto'
   | 'recaudando_documentacion'
   | 'aprobando_credito'
@@ -66,6 +70,10 @@ export const ESTADOS_CITA: Record<EstadoCita, {
   reagendada:               { label: 'Reagendada/cancelada',       color: '#b45309', bg: '#fef3c7', dark: '#92400e', icon: 'refresh-outline',             emoji: '🟤' },
   no_responde_asesor:       { label: 'No responde el cliente',     color: '#dc2626', bg: '#fef2f2', dark: '#b91c1c', icon: 'notifications-off-outline',   emoji: '🔴' },
   realizada:                { label: 'Realizada',                  color: '#0d9488', bg: '#f0fdfa', dark: '#0f766e', icon: 'checkmark-circle-outline',    emoji: '✅' },
+  seguimiento_cierre_alto:  { label: 'Seguim. cierre · alto',      color: '#dc2626', bg: '#fef2f2', dark: '#b91c1c', icon: 'flame-outline',              emoji: '🔥' },
+  seguimiento_cierre_bajo:  { label: 'Seguim. cierre · bajo',      color: '#f97316', bg: '#fff7ed', dark: '#c2410c', icon: 'thermometer-outline',        emoji: '🌡️' },
+  falta_perfilamiento:      { label: 'Falta perfilar / crédito',   color: '#8b5cf6', bg: '#f5f3ff', dark: '#6d28d9', icon: 'clipboard-outline',          emoji: '📋' },
+  compra_futuro:            { label: 'Compra a futuro',            color: '#0369a1', bg: '#e0f2fe', dark: '#075985', icon: 'time-outline',               emoji: '⏭️' },
   aparto:                   { label: 'Apartó / Trato cerrado',      color: '#c87f0a', bg: '#fef9eb', dark: '#92400e', icon: 'trophy-outline',              emoji: '🏆' },
   recaudando_documentacion: { label: 'Recaudando documentación',   color: '#0369a1', bg: '#e0f2fe', dark: '#075985', icon: 'document-text-outline',       emoji: '📄' },
   aprobando_credito:        { label: 'Aprobando crédito',          color: '#d97706', bg: '#fef3c7', dark: '#b45309', icon: 'card-outline',                emoji: '💳' },
@@ -82,6 +90,7 @@ const ORDEN_ESTADOS: EstadoCita[] = [
   'primer_contacto', 'buscando_opciones',
   'en_coordinacion', 'coordinada', 'reagendada',
   'no_responde_asesor', 'realizada',
+  'seguimiento_cierre_alto', 'seguimiento_cierre_bajo', 'falta_perfilamiento', 'compra_futuro',
   'aparto',
   'cancelada',
 ]
