@@ -11,6 +11,7 @@ import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme, useColors } from '../../lib/ThemeContext'
+import { useVistaComo } from '../../lib/VistaComo'
 import {
   PATRONES_ANIMADOS, FIGURAS_NIVEL, baseColorDeAcento, AnimatedGradientView, AccentBackground, precioPatron,
 } from '../../lib/patrones'
@@ -130,6 +131,7 @@ export default function Perfil() {
   const { setPrimaryColor, setAcentoId, setFiguraAcento, darkMode, toggleDarkMode, fontScaleCap, toggleFontScaleCap } = useTheme()
   const { modo: modoCarga, setModo: setModoCarga, conexionLenta } = useCargaDatos()
   const c = useColors()
+  const { vistaComo } = useVistaComo()
 
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
@@ -138,6 +140,10 @@ export default function Perfil() {
   const [avatarsDesbloqueados, setAvatarsDesbloqueados] = useState<string[]>([])
   const [gifsFallidos, setGifsFallidos] = useState<Set<string>>(new Set())
   const [userId, setUserId] = useState('')
+  const [role, setRole] = useState<string | null>(null)
+  // asesor/gerente no tienen Universidad ni Misiones en la barra; se ofrecen en Perfil.
+  const rolEf = vistaComo ?? role
+  const esAsesorOGerente = rolEf === 'asesor' || rolEf === 'gerente'
   const [nombre, setNombre] = useState('')
   const [stats, setStats] = useState<UserStats | null>(null)
   const [presupuestoActivo, setPresupuestoActivo] = useState(0)
@@ -190,7 +196,7 @@ export default function Perfil() {
     setEmail(user.email ?? '')
 
     const [{ data }, statsData, { data: clientesData }] = await Promise.all([
-      supabase.from('profiles').select('nombre, telefono, avatar_url, color_acento, figura_acento, colores_desbloqueados, avatares_desbloqueados').eq('id', user.id).single(),
+      supabase.from('profiles').select('nombre, telefono, avatar_url, color_acento, figura_acento, colores_desbloqueados, avatares_desbloqueados, role').eq('id', user.id).single(),
       getUserStats(user.id),
       supabase.from('clientes').select('presupuesto, estado').eq('agente_id', user.id),
     ])
@@ -212,6 +218,7 @@ export default function Perfil() {
       setFiguraAcentoLocal((data as any).figura_acento ?? null)
       setColoresDesbloqueados((data as any).colores_desbloqueados ?? [])
       setAvatarsDesbloqueados((data as any).avatares_desbloqueados ?? [])
+      setRole((data as any).role ?? null)
       if (data.avatar_url?.startsWith('emoji:')) {
         setAvatarEmoji(data.avatar_url.replace('emoji:', ''))
         setAvatarUrl(null)
@@ -607,6 +614,29 @@ export default function Perfil() {
             </Text>
           )}
         </TouchableOpacity>
+
+        {/* Aprendizaje y metas — Universidad y Misiones (asesor/gerente) */}
+        {esAsesorOGerente && (
+          <>
+            <Text style={s.seccion}>APRENDIZAJE Y METAS</Text>
+            <TouchableOpacity style={[s.modoRow, darkMode && { backgroundColor: '#111f2e', borderColor: '#1e3448' }]} onPress={() => router.push('/(prospectador)/university')} activeOpacity={0.8}>
+              <Text style={{ fontSize: 22, marginRight: 12 }}>🎓</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.modoTitulo, darkMode && { color: '#fff' }]}>Universidad</Text>
+                <Text style={[s.modoSub, darkMode && { color: '#7a9ab5' }]}>Cursos y certificados</Text>
+              </View>
+              <Text style={{ fontSize: 22, color: c.textMute }}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.modoRow, darkMode && { backgroundColor: '#111f2e', borderColor: '#1e3448' }]} onPress={() => router.push('/(prospectador)/misiones')} activeOpacity={0.8}>
+              <Text style={{ fontSize: 22, marginRight: 12 }}>🎯</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.modoTitulo, darkMode && { color: '#fff' }]}>Misiones</Text>
+                <Text style={[s.modoSub, darkMode && { color: '#7a9ab5' }]}>Retos y recompensas</Text>
+              </View>
+              <Text style={{ fontSize: 22, color: c.textMute }}>›</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         {/* Apariencia */}
         <Text style={s.seccion}>APARIENCIA</Text>

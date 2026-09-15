@@ -341,8 +341,8 @@ export default function ProspectadorLayout() {
         options={{
           title: 'Universidad',
           tabBarIcon: tabIcon('school-outline', 'school'),
-          // El gerente la tiene en su panel de Gerencia, no en la barra de abajo.
-          href: esGerente ? null : undefined,
+          // Asesor y gerente la tienen en su Perfil, no en la barra de abajo.
+          href: (esAsesor || esGerente) ? null : undefined,
         }}
       />
       <Tabs.Screen
