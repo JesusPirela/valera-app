@@ -95,7 +95,8 @@ export default function Calendario() {
   if (loading) return <View style={[s.center, { backgroundColor: c.bg }]}><ActivityIndicator size="large" color="#1a6470" /></View>
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: 14, paddingBottom: 60 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: 14, paddingBottom: 60, alignItems: 'center' }}>
+    <View style={{ width: '100%', maxWidth: 760 }}>
       <Text style={[s.h1, { color: c.text }]}>📅 Calendario</Text>
       <Text style={[s.sub, { color: c.textMute }]}>Tu agenda personal. Es privada tuya.</Text>
 
@@ -158,6 +159,7 @@ export default function Calendario() {
       {editando && (
         <ModalEvento evento={editando} c={c} onChange={setEditando} onGuardar={guardar} onBorrar={borrar} onClose={() => setEditando(null)} />
       )}
+    </View>
     </ScrollView>
   )
 }
@@ -245,7 +247,7 @@ const s = StyleSheet.create({
   hoyTxt: { color: '#1a6470', fontWeight: '800', fontSize: 12.5 },
   grid: { borderWidth: 1, borderRadius: 14, padding: 8, marginTop: 12 },
   dow: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', paddingVertical: 4 },
-  cell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', paddingTop: 4 },
+  cell: { width: `${100 / 7}%`, height: 58, alignItems: 'center', paddingTop: 5 },
   diaWrap: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   puntos: { flexDirection: 'row', gap: 2, marginTop: 2, height: 6 },
   punto: { width: 5, height: 5, borderRadius: 3 },
