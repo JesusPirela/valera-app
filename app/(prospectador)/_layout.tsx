@@ -330,10 +330,10 @@ export default function ProspectadorLayout() {
       <Tabs.Screen
         name="asesor-citas"
         options={{
-          // Para el asesor, "Citas" ocupa el lugar de Misiones en la barra de abajo.
+          // Para asesor y gerente, "Citas" va en la barra de abajo (junto a Universidad).
           title: 'Citas',
           tabBarIcon: tabIcon('calendar-outline', 'calendar'),
-          href: esAsesor ? undefined : null,
+          href: (esAsesor || esGerente) ? undefined : null,
         }}
       />
       <Tabs.Screen

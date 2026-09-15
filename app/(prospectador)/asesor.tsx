@@ -7,7 +7,6 @@ import { useVistaComo } from '../../lib/VistaComo'
 
 const ITEMS = [
   { label: 'CRM y Pipeline comercial', desc: 'Clientes y prospectos de todo el equipo, por etapa', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
-  { label: 'Mis citas', desc: 'Las citas que te asignaron · agrégalas y da seguimiento', icon: '📅', route: '/(prospectador)/asesor-citas', color: '#2E7D32' },
   { label: 'Mis estadísticas', desc: 'Tu desempeño: leads, cierres y actividad', icon: '📊', route: '/(prospectador)/asesor-estadisticas?modo=propio', color: '#1565c0' },
   { label: 'Estadísticas de equipo', desc: 'Desempeño de todo el equipo de prospectadores', icon: '📈', route: '/(prospectador)/asesor-estadisticas?modo=equipo', color: '#00838F' },
   { label: 'Tabla de precios', desc: 'Precios por zona y desarrollo, en vivo', icon: '🏷️', route: '/(prospectador)/tabla-equipo', color: '#c9a84c' },
