@@ -84,6 +84,7 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
         p_info_extra: resp[1].trim() || null,
         p_plan_accion: resp[2].trim() || null,
         p_prox_seguimiento: prox ? fmtProx(prox) : null,
+        p_prox_seguimiento_ts: prox && !isNaN(new Date(prox).getTime()) ? new Date(prox).toISOString() : null,
       })
       if (error) throw error
       onSaved?.()

@@ -1,12 +1,14 @@
 // Calendario IN-APP (local, sin Google) — apartado de admin.
-// Vista de mes con puntitos en los días con eventos + agenda del día
-// seleccionado. Crear / editar / borrar eventos personales (privados por dueño).
+// Muestra: tus eventos personales (editables) + las CITAS del dashboard
+// (por fecha_cita) + los PRÓXIMOS SEGUIMIENTOS fijados al terminar una retro
+// (citas_venta.fecha_prox_seguimiento_ts). Citas y seguimientos son de solo
+// lectura y al tocarlos te llevan a su pantalla.
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Alert, Platform, Modal,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
@@ -15,12 +17,15 @@ type Evento = {
   id: string; titulo: string; descripcion: string | null
   inicio: string; fin: string | null; todo_el_dia: boolean; color: string
 }
+type CalItem = {
+  key: string; inicio: string; titulo: string; descripcion: string | null; color: string
+  tipo: 'evento' | 'cita' | 'seguimiento'; evento?: Evento; todo_el_dia?: boolean; fin?: string | null; ruta?: string
+}
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
 const COLORES = ['#1a6470', '#5e35b1', '#c62828', '#2e7d32', '#f57f17', '#0277bd', '#c9a84c', '#00838f']
 
-// YYYY-MM-DD en hora LOCAL (para agrupar por día sin corrimientos de zona).
 function claveDia(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
@@ -28,7 +33,6 @@ function horaTxt(iso: string): string {
   const d = new Date(iso); const h = d.getHours(); const ampm = h < 12 ? 'am' : 'pm'
   return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${ampm}`
 }
-// Valor para <input datetime-local> a partir de un Date (hora local, sin UTC).
 function paraInput(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
@@ -37,6 +41,7 @@ export default function Calendario() {
   const c = useColors()
   const [miId, setMiId] = useState<string | null>(null)
   const [eventos, setEventos] = useState<Evento[]>([])
+  const [extras, setExtras] = useState<CalItem[]>([])   // citas + seguimientos del mes visible
   const [loading, setLoading] = useState(true)
   const [mes, setMes] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })
   const [selDia, setSelDia] = useState(() => claveDia(new Date()))
@@ -54,19 +59,47 @@ export default function Calendario() {
   }, [])
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
 
-  // Eventos agrupados por día (clave local).
+  // Citas del dashboard + próximos seguimientos del mes visible.
+  useEffect(() => {
+    let vivo = true
+    const ini = new Date(mes.getFullYear(), mes.getMonth(), 1).toISOString()
+    const fin = new Date(mes.getFullYear(), mes.getMonth() + 1, 1).toISOString()
+    Promise.all([
+      supabase.from('citas_coordinacion').select('id, fecha_cita, estado, clientes(nombre)')
+        .not('fecha_cita', 'is', null).gte('fecha_cita', ini).lt('fecha_cita', fin),
+      supabase.from('citas_venta').select('id, cliente_nombre, fecha_prox_seguimiento_ts')
+        .not('fecha_prox_seguimiento_ts', 'is', null).gte('fecha_prox_seguimiento_ts', ini).lt('fecha_prox_seguimiento_ts', fin),
+    ]).then(([citas, segs]) => {
+      if (!vivo) return
+      const a: CalItem[] = (citas.data ?? []).map((x: any) => ({
+        key: 'c' + x.id, inicio: x.fecha_cita, titulo: `Cita: ${x.clientes?.nombre ?? 'Cliente'}`,
+        descripcion: x.estado ? String(x.estado).replace(/_/g, ' ') : null, color: '#2e7d32', tipo: 'cita', ruta: '/(admin)/coordinacion-citas',
+      }))
+      const b: CalItem[] = (segs.data ?? []).map((x: any) => ({
+        key: 's' + x.id, inicio: x.fecha_prox_seguimiento_ts, titulo: `Seguimiento: ${x.cliente_nombre ?? 'Cliente'}`,
+        descripcion: null, color: '#f57f17', tipo: 'seguimiento', ruta: '/(admin)/citas-venta',
+      }))
+      setExtras([...a, ...b])
+    })
+    return () => { vivo = false }
+  }, [mes, eventos])
+
+  // Todos los items (eventos personales + citas + seguimientos) por día.
   const porDia = useMemo(() => {
-    const m: Record<string, Evento[]> = {}
-    for (const e of eventos) (m[claveDia(new Date(e.inicio))] ??= []).push(e)
+    const evs: CalItem[] = eventos.map(e => ({
+      key: 'e' + e.id, inicio: e.inicio, titulo: e.titulo, descripcion: e.descripcion, color: e.color,
+      tipo: 'evento', evento: e, todo_el_dia: e.todo_el_dia, fin: e.fin,
+    }))
+    const m: Record<string, CalItem[]> = {}
+    for (const it of [...evs, ...extras]) (m[claveDia(new Date(it.inicio))] ??= []).push(it)
     return m
-  }, [eventos])
+  }, [eventos, extras])
 
   const y = mes.getFullYear(), m = mes.getMonth()
-  const off = (new Date(y, m, 1).getDay() + 6) % 7   // lunes primero
+  const off = (new Date(y, m, 1).getDay() + 6) % 7
   const diasMes = new Date(y, m + 1, 0).getDate()
   const celdas: (number | null)[] = [...Array(off).fill(null), ...Array.from({ length: diasMes }, (_, i) => i + 1)]
   const hoyClave = claveDia(new Date())
-
   const delDia = (porDia[selDia] ?? []).slice().sort((a, b) => a.inicio.localeCompare(b.inicio))
 
   function nuevo() {
@@ -74,7 +107,6 @@ export default function Calendario() {
     const ini = new Date(yy, mm - 1, dd, 9, 0)
     setEditando({ titulo: '', descripcion: '', inicio: ini.toISOString(), fin: null, todo_el_dia: false, color: COLORES[0] })
   }
-
   async function guardar() {
     if (!editando || !miId || !editando.titulo?.trim() || !editando.inicio) return
     const payload = {
@@ -91,6 +123,10 @@ export default function Calendario() {
     if (Platform.OS === 'web') { if (window.confirm('¿Borrar este evento?')) go() }
     else Alert.alert('Borrar evento', '¿Seguro?', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Borrar', style: 'destructive', onPress: go }])
   }
+  function tocarItem(it: CalItem) {
+    if (it.tipo === 'evento' && it.evento) setEditando(it.evento)
+    else if (it.ruta) router.push(it.ruta as any)
+  }
 
   if (loading) return <View style={[s.center, { backgroundColor: c.bg }]}><ActivityIndicator size="large" color="#1a6470" /></View>
 
@@ -98,9 +134,8 @@ export default function Calendario() {
     <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: 14, paddingBottom: 60, alignItems: 'center' }}>
     <View style={{ width: '100%', maxWidth: 760 }}>
       <Text style={[s.h1, { color: c.text }]}>📅 Calendario</Text>
-      <Text style={[s.sub, { color: c.textMute }]}>Tu agenda personal. Es privada tuya.</Text>
+      <Text style={[s.sub, { color: c.textMute }]}>Tus eventos + las citas del dashboard 🟢 y los próximos seguimientos 🟠.</Text>
 
-      {/* Navegación de mes */}
       <View style={s.mesRow}>
         <TouchableOpacity onPress={() => setMes(new Date(y, m - 1, 1))} style={s.navBtn}><Text style={s.navTxt}>‹</Text></TouchableOpacity>
         <Text style={[s.mesTxt, { color: c.text }]}>{MESES[m]} {y}</Text>
@@ -110,7 +145,6 @@ export default function Calendario() {
         </TouchableOpacity>
       </View>
 
-      {/* Rejilla del mes */}
       <View style={[s.grid, { backgroundColor: c.card, borderColor: c.border }]}>
         <View style={{ flexDirection: 'row' }}>
           {DOW.map((d, i) => <Text key={i} style={[s.dow, { color: c.textMute }]}>{d}</Text>)}
@@ -128,7 +162,7 @@ export default function Calendario() {
                   <Text style={{ color: sel ? '#fff' : esHoy ? '#1a6470' : c.text, fontWeight: sel || esHoy ? '800' : '500', fontSize: 13 }}>{dd}</Text>
                 </View>
                 <View style={s.puntos}>
-                  {evs.slice(0, 3).map(e => <View key={e.id} style={[s.punto, { backgroundColor: e.color }]} />)}
+                  {evs.slice(0, 4).map(e => <View key={e.key} style={[s.punto, { backgroundColor: e.color }]} />)}
                 </View>
               </TouchableOpacity>
             )
@@ -136,26 +170,27 @@ export default function Calendario() {
         </View>
       </View>
 
-      {/* Agenda del día */}
       <View style={s.agendaHead}>
         <Text style={[s.agendaTitulo, { color: c.text }]}>{(() => { const [yy, mm, dd] = selDia.split('-').map(Number); const d = new Date(yy, mm - 1, dd); return `${['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][d.getDay()]} ${dd} de ${MESES[mm - 1]}` })()}</Text>
         <TouchableOpacity style={s.nuevoBtn} onPress={nuevo}><Text style={s.nuevoTxt}>＋ Evento</Text></TouchableOpacity>
       </View>
 
       {delDia.length === 0 ? (
-        <Text style={[s.vacio, { color: c.textMute }]}>Sin eventos este día. Toca "＋ Evento" para agregar uno.</Text>
-      ) : delDia.map(e => (
-        <TouchableOpacity key={e.id} style={[s.evento, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setEditando(e)}>
-          <View style={[s.evBar, { backgroundColor: e.color }]} />
-          <View style={{ flex: 1 }}>
-            <Text style={[s.evTitulo, { color: c.text }]} numberOfLines={1}>{e.titulo}</Text>
-            <Text style={[s.evHora, { color: c.textMute }]}>{e.todo_el_dia ? 'Todo el día' : `${horaTxt(e.inicio)}${e.fin ? ` – ${horaTxt(e.fin)}` : ''}`}</Text>
-            {e.descripcion ? <Text style={[s.evDesc, { color: c.textSub }]} numberOfLines={2}>{e.descripcion}</Text> : null}
+        <Text style={[s.vacio, { color: c.textMute }]}>Sin nada este día. Toca "＋ Evento" para agregar uno tuyo.</Text>
+      ) : delDia.map(it => (
+        <TouchableOpacity key={it.key} style={[s.evento, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => tocarItem(it)}>
+          <View style={[s.evBar, { backgroundColor: it.color }]} />
+          <View style={{ flex: 1, padding: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {it.tipo !== 'evento' ? <Text style={[s.tag, { backgroundColor: it.color + '22', color: it.color }]}>{it.tipo === 'cita' ? '📅 Cita' : '🔔 Seguim.'}</Text> : null}
+              <Text style={[s.evTitulo, { color: c.text }]} numberOfLines={1}>{it.titulo}</Text>
+            </View>
+            <Text style={[s.evHora, { color: c.textMute }]}>{it.todo_el_dia ? 'Todo el día' : `${horaTxt(it.inicio)}${it.fin ? ` – ${horaTxt(it.fin)}` : ''}`}{it.tipo !== 'evento' ? '  ·  toca para ver ›' : ''}</Text>
+            {it.descripcion ? <Text style={[s.evDesc, { color: c.textSub }]} numberOfLines={2}>{it.descripcion}</Text> : null}
           </View>
         </TouchableOpacity>
       ))}
 
-      {/* Modal crear/editar */}
       {editando && (
         <ModalEvento evento={editando} c={c} onChange={setEditando} onGuardar={guardar} onBorrar={borrar} onClose={() => setEditando(null)} />
       )}
@@ -171,7 +206,6 @@ function ModalEvento({ evento, c, onChange, onGuardar, onBorrar, onClose }: {
   const inp = [s.inp, { color: c.text, borderColor: c.inputBorder, backgroundColor: c.input }]
   const iniDate = evento.inicio ? new Date(evento.inicio) : new Date()
   const finDate = evento.fin ? new Date(evento.fin) : null
-  // Web input date-only (todo el día) o datetime-local.
   useEffect(() => { if (evento.todo_el_dia && evento.fin) onChange({ ...evento, fin: null }) }, [evento.todo_el_dia])
 
   return (
@@ -195,7 +229,7 @@ function ModalEvento({ evento, c, onChange, onGuardar, onBorrar, onClose }: {
               /* @ts-ignore */
               <input type={evento.todo_el_dia ? 'date' : 'datetime-local'}
                 value={evento.todo_el_dia ? paraInput(iniDate).slice(0, 10) : paraInput(iniDate)}
-                onChange={(ev: any) => { const val = ev.target.value; const d = new Date(val); if (!isNaN(d.getTime())) onChange({ ...evento, inicio: d.toISOString() }) }}
+                onChange={(ev: any) => { const d = new Date(ev.target.value); if (!isNaN(d.getTime())) onChange({ ...evento, inicio: d.toISOString() }) }}
                 style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: `1px solid ${c.inputBorder}`, fontSize: 14.5, color: c.inputText, backgroundColor: c.input, outline: 'none', boxSizing: 'border-box' }} />
             ) : (
               <TextInput style={inp} value={paraInput(iniDate)} onChangeText={v => { const d = new Date(v); if (!isNaN(d.getTime())) onChange({ ...evento, inicio: d.toISOString() }) }} placeholder="YYYY-MM-DD HH:MM" placeholderTextColor={c.placeholder} />
@@ -207,7 +241,7 @@ function ModalEvento({ evento, c, onChange, onGuardar, onBorrar, onClose }: {
                 {Platform.OS === 'web' ? (
                   /* @ts-ignore */
                   <input type="datetime-local" value={finDate ? paraInput(finDate) : ''}
-                    onChange={(ev: any) => { const val = ev.target.value; onChange({ ...evento, fin: val ? new Date(val).toISOString() : null }) }}
+                    onChange={(ev: any) => onChange({ ...evento, fin: ev.target.value ? new Date(ev.target.value).toISOString() : null })}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: `1px solid ${c.inputBorder}`, fontSize: 14.5, color: c.inputText, backgroundColor: c.input, outline: 'none', boxSizing: 'border-box' }} />
                 ) : (
                   <TextInput style={inp} value={finDate ? paraInput(finDate) : ''} onChangeText={v => onChange({ ...evento, fin: v ? new Date(v).toISOString() : null })} placeholder="YYYY-MM-DD HH:MM (opcional)" placeholderTextColor={c.placeholder} />
@@ -258,9 +292,10 @@ const s = StyleSheet.create({
   vacio: { fontSize: 13.5, marginTop: 14, lineHeight: 19 },
   evento: { flexDirection: 'row', borderWidth: 1, borderRadius: 12, overflow: 'hidden', marginTop: 10 },
   evBar: { width: 5 },
-  evTitulo: { fontSize: 15, fontWeight: '700', padding: 12, paddingBottom: 2, paddingLeft: 12 },
-  evHora: { fontSize: 12.5, paddingHorizontal: 12 },
-  evDesc: { fontSize: 12.5, paddingHorizontal: 12, paddingBottom: 12, paddingTop: 3, lineHeight: 17 },
+  tag: { fontSize: 10, fontWeight: '800', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1, overflow: 'hidden' },
+  evTitulo: { fontSize: 15, fontWeight: '700', flexShrink: 1 },
+  evHora: { fontSize: 12.5, marginTop: 3 },
+  evDesc: { fontSize: 12.5, marginTop: 3, lineHeight: 17, textTransform: 'capitalize' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, paddingBottom: 28, maxHeight: '90%' },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#88888855', alignSelf: 'center', marginBottom: 12 },
