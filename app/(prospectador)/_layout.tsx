@@ -330,7 +330,7 @@ export default function ProspectadorLayout() {
       <Tabs.Screen
         name="asesor-citas"
         options={{
-          // Para asesor y gerente, "Citas" va en la barra de abajo (junto a Universidad).
+          // Para asesor y gerente, "Citas" va en la barra de abajo.
           title: 'Citas',
           tabBarIcon: tabIcon('calendar-outline', 'calendar'),
           href: (esAsesor || esGerente) ? undefined : null,
@@ -341,6 +341,8 @@ export default function ProspectadorLayout() {
         options={{
           title: 'Universidad',
           tabBarIcon: tabIcon('school-outline', 'school'),
+          // El gerente la tiene en su panel de Gerencia, no en la barra de abajo.
+          href: esGerente ? null : undefined,
         }}
       />
       <Tabs.Screen

@@ -24,6 +24,7 @@ const GERENCIA_ITEMS = [
   { label: 'Proyectos', desc: 'Desarrollos y proyectos', icon: '🏗️', route: '/(admin)/proyectos', color: '#455A64' },
   { label: 'Tabla de precios (inventario)', desc: 'Inventario por zona con precios en vivo', icon: '🏷️', route: '/(admin)/inventario-tabla', color: '#00838F' },
   { label: 'Ranking', desc: 'Tabla de posiciones del equipo', icon: '🏆', route: '/(prospectador)/ranking', color: '#F9A825' },
+  { label: 'Universidad', desc: 'Cursos y certificados', icon: '🎓', route: '/(prospectador)/university', color: '#6A4C93' },
 ]
 
 export default function Asesor() {
