@@ -117,7 +117,7 @@ export default function EstadisticasPropiedades() {
       {/* Publicaciones por tipo: desarrollo (constructora) vs las demás */}
       <View style={s.kpiRow}>
         <Kpi c={c} label="🏗️ De desarrollo" value={pubDesarrollo.toLocaleString('es-MX')} sub="constructora" color="#5e35b1" />
-        <Kpi c={c} label="🏠 De las demás" value={pubOtras.toLocaleString('es-MX')} sub="otras propiedades" color="#c9a84c" />
+        <Kpi c={c} label="🏠 Corretaje" value={pubOtras.toLocaleString('es-MX')} sub="otras propiedades" color="#c9a84c" />
       </View>
 
       {/* Por desarrollo (constructora) */}
