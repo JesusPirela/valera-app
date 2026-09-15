@@ -99,6 +99,9 @@ export default function EstadisticasPropiedades() {
     nunca: data.nunca_publicadas,
   }
   const maxZona = Math.max(1, ...porZona.map(z => z.veces))
+  // Publicaciones divididas: de desarrollo (constructora, con `dev`) vs las demás.
+  const pubDesarrollo = data.todas.reduce((sum, r) => sum + (r.dev ? r.veces : 0), 0)
+  const pubOtras = data.total_publicaciones - pubDesarrollo
 
   const header = (
     <View>
@@ -109,6 +112,12 @@ export default function EstadisticasPropiedades() {
         <Kpi c={c} label="Publicaciones" value={data.total_publicaciones.toLocaleString('es-MX')} color={TEAL} />
         <Kpi c={c} label="Publicadas" value={`${data.propiedades_publicadas}`} sub={`de ${data.propiedades_totales}`} color="#16a34a" />
         <Kpi c={c} label="Nunca publicadas" value={`${data.nunca_publicadas}`} color="#ef4444" />
+      </View>
+
+      {/* Publicaciones por tipo: desarrollo (constructora) vs las demás */}
+      <View style={s.kpiRow}>
+        <Kpi c={c} label="🏗️ De desarrollo" value={pubDesarrollo.toLocaleString('es-MX')} sub="constructora" color="#5e35b1" />
+        <Kpi c={c} label="🏠 De las demás" value={pubOtras.toLocaleString('es-MX')} sub="otras propiedades" color="#c9a84c" />
       </View>
 
       {/* Por desarrollo (constructora) */}
