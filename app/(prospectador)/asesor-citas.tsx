@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
-import { useColors } from '../../lib/ThemeContext'
+import { useColors, useTheme } from '../../lib/ThemeContext'
 
 type Estado = 'coordinada' | 'realizada' | 'aparto' | 'reagendada' | 'cancelada'
 const ESTADOS: Record<Estado, { label: string; color: string; bg: string; emoji: string }> = {
@@ -52,6 +52,7 @@ function limpiarTel(t: string | null | undefined): string { return (t ?? '').rep
 
 export default function AsesorCitas() {
   const c = useColors()
+  const { darkMode } = useTheme()
   const { width } = useWindowDimensions()
   const [miId, setMiId] = useState<string | null>(null)
   const [citas, setCitas] = useState<Cita[]>([])
@@ -131,20 +132,20 @@ export default function AsesorCitas() {
     const est = ESTADOS[colDe(ci.estado)]
     const tel = limpiarTel(ci.clientes?.telefono)
     const card = (
-      <TouchableOpacity style={kc.card} activeOpacity={0.85} onPress={() => setDetalle(ci)}>
+      <TouchableOpacity style={[kc.card, { backgroundColor: c.card, borderColor: c.border }]} activeOpacity={0.85} onPress={() => setDetalle(ci)}>
         <View style={[kc.colorBar, { backgroundColor: est.color }]} />
         <View style={kc.body}>
           <View style={kc.headRow}>
-            <View style={[kc.avatar, { backgroundColor: est.bg }]}><Text style={[kc.avatarTxt, { color: est.color }]}>{iniciales(ci.clientes?.nombre)}</Text></View>
+            <View style={[kc.avatar, { backgroundColor: est.color + '22' }]}><Text style={[kc.avatarTxt, { color: est.color }]}>{iniciales(ci.clientes?.nombre)}</Text></View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={kc.nombre} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text>
-              {tel ? <Text style={kc.tel}>{tel}</Text> : null}
+              <Text style={[kc.nombre, { color: c.text }]} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text>
+              {tel ? <Text style={[kc.tel, { color: c.textMute }]}>{tel}</Text> : null}
             </View>
           </View>
-          {ci.fecha_cita ? <View style={kc.fechaRow}><Ionicons name="calendar-outline" size={11} color="#1a6470" /><Text style={kc.fechaTxt}>{fmtFecha(ci.fecha_cita)}</Text></View> : null}
+          {ci.fecha_cita ? <View style={[kc.fechaRow, { backgroundColor: est.color + '1a' }]}><Ionicons name="calendar-outline" size={11} color={est.color} /><Text style={[kc.fechaTxt, { color: est.color }]}>{fmtFecha(ci.fecha_cita)}</Text></View> : null}
           {propNombre(ci) ? <View style={kc.proyectoRow}><Ionicons name="business-outline" size={10} color="#0d9488" /><Text style={kc.proyectoTxt} numberOfLines={1}>{propNombre(ci)}</Text></View> : null}
-          {ci.notas ? <Text style={kc.notas} numberOfLines={2}>{ci.notas}</Text> : null}
-          {ci.prospectador?.nombre ? <Text style={kc.metaTxt} numberOfLines={1}><Ionicons name="person-outline" size={9} color="#94a3b8" /> {ci.prospectador.nombre.split(' ')[0]}</Text> : null}
+          {ci.notas ? <Text style={[kc.notas, { color: c.textMute }]} numberOfLines={2}>{ci.notas}</Text> : null}
+          {ci.prospectador?.nombre ? <Text style={[kc.metaTxt, { color: c.textMute }]} numberOfLines={1}><Ionicons name="person-outline" size={9} color={c.textMute} /> {ci.prospectador.nombre.split(' ')[0]}</Text> : null}
         </View>
       </TouchableOpacity>
     )
@@ -195,14 +196,14 @@ export default function AsesorCitas() {
               const colW = Math.min(COL_W, width - 40)
               const resaltar = dragOver === e && dragCita && colDe(dragCita.estado) !== e
               const inner = (
-                <View style={[tb.col, { width: colW }, resaltar && { borderWidth: 2, borderColor: ESTADOS[e].color }]}>
-                  <View style={[tb.colHead, { backgroundColor: ESTADOS[e].bg, borderColor: ESTADOS[e].color }]}>
+                <View style={[tb.col, { width: colW, backgroundColor: darkMode ? '#0f1d2e' : '#eef2f6' }, resaltar && { borderWidth: 2, borderColor: ESTADOS[e].color }]}>
+                  <View style={[tb.colHead, { backgroundColor: ESTADOS[e].color + (darkMode ? '2e' : '22'), borderColor: ESTADOS[e].color }]}>
                     <Text style={[tb.colHeadTxt, { color: ESTADOS[e].color }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
                     <View style={[tb.colCount, { backgroundColor: ESTADOS[e].color }]}><Text style={tb.colCountTxt}>{porEstado[e].length}</Text></View>
                   </View>
                   <View style={{ paddingBottom: 12 }}>
                     {porEstado[e].map(ci => <TarjetaTablero key={ci.id} ci={ci} />)}
-                    {porEstado[e].length === 0 && <Text style={tb.colVacio}>{Platform.OS === 'web' ? 'Suelta aquí' : '—'}</Text>}
+                    {porEstado[e].length === 0 && <Text style={[tb.colVacio, { color: c.textMute }]}>{Platform.OS === 'web' ? 'Suelta aquí' : '—'}</Text>}
                   </View>
                 </View>
               )
@@ -303,7 +304,7 @@ const cl = StyleSheet.create({
 
 // Vista TABLERO — estilo dashboard
 const tb = StyleSheet.create({
-  col: { backgroundColor: '#f1f5f9', borderRadius: 12, padding: 8 },
+  col: { borderRadius: 12, padding: 8 },
   colHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8 },
   colHeadTxt: { fontSize: 13, fontWeight: '900' },
   colCount: { minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
@@ -311,7 +312,7 @@ const tb = StyleSheet.create({
   colVacio: { textAlign: 'center', color: '#cbd5e1', fontSize: 20, marginTop: 8 },
 })
 const kc = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderRadius: 10, marginBottom: 8, flexDirection: 'row', overflow: 'hidden', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 2 },
+  card: { borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, marginBottom: 8, flexDirection: 'row', overflow: 'hidden', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 2 },
   colorBar: { width: 4 },
   body: { flex: 1, padding: 10, gap: 5 },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
