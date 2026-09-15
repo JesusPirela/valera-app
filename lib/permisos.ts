@@ -2,11 +2,11 @@
 // en cada pantalla. Jerarquía: nuevo < prospectador < prospectador_plus < asesor ≈ supervisor < admin.
 
 export function esPlusOMejor(role?: string | null): boolean {
-  return ['prospectador_plus', 'asesor', 'supervisor', 'admin'].includes(role ?? '')
+  return ['prospectador_plus', 'asesor', 'supervisor', 'gerente', 'admin'].includes(role ?? '')
 }
 
 export function esStaffSupervision(role?: string | null): boolean {
-  return ['asesor', 'supervisor', 'admin'].includes(role ?? '')
+  return ['asesor', 'supervisor', 'gerente', 'admin'].includes(role ?? '')
 }
 
 export function esAdmin(role?: string | null): boolean {

@@ -675,6 +675,10 @@ export default function ProspectadorPropiedades() {
   const esAdmin = queryData?.rol === 'admin'
   const userId = queryData?.userId ?? null
   const esAsesorOMas = ['asesor', 'supervisor', 'admin'].includes(queryData?.rol ?? '')
+  // El gerente ve el filtro "Directas" igual que el admin (ya ve exclusivas por
+  // ser esPlusOMejor). Es la única gate de "directa" que no pasaba por esa
+  // función centralizada, así que se agrega aparte.
+  const puedeVerDirectas = esAdmin || queryData?.rol === 'gerente'
 
   // ── Publicar (reescrito desde cero) ─────────────────────────────────────────
   // Diseño: la publicación NUNCA se pierde y el botón NUNCA queda colgado.
@@ -861,7 +865,7 @@ export default function ProspectadorPropiedades() {
     filtroNueva != null ? 'nueva' : null,
     filtroExclusiva ? 'exclusiva' : null,
     filtroDestacada ? 'destacada' : null,
-    (esAdmin && filtroDirecta) ? 'directa' : null,
+    (puedeVerDirectas && filtroDirecta) ? 'directa' : null,
     (filtroFechaPreset || fechaDesdeCustom || fechaHastaCustom) ? 'fecha' : null,
     filtroOrden !== 'normal' ? 'orden' : null,
   ].filter(Boolean).length
@@ -908,7 +912,7 @@ export default function ProspectadorPropiedades() {
   if (filtroExclusiva) {
     propiedadesFiltradas = propiedadesFiltradas.filter(p => p.exclusiva || p.inmobiliarias?.exclusiva)
   }
-  if (esAdmin && filtroDirecta) {
+  if (puedeVerDirectas && filtroDirecta) {
     propiedadesFiltradas = propiedadesFiltradas.filter(p => p.directa === true)
   }
   // Filtro por estado (Querétaro / Otros estados / Todas). "Desconocido" se
@@ -1071,7 +1075,7 @@ export default function ProspectadorPropiedades() {
   }, [
     propiedades, busqueda, filtroPublicadas, publicaciones, pubData, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroDirecta, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
-    filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin,
+    filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin, puedeVerDirectas,
     viewsData, userId, filtroEstado, filtroOrden,
   ])
 
@@ -1203,7 +1207,7 @@ export default function ProspectadorPropiedades() {
           // Acceso rápido a "Sin publicar" (antes solo estaba escondido en el
           // panel de filtros avanzados, bajo "Mis propiedades").
           { key: 'sin_publicar', label: 'Sin publicar', icon: 'cloud-upload-outline' as const, activo: filtroPublicadas === 'sin_publicar', onPress: () => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar') },
-          ...(esAdmin ? [
+          ...(puedeVerDirectas ? [
             { key: 'directas', label: 'Directas', icon: 'person-outline' as const, activo: filtroDirecta, onPress: () => setFiltroDirecta(v => !v) },
           ] : []),
         ]).map(btn => (
