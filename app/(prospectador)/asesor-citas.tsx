@@ -28,6 +28,16 @@ const ORDEN: Estado[] = ['coordinada', 'realizada', 'aparto', 'reagendada', 'can
 function colDe(e: string): Estado { return (ESTADOS as any)[e] ? (e as Estado) : 'coordinada' }
 const COL_W = 250
 
+// Columnas de la vista Tabla (estilo tabla del CRM).
+const TABLE_COLS = [
+  { id: 'cliente',   label: 'Cliente',   w: 180 },
+  { id: 'tel',       label: 'Teléfono',  w: 130 },
+  { id: 'prop',      label: 'Propiedad', w: 240 },
+  { id: 'fecha',     label: 'Fecha',     w: 175 },
+  { id: 'estado',    label: 'Estado',    w: 150 },
+  { id: 'prospecto', label: 'Prospectó', w: 150 },
+]
+
 type Cita = {
   id: string; cliente_id: string; estado: string; fecha_cita: string | null
   notas: string | null; propiedad_externa: string | null
@@ -57,7 +67,7 @@ export default function AsesorCitas() {
   const [miId, setMiId] = useState<string | null>(null)
   const [citas, setCitas] = useState<Cita[]>([])
   const [loading, setLoading] = useState(true)
-  const [vista, setVista] = useState<'lista' | 'tablero'>('lista')
+  const [vista, setVista] = useState<'lista' | 'tablero' | 'tabla'>('lista')
   const [busca, setBusca] = useState('')
   const [detalle, setDetalle] = useState<Cita | null>(null)
   const [dragCita, setDragCita] = useState<Cita | null>(null)   // arrastre (web)
@@ -171,9 +181,9 @@ export default function AsesorCitas() {
       </View>
 
       <View style={st.toggleRow}>
-        {(['lista', 'tablero'] as const).map(v => (
+        {(['lista', 'tablero', 'tabla'] as const).map(v => (
           <TouchableOpacity key={v} onPress={() => setVista(v)} style={[st.toggleBtn, { borderColor: c.border }, vista === v && st.toggleOn]}>
-            <Text style={[st.toggleTxt, { color: vista === v ? '#fff' : c.textSub }]}>{v === 'lista' ? '☰ Lista' : '▦ Tablero'}</Text>
+            <Text style={[st.toggleTxt, { color: vista === v ? '#fff' : c.textSub }]}>{v === 'lista' ? '☰ Lista' : v === 'tablero' ? '▦ Tablero' : '▤ Tabla'}</Text>
           </TouchableOpacity>
         ))}
         <TextInput style={[st.busca, { color: c.text, borderColor: c.border, backgroundColor: c.card }]} value={busca} onChangeText={setBusca} placeholder="Buscar…" placeholderTextColor={c.placeholder} />
@@ -186,7 +196,7 @@ export default function AsesorCitas() {
           {visibles.map(ci => <TarjetaLista key={ci.id} ci={ci} />)}
           {visibles.length === 0 && <Text style={{ color: c.textMute, textAlign: 'center', marginTop: 20 }}>Sin resultados.</Text>}
         </ScrollView>
-      ) : (
+      ) : vista === 'tablero' ? (
         // Igual que el dashboard: scroll vertical de la página, dentro un scroll
         // horizontal de columnas, y CADA columna es una View plana (sin ScrollView
         // interna) — en RN-Web una ScrollView interna bloquea el arrastre HTML5.
@@ -216,6 +226,38 @@ export default function AsesorCitas() {
                 style: { flexShrink: 0 },
               }, inner)
             })}
+          </ScrollView>
+        </ScrollView>
+      ) : (
+        /* ── Vista Tabla (estilo tabla del CRM) ── */
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingBottom: 40 }}>
+            <View style={{ width: TABLE_COLS.reduce((s, cc) => s + cc.w, 0) }}>
+              {/* Encabezado */}
+              <View style={tbl.trHead}>
+                {TABLE_COLS.map(cc => (
+                  <View key={cc.id} style={[tbl.th, { width: cc.w }]}><Text style={tbl.thTxt} numberOfLines={1}>{cc.label}</Text></View>
+                ))}
+              </View>
+              {/* Filas */}
+              {visibles.map((ci, idx) => {
+                const est = ESTADOS[colDe(ci.estado)]
+                return (
+                  <TouchableOpacity key={ci.id} activeOpacity={0.7} onPress={() => setDetalle(ci)}
+                    style={[tbl.tr, { borderBottomColor: c.border, backgroundColor: idx % 2 ? (darkMode ? '#0a1827' : '#f8fafc') : c.card }]}>
+                    <View style={[tbl.td, { width: TABLE_COLS[0].w }]}><Text style={[tbl.tdBold, { color: c.text }]} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text></View>
+                    <View style={[tbl.td, { width: TABLE_COLS[1].w }]}><Text style={[tbl.tdTxt, { color: c.textSub }]} numberOfLines={1}>{limpiarTel(ci.clientes?.telefono) || '—'}</Text></View>
+                    <View style={[tbl.td, { width: TABLE_COLS[2].w }]}><Text style={[tbl.tdTxt, { color: c.textSub }]} numberOfLines={1}>{propNombre(ci) || '—'}</Text></View>
+                    <View style={[tbl.td, { width: TABLE_COLS[3].w }]}><Text style={[tbl.tdTxt, { color: c.textSub }]} numberOfLines={1}>{fmtFecha(ci.fecha_cita)}</Text></View>
+                    <View style={[tbl.td, { width: TABLE_COLS[4].w }]}>
+                      <View style={[tbl.chip, { backgroundColor: est.color + '22' }]}><Text style={[tbl.chipTxt, { color: est.color }]} numberOfLines={1}>{est.emoji} {est.label}</Text></View>
+                    </View>
+                    <View style={[tbl.td, { width: TABLE_COLS[5].w }]}><Text style={[tbl.tdTxt, { color: c.textMute }]} numberOfLines={1}>{ci.prospectador?.nombre || '—'}</Text></View>
+                  </TouchableOpacity>
+                )
+              })}
+              {visibles.length === 0 && <Text style={{ color: c.textMute, textAlign: 'center', margin: 20 }}>Sin resultados.</Text>}
+            </View>
           </ScrollView>
         </ScrollView>
       )}
@@ -326,6 +368,18 @@ const kc = StyleSheet.create({
   proyectoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   proyectoTxt: { fontSize: 10, color: '#0d9488', fontWeight: '600', flexShrink: 1 },
   metaTxt: { fontSize: 10, color: '#94a3b8' },
+})
+// Vista TABLA — estilo de la tabla del CRM
+const tbl = StyleSheet.create({
+  trHead: { flexDirection: 'row', backgroundColor: '#1a3547', minHeight: 44, alignItems: 'stretch' },
+  th: { justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.08)' },
+  thTxt: { color: '#fff', fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  tr: { flexDirection: 'row', minHeight: 44, alignItems: 'stretch', borderBottomWidth: 1 },
+  td: { justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 },
+  tdTxt: { fontSize: 13 },
+  tdBold: { fontSize: 13, fontWeight: '700' },
+  chip: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 3 },
+  chipTxt: { fontSize: 11.5, fontWeight: '800' },
 })
 const dm = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
