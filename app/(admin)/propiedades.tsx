@@ -63,44 +63,56 @@ type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
 type OrdenPublicaciones = 'desc' | 'asc' | null
 
+// Íconos rellenos (filled) + color propio por item: el glifo blanco lee nítido
+// sobre el tile de color y el color distinto de cada uno sirve de guía visual
+// (patrón tipo Ajustes de iOS/macOS). Paleta curada y armónica, no arcoíris.
 const NAV_ITEMS = [
-  { label: 'Dashboard', desc: 'Resumen y actividad', ion: 'speedometer-outline', route: '/(admin)/dashboard', grupo: 'Propiedades' },
-  { label: 'Nueva', desc: 'Publicar propiedad', ion: 'add-circle-outline', route: '/(admin)/nueva-propiedad', grupo: 'Propiedades' },
-  { label: 'Constructoras QRO', desc: 'Desarrollos locales', ion: 'business-outline', route: '/(admin)/constructoras?scope=queretaro', grupo: 'Propiedades' },
-  { label: 'Constructoras Nal.', desc: 'Desarrollos del país', ion: 'earth-outline', route: '/(admin)/constructoras?scope=nacional', grupo: 'Propiedades' },
-  { label: 'Colaboradores', desc: 'Asesores e inmobiliarias', ion: 'people-circle-outline', route: '/(admin)/colaboradores', grupo: 'Propiedades' },
-  { label: 'Tabla precios', desc: 'Precios por zona', ion: 'pricetags-outline', route: '/(admin)/inventario-tabla', grupo: 'Propiedades' },
-  { label: 'Publicaciones', desc: 'Veces publicada c/u', ion: 'bar-chart-outline', route: '/(admin)/estadisticas-propiedades', grupo: 'Propiedades' },
-  { label: 'Bloques', desc: 'Grupos de prospectadores', ion: 'apps-outline', route: '/(admin)/bloques', grupo: 'Propiedades' },
-  { label: 'Colores ficha', desc: 'Personaliza fichas', ion: 'color-palette-outline', route: '/(admin)/colores-ficha', grupo: 'Propiedades' },
-  { label: 'CRM', desc: 'Clientes y pipeline', ion: 'people-outline', route: '/(admin)/crm', grupo: 'Gestión' },
-  { label: 'Citas', desc: 'Coordinación de citas', ion: 'calendar-outline', route: '/(admin)/coordinacion-citas', grupo: 'Gestión' },
-  { label: 'Citas de venta', desc: 'Registro y retro', ion: 'document-text-outline', route: '/(admin)/citas-venta', grupo: 'Gestión' },
-  { label: 'Cierres', desc: 'Ventas y rentas cerradas', ion: 'ribbon-outline', route: '/(admin)/cierres', grupo: 'Gestión' },
-  { label: 'Anuncios', desc: 'Avisos al equipo', ion: 'megaphone-outline', route: '/(admin)/anuncios', grupo: 'Gestión' },
-  { label: '1 a 1', desc: 'Entrevistas del equipo', ion: 'headset-outline', route: '/(admin)/uno-a-uno', grupo: 'Gestión' },
-  { label: 'Calendario', desc: 'Tu agenda y citas', ion: 'calendar-number-outline', route: '/(admin)/calendario', grupo: 'Gestión' },
-  { label: 'Leads campañas', desc: 'Leads de Facebook Ads', ion: 'funnel-outline', route: '/(admin)/leads-campanias', grupo: 'Gestión' },
-  { label: 'Donaciones', desc: 'Clientes donados', ion: 'heart-outline', route: '/(admin)/donaciones', grupo: 'Gestión' },
-  { label: 'Proyectos', desc: 'Desarrollos y proyectos', ion: 'briefcase-outline', route: '/(admin)/proyectos', grupo: 'Gestión' },
-  { label: 'Usuarios', desc: 'Cuentas del equipo', ion: 'person-add-outline', route: '/(admin)/prospectadores', grupo: 'Gestión' },
-  { label: 'Agenda', desc: 'Directorio de contactos', ion: 'reader-outline', route: '/(admin)/agenda', grupo: 'Gestión' },
-  { label: 'Estadísticas', desc: 'Métricas del equipo', ion: 'stats-chart-outline', route: '/(admin)/estadisticas', grupo: 'Gestión' },
-  { label: 'Actividad', desc: 'Bitácora de actividad', ion: 'pulse-outline', route: '/(admin)/actividad', grupo: 'Gestión' },
-  { label: 'Monitoreo', desc: 'Errores y salud', ion: 'medkit-outline', route: '/(admin)/monitoreo', grupo: 'Gestión' },
-  { label: 'Cuenta', desc: 'Ver como rol / salir', ion: 'settings-outline', route: '/(admin)/cuenta', grupo: 'Gestión' },
-  { label: 'Universidad', desc: 'Cursos y certificados', ion: 'school-outline', route: '/(admin)/university', grupo: 'Crecimiento' },
-  { label: 'Tienda', desc: 'Compras y recompensas', ion: 'cart-outline', route: '/(admin)/tienda-compras', grupo: 'Crecimiento' },
-  { label: 'Pool Leads', desc: 'Leads sin dueño', ion: 'flame-outline', route: '/(admin)/leads-pool', grupo: 'Crecimiento' },
-  { label: 'Misiones', desc: 'Retos y recompensas', ion: 'flag-outline', route: '/(admin)/misiones', grupo: 'Crecimiento' },
-  { label: 'Ranking', desc: 'Tabla de posiciones', ion: 'trophy-outline', route: '/(prospectador)/ranking', grupo: 'Crecimiento' },
-  { label: 'Cofres', desc: 'Gestión de premios', ion: 'gift-outline', route: '/(admin)/gestion-cofres', grupo: 'Crecimiento' },
-  { label: 'Videos', desc: 'Material de marketing', ion: 'videocam-outline', route: '/(admin)/videos-marketing', grupo: 'Crecimiento' },
+  // Inicio — visión general
+  { label: 'Dashboard', desc: 'Resumen y actividad', ion: 'speedometer', color: '#2563EB', route: '/(admin)/dashboard', grupo: 'Inicio' },
+  { label: 'Estadísticas', desc: 'Métricas del equipo', ion: 'stats-chart', color: '#0891B2', route: '/(admin)/estadisticas', grupo: 'Inicio' },
+  { label: 'Actividad', desc: 'Bitácora de actividad', ion: 'pulse', color: '#7C3AED', route: '/(admin)/actividad', grupo: 'Inicio' },
+  { label: 'Monitoreo', desc: 'Errores y salud', ion: 'medkit', color: '#DC2626', route: '/(admin)/monitoreo', grupo: 'Inicio' },
+
+  // Inventario — propiedades y desarrollos
+  { label: 'Nueva', desc: 'Publicar propiedad', ion: 'add-circle', color: '#16A34A', route: '/(admin)/nueva-propiedad', grupo: 'Inventario' },
+  { label: 'Constructoras QRO', desc: 'Desarrollos locales', ion: 'business', color: '#2563EB', route: '/(admin)/constructoras?scope=queretaro', grupo: 'Inventario' },
+  { label: 'Constructoras Nal.', desc: 'Desarrollos del país', ion: 'earth', color: '#0EA5E9', route: '/(admin)/constructoras?scope=nacional', grupo: 'Inventario' },
+  { label: 'Proyectos', desc: 'Desarrollos y proyectos', ion: 'briefcase', color: '#CA8A04', route: '/(admin)/proyectos', grupo: 'Inventario' },
+  { label: 'Tabla precios', desc: 'Precios por zona', ion: 'pricetags', color: '#0D9488', route: '/(admin)/inventario-tabla', grupo: 'Inventario' },
+  { label: 'Publicaciones', desc: 'Veces publicada c/u', ion: 'bar-chart', color: '#4F46E5', route: '/(admin)/estadisticas-propiedades', grupo: 'Inventario' },
+  { label: 'Colores ficha', desc: 'Personaliza fichas', ion: 'color-palette', color: '#DB2777', route: '/(admin)/colores-ficha', grupo: 'Inventario' },
+
+  // Ventas — CRM, citas y cierres
+  { label: 'CRM', desc: 'Clientes y pipeline', ion: 'people', color: '#EA580C', route: '/(admin)/crm', grupo: 'Ventas' },
+  { label: 'Citas', desc: 'Coordinación de citas', ion: 'calendar', color: '#2563EB', route: '/(admin)/coordinacion-citas', grupo: 'Ventas' },
+  { label: 'Citas de venta', desc: 'Registro y retro', ion: 'document-text', color: '#0D9488', route: '/(admin)/citas-venta', grupo: 'Ventas' },
+  { label: 'Cierres', desc: 'Ventas y rentas cerradas', ion: 'ribbon', color: '#16A34A', route: '/(admin)/cierres', grupo: 'Ventas' },
+  { label: 'Calendario', desc: 'Tu agenda y citas', ion: 'calendar-number', color: '#7C3AED', route: '/(admin)/calendario', grupo: 'Ventas' },
+  { label: 'Leads campañas', desc: 'Leads de Facebook Ads', ion: 'funnel', color: '#0284C7', route: '/(admin)/leads-campanias', grupo: 'Ventas' },
+  { label: 'Pool Leads', desc: 'Leads sin dueño', ion: 'flame', color: '#DC2626', route: '/(admin)/leads-pool', grupo: 'Ventas' },
+  { label: 'Donaciones', desc: 'Clientes donados', ion: 'heart', color: '#DB2777', route: '/(admin)/donaciones', grupo: 'Ventas' },
+
+  // Equipo — personas y comunicación
+  { label: 'Usuarios', desc: 'Cuentas del equipo', ion: 'person-add', color: '#2563EB', route: '/(admin)/prospectadores', grupo: 'Equipo' },
+  { label: 'Colaboradores', desc: 'Asesores e inmobiliarias', ion: 'people-circle', color: '#9333EA', route: '/(admin)/colaboradores', grupo: 'Equipo' },
+  { label: 'Bloques', desc: 'Grupos de prospectadores', ion: 'apps', color: '#6366F1', route: '/(admin)/bloques', grupo: 'Equipo' },
+  { label: '1 a 1', desc: 'Entrevistas del equipo', ion: 'headset', color: '#7C3AED', route: '/(admin)/uno-a-uno', grupo: 'Equipo' },
+  { label: 'Anuncios', desc: 'Avisos al equipo', ion: 'megaphone', color: '#E11D48', route: '/(admin)/anuncios', grupo: 'Equipo' },
+  { label: 'Agenda', desc: 'Directorio de contactos', ion: 'reader', color: '#0891B2', route: '/(admin)/agenda', grupo: 'Equipo' },
+
+  // Crecimiento — gamificación y contenido
+  { label: 'Universidad', desc: 'Cursos y certificados', ion: 'school', color: '#CA8A04', route: '/(admin)/university', grupo: 'Crecimiento' },
+  { label: 'Misiones', desc: 'Retos y recompensas', ion: 'flag', color: '#DB2777', route: '/(admin)/misiones', grupo: 'Crecimiento' },
+  { label: 'Ranking', desc: 'Tabla de posiciones', ion: 'trophy', color: '#F59E0B', route: '/(prospectador)/ranking', grupo: 'Crecimiento' },
+  { label: 'Cofres', desc: 'Gestión de premios', ion: 'gift', color: '#9333EA', route: '/(admin)/gestion-cofres', grupo: 'Crecimiento' },
+  { label: 'Tienda', desc: 'Compras y recompensas', ion: 'cart', color: '#16A34A', route: '/(admin)/tienda-compras', grupo: 'Crecimiento' },
+  { label: 'Videos', desc: 'Material de marketing', ion: 'videocam', color: '#E11D48', route: '/(admin)/videos-marketing', grupo: 'Crecimiento' },
+
+  // Sistema
+  { label: 'Cuenta', desc: 'Ver como rol / salir', ion: 'settings', color: '#64748B', route: '/(admin)/cuenta', grupo: 'Sistema' },
 ] as const
 
-const GRUPO_ACENTO: Record<string, string> = { Propiedades: '#0f4c81', 'Gestión': '#1a6470', Crecimiento: '#F57F17' }
-
-const NAV_GRUPOS = ['Propiedades', 'Gestión', 'Crecimiento']
+const NAV_GRUPOS = ['Inicio', 'Inventario', 'Ventas', 'Equipo', 'Crecimiento', 'Sistema']
 
 // En web, las filas de chips horizontales no se pueden arrastrar con el mouse
 // (sin scrollbar visible) y la rueda del mouse solo hace scroll vertical. Este
@@ -474,33 +486,37 @@ export default function AdminPropiedades() {
   const contentWidth = screenWidth - 32
   const cardWidth = isWeb ? (contentWidth - 16 * (numCols - 1)) / numCols : undefined
 
+  // Columnas responsivas del menú: ~240px por card, entre 2 (móvil) y 4 (desktop)
+  const NAV_GAP = 10
+  const navCols = Math.max(2, Math.min(4, Math.floor(contentWidth / 240)))
+  const navCardW = (contentWidth - NAV_GAP * (navCols - 1)) / navCols
+
   // Cuadrícula de navegación — fija arriba en móvil, parte del scroll en web
   const navHeader = (
     <>
       {NAV_GRUPOS.map((grupo) => {
         const items = navItems.filter((item) => item.grupo === grupo)
         if (items.length === 0) return null
-        const acento = GRUPO_ACENTO[grupo] ?? '#1a6470'
         return (
           <View key={grupo} style={styles.navGroup}>
             <View style={styles.navGroupHead}>
-              <View style={[styles.navGroupDot, { backgroundColor: acento }]} />
-              <Text style={[styles.navGroupTitle, { color: c.text }]}>{grupo}</Text>
+              <Text style={[styles.navGroupTitle, { color: c.textSub }]}>{grupo.toUpperCase()}</Text>
+              <View style={[styles.navGroupLine, { backgroundColor: c.border }]} />
               <Text style={[styles.navGroupCount, { color: c.textMute }]}>{items.length}</Text>
             </View>
-            <View style={styles.navGrid}>
+            <View style={[styles.navGrid, { gap: NAV_GAP }]}>
               {items.map((item) => {
                 const badge = item.route === '/(admin)/tienda-compras' ? comprasPendientes
                   : item.route === '/(admin)/leads-campanias' ? campanasPendientes : 0
                 return (
                   <TouchableOpacity
                     key={item.route}
-                    style={[styles.navCard, { backgroundColor: c.card, borderColor: c.border }]}
+                    style={[styles.navCard, { width: navCardW, backgroundColor: c.card, borderColor: c.border }]}
                     onPress={() => router.push(item.route as any)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.navIconTile, { backgroundColor: acento, shadowColor: acento }]}>
-                      <Ionicons name={item.ion as any} size={21} color="#fff" />
+                    <View style={[styles.navIconTile, { backgroundColor: item.color, shadowColor: item.color }]}>
+                      <Ionicons name={item.ion as any} size={20} color="#fff" />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={[styles.navLabel, { color: c.text }]} numberOfLines={1}>{item.label}</Text>
@@ -991,29 +1007,27 @@ const styles = StyleSheet.create({
   webGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 16, marginTop: 8 },
 
   // Grid de navegación agrupado por categoría, 4 columnas
-  navGroup: { marginBottom: 18 },
-  navGroupHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  navGroupDot: { width: 9, height: 9, borderRadius: 5 },
-  navGroupCount: { fontSize: 12, fontWeight: '700' },
+  navGroup: { marginBottom: 20 },
+  navGroupHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 11 },
+  navGroupLine: { flex: 1, height: 1, borderRadius: 1 },
+  navGroupCount: { fontSize: 11.5, fontWeight: '700' },
   navGroupTitle: {
-    fontSize: 15,
+    fontSize: 11.5,
     fontWeight: '800',
-    letterSpacing: 0.2,
+    letterSpacing: 1.1,
   },
   navGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
   },
   navCard: {
-    width: '48%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 11,
+    gap: 12,
     borderRadius: 14,
     borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 11,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -1021,8 +1035,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   navIconTile: {
-    width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 3,
+    width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 3,
   },
   navIcon: { fontSize: 19 },
   navLabel: { fontSize: 13.5, fontWeight: '700' },
