@@ -63,39 +63,41 @@ type OrdenPrecio = 'asc' | 'desc' | null
 type OrdenPublicaciones = 'desc' | 'asc' | null
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', icon: '📋', route: '/(admin)/dashboard', color: '#0f4c81', grupo: 'Propiedades' },
-  { label: 'Nueva', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2', grupo: 'Propiedades' },
-  { label: 'Constructoras de Querétaro', icon: '🏗️', route: '/(admin)/constructoras?scope=queretaro', color: '#455A64', grupo: 'Propiedades' },
-  { label: 'Constructoras Nacionales', icon: '🌎', route: '/(admin)/constructoras?scope=nacional', color: '#0f4c81', grupo: 'Propiedades' },
-  { label: 'Colaboradores', icon: '🤝', route: '/(admin)/colaboradores', color: '#795548', grupo: 'Propiedades' },
-  { label: 'Tabla precios', icon: '🏷️', route: '/(admin)/inventario-tabla', color: '#00838F', grupo: 'Propiedades' },
-  { label: 'Publicaciones', icon: '📊', route: '/(admin)/estadisticas-propiedades', color: '#0277BD', grupo: 'Propiedades' },
-  { label: 'Bloques', icon: '🧩', route: '/(admin)/bloques', color: '#5e35b1', grupo: 'Propiedades' },
-  { label: 'Colores ficha', icon: '🎨', route: '/(admin)/colores-ficha', color: '#6A1B9A', grupo: 'Propiedades' },
-  { label: 'CRM', icon: '📒', route: '/(admin)/crm', color: '#D84315', grupo: 'Gestión' },
-  { label: 'Citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32', grupo: 'Gestión' },
-  { label: 'Citas de venta', icon: '📋', route: '/(admin)/citas-venta', color: '#00695C', grupo: 'Gestión' },
-  { label: 'Cierres', icon: '🤝', route: '/(admin)/cierres', color: '#1a6470', grupo: 'Gestión' },
-  { label: 'Anuncios', icon: '📣', route: '/(admin)/anuncios', color: '#C62828', grupo: 'Gestión' },
-  { label: '1 a 1', icon: '🎧', route: '/(admin)/uno-a-uno', color: '#4527A0', grupo: 'Gestión' },
-  { label: 'Calendario', icon: '📅', route: '/(admin)/calendario', color: '#3949AB', grupo: 'Gestión' },
-  { label: 'Leads campañas', icon: '📢', route: '/(admin)/leads-campanias', color: '#1565C0', grupo: 'Gestión' },
-  { label: 'Donaciones', icon: '🤝', route: '/(admin)/donaciones', color: '#0f6b52', grupo: 'Gestión' },
-  { label: 'Proyectos', icon: '💼', route: '/(admin)/proyectos', color: '#c9a84c', grupo: 'Gestión' },
-  { label: 'Usuarios', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828', grupo: 'Gestión' },
-  { label: 'Agenda', icon: '📇', route: '/(admin)/agenda', color: '#00838F', grupo: 'Gestión' },
-  { label: 'Estadísticas', icon: '📊', route: '/(admin)/estadisticas', color: '#00838F', grupo: 'Gestión' },
-  { label: 'Actividad', icon: '📋', route: '/(admin)/actividad', color: '#7B1FA2', grupo: 'Gestión' },
-  { label: 'Monitoreo', icon: '🩺', route: '/(admin)/monitoreo', color: '#00695C', grupo: 'Gestión' },
-  { label: 'Universidad', icon: '🎓', route: '/(admin)/university', color: '#F57F17', grupo: 'Crecimiento' },
-  { label: 'Tienda', icon: '🛒', route: '/(admin)/tienda-compras', color: '#558B2F', grupo: 'Crecimiento' },
-  { label: 'Pool Leads', icon: '🔥', route: '/(admin)/leads-pool', color: '#B71C1C', grupo: 'Crecimiento' },
-  { label: 'Misiones', icon: '🎯', route: '/(admin)/misiones', color: '#AD1457', grupo: 'Crecimiento' },
-  { label: 'Ranking', icon: '🏆', route: '/(prospectador)/ranking', color: '#F9A825', grupo: 'Crecimiento' },
-  { label: 'Cofres', icon: '🎁', route: '/(admin)/gestion-cofres', color: '#2e7d32', grupo: 'Crecimiento' },
-  { label: 'Videos', icon: '🎬', route: '/(admin)/videos-marketing', color: '#C2185B', grupo: 'Crecimiento' },
-  { label: 'Cuenta', icon: '👤', route: '/(admin)/cuenta', color: '#37474F', grupo: 'Gestión' },
+  { label: 'Dashboard', desc: 'Resumen y actividad', icon: '📋', route: '/(admin)/dashboard', color: '#0f4c81', grupo: 'Propiedades' },
+  { label: 'Nueva', desc: 'Publicar propiedad', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2', grupo: 'Propiedades' },
+  { label: 'Constructoras QRO', desc: 'Desarrollos locales', icon: '🏗️', route: '/(admin)/constructoras?scope=queretaro', color: '#455A64', grupo: 'Propiedades' },
+  { label: 'Constructoras Nal.', desc: 'Desarrollos del país', icon: '🌎', route: '/(admin)/constructoras?scope=nacional', color: '#0f4c81', grupo: 'Propiedades' },
+  { label: 'Colaboradores', desc: 'Asesores e inmobiliarias', icon: '🤝', route: '/(admin)/colaboradores', color: '#795548', grupo: 'Propiedades' },
+  { label: 'Tabla precios', desc: 'Precios por zona', icon: '🏷️', route: '/(admin)/inventario-tabla', color: '#00838F', grupo: 'Propiedades' },
+  { label: 'Publicaciones', desc: 'Veces publicada c/u', icon: '📊', route: '/(admin)/estadisticas-propiedades', color: '#0277BD', grupo: 'Propiedades' },
+  { label: 'Bloques', desc: 'Grupos de prospectadores', icon: '🧩', route: '/(admin)/bloques', color: '#5e35b1', grupo: 'Propiedades' },
+  { label: 'Colores ficha', desc: 'Personaliza fichas', icon: '🎨', route: '/(admin)/colores-ficha', color: '#6A1B9A', grupo: 'Propiedades' },
+  { label: 'CRM', desc: 'Clientes y pipeline', icon: '📒', route: '/(admin)/crm', color: '#D84315', grupo: 'Gestión' },
+  { label: 'Citas', desc: 'Coordinación de citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32', grupo: 'Gestión' },
+  { label: 'Citas de venta', desc: 'Registro y retro', icon: '📗', route: '/(admin)/citas-venta', color: '#00695C', grupo: 'Gestión' },
+  { label: 'Cierres', desc: 'Ventas y rentas cerradas', icon: '🤝', route: '/(admin)/cierres', color: '#1a6470', grupo: 'Gestión' },
+  { label: 'Anuncios', desc: 'Avisos al equipo', icon: '📣', route: '/(admin)/anuncios', color: '#C62828', grupo: 'Gestión' },
+  { label: '1 a 1', desc: 'Entrevistas del equipo', icon: '🎧', route: '/(admin)/uno-a-uno', color: '#4527A0', grupo: 'Gestión' },
+  { label: 'Calendario', desc: 'Tu agenda y citas', icon: '📆', route: '/(admin)/calendario', color: '#3949AB', grupo: 'Gestión' },
+  { label: 'Leads campañas', desc: 'Leads de Facebook Ads', icon: '📢', route: '/(admin)/leads-campanias', color: '#1565C0', grupo: 'Gestión' },
+  { label: 'Donaciones', desc: 'Clientes donados', icon: '💝', route: '/(admin)/donaciones', color: '#0f6b52', grupo: 'Gestión' },
+  { label: 'Proyectos', desc: 'Desarrollos y proyectos', icon: '💼', route: '/(admin)/proyectos', color: '#c9a84c', grupo: 'Gestión' },
+  { label: 'Usuarios', desc: 'Cuentas del equipo', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828', grupo: 'Gestión' },
+  { label: 'Agenda', desc: 'Directorio de contactos', icon: '📇', route: '/(admin)/agenda', color: '#00838F', grupo: 'Gestión' },
+  { label: 'Estadísticas', desc: 'Métricas del equipo', icon: '📈', route: '/(admin)/estadisticas', color: '#00838F', grupo: 'Gestión' },
+  { label: 'Actividad', desc: 'Bitácora de actividad', icon: '📜', route: '/(admin)/actividad', color: '#7B1FA2', grupo: 'Gestión' },
+  { label: 'Monitoreo', desc: 'Errores y salud', icon: '🩺', route: '/(admin)/monitoreo', color: '#00695C', grupo: 'Gestión' },
+  { label: 'Cuenta', desc: 'Ver como rol / salir', icon: '👤', route: '/(admin)/cuenta', color: '#37474F', grupo: 'Gestión' },
+  { label: 'Universidad', desc: 'Cursos y certificados', icon: '🎓', route: '/(admin)/university', color: '#F57F17', grupo: 'Crecimiento' },
+  { label: 'Tienda', desc: 'Compras y recompensas', icon: '🛒', route: '/(admin)/tienda-compras', color: '#558B2F', grupo: 'Crecimiento' },
+  { label: 'Pool Leads', desc: 'Leads sin dueño', icon: '🔥', route: '/(admin)/leads-pool', color: '#B71C1C', grupo: 'Crecimiento' },
+  { label: 'Misiones', desc: 'Retos y recompensas', icon: '🎯', route: '/(admin)/misiones', color: '#AD1457', grupo: 'Crecimiento' },
+  { label: 'Ranking', desc: 'Tabla de posiciones', icon: '🏆', route: '/(prospectador)/ranking', color: '#F9A825', grupo: 'Crecimiento' },
+  { label: 'Cofres', desc: 'Gestión de premios', icon: '🎁', route: '/(admin)/gestion-cofres', color: '#2e7d32', grupo: 'Crecimiento' },
+  { label: 'Videos', desc: 'Material de marketing', icon: '🎬', route: '/(admin)/videos-marketing', color: '#C2185B', grupo: 'Crecimiento' },
 ]
+
+const GRUPO_ACENTO: Record<string, string> = { Propiedades: '#0f4c81', 'Gestión': '#1a6470', Crecimiento: '#F57F17' }
 
 const NAV_GRUPOS = ['Propiedades', 'Gestión', 'Crecimiento']
 
@@ -476,9 +478,14 @@ export default function AdminPropiedades() {
       {NAV_GRUPOS.map((grupo) => {
         const items = navItems.filter((item) => item.grupo === grupo)
         if (items.length === 0) return null
+        const acento = GRUPO_ACENTO[grupo] ?? '#1a6470'
         return (
           <View key={grupo} style={styles.navGroup}>
-            <Text style={[styles.navGroupTitle, { color: c.textMute }]}>{grupo.toUpperCase()}</Text>
+            <View style={styles.navGroupHead}>
+              <View style={[styles.navGroupDot, { backgroundColor: acento }]} />
+              <Text style={[styles.navGroupTitle, { color: c.text }]}>{grupo}</Text>
+              <Text style={[styles.navGroupCount, { color: c.textMute }]}>{items.length}</Text>
+            </View>
             <View style={styles.navGrid}>
               {items.map((item) => {
                 const badge = item.route === '/(admin)/tienda-compras' ? comprasPendientes
@@ -486,11 +493,17 @@ export default function AdminPropiedades() {
                 return (
                   <TouchableOpacity
                     key={item.route}
-                    style={[styles.navCard, { backgroundColor: item.color }]}
+                    style={[styles.navCard, { backgroundColor: c.card, borderColor: c.border }]}
                     onPress={() => router.push(item.route as any)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={styles.navIcon}>{item.icon}</Text>
-                    <Text style={styles.navLabel}>{item.label}</Text>
+                    <View style={[styles.navIconTile, { backgroundColor: item.color }]}>
+                      <Text style={styles.navIcon}>{item.icon}</Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.navLabel, { color: c.text }]} numberOfLines={1}>{item.label}</Text>
+                      <Text style={[styles.navDesc, { color: c.textMute }]} numberOfLines={1}>{(item as any).desc}</Text>
+                    </View>
                     {badge > 0 && (
                       <View style={styles.navBadge}>
                         <Text style={styles.navBadgeText}>{badge > 99 ? '99+' : badge}</Text>
@@ -976,12 +989,14 @@ const styles = StyleSheet.create({
   webGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 16, marginTop: 8 },
 
   // Grid de navegación agrupado por categoría, 4 columnas
-  navGroup: { marginBottom: 14 },
+  navGroup: { marginBottom: 18 },
+  navGroupHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  navGroupDot: { width: 9, height: 9, borderRadius: 5 },
+  navGroupCount: { fontSize: 12, fontWeight: '700' },
   navGroupTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: 8,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   navGrid: {
     flexDirection: 'row',
@@ -989,19 +1004,24 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   navCard: {
-    width: '23%',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    width: '48%',
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    gap: 11,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 11,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
-  navIcon: { fontSize: 16 },
-  navLabel: { color: '#fff', fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  navIconTile: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  navIcon: { fontSize: 19 },
+  navLabel: { fontSize: 13.5, fontWeight: '700' },
+  navDesc: { fontSize: 11, marginTop: 1 },
   navBadge: {
     position: 'absolute', top: -5, right: -5,
     backgroundColor: '#e53935', borderRadius: 11, minWidth: 22, height: 22,
