@@ -86,11 +86,14 @@ export const ESTADOS_CITA: Record<EstadoCita, {
 // recaudando_documentacion, aprobando_credito, firma_contrato, escrituracion)
 // ahora son exclusivas de la vista de asesor (ver ORDEN_ESTADOS_VENTA/RENTA
 // abajo) — el admin se queda con el resto del embudo de coordinación.
+// Las 4 etapas de seguimiento de cierre (alto/bajo, falta perfilar, compra
+// futuro) son EXCLUSIVAS del tablero del asesor — el admin ve su embudo de
+// coordinación limpio y, si quiere ver esas etapas, abre la pantalla de
+// citas del asesor en modo admin (botón "Citas de asesores").
 const ORDEN_ESTADOS: EstadoCita[] = [
   'primer_contacto', 'buscando_opciones',
   'en_coordinacion', 'coordinada', 'reagendada',
   'no_responde_asesor', 'realizada',
-  'seguimiento_cierre_alto', 'seguimiento_cierre_bajo', 'falta_perfilamiento', 'compra_futuro',
   'aparto',
   'cancelada',
 ]
@@ -1616,6 +1619,13 @@ export default function CoordinacionCitas() {
           >
             <Ionicons name="search-outline" size={18} color={showSearch ? '#fff' : '#1a6470'} />
           </TouchableOpacity>
+          {!vistaAsesor && (
+            <TouchableOpacity style={s.headerBtn}
+              onPress={() => router.push('/(prospectador)/asesor-citas?admin=1')}>
+              <Ionicons name="people-outline" size={17} color="#1a6470" />
+              <Text style={{ color: '#1a6470', fontWeight: '700', fontSize: 12 }}>Asesores</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={[s.headerBtn, { backgroundColor: '#059669', borderColor: '#059669' }]}
             onPress={() => setModalNueva(true)}>
             <Ionicons name="add" size={18} color="#fff" />

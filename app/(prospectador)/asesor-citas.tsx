@@ -9,7 +9,7 @@ import {
   ActivityIndicator, Platform, Linking, useWindowDimensions,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors, useTheme } from '../../lib/ThemeContext'
@@ -52,10 +52,11 @@ const TABLE_COLS = [
 
 type Cita = {
   id: string; cliente_id: string; estado: string; fecha_cita: string | null
-  notas: string | null; propiedad_externa: string | null
+  notas: string | null; propiedad_externa: string | null; asesor_id: string | null
   clientes: { nombre: string; telefono: string | null; tipo_operacion: string | null } | null
   prospectador: { nombre: string } | null
   propiedad: { titulo: string } | null
+  asesor: { nombre: string } | null
 }
 
 const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -76,8 +77,11 @@ export default function AsesorCitas() {
   const c = useColors()
   const { darkMode } = useTheme()
   const { width } = useWindowDimensions()
+  const params = useLocalSearchParams<{ admin?: string }>()
+  const esAdmin = params.admin === '1'   // admin viendo el tablero de los asesores
   const [miId, setMiId] = useState<string | null>(null)
   const [citas, setCitas] = useState<Cita[]>([])
+  const [filtroAsesor, setFiltroAsesor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [vista, setVista] = useState<'lista' | 'tablero' | 'tabla'>('lista')
   const [busca, setBusca] = useState('')
@@ -92,24 +96,36 @@ export default function AsesorCitas() {
     const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
     setMiId(user.id)
-    const { data } = await supabase
+    let q = supabase
       .from('citas_coordinacion')
-      .select(`id, cliente_id, estado, fecha_cita, notas, propiedad_externa,
+      .select(`id, cliente_id, estado, fecha_cita, notas, propiedad_externa, asesor_id,
         clientes ( nombre, telefono, tipo_operacion ),
         prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre ),
+        asesor:profiles!citas_coordinacion_asesor_id_fkey ( nombre ),
         propiedad:propiedades ( titulo )`)
-      .eq('asesor_id', user.id)
-      .order('fecha_cita', { ascending: false, nullsFirst: false })
+    // Admin: todas las citas que ya tienen asesor asignado. Asesor: solo las suyas.
+    q = esAdmin ? q.not('asesor_id', 'is', null) : q.eq('asesor_id', user.id)
+    const { data } = await q.order('fecha_cita', { ascending: false, nullsFirst: false })
     setCitas((data ?? []) as unknown as Cita[])
     setLoading(false)
-  }, [])
+  }, [esAdmin])
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
+
+  // Lista de asesores presentes (solo modo admin), para el filtro.
+  const asesores = useMemo(() => {
+    if (!esAdmin) return []
+    const m = new Map<string, string>()
+    for (const ci of citas) if (ci.asesor_id) m.set(ci.asesor_id, ci.asesor?.nombre ?? 'Asesor')
+    return [...m.entries()].map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }, [citas, esAdmin])
 
   const visibles = useMemo(() => {
     const q = busca.trim().toLowerCase()
-    if (!q) return citas
-    return citas.filter(ci => `${ci.clientes?.nombre ?? ''} ${ci.propiedad?.titulo ?? ''} ${ci.propiedad_externa ?? ''}`.toLowerCase().includes(q))
-  }, [citas, busca])
+    let base = citas
+    if (esAdmin && filtroAsesor) base = base.filter(ci => ci.asesor_id === filtroAsesor)
+    if (!q) return base
+    return base.filter(ci => `${ci.clientes?.nombre ?? ''} ${ci.propiedad?.titulo ?? ''} ${ci.propiedad_externa ?? ''}`.toLowerCase().includes(q))
+  }, [citas, busca, esAdmin, filtroAsesor])
 
   const porEstado = useMemo(() => {
     const m = Object.fromEntries(ORDEN.map(e => [e, [] as Cita[]])) as Record<Estado, Cita[]>
@@ -146,6 +162,7 @@ export default function AsesorCitas() {
             </View>
           </View>
           <Text style={[cl.linea, { color: c.textSub }]} numberOfLines={1}>📅 {fmtFecha(ci.fecha_cita)}</Text>
+          {esAdmin && ci.asesor?.nombre ? <Text style={[cl.linea, { color: c.textSub }]} numberOfLines={1}>👤 {ci.asesor.nombre}</Text> : null}
           {ci.prospectador?.nombre ? <Text style={[cl.linea, { color: c.textMute }]} numberOfLines={1}>🌱 {ci.prospectador.nombre}</Text> : null}
         </View>
       </TouchableOpacity>
@@ -170,6 +187,7 @@ export default function AsesorCitas() {
           {ci.fecha_cita ? <View style={[kc.fechaRow, { backgroundColor: est.color + '1a' }]}><Ionicons name="calendar-outline" size={11} color={est.color} /><Text style={[kc.fechaTxt, { color: est.color }]}>{fmtFecha(ci.fecha_cita)}</Text></View> : null}
           {propNombre(ci) ? <View style={kc.proyectoRow}><Ionicons name="business-outline" size={10} color="#0d9488" /><Text style={kc.proyectoTxt} numberOfLines={1}>{propNombre(ci)}</Text></View> : null}
           {ci.notas ? <Text style={[kc.notas, { color: c.textMute }]} numberOfLines={2}>{ci.notas}</Text> : null}
+          {esAdmin && ci.asesor?.nombre ? <Text style={[kc.metaTxt, { color: c.textSub }]} numberOfLines={1}><Ionicons name="person-circle-outline" size={10} color={c.textSub} /> {ci.asesor.nombre}</Text> : null}
           {ci.prospectador?.nombre ? <Text style={[kc.metaTxt, { color: c.textMute }]} numberOfLines={1}><Ionicons name="person-outline" size={9} color={c.textMute} /> {ci.prospectador.nombre.split(' ')[0]}</Text> : null}
         </View>
       </TouchableOpacity>
@@ -189,11 +207,33 @@ export default function AsesorCitas() {
   return (
     <View style={[st.page, { backgroundColor: c.bg }]}>
       <View style={st.top}>
+        {esAdmin && (
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/coordinacion-citas')} style={{ paddingRight: 10, paddingVertical: 4 }}>
+            <Ionicons name="arrow-back" size={22} color={c.text} />
+          </TouchableOpacity>
+        )}
         <View style={{ flex: 1 }}>
-          <Text style={[st.h1, { color: c.text }]}>Mis citas</Text>
-          <Text style={[st.sub, { color: c.textMute }]}>{loading ? ' ' : `${citas.length} cita${citas.length !== 1 ? 's' : ''} asignada${citas.length !== 1 ? 's' : ''} a ti`}</Text>
+          <Text style={[st.h1, { color: c.text }]}>{esAdmin ? 'Citas de asesores' : 'Mis citas'}</Text>
+          <Text style={[st.sub, { color: c.textMute }]}>{loading ? ' ' : esAdmin
+            ? `${visibles.length} cita${visibles.length !== 1 ? 's' : ''}${filtroAsesor ? ' · ' + (asesores.find(a => a.id === filtroAsesor)?.nombre ?? '') : ` · ${asesores.length} asesor${asesores.length !== 1 ? 'es' : ''}`}`
+            : `${citas.length} cita${citas.length !== 1 ? 's' : ''} asignada${citas.length !== 1 ? 's' : ''} a ti`}</Text>
         </View>
       </View>
+
+      {esAdmin && asesores.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.asesorScroll} contentContainerStyle={st.asesorRow}>
+          {[{ id: null as string | null, nombre: 'Todos' }, ...asesores].map(a => {
+            const activo = filtroAsesor === a.id
+            const n = a.id === null ? citas.length : citas.filter(ci => ci.asesor_id === a.id).length
+            return (
+              <TouchableOpacity key={String(a.id)} onPress={() => setFiltroAsesor(a.id)}
+                style={[st.asesorChip, { borderColor: c.border, backgroundColor: c.card }, activo && st.asesorChipOn]}>
+                <Text style={[st.asesorChipTxt, { color: activo ? '#fff' : c.textSub }]} numberOfLines={1}>{a.nombre} · {n}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
+      )}
 
       <View style={st.toggleRow}>
         {(['lista', 'tablero', 'tabla'] as const).map(v => (
@@ -335,6 +375,11 @@ const st = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 10 },
   h1: { fontSize: 21, fontWeight: '900' },
   sub: { fontSize: 12.5, marginTop: 1 },
+  asesorScroll: { maxHeight: 44, marginTop: 8 },
+  asesorRow: { flexDirection: 'row', gap: 7, paddingHorizontal: 14, alignItems: 'center' },
+  asesorChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
+  asesorChipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  asesorChipTxt: { fontSize: 12, fontWeight: '700', maxWidth: 160 },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, marginTop: 10 },
   toggleBtn: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 7 },
   toggleOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
