@@ -3,6 +3,8 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
+  Animated,
   StyleSheet,
   FlatList,
   TextInput,
@@ -16,7 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { useColors, useTheme } from '../../lib/ThemeContext'
+import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
@@ -114,6 +116,62 @@ const NAV_ITEMS = [
 
 const NAV_GRUPOS = ['Inicio', 'Inventario', 'Ventas', 'Equipo', 'Crecimiento', 'Sistema']
 
+// Tarjeta de navegación con micro-animaciones (como en apps profesionales):
+// entrada con fade + slide escalonado, elevación al pasar el mouse (web) y
+// ligero "scale" al presionar. Todo con el driver nativo (fluido en web y móvil).
+function NavCard({ item, width, badge, index }: {
+  item: typeof NAV_ITEMS[number]; width: number; badge: number; index: number
+}) {
+  const c = useColors()
+  const press = useRef(new Animated.Value(0)).current   // 0 reposo · 1 presionado
+  const hover = useRef(new Animated.Value(0)).current   // 0 fuera · 1 hover (web)
+  const enter = useRef(new Animated.Value(0)).current   // 0 → 1 al montar
+
+  useEffect(() => {
+    Animated.timing(enter, {
+      toValue: 1, duration: 300, delay: Math.min(index * 24, 360), useNativeDriver: true,
+    }).start()
+  }, [])
+
+  const anim = (v: Animated.Value, to: number) =>
+    Animated.spring(v, { toValue: to, useNativeDriver: true, speed: 28, bounciness: 5 }).start()
+
+  const scale = Animated.multiply(
+    press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }),
+    hover.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] }),
+  )
+  const translateY = Animated.add(
+    enter.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
+    hover.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }),
+  )
+
+  return (
+    <Animated.View style={{ width, opacity: enter, transform: [{ translateY }, { scale }] }}>
+      <Pressable
+        onPress={() => router.push(item.route as any)}
+        onPressIn={() => anim(press, 1)}
+        onPressOut={() => anim(press, 0)}
+        onHoverIn={() => anim(hover, 1)}
+        onHoverOut={() => anim(hover, 0)}
+        style={[styles.navCard, { backgroundColor: c.card, borderColor: c.border }]}
+      >
+        <View style={[styles.navIconTile, { backgroundColor: item.color, shadowColor: item.color }]}>
+          <Ionicons name={item.ion as any} size={20} color="#fff" />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[styles.navLabel, { color: c.text }]} numberOfLines={1}>{item.label}</Text>
+          <Text style={[styles.navDesc, { color: c.textMute }]} numberOfLines={1}>{(item as any).desc}</Text>
+        </View>
+        {badge > 0 && (
+          <View style={styles.navBadge}>
+            <Text style={styles.navBadgeText}>{badge > 99 ? '99+' : badge}</Text>
+          </View>
+        )}
+      </Pressable>
+    </Animated.View>
+  )
+}
+
 // En web, las filas de chips horizontales no se pueden arrastrar con el mouse
 // (sin scrollbar visible) y la rueda del mouse solo hace scroll vertical. Este
 // hook traduce el scroll vertical de la rueda en scroll horizontal de la fila.
@@ -131,7 +189,6 @@ function FiltroChip({ label, active, onPress, textSubColor }: { label: string; a
 export default function AdminPropiedades() {
   useSupervisorBlock()
   const c = useColors()
-  const { darkMode } = useTheme()
   const scrollOperacionRef = useScrollHorizontalConRueda()
   const scrollEstadoRef = useScrollHorizontalConRueda()
   const scrollTipoRef = useScrollHorizontalConRueda()
@@ -505,30 +562,10 @@ export default function AdminPropiedades() {
               <Text style={[styles.navGroupCount, { color: c.textMute }]}>{items.length}</Text>
             </View>
             <View style={[styles.navGrid, { gap: NAV_GAP }]}>
-              {items.map((item) => {
+              {items.map((item, i) => {
                 const badge = item.route === '/(admin)/tienda-compras' ? comprasPendientes
                   : item.route === '/(admin)/leads-campanias' ? campanasPendientes : 0
-                return (
-                  <TouchableOpacity
-                    key={item.route}
-                    style={[styles.navCard, { width: navCardW, backgroundColor: c.card, borderColor: c.border }]}
-                    onPress={() => router.push(item.route as any)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.navIconTile, { backgroundColor: item.color, shadowColor: item.color }]}>
-                      <Ionicons name={item.ion as any} size={20} color="#fff" />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={[styles.navLabel, { color: c.text }]} numberOfLines={1}>{item.label}</Text>
-                      <Text style={[styles.navDesc, { color: c.textMute }]} numberOfLines={1}>{(item as any).desc}</Text>
-                    </View>
-                    {badge > 0 && (
-                      <View style={styles.navBadge}>
-                        <Text style={styles.navBadgeText}>{badge > 99 ? '99+' : badge}</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                )
+                return <NavCard key={item.route} item={item} width={navCardW} badge={badge} index={i} />
               })}
             </View>
           </View>
