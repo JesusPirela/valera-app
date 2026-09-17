@@ -55,6 +55,7 @@ import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import MiniMapa from '../../components/MiniMapa'
 import { getDesbloqueadas } from '../../lib/publicarUnlock'
 import { fetchPublicacionesUsuario, type PublicacionesData } from '../../lib/publicaciones'
+import { actualizarWidgetMiDia } from '../../lib/widgetUpdate'
 
 type Propiedad = {
   id: string
@@ -727,6 +728,7 @@ export default function ProspectadorPropiedades() {
       recienPublicadosRef.current = new Set([...recienPublicadosRef.current, propiedadId])
       track('publicar_propiedad', { veces: vecesReal })
       actualizarMisionesPorCategoria(userId, 'propiedad').catch(() => {})
+      actualizarWidgetMiDia().catch(() => {})
     }
     const encolar = async () => {
       await enqueuePublicacion(propiedadId, idemKey, userId).catch(() => {})

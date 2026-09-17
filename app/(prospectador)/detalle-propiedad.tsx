@@ -42,6 +42,7 @@ import PropMapa from '../../components/PropMapa'
 import { actualizarMisionesPorCategoria, registrarAccion } from '../../lib/gamification'
 import { marcarDesbloqueada, estaDesbloqueada } from '../../lib/publicarUnlock'
 import { fetchPublicacionesUsuario, type PublicacionesData } from '../../lib/publicaciones'
+import { actualizarWidgetMiDia } from '../../lib/widgetUpdate'
 
 
 type Propiedad = {
@@ -530,6 +531,7 @@ export default function DetallePropiedad() {
     const exito = (veces: number, fecha?: string | null) => {
       actualizarMisionesPorCategoria(user.id, 'propiedad').catch(() => {})
       actualizarProgresoTareasPublicar(user.id)
+      actualizarWidgetMiDia().catch(() => {})
       // Actualización optimista exacta: igual que publicarPropiedad() en propiedades.tsx.
       // Solo toca ESTA propiedad en el mapa; no depende de que el refetch llegue
       // con la sesión en buen estado (en iOS el refresh de token puede solaparse).

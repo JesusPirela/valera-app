@@ -82,6 +82,24 @@
           "color": "#1a6470",
           "sounds": []
         }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "MiDia",
+              "label": "Valera - Mi Día",
+              "description": "Publicaciones de hoy, seguimientos pendientes y tu racha.",
+              "minWidth": "180dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 3,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
       ]
     ],
     "extra": {

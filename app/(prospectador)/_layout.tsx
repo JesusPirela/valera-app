@@ -17,6 +17,7 @@ import AscensoRolModal from '../../components/AscensoRolModal'
 import PopupLeadsCampania from '../../components/PopupLeadsCampania'
 import RetroPendientesPopup from '../../components/RetroPendientesPopup'
 import AnunciosPopup from '../../components/AnunciosPopup'
+import { actualizarWidgetMiDia } from '../../lib/widgetUpdate'
 
 const LOGO = require('../../assets/logo-recortado.png')
 
@@ -161,6 +162,11 @@ export default function ProspectadorLayout() {
     // Programar alarmas de recordatorios (móvil) y pedir permiso de avisos (web)
     programarRecordatorios().catch(() => {})
     solicitarPermisoWeb().catch(() => {})
+
+    // Refresca el widget "Mi Día" (Android) al abrir la app, sin esperar el
+    // ciclo automático de 30 min — así ya está al día si la persona abre la
+    // app pero no toca el widget.
+    actualizarWidgetMiDia().catch(() => {})
 
     // Deep link al tocar una notificación push: navegar a la pantalla correcta
     const subNotif = Notifications.addNotificationResponseReceivedListener(async response => {
