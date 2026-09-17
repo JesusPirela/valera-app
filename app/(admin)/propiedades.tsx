@@ -201,6 +201,15 @@ export default function AdminPropiedades() {
   const [loading, setLoading] = useState(true)
   const yaCargoRef = useRef(false)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
+  const [gruposAbiertos, setGruposAbiertos] = useState<Set<string>>(new Set())
+
+  function toggleGrupo(grupo: string) {
+    setGruposAbiertos((prev) => {
+      const next = new Set(prev)
+      if (next.has(grupo)) next.delete(grupo); else next.add(grupo)
+      return next
+    })
+  }
 
   const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>(null)
@@ -554,13 +563,25 @@ export default function AdminPropiedades() {
       {NAV_GRUPOS.map((grupo) => {
         const items = navItems.filter((item) => item.grupo === grupo)
         if (items.length === 0) return null
+        const abierto = gruposAbiertos.has(grupo)
         return (
           <View key={grupo} style={styles.navGroup}>
-            <View style={styles.navGroupHead}>
+            <TouchableOpacity
+              style={styles.navGroupHead}
+              onPress={() => toggleGrupo(grupo)}
+              activeOpacity={0.7}
+            >
               <Text style={[styles.navGroupTitle, { color: c.textSub }]}>{grupo.toUpperCase()}</Text>
               <View style={[styles.navGroupLine, { backgroundColor: c.border }]} />
               <Text style={[styles.navGroupCount, { color: c.textMute }]}>{items.length}</Text>
-            </View>
+              <Ionicons
+                name={abierto ? 'chevron-up-outline' : 'chevron-down-outline'}
+                size={18}
+                color={c.textMute}
+                style={styles.navGroupChevron}
+              />
+            </TouchableOpacity>
+            {abierto && (
             <View style={[styles.navGrid, { gap: NAV_GAP }]}>
               {items.map((item, i) => {
                 const badge = item.route === '/(admin)/tienda-compras' ? comprasPendientes
@@ -568,6 +589,7 @@ export default function AdminPropiedades() {
                 return <NavCard key={item.route} item={item} width={navCardW} badge={badge} index={i} />
               })}
             </View>
+            )}
           </View>
         )
       })}
@@ -1045,7 +1067,7 @@ const styles = StyleSheet.create({
 
   // Grid de navegación agrupado por categoría, 4 columnas
   navGroup: { marginBottom: 20 },
-  navGroupHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 11 },
+  navGroupHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 11, paddingVertical: 4 },
   navGroupLine: { flex: 1, height: 1, borderRadius: 1 },
   navGroupCount: { fontSize: 11.5, fontWeight: '700' },
   navGroupTitle: {
@@ -1053,6 +1075,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.1,
   },
+  navGroupChevron: { marginLeft: 'auto' },
   navGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
