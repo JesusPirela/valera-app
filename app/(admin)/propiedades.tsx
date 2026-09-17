@@ -499,8 +499,8 @@ export default function AdminPropiedades() {
                     onPress={() => router.push(item.route as any)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.navIconTile, { backgroundColor: acento + (darkMode ? '26' : '14') }]}>
-                      <Ionicons name={item.ion as any} size={20} color={acento} />
+                    <View style={[styles.navIconTile, { backgroundColor: acento, shadowColor: acento }]}>
+                      <Ionicons name={item.ion as any} size={21} color="#fff" />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={[styles.navLabel, { color: c.text }]} numberOfLines={1}>{item.label}</Text>
@@ -1020,7 +1020,10 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
   },
-  navIconTile: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  navIconTile: {
+    width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 3,
+  },
   navIcon: { fontSize: 19 },
   navLabel: { fontSize: 13.5, fontWeight: '700' },
   navDesc: { fontSize: 11, marginTop: 1 },
