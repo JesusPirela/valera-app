@@ -13,9 +13,10 @@ import {
   Modal,
   useWindowDimensions,
 } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { useColors } from '../../lib/ThemeContext'
+import { useColors, useTheme } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
@@ -63,39 +64,39 @@ type OrdenPrecio = 'asc' | 'desc' | null
 type OrdenPublicaciones = 'desc' | 'asc' | null
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', desc: 'Resumen y actividad', icon: '📋', route: '/(admin)/dashboard', color: '#0f4c81', grupo: 'Propiedades' },
-  { label: 'Nueva', desc: 'Publicar propiedad', icon: '＋', route: '/(admin)/nueva-propiedad', color: '#1976D2', grupo: 'Propiedades' },
-  { label: 'Constructoras QRO', desc: 'Desarrollos locales', icon: '🏗️', route: '/(admin)/constructoras?scope=queretaro', color: '#455A64', grupo: 'Propiedades' },
-  { label: 'Constructoras Nal.', desc: 'Desarrollos del país', icon: '🌎', route: '/(admin)/constructoras?scope=nacional', color: '#0f4c81', grupo: 'Propiedades' },
-  { label: 'Colaboradores', desc: 'Asesores e inmobiliarias', icon: '🤝', route: '/(admin)/colaboradores', color: '#795548', grupo: 'Propiedades' },
-  { label: 'Tabla precios', desc: 'Precios por zona', icon: '🏷️', route: '/(admin)/inventario-tabla', color: '#00838F', grupo: 'Propiedades' },
-  { label: 'Publicaciones', desc: 'Veces publicada c/u', icon: '📊', route: '/(admin)/estadisticas-propiedades', color: '#0277BD', grupo: 'Propiedades' },
-  { label: 'Bloques', desc: 'Grupos de prospectadores', icon: '🧩', route: '/(admin)/bloques', color: '#5e35b1', grupo: 'Propiedades' },
-  { label: 'Colores ficha', desc: 'Personaliza fichas', icon: '🎨', route: '/(admin)/colores-ficha', color: '#6A1B9A', grupo: 'Propiedades' },
-  { label: 'CRM', desc: 'Clientes y pipeline', icon: '📒', route: '/(admin)/crm', color: '#D84315', grupo: 'Gestión' },
-  { label: 'Citas', desc: 'Coordinación de citas', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32', grupo: 'Gestión' },
-  { label: 'Citas de venta', desc: 'Registro y retro', icon: '📗', route: '/(admin)/citas-venta', color: '#00695C', grupo: 'Gestión' },
-  { label: 'Cierres', desc: 'Ventas y rentas cerradas', icon: '🤝', route: '/(admin)/cierres', color: '#1a6470', grupo: 'Gestión' },
-  { label: 'Anuncios', desc: 'Avisos al equipo', icon: '📣', route: '/(admin)/anuncios', color: '#C62828', grupo: 'Gestión' },
-  { label: '1 a 1', desc: 'Entrevistas del equipo', icon: '🎧', route: '/(admin)/uno-a-uno', color: '#4527A0', grupo: 'Gestión' },
-  { label: 'Calendario', desc: 'Tu agenda y citas', icon: '📆', route: '/(admin)/calendario', color: '#3949AB', grupo: 'Gestión' },
-  { label: 'Leads campañas', desc: 'Leads de Facebook Ads', icon: '📢', route: '/(admin)/leads-campanias', color: '#1565C0', grupo: 'Gestión' },
-  { label: 'Donaciones', desc: 'Clientes donados', icon: '💝', route: '/(admin)/donaciones', color: '#0f6b52', grupo: 'Gestión' },
-  { label: 'Proyectos', desc: 'Desarrollos y proyectos', icon: '💼', route: '/(admin)/proyectos', color: '#c9a84c', grupo: 'Gestión' },
-  { label: 'Usuarios', desc: 'Cuentas del equipo', icon: '👥', route: '/(admin)/prospectadores', color: '#C62828', grupo: 'Gestión' },
-  { label: 'Agenda', desc: 'Directorio de contactos', icon: '📇', route: '/(admin)/agenda', color: '#00838F', grupo: 'Gestión' },
-  { label: 'Estadísticas', desc: 'Métricas del equipo', icon: '📈', route: '/(admin)/estadisticas', color: '#00838F', grupo: 'Gestión' },
-  { label: 'Actividad', desc: 'Bitácora de actividad', icon: '📜', route: '/(admin)/actividad', color: '#7B1FA2', grupo: 'Gestión' },
-  { label: 'Monitoreo', desc: 'Errores y salud', icon: '🩺', route: '/(admin)/monitoreo', color: '#00695C', grupo: 'Gestión' },
-  { label: 'Cuenta', desc: 'Ver como rol / salir', icon: '👤', route: '/(admin)/cuenta', color: '#37474F', grupo: 'Gestión' },
-  { label: 'Universidad', desc: 'Cursos y certificados', icon: '🎓', route: '/(admin)/university', color: '#F57F17', grupo: 'Crecimiento' },
-  { label: 'Tienda', desc: 'Compras y recompensas', icon: '🛒', route: '/(admin)/tienda-compras', color: '#558B2F', grupo: 'Crecimiento' },
-  { label: 'Pool Leads', desc: 'Leads sin dueño', icon: '🔥', route: '/(admin)/leads-pool', color: '#B71C1C', grupo: 'Crecimiento' },
-  { label: 'Misiones', desc: 'Retos y recompensas', icon: '🎯', route: '/(admin)/misiones', color: '#AD1457', grupo: 'Crecimiento' },
-  { label: 'Ranking', desc: 'Tabla de posiciones', icon: '🏆', route: '/(prospectador)/ranking', color: '#F9A825', grupo: 'Crecimiento' },
-  { label: 'Cofres', desc: 'Gestión de premios', icon: '🎁', route: '/(admin)/gestion-cofres', color: '#2e7d32', grupo: 'Crecimiento' },
-  { label: 'Videos', desc: 'Material de marketing', icon: '🎬', route: '/(admin)/videos-marketing', color: '#C2185B', grupo: 'Crecimiento' },
-]
+  { label: 'Dashboard', desc: 'Resumen y actividad', ion: 'speedometer-outline', route: '/(admin)/dashboard', grupo: 'Propiedades' },
+  { label: 'Nueva', desc: 'Publicar propiedad', ion: 'add-circle-outline', route: '/(admin)/nueva-propiedad', grupo: 'Propiedades' },
+  { label: 'Constructoras QRO', desc: 'Desarrollos locales', ion: 'business-outline', route: '/(admin)/constructoras?scope=queretaro', grupo: 'Propiedades' },
+  { label: 'Constructoras Nal.', desc: 'Desarrollos del país', ion: 'earth-outline', route: '/(admin)/constructoras?scope=nacional', grupo: 'Propiedades' },
+  { label: 'Colaboradores', desc: 'Asesores e inmobiliarias', ion: 'people-circle-outline', route: '/(admin)/colaboradores', grupo: 'Propiedades' },
+  { label: 'Tabla precios', desc: 'Precios por zona', ion: 'pricetags-outline', route: '/(admin)/inventario-tabla', grupo: 'Propiedades' },
+  { label: 'Publicaciones', desc: 'Veces publicada c/u', ion: 'bar-chart-outline', route: '/(admin)/estadisticas-propiedades', grupo: 'Propiedades' },
+  { label: 'Bloques', desc: 'Grupos de prospectadores', ion: 'apps-outline', route: '/(admin)/bloques', grupo: 'Propiedades' },
+  { label: 'Colores ficha', desc: 'Personaliza fichas', ion: 'color-palette-outline', route: '/(admin)/colores-ficha', grupo: 'Propiedades' },
+  { label: 'CRM', desc: 'Clientes y pipeline', ion: 'people-outline', route: '/(admin)/crm', grupo: 'Gestión' },
+  { label: 'Citas', desc: 'Coordinación de citas', ion: 'calendar-outline', route: '/(admin)/coordinacion-citas', grupo: 'Gestión' },
+  { label: 'Citas de venta', desc: 'Registro y retro', ion: 'document-text-outline', route: '/(admin)/citas-venta', grupo: 'Gestión' },
+  { label: 'Cierres', desc: 'Ventas y rentas cerradas', ion: 'ribbon-outline', route: '/(admin)/cierres', grupo: 'Gestión' },
+  { label: 'Anuncios', desc: 'Avisos al equipo', ion: 'megaphone-outline', route: '/(admin)/anuncios', grupo: 'Gestión' },
+  { label: '1 a 1', desc: 'Entrevistas del equipo', ion: 'headset-outline', route: '/(admin)/uno-a-uno', grupo: 'Gestión' },
+  { label: 'Calendario', desc: 'Tu agenda y citas', ion: 'calendar-number-outline', route: '/(admin)/calendario', grupo: 'Gestión' },
+  { label: 'Leads campañas', desc: 'Leads de Facebook Ads', ion: 'funnel-outline', route: '/(admin)/leads-campanias', grupo: 'Gestión' },
+  { label: 'Donaciones', desc: 'Clientes donados', ion: 'heart-outline', route: '/(admin)/donaciones', grupo: 'Gestión' },
+  { label: 'Proyectos', desc: 'Desarrollos y proyectos', ion: 'briefcase-outline', route: '/(admin)/proyectos', grupo: 'Gestión' },
+  { label: 'Usuarios', desc: 'Cuentas del equipo', ion: 'person-add-outline', route: '/(admin)/prospectadores', grupo: 'Gestión' },
+  { label: 'Agenda', desc: 'Directorio de contactos', ion: 'reader-outline', route: '/(admin)/agenda', grupo: 'Gestión' },
+  { label: 'Estadísticas', desc: 'Métricas del equipo', ion: 'stats-chart-outline', route: '/(admin)/estadisticas', grupo: 'Gestión' },
+  { label: 'Actividad', desc: 'Bitácora de actividad', ion: 'pulse-outline', route: '/(admin)/actividad', grupo: 'Gestión' },
+  { label: 'Monitoreo', desc: 'Errores y salud', ion: 'medkit-outline', route: '/(admin)/monitoreo', grupo: 'Gestión' },
+  { label: 'Cuenta', desc: 'Ver como rol / salir', ion: 'settings-outline', route: '/(admin)/cuenta', grupo: 'Gestión' },
+  { label: 'Universidad', desc: 'Cursos y certificados', ion: 'school-outline', route: '/(admin)/university', grupo: 'Crecimiento' },
+  { label: 'Tienda', desc: 'Compras y recompensas', ion: 'cart-outline', route: '/(admin)/tienda-compras', grupo: 'Crecimiento' },
+  { label: 'Pool Leads', desc: 'Leads sin dueño', ion: 'flame-outline', route: '/(admin)/leads-pool', grupo: 'Crecimiento' },
+  { label: 'Misiones', desc: 'Retos y recompensas', ion: 'flag-outline', route: '/(admin)/misiones', grupo: 'Crecimiento' },
+  { label: 'Ranking', desc: 'Tabla de posiciones', ion: 'trophy-outline', route: '/(prospectador)/ranking', grupo: 'Crecimiento' },
+  { label: 'Cofres', desc: 'Gestión de premios', ion: 'gift-outline', route: '/(admin)/gestion-cofres', grupo: 'Crecimiento' },
+  { label: 'Videos', desc: 'Material de marketing', ion: 'videocam-outline', route: '/(admin)/videos-marketing', grupo: 'Crecimiento' },
+] as const
 
 const GRUPO_ACENTO: Record<string, string> = { Propiedades: '#0f4c81', 'Gestión': '#1a6470', Crecimiento: '#F57F17' }
 
@@ -118,6 +119,7 @@ function FiltroChip({ label, active, onPress, textSubColor }: { label: string; a
 export default function AdminPropiedades() {
   useSupervisorBlock()
   const c = useColors()
+  const { darkMode } = useTheme()
   const scrollOperacionRef = useScrollHorizontalConRueda()
   const scrollEstadoRef = useScrollHorizontalConRueda()
   const scrollTipoRef = useScrollHorizontalConRueda()
@@ -497,8 +499,8 @@ export default function AdminPropiedades() {
                     onPress={() => router.push(item.route as any)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.navIconTile, { backgroundColor: item.color }]}>
-                      <Text style={styles.navIcon}>{item.icon}</Text>
+                    <View style={[styles.navIconTile, { backgroundColor: acento + (darkMode ? '26' : '14') }]}>
+                      <Ionicons name={item.ion as any} size={20} color={acento} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={[styles.navLabel, { color: c.text }]} numberOfLines={1}>{item.label}</Text>
