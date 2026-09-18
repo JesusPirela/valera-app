@@ -22,6 +22,8 @@ export type DatosWidgetMiDia = {
   metaPublicaciones: number
   seguimientosHoy: number
   racha: number
+  misionesHoy: number
+  metaMisiones: number
 }
 
 // Deep link al que abre el widget al tocarlo — mismo scheme que app.json
@@ -53,6 +55,9 @@ export function MiDiaWidget(props: Partial<DatosWidgetMiDia> & { sinSesion?: boo
   const metaPublicaciones = props.metaPublicaciones ?? 20
   const seguimientosHoy = props.seguimientosHoy ?? 0
   const racha = props.racha ?? 0
+  const misionesHoy = props.misionesHoy ?? 0
+  const metaMisiones = props.metaMisiones ?? 1
+  const misionesCumplidas = misionesHoy >= metaMisiones
 
   const cumplida = publicacionesHoy >= metaPublicaciones
   const colorNumero = cumplida ? GREEN : TEXT
@@ -103,13 +108,23 @@ export function MiDiaWidget(props: Partial<DatosWidgetMiDia> & { sinSesion?: boo
         <FlexWidget style={{ flex: 1 - pct, height: 7 }} />
       </FlexWidget>
 
-      {/* Seguimientos pendientes — pegado abajo */}
-      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
-        <TextWidget text="⏰" style={{ fontSize: 13 }} />
-        <TextWidget
-          text={`${seguimientosHoy} seguimiento${seguimientosHoy === 1 ? '' : 's'} pendiente${seguimientosHoy === 1 ? '' : 's'}`}
-          style={{ fontSize: 12, color: TEXT, marginLeft: 6 }}
-        />
+      {/* Seguimientos pendientes + misiones del día, lado a lado para no
+          alargar demasiado el widget. */}
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14, width: 'match_parent' }}>
+        <FlexWidget style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+          <TextWidget text="⏰" style={{ fontSize: 13 }} />
+          <TextWidget
+            text={`${seguimientosHoy} seguimiento${seguimientosHoy === 1 ? '' : 's'}`}
+            style={{ fontSize: 12, color: TEXT, marginLeft: 6 }}
+          />
+        </FlexWidget>
+        <FlexWidget style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+          <TextWidget text={misionesCumplidas ? '✅' : '⚡'} style={{ fontSize: 13 }} />
+          <TextWidget
+            text={`${misionesHoy}/${metaMisiones} misiones`}
+            style={{ fontSize: 12, color: misionesCumplidas ? GREEN : TEXT, marginLeft: 6 }}
+          />
+        </FlexWidget>
       </FlexWidget>
     </FlexWidget>
   )

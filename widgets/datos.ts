@@ -39,10 +39,17 @@ export async function obtenerDatosWidget(): Promise<DatosWidgetMiDia | null> {
     supabase.rpc('get_estado_racha'),
   ])
 
+  // meta_diaria/misiones_hoy vienen de la MISMA rpc que ya se pedía para la
+  // racha (get_estado_racha) — es la fuente que también usa PanelRacha.tsx en
+  // la app, así que el número siempre coincide con lo que se ve ahí.
+  const racha = rachaRes.data as { racha?: number; meta_diaria?: number; misiones_hoy?: number } | null
+
   return {
     publicacionesHoy: pubRes.count ?? 0,
     metaPublicaciones: META_PUBLICACIONES,
     seguimientosHoy: recsRes.count ?? 0,
-    racha: (rachaRes.data as { racha?: number } | null)?.racha ?? 0,
+    racha: racha?.racha ?? 0,
+    misionesHoy: racha?.misiones_hoy ?? 0,
+    metaMisiones: racha?.meta_diaria ?? 1,
   }
 }
