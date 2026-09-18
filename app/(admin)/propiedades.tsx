@@ -111,11 +111,14 @@ const NAV_ITEMS = [
   { label: 'Tienda', desc: 'Compras y recompensas', ion: 'cart', color: '#16A34A', route: '/(admin)/tienda-compras', grupo: 'Crecimiento' },
   { label: 'Videos', desc: 'Material de marketing', ion: 'videocam', color: '#E11D48', route: '/(admin)/videos-marketing', grupo: 'Crecimiento' },
 
+  // Gestión — solicitudes externas al sistema (sitio web público, etc.)
+  { label: 'Solicitudes web', desc: 'Contactos y candidatos del sitio', ion: 'globe', color: '#0D9488', route: '/(admin)/solicitudes-web', grupo: 'Gestión' },
+
   // Sistema
   { label: 'Cuenta', desc: 'Ver como rol / salir', ion: 'settings', color: '#64748B', route: '/(admin)/cuenta', grupo: 'Sistema' },
 ] as const
 
-const NAV_GRUPOS = ['Inicio', 'Inventario', 'Ventas', 'Equipo', 'Crecimiento', 'Sistema']
+const NAV_GRUPOS = ['Inicio', 'Inventario', 'Ventas', 'Equipo', 'Crecimiento', 'Gestión', 'Sistema']
 
 // Tarjeta de navegación con micro-animaciones (como en apps profesionales):
 // elevación al pasar el mouse (web) y ligero "scale" al presionar. Todas se
@@ -213,6 +216,7 @@ export default function AdminPropiedades() {
   const [publicacionesMap, setPublicacionesMap] = useState<Record<string, number>>({})
   const [comprasPendientes, setComprasPendientes] = useState(0)
   const [campanasPendientes, setCampanasPendientes] = useState(0)
+  const [solicitudesPendientes, setSolicitudesPendientes] = useState(0)
   const [busquedaContacto, setBusquedaContacto] = useState('')
 
   const [modalVisible, setModalVisible] = useState(false)
@@ -277,11 +281,13 @@ export default function AdminPropiedades() {
   async function cargarRolEInmobiliarias() {
     const { data: { session } } = await supabase.auth.getSession()
     const uid = session?.user?.id ?? null
-    const [perfilRes, conteoRes, pendRes, campRes] = await Promise.all([
+    const [perfilRes, conteoRes, pendRes, campRes, solWebRes, candRecRes] = await Promise.all([
       uid ? supabase.from('profiles').select('role').eq('id', uid).maybeSingle() : Promise.resolve({ data: null }),
       supabase.rpc('get_publicaciones_conteo'),
       supabase.rpc('get_compras_pendientes_count'),
       supabase.from('campanias').select('id, asignado_a, leads_campania(count)'),
+      supabase.from('solicitudes_sitio_web').select('id', { count: 'exact', head: true }).eq('estado', 'nuevo'),
+      supabase.from('candidatos_reclutamiento').select('id', { count: 'exact', head: true }).eq('estado', 'nuevo'),
     ])
     setRole((perfilRes as any).data?.role ?? null)
     const conteo = (conteoRes as any).data
@@ -294,6 +300,8 @@ export default function AdminPropiedades() {
     // Campañas sin asignar y con leads = "pendientes de repartir" → badge.
     const campanias = (campRes as any).data ?? []
     setCampanasPendientes(campanias.filter((c: any) => !c.asignado_a && (c.leads_campania?.[0]?.count ?? 0) > 0).length)
+    // Solicitudes del sitio web + candidatos de reclutamiento sin atender aún.
+    setSolicitudesPendientes((solWebRes.count ?? 0) + (candRecRes.count ?? 0))
   }
 
   useFocusEffect(useCallback(() => { cargarPropiedades(); cargarRolEInmobiliarias() }, []))
@@ -578,7 +586,8 @@ export default function AdminPropiedades() {
             <View style={[styles.navGrid, { gap: NAV_GAP }]}>
               {items.map((item) => {
                 const badge = item.route === '/(admin)/tienda-compras' ? comprasPendientes
-                  : item.route === '/(admin)/leads-campanias' ? campanasPendientes : 0
+                  : item.route === '/(admin)/leads-campanias' ? campanasPendientes
+                  : item.route === '/(admin)/solicitudes-web' ? solicitudesPendientes : 0
                 return <NavCard key={item.route} item={item} width={navCardW} badge={badge} />
               })}
             </View>

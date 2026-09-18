@@ -1,0 +1,253 @@
+// Solicitudes que llegan de la landing page pública (proyecto aparte, sitio
+// estático) — a propósito SEPARADAS del CRM (tabla `clientes`): son
+// solicitudes crudas sin perfilar, no se mezclan con el pipeline de ventas.
+// Dos pestañas: "Solicitudes" (contacto general / interés en propiedad) y
+// "Reclutamiento" (aspirantes a asesor/prospectador).
+import { useState, useCallback } from 'react'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform } from 'react-native'
+import { useFocusEffect, useLocalSearchParams, router } from 'expo-router'
+import { supabase } from '../../lib/supabase'
+import { useColors } from '../../lib/ThemeContext'
+import { usePullRefresh } from '../../hooks/usePullRefresh'
+
+type Estado = 'nuevo' | 'contactado' | 'descartado'
+
+type Solicitud = {
+  id: string
+  tipo: 'contacto_general' | 'interes_propiedad'
+  nombre: string
+  telefono: string
+  mensaje: string | null
+  presupuesto: string | null
+  zona: string | null
+  propiedad_codigo: string | null
+  propiedad_titulo: string | null
+  estado: Estado
+  created_at: string
+}
+
+type Candidato = {
+  id: string
+  nombre: string
+  telefono: string
+  email: string | null
+  mensaje: string | null
+  estado: Estado
+  created_at: string
+}
+
+const ESTADO_LABEL: Record<Estado, string> = { nuevo: 'Nuevo', contactado: 'Contactado', descartado: 'Descartado' }
+const ESTADO_COLOR: Record<Estado, string> = { nuevo: '#c9a84c', contactado: '#16A34A', descartado: '#94A3B8' }
+
+function formatFecha(iso: string) {
+  return new Date(iso).toLocaleString('es-MX', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+// Segmentado de 3 estados — mismo componente para ambas pestañas.
+function EstadoSelector({ estado, onCambiar }: { estado: Estado; onCambiar: (e: Estado) => void }) {
+  return (
+    <View style={s.estadoRow}>
+      {(['nuevo', 'contactado', 'descartado'] as const).map(e => (
+        <TouchableOpacity
+          key={e}
+          onPress={() => onCambiar(e)}
+          style={[
+            s.estadoBtn,
+            { borderColor: ESTADO_COLOR[e] },
+            estado === e && { backgroundColor: ESTADO_COLOR[e] },
+          ]}
+        >
+          <Text style={[s.estadoBtnText, { color: estado === e ? '#fff' : ESTADO_COLOR[e] }]}>
+            {ESTADO_LABEL[e]}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  )
+}
+
+export default function SolicitudesWeb() {
+  const c = useColors()
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>()
+  const [tab, setTab] = useState<'solicitudes' | 'reclutamiento'>(
+    tabParam === 'reclutamiento' ? 'reclutamiento' : 'solicitudes'
+  )
+
+  const [solicitudes, setSolicitudes] = useState<Solicitud[]>([])
+  const [loadingSolicitudes, setLoadingSolicitudes] = useState(true)
+  const [candidatos, setCandidatos] = useState<Candidato[]>([])
+  const [loadingCandidatos, setLoadingCandidatos] = useState(true)
+  const [actualizando, setActualizando] = useState<string | null>(null)
+
+  async function cargarSolicitudes() {
+    setLoadingSolicitudes(true)
+    const { data } = await supabase.from('solicitudes_sitio_web').select('*').order('created_at', { ascending: false })
+    setSolicitudes((data as Solicitud[]) ?? [])
+    setLoadingSolicitudes(false)
+  }
+
+  async function cargarCandidatos() {
+    setLoadingCandidatos(true)
+    const { data } = await supabase.from('candidatos_reclutamiento').select('*').order('created_at', { ascending: false })
+    setCandidatos((data as Candidato[]) ?? [])
+    setLoadingCandidatos(false)
+  }
+
+  useFocusEffect(useCallback(() => { cargarSolicitudes(); cargarCandidatos() }, []))
+  const { refreshControl } = usePullRefresh(async () => { await Promise.all([cargarSolicitudes(), cargarCandidatos()]) })
+
+  async function cambiarEstadoSolicitud(id: string, estado: Estado) {
+    setActualizando(id)
+    setSolicitudes(prev => prev.map(x => x.id === id ? { ...x, estado } : x)) // optimista
+    const { error } = await supabase.from('solicitudes_sitio_web').update({ estado }).eq('id', id)
+    setActualizando(null)
+    if (error) cargarSolicitudes() // revertir si falló
+  }
+
+  async function cambiarEstadoCandidato(id: string, estado: Estado) {
+    setActualizando(id)
+    setCandidatos(prev => prev.map(x => x.id === id ? { ...x, estado } : x)) // optimista
+    const { error } = await supabase.from('candidatos_reclutamiento').update({ estado }).eq('id', id)
+    setActualizando(null)
+    if (error) cargarCandidatos() // revertir si falló
+  }
+
+  const nuevasSolicitudes = solicitudes.filter(x => x.estado === 'nuevo').length
+  const nuevosCandidatos = candidatos.filter(x => x.estado === 'nuevo').length
+
+  return (
+    <View style={[s.root, { backgroundColor: c.bg }]}>
+      {/* Header */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(admin)/propiedades')}>
+          <Text style={{ color: '#fff', fontSize: 20 }}>←</Text>
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Solicitudes del sitio web 🌐</Text>
+      </View>
+
+      {/* Tabs */}
+      <View style={[s.tabs, { backgroundColor: c.card, borderBottomColor: c.border }]}>
+        {(['solicitudes', 'reclutamiento'] as const).map(t => (
+          <TouchableOpacity
+            key={t}
+            style={[s.tab, tab === t && { borderBottomColor: '#1a6470', borderBottomWidth: 2 }]}
+            onPress={() => setTab(t)}
+          >
+            <Text style={[s.tabText, { color: tab === t ? '#1a6470' : c.textMute }]}>
+              {t === 'solicitudes' ? `Solicitudes${nuevasSolicitudes > 0 ? ` (${nuevasSolicitudes})` : ''}` : `Reclutamiento${nuevosCandidatos > 0 ? ` (${nuevosCandidatos})` : ''}`}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {tab === 'solicitudes' ? (
+        loadingSolicitudes ? (
+          <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
+        ) : solicitudes.length === 0 ? (
+          <View style={s.empty}>
+            <Text style={s.emptyIcon}>📭</Text>
+            <Text style={[s.emptyText, { color: c.textMute }]}>Aún no hay solicitudes del sitio web</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={s.scroll} refreshControl={refreshControl}>
+            {solicitudes.map(item => (
+              <View key={item.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={s.cardTopRow}>
+                  <View style={[s.tipoChip, { backgroundColor: item.tipo === 'interes_propiedad' ? '#1a647018' : '#7C3AED18' }]}>
+                    <Text style={[s.tipoChipText, { color: item.tipo === 'interes_propiedad' ? '#1a6470' : '#7C3AED' }]}>
+                      {item.tipo === 'interes_propiedad' ? '🏠 Interés en propiedad' : '📩 Contacto general'}
+                    </Text>
+                  </View>
+                  <Text style={[s.fecha, { color: c.textMute }]}>{formatFecha(item.created_at)}</Text>
+                </View>
+
+                <Text style={[s.nombre, { color: c.text }]}>{item.nombre}</Text>
+                <Text style={[s.telefono, { color: c.textSub }]}>{item.telefono}</Text>
+
+                {item.tipo === 'interes_propiedad' ? (
+                  <Text style={[s.meta, { color: c.textMute }]}>
+                    🏷️ {item.propiedad_titulo ?? item.propiedad_codigo}
+                  </Text>
+                ) : (
+                  <>
+                    {item.zona ? <Text style={[s.meta, { color: c.textMute }]}>📍 {item.zona}</Text> : null}
+                    {item.presupuesto ? <Text style={[s.meta, { color: c.textMute }]}>💰 {item.presupuesto}</Text> : null}
+                  </>
+                )}
+                {item.mensaje ? <Text style={[s.mensaje, { color: c.textSub }]}>“{item.mensaje}”</Text> : null}
+
+                <EstadoSelector
+                  estado={item.estado}
+                  onCambiar={(e) => cambiarEstadoSolicitud(item.id, e)}
+                />
+              </View>
+            ))}
+          </ScrollView>
+        )
+      ) : (
+        loadingCandidatos ? (
+          <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
+        ) : candidatos.length === 0 ? (
+          <View style={s.empty}>
+            <Text style={s.emptyIcon}>🧑‍💼</Text>
+            <Text style={[s.emptyText, { color: c.textMute }]}>Aún no hay candidatos registrados</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={s.scroll} refreshControl={refreshControl}>
+            {candidatos.map(item => (
+              <View key={item.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={s.cardTopRow}>
+                  <View style={[s.tipoChip, { backgroundColor: '#CA8A0418' }]}>
+                    <Text style={[s.tipoChipText, { color: '#CA8A04' }]}>🧑‍💼 Candidato</Text>
+                  </View>
+                  <Text style={[s.fecha, { color: c.textMute }]}>{formatFecha(item.created_at)}</Text>
+                </View>
+
+                <Text style={[s.nombre, { color: c.text }]}>{item.nombre}</Text>
+                <Text style={[s.telefono, { color: c.textSub }]}>{item.telefono}</Text>
+                {item.email ? <Text style={[s.meta, { color: c.textMute }]}>✉️ {item.email}</Text> : null}
+                {item.mensaje ? <Text style={[s.mensaje, { color: c.textSub }]}>“{item.mensaje}”</Text> : null}
+
+                <EstadoSelector
+                  estado={item.estado}
+                  onCambiar={(e) => cambiarEstadoCandidato(item.id, e)}
+                />
+              </View>
+            ))}
+          </ScrollView>
+        )
+      )}
+    </View>
+  )
+}
+
+const s = StyleSheet.create({
+  root: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1a6470', paddingHorizontal: 16, paddingVertical: 14, paddingTop: Platform.OS === 'web' ? 14 : 44 },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+
+  tabs: { flexDirection: 'row', borderBottomWidth: 1 },
+  tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
+  tabText: { fontSize: 14, fontWeight: '700' },
+
+  scroll: { padding: 16, gap: 10, paddingBottom: 40 },
+
+  card: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 4, marginBottom: 10 },
+  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  tipoChip: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  tipoChipText: { fontSize: 11.5, fontWeight: '800' },
+  fecha: { fontSize: 11 },
+
+  nombre: { fontSize: 16, fontWeight: '800' },
+  telefono: { fontSize: 14, marginTop: 1 },
+  meta: { fontSize: 13, marginTop: 3 },
+  mensaje: { fontSize: 13, fontStyle: 'italic', marginTop: 6, lineHeight: 18 },
+
+  estadoRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  estadoBtn: { flex: 1, borderRadius: 10, borderWidth: 1.5, paddingVertical: 8, alignItems: 'center' },
+  estadoBtnText: { fontSize: 12.5, fontWeight: '800' },
+
+  empty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 32, gap: 8 },
+  emptyIcon: { fontSize: 48 },
+  emptyText: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
+})
