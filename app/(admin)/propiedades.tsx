@@ -192,7 +192,8 @@ export default function AdminPropiedades() {
   const [loading, setLoading] = useState(true)
   const yaCargoRef = useRef(false)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
-  const [gruposAbiertos, setGruposAbiertos] = useState<Set<string>>(new Set())
+  // Todas las secciones del menú arrancan abiertas (el usuario puede plegarlas).
+  const [gruposAbiertos, setGruposAbiertos] = useState<Set<string>>(() => new Set(NAV_GRUPOS))
 
   function toggleGrupo(grupo: string) {
     setGruposAbiertos((prev) => {
