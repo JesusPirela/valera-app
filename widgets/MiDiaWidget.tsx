@@ -10,9 +10,12 @@ import React from 'react'
 import { FlexWidget, TextWidget } from 'react-native-android-widget'
 
 const BG = '#0d1b2a'
+const CARD_SUB = '#12283b'
 const GOLD = '#c9a84c'
+const GREEN = '#4ade80'
 const TEXT = '#e8f0f4'
 const SUB = '#9fb3c0'
+const TRACK = '#1e3448'
 
 export type DatosWidgetMiDia = {
   publicacionesHoy: number
@@ -33,8 +36,8 @@ export function MiDiaWidget(props: Partial<DatosWidgetMiDia> & { sinSesion?: boo
         clickAction="OPEN_APP"
         style={{
           height: 'match_parent', width: 'match_parent',
-          backgroundColor: BG, borderRadius: 16,
-          paddingLeft: 14, paddingTop: 12, paddingRight: 14, paddingBottom: 12,
+          backgroundColor: BG, borderRadius: 18,
+          paddingLeft: 16, paddingTop: 14, paddingRight: 16, paddingBottom: 14,
           justifyContent: 'center', alignItems: 'center',
         }}
       >
@@ -51,39 +54,63 @@ export function MiDiaWidget(props: Partial<DatosWidgetMiDia> & { sinSesion?: boo
   const seguimientosHoy = props.seguimientosHoy ?? 0
   const racha = props.racha ?? 0
 
+  const cumplida = publicacionesHoy >= metaPublicaciones
+  const colorNumero = cumplida ? GREEN : TEXT
+  // Fracción de la barra de progreso: mínimo 4% visible (una barra en 0 se
+  // sentía "vacía", como si el widget estuviera roto) hasta 100%.
+  const pct = Math.max(0.04, Math.min(1, publicacionesHoy / Math.max(metaPublicaciones, 1)))
+
   return (
     <FlexWidget
       clickAction="OPEN_URI"
       clickActionData={{ uri: WIDGET_DEEP_LINK }}
       style={{
         height: 'match_parent', width: 'match_parent',
-        backgroundColor: BG, borderRadius: 16,
-        paddingLeft: 14, paddingTop: 12, paddingRight: 14, paddingBottom: 10,
-        flexDirection: 'column', justifyContent: 'space-between',
+        backgroundColor: BG, borderRadius: 18,
+        paddingLeft: 16, paddingTop: 14, paddingRight: 16, paddingBottom: 14,
+        flexDirection: 'column', justifyContent: 'flex-start',
       }}
     >
       {/* Encabezado: marca + racha */}
       <FlexWidget style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: 'match_parent' }}>
         <TextWidget text="VALERA · MI DÍA" style={{ fontSize: 10, fontWeight: 'bold', color: GOLD, letterSpacing: 1 }} />
         {racha > 0 && (
-          <TextWidget text={`🔥 ${racha}`} style={{ fontSize: 12, fontWeight: 'bold', color: TEXT }} />
+          <FlexWidget style={{
+            backgroundColor: CARD_SUB, borderRadius: 10,
+            paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
+          }}>
+            <TextWidget text={`🔥 ${racha}`} style={{ fontSize: 11, fontWeight: 'bold', color: TEXT }} />
+          </FlexWidget>
         )}
       </FlexWidget>
 
       {/* Número principal: publicaciones de hoy / meta */}
-      <FlexWidget style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-        <TextWidget
-          text={`${publicacionesHoy}/${metaPublicaciones}`}
-          style={{ fontSize: 30, fontWeight: 'bold', color: publicacionesHoy >= metaPublicaciones ? '#4ade80' : TEXT }}
-        />
-        <TextWidget text="publicaciones hoy" style={{ fontSize: 11, color: SUB }} />
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
+        <TextWidget text="📤" style={{ fontSize: 22 }} />
+        <FlexWidget style={{ flexDirection: 'column', marginLeft: 8 }}>
+          <TextWidget text={`${publicacionesHoy}/${metaPublicaciones}`} style={{ fontSize: 26, fontWeight: 'bold', color: colorNumero }} />
+          <TextWidget text={cumplida ? '¡meta cumplida hoy! 🎉' : 'publicaciones hoy'} style={{ fontSize: 11, color: cumplida ? GREEN : SUB }} />
+        </FlexWidget>
       </FlexWidget>
 
-      {/* Seguimientos pendientes */}
-      <TextWidget
-        text={`📞 ${seguimientosHoy} seguimiento${seguimientosHoy === 1 ? '' : 's'} hoy`}
-        style={{ fontSize: 11, color: TEXT }}
-      />
+      {/* Barra de progreso — dos segmentos con flex proporcional al avance. */}
+      <FlexWidget style={{
+        flexDirection: 'row', width: 'match_parent', height: 7,
+        borderRadius: 4, overflow: 'hidden', backgroundColor: TRACK,
+        marginTop: 10,
+      }}>
+        <FlexWidget style={{ flex: pct, height: 7, backgroundColor: cumplida ? GREEN : GOLD }} />
+        <FlexWidget style={{ flex: 1 - pct, height: 7 }} />
+      </FlexWidget>
+
+      {/* Seguimientos pendientes — pegado abajo */}
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
+        <TextWidget text="⏰" style={{ fontSize: 13 }} />
+        <TextWidget
+          text={`${seguimientosHoy} seguimiento${seguimientosHoy === 1 ? '' : 's'} pendiente${seguimientosHoy === 1 ? '' : 's'}`}
+          style={{ fontSize: 12, color: TEXT, marginLeft: 6 }}
+        />
+      </FlexWidget>
     </FlexWidget>
   )
 }
