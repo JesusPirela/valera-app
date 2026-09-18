@@ -117,21 +117,15 @@ const NAV_ITEMS = [
 const NAV_GRUPOS = ['Inicio', 'Inventario', 'Ventas', 'Equipo', 'Crecimiento', 'Sistema']
 
 // Tarjeta de navegación con micro-animaciones (como en apps profesionales):
-// entrada con fade + slide escalonado, elevación al pasar el mouse (web) y
-// ligero "scale" al presionar. Todo con el driver nativo (fluido en web y móvil).
-function NavCard({ item, width, badge, index }: {
-  item: typeof NAV_ITEMS[number]; width: number; badge: number; index: number
+// elevación al pasar el mouse (web) y ligero "scale" al presionar. Todas se
+// muestran visibles desde el primer frame (sin animación de entrada que las
+// oculte). Driver nativo, fluido en web y móvil.
+function NavCard({ item, width, badge }: {
+  item: typeof NAV_ITEMS[number]; width: number; badge: number
 }) {
   const c = useColors()
   const press = useRef(new Animated.Value(0)).current   // 0 reposo · 1 presionado
   const hover = useRef(new Animated.Value(0)).current   // 0 fuera · 1 hover (web)
-  const enter = useRef(new Animated.Value(0)).current   // 0 → 1 al montar
-
-  useEffect(() => {
-    Animated.timing(enter, {
-      toValue: 1, duration: 300, delay: Math.min(index * 24, 360), useNativeDriver: true,
-    }).start()
-  }, [])
 
   const anim = (v: Animated.Value, to: number) =>
     Animated.spring(v, { toValue: to, useNativeDriver: true, speed: 28, bounciness: 5 }).start()
@@ -140,13 +134,10 @@ function NavCard({ item, width, badge, index }: {
     press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }),
     hover.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] }),
   )
-  const translateY = Animated.add(
-    enter.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
-    hover.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }),
-  )
+  const translateY = hover.interpolate({ inputRange: [0, 1], outputRange: [0, -3] })
 
   return (
-    <Animated.View style={{ width, opacity: enter, transform: [{ translateY }, { scale }] }}>
+    <Animated.View style={{ width, transform: [{ translateY }, { scale }] }}>
       <Pressable
         onPress={() => router.push(item.route as any)}
         onPressIn={() => anim(press, 1)}
@@ -583,10 +574,10 @@ export default function AdminPropiedades() {
             </TouchableOpacity>
             {abierto && (
             <View style={[styles.navGrid, { gap: NAV_GAP }]}>
-              {items.map((item, i) => {
+              {items.map((item) => {
                 const badge = item.route === '/(admin)/tienda-compras' ? comprasPendientes
                   : item.route === '/(admin)/leads-campanias' ? campanasPendientes : 0
-                return <NavCard key={item.route} item={item} width={navCardW} badge={badge} index={i} />
+                return <NavCard key={item.route} item={item} width={navCardW} badge={badge} />
               })}
             </View>
             )}
