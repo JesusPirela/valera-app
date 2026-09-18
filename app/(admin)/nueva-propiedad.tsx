@@ -528,6 +528,26 @@ export default function NuevaPropiedad() {
     return () => clearTimeout(id)
   }, [imagenes])
 
+  // Web: pegar imágenes del portapapeles (Ctrl/Cmd+V) las agrega directo,
+  // sin tener que guardarlas y arrastrarlas. Escucha en todo el documento,
+  // así funciona aunque el foco esté en un campo de texto.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const onPaste = (e: ClipboardEvent) => {
+      const items = Array.from(e.clipboardData?.items ?? [])
+      const files = items
+        .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+        .map(it => it.getAsFile())
+        .filter((f): f is File => !!f)
+      if (files.length === 0) return   // sin imágenes: dejar el pegado normal (texto)
+      e.preventDefault()
+      const urls = files.map(f => URL.createObjectURL(f))
+      setImagenes(prev => [...prev, ...urls])
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [])
+
   useEffect(() => {
     if (Platform.OS !== 'web') return
     let cleanup: (() => void) | undefined
@@ -1110,7 +1130,7 @@ export default function NuevaPropiedad() {
               style={{ position: 'absolute', width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
             />
             <Text style={[styles.imagenPickerText, { color: c.textMute }]}>
-              {isDragging ? '📂 Suelta las fotos aquí' : '📁 Arrastra fotos aquí o haz clic para seleccionar'}
+              {isDragging ? '📂 Suelta las fotos aquí' : '📁 Arrastra, haz clic o pega (Ctrl+V) para agregar fotos'}
             </Text>
           </View>
         ) : (

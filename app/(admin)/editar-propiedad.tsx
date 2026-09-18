@@ -602,6 +602,23 @@ export default function EditarPropiedad() {
     return () => clearTimeout(tid)
   }, [imagenes])
 
+  // Web: pegar imágenes del portapapeles (Ctrl/Cmd+V) las agrega directo.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const onPaste = (e: ClipboardEvent) => {
+      const items = Array.from(e.clipboardData?.items ?? [])
+      const files = items
+        .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+        .map(it => it.getAsFile())
+        .filter((f): f is File => !!f)
+      if (files.length === 0) return
+      e.preventDefault()
+      agregarUris(files.map(f => URL.createObjectURL(f)))
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [])
+
   // Zona para soltar archivos nuevos
   useEffect(() => {
     if (Platform.OS !== 'web') return
@@ -1248,7 +1265,7 @@ export default function EditarPropiedad() {
               style={{ position: 'absolute', width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
             />
             <Text style={[styles.imagenPickerText, { color: c.textMute }]}>
-              {isDragging ? '📂 Suelta las fotos aquí' : '📁 Arrastra fotos aquí o haz clic para seleccionar'}
+              {isDragging ? '📂 Suelta las fotos aquí' : '📁 Arrastra, haz clic o pega (Ctrl+V) para agregar fotos'}
             </Text>
           </View>
         ) : (
