@@ -20,9 +20,11 @@ import { supabase } from '../lib/supabase'
 import { getUsuarioActual } from '../lib/sesion'
 import { useColors } from '../lib/ThemeContext'
 
+type Recurrencia = 'none' | 'daily' | 'weekly' | 'monthly'
 type Evento = {
   id: string; titulo: string; descripcion: string | null
   inicio: string; fin: string | null; todo_el_dia: boolean; color: string
+  recurrencia?: Recurrencia; recurrencia_fin?: string | null
 }
 type Tipo = 'evento' | 'cita' | 'seguimiento'
 type CalItem = {
@@ -57,6 +59,36 @@ function inicioSemana(d: Date): Date {   // lunes de la semana de d
 function sumarDias(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x }
 function minutosDe(iso: string): number { const d = new Date(iso); return d.getHours() * 60 + d.getMinutes() }
 function limpiarTel(t: string | null | undefined): string { return (t ?? '').replace(/[^\d+]/g, '') }
+function siguienteOcurrencia(d: Date, rec: Recurrencia): Date {
+  const x = new Date(d)
+  if (rec === 'daily') x.setDate(x.getDate() + 1)
+  else if (rec === 'weekly') x.setDate(x.getDate() + 7)
+  else if (rec === 'monthly') x.setMonth(x.getMonth() + 1)
+  else x.setFullYear(x.getFullYear() + 100)   // 'none': salir del bucle
+  return x
+}
+// Expande un evento recurrente en ocurrencias dentro de [ini, fin).
+function expandir(e: Evento, ini: Date, fin: Date): CalItem[] {
+  const base = new Date(e.inicio)
+  if (isNaN(base.getTime())) return []
+  const dur = e.fin ? (new Date(e.fin).getTime() - base.getTime()) : 0
+  const tope = e.recurrencia_fin ? new Date(e.recurrencia_fin + 'T23:59:59') : fin
+  const limite = tope < fin ? tope : fin
+  const out: CalItem[] = []
+  let d = new Date(base), n = 0
+  while (d < ini && n < 2000) { d = siguienteOcurrencia(d, e.recurrencia ?? 'none'); n++ }
+  n = 0
+  while (d < limite && n < 2000) {
+    if (d >= base) out.push({
+      key: 'e' + e.id + '-' + claveDia(d), inicio: d.toISOString(),
+      fin: dur ? new Date(d.getTime() + dur).toISOString() : null,
+      titulo: e.titulo, descripcion: e.descripcion, color: e.color,
+      tipo: 'evento', evento: e, todo_el_dia: e.todo_el_dia,
+    })
+    d = siguienteOcurrencia(d, e.recurrencia ?? 'none'); n++
+  }
+  return out
+}
 
 export default function CalendarioView({ esAsesor = false }: { esAsesor?: boolean }) {
   const c = useColors()
@@ -90,7 +122,7 @@ export default function CalendarioView({ esAsesor = false }: { esAsesor?: boolea
     if (!user) { setLoading(false); return }
     setMiId(user.id)
     const { data } = await supabase.from('eventos_calendario')
-      .select('id, titulo, descripcion, inicio, fin, todo_el_dia, color')
+      .select('id, titulo, descripcion, inicio, fin, todo_el_dia, color, recurrencia, recurrencia_fin')
       .eq('user_id', user.id).order('inicio')
     setEventos((data ?? []) as Evento[])
     setLoading(false)
@@ -127,17 +159,21 @@ export default function CalendarioView({ esAsesor = false }: { esAsesor?: boolea
     return () => { vivo = false }
   }, [rango, eventos, esAsesor, miId])
 
-  // Items filtrados (tipo + búsqueda) por día.
+  // Items filtrados (tipo + búsqueda) por día. Los eventos recurrentes se
+  // expanden en ocurrencias dentro del rango visible.
   const q = busca.trim().toLowerCase()
   const items = useMemo(() => {
-    const evs: CalItem[] = eventos.map(e => ({
-      key: 'e' + e.id, inicio: e.inicio, titulo: e.titulo, descripcion: e.descripcion, color: e.color,
-      tipo: 'evento', evento: e, todo_el_dia: e.todo_el_dia, fin: e.fin,
-    }))
+    const evs: CalItem[] = eventos.flatMap(e => {
+      if (e.recurrencia && e.recurrencia !== 'none') return expandir(e, rango.ini, rango.fin)
+      return [{
+        key: 'e' + e.id, inicio: e.inicio, titulo: e.titulo, descripcion: e.descripcion, color: e.color,
+        tipo: 'evento' as Tipo, evento: e, todo_el_dia: e.todo_el_dia, fin: e.fin,
+      }]
+    })
     return [...evs, ...extras]
       .filter(it => filtros[it.tipo])
       .filter(it => !q || `${it.titulo} ${it.descripcion ?? ''}`.toLowerCase().includes(q))
-  }, [eventos, extras, filtros, q])
+  }, [eventos, extras, filtros, q, rango])
 
   const porDia = useMemo(() => {
     const m: Record<string, CalItem[]> = {}
@@ -156,10 +192,12 @@ export default function CalendarioView({ esAsesor = false }: { esAsesor?: boolea
   }
   async function guardar() {
     if (!editando || !miId || !editando.titulo?.trim() || !editando.inicio) return
+    const rec = editando.recurrencia ?? 'none'
     const payload = {
       user_id: miId, titulo: editando.titulo.trim(), descripcion: editando.descripcion?.trim() || null,
       inicio: editando.inicio, fin: editando.todo_el_dia ? null : (editando.fin || null),
       todo_el_dia: !!editando.todo_el_dia, color: editando.color || COLORES[0],
+      recurrencia: rec, recurrencia_fin: rec !== 'none' ? (editando.recurrencia_fin || null) : null,
     }
     if (editando.id) await supabase.from('eventos_calendario').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editando.id)
     else await supabase.from('eventos_calendario').insert(payload)
@@ -516,6 +554,32 @@ function ModalEvento({ evento, c, onChange, onGuardar, onBorrar, onClose }: {
               ))}
             </View>
 
+            <Text style={[s.lbl, { color: c.textSub }]}>Repetir</Text>
+            <View style={s.recRow}>
+              {([['none', 'No'], ['daily', 'Diario'], ['weekly', 'Semanal'], ['monthly', 'Mensual']] as [Recurrencia, string][]).map(([r, lbl]) => {
+                const activo = (evento.recurrencia ?? 'none') === r
+                return (
+                  <TouchableOpacity key={r} onPress={() => onChange({ ...evento, recurrencia: r })}
+                    style={[s.recChip, { borderColor: c.inputBorder }, activo && s.recOn]}>
+                    <Text style={[s.recTxt, { color: activo ? '#fff' : c.textSub }]}>{lbl}</Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+            {(evento.recurrencia ?? 'none') !== 'none' && (
+              <>
+                <Text style={[s.lbl, { color: c.textSub }]}>Repetir hasta (opcional)</Text>
+                {Platform.OS === 'web' ? (
+                  /* @ts-ignore */
+                  <input type="date" value={evento.recurrencia_fin ?? ''}
+                    onChange={(ev: any) => onChange({ ...evento, recurrencia_fin: ev.target.value || null })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: `1px solid ${c.inputBorder}`, fontSize: 14.5, color: c.inputText, backgroundColor: c.input, outline: 'none', boxSizing: 'border-box' }} />
+                ) : (
+                  <TextInput style={inp} value={evento.recurrencia_fin ?? ''} onChangeText={v => onChange({ ...evento, recurrencia_fin: v || null })} placeholder="YYYY-MM-DD (opcional)" placeholderTextColor={c.placeholder} />
+                )}
+              </>
+            )}
+
             <TouchableOpacity style={s.guardarBtn} onPress={onGuardar}><Text style={s.guardarTxt}>Guardar evento</Text></TouchableOpacity>
             {evento.id ? <TouchableOpacity style={s.borrarBtn} onPress={() => onBorrar(evento.id!)}><Text style={s.borrarTxt}>🗑 Borrar</Text></TouchableOpacity> : null}
             <TouchableOpacity style={s.cerrar} onPress={onClose}><Text style={[s.cerrarTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
@@ -586,6 +650,10 @@ const s = StyleSheet.create({
   colores: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   colorChip: { width: 30, height: 30, borderRadius: 15 },
   colorSel: { borderWidth: 3, borderColor: '#fff', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 3, elevation: 3 },
+  recRow: { flexDirection: 'row', gap: 7, flexWrap: 'wrap' },
+  recChip: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 7 },
+  recOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  recTxt: { fontSize: 12.5, fontWeight: '700' },
   guardarBtn: { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 20 },
   guardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
   borrarBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
