@@ -87,7 +87,7 @@ const NAV_ITEMS = [
   // Ventas — CRM, citas y cierres
   { label: 'CRM', desc: 'Clientes y pipeline', ion: 'people', color: '#EA580C', route: '/(admin)/crm', grupo: 'Ventas' },
   { label: 'Citas', desc: 'Coordinación de citas', ion: 'calendar', color: '#2563EB', route: '/(admin)/coordinacion-citas', grupo: 'Ventas' },
-  { label: 'Citas asesores', desc: 'Tablero de citas por asesor', ion: 'people', color: '#9333EA', route: '/(prospectador)/asesor-citas?admin=1', grupo: 'Ventas' },
+  { label: 'Citas asesores', desc: 'Tablero de citas por asesor', ion: 'people', color: '#9333EA', route: '/(prospectador)/citas-asesores', grupo: 'Ventas' },
   { label: 'Citas de venta', desc: 'Registro y retro', ion: 'document-text', color: '#0D9488', route: '/(admin)/citas-venta', grupo: 'Ventas' },
   { label: 'Cierres', desc: 'Ventas y rentas cerradas', ion: 'ribbon', color: '#16A34A', route: '/(admin)/cierres', grupo: 'Ventas' },
   { label: 'Calendario', desc: 'Tu agenda y citas', ion: 'calendar-number', color: '#7C3AED', route: '/(admin)/calendario', grupo: 'Ventas' },

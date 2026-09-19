@@ -89,12 +89,20 @@ function iniciales(n: string | null | undefined): string {
 }
 function limpiarTel(t: string | null | undefined): string { return (t ?? '').replace(/[^\d+]/g, '') }
 
-export default function AsesorCitas() {
+// Ruta por defecto = pestaña "Citas" del asesor/gerente (sus propias citas).
+// El parámetro ?admin=1 sigue soportado por compatibilidad, pero el modo admin
+// se usa por la ruta separada citas-asesores (que renderiza AsesorCitasAdmin),
+// para que el modo NO se quede pegado en la pestaña al volver.
+export default function AsesorCitasRoute() {
+  const params = useLocalSearchParams<{ admin?: string }>()
+  return <AsesorCitas esAdmin={params.admin === '1'} />
+}
+export function AsesorCitasAdmin() { return <AsesorCitas esAdmin /> }
+
+function AsesorCitas({ esAdmin }: { esAdmin: boolean }) {
   const c = useColors()
   const { darkMode } = useTheme()
   const { width } = useWindowDimensions()
-  const params = useLocalSearchParams<{ admin?: string }>()
-  const esAdmin = params.admin === '1'   // admin viendo el tablero de los asesores
   const [miId, setMiId] = useState<string | null>(null)
   const [citas, setCitas] = useState<Cita[]>([])
   const [filtroAsesor, setFiltroAsesor] = useState<string | null>(null)

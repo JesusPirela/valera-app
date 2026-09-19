@@ -457,17 +457,23 @@ export default function CitasVenta() {
   const cargar = useCallback(async () => {
     const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, fecha_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at'
     const todas: Fila[] = []; const paso = 1000
-    for (let desde = 0; ; desde += paso) {
-      const { data, error } = await supabase.from('citas_venta').select(cols)
-        // excel por su orden; las del dashboard (orden NULL) van al final por
-        // fecha ascendente → cada cliente nuevo queda hasta abajo (sin pie fijo).
-        .order('orden', { ascending: true, nullsFirst: false }).order('created_at', { ascending: true })
-        .range(desde, desde + paso - 1)
-      if (error || !data || data.length === 0) break
-      todas.push(...(data as Fila[]))
-      if (data.length < paso) break
+    try {
+      for (let desde = 0; ; desde += paso) {
+        const { data, error } = await supabase.from('citas_venta').select(cols)
+          // excel por su orden; las del dashboard (orden NULL) van al final por
+          // fecha ascendente → cada cliente nuevo queda hasta abajo (sin pie fijo).
+          .order('orden', { ascending: true, nullsFirst: false }).order('created_at', { ascending: true })
+          .range(desde, desde + paso - 1)
+        if (error || !data || data.length === 0) break
+        todas.push(...(data as Fila[]))
+        if (data.length < paso) break
+      }
+      setFilas(todas)
+    } catch {
+      // Red caída: no dejar la pantalla colgada en "cargando".
+    } finally {
+      setLoading(false)
     }
-    setFilas(todas); setLoading(false)
   }, [])
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
   // Candado: esta pantalla es SOLO para admins. Un supervisor u otro rol se saca.

@@ -1364,20 +1364,23 @@ export default function CoordinacionCitas() {
   }
 
   async function cargar() {
-    const { data } = await supabase
-      .from('citas_coordinacion')
-      .select(`
-        *,
-        clientes ( nombre, telefono, tipo_operacion, estado ),
-        prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre, telefono ),
-        coordinador:profiles!citas_coordinacion_coordinado_por_fkey ( nombre ),
-        asesor:profiles!citas_coordinacion_asesor_id_fkey ( nombre ),
-        propiedad:propiedades ( titulo )
-      `)
-      .order('updated_at', { ascending: false })
-    if (mountedRef.current) {
-      setCitas((data ?? []) as unknown as Cita[])
-      setLoading(false)
+    try {
+      const { data } = await supabase
+        .from('citas_coordinacion')
+        .select(`
+          *,
+          clientes ( nombre, telefono, tipo_operacion, estado ),
+          prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre, telefono ),
+          coordinador:profiles!citas_coordinacion_coordinado_por_fkey ( nombre ),
+          asesor:profiles!citas_coordinacion_asesor_id_fkey ( nombre ),
+          propiedad:propiedades ( titulo )
+        `)
+        .order('updated_at', { ascending: false })
+      if (mountedRef.current) setCitas((data ?? []) as unknown as Cita[])
+    } catch {
+      // Red caída / sesión: no dejar el spinner "Cargando pipeline" colgado.
+    } finally {
+      if (mountedRef.current) setLoading(false)
     }
   }
 
@@ -1621,7 +1624,7 @@ export default function CoordinacionCitas() {
           </TouchableOpacity>
           {!vistaAsesor && (
             <TouchableOpacity style={s.headerBtn}
-              onPress={() => router.push('/(prospectador)/asesor-citas?admin=1')}>
+              onPress={() => router.push('/(prospectador)/citas-asesores')}>
               <Ionicons name="people-outline" size={17} color="#1a6470" />
               <Text style={{ color: '#1a6470', fontWeight: '700', fontSize: 12 }}>Asesores</Text>
             </TouchableOpacity>

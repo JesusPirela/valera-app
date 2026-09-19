@@ -413,6 +413,7 @@ export default function ProspectadorLayout() {
       <Tabs.Screen name="tienda"             options={{ href: null, title: 'Tienda' }} />
       <Tabs.Screen name="ranking"            options={{ href: null, title: 'Ranking' }} />
       <Tabs.Screen name="calendario"         options={{ href: null, title: 'Calendario', headerLeft: () => <HeaderBack to="/(prospectador)/asesor" /> }} />
+      <Tabs.Screen name="citas-asesores"     options={{ href: null, title: 'Citas de asesores' }} />
       <Tabs.Screen name="mi-actividad"       options={{ href: null, title: 'Mi Actividad' }} />
       <Tabs.Screen name="mi-historial"       options={{ href: null, title: 'Mi Historial' }} />
       <Tabs.Screen name="mi-publicaciones"   options={{ href: null, title: 'Mis Publicaciones' }} />
