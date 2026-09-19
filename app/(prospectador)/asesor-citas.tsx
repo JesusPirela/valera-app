@@ -53,10 +53,26 @@ const TABLE_COLS = [
 type Cita = {
   id: string; cliente_id: string; estado: string; fecha_cita: string | null
   notas: string | null; propiedad_externa: string | null; asesor_id: string | null
+  updated_at: string
   clientes: { nombre: string; telefono: string | null; tipo_operacion: string | null } | null
   prospectador: { nombre: string } | null
   propiedad: { titulo: string } | null
   asesor: { nombre: string } | null
+}
+
+// Badge de inercia (idéntico al dashboard de admin): días desde el último
+// movimiento de la cita (updated_at, que el trigger actualiza al mover/editar).
+// Solo en estados donde el asesor debe estar accionando; ≥3d 🟡, ≥7d 🔴.
+const ESTADOS_INERTES = new Set<string>([
+  'por_contactar', 'primer_contacto', 'buscando_opciones', 'en_coordinacion',
+  'coordinada', 'reagendada', 'no_responde_asesor',
+  'seguimiento_cierre_alto', 'seguimiento_cierre_bajo', 'falta_perfilamiento',
+])
+function inerciaDe(ci: Cita): { dias: number; critica: boolean } | null {
+  if (!ESTADOS_INERTES.has(ci.estado) || !ci.updated_at) return null
+  const dias = Math.floor((Date.now() - new Date(ci.updated_at).getTime()) / 86400000)
+  if (isNaN(dias) || dias < 3) return null
+  return { dias, critica: dias >= 7 }
 }
 
 const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -98,7 +114,7 @@ export default function AsesorCitas() {
     setMiId(user.id)
     let q = supabase
       .from('citas_coordinacion')
-      .select(`id, cliente_id, estado, fecha_cita, notas, propiedad_externa, asesor_id,
+      .select(`id, cliente_id, estado, fecha_cita, notas, propiedad_externa, asesor_id, updated_at,
         clientes ( nombre, telefono, tipo_operacion ),
         prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre ),
         asesor:profiles!citas_coordinacion_asesor_id_fkey ( nombre ),
@@ -164,6 +180,11 @@ export default function AsesorCitas() {
           <Text style={[cl.linea, { color: c.textSub }]} numberOfLines={1}>📅 {fmtFecha(ci.fecha_cita)}</Text>
           {esAdmin && ci.asesor?.nombre ? <Text style={[cl.linea, { color: c.textSub }]} numberOfLines={1}>👤 {ci.asesor.nombre}</Text> : null}
           {ci.prospectador?.nombre ? <Text style={[cl.linea, { color: c.textMute }]} numberOfLines={1}>🌱 {ci.prospectador.nombre}</Text> : null}
+          {(() => { const q = inerciaDe(ci); return q ? (
+            <View style={[st.inercia, q.critica ? st.inerciaCrit : st.inerciaWarn]}>
+              <Text style={[st.inerciaTxt, { color: q.critica ? '#b91c1c' : '#92400e' }]}>{q.critica ? '🔴' : '🟡'} {q.dias}d sin movimiento</Text>
+            </View>
+          ) : null })()}
         </View>
       </TouchableOpacity>
     )
@@ -189,6 +210,11 @@ export default function AsesorCitas() {
           {ci.notas ? <Text style={[kc.notas, { color: c.textMute }]} numberOfLines={2}>{ci.notas}</Text> : null}
           {esAdmin && ci.asesor?.nombre ? <Text style={[kc.metaTxt, { color: c.textSub }]} numberOfLines={1}><Ionicons name="person-circle-outline" size={10} color={c.textSub} /> {ci.asesor.nombre}</Text> : null}
           {ci.prospectador?.nombre ? <Text style={[kc.metaTxt, { color: c.textMute }]} numberOfLines={1}><Ionicons name="person-outline" size={9} color={c.textMute} /> {ci.prospectador.nombre.split(' ')[0]}</Text> : null}
+          {(() => { const q = inerciaDe(ci); return q ? (
+            <View style={[st.inercia, q.critica ? st.inerciaCrit : st.inerciaWarn, { marginTop: 5 }]}>
+              <Text style={[st.inerciaTxt, { color: q.critica ? '#b91c1c' : '#92400e' }]}>{q.critica ? '🔴' : '🟡'} {q.dias}d sin movimiento</Text>
+            </View>
+          ) : null })()}
         </View>
       </TouchableOpacity>
     )
@@ -383,6 +409,10 @@ const st = StyleSheet.create({
   sub: { fontSize: 12.5, marginTop: 1 },
   calBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7 },
   calBtnTxt: { fontSize: 12.5, fontWeight: '700' },
+  inercia: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, marginTop: 6 },
+  inerciaWarn: { backgroundColor: '#fef9c3' },
+  inerciaCrit: { backgroundColor: '#fee2e2' },
+  inerciaTxt: { fontSize: 10.5, fontWeight: '800' },
   asesorScroll: { maxHeight: 44, marginTop: 8 },
   asesorRow: { flexDirection: 'row', gap: 7, paddingHorizontal: 14, alignItems: 'center' },
   asesorChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
