@@ -218,6 +218,12 @@ export default function AsesorCitas() {
             ? `${visibles.length} cita${visibles.length !== 1 ? 's' : ''}${filtroAsesor ? ' · ' + (asesores.find(a => a.id === filtroAsesor)?.nombre ?? '') : ` · ${asesores.length} asesor${asesores.length !== 1 ? 'es' : ''}`}`
             : `${citas.length} cita${citas.length !== 1 ? 's' : ''} asignada${citas.length !== 1 ? 's' : ''} a ti`}</Text>
         </View>
+        {!esAdmin && (
+          <TouchableOpacity onPress={() => router.push('/(prospectador)/calendario')} style={[st.calBtn, { borderColor: c.border, backgroundColor: c.card }]}>
+            <Ionicons name="calendar-number-outline" size={16} color="#3949AB" />
+            <Text style={[st.calBtnTxt, { color: c.text }]}>Calendario</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {esAdmin && asesores.length > 0 && (
@@ -375,6 +381,8 @@ const st = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 10 },
   h1: { fontSize: 21, fontWeight: '900' },
   sub: { fontSize: 12.5, marginTop: 1 },
+  calBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7 },
+  calBtnTxt: { fontSize: 12.5, fontWeight: '700' },
   asesorScroll: { maxHeight: 44, marginTop: 8 },
   asesorRow: { flexDirection: 'row', gap: 7, paddingHorizontal: 14, alignItems: 'center' },
   asesorChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
