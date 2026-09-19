@@ -389,11 +389,12 @@ function RejillaHoras({ dias, porDia, hoyClave, c, onItem, onNuevo }: {
 }) {
   const horas = Array.from({ length: HORA_FIN - HORA_INI }, (_, i) => HORA_INI + i)
   const totalH = horas.length * ROW_H
+  const ahora = new Date(); const nowMin = ahora.getHours() * 60 + ahora.getMinutes()
   return (
     <View style={[s.grid, { backgroundColor: c.card, borderColor: c.border, padding: 0, overflow: 'hidden' }]}>
       {/* Encabezado de días */}
       <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: c.border }}>
-        <View style={{ width: 44 }} />
+        <View style={{ width: 54 }} />
         {dias.map((d, i) => {
           const esHoy = claveDia(d) === hoyClave
           return (
@@ -409,7 +410,7 @@ function RejillaHoras({ dias, porDia, hoyClave, c, onItem, onNuevo }: {
       {/* Todo el día */}
       {dias.some(d => (porDia[claveDia(d)] ?? []).some(e => e.todo_el_dia)) && (
         <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: c.border, minHeight: 24 }}>
-          <View style={{ width: 44, justifyContent: 'center' }}><Text style={[s.rejHora, { color: c.textMute }]}>Todo</Text></View>
+          <View style={{ width: 54, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 6 }}><Text style={[s.rejHora, { color: c.textMute }]}>Todo el día</Text></View>
           {dias.map((d, i) => (
             <View key={i} style={{ flex: 1, padding: 2, gap: 2 }}>
               {(porDia[claveDia(d)] ?? []).filter(e => e.todo_el_dia).map(e => (
@@ -423,30 +424,42 @@ function RejillaHoras({ dias, porDia, hoyClave, c, onItem, onNuevo }: {
       )}
       {/* Rejilla */}
       <View style={{ flexDirection: 'row', height: totalH }}>
-        <View style={{ width: 44 }}>
+        {/* Columna de horas (am/pm) */}
+        <View style={{ width: 54, height: totalH }}>
           {horas.map(h => (
-            <View key={h} style={{ height: ROW_H }}>
-              <Text style={[s.rejHora, { color: c.textMute }]}>{h % 12 || 12}{h < 12 ? 'a' : 'p'}</Text>
-            </View>
+            <Text key={h} style={[s.rejHora, { color: c.textMute, position: 'absolute', top: (h - HORA_INI) * ROW_H - 6, right: 6 }]}>
+              {h % 12 || 12} {h < 12 ? 'AM' : 'PM'}
+            </Text>
           ))}
         </View>
         {dias.map((d, di) => {
           const evs = (porDia[claveDia(d)] ?? []).filter(e => !e.todo_el_dia)
+          const esHoyCol = claveDia(d) === hoyClave
+          const dentro = nowMin >= HORA_INI * 60 && nowMin <= HORA_FIN * 60
           return (
             <View key={di} style={{ flex: 1, borderLeftWidth: 1, borderColor: c.border }}>
-              {horas.map(h => <View key={h} style={{ position: 'absolute', top: (h - HORA_INI) * ROW_H, left: 0, right: 0, height: 1, backgroundColor: c.border, opacity: 0.5 }} />)}
+              {/* Líneas de hora y media hora */}
+              {horas.map(h => <View key={'l' + h} style={{ position: 'absolute', top: (h - HORA_INI) * ROW_H, left: 0, right: 0, height: 1, backgroundColor: c.border, opacity: 0.6 }} />)}
+              {horas.map(h => <View key={'m' + h} style={{ position: 'absolute', top: (h - HORA_INI) * ROW_H + ROW_H / 2, left: 0, right: 0, height: 1, backgroundColor: c.border, opacity: 0.22 }} />)}
               {evs.map(e => {
                 const top = Math.max(0, Math.min(totalH - 20, (minutosDe(e.inicio) - HORA_INI * 60) / 60 * ROW_H))
                 const dur = e.fin ? Math.max(20, (minutosDe(e.fin) - minutosDe(e.inicio))) : 45
-                const alto = Math.max(20, Math.min(totalH - top, dur / 60 * ROW_H))
+                const alto = Math.max(24, Math.min(totalH - top, dur / 60 * ROW_H))
+                const col = e.vencido ? '#dc2626' : e.color
                 return (
                   <TouchableOpacity key={e.key} onPress={() => onItem(e)}
-                    style={{ position: 'absolute', top, left: 2, right: 2, height: alto, backgroundColor: (e.vencido ? '#dc2626' : e.color) + '22', borderLeftWidth: 3, borderLeftColor: e.vencido ? '#dc2626' : e.color, borderRadius: 5, paddingHorizontal: 4, paddingVertical: 2, overflow: 'hidden' }}>
-                    <Text numberOfLines={1} style={{ fontSize: 10.5, fontWeight: '800', color: e.vencido ? '#dc2626' : e.color }}>{e.titulo}</Text>
-                    <Text style={{ fontSize: 9, color: c.textMute }}>{horaTxt(e.inicio)}</Text>
+                    style={{ position: 'absolute', top, left: 3, right: 3, height: alto, backgroundColor: col + '26', borderWidth: 1, borderColor: col + '55', borderLeftWidth: 3, borderLeftColor: col, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3, overflow: 'hidden' }}>
+                    <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '800', color: col }}>{e.titulo}</Text>
+                    <Text numberOfLines={1} style={{ fontSize: 9.5, color: c.textMute }}>{horaTxt(e.inicio)}{e.fin ? ` – ${horaTxt(e.fin)}` : ''}</Text>
                   </TouchableOpacity>
                 )
               })}
+              {/* Línea de la hora actual */}
+              {esHoyCol && dentro && (
+                <View pointerEvents="none" style={{ position: 'absolute', top: (nowMin - HORA_INI * 60) / 60 * ROW_H, left: 0, right: 0, height: 2, backgroundColor: '#ef4444' }}>
+                  <View style={{ position: 'absolute', left: -3, top: -3, width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444' }} />
+                </View>
+              )}
             </View>
           )
         })}
@@ -675,7 +688,7 @@ const s = StyleSheet.create({
   punto: { width: 5, height: 5, borderRadius: 3 },
   rejDow: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
   rejNum: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
-  rejHora: { fontSize: 9.5, fontWeight: '600', textAlign: 'center', marginTop: -6 },
+  rejHora: { fontSize: 10, fontWeight: '600', textAlign: 'right' },
   agendaHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, gap: 10 },
   agendaTitulo: { fontSize: 15.5, fontWeight: '800', flex: 1 },
   agendaFecha: { fontSize: 12.5, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 },
