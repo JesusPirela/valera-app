@@ -24,7 +24,7 @@ type Recurrencia = 'none' | 'daily' | 'weekly' | 'monthly'
 type Evento = {
   id: string; titulo: string; descripcion: string | null
   inicio: string; fin: string | null; todo_el_dia: boolean; color: string
-  recurrencia?: Recurrencia; recurrencia_fin?: string | null
+  recurrencia?: Recurrencia; recurrencia_fin?: string | null; recordatorio_min?: number | null
 }
 type Tipo = 'evento' | 'cita' | 'seguimiento'
 type CalItem = {
@@ -122,7 +122,7 @@ export default function CalendarioView({ esAsesor = false }: { esAsesor?: boolea
     if (!user) { setLoading(false); return }
     setMiId(user.id)
     const { data } = await supabase.from('eventos_calendario')
-      .select('id, titulo, descripcion, inicio, fin, todo_el_dia, color, recurrencia, recurrencia_fin')
+      .select('id, titulo, descripcion, inicio, fin, todo_el_dia, color, recurrencia, recurrencia_fin, recordatorio_min')
       .eq('user_id', user.id).order('inicio')
     setEventos((data ?? []) as Evento[])
     setLoading(false)
@@ -198,6 +198,8 @@ export default function CalendarioView({ esAsesor = false }: { esAsesor?: boolea
       inicio: editando.inicio, fin: editando.todo_el_dia ? null : (editando.fin || null),
       todo_el_dia: !!editando.todo_el_dia, color: editando.color || COLORES[0],
       recurrencia: rec, recurrencia_fin: rec !== 'none' ? (editando.recurrencia_fin || null) : null,
+      // Re-armar el recordatorio en cada guardado (por si cambió la hora).
+      recordatorio_min: editando.recordatorio_min ?? null, recordatorio_enviado_at: null,
     }
     if (editando.id) await supabase.from('eventos_calendario').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editando.id)
     else await supabase.from('eventos_calendario').insert(payload)
@@ -580,6 +582,20 @@ function ModalEvento({ evento, c, onChange, onGuardar, onBorrar, onClose }: {
               </>
             )}
 
+            <Text style={[s.lbl, { color: c.textSub }]}>Recordatorio</Text>
+            <View style={s.recRow}>
+              {([[null, 'No'], [10, '10 min'], [30, '30 min'], [60, '1 hora'], [1440, '1 día']] as [number | null, string][]).map(([min, lbl]) => {
+                const activo = (evento.recordatorio_min ?? null) === min
+                return (
+                  <TouchableOpacity key={String(min)} onPress={() => onChange({ ...evento, recordatorio_min: min })}
+                    style={[s.recChip, { borderColor: c.inputBorder }, activo && s.recOn]}>
+                    <Text style={[s.recTxt, { color: activo ? '#fff' : c.textSub }]}>{lbl}</Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+            <Text style={[s.hint, { color: c.textMute }]}>Te llega una notificación antes de que empiece.</Text>
+
             <TouchableOpacity style={s.guardarBtn} onPress={onGuardar}><Text style={s.guardarTxt}>Guardar evento</Text></TouchableOpacity>
             {evento.id ? <TouchableOpacity style={s.borrarBtn} onPress={() => onBorrar(evento.id!)}><Text style={s.borrarTxt}>🗑 Borrar</Text></TouchableOpacity> : null}
             <TouchableOpacity style={s.cerrar} onPress={onClose}><Text style={[s.cerrarTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
@@ -654,6 +670,7 @@ const s = StyleSheet.create({
   recChip: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 7 },
   recOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   recTxt: { fontSize: 12.5, fontWeight: '700' },
+  hint: { fontSize: 11.5, marginTop: 6 },
   guardarBtn: { backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 20 },
   guardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
   borrarBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
