@@ -9,7 +9,7 @@
 //
 // - Admin/gerencia (esAsesor=false): ve TODAS las citas del equipo (según RLS).
 // - Asesor (esAsesor=true): ve SOLO sus propias citas (asesor_id = él).
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, createElement } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Alert, Platform, Modal, Linking,
@@ -102,6 +102,7 @@ export default function CalendarioView({ esAsesor = false }: { esAsesor?: boolea
   const [editando, setEditando] = useState<Partial<Evento> | null>(null)
   const [busca, setBusca] = useState('')
   const [filtros, setFiltros] = useState<Record<Tipo, boolean>>({ evento: true, cita: true, seguimiento: true })
+  const [dragEv, setDragEv] = useState<string | null>(null)   // arrastre (web) en vista Mes
 
   const rutaCita = esAsesor ? '/(prospectador)/asesor-citas' : '/(admin)/coordinacion-citas'
   const rutaSeguimiento = esAsesor ? '/(prospectador)/asesor-citas' : '/(admin)/citas-venta'
@@ -217,6 +218,20 @@ export default function CalendarioView({ esAsesor = false }: { esAsesor?: boolea
   function whatsapp(tel: string) { Linking.openURL(`https://wa.me/${limpiarTel(tel).replace(/^\+/, '')}`) }
   function llamar(tel: string) { Linking.openURL(`tel:${limpiarTel(tel)}`) }
 
+  // Arrastrar un evento personal a otro día (web, vista Mes): conserva la hora.
+  async function moverEvento(eventoId: string, clave: string) {
+    const e = eventos.find(x => x.id === eventoId)
+    if (!e || (e.recurrencia && e.recurrencia !== 'none')) return   // recurrentes no se arrastran
+    const [Y, M, D] = clave.split('-').map(Number)
+    const base = new Date(e.inicio)
+    const nuevo = new Date(Y, M - 1, D, base.getHours(), base.getMinutes(), 0, 0)
+    if (claveDia(nuevo) === claveDia(base)) return
+    const dur = e.fin ? new Date(e.fin).getTime() - base.getTime() : 0
+    const nuevoFin = dur ? new Date(nuevo.getTime() + dur).toISOString() : e.fin
+    setEventos(prev => prev.map(x => x.id === eventoId ? { ...x, inicio: nuevo.toISOString(), fin: nuevoFin } : x))
+    await supabase.from('eventos_calendario').update({ inicio: nuevo.toISOString(), fin: nuevoFin, updated_at: new Date().toISOString() }).eq('id', eventoId)
+  }
+
   // Navegación (prev/next) según la vista.
   function mover(dir: 1 | -1) {
     if (vista === 'mes') setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + dir, 1))
@@ -285,7 +300,7 @@ export default function CalendarioView({ esAsesor = false }: { esAsesor?: boolea
         {busca ? <TouchableOpacity onPress={() => setBusca('')}><Ionicons name="close-circle" size={16} color={c.textMute} /></TouchableOpacity> : null}
       </View>
 
-      {vista === 'mes' && <VistaMes {...{ cursor, porDia, selDia, setSelDia, hoyClave, c }} />}
+      {vista === 'mes' && <VistaMes {...{ cursor, porDia, selDia, setSelDia, hoyClave, c, dragEv, setDragEv, onMoverEvento: moverEvento }} />}
       {vista === 'semana' && <RejillaHoras dias={Array.from({ length: 7 }, (_, i) => sumarDias(inicioSemana(cursor), i))} porDia={porDia} hoyClave={hoyClave} c={c} onItem={tocarItem} onNuevo={nuevo} />}
       {vista === 'dia' && <RejillaHoras dias={[new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())]} porDia={porDia} hoyClave={hoyClave} c={c} onItem={tocarItem} onNuevo={nuevo} />}
 
@@ -309,14 +324,16 @@ export default function CalendarioView({ esAsesor = false }: { esAsesor?: boolea
   )
 }
 
-// ── Vista Mes (rejilla de días) ──
-function VistaMes({ cursor, porDia, selDia, setSelDia, hoyClave, c }: {
-  cursor: Date; porDia: Record<string, CalItem[]>; selDia: string; setSelDia: (k: string) => void; hoyClave: string; c: ReturnType<typeof useColors>
+// ── Vista Mes (rejilla de días) — en web permite arrastrar eventos a otro día ──
+function VistaMes({ cursor, porDia, selDia, setSelDia, hoyClave, c, dragEv, setDragEv, onMoverEvento }: {
+  cursor: Date; porDia: Record<string, CalItem[]>; selDia: string; setSelDia: (k: string) => void; hoyClave: string
+  c: ReturnType<typeof useColors>; dragEv: string | null; setDragEv: (id: string | null) => void; onMoverEvento: (id: string, clave: string) => void
 }) {
   const y = cursor.getFullYear(), m = cursor.getMonth()
   const off = (new Date(y, m, 1).getDay() + 6) % 7
   const diasMes = new Date(y, m + 1, 0).getDate()
   const celdas: (number | null)[] = [...Array(off).fill(null), ...Array.from({ length: diasMes }, (_, i) => i + 1)]
+  const esWeb = Platform.OS === 'web'
   return (
     <View style={[s.grid, { backgroundColor: c.card, borderColor: c.border }]}>
       <View style={{ flexDirection: 'row' }}>
@@ -328,16 +345,37 @@ function VistaMes({ cursor, porDia, selDia, setSelDia, hoyClave, c }: {
           const clave = `${y}-${String(m + 1).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
           const evs = porDia[clave] ?? []
           const sel = clave === selDia, esHoy = clave === hoyClave
-          return (
-            <TouchableOpacity key={i} style={s.cell} onPress={() => setSelDia(clave)}>
+          const inner = (
+            <TouchableOpacity style={[s.cell, esWeb && { width: '100%' }]} onPress={() => setSelDia(clave)}>
               <View style={[s.diaWrap, sel && { backgroundColor: '#1a6470' }, !sel && esHoy && { borderWidth: 1.5, borderColor: '#1a6470' }]}>
                 <Text style={{ color: sel ? '#fff' : esHoy ? '#1a6470' : c.text, fontWeight: sel || esHoy ? '800' : '500', fontSize: 13 }}>{dd}</Text>
               </View>
               <View style={s.puntos}>
-                {evs.slice(0, 4).map(e => <View key={e.key} style={[s.punto, { backgroundColor: e.vencido ? '#dc2626' : e.color }]} />)}
+                {evs.slice(0, 4).map(e => {
+                  const dot = <View style={[s.punto, { backgroundColor: e.vencido ? '#dc2626' : e.color }]} />
+                  // Web: los eventos personales (no recurrentes) se pueden arrastrar.
+                  if (esWeb && e.tipo === 'evento' && e.evento && (!e.evento.recurrencia || e.evento.recurrencia === 'none')) {
+                    return createElement('div', {
+                      key: e.key, draggable: true,
+                      onDragStart: (ev: any) => { ev.stopPropagation(); ev.dataTransfer.setData('text/plain', e.evento!.id); ev.dataTransfer.effectAllowed = 'move'; setDragEv(e.evento!.id) },
+                      onDragEnd: () => setDragEv(null),
+                      style: { cursor: 'grab', display: 'inline-flex', padding: 1 },
+                    }, dot)
+                  }
+                  return <View key={e.key}>{dot}</View>
+                })}
               </View>
             </TouchableOpacity>
           )
+          if (esWeb) {
+            return createElement('div', {
+              key: i,
+              onDragOver: (ev: any) => { if (dragEv) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move' } },
+              onDrop: (ev: any) => { ev.preventDefault(); const id = ev.dataTransfer.getData('text/plain') || dragEv; if (id) onMoverEvento(id, clave); setDragEv(null) },
+              style: { width: `${100 / 7}%`, boxSizing: 'border-box', outline: dragEv ? `1px dashed ${c.border}` : 'none' },
+            }, inner)
+          }
+          return <View key={i}>{inner}</View>
         })}
       </View>
     </View>
