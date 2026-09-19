@@ -7,6 +7,7 @@ import { useVistaComo } from '../../lib/VistaComo'
 
 const ITEMS = [
   { label: 'CRM y Pipeline comercial', desc: 'Clientes y prospectos de todo el equipo, por etapa', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
+  { label: 'Calendario', desc: 'Tus eventos + tus citas y próximos seguimientos', icon: '📅', route: '/(prospectador)/calendario', color: '#3949AB' },
   { label: 'Mis estadísticas', desc: 'Tu desempeño: leads, cierres y actividad', icon: '📊', route: '/(prospectador)/asesor-estadisticas?modo=propio', color: '#1565c0' },
   { label: 'Estadísticas de equipo', desc: 'Desempeño de todo el equipo de prospectadores', icon: '📈', route: '/(prospectador)/asesor-estadisticas?modo=equipo', color: '#00838F' },
   { label: 'Tabla de precios', desc: 'Precios por zona y desarrollo, en vivo', icon: '🏷️', route: '/(prospectador)/tabla-equipo', color: '#c9a84c' },
@@ -19,6 +20,7 @@ const GERENCIA_ITEMS = [
   { label: 'Bloques', desc: 'Grupos de prospectadores y su actividad en vivo', icon: '🧱', route: '/(admin)/bloques', color: '#5E35B1' },
   { label: 'Citas de venta', desc: 'Registro (Excel) de citas de venta del equipo', icon: '📗', route: '/(admin)/citas-venta', color: '#1B5E20' },
   { label: 'Coordinación de citas', desc: 'Panel de coordinación de citas del equipo', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32' },
+  { label: 'Citas de asesores', desc: 'Tablero de citas por asesor (todas las tablas)', icon: '👥', route: '/(prospectador)/asesor-citas?admin=1', color: '#7B1FA2' },
   { label: 'Cierres', desc: 'Apartado de cierres del equipo', icon: '🤝', route: '/(admin)/cierres', color: '#00695C' },
   { label: 'CRM de prospectadores', desc: 'CRM de todos los prospectadores', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
   { label: 'Proyectos', desc: 'Desarrollos y proyectos', icon: '🏗️', route: '/(admin)/proyectos', color: '#455A64' },
