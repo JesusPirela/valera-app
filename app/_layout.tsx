@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { View, ActivityIndicator, AppState, Platform, Modal, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native'
-import { Stack, router, usePathname } from 'expo-router'
+import { Stack, router, usePathname, ErrorBoundaryProps } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { getUsuarioActual } from '../lib/sesion'
 import { Session } from '@supabase/supabase-js'
@@ -490,6 +490,37 @@ export default function RootLayout() {
   )
 }
 
+// Red de seguridad: si una pantalla revienta al renderizar, en vez de quedar en
+// blanco se muestra esto con "Reintentar" e "Ir al inicio". Lo usa expo-router
+// automáticamente por ser un export llamado ErrorBoundary desde este layout.
+// Es puramente aditivo: si nada truena, nunca se ve. Renderiza FUERA del
+// ThemeProvider, por eso usa colores fijos (no useColors).
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View style={styles.overlay}>
+      <View style={styles.card}>
+        <Text style={styles.emoji}>😵‍💫</Text>
+        <Text style={styles.titulo}>Algo salió mal</Text>
+        <Text style={styles.mensaje}>
+          Ocurrió un error inesperado en esta pantalla.{'\n'}Intenta de nuevo.
+        </Text>
+        {__DEV__ && !!error?.message && (
+          <Text style={styles.errDev} numberOfLines={4}>{error.message}</Text>
+        )}
+        <TouchableOpacity style={styles.btn} onPress={() => retry()}>
+          <Text style={styles.btnText}>Reintentar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.btnSec}
+          onPress={() => { try { router.replace('/') } catch { retry() } }}
+        >
+          <Text style={styles.btnSecText}>Ir al inicio</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -518,4 +549,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  errDev: { fontSize: 11, color: '#c0392b', textAlign: 'center', marginBottom: 16, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  btnSec: { paddingVertical: 12, paddingHorizontal: 40, marginTop: 6 },
+  btnSecText: { color: '#1a6470', fontSize: 15, fontWeight: '700' },
 })
