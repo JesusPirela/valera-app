@@ -55,22 +55,37 @@ export default function AdminLayout() {
     if (vistaComoListo && vistaComo) router.replace(destinoProspectador() as any)
   }, [vistaComoListo, vistaComo, destinoProspectador])
 
-  // Por la misma colisión de nombres, un usuario sin permisos podía aterrizar en
-  // (admin) al recargar. Los datos ya los protege RLS; esto saca de la pantalla.
+  // Por la colisión de nombres (en web la URL no lleva el grupo), al recargar
+  // con Ctrl+Shift+R una pantalla COMPARTIDA (propiedades, crm, misiones…) el
+  // router entra por (admin) y muestra el menú/chrome de admin. Eso está mal
+  // para cualquier NO-admin: su casa es (prospectador).
+  //   - asesor / prospectador / nuevo: salen SIEMPRE del layout de admin.
+  //   - gerente / supervisor: usan pantallas EXCLUSIVAS de admin (coordinación
+  //     de citas, cierres, bloques…), así que solo se les saca de las
+  //     COMPARTIDAS; en las exclusivas se quedan.
   useEffect(() => {
     let activo = true
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session || !activo) return
       supabase.from('profiles').select('role').eq('id', session.user.id).single()
         .then(({ data }) => {
-          if (!activo || !data) return
-          if (data.role !== 'admin' && data.role !== 'supervisor' && data.role !== 'gerente') {
+          if (!activo || !data || data.role === 'admin') return
+          const ruta = (pathname || '').replace(/^\/+/, '')
+          const accesoAdminParcial = data.role === 'supervisor' || data.role === 'gerente'
+          if (accesoAdminParcial) {
+            // Gerente/supervisor entran a propósito a varias pantallas de admin
+            // (coordinación de citas, cierres, /crm de prospectadores…). El único
+            // caso malo es aterrizar en el MENÚ de admin (propiedades) al recargar
+            // en web: su casa es (prospectador). Solo de ahí se les saca.
+            if (ruta === 'propiedades') router.replace('/(prospectador)/propiedades')
+          } else {
+            // asesor / prospectador / nuevo: no pintan nada en (admin).
             router.replace(destinoProspectador() as any)
           }
         })
     })
     return () => { activo = false }
-  }, [destinoProspectador])
+  }, [destinoProspectador, pathname])
 
   useEffect(() => {
     mountedRef.current = true
