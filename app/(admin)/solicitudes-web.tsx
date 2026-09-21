@@ -48,6 +48,58 @@ function formatFecha(iso: string) {
   return new Date(iso).toLocaleString('es-MX', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+// El formulario de reclutamiento manda el mensaje como texto plano con una
+// línea "Etiqueta: valor" por campo (fecha de nacimiento, domicilio,
+// experiencia...). Si TODAS las líneas encajan en ese patrón se muestra como
+// una lista de campos ordenada; si no (mensaje libre, como en contacto
+// general), se muestra tal cual entre comillas — sin inventar estructura
+// donde no la hay.
+type MensajePar = { label: string; valor: string }
+function parsearMensaje(mensaje: string): MensajePar[] | null {
+  const lineas = mensaje.split('\n').map(l => l.trim()).filter(Boolean)
+  if (lineas.length < 2) return null
+  const pares: MensajePar[] = []
+  for (const linea of lineas) {
+    const m = linea.match(/^([^:]{2,60}):\s*(.+)$/)
+    if (!m) return null
+    pares.push({ label: m[1].trim(), valor: m[2].trim() })
+  }
+  return pares
+}
+
+function DetalleMensaje({ mensaje, c }: { mensaje: string | null; c: ReturnType<typeof useColors> }) {
+  if (!mensaje) return null
+  const pares = parsearMensaje(mensaje)
+  if (!pares) {
+    return <Text style={[s.mensaje, { color: c.textSub }]}>“{mensaje}”</Text>
+  }
+  return (
+    <View style={[s.detalleBox, { backgroundColor: c.bg, borderColor: c.border }]}>
+      {pares.map((p, i) => (
+        <View key={p.label + i} style={[s.detalleRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border }]}>
+          <Text style={[s.detalleLabel, { color: c.textMute }]}>{p.label}</Text>
+          <Text style={[s.detalleValor, { color: c.text }]}>{p.valor}</Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
+// Fila de "chips" para los campos cortos (zona, presupuesto, propiedad de
+// interés) — antes iban uno debajo del otro y se sentía desordenado.
+function MetaChips({ items, c }: { items: { icon: string; texto: string }[]; c: ReturnType<typeof useColors> }) {
+  if (items.length === 0) return null
+  return (
+    <View style={s.metaChipsRow}>
+      {items.map((it, i) => (
+        <View key={i} style={[s.metaChip, { backgroundColor: c.bg, borderColor: c.border }]}>
+          <Text style={[s.metaChipText, { color: c.textSub }]} numberOfLines={1}>{it.icon} {it.texto}</Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
 // Segmentado de 3 estados — mismo componente para ambas pestañas.
 function EstadoSelector({ estado, onCambiar }: { estado: Estado; onCambiar: (e: Estado) => void }) {
   return (
@@ -185,20 +237,23 @@ export default function SolicitudesWeb() {
                 </View>
 
                 <Text style={[s.nombre, { color: c.text }]}>{item.nombre}</Text>
-                <Text style={[s.telefono, { color: c.textSub }]}>{item.telefono}</Text>
+                <Text style={[s.telefono, { color: c.textSub }]}>📞 {item.telefono}</Text>
 
-                {item.tipo === 'interes_propiedad' ? (
-                  <Text style={[s.meta, { color: c.textMute }]}>
-                    🏷️ {item.propiedad_titulo ?? item.propiedad_codigo}
-                  </Text>
-                ) : (
-                  <>
-                    {item.zona ? <Text style={[s.meta, { color: c.textMute }]}>📍 {item.zona}</Text> : null}
-                    {item.presupuesto ? <Text style={[s.meta, { color: c.textMute }]}>💰 {item.presupuesto}</Text> : null}
-                  </>
-                )}
-                {item.mensaje ? <Text style={[s.mensaje, { color: c.textSub }]}>“{item.mensaje}”</Text> : null}
+                <MetaChips
+                  c={c}
+                  items={
+                    item.tipo === 'interes_propiedad'
+                      ? [{ icon: '🏷️', texto: item.propiedad_titulo ?? item.propiedad_codigo ?? '' }]
+                      : [
+                          ...(item.zona ? [{ icon: '📍', texto: item.zona }] : []),
+                          ...(item.presupuesto ? [{ icon: '💰', texto: item.presupuesto }] : []),
+                        ]
+                  }
+                />
 
+                <DetalleMensaje mensaje={item.mensaje} c={c} />
+
+                <View style={[s.divider, { borderColor: c.border }]} />
                 <EstadoSelector
                   estado={item.estado}
                   onCambiar={(e) => cambiarEstadoSolicitud(item.id, e)}
@@ -227,29 +282,35 @@ export default function SolicitudesWeb() {
                 </View>
 
                 <Text style={[s.nombre, { color: c.text }]}>{item.nombre}</Text>
-                <Text style={[s.telefono, { color: c.textSub }]}>{item.telefono}</Text>
-                {item.email ? <Text style={[s.meta, { color: c.textMute }]}>✉️ {item.email}</Text> : null}
-                {item.mensaje ? <Text style={[s.mensaje, { color: c.textSub }]}>“{item.mensaje}”</Text> : null}
+                <Text style={[s.telefono, { color: c.textSub }]}>📞 {item.telefono}</Text>
+
+                <MetaChips c={c} items={item.email ? [{ icon: '✉️', texto: item.email }] : []} />
+
+                <DetalleMensaje mensaje={item.mensaje} c={c} />
 
                 {item.documentos?.length > 0 && (
-                  <View style={s.docsRow}>
-                    {item.documentos.map((doc, i) => (
-                      <TouchableOpacity
-                        key={doc.ruta}
-                        style={[s.docChip, { borderColor: c.border, backgroundColor: c.bg }]}
-                        onPress={() => abrirDocumento(doc)}
-                        disabled={abriendoDoc === doc.ruta}
-                      >
-                        {abriendoDoc === doc.ruta
-                          ? <ActivityIndicator size="small" color="#1a6470" />
-                          : <Text style={[s.docChipText, { color: '#1a6470' }]} numberOfLines={1}>
-                              📎 {doc.nombre || `Documento ${i + 1}`}
-                            </Text>}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  <>
+                    <Text style={[s.docsLabel, { color: c.textMute }]}>DOCUMENTOS</Text>
+                    <View style={s.docsRow}>
+                      {item.documentos.map((doc, i) => (
+                        <TouchableOpacity
+                          key={doc.ruta}
+                          style={[s.docChip, { borderColor: c.border, backgroundColor: c.bg }]}
+                          onPress={() => abrirDocumento(doc)}
+                          disabled={abriendoDoc === doc.ruta}
+                        >
+                          {abriendoDoc === doc.ruta
+                            ? <ActivityIndicator size="small" color="#1a6470" />
+                            : <Text style={[s.docChipText, { color: '#1a6470' }]} numberOfLines={1}>
+                                📎 {doc.nombre || `Documento ${i + 1}`}
+                              </Text>}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
                 )}
 
+                <View style={[s.divider, { borderColor: c.border }]} />
                 <EstadoSelector
                   estado={item.estado}
                   onCambiar={(e) => cambiarEstadoCandidato(item.id, e)}
@@ -281,15 +342,27 @@ const s = StyleSheet.create({
   fecha: { fontSize: 11 },
 
   nombre: { fontSize: 16, fontWeight: '800' },
-  telefono: { fontSize: 14, marginTop: 1 },
-  meta: { fontSize: 13, marginTop: 3 },
-  mensaje: { fontSize: 13, fontStyle: 'italic', marginTop: 6, lineHeight: 18 },
+  telefono: { fontSize: 13.5, marginTop: 2 },
+  mensaje: { fontSize: 13, fontStyle: 'italic', marginTop: 8, lineHeight: 18 },
 
-  docsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  // Chips cortos (zona, presupuesto, propiedad de interés, email)
+  metaChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  metaChip: { borderRadius: 7, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, maxWidth: '100%' },
+  metaChipText: { fontSize: 12, fontWeight: '600' },
+
+  // Mensaje estructurado (Etiqueta: valor por línea) del formulario de reclutamiento
+  detalleBox: { borderRadius: 10, borderWidth: 1, marginTop: 8, overflow: 'hidden' },
+  detalleRow: { paddingHorizontal: 10, paddingVertical: 7 },
+  detalleLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' },
+  detalleValor: { fontSize: 13, marginTop: 2, lineHeight: 17 },
+
+  docsLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4, marginTop: 10, marginBottom: 6 },
+  docsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   docChip: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, maxWidth: 200 },
   docChipText: { fontSize: 12, fontWeight: '700' },
 
-  estadoRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 12, marginBottom: 10 },
+  estadoRow: { flexDirection: 'row', gap: 8 },
   estadoBtn: { flex: 1, borderRadius: 10, borderWidth: 1.5, paddingVertical: 8, alignItems: 'center' },
   estadoBtnText: { fontSize: 12.5, fontWeight: '800' },
 
