@@ -4,11 +4,15 @@
 // Dos pestañas: "Solicitudes" (contacto general / interés en propiedad) y
 // "Reclutamiento" (aspirantes a asesor/prospectador).
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform, Linking, Alert } from 'react-native'
 import { useFocusEffect, useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
+
+const BUCKET_DOCUMENTOS = 'candidatos-documentos'
+
+type Documento = { tipo: string; ruta: string; nombre: string }
 
 type Estado = 'nuevo' | 'contactado' | 'descartado'
 
@@ -32,6 +36,7 @@ type Candidato = {
   telefono: string
   email: string | null
   mensaje: string | null
+  documentos: Documento[]
   estado: Estado
   created_at: string
 }
@@ -110,6 +115,24 @@ export default function SolicitudesWeb() {
     const { error } = await supabase.from('candidatos_reclutamiento').update({ estado }).eq('id', id)
     setActualizando(null)
     if (error) cargarCandidatos() // revertir si falló
+  }
+
+  // El bucket es privado: la URL se firma AL TOCAR (no se pre-generan al
+  // cargar la lista), expira en ~60s — de sobra para que se abra en una
+  // pestaña/visor y se descargue, pero no queda un link reusable después.
+  const [abriendoDoc, setAbriendoDoc] = useState<string | null>(null)
+  async function abrirDocumento(doc: Documento) {
+    setAbriendoDoc(doc.ruta)
+    const { data, error } = await supabase.storage.from(BUCKET_DOCUMENTOS).createSignedUrl(doc.ruta, 60)
+    setAbriendoDoc(null)
+    if (error || !data?.signedUrl) {
+      const msg = 'No se pudo abrir el documento. Intenta de nuevo.'
+      if (Platform.OS === 'web') window.alert(msg)
+      else Alert.alert('Documento', msg)
+      return
+    }
+    if (Platform.OS === 'web') window.open(data.signedUrl, '_blank')
+    else Linking.openURL(data.signedUrl)
   }
 
   const nuevasSolicitudes = solicitudes.filter(x => x.estado === 'nuevo').length
@@ -208,6 +231,25 @@ export default function SolicitudesWeb() {
                 {item.email ? <Text style={[s.meta, { color: c.textMute }]}>✉️ {item.email}</Text> : null}
                 {item.mensaje ? <Text style={[s.mensaje, { color: c.textSub }]}>“{item.mensaje}”</Text> : null}
 
+                {item.documentos?.length > 0 && (
+                  <View style={s.docsRow}>
+                    {item.documentos.map((doc, i) => (
+                      <TouchableOpacity
+                        key={doc.ruta}
+                        style={[s.docChip, { borderColor: c.border, backgroundColor: c.bg }]}
+                        onPress={() => abrirDocumento(doc)}
+                        disabled={abriendoDoc === doc.ruta}
+                      >
+                        {abriendoDoc === doc.ruta
+                          ? <ActivityIndicator size="small" color="#1a6470" />
+                          : <Text style={[s.docChipText, { color: '#1a6470' }]} numberOfLines={1}>
+                              📎 {doc.nombre || `Documento ${i + 1}`}
+                            </Text>}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
                 <EstadoSelector
                   estado={item.estado}
                   onCambiar={(e) => cambiarEstadoCandidato(item.id, e)}
@@ -242,6 +284,10 @@ const s = StyleSheet.create({
   telefono: { fontSize: 14, marginTop: 1 },
   meta: { fontSize: 13, marginTop: 3 },
   mensaje: { fontSize: 13, fontStyle: 'italic', marginTop: 6, lineHeight: 18 },
+
+  docsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  docChip: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, maxWidth: 200 },
+  docChipText: { fontSize: 12, fontWeight: '700' },
 
   estadoRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   estadoBtn: { flex: 1, borderRadius: 10, borderWidth: 1.5, paddingVertical: 8, alignItems: 'center' },
