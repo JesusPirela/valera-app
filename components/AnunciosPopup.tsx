@@ -3,7 +3,9 @@
 // sale un modal. Los 'crítica' con confirmación pendiente reaparecen hasta que
 // responda. Se monta en los layouts de (prospectador) y (admin).
 import { useEffect, useState, useCallback } from 'react'
-import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native'
+import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
 
@@ -31,6 +33,8 @@ export default function AnunciosPopup() {
   if (!anuncio) return null
   const critico = anuncio.prioridad === 'critica'
   const acento = critico ? '#C62828' : '#F57F17'
+  // Degradado del encabezado (más vivo que la franja plana de antes).
+  const degradado: [string, string] = critico ? ['#E53935', '#A81C1C'] : ['#FFA726', '#EF6C00']
 
   async function entendido() {
     if (!anuncio) return
@@ -58,46 +62,78 @@ export default function AnunciosPopup() {
   }
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={luego}>
+    <Modal visible transparent animationType="fade" onRequestClose={luego} statusBarTranslucent>
       <View style={s.overlay}>
         <View style={[s.card, { backgroundColor: c.card }]}>
-          <View style={[s.tag, { backgroundColor: acento }]}>
-            <Text style={s.tagTxt}>{critico ? '🚨 IMPORTANTE' : '📣 AVISO'}</Text>
-          </View>
+          {/* Encabezado con degradado */}
+          <LinearGradient colors={degradado} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.header}>
+            <View style={s.headerIcon}>
+              <Ionicons name={critico ? 'alert' : 'megaphone'} size={20} color="#fff" />
+            </View>
+            <Text style={s.headerTxt}>{critico ? 'IMPORTANTE' : 'AVISO'}</Text>
+          </LinearGradient>
 
-          <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={{ padding: 22, paddingTop: 16 }}>
+          {/* Contenido */}
+          <ScrollView
+            style={{ maxHeight: 340 }}
+            contentContainerStyle={s.body}
+            showsVerticalScrollIndicator={false}
+          >
             <Text style={[s.titulo, { color: c.text }]}>{anuncio.titulo}</Text>
 
             {anuncio.es_reunion && anuncio.evento_cuando ? (
-              <View style={[s.cuando, { borderColor: acento }]}>
-                <Text style={[s.cuandoTxt, { color: acento }]}>📅 {anuncio.evento_cuando}</Text>
+              <View style={[s.cuando, { backgroundColor: acento + '1f', borderColor: acento + '66' }]}>
+                <Ionicons name="calendar" size={15} color={acento} />
+                <Text style={[s.cuandoTxt, { color: acento }]}>{anuncio.evento_cuando}</Text>
               </View>
             ) : null}
 
-            <Text style={[s.cuerpo, { color: c.textSub }]}>{anuncio.cuerpo}</Text>
+            <View style={[s.separador, { backgroundColor: c.border }]} />
 
+            {/* Alineado a la izquierda: los textos largos centrados se leen mal */}
+            <Text style={[s.cuerpo, { color: c.textSub }]}>{anuncio.cuerpo}</Text>
+          </ScrollView>
+
+          {/* Acciones fijas: antes iban dentro del scroll y quedaban cortadas */}
+          <View style={[s.footer, { borderTopColor: c.border }]}>
             {anuncio.pide_confirmacion ? (
               <>
                 <Text style={[s.pregunta, { color: c.text }]}>¿Vas a asistir?</Text>
-                <TouchableOpacity style={[s.btn, { backgroundColor: '#2e7d32' }]} disabled={guardando} onPress={() => confirmar('asiste')}>
-                  <Text style={s.btnTxt}>✅ Sí, asistiré</Text>
+                <TouchableOpacity
+                  style={[s.btn, { backgroundColor: '#2e7d32' }, guardando && s.btnOff]}
+                  disabled={guardando} onPress={() => confirmar('asiste')} activeOpacity={0.85}
+                >
+                  <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                  <Text style={s.btnTxt}>Sí, asistiré</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.btn, { backgroundColor: '#F57F17' }]} disabled={guardando} onPress={() => confirmar('tal_vez')}>
-                  <Text style={s.btnTxt}>🤔 Tal vez</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[s.btn, { backgroundColor: '#c0392b' }]} disabled={guardando} onPress={() => confirmar('no_asiste')}>
-                  <Text style={s.btnTxt}>❌ No podré</Text>
-                </TouchableOpacity>
+                <View style={s.btnFila}>
+                  <TouchableOpacity
+                    style={[s.btnSec, { borderColor: '#F57F17' }, guardando && s.btnOff]}
+                    disabled={guardando} onPress={() => confirmar('tal_vez')} activeOpacity={0.85}
+                  >
+                    <Text style={[s.btnSecTxt, { color: '#F57F17' }]}>Tal vez</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.btnSec, { borderColor: '#c0392b' }, guardando && s.btnOff]}
+                    disabled={guardando} onPress={() => confirmar('no_asiste')} activeOpacity={0.85}
+                  >
+                    <Text style={[s.btnSecTxt, { color: '#c0392b' }]}>No podré</Text>
+                  </TouchableOpacity>
+                </View>
                 <TouchableOpacity style={s.luego} onPress={luego}>
                   <Text style={[s.luegoTxt, { color: c.textMute }]}>Responder luego</Text>
                 </TouchableOpacity>
               </>
             ) : (
-              <TouchableOpacity style={[s.btn, { backgroundColor: acento, marginTop: 16 }]} disabled={guardando} onPress={entendido}>
+              <TouchableOpacity
+                style={[s.btn, { backgroundColor: acento }, guardando && s.btnOff]}
+                disabled={guardando} onPress={entendido} activeOpacity={0.85}
+              >
+                <Ionicons name="checkmark" size={18} color="#fff" />
                 <Text style={s.btnTxt}>Entendido</Text>
               </TouchableOpacity>
             )}
-          </ScrollView>
+          </View>
         </View>
       </View>
     </Modal>
@@ -105,17 +141,43 @@ export default function AnunciosPopup() {
 }
 
 const s = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
-  card: { borderRadius: 20, maxWidth: 440, width: '100%', alignSelf: 'center', overflow: 'hidden' },
-  tag: { paddingVertical: 8, alignItems: 'center' },
-  tagTxt: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 0.5 },
-  titulo: { fontSize: 20, fontWeight: '900', textAlign: 'center' },
-  cuando: { borderWidth: 1.5, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12, marginTop: 12, alignItems: 'center' },
-  cuandoTxt: { fontSize: 15, fontWeight: '800' },
-  cuerpo: { fontSize: 14.5, lineHeight: 21, marginTop: 12, textAlign: 'center' },
-  pregunta: { fontSize: 15.5, fontWeight: '800', textAlign: 'center', marginTop: 18, marginBottom: 6 },
-  btn: { borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginTop: 9 },
-  btnTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  luego: { paddingVertical: 12, alignItems: 'center', marginTop: 4 },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: 20 },
+  card: {
+    borderRadius: 22, maxWidth: 440, width: '100%', alignSelf: 'center', overflow: 'hidden',
+    ...Platform.select({
+      web: { boxShadow: '0 18px 50px rgba(0,0,0,0.45)' } as any,
+      default: { elevation: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16 },
+    }),
+  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, paddingVertical: 14 },
+  headerIcon: {
+    width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  headerTxt: { color: '#fff', fontWeight: '900', fontSize: 14.5, letterSpacing: 1.6 },
+
+  body: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 18 },
+  titulo: { fontSize: 21, fontWeight: '900', textAlign: 'center', lineHeight: 27 },
+  cuando: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    borderWidth: 1.5, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14,
+    marginTop: 14, alignSelf: 'center',
+  },
+  cuandoTxt: { fontSize: 14.5, fontWeight: '800' },
+  separador: { height: 1, marginTop: 18, marginBottom: 16, opacity: 0.7 },
+  cuerpo: { fontSize: 14.5, lineHeight: 22, textAlign: 'left' },
+
+  footer: { borderTopWidth: 1, paddingHorizontal: 22, paddingTop: 14, paddingBottom: 18 },
+  pregunta: { fontSize: 15.5, fontWeight: '800', textAlign: 'center', marginBottom: 10 },
+  btn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderRadius: 13, paddingVertical: 14,
+  },
+  btnTxt: { color: '#fff', fontSize: 15.5, fontWeight: '800' },
+  btnOff: { opacity: 0.55 },
+  btnFila: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  btnSec: { flex: 1, borderWidth: 1.5, borderRadius: 13, paddingVertical: 12, alignItems: 'center' },
+  btnSecTxt: { fontSize: 14.5, fontWeight: '800' },
+  luego: { paddingVertical: 11, alignItems: 'center', marginTop: 2 },
   luegoTxt: { fontSize: 13.5, fontWeight: '600' },
 })
