@@ -97,6 +97,7 @@ const NAV_ITEMS = [
   // Equipo — personas y comunicación
   { label: 'Usuarios', desc: 'Cuentas del equipo', ion: 'person-add', color: '#2563EB', route: '/(admin)/prospectadores', grupo: 'Equipo' },
   { label: 'Colaboradores', desc: 'Asesores e inmobiliarias', ion: 'people-circle', color: '#9333EA', route: '/(admin)/colaboradores', grupo: 'Equipo' },
+  { label: 'Asesores externos', desc: 'Apoyo por zona (nombre y tel.)', ion: 'id-card', color: '#0D9488', route: '/(admin)/asesores-externos', grupo: 'Equipo' },
   { label: 'Bloques', desc: 'Grupos de prospectadores', ion: 'apps', color: '#6366F1', route: '/(admin)/bloques', grupo: 'Equipo' },
   { label: '1 a 1', desc: 'Entrevistas del equipo', ion: 'headset', color: '#7C3AED', route: '/(admin)/uno-a-uno', grupo: 'Equipo' },
   { label: 'Anuncios', desc: 'Avisos al equipo', ion: 'megaphone', color: '#E11D48', route: '/(admin)/anuncios', grupo: 'Equipo' },
