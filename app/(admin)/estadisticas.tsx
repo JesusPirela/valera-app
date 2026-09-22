@@ -126,13 +126,13 @@ function DonutChart({ slices, size = 160, centerText, centerSub }: {
 
 function PieLegend({ slices, total, textColor }: { slices: Slice[]; total: number; textColor?: string }) {
   return (
-    <View style={{ gap: 7, flex: 1, justifyContent: 'center' }}>
+    <View style={styles.legendWrap}>
       {slices.map((s, i) => (
         <View key={i} style={styles.legendRow}>
           <View style={[styles.legendDot, { backgroundColor: s.color }]} />
           <Text style={[styles.legendLabel, textColor ? { color: textColor } : {}]} numberOfLines={1}>{s.label}</Text>
-          <Text style={[styles.legendVal, textColor ? { color: textColor } : {}]}>{s.value}</Text>
-          <Text style={styles.legendPct}>
+          <Text style={[styles.legendVal, textColor ? { color: textColor } : {}]} numberOfLines={1}>{s.value.toLocaleString('es-MX')}</Text>
+          <Text style={styles.legendPct} numberOfLines={1}>
             {total > 0 ? `${Math.round((s.value / total) * 100)}%` : '0%'}
           </Text>
         </View>
@@ -179,10 +179,11 @@ function RankRow({ pos, label, sublabel, valor, max, color, textColor, trackBg }
 }
 
 // ─── Card wrapper ─────────────────────────────────────────
-function Card({ titulo, children, bg, titleColor }: { titulo?: string; children: React.ReactNode; bg?: string; titleColor?: string }) {
+function Card({ titulo, desc, children, bg, titleColor }: { titulo?: string; desc?: string; children: React.ReactNode; bg?: string; titleColor?: string }) {
   return (
     <View style={[styles.card, bg ? { backgroundColor: bg } : {}]}>
-      {titulo && <Text style={[styles.cardTitulo, titleColor ? { color: titleColor } : {}]}>{titulo}</Text>}
+      {titulo && <Text style={[styles.cardTitulo, titleColor ? { color: titleColor } : {}, desc ? { marginBottom: 4 } : {}]}>{titulo}</Text>}
+      {desc && <Text style={styles.cardDesc}>{desc}</Text>}
       {children}
     </View>
   )
@@ -375,19 +376,23 @@ export default function Estadisticas() {
         ))}
       </View>
 
+      <Text style={[styles.periodoNota, { color: c.textMute }]}>
+        El período cambia Vistas, Descargas y la actividad. Propiedades y Prospectadores son totales (no dependen del período).
+      </Text>
+
       {/* KPI Cards */}
       <View style={styles.kpiGrid}>
-        <KpiCard label="Propiedades" value={resumen.total_propiedades} color={C.teal} icon="🏠" bg={c.card} labelColor={c.textMute} />
-        <KpiCard label="Prospectadores" value={resumen.total_prospectadores} color={C.green} icon="👥" bg={c.card} labelColor={c.textMute} />
-        <KpiCard label="Vistas" value={resumen.total_vistas} color={C.blue} icon="👁" bg={c.card} labelColor={c.textMute} />
-        <KpiCard label="Descargas" value={resumen.total_descargas} color={C.amber} icon="📥" bg={c.card} labelColor={c.textMute} />
+        <KpiCard label="Propiedades (total)" value={resumen.total_propiedades} color={C.teal} icon="🏠" bg={c.card} labelColor={c.textMute} />
+        <KpiCard label="Prospectadores (total)" value={resumen.total_prospectadores} color={C.green} icon="👥" bg={c.card} labelColor={c.textMute} />
+        <KpiCard label="Vistas (período)" value={resumen.total_vistas} color={C.blue} icon="👁" bg={c.card} labelColor={c.textMute} />
+        <KpiCard label="Descargas (período)" value={resumen.total_descargas} color={C.amber} icon="📥" bg={c.card} labelColor={c.textMute} />
       </View>
 
       {/* Propiedades: tipo y operación */}
       {propDist.length > 0 && (
         <>
           <View style={styles.rowCards}>
-            <Card bg={c.card} titulo="Por tipo" titleColor={c.textMute}>
+            <Card bg={c.card} titulo="Por tipo" desc="Cuántas propiedades hay de cada tipo (casa, depto…)." titleColor={c.textMute}>
               <View style={styles.pieRow}>
                 <DonutChart
                   slices={slicesTipo}
@@ -399,7 +404,7 @@ export default function Estadisticas() {
               </View>
             </Card>
 
-            <Card bg={c.card} titulo="Por operación" titleColor={c.textMute}>
+            <Card bg={c.card} titulo="Por operación" desc="Cuántas están en venta y cuántas en renta." titleColor={c.textMute}>
               <View style={styles.pieRow}>
                 <DonutChart
                   slices={slicesOp}
@@ -412,7 +417,7 @@ export default function Estadisticas() {
             </Card>
           </View>
 
-          <Card bg={c.card} titulo="Por estado" titleColor={c.textMute}>
+          <Card bg={c.card} titulo="Por estado" desc="Cuántas siguen disponibles y cuántas ya se vendieron." titleColor={c.textMute}>
             <View style={styles.pieRowCenter}>
               <DonutChart
                 slices={slicesEst}
@@ -428,7 +433,7 @@ export default function Estadisticas() {
 
       {/* CRM */}
       {slicesCRM.length > 0 && (
-        <Card bg={c.card} titulo="Clientes CRM — por etapa" titleColor={c.textMute}>
+        <Card bg={c.card} titulo="Clientes CRM — por etapa" desc="En qué etapa del embudo está cada cliente registrado." titleColor={c.textMute}>
           <View style={styles.pieRowCenter}>
             <DonutChart
               slices={slicesCRM}
@@ -443,7 +448,7 @@ export default function Estadisticas() {
 
       {/* Engagement */}
       {(resumen.total_vistas > 0 || resumen.total_descargas > 0) && (
-        <Card bg={c.card} titulo="Vistas vs Descargas" titleColor={c.textMute}>
+        <Card bg={c.card} titulo="Vistas vs Descargas" desc="Cuánto se vieron vs. se descargaron las fichas (del período)." titleColor={c.textMute}>
           <View style={styles.pieRowCenter}>
             <DonutChart
               slices={slicesEngagement}
@@ -470,7 +475,7 @@ export default function Estadisticas() {
       </Card>
 
       {/* Top propiedades */}
-      <Card bg={c.card} titulo="Propiedades más activas" titleColor={c.textMute}>
+      <Card bg={c.card} titulo="Propiedades más activas" desc="Las 5 con más vistas + descargas." titleColor={c.textMute}>
         {top_propiedades.length === 0 ? (
           <Text style={styles.sinDatos}>Sin datos aún</Text>
         ) : (
@@ -491,7 +496,7 @@ export default function Estadisticas() {
       </Card>
 
       {/* Top prospectadores */}
-      <Card bg={c.card} titulo="Prospectadores más activos" titleColor={c.textMute}>
+      <Card bg={c.card} titulo="Prospectadores más activos" desc="Los 5 con más vistas + descargas (del período)." titleColor={c.textMute}>
         {top_prospectadores.length === 0 ? (
           <Text style={styles.sinDatos}>Sin datos aún</Text>
         ) : (
@@ -518,7 +523,7 @@ function KpiCard({ label, value, color, icon, bg, labelColor }: { label: string;
   return (
     <View style={[styles.kpiCard, { borderLeftColor: color }, bg ? { backgroundColor: bg } : {}]}>
       <Text style={styles.kpiIcon}>{icon}</Text>
-      <Text style={[styles.kpiNum, { color }]}>{value}</Text>
+      <Text style={[styles.kpiNum, { color }]}>{value.toLocaleString('es-MX')}</Text>
       <Text style={[styles.kpiLabel, labelColor ? { color: labelColor } : {}]}>{label}</Text>
     </View>
   )
@@ -539,7 +544,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#1a6470',
   },
   conexionBtnTxt: { color: '#1a6470', fontSize: 12, fontWeight: '700' },
-  periodoRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  periodoRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  periodoNota: { fontSize: 11.5, lineHeight: 15, marginBottom: 14 },
   periodoBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#ddd', alignItems: 'center', backgroundColor: '#fff' },
   periodoBtnActivo: { backgroundColor: C.teal, borderColor: C.teal },
   periodoBtnText: { fontSize: 13, fontWeight: '600', color: '#888' },
@@ -581,6 +587,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     marginBottom: 16,
   },
+  cardDesc: { fontSize: 12, color: '#94a3b8', marginBottom: 14, lineHeight: 16 },
 
   // Row de cards side by side
   rowCards: { flexDirection: 'row', gap: 10, marginBottom: 14 },
@@ -590,11 +597,12 @@ const styles = StyleSheet.create({
   pieRowCenter: { flexDirection: 'row', alignItems: 'center', gap: 18 },
 
   // Legend
+  legendWrap: { gap: 9, flex: 1, maxWidth: 300, justifyContent: 'center' },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  legendDot: { width: 10, height: 10, borderRadius: 3 },
-  legendLabel: { flex: 1, fontSize: 12 },
-  legendVal: { fontSize: 13, fontWeight: '700', width: 28, textAlign: 'right' as const },
-  legendPct: { fontSize: 11, color: '#bbb', width: 34, textAlign: 'right' },
+  legendDot: { width: 11, height: 11, borderRadius: 3, flexShrink: 0 },
+  legendLabel: { flex: 1, fontSize: 12.5 },
+  legendVal: { fontSize: 13.5, fontWeight: '800', minWidth: 46, textAlign: 'right' as const, flexShrink: 0 },
+  legendPct: { fontSize: 11.5, color: '#94a3b8', width: 40, textAlign: 'right', flexShrink: 0 },
 
   // Bar chart vertical
   barChartRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', height: 120 },

@@ -13,21 +13,41 @@ import { useColors } from '../lib/ThemeContext'
 
 type Res = { key: string; titulo: string; sub?: string; icon: string; ir: () => void }
 
-// Pantallas frecuentes a las que saltar por nombre.
+// Pantallas a las que saltar por nombre (todo el menú de admin).
 const PANTALLAS: { label: string; route: string; icon: string }[] = [
   { label: 'Panel', route: '/(admin)/cockpit', icon: 'analytics-outline' },
+  { label: 'Estadísticas', route: '/(admin)/estadisticas', icon: 'stats-chart-outline' },
+  { label: 'Actividad', route: '/(admin)/actividad', icon: 'pulse-outline' },
+  { label: 'Monitoreo', route: '/(admin)/monitoreo', icon: 'medkit-outline' },
+  { label: 'Nueva propiedad', route: '/(admin)/nueva-propiedad', icon: 'add-circle-outline' },
+  { label: 'Constructoras', route: '/(admin)/constructoras', icon: 'business-outline' },
+  { label: 'Proyectos', route: '/(admin)/proyectos', icon: 'briefcase-outline' },
+  { label: 'Tabla de precios', route: '/(admin)/inventario-tabla', icon: 'pricetags-outline' },
+  { label: 'Inventario', route: '/(admin)/inventario', icon: 'cube-outline' },
+  { label: 'Publicaciones', route: '/(admin)/estadisticas-propiedades', icon: 'bar-chart-outline' },
+  { label: 'Colores de ficha', route: '/(admin)/colores-ficha', icon: 'color-palette-outline' },
   { label: 'CRM', route: '/(admin)/crm', icon: 'people-outline' },
   { label: 'Coordinación de citas', route: '/(admin)/coordinacion-citas', icon: 'calendar-outline' },
   { label: 'Citas de venta', route: '/(admin)/citas-venta', icon: 'document-text-outline' },
   { label: 'Cierres', route: '/(admin)/cierres', icon: 'ribbon-outline' },
   { label: 'Calendario', route: '/(admin)/calendario', icon: 'calendar-number-outline' },
-  { label: 'Nueva propiedad', route: '/(admin)/nueva-propiedad', icon: 'add-circle-outline' },
-  { label: 'Estadísticas', route: '/(admin)/estadisticas', icon: 'stats-chart-outline' },
-  { label: 'Usuarios', route: '/(admin)/prospectadores', icon: 'person-add-outline' },
   { label: 'Leads de campañas', route: '/(admin)/leads-campanias', icon: 'funnel-outline' },
+  { label: 'Pool de leads', route: '/(admin)/leads-pool', icon: 'flame-outline' },
+  { label: 'Donaciones', route: '/(admin)/donaciones', icon: 'heart-outline' },
   { label: 'Anuncios', route: '/(admin)/anuncios', icon: 'megaphone-outline' },
-  { label: 'Actividad', route: '/(admin)/actividad', icon: 'pulse-outline' },
-  { label: 'Monitoreo', route: '/(admin)/monitoreo', icon: 'medkit-outline' },
+  { label: '1 a 1', route: '/(admin)/uno-a-uno', icon: 'headset-outline' },
+  { label: 'Usuarios', route: '/(admin)/prospectadores', icon: 'person-add-outline' },
+  { label: 'Colaboradores', route: '/(admin)/colaboradores', icon: 'people-circle-outline' },
+  { label: 'Asesores externos', route: '/(admin)/asesores-externos', icon: 'id-card-outline' },
+  { label: 'Bloques', route: '/(admin)/bloques', icon: 'apps-outline' },
+  { label: 'Agenda', route: '/(admin)/agenda', icon: 'reader-outline' },
+  { label: 'Universidad', route: '/(admin)/university', icon: 'school-outline' },
+  { label: 'Tienda', route: '/(admin)/tienda-compras', icon: 'cart-outline' },
+  { label: 'Misiones', route: '/(admin)/misiones', icon: 'flag-outline' },
+  { label: 'Ranking', route: '/(prospectador)/ranking', icon: 'trophy-outline' },
+  { label: 'Cofres', route: '/(admin)/gestion-cofres', icon: 'gift-outline' },
+  { label: 'Videos de marketing', route: '/(admin)/videos-marketing', icon: 'videocam-outline' },
+  { label: 'Cuenta', route: '/(admin)/cuenta', icon: 'settings-outline' },
 ]
 
 function limpiar(q: string) { return q.replace(/[,()%]/g, ' ').trim() }
