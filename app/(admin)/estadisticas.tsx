@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native'
 import Svg, { Path, Text as SvgText } from 'react-native-svg'
-import { useFocusEffect, router } from 'expo-router'
+import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
@@ -196,7 +196,10 @@ const PERIODOS: { value: Periodo; label: string }[] = [
   { value: 'total',  label: 'Total' },
 ]
 
-function fechaDesde(periodo: Periodo): string | null {
+// Siempre devuelve una fecha (para "Total" una muy antigua): así SIEMPRE se
+// llama la sobrecarga get_estadisticas_admin(p_desde) y se evita el 300 por
+// ambigüedad que rompía el botón "Total".
+function fechaDesde(periodo: Periodo): string {
   const now = new Date()
   if (periodo === 'dia') {
     const d = new Date(now); d.setHours(0, 0, 0, 0); return d.toISOString()
@@ -207,7 +210,7 @@ function fechaDesde(periodo: Periodo): string | null {
   if (periodo === 'mes') {
     const d = new Date(now); d.setDate(d.getDate() - 30); return d.toISOString()
   }
-  return null
+  return new Date('2000-01-01T00:00:00.000Z').toISOString()   // total
 }
 
 // ─── Pantalla principal ───────────────────────────────────
@@ -220,17 +223,37 @@ export default function Estadisticas() {
   const [periodo, setPeriodo] = useState<Periodo>('dia')
   const yaCargoRef = useRef(false)
 
+  // PostgREST corta en 1000 filas por petición; sin paginar, los donuts salían
+  // capados a 1000 (hay miles de propiedades/clientes). Trae TODAS las filas.
+  async function traerTodo<T>(tabla: string, cols: string, filtroInventario: boolean): Promise<T[]> {
+    const todas: T[] = []
+    for (let desde = 0; ; desde += 1000) {
+      let q = supabase.from(tabla).select(cols).range(desde, desde + 999)
+      if (filtroInventario) q = q.eq('es_inventario', false)
+      const { data, error } = await q
+      if (error || !data || data.length === 0) break
+      todas.push(...(data as T[]))
+      if (data.length < 1000) break
+    }
+    return todas
+  }
+
   async function cargar(p: Periodo = periodo) {
-    if (!yaCargoRef.current) setLoading(true)
-    const desde = fechaDesde(p)
-    const [rpcRes, propRes, crmRes] = await Promise.all([
-      supabase.rpc('get_estadisticas_admin', desde ? { p_desde: desde } : {}),
-      supabase.from('propiedades').select('tipo, operacion, estado').eq('es_inventario', false),
-      supabase.from('clientes').select('estado'),
-    ])
+    const primera = !yaCargoRef.current
+    if (primera) setLoading(true)
+    const desde = fechaDesde(p)   // siempre definido → sin ambigüedad de sobrecarga
+    // El RPC (vistas/descargas/top) SÍ depende del período. Los donuts
+    // (distribución de propiedades y CRM) NO — solo se traen la primera vez.
+    const rpcRes = await supabase.rpc('get_estadisticas_admin', { p_desde: desde })
     if (!rpcRes.error && rpcRes.data) setStats(rpcRes.data as Estadisticas)
-    setPropDist(propRes.data ?? [])
-    setClienteDist(crmRes.data ?? [])
+    if (primera) {
+      const [propAll, crmAll] = await Promise.all([
+        traerTodo<{ tipo: string | null; operacion: string | null; estado: string | null }>('propiedades', 'tipo, operacion, estado', true),
+        traerTodo<{ estado: string }>('clientes', 'estado', false),
+      ])
+      setPropDist(propAll)
+      setClienteDist(crmAll)
+    }
     yaCargoRef.current = true
     setLoading(false)
   }
@@ -335,20 +358,6 @@ export default function Estadisticas() {
     <ScrollView style={[styles.container, { backgroundColor: c.bg }]} contentContainerStyle={{ paddingBottom: 48 }} refreshControl={refreshControl}>
       <View style={styles.pageHeader}>
         <Text style={[styles.pageTitle, { color: c.text }]}>Estadísticas</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity
-            style={styles.conexionBtn}
-            onPress={() => router.push('/(admin)/reportes' as any)}
-          >
-            <Text style={styles.conexionBtnTxt}>📊 Productividad</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.conexionBtn}
-            onPress={() => router.push('/(admin)/conexion-usuarios' as any)}
-          >
-            <Text style={styles.conexionBtnTxt}>⏱️ Tiempo conectado</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* Selector de período */}
