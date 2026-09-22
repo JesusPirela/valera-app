@@ -14,7 +14,7 @@ import { useColors } from '../lib/ThemeContext'
 type Res = { key: string; titulo: string; sub?: string; icon: string; ir: () => void }
 
 // Pantallas a las que saltar por nombre (todo el menú de admin).
-const PANTALLAS: { label: string; route: string; icon: string }[] = [
+const PANTALLAS_ADMIN: { label: string; route: string; icon: string }[] = [
   { label: 'Panel', route: '/(admin)/cockpit', icon: 'analytics-outline' },
   { label: 'Estadísticas', route: '/(admin)/estadisticas', icon: 'stats-chart-outline' },
   { label: 'Actividad', route: '/(admin)/actividad', icon: 'pulse-outline' },
@@ -50,10 +50,30 @@ const PANTALLAS: { label: string; route: string; icon: string }[] = [
   { label: 'Cuenta', route: '/(admin)/cuenta', icon: 'settings-outline' },
 ]
 
+// Pantallas de prospectador.
+const PANTALLAS_PROSP: { label: string; route: string; icon: string }[] = [
+  { label: 'Propiedades', route: '/(prospectador)/propiedades', icon: 'home-outline' },
+  { label: 'CRM', route: '/(prospectador)/crm', icon: 'people-outline' },
+  { label: 'Colecciones', route: '/(prospectador)/colecciones', icon: 'albums-outline' },
+  { label: 'Constructoras', route: '/(prospectador)/constructoras', icon: 'business-outline' },
+  { label: 'Tabla de precios', route: '/(prospectador)/tabla-equipo', icon: 'pricetags-outline' },
+  { label: 'Misiones', route: '/(prospectador)/misiones', icon: 'flag-outline' },
+  { label: 'Ranking', route: '/(prospectador)/ranking', icon: 'trophy-outline' },
+  { label: 'Universidad', route: '/(prospectador)/university', icon: 'school-outline' },
+  { label: 'Tienda', route: '/(prospectador)/tienda', icon: 'cart-outline' },
+  { label: 'Mi día', route: '/(prospectador)/mi-dia', icon: 'sunny-outline' },
+  { label: 'Avisos', route: '/(prospectador)/notificaciones', icon: 'notifications-outline' },
+  { label: 'Perfil', route: '/(prospectador)/perfil', icon: 'person-outline' },
+]
+
 function limpiar(q: string) { return q.replace(/[,()%]/g, ' ').trim() }
 
-export default function BusquedaGlobal() {
+export default function BusquedaGlobal({ modo = 'admin' }: { modo?: 'admin' | 'prospectador' }) {
   const c = useColors()
+  const esProsp = modo === 'prospectador'
+  const rutaCliente = esProsp ? '/(prospectador)/detalle-cliente' : '/(admin)/detalle-cliente'
+  const rutaPropiedad = esProsp ? '/(prospectador)/detalle-propiedad' : '/(admin)/editar-propiedad'
+  const PANTALLAS = esProsp ? PANTALLAS_PROSP : PANTALLAS_ADMIN
   const [abierto, setAbierto] = useState(false)
   const [q, setQ] = useState('')
   const [clientes, setClientes] = useState<Res[]>([])
@@ -93,11 +113,11 @@ export default function BusquedaGlobal() {
         ])
         setClientes((cli.data ?? []).map((x: any) => ({
           key: 'c' + x.id, titulo: x.nombre ?? 'Cliente', sub: x.telefono ?? undefined, icon: 'person',
-          ir: () => { cerrar(); router.push(`/(admin)/detalle-cliente?id=${x.id}` as any) },
+          ir: () => { cerrar(); router.push(`${rutaCliente}?id=${x.id}` as any) },
         })))
         setProps((pr.data ?? []).map((x: any) => ({
           key: 'p' + x.id, titulo: x.titulo ?? x.codigo, sub: x.codigo, icon: 'home',
-          ir: () => { cerrar(); router.push(`/(admin)/editar-propiedad?id=${x.id}` as any) },
+          ir: () => { cerrar(); router.push(`${rutaPropiedad}?id=${x.id}` as any) },
         })))
       } catch { /* red: sin resultados */ } finally { setBuscando(false) }
     }, 280)

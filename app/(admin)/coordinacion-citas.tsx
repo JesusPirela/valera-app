@@ -8,7 +8,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { normalizar } from '../../lib/texto'
-import ClientesPorProspecto from '../../components/ClientesPorProspecto'
 import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
 
 import { getUsuarioActual } from '../../lib/sesion'
@@ -1691,7 +1690,6 @@ export default function CoordinacionCitas() {
           >
             <Ionicons name="search-outline" size={18} color={showSearch ? '#fff' : '#1a6470'} />
           </TouchableOpacity>
-          {!vistaAsesor && <ClientesPorProspecto />}
           {!vistaAsesor && (
             <TouchableOpacity style={s.headerBtn}
               onPress={() => router.push('/(prospectador)/citas-asesores')}>

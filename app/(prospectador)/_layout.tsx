@@ -11,6 +11,7 @@ import { trackLoginDiario } from '../../lib/gamification'
 import { programarRecordatorios, solicitarPermisoWeb, notificarWeb } from '../../lib/notificaciones-locales'
 import HeaderBack from '../../components/HeaderBack'
 import ClienteFormBack from '../../components/ClienteFormBack'
+import BusquedaGlobal from '../../components/BusquedaGlobal'
 import { useVistaComo } from '../../lib/VistaComo'
 import VistaComoBanner from '../../components/VistaComoBanner'
 import AscensoRolModal from '../../components/AscensoRolModal'
@@ -302,7 +303,7 @@ export default function ProspectadorLayout() {
           </TouchableOpacity>
         ),
         headerLeft: () => <HeaderBack />,
-        headerRight: () => null,
+        headerRight: () => <View style={{ marginRight: 10 }}><BusquedaGlobal modo="prospectador" /></View>,
       }}
     >
       <Tabs.Screen
