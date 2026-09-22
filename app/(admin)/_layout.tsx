@@ -74,11 +74,14 @@ export default function AdminLayout() {
           const ruta = (pathname || '').replace(/^\/+/, '')
           const accesoAdminParcial = data.role === 'supervisor' || data.role === 'gerente'
           if (accesoAdminParcial) {
-            // Gerente/supervisor entran a propósito a varias pantallas de admin
-            // (coordinación de citas, cierres, /crm de prospectadores…). El único
-            // caso malo es aterrizar en el MENÚ de admin (propiedades) al recargar
-            // en web: su casa es (prospectador). Solo de ahí se les saca.
+            // Gerente/supervisor entran a propósito a pantallas EXCLUSIVAS de
+            // admin (coordinación de citas, cierres, bloques…) y ahí se quedan.
+            // Pero en las COMPARTIDAS su casa es (prospectador):
+            //  - propiedades → su menú de prospectador.
+            //  - crm → su CRM PROPIO (?mios=1); el CRM de TODO el equipo se ve
+            //    desde el panel de Gerencia ("CRM de prospectadores").
             if (ruta === 'propiedades') router.replace('/(prospectador)/propiedades')
+            else if (ruta === 'crm') router.replace('/(prospectador)/crm?mios=1')
           } else {
             // asesor / prospectador / nuevo: no pintan nada en (admin).
             router.replace(destinoProspectador() as any)

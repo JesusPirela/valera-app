@@ -6,7 +6,7 @@ import { useColors } from '../../lib/ThemeContext'
 import { useVistaComo } from '../../lib/VistaComo'
 
 const ITEMS = [
-  { label: 'CRM y Pipeline comercial', desc: 'Clientes y prospectos de todo el equipo, por etapa', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
+  { label: 'CRM y Pipeline comercial', desc: 'Tus clientes y prospectos, por etapa', icon: '📒', route: '/(prospectador)/crm?mios=1', color: '#D84315' },
   { label: 'Calendario', desc: 'Tus eventos + tus citas y próximos seguimientos', icon: '📅', route: '/(prospectador)/calendario', color: '#3949AB' },
   { label: 'Mis estadísticas', desc: 'Tu desempeño: leads, cierres y actividad', icon: '📊', route: '/(prospectador)/asesor-estadisticas?modo=propio', color: '#1565c0' },
   { label: 'Estadísticas de equipo', desc: 'Desempeño de todo el equipo de prospectadores', icon: '📈', route: '/(prospectador)/asesor-estadisticas?modo=equipo', color: '#00838F' },
@@ -22,7 +22,7 @@ const GERENCIA_ITEMS = [
   { label: 'Coordinación de citas', desc: 'Panel de coordinación de citas del equipo', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32' },
   { label: 'Citas de asesores', desc: 'Tablero de citas por asesor (todas las tablas)', icon: '👥', route: '/(prospectador)/citas-asesores', color: '#7B1FA2' },
   { label: 'Cierres', desc: 'Apartado de cierres del equipo', icon: '🤝', route: '/(admin)/cierres', color: '#00695C' },
-  { label: 'CRM de prospectadores', desc: 'CRM de todos los prospectadores', icon: '📒', route: '/(admin)/crm', color: '#D84315' },
+  { label: 'CRM de prospectadores', desc: 'CRM de TODO el equipo (todos los prospectadores)', icon: '📒', route: '/(prospectador)/crm', color: '#D84315' },
   { label: 'Proyectos', desc: 'Desarrollos y proyectos', icon: '🏗️', route: '/(admin)/proyectos', color: '#455A64' },
   { label: 'Tabla de precios (inventario)', desc: 'Inventario por zona con precios en vivo', icon: '🏷️', route: '/(admin)/inventario-tabla', color: '#00838F' },
   { label: 'Ranking', desc: 'Tabla de posiciones del equipo', icon: '🏆', route: '/(prospectador)/ranking', color: '#F9A825' },
