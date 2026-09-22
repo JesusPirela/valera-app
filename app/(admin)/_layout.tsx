@@ -10,6 +10,7 @@ import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useTheme } from '../../lib/ThemeContext'
 import { useVistaComo } from '../../lib/VistaComo'
 import HeaderBack from '../../components/HeaderBack'
+import BusquedaGlobal from '../../components/BusquedaGlobal'
 import RetroPendientesPopup from '../../components/RetroPendientesPopup'
 import AnunciosPopup from '../../components/AnunciosPopup'
 
@@ -177,6 +178,7 @@ export default function AdminLayout() {
         ),
         headerRight: () => (
           <View style={styles.headerRight}>
+            <BusquedaGlobal />
             <TouchableOpacity
               onPress={() => router.push('/(admin)/notificaciones')}
               style={styles.bellBtn}
