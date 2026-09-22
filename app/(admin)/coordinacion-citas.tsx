@@ -554,11 +554,42 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
   const [prospectadores, setProspectadores]   = useState<Profile[]>([])
   const [guardando, setGuardando]             = useState(false)
   const [buscando, setBuscando]               = useState(false)
+  // Sub-modo de "Buscar existente": por nombre, o por prospecto (ver todos
+  // los clientes de un prospectador y elegir uno).
+  const [subModo, setSubModo]                 = useState<'nombre' | 'prospecto'>('nombre')
+  const [prospSel, setProspSel]               = useState<Profile | null>(null)
+  const [buscaProsp, setBuscaProsp]           = useState('')
+  const [buscaCliProsp, setBuscaCliProsp]     = useState('')
+  const [cargandoCliProsp, setCargandoCliProsp] = useState(false)
 
   useState(() => {
     supabase.from('profiles').select('id, nombre').neq('role', 'admin')
       .then(({ data }) => setProspectadores((data ?? []).filter(p => p.nombre?.trim())))
   })
+
+  // Selección de cliente (compartida por ambos sub-modos): rellena los campos.
+  function seleccionarCliente(c: { id: string; nombre: string; telefono: string; tipo_operacion: string | null; responsable_id: string | null }) {
+    setClienteId(c.id); setClienteNombre(c.nombre); setClientes([])
+    if (c.responsable_id) setProspectadorId(c.responsable_id)
+    setTipoOperacion(c.tipo_operacion === 'renta' ? 'renta' : 'venta')
+  }
+
+  async function cargarClientesDeProspecto(p: Profile) {
+    setProspSel(p); setBuscaCliProsp(''); setCargandoCliProsp(true)
+    const { data } = await supabase.from('clientes')
+      .select('id, nombre, telefono, tipo_operacion, responsable_id')
+      .eq('responsable_id', p.id).order('nombre')
+    setClientes(((data ?? []) as any[]).map(c => ({ ...c, responsable: { nombre: p.nombre ?? '' } })))
+    setCargandoCliProsp(false)
+  }
+
+  const filaCliente = (c: typeof clientes[number]) => (
+    <TouchableOpacity key={c.id} style={s.clienteRow} onPress={() => seleccionarCliente(c)}>
+      <Text style={s.clienteRowNombre}>{c.nombre}</Text>
+      {c.responsable?.nombre ? <Text style={s.clienteRowProsp}>👤 {c.responsable.nombre}</Text> : null}
+      <Text style={s.clienteRowTel}>{c.telefono}</Text>
+    </TouchableOpacity>
+  )
 
   const buscarDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   function onBusqueda(txt: string) {
@@ -673,24 +704,58 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
                   </View>
                 ) : (
                   <>
-                    <TextInput style={[s.input, { marginBottom: 6 }]} placeholder="Buscar por nombre..."
-                      value={busqueda} onChangeText={onBusqueda} autoCapitalize="words" />
-                    {buscando && <ActivityIndicator size="small" color="#1a6470" style={{ marginBottom: 8 }} />}
-                    {clientes.map(c => (
-                      <TouchableOpacity key={c.id} style={s.clienteRow}
-                        onPress={() => {
-                          setClienteId(c.id); setClienteNombre(c.nombre); setClientes([])
-                          // Autocompletar el prospectador con el dueño del cliente.
-                          if (c.responsable_id) setProspectadorId(c.responsable_id)
-                          setTipoOperacion(c.tipo_operacion === 'renta' ? 'renta' : 'venta')
-                        }}>
-                        <Text style={s.clienteRowNombre}>{c.nombre}</Text>
-                        {c.responsable?.nombre && (
-                          <Text style={s.clienteRowProsp}>👤 {c.responsable.nombre}</Text>
-                        )}
-                        <Text style={s.clienteRowTel}>{c.telefono}</Text>
+                    {/* Sub-modo: buscar por nombre, o por prospecto (ver sus clientes) */}
+                    <View style={[s.modoToggle, { marginBottom: 8 }]}>
+                      <TouchableOpacity style={[s.modoBtn, subModo === 'nombre' && s.modoBtnActivo]}
+                        onPress={() => { setSubModo('nombre'); setProspSel(null); setClientes([]); setBusqueda('') }}>
+                        <Ionicons name="search-outline" size={13} color={subModo === 'nombre' ? '#fff' : '#64748b'} />
+                        <Text style={[s.modoBtnTxt, subModo === 'nombre' && { color: '#fff', fontWeight: '700' }]}>Por nombre</Text>
                       </TouchableOpacity>
-                    ))}
+                      <TouchableOpacity style={[s.modoBtn, subModo === 'prospecto' && s.modoBtnActivo]}
+                        onPress={() => { setSubModo('prospecto'); setProspSel(null); setClientes([]); setBusqueda('') }}>
+                        <Ionicons name="person-circle-outline" size={14} color={subModo === 'prospecto' ? '#fff' : '#64748b'} />
+                        <Text style={[s.modoBtnTxt, subModo === 'prospecto' && { color: '#fff', fontWeight: '700' }]}>Por prospecto</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {subModo === 'nombre' ? (
+                      <>
+                        <TextInput style={[s.input, { marginBottom: 6 }]} placeholder="Buscar por nombre..."
+                          value={busqueda} onChangeText={onBusqueda} autoCapitalize="words" />
+                        {buscando && <ActivityIndicator size="small" color="#1a6470" style={{ marginBottom: 8 }} />}
+                        {clientes.map(filaCliente)}
+                      </>
+                    ) : !prospSel ? (
+                      <>
+                        <TextInput style={[s.input, { marginBottom: 6 }]} placeholder="Buscar prospecto…"
+                          value={buscaProsp} onChangeText={setBuscaProsp} autoCapitalize="words" />
+                        {prospectadores
+                          .filter(p => !buscaProsp.trim() || normalizar(p.nombre).includes(normalizar(buscaProsp)))
+                          .slice(0, 40)
+                          .map(p => (
+                            <TouchableOpacity key={p.id} style={s.clienteRow} onPress={() => cargarClientesDeProspecto(p)}>
+                              <Text style={s.clienteRowNombre}>👤 {p.nombre}</Text>
+                            </TouchableOpacity>
+                          ))}
+                      </>
+                    ) : (
+                      <>
+                        <View style={s.clienteSeleccionado}>
+                          <Text style={s.clienteSelNombre}>👤 {prospSel.nombre}</Text>
+                          <TouchableOpacity onPress={() => { setProspSel(null); setClientes([]); setBuscaCliProsp('') }}>
+                            <Ionicons name="close-circle" size={18} color="#94a3b8" />
+                          </TouchableOpacity>
+                        </View>
+                        <TextInput style={[s.input, { marginTop: 8, marginBottom: 6 }]} placeholder="Filtrar sus clientes…"
+                          value={buscaCliProsp} onChangeText={setBuscaCliProsp} autoCapitalize="words" />
+                        {cargandoCliProsp ? <ActivityIndicator size="small" color="#1a6470" style={{ marginBottom: 8 }} /> : (() => {
+                          const qc = normalizar(buscaCliProsp), qd = buscaCliProsp.replace(/\D/g, '')
+                          const arr = clientes.filter(c => (!qc || normalizar(c.nombre).includes(qc)) && (qd.length === 0 || (c.telefono ?? '').replace(/\D/g, '').includes(qd)))
+                          if (arr.length === 0) return <Text style={[s.clienteRowTel, { padding: 10 }]}>Este prospecto no tiene clientes que coincidan.</Text>
+                          return arr.map(filaCliente)
+                        })()}
+                      </>
+                    )}
                   </>
                 )}
               </>
