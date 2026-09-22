@@ -67,6 +67,13 @@ const PANTALLAS_PROSP: { label: string; route: string; icon: string }[] = [
 ]
 
 function limpiar(q: string) { return q.replace(/[,()%]/g, ' ').trim() }
+function rolLabel(role: string | null): string {
+  const m: Record<string, string> = {
+    admin: 'Admin', gerente: 'Gerente', supervisor: 'Supervisor',
+    asesor: 'Asesor', prospectador: 'Prospectador', prospectador_plus: 'Prospectador Plus', nuevo: 'Nuevo',
+  }
+  return m[role ?? ''] ?? (role ?? 'Usuario')
+}
 
 export default function BusquedaGlobal({ modo = 'admin' }: { modo?: 'admin' | 'prospectador' }) {
   const c = useColors()
@@ -78,11 +85,12 @@ export default function BusquedaGlobal({ modo = 'admin' }: { modo?: 'admin' | 'p
   const [q, setQ] = useState('')
   const [clientes, setClientes] = useState<Res[]>([])
   const [props, setProps] = useState<Res[]>([])
+  const [usuarios, setUsuarios] = useState<Res[]>([])
   const [buscando, setBuscando] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<TextInput>(null)
 
-  const cerrar = useCallback(() => { setAbierto(false); setQ(''); setClientes([]); setProps([]) }, [])
+  const cerrar = useCallback(() => { setAbierto(false); setQ(''); setClientes([]); setProps([]); setUsuarios([]) }, [])
   const abrir = useCallback(() => setAbierto(true), [])
 
   // Atajo Ctrl/⌘+K (web).
@@ -101,15 +109,18 @@ export default function BusquedaGlobal({ modo = 'admin' }: { modo?: 'admin' | 'p
     if (!abierto) return
     const term = limpiar(q)
     if (timer.current) clearTimeout(timer.current)
-    if (term.length < 2) { setClientes([]); setProps([]); setBuscando(false); return }
+    if (term.length < 2) { setClientes([]); setProps([]); setUsuarios([]); setBuscando(false); return }
     setBuscando(true)
     timer.current = setTimeout(async () => {
       try {
-        const [cli, pr] = await Promise.all([
+        const [cli, pr, usr] = await Promise.all([
           supabase.from('clientes').select('id, nombre, telefono')
             .or(`nombre.ilike.%${term}%,telefono.ilike.%${term}%`).limit(6),
           supabase.from('propiedades').select('id, codigo, titulo')
             .or(`codigo.ilike.%${term}%,titulo.ilike.%${term}%`).limit(6),
+          // Usuarios: solo en modo admin (quien gestiona el equipo).
+          esProsp ? Promise.resolve({ data: [] as any[] })
+            : supabase.from('profiles').select('id, nombre, role').ilike('nombre', `%${term}%`).limit(6),
         ])
         setClientes((cli.data ?? []).map((x: any) => ({
           key: 'c' + x.id, titulo: x.nombre ?? 'Cliente', sub: x.telefono ?? undefined, icon: 'person',
@@ -118,6 +129,10 @@ export default function BusquedaGlobal({ modo = 'admin' }: { modo?: 'admin' | 'p
         setProps((pr.data ?? []).map((x: any) => ({
           key: 'p' + x.id, titulo: x.titulo ?? x.codigo, sub: x.codigo, icon: 'home',
           ir: () => { cerrar(); router.push(`${rutaPropiedad}?id=${x.id}` as any) },
+        })))
+        setUsuarios(((usr as any).data ?? []).map((x: any) => ({
+          key: 'u' + x.id, titulo: x.nombre ?? 'Usuario', sub: rolLabel(x.role), icon: 'person-circle',
+          ir: () => { cerrar(); router.push({ pathname: '/(admin)/usuario-actividad', params: { id: x.id, nombre: x.nombre ?? '' } } as any) },
         })))
       } catch { /* red: sin resultados */ } finally { setBuscando(false) }
     }, 280)
@@ -135,7 +150,7 @@ export default function BusquedaGlobal({ modo = 'admin' }: { modo?: 'admin' | 'p
         ir: () => { cerrar(); router.push(p.route as any) },
       }))
 
-  const nada = !buscando && term.length >= 2 && clientes.length === 0 && props.length === 0 && pantallas.length === 0
+  const nada = !buscando && term.length >= 2 && clientes.length === 0 && props.length === 0 && usuarios.length === 0 && pantallas.length === 0
 
   return (
     <>
@@ -166,6 +181,7 @@ export default function BusquedaGlobal({ modo = 'admin' }: { modo?: 'admin' | 'p
               {nada && <Text style={[styles.vacio, { color: c.textMute }]}>Sin resultados para "{limpiar(q)}".</Text>}
               <Grupo titulo="Clientes" items={clientes} c={c} />
               <Grupo titulo="Propiedades" items={props} c={c} />
+              <Grupo titulo="Usuarios" items={usuarios} c={c} />
               <Grupo titulo="Ir a" items={pantallas} c={c} />
             </ScrollView>
           </TouchableOpacity>
