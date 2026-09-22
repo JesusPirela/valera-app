@@ -1146,7 +1146,7 @@ export default function ProspectadorPropiedades() {
     setFiltroRecamaras(b.recamaras ?? null)
     setPrecioMin(b.precioMin ?? '')
     setPrecioMax(b.precioMax ?? '')
-    setFiltroNueva((b.nueva as FiltroNueva) ?? null)
+    setFiltroNueva((b.nueva ?? null) as FiltroNueva)
     setFiltroExclusiva(!!b.exclusiva)
     setFiltroDestacada(!!b.destacada)
   }

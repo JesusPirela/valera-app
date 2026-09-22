@@ -14,7 +14,7 @@ export type FiltrosPropiedad = {
   recamaras?: number | null
   precioMin?: string
   precioMax?: string
-  nueva?: boolean
+  nueva?: number | null   // filtro "nuevas en los últimos N días" (3|7|15|30) o null
   exclusiva?: boolean
   destacada?: boolean
 }
