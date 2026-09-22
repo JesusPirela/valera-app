@@ -37,6 +37,7 @@ export function useOfflineSync(): OfflineSyncState {
       if (success > 0) {
         // Invalidar cache para reflejar los datos recién guardados
         queryClient.invalidateQueries({ queryKey: ['clientes'] })
+        queryClient.invalidateQueries({ queryKey: ['detalle-cliente'] })
         // Publicaciones encoladas ya aplicadas → refrescar contadores x/10
         queryClient.invalidateQueries({ queryKey: ['publicaciones-usuario'] })
         if (hadPublications) {

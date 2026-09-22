@@ -1,16 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
+import { registrarSeguimiento } from './gamification'
 
 const QUEUE_KEY = 'VALERA_OFFLINE_QUEUE_v1'
 
 export type QueueOp = {
   id: string
-  type: 'update_client' | 'create_client' | 'publish_property'
+  type: 'update_client' | 'create_client' | 'publish_property' | 'update_recordatorio'
   ts: number
   userId?: string            // quien creó la operación; evita que otro usuario la ejecute
   clienteId?: string         // para update: id real; para create: UUID generado localmente
   propiedadId?: string       // para publish_property
   idemKey?: string           // para publish_property: MISMO key en cada reintento → nunca duplica
+  recordatorioId?: string    // para update_recordatorio
   payload: Record<string, any>
 }
 
@@ -83,6 +85,29 @@ export async function enqueuePublicacion(propiedadId: string, idemKey: string, u
   await saveQueue([...queue, op])
 }
 
+// Encola la actualización de un recordatorio (completar, posponer, mover a
+// mañana). Igual que enqueueClienteUpdate: si ya hay una op pendiente para
+// ese recordatorio, fusiona el payload en vez de crear una segunda entrada
+// (ej. "completar" tras un "aplazar" fallido no debe perder el aplazamiento
+// ni duplicar la operación). clienteId es opcional y NO se envía a la BD:
+// solo se usa para acreditar el seguimiento (gamification) si esta op es
+// la que marca completado=true y logra sincronizar más tarde.
+export async function enqueueRecordatorioUpdate(
+  recordatorioId: string,
+  payload: Record<string, any>,
+  clienteId?: string,
+): Promise<void> {
+  const queue = await getQueue()
+  const idx = queue.findIndex(q => q.type === 'update_recordatorio' && q.recordatorioId === recordatorioId)
+  if (idx >= 0) {
+    queue[idx] = { ...queue[idx], ts: Date.now(), payload: { ...queue[idx].payload, ...payload }, clienteId: clienteId ?? queue[idx].clienteId }
+    await saveQueue(queue)
+  } else {
+    const op: QueueOp = { id: genUUID(), type: 'update_recordatorio', ts: Date.now(), recordatorioId, clienteId, payload }
+    await saveQueue([...queue, op])
+  }
+}
+
 export async function getPendingCount(): Promise<number> {
   return (await getQueue()).length
 }
@@ -135,6 +160,15 @@ export async function flushQueue(): Promise<{ success: number; failed: number; h
         // atorada para siempre, mostrando "N cambios no se pudieron enviar" sin fin.
         if (error) throw error
         hadPublications = true
+      } else if (op.type === 'update_recordatorio') {
+        const { error } = await supabase
+          .from('recordatorios')
+          .update(op.payload)
+          .eq('id', op.recordatorioId!)
+        if (error) throw error
+        if (op.payload.completado === true && op.clienteId && currentUserId) {
+          registrarSeguimiento(currentUserId, op.clienteId).catch(() => {})
+        }
       }
       success++
     } catch {

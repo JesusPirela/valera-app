@@ -15,6 +15,9 @@ import { programarRecordatorios } from '../../lib/notificaciones-locales'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { Ionicons } from '@expo/vector-icons'
 import { puedeEnviarClienteAChatbot } from '../../lib/permisos'
+import { useOfflineSync } from '../../hooks/useOfflineSync'
+import { enqueueRecordatorioUpdate } from '../../lib/offline-queue'
+import { conTimeout } from '../../lib/redIntentos'
 
 type Cliente = {
   id: string; nombre: string; telefono: string; email: string | null
@@ -256,6 +259,7 @@ export default function DetalleCliente() {
   const { id, ro } = useLocalSearchParams<{ id: string; ro?: string }>()
   const soloLectura = ro === '1'  // viendo el cliente de otra persona: no se edita
   const queryClient = useQueryClient()
+  const { refreshPending } = useOfflineSync()
 
   const { data, isLoading, refetch } = useQuery({
     // Sufijo 'v2': ver nota en (prospectador)/crm.tsx — invalida caché en
@@ -426,16 +430,42 @@ export default function DetalleCliente() {
     }
   }
 
+  // Escritura de un campo de recordatorio con timeout + 1 reintento y, si aun
+  // así no llega (offline o sesión colgada), se ENCOLA para reintentar sola.
+  // Sin esto el cambio se veía guardado por el optimista pero al recargar
+  // revertía sin avisar (ver mismo patrón en crm.tsx).
+  async function guardarRecordatorio(recId: string, payload: Record<string, any>): Promise<boolean> {
+    queryClient.setQueryData(['detalle-cliente', id, 'v2'], (old: typeof data) => {
+      if (!old) return old
+      return { ...old, recordatorios: old.recordatorios.map(r => r.id === recId ? { ...r, ...payload } : r) }
+    })
+    tocarCliente()
+
+    let ok = false
+    for (let intento = 1; intento <= 2; intento++) {
+      try {
+        const { error } = await conTimeout(
+          supabase.from('recordatorios').update(payload).eq('id', recId),
+          12_000,
+        )
+        if (!error) { ok = true; break }
+        break  // error real del servidor: no reintentar
+      } catch { /* timeout / caída de red: reintentar una vez */ }
+    }
+
+    if (!ok) {
+      await enqueueRecordatorioUpdate(recId, payload, payload.completado ? (id as string) : undefined)
+      await refreshPending()
+    }
+    return ok
+  }
+
   async function aplazar15min(recId: string, fechaActual: string) {
     if (soloLectura) return
     const nueva = new Date(new Date(fechaActual).getTime() + 15 * 60 * 1000)
-    const { error } = await supabase.from('recordatorios')
-      .update({ fecha_hora: nueva.toISOString() }).eq('id', recId)
-    if (!error) {
-      tocarCliente()
-      refetch()
-      programarRecordatorios()
-    }
+    const ok = await guardarRecordatorio(recId, { fecha_hora: nueva.toISOString() })
+    refetch()
+    if (ok) programarRecordatorios()
   }
 
   async function hacerManana(recId: string, fechaActual: string) {
@@ -444,24 +474,15 @@ export default function DetalleCliente() {
     const manana = new Date()
     manana.setDate(manana.getDate() + 1)
     manana.setHours(base.getHours(), base.getMinutes(), 0, 0)
-    const { error } = await supabase.from('recordatorios')
-      .update({ fecha_hora: manana.toISOString() }).eq('id', recId)
-    if (!error) {
-      tocarCliente()
-      refetch()
-      programarRecordatorios()
-    }
+    const ok = await guardarRecordatorio(recId, { fecha_hora: manana.toISOString() })
+    refetch()
+    if (ok) programarRecordatorios()
   }
 
   async function completarRecordatorio(recId: string) {
     if (soloLectura) return
-    const { error } = await supabase.from('recordatorios').update({ completado: true }).eq('id', recId)
-    queryClient.setQueryData(['detalle-cliente', id, 'v2'], (old: typeof data) => {
-      if (!old) return old
-      return { ...old, recordatorios: old.recordatorios.map(r => r.id === recId ? { ...r, completado: true } : r) }
-    })
-    tocarCliente()
-    if (!error) {
+    const ok = await guardarRecordatorio(recId, { completado: true })
+    if (ok) {
       const { data: { user } } = await getUsuarioActual()
       if (user) registrarSeguimiento(user.id, id as string).catch(() => {})
     }
