@@ -26,11 +26,26 @@ function desdeISO(p: Periodo): string | null {
 }
 
 type RankRow = { id: string; nombre: string; citas_realizadas?: number; ventas_cerradas?: number; rentas_cerradas?: number; posicion?: number }
+type CitaHoy = { id: string; estado: string; fecha_cita: string | null; clientes: { nombre: string } | null; asesor: { nombre: string } | null }
+type Activo = { id: string; nombre: string | null; role: string }
 type Datos = {
   leads: number; clientesNuevos: number; citas: number; cierres: number
   estancadas: number; segVencidos: number; ranking: RankRow[]
+  citasHoy: CitaHoy[]; activos: Activo[]
 }
-const VACIO: Datos = { leads: 0, clientesNuevos: 0, citas: 0, cierres: 0, estancadas: 0, segVencidos: 0, ranking: [] }
+const VACIO: Datos = { leads: 0, clientesNuevos: 0, citas: 0, cierres: 0, estancadas: 0, segVencidos: 0, ranking: [], citasHoy: [], activos: [] }
+
+const ESTADO_COLOR: Record<string, string> = {
+  por_contactar: '#3b82f6', primer_contacto: '#8b5cf6', buscando_opciones: '#ca8a04',
+  en_coordinacion: '#f97316', coordinada: '#16a34a', reagendada: '#b45309',
+  no_responde_asesor: '#dc2626', realizada: '#0d9488', aparto: '#7c3aed',
+  recaudando_documentacion: '#0369a1', aprobando_credito: '#d97706',
+  firma_contrato: '#059669', escrituracion: '#c2410c', cancelada: '#64748b',
+}
+function horaTxt(iso: string | null) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+}
 
 const ESTADOS_TERMINALES = '("cancelada","realizada","escrituracion","aparto","firma_contrato")'
 
@@ -46,9 +61,12 @@ export default function Cockpit() {
     const desde = desdeISO(p)
     const hace3dias = new Date(Date.now() - 3 * 86_400_000).toISOString()
     const ahora = new Date().toISOString()
+    const hoy0 = new Date(); hoy0.setHours(0, 0, 0, 0)
+    const manana0 = new Date(hoy0); manana0.setDate(hoy0.getDate() + 1)
+    const hace10min = new Date(Date.now() - 10 * 60_000).toISOString()
     const rango = <T extends { gte: (col: string, v: string) => T }>(q: T) => (desde ? q.gte('created_at', desde) : q)
     try {
-      const [leadsR, cliR, citasR, cierresR, estR, segR, rankR] = await Promise.all([
+      const [leadsR, cliR, citasR, cierresR, estR, segR, rankR, citasHoyR, activosR] = await Promise.all([
         rango(supabase.from('clientes').select('id', { count: 'exact', head: true }).eq('es_lead_campania', true) as any),
         rango(supabase.from('clientes').select('id', { count: 'exact', head: true }) as any),
         rango(supabase.from('citas_coordinacion').select('id', { count: 'exact', head: true }) as any),
@@ -58,6 +76,13 @@ export default function Cockpit() {
         supabase.from('citas_venta').select('id', { count: 'exact', head: true })
           .not('fecha_prox_seguimiento_ts', 'is', null).lt('fecha_prox_seguimiento_ts', ahora),
         supabase.rpc('get_ranking'),
+        supabase.from('citas_coordinacion')
+          .select('id, estado, fecha_cita, clientes(nombre), asesor:asesor_id(nombre)')
+          .gte('fecha_cita', hoy0.toISOString()).lt('fecha_cita', manana0.toISOString())
+          .neq('estado', 'cancelada').order('fecha_cita', { ascending: true }),
+        supabase.from('profiles').select('id, nombre, role')
+          .gte('last_seen', hace10min).not('role', 'in', '("admin","supervisor")')
+          .order('last_seen', { ascending: false }),
       ])
       setD({
         leads: leadsR.count ?? 0,
@@ -67,6 +92,8 @@ export default function Cockpit() {
         estancadas: estR.count ?? 0,
         segVencidos: segR.count ?? 0,
         ranking: ((rankR.data ?? []) as RankRow[]).slice(0, 5),
+        citasHoy: ((citasHoyR.data ?? []) as unknown as CitaHoy[]),
+        activos: ((activosR.data ?? []) as Activo[]),
       })
     } catch {
       // Sin red: se conserva lo anterior y no se cuelga.
@@ -131,6 +158,46 @@ export default function Cockpit() {
         <Alerta icon="🔔" texto="Seguimientos vencidos" value={d.segVencidos}
           color="#dc2626" onPress={() => router.push('/(admin)/citas-venta')} c={c} />
       </View>
+
+      {/* Citas de hoy */}
+      <View style={[st.card, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={st.cardHead}>
+          <Text style={[st.cardTit, { color: c.text, marginBottom: 0 }]}>Citas de hoy</Text>
+          <TouchableOpacity onPress={() => router.push('/(admin)/coordinacion-citas')}><Text style={st.verMas}>Abrir kanban ›</Text></TouchableOpacity>
+        </View>
+        {d.citasHoy.length === 0 ? (
+          <Text style={[st.sinDatos, { color: c.textMute }]}>No hay citas agendadas para hoy.</Text>
+        ) : d.citasHoy.map(cita => {
+          const color = ESTADO_COLOR[cita.estado] ?? '#64748b'
+          return (
+            <TouchableOpacity key={cita.id} style={st.citaRow} onPress={() => router.push('/(admin)/coordinacion-citas')} activeOpacity={0.8}>
+              <View style={[st.citaHora, { backgroundColor: color + '20' }]}><Text style={[st.citaHoraTxt, { color }]}>{horaTxt(cita.fecha_cita)}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={[st.citaNombre, { color: c.text }]} numberOfLines={1}>{cita.clientes?.nombre ?? 'Sin nombre'}</Text>
+                <Text style={[st.citaEstado, { color }]} numberOfLines={1}>{cita.estado.replace(/_/g, ' ')}{cita.asesor ? ` · ${cita.asesor.nombre.split(' ')[0]}` : ''}</Text>
+              </View>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+
+      {/* En línea ahora */}
+      {d.activos.length > 0 && (
+        <View style={[st.card, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={st.cardHead}>
+            <Text style={[st.cardTit, { color: c.text, marginBottom: 0 }]}>🟢 En línea ahora ({d.activos.length})</Text>
+            <TouchableOpacity onPress={() => router.push('/(admin)/conexion-usuarios')}><Text style={st.verMas}>Historial ›</Text></TouchableOpacity>
+          </View>
+          <View style={st.activosWrap}>
+            {d.activos.map(u => (
+              <View key={u.id} style={st.activoPill}>
+                <View style={st.activoDot} />
+                <Text style={st.activoNombre} numberOfLines={1}>{u.nombre ?? u.id.slice(0, 6)}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       {/* Ranking */}
       <View style={[st.card, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -253,6 +320,15 @@ const st = StyleSheet.create({
   rankVal: { fontSize: 12, fontWeight: '800' },
   rankTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   rankFill: { height: '100%', borderRadius: 3, backgroundColor: TEAL },
+  citaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 },
+  citaHora: { minWidth: 52, alignItems: 'center', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 6 },
+  citaHoraTxt: { fontSize: 12, fontWeight: '800' },
+  citaNombre: { fontSize: 13, fontWeight: '700' },
+  citaEstado: { fontSize: 11, fontWeight: '600', marginTop: 1, textTransform: 'capitalize' },
+  activosWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  activoPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#bbf7d0' },
+  activoDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22c55e' },
+  activoNombre: { fontSize: 12, fontWeight: '700', maxWidth: 120, color: '#14532d' },
   linkGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
   linkIcon: { fontSize: 17 },

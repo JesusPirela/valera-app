@@ -70,9 +70,7 @@ type OrdenPublicaciones = 'desc' | 'asc' | null
 // (patrón tipo Ajustes de iOS/macOS). Paleta curada y armónica, no arcoíris.
 const NAV_ITEMS = [
   // Inicio — visión general
-  { label: 'Panel', desc: 'KPIs y embudo del negocio', ion: 'analytics', color: '#0D9488', route: '/(admin)/cockpit', grupo: 'Inicio' },
-  { label: 'Dashboard', desc: 'Resumen y actividad', ion: 'speedometer', color: '#2563EB', route: '/(admin)/dashboard', grupo: 'Inicio' },
-  { label: 'Estadísticas', desc: 'Métricas del equipo', ion: 'stats-chart', color: '#0891B2', route: '/(admin)/estadisticas', grupo: 'Inicio' },
+  { label: 'Panel', desc: 'KPIs, embudo y actividad', ion: 'analytics', color: '#0D9488', route: '/(admin)/cockpit', grupo: 'Inicio' },
   { label: 'Actividad', desc: 'Bitácora de actividad', ion: 'pulse', color: '#7C3AED', route: '/(admin)/actividad', grupo: 'Inicio' },
   { label: 'Monitoreo', desc: 'Errores y salud', ion: 'medkit', color: '#DC2626', route: '/(admin)/monitoreo', grupo: 'Inicio' },
 

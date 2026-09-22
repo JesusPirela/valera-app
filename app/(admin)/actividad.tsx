@@ -120,7 +120,7 @@ export default function ActividadAdmin() {
       </View>
 
       {/* Filtros */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtrosRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtrosRow} contentContainerStyle={s.filtrosContent}>
         <FiltroChip label="Todos" value="todos" />
         <FiltroChip label="Solo descargas" value="descarga" />
         <FiltroChip label="Solo vistas" value="vista" />
@@ -137,6 +137,7 @@ export default function ActividadAdmin() {
         </View>
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           refreshControl={refreshControl}
           data={registrosFiltrados}
           keyExtractor={(item) => item.id}
@@ -212,8 +213,13 @@ function makeStyles(c: AppColors) {
     },
 
     filtrosRow: {
-      flexDirection: 'row',
+      flexGrow: 0,
       marginBottom: 14,
+    },
+    filtrosContent: {
+      gap: 8,
+      alignItems: 'center',
+      paddingRight: 4,
     },
     chip: {
       borderWidth: 1,
@@ -221,7 +227,6 @@ function makeStyles(c: AppColors) {
       borderRadius: 16,
       paddingHorizontal: 14,
       paddingVertical: 6,
-      marginRight: 8,
       backgroundColor: c.card,
     },
     chipActive: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
