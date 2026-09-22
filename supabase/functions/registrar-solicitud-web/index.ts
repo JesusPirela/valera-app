@@ -27,6 +27,56 @@ const EXT_POR_MIME: Record<string, string> = {
 const RUTA_DOCUMENTO_RE = /^[0-9a-f-]{36}\/[\w.-]+$/
 const MAX_DOCUMENTOS = 2
 
+// ── Código de seguimiento (sin cuenta) ──────────────────────────────────────
+// Formato VLR-XXXXXX. Charset sin 0/O/1/I para que no se confundan al
+// transcribirlo a mano o dictarlo por teléfono.
+const CODIGO_CHARSET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
+const CODIGO_LEN = 6
+const CODIGO_RE = /^VLR-[0-9A-Z]{6}$/
+
+function generarCodigoSeguimiento(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(CODIGO_LEN))
+  let sufijo = ''
+  for (let i = 0; i < CODIGO_LEN; i++) sufijo += CODIGO_CHARSET[bytes[i] % CODIGO_CHARSET.length]
+  return `VLR-${sufijo}`
+}
+
+// Inserta el candidato con un código de seguimiento único, reintentando si
+// choca con el UNIQUE (probabilidad mínima con 32^6 combinaciones, pero la
+// colisión SÍ se puede dar y no debe tumbar el registro).
+async function insertarCandidatoConCodigo(
+  db: SupabaseClient,
+  fila: Record<string, unknown>,
+): Promise<{ codigo: string } | null> {
+  for (let intento = 0; intento < 5; intento++) {
+    const codigo = generarCodigoSeguimiento()
+    const { error } = await db.from('candidatos_reclutamiento').insert({ ...fila, codigo_seguimiento: codigo })
+    if (!error) return { codigo }
+    // 23505 = unique_violation. Cualquier otro error no tiene sentido reintentarlo.
+    if ((error as { code?: string }).code !== '23505') return null
+  }
+  return null
+}
+
+// Consulta pública de estado por código — sin nombre/teléfono, sin sesión.
+// Responde SOLO nombre (primero) + estado: nunca teléfono, email, mensaje ni
+// documentos, porque el código es la única protección de este endpoint.
+async function consultarSeguimiento(db: SupabaseClient, body: Record<string, unknown>): Promise<Response> {
+  const codigo = String(body.codigo ?? '').trim().toUpperCase()
+  if (!CODIGO_RE.test(codigo)) return err('No encontramos ninguna solicitud con ese código.')
+
+  const { data } = await db
+    .from('candidatos_reclutamiento')
+    .select('nombre, estado')
+    .eq('codigo_seguimiento', codigo)
+    .maybeSingle()
+
+  if (!data) return err('No encontramos ninguna solicitud con ese código.')
+
+  const primerNombre = String(data.nombre ?? '').trim().split(/\s+/)[0] || 'Candidato'
+  return ok({ nombre: primerNombre, estado: data.estado })
+}
+
 // Genera la URL firmada de subida para UN documento. No requiere nombre ni
 // teléfono, y NO inserta nada en ninguna tabla — solo reserva el espacio en
 // Storage para que la landing suba el archivo directo (sin pasar el binario
@@ -77,6 +127,12 @@ serve(async (req) => {
       return await prepararDocumento(db, body)
     }
 
+    // ── Acción especial: consultar seguimiento por código (solo lectura,
+    // sin nombre/teléfono — el código es la única credencial). ──
+    if (origen === 'reclutamiento' && body.accion === 'consultar_seguimiento') {
+      return await consultarSeguimiento(db, body)
+    }
+
     const nombre = String(body.nombre ?? '').trim()
     const telefono = String(body.telefono ?? '').trim()
     if (!nombre || !telefono) return err('Nombre y teléfono son obligatorios.')
@@ -85,6 +141,7 @@ serve(async (req) => {
 
     let notifTitulo: string
     let notifMensaje: string
+    let codigoSeguimiento: string | null = null
 
     if (origen === 'reclutamiento') {
       const email = body.email != null ? String(body.email).trim() || null : null
@@ -102,8 +159,9 @@ serve(async (req) => {
         })
       }
 
-      const { error: eIns } = await db.from('candidatos_reclutamiento').insert({ nombre, telefono, email, mensaje, documentos })
-      if (eIns) return err('No se pudo registrar. Intenta de nuevo.', 500)
+      const insertado = await insertarCandidatoConCodigo(db, { nombre, telefono, email, mensaje, documentos })
+      if (!insertado) return err('No se pudo registrar. Intenta de nuevo.', 500)
+      codigoSeguimiento = insertado.codigo
 
       notifTitulo = '🧑‍💼 Nuevo candidato desde el sitio web'
       notifMensaje = `${nombre} · ${telefono}${email ? ` · ${email}` : ''}${documentos.length ? ` · 📎 ${documentos.length} doc.` : ''}`
@@ -146,7 +204,7 @@ serve(async (req) => {
       )
     }
 
-    return ok()
+    return ok(codigoSeguimiento ? { codigo_seguimiento: codigoSeguimiento } : {})
   } catch (e) {
     return err(`Error: ${String((e as Error)?.message ?? e)}`, 500)
   }
