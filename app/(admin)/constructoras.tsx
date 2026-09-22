@@ -62,6 +62,27 @@ const EMPTY_CONTACTO: Omit<Contacto, 'id'> = {
   notas: null,
 }
 
+// ── Desarrollos pendientes de subir (solo admin/gerente) ────────────────────
+type EstadoPendiente = 'pendiente' | 'en_proceso' | 'subido'
+type Pendiente = {
+  id: string
+  nombre: string
+  constructora: string | null
+  zona: string | null
+  notas: string | null
+  estado: EstadoPendiente
+  created_at: string
+}
+const EMPTY_PENDIENTE: Omit<Pendiente, 'id' | 'estado' | 'created_at'> = {
+  nombre: '', constructora: null, zona: null, notas: null,
+}
+const ESTADO_PEND_LABEL: Record<EstadoPendiente, string> = {
+  pendiente: 'Pendiente', en_proceso: 'En proceso', subido: 'Subido',
+}
+const ESTADO_PEND_COLOR: Record<EstadoPendiente, string> = {
+  pendiente: '#c9a84c', en_proceso: '#0284C7', subido: '#16A34A',
+}
+
 function formatPrecio(precio: number | null) {
   if (precio == null) return 'Precio a consultar'
   return `$${precio.toLocaleString('es-MX')} MXN`
@@ -102,7 +123,9 @@ export default function AdminConstructoras() {
   // 'queretaro' (por defecto) muestra SOLO desarrollos de Querétaro; 'nacional'
   // muestra los de otros estados, seccionados por estado → zona.
   const scope: 'queretaro' | 'nacional' = params.scope === 'nacional' ? 'nacional' : 'queretaro'
-  const [vista, setVista] = useState<'catalogo' | 'contactos'>(params.vista === 'contactos' ? 'contactos' : 'catalogo')
+  const [vista, setVista] = useState<'catalogo' | 'contactos' | 'pendientes'>(
+    params.vista === 'contactos' ? 'contactos' : params.vista === 'pendientes' ? 'pendientes' : 'catalogo'
+  )
   const [rol, setRol] = useState<string | null>(null)
 
   // ── Catálogo (igual al que ve el prospectador) ──────────────────────────
@@ -121,12 +144,24 @@ export default function AdminConstructoras() {
   const [form, setForm] = useState<Omit<Contacto, 'id'>>(EMPTY_CONTACTO)
   const [guardando, setGuardando] = useState(false)
 
+  // ── Desarrollos pendientes (solo admin/gerente) ───────────────────────────
+  const [pendientes, setPendientes] = useState<Pendiente[]>([])
+  const [loadingPendientes, setLoadingPendientes] = useState(true)
+  const [modalPendiente, setModalPendiente] = useState(false)
+  const [editandoPendiente, setEditandoPendiente] = useState<Pendiente | null>(null)
+  const [formPendiente, setFormPendiente] = useState<Omit<Pendiente, 'id' | 'estado' | 'created_at'>>(EMPTY_PENDIENTE)
+  const [guardandoPendiente, setGuardandoPendiente] = useState(false)
+  const [actualizandoPendiente, setActualizandoPendiente] = useState<string | null>(null)
+
   useFocusEffect(useCallback(() => {
     cargarRol()
     cargarCatalogo()
     cargarContactos()
+    cargarPendientes()
   }, []))
-  const { refreshControl } = usePullRefresh(async () => { await Promise.all([cargarCatalogo(), cargarContactos()]) })
+  const { refreshControl } = usePullRefresh(async () => {
+    await Promise.all([cargarCatalogo(), cargarContactos(), cargarPendientes()])
+  })
 
   async function cargarRol() {
     const { data: { user } } = await getUsuarioActual()
@@ -159,6 +194,20 @@ export default function AdminConstructoras() {
     const { data } = await supabase.from('constructoras').select('*').order('nombre')
     setContactos(data ?? [])
     setLoadingContactos(false)
+  }
+
+  const ORDEN_ESTADO_PEND: Record<EstadoPendiente, number> = { pendiente: 0, en_proceso: 1, subido: 2 }
+  async function cargarPendientes() {
+    setLoadingPendientes(true)
+    const { data } = await supabase
+      .from('desarrollos_pendientes')
+      .select('*')
+      .order('created_at', { ascending: false })
+    // Pendientes/en proceso arriba, subidos al final — más útil que orden
+    // alfabético para "qué me falta por subir".
+    const lista = ((data as Pendiente[]) ?? []).sort((a, b) => ORDEN_ESTADO_PEND[a.estado] - ORDEN_ESTADO_PEND[b.estado])
+    setPendientes(lista)
+    setLoadingPendientes(false)
   }
 
   // Cada modelo con su fraccionamiento/colonia (derivado de dirección + título).
@@ -401,24 +450,177 @@ export default function AdminConstructoras() {
     }
   }
 
+  function abrirNuevoPendiente() {
+    setEditandoPendiente(null)
+    setFormPendiente(EMPTY_PENDIENTE)
+    setModalPendiente(true)
+  }
+
+  function abrirEditarPendiente(item: Pendiente) {
+    setEditandoPendiente(item)
+    setFormPendiente({ nombre: item.nombre, constructora: item.constructora, zona: item.zona, notas: item.notas })
+    setModalPendiente(true)
+  }
+
+  async function guardarPendiente() {
+    if (!formPendiente.nombre.trim()) { alerta('El nombre del desarrollo es obligatorio'); return }
+    setGuardandoPendiente(true)
+    try {
+      const payload = {
+        nombre:       formPendiente.nombre.trim(),
+        constructora: formPendiente.constructora?.trim() || null,
+        zona:         formPendiente.zona?.trim() || null,
+        notas:        formPendiente.notas?.trim() || null,
+      }
+      if (editandoPendiente) {
+        const { error } = await supabase.from('desarrollos_pendientes').update(payload).eq('id', editandoPendiente.id)
+        if (error) throw error
+      } else {
+        const { data: { user } } = await getUsuarioActual()
+        const { error } = await supabase.from('desarrollos_pendientes').insert({ ...payload, created_by: user?.id ?? null })
+        if (error) throw error
+      }
+      setModalPendiente(false)
+      cargarPendientes()
+    } catch (e: any) {
+      alerta('Error: ' + e.message)
+    } finally {
+      setGuardandoPendiente(false)
+    }
+  }
+
+  async function eliminarPendiente(item: Pendiente) {
+    const confirmar = async () => {
+      const { error } = await supabase.from('desarrollos_pendientes').delete().eq('id', item.id)
+      if (error) alerta('Error: ' + error.message)
+      else cargarPendientes()
+    }
+    const msg = `¿Quitar "${item.nombre}" de la lista de pendientes?`
+    if (Platform.OS === 'web') {
+      if (window.confirm(msg)) confirmar()
+    } else {
+      Alert.alert('Quitar', msg, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Quitar', style: 'destructive', onPress: confirmar },
+      ])
+    }
+  }
+
+  async function cambiarEstadoPendiente(id: string, estado: EstadoPendiente) {
+    setActualizandoPendiente(id)
+    setPendientes(prev => prev.map(x => x.id === id ? { ...x, estado } : x)) // optimista
+    const { error } = await supabase.from('desarrollos_pendientes').update({ estado }).eq('id', id)
+    setActualizandoPendiente(null)
+    if (error) cargarPendientes() // revertir si falló
+  }
+
   const esAdmin = rol === 'admin'
+  const esGerente = rol === 'gerente'
+  const puedeGestionarPendientes = esAdmin || esGerente
+  const pendientesActivos = pendientes.filter(p => p.estado !== 'subido').length
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
       <View style={styles.headerRow}>
-        {esAdmin && (
+        {vista !== 'catalogo' && (
           <TouchableOpacity
-            style={[styles.toggleBtn, vista === 'contactos' && styles.toggleBtnActivo]}
-            onPress={() => setVista(vista === 'catalogo' ? 'contactos' : 'catalogo')}
+            style={[styles.toggleBtn, styles.toggleBtnActivo]}
+            onPress={() => setVista('catalogo')}
           >
-            <Text style={[styles.toggleBtnTxt, vista === 'contactos' && styles.toggleBtnTxtActivo]}>
-              {vista === 'catalogo' ? '📞 Ver contactos de constructoras' : '🏗️ Ver catálogo'}
+            <Text style={[styles.toggleBtnTxt, styles.toggleBtnTxtActivo]}>🏗️ Ver catálogo</Text>
+          </TouchableOpacity>
+        )}
+        {vista === 'catalogo' && esAdmin && (
+          <TouchableOpacity style={styles.toggleBtn} onPress={() => setVista('contactos')}>
+            <Text style={styles.toggleBtnTxt}>📞 Ver contactos de constructoras</Text>
+          </TouchableOpacity>
+        )}
+        {vista === 'catalogo' && puedeGestionarPendientes && (
+          <TouchableOpacity style={styles.toggleBtn} onPress={() => setVista('pendientes')}>
+            <Text style={styles.toggleBtnTxt}>
+              📝 Desarrollos pendientes{pendientesActivos > 0 ? ` (${pendientesActivos})` : ''}
             </Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {vista === 'catalogo' || !esAdmin ? (
+      {vista === 'pendientes' && puedeGestionarPendientes ? (
+        <>
+          {/* Barra superior: título + botón nuevo */}
+          <View style={styles.contactosTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.introTitle, { color: c.text, fontSize: 18 }]}>📝 Desarrollos pendientes</Text>
+              <Text style={[styles.introSub, { color: c.textMute }]}>Lo que sabemos que falta por subir al catálogo.</Text>
+            </View>
+            <TouchableOpacity style={styles.btnNuevoCircle} onPress={abrirNuevoPendiente}>
+              <Text style={styles.btnNuevoCircleTxt}>+</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loadingPendientes ? (
+            <ActivityIndicator color="#c9a84c" size="large" style={{ marginTop: 40 }} />
+          ) : pendientes.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={{ fontSize: 46, marginBottom: 10 }}>📝</Text>
+              <Text style={[styles.emptyText, { color: c.textMute }]}>No hay desarrollos pendientes anotados.</Text>
+              <TouchableOpacity style={styles.btnAdd} onPress={abrirNuevoPendiente}>
+                <Text style={styles.btnAddText}>+ Agregar el primero</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={{ paddingBottom: 32, gap: 10 }} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
+              {pendientes.map(item => (
+                <View key={item.id} style={[styles.contactoCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                  <View style={styles.contactoHeaderRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.contactoEmpresa, { color: c.text }]}>{item.nombre}</Text>
+                      {item.constructora ? (
+                        <Text style={[styles.contactoCargo, { color: '#1a6470' }]}>🏗️ {item.constructora}</Text>
+                      ) : null}
+                      {item.zona ? (
+                        <Text style={[styles.contactoCargo, { color: c.textMute }]}>📍 {item.zona}</Text>
+                      ) : null}
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 4 }}>
+                      <TouchableOpacity style={styles.contactoAccionBtn} onPress={() => abrirEditarPendiente(item)}>
+                        <Text style={styles.contactoAccionIco}>✏️</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.contactoAccionBtn} onPress={() => eliminarPendiente(item)}>
+                        <Text style={styles.contactoAccionIco}>🗑️</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {item.notas ? (
+                    <View style={[styles.contactoNotas, { backgroundColor: c.bg }]}>
+                      <Text style={[styles.contactoNotasTxt, { color: c.textMute }]}>{item.notas}</Text>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.estadoPendRow}>
+                    {(['pendiente', 'en_proceso', 'subido'] as const).map(e => (
+                      <TouchableOpacity
+                        key={e}
+                        onPress={() => cambiarEstadoPendiente(item.id, e)}
+                        disabled={actualizandoPendiente === item.id}
+                        style={[
+                          styles.estadoPendBtn,
+                          { borderColor: ESTADO_PEND_COLOR[e] },
+                          item.estado === e && { backgroundColor: ESTADO_PEND_COLOR[e] },
+                        ]}
+                      >
+                        <Text style={[styles.estadoPendBtnTxt, { color: item.estado === e ? '#fff' : ESTADO_PEND_COLOR[e] }]}>
+                          {ESTADO_PEND_LABEL[e]}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </>
+      ) : vista === 'catalogo' || !esAdmin ? (
         <>
           <View style={styles.intro}>
             <Text style={[styles.introTitle, { color: c.text }]}>
@@ -873,6 +1075,79 @@ export default function AdminConstructoras() {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Modal agregar/editar desarrollo pendiente */}
+      <Modal visible={modalPendiente} transparent animationType="slide" onRequestClose={() => setModalPendiente(false)}>
+        <View style={styles.modalOverlay}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ justifyContent: 'flex-end', flexGrow: 1 }}
+            keyboardShouldPersistTaps="always"
+          >
+            <View style={[styles.modalBox, { backgroundColor: c.card }]}>
+              <Text style={[styles.modalTitulo, { color: c.text }]}>
+                {editandoPendiente ? 'Editar pendiente' : 'Nuevo desarrollo pendiente'}
+              </Text>
+
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Nombre del desarrollo *</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={formPendiente.nombre}
+                onChangeText={v => setFormPendiente(f => ({ ...f, nombre: v }))}
+                placeholder="Ej. Residencial Las Torres"
+                placeholderTextColor={c.placeholder}
+                autoCapitalize="words"
+              />
+
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Constructora</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={formPendiente.constructora ?? ''}
+                onChangeText={v => setFormPendiente(f => ({ ...f, constructora: v }))}
+                placeholder="Ej. Spacio Vitale"
+                placeholderTextColor={c.placeholder}
+                autoCapitalize="words"
+              />
+
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Zona / ciudad</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={formPendiente.zona ?? ''}
+                onChangeText={v => setFormPendiente(f => ({ ...f, zona: v }))}
+                placeholder="Ej. Querétaro, El Marqués"
+                placeholderTextColor={c.placeholder}
+                autoCapitalize="words"
+              />
+
+              <Text style={[styles.fieldLabel, { color: c.textSub }]}>Notas</Text>
+              <TextInput
+                style={[styles.input, styles.inputMultiline, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={formPendiente.notas ?? ''}
+                onChangeText={v => setFormPendiente(f => ({ ...f, notas: v }))}
+                placeholder="Qué falta, con quién se habló, fecha estimada, etc."
+                placeholderTextColor={c.placeholder}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={[styles.btnGuardar, guardandoPendiente && { opacity: 0.5 }]}
+                onPress={guardarPendiente}
+                disabled={guardandoPendiente}
+              >
+                {guardandoPendiente
+                  ? <ActivityIndicator color="#000" />
+                  : <Text style={styles.btnGuardarText}>Guardar</Text>
+                }
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnCancelar} onPress={() => setModalPendiente(false)}>
+                <Text style={[styles.btnCancelarText, { color: c.textSub }]}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -984,6 +1259,10 @@ const styles = StyleSheet.create({
   contactoNotasTxt: { fontSize: 13, lineHeight: 19 },
 
   contactoFalta: { fontSize: 12, color: '#c0392b', fontWeight: '600' },
+
+  estadoPendRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  estadoPendBtn: { flex: 1, borderRadius: 10, borderWidth: 1.5, paddingVertical: 8, alignItems: 'center' },
+  estadoPendBtnTxt: { fontSize: 12.5, fontWeight: '800' },
 
   inputMultiline: { minHeight: 80 },
 
