@@ -9,6 +9,14 @@ import { useColors } from '../../lib/ThemeContext'
 
 const TEAL = '#1a6470'
 
+// Alert.alert NO muestra nada en React Native Web: al publicar desde la PC no
+// se veía ni la validación, ni el error, ni el "¡Publicado!" — parecía que el
+// botón no hacía nada. En web se usa window.alert.
+function avisar(titulo: string, msg: string) {
+  if (Platform.OS === 'web') window.alert(msg ? `${titulo}\n\n${msg}` : titulo)
+  else Alert.alert(titulo, msg)
+}
+
 type Prioridad = 'normal' | 'alta' | 'critica'
 type Rol = 'nuevo' | 'prospectador' | 'prospectador_plus' | 'asesor' | 'supervisor'
 
@@ -109,34 +117,40 @@ export default function AnunciosAdmin() {
 
   async function publicar() {
     if (!titulo.trim() || !cuerpo.trim()) {
-      Alert.alert('Faltan datos', 'Escribe un título y el contenido del anuncio.'); return
+      avisar('Faltan datos', 'Escribe un título y el contenido del anuncio.'); return
     }
     if (!todos && rolesSel.size === 0 && userIds.size === 0) {
-      Alert.alert('¿A quién?', 'Elige "Todos", uno o más grupos, o personas específicas.'); return
+      avisar('¿A quién?', 'Elige "Todos", uno o más grupos, o personas específicas.'); return
     }
     if (destinatariosPreview === 0) {
-      Alert.alert('Sin destinatarios', 'Nadie coincide con lo que elegiste.'); return
+      avisar('Sin destinatarios', 'Nadie coincide con lo que elegiste.'); return
     }
     setPublicando(true)
-    const { data, error } = await supabase.rpc('crear_anuncio', {
-      p_titulo: titulo.trim(),
-      p_cuerpo: cuerpo.trim(),
-      p_prioridad: prioridad,
-      p_es_reunion: esReunion,
-      p_evento_cuando: esReunion && eventoCuando.trim() ? formatoEventoEs(eventoCuando.trim()) : null,
-      p_pide_confirmacion: esReunion && pideConfirmacion,
-      p_roles: todos ? [] : Array.from(rolesSel),
-      p_user_ids: todos ? [] : Array.from(userIds),
-      p_todos: todos,
-    })
-    setPublicando(false)
-    if (error) { Alert.alert('Error', error.message); return }
-    const n = (data as any)?.destinatarios ?? 0
-    Alert.alert('¡Publicado!', `El anuncio le llegó a ${n} persona${n !== 1 ? 's' : ''}.`)
-    setTitulo(''); setCuerpo(''); setEventoCuando(''); setEsReunion(false)
-    setPideConfirmacion(false); setPrioridad('alta'); setTodos(true)
-    setRolesSel(new Set()); setUserIds(new Set()); setMostrarUsuarios(false)
-    cargar()
+    try {
+      const { data, error } = await supabase.rpc('crear_anuncio', {
+        p_titulo: titulo.trim(),
+        p_cuerpo: cuerpo.trim(),
+        p_prioridad: prioridad,
+        p_es_reunion: esReunion,
+        p_evento_cuando: esReunion && eventoCuando.trim() ? formatoEventoEs(eventoCuando.trim()) : null,
+        p_pide_confirmacion: esReunion && pideConfirmacion,
+        p_roles: todos ? [] : Array.from(rolesSel),
+        p_user_ids: todos ? [] : Array.from(userIds),
+        p_todos: todos,
+      })
+      if (error) { avisar('No se pudo publicar', error.message); return }
+      const n = (data as any)?.destinatarios ?? 0
+      avisar('¡Publicado!', `El anuncio le llegó a ${n} persona${n !== 1 ? 's' : ''}.`)
+      setTitulo(''); setCuerpo(''); setEventoCuando(''); setEsReunion(false)
+      setPideConfirmacion(false); setPrioridad('alta'); setTodos(true)
+      setRolesSel(new Set()); setUserIds(new Set()); setMostrarUsuarios(false)
+      cargar()
+    } catch (e: any) {
+      // Sin red / excepción: antes esto dejaba el botón deshabilitado para siempre.
+      avisar('No se pudo publicar', e?.message ?? 'Revisa tu conexión e inténtalo de nuevo.')
+    } finally {
+      setPublicando(false)
+    }
   }
 
   async function verConfirmaciones(id: string) {
