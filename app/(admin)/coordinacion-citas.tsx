@@ -7,6 +7,8 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { normalizar } from '../../lib/texto'
+import ClientesPorProspecto from '../../components/ClientesPorProspecto'
 import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
 
 import { getUsuarioActual } from '../../lib/sesion'
@@ -1500,12 +1502,14 @@ export default function CoordinacionCitas() {
       }
       if (filtroOperacion && c.clientes?.tipo_operacion !== filtroOperacion) return false
       if (busqueda.trim()) {
-        const q = busqueda.toLowerCase()
+        // Búsqueda sin acentos: "jose" encuentra "José", "peña" = "pena", etc.
+        const q = normalizar(busqueda)
+        const qDigitos = busqueda.replace(/\D/g, '')
         return (
-          (c.clientes?.nombre ?? '').toLowerCase().includes(q) ||
-          (c.clientes?.telefono ?? '').includes(q) ||
-          c.prospectador?.nombre?.toLowerCase().includes(q) ||
-          c.coordinador?.nombre?.toLowerCase().includes(q) ||
+          normalizar(c.clientes?.nombre).includes(q) ||
+          (qDigitos.length > 0 && (c.clientes?.telefono ?? '').replace(/\D/g, '').includes(qDigitos)) ||
+          normalizar(c.prospectador?.nombre).includes(q) ||
+          normalizar(c.coordinador?.nombre).includes(q) ||
           false
         )
       }
@@ -1622,11 +1626,12 @@ export default function CoordinacionCitas() {
           >
             <Ionicons name="search-outline" size={18} color={showSearch ? '#fff' : '#1a6470'} />
           </TouchableOpacity>
+          {!vistaAsesor && <ClientesPorProspecto />}
           {!vistaAsesor && (
             <TouchableOpacity style={s.headerBtn}
               onPress={() => router.push('/(prospectador)/citas-asesores')}>
               <Ionicons name="people-outline" size={17} color="#1a6470" />
-              <Text style={{ color: '#1a6470', fontWeight: '700', fontSize: 12 }}>Asesores</Text>
+              {Platform.OS === 'web' && <Text style={{ color: '#1a6470', fontWeight: '700', fontSize: 12 }}>Asesores</Text>}
             </TouchableOpacity>
           )}
           <TouchableOpacity style={[s.headerBtn, { backgroundColor: '#059669', borderColor: '#059669' }]}
