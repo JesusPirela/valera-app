@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native'
-import { useFocusEffect, router } from 'expo-router'
+import { useFocusEffect, router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { normalizar } from '../../lib/texto'
 import { adminAjustarMonedas, adminAjustarXP } from '../../lib/gamification'
@@ -158,7 +158,17 @@ export default function Prospectadores() {
   const c = useColors()
   const [lista, setLista] = useState<Prospectador[]>([])
   const [loading, setLoading] = useState(true)
-  const [busqueda, setBusqueda] = useState('')
+  // ?buscar=<nombre> abre la pantalla ya filtrada en esa persona: lo usa la
+  // búsqueda global para llevarte directo a la ficha del usuario.
+  const { buscar } = useLocalSearchParams<{ buscar?: string }>()
+  const [busqueda, setBusqueda] = useState(buscar ?? '')
+  useEffect(() => {
+    if (!buscar) return
+    setBusqueda(buscar)
+    // El parámetro se queda pegado en la ruta; se limpia tras aplicarlo para
+    // que al volver a Usuarios no siga filtrado por la última búsqueda.
+    router.setParams({ buscar: '' })
+  }, [buscar])
   const [pubMap, setPubMap] = useState<Map<string, number>>(new Map())
   const [ordenPub, setOrdenPub] = useState<'no' | 'asc' | 'desc'>('no')  // por publicaciones
 

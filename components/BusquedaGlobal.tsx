@@ -132,7 +132,9 @@ export default function BusquedaGlobal({ modo = 'admin' }: { modo?: 'admin' | 'p
         })))
         setUsuarios(((usr as any).data ?? []).map((x: any) => ({
           key: 'u' + x.id, titulo: x.nombre ?? 'Usuario', sub: rolLabel(x.role), icon: 'person-circle',
-          ir: () => { cerrar(); router.push({ pathname: '/(admin)/usuario-actividad', params: { id: x.id, nombre: x.nombre ?? '' } } as any) },
+          // Abre Usuarios filtrado en esa persona: ahí está toda su
+          // configuración (rol, coins, habilitar/inhabilitar, historial…).
+          ir: () => { cerrar(); router.push({ pathname: '/(admin)/prospectadores', params: { buscar: x.nombre ?? '' } } as any) },
         })))
       } catch { /* red: sin resultados */ } finally { setBuscando(false) }
     }, 280)
