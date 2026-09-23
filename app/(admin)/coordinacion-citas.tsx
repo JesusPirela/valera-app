@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { normalizar } from '../../lib/texto'
+import { normalizarTelefono } from '../../lib/telefono'
 import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
 
 import { getUsuarioActual } from '../../lib/sesion'
@@ -597,9 +598,17 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
     if (txt.trim().length < 2) { setClientes([]); return }
     buscarDebounce.current = setTimeout(async () => {
       setBuscando(true)
-      const { data } = await supabase.from('clientes')
+      // También busca por teléfono (si el texto trae dígitos): buscar SOLO por
+      // nombre es la causa más probable de los clientes duplicados — si el
+      // coordinador teclea el teléfono, o un nombre con typo/apodo distinto al
+      // registrado, no encontraba al cliente y terminaba creando uno nuevo.
+      const digitos = txt.replace(/\D/g, '')
+      let query = supabase.from('clientes')
         .select('id, nombre, telefono, tipo_operacion, responsable_id')
-        .ilike('nombre', `%${txt}%`).limit(8)
+      query = digitos.length >= 4
+        ? query.or(`nombre.ilike.%${txt}%,telefono.ilike.%${digitos}%`)
+        : query.ilike('nombre', `%${txt}%`)
+      const { data } = await query.limit(8)
       // No hay FK en responsable_id → se traen los nombres de los prospectadores
       // en una segunda consulta y se mapean.
       const ids = [...new Set((data ?? []).map((c: any) => c.responsable_id).filter(Boolean))]
@@ -631,6 +640,36 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
       if (modoNuevo) {
         if (!nuevoNombre.trim() || !nuevoTelefono.trim()) {
           alerta('Nombre y teléfono son obligatorios.'); setGuardando(false); return
+        }
+        // Antes de crear, verificar que no exista YA un cliente con ese
+        // teléfono. Sin esto, si el coordinador no lo encontró al buscar por
+        // nombre (typo, apodo, nombre distinto al de otro sistema…), se
+        // creaba un cliente DUPLICADO con su propio responsable_id — el
+        // mismo prospecto termina repartido en dos fichas de dos
+        // prospectadores distintos. Coincide por los últimos 10 dígitos para
+        // no fallar por el prefijo 52/521 ni espacios/guiones.
+        const ultimos10 = normalizarTelefono(nuevoTelefono).slice(-10)
+        const { data: existentes } = await supabase.from('clientes')
+          .select('id, nombre, telefono, tipo_operacion, responsable_id')
+          .ilike('telefono', `%${ultimos10}`)
+          .is('eliminado_at', null)
+          .limit(1)
+        if (existentes?.length) {
+          const match = existentes[0] as any
+          let nombreResp = ''
+          if (match.responsable_id) {
+            const { data: resp } = await supabase.from('profiles').select('nombre').eq('id', match.responsable_id).maybeSingle()
+            nombreResp = resp?.nombre ?? ''
+          }
+          setGuardando(false)
+          alerta(
+            `"${match.nombre}" ya está registrado con ese teléfono` +
+            `${nombreResp ? ` (asignado a ${nombreResp})` : ' (sin prospectador asignado)'}` +
+            `. Se seleccionó para que no se duplique — revisa los datos y guarda de nuevo.`,
+          )
+          setModoNuevo(false)
+          seleccionarCliente(match)
+          return
         }
         const { data: { user } } = await getUsuarioActual()
         const { data: nuevo, error: errC } = await supabase.from('clientes').insert({
