@@ -96,7 +96,8 @@ const NAV_ITEMS = [
 
   // Equipo — personas y comunicación
   { label: 'Usuarios', desc: 'Cuentas del equipo', ion: 'person-add', color: '#2563EB', route: '/(admin)/prospectadores', grupo: 'Equipo' },
-  { label: 'Colaboradores', desc: 'Asesores e inmobiliarias', ion: 'people-circle', color: '#9333EA', route: '/(admin)/colaboradores', grupo: 'Equipo' },
+  { label: 'Colaboradores', desc: 'Portales y fuentes externas', ion: 'people-circle', color: '#9333EA', route: '/(admin)/colaboradores', grupo: 'Equipo' },
+  { label: 'Inmobiliarias', desc: 'Empresas asociadas a propiedades', ion: 'business', color: '#7C3AED', route: '/(admin)/inmobiliarias', grupo: 'Equipo' },
   { label: 'Asesores externos', desc: 'Apoyo por zona (nombre y tel.)', ion: 'id-card', color: '#0D9488', route: '/(admin)/asesores-externos', grupo: 'Equipo' },
   { label: 'Bloques', desc: 'Grupos de prospectadores', ion: 'apps', color: '#6366F1', route: '/(admin)/bloques', grupo: 'Equipo' },
   { label: '1 a 1', desc: 'Entrevistas del equipo', ion: 'headset', color: '#7C3AED', route: '/(admin)/uno-a-uno', grupo: 'Equipo' },
@@ -227,6 +228,7 @@ export default function AdminPropiedades() {
 
   const [role, setRole] = useState<string | null>(null)
   const esSupervisor = role === 'supervisor'
+  const esAdmin = role === 'admin'
 
   // Modo selección múltiple
   const [modoSeleccion, setModoSeleccion] = useState(false)
@@ -822,7 +824,20 @@ export default function AdminPropiedades() {
           <Text style={[styles.cardTitulo, { color: c.text }]}>{item.titulo}</Text>
           <Text style={[styles.cardDireccion, { color: c.textMute }]} numberOfLines={1}>📍 {item.direccion}</Text>
           {contactoLabel(item) && (
-            <Text style={[styles.contactoBadge, { color: c.textMute }]} numberOfLines={1}>👤 {contactoLabel(item)}</Text>
+            <Text style={[styles.contactoBadge, { color: c.textMute }]} numberOfLines={1}>
+              👤 {item.asesores?.nombre?.trim() || ''}
+              {item.asesores?.nombre?.trim() && (item.inmobiliarias?.nombre?.trim() || item.asesores?.inmobiliaria?.trim()) ? ' — ' : ''}
+              {esAdmin && item.inmobiliaria_id && item.inmobiliarias?.nombre?.trim() ? (
+                <Text
+                  style={styles.contactoBadgeLink}
+                  onPress={() => router.push({ pathname: '/(admin)/inmobiliarias', params: { id: item.inmobiliaria_id! } })}
+                >
+                  {item.inmobiliarias.nombre}
+                </Text>
+              ) : (
+                item.inmobiliarias?.nombre?.trim() || item.asesores?.inmobiliaria?.trim() || ''
+              )}
+            </Text>
           )}
           <Text style={styles.pubBadge}>📤 {publicacionesMap[item.id] ?? 0} publicaciones</Text>
           {tieneMeta && (
@@ -1434,6 +1449,7 @@ const styles = StyleSheet.create({
   },
   contactoLimpiar: { paddingHorizontal: 10, paddingVertical: 8 },
   contactoBadge: { fontSize: 12, marginBottom: 4 },
+  contactoBadgeLink: { fontWeight: '700', textDecorationLine: 'underline' },
   duracionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   duracionChip: {
     paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,

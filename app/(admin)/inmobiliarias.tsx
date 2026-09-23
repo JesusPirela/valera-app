@@ -1,9 +1,9 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Platform, Alert, Modal,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
@@ -34,15 +34,39 @@ function alerta(msg: string) {
 export default function AdminInmobiliarias() {
   useSupervisorBlock()
   const c = useColors()
+  const { id: idResaltado } = useLocalSearchParams<{ id?: string }>()
   const [lista, setLista] = useState<Inmobiliaria[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<Inmobiliaria | null>(null)
   const [form, setForm] = useState<Omit<Inmobiliaria, 'id'>>(EMPTY)
   const [guardando, setGuardando] = useState(false)
+  const [resaltadoId, setResaltadoId] = useState<string | null>(null)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
   const { refreshControl } = usePullRefresh(cargar)
+
+  // Llegar desde "Propiedades" (click en el nombre de la inmobiliaria):
+  // resalta esa tarjeta unos segundos y le hace scroll para que se ubique
+  // de inmediato entre todas las demás.
+  const scrollRef = useRef<ScrollView>(null)
+  const itemRefs = useRef<Record<string, View | null>>({})
+  useEffect(() => {
+    if (!idResaltado || loading) return
+    setResaltadoId(idResaltado)
+    const t = setTimeout(() => {
+      const nodo = itemRefs.current[idResaltado]
+      if (nodo && scrollRef.current) {
+        nodo.measureLayout(
+          scrollRef.current as any,
+          (_x: number, y: number) => scrollRef.current?.scrollTo({ y: Math.max(y - 20, 0), animated: true }),
+          () => {},
+        )
+      }
+    }, 300)
+    const tFin = setTimeout(() => setResaltadoId(null), 4000)
+    return () => { clearTimeout(t); clearTimeout(tFin) }
+  }, [idResaltado, loading])
 
   const yaCargoRef = useRef(false)
   async function cargar() {
@@ -135,9 +159,16 @@ export default function AdminInmobiliarias() {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={s.lista} refreshControl={refreshControl}>
+        <ScrollView ref={scrollRef} contentContainerStyle={s.lista} refreshControl={refreshControl}>
           {lista.map(inm => (
-            <View key={inm.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
+            <View
+              key={inm.id}
+              ref={el => { itemRefs.current[inm.id] = el }}
+              style={[
+                s.card, { backgroundColor: c.card, borderColor: c.border },
+                inm.id === resaltadoId && s.cardResaltada,
+              ]}
+            >
               <View style={[s.cardIcon, { backgroundColor: c.bg }]}>
                 <Text style={s.cardIconText}>🏢</Text>
               </View>
@@ -284,6 +315,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
     borderWidth: 1,
   },
+  cardResaltada: { borderColor: '#c9a84c', borderWidth: 2 },
   cardIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   cardIconText: { fontSize: 22 },
   cardNombreRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
