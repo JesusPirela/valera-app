@@ -460,11 +460,14 @@ export default function CitasVenta() {
     try {
       for (let desde = 0; ; desde += paso) {
         const { data, error } = await supabase.from('citas_venta').select(cols)
-          // Las del dashboard (orden NULL) van PRIMERO y de más reciente a más
-          // antigua: son las accionables. Antes iban al final y, con ~800 filas
-          // del Excel encima, quedaban enterradas y parecía que no existían.
+          // Las del dashboard (orden NULL) van PRIMERO, por FECHA DE LA CITA
+          // (más próxima arriba). Antes iban al final y, con ~800 filas del
+          // Excel encima, quedaban enterradas y parecía que no existían.
+          // Se ordena por fecha_cita y NO por created_at: al resincronizar
+          // citas viejas su created_at es "hoy" y taparían a las citas reales.
           // Debajo, el Excel conserva su orden original.
-          .order('orden', { ascending: true, nullsFirst: true }).order('created_at', { ascending: false })
+          .order('orden', { ascending: true, nullsFirst: true })
+          .order('fecha_cita', { ascending: false, nullsFirst: false })
           .range(desde, desde + paso - 1)
         if (error || !data || data.length === 0) break
         todas.push(...(data as Fila[]))
