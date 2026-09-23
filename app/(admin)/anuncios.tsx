@@ -35,6 +35,17 @@ const PRIORIDADES: { id: Prioridad; label: string; desc: string; color: string; 
 ]
 
 // El picker da "2026-09-12T17:00"; lo mostramos y guardamos en español legible.
+// Un anuncio de reunión deja de mostrarse al día siguiente del evento: se
+// apaga a la medianoche siguiente, así sigue visible todo el día del evento.
+function expiraTrasEvento(valor: string): string | null {
+  const d = new Date(valor)
+  if (isNaN(d.getTime())) return null
+  const fin = new Date(d)
+  fin.setHours(0, 0, 0, 0)
+  fin.setDate(fin.getDate() + 1)
+  return fin.toISOString()
+}
+
 function formatoEventoEs(valor: string): string {
   const d = new Date(valor)
   if (isNaN(d.getTime())) return valor
@@ -137,6 +148,7 @@ export default function AnunciosAdmin() {
         p_roles: todos ? [] : Array.from(rolesSel),
         p_user_ids: todos ? [] : Array.from(userIds),
         p_todos: todos,
+        p_expira_at: esReunion && eventoCuando.trim() ? expiraTrasEvento(eventoCuando.trim()) : null,
       })
       if (error) { avisar('No se pudo publicar', error.message); return }
       const n = (data as any)?.destinatarios ?? 0
@@ -160,6 +172,26 @@ export default function AnunciosAdmin() {
       const { data } = await supabase.rpc('get_anuncio_confirmaciones', { p_anuncio_id: id })
       setConfs(prev => ({ ...prev, [id]: (data ?? []) as Confirmacion[] }))
     }
+  }
+
+  // Finalizar = apagarlo para que deje de salirle a la gente, SIN borrarlo
+  // (se conservan las confirmaciones y el historial).
+  async function finalizar(id: string) {
+    const go = async () => {
+      setAnuncios(prev => prev.map(a => a.id === id ? { ...a, activo: false } : a))
+      const { error } = await supabase.rpc('finalizar_anuncio', { p_anuncio_id: id })
+      if (error) { avisar('No se pudo finalizar', error.message); cargar() }
+    }
+    if (Platform.OS === 'web') { if (confirm('¿Finalizar este anuncio? Dejará de aparecerle a la gente.')) go() }
+    else Alert.alert('Finalizar anuncio', 'Dejará de aparecerle a la gente. No se borra.', [
+      { text: 'Cancelar', style: 'cancel' }, { text: 'Finalizar', onPress: go },
+    ])
+  }
+
+  async function reactivar(id: string) {
+    setAnuncios(prev => prev.map(a => a.id === id ? { ...a, activo: true } : a))
+    const { error } = await supabase.rpc('reactivar_anuncio', { p_anuncio_id: id })
+    if (error) { avisar('No se pudo reactivar', error.message); cargar() }
   }
 
   function eliminar(id: string) {
@@ -231,7 +263,10 @@ export default function AnunciosAdmin() {
                 keyboardType="numbers-and-punctuation" />
             )}
             {eventoCuando ? (
-              <Text style={{ color: c.textMute, fontSize: 12.5, marginTop: 6 }}>🗓️ {formatoEventoEs(eventoCuando)}</Text>
+              <Text style={{ color: c.textMute, fontSize: 12.5, marginTop: 6 }}>
+                🗓️ {formatoEventoEs(eventoCuando)}{'\n'}
+                ⏹ Se finaliza solo al día siguiente del evento.
+              </Text>
             ) : null}
             <TouchableOpacity style={styles.switchRow} onPress={() => setPideConfirmacion(v => !v)}>
               <View style={[styles.check, pideConfirmacion && styles.checkOn]}>{pideConfirmacion && <Text style={styles.checkTxt}>✓</Text>}</View>
@@ -309,10 +344,22 @@ export default function AnunciosAdmin() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Text style={{ fontSize: 16 }}>{pr.emoji}</Text>
               <Text style={[styles.anTit, { color: c.text }]} numberOfLines={2}>{a.titulo}</Text>
+              {!a.activo && (
+                <View style={styles.finTag}><Text style={styles.finTagTxt}>FINALIZADO</Text></View>
+              )}
               <TouchableOpacity onPress={() => eliminar(a.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Text style={{ color: '#c0392b', fontSize: 16 }}>🗑</Text>
               </TouchableOpacity>
             </View>
+
+            <TouchableOpacity
+              style={[styles.finBtn, { borderColor: a.activo ? '#c0392b' : TEAL }]}
+              onPress={() => (a.activo ? finalizar(a.id) : reactivar(a.id))}
+            >
+              <Text style={[styles.finBtnTxt, { color: a.activo ? '#c0392b' : TEAL }]}>
+                {a.activo ? '⏹ Finalizar anuncio' : '↩ Reactivar'}
+              </Text>
+            </TouchableOpacity>
             <Text style={{ color: c.textSub, fontSize: 13, marginTop: 4 }}>{a.cuerpo}</Text>
             {a.es_reunion && a.evento_cuando ? (
               <Text style={{ color: pr.color, fontSize: 12.5, fontWeight: '700', marginTop: 4 }}>📅 {a.evento_cuando}</Text>
@@ -380,6 +427,10 @@ const styles = StyleSheet.create({
   pub: { backgroundColor: TEAL, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
   pubTxt: { color: '#fff', fontSize: 15.5, fontWeight: '800' },
   anTit: { flex: 1, fontSize: 15, fontWeight: '800' },
+  finTag: { backgroundColor: '#64748b22', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+  finTagTxt: { color: '#64748b', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  finBtn: { borderWidth: 1.5, borderRadius: 10, paddingVertical: 8, alignItems: 'center', marginTop: 10 },
+  finBtnTxt: { fontSize: 13, fontWeight: '800' },
   stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
   stat: { fontSize: 12.5, fontWeight: '700' },
   confRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#88888833', paddingTop: 6 },
