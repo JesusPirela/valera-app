@@ -460,9 +460,11 @@ export default function CitasVenta() {
     try {
       for (let desde = 0; ; desde += paso) {
         const { data, error } = await supabase.from('citas_venta').select(cols)
-          // excel por su orden; las del dashboard (orden NULL) van al final por
-          // fecha ascendente → cada cliente nuevo queda hasta abajo (sin pie fijo).
-          .order('orden', { ascending: true, nullsFirst: false }).order('created_at', { ascending: true })
+          // Las del dashboard (orden NULL) van PRIMERO y de más reciente a más
+          // antigua: son las accionables. Antes iban al final y, con ~800 filas
+          // del Excel encima, quedaban enterradas y parecía que no existían.
+          // Debajo, el Excel conserva su orden original.
+          .order('orden', { ascending: true, nullsFirst: true }).order('created_at', { ascending: false })
           .range(desde, desde + paso - 1)
         if (error || !data || data.length === 0) break
         todas.push(...(data as Fila[]))
