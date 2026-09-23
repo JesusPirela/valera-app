@@ -460,9 +460,12 @@ export default function CitasVenta() {
     try {
       for (let desde = 0; ; desde += paso) {
         const { data, error } = await supabase.from('citas_venta').select(cols)
-          // excel por su orden; las del dashboard (orden NULL) van al final por
-          // fecha ascendente → cada cliente nuevo queda hasta abajo (sin pie fijo).
-          .order('orden', { ascending: true, nullsFirst: false }).order('created_at', { ascending: true })
+          // excel por su orden; las del dashboard (orden NULL) van al final y se
+          // ordenan SOLAS por la FECHA DE LA CITA (la más próxima hasta abajo).
+          // Antes desempataban por created_at, así que una cita que llegaba
+          // tarde a la tabla se colaba fuera de su lugar cronológico.
+          .order('orden', { ascending: true, nullsFirst: false })
+          .order('fecha_cita', { ascending: true, nullsFirst: false })
           .range(desde, desde + paso - 1)
         if (error || !data || data.length === 0) break
         todas.push(...(data as Fila[]))
