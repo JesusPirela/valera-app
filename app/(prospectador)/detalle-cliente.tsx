@@ -18,6 +18,7 @@ import { puedeEnviarClienteAChatbot } from '../../lib/permisos'
 import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueRecordatorioUpdate } from '../../lib/offline-queue'
 import { conTimeout } from '../../lib/redIntentos'
+import PropiedadesSugeridas from '../../components/PropiedadesSugeridas'
 
 type Cliente = {
   id: string; nombre: string; telefono: string; email: string | null
@@ -910,6 +911,21 @@ export default function DetalleCliente() {
           })
         )}
       </View>
+
+      {/* ── Propiedades que le quedan ──────────────────── */}
+      {/* Va justo ANTES de "Armar colección" a propósito: es el paso que
+          faltaba. Antes había que salir a buscar el inventario a mano y volver;
+          ahora se eligen aquí y de estas mismas sale la colección. */}
+      {cliente && (
+        <PropiedadesSugeridas
+          clienteId={cliente.id}
+          clienteNombre={cliente.nombre}
+          clienteTelefono={cliente.telefono}
+          presupuesto={cliente.presupuesto}
+          zonaBusqueda={cliente.zona_busqueda}
+          tipoOperacion={cliente.tipo_operacion}
+        />
+      )}
 
       {/* ── Armar colección para este cliente ─────────── */}
       <TouchableOpacity

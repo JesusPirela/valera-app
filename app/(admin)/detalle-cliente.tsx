@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS } from '../(prospectador)/crm'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
+import PropiedadesSugeridas from '../../components/PropiedadesSugeridas'
 
 function abrirWhatsApp(telefono: string, nombre: string) {
   const phone = telefono.replace(/\D/g, '')
@@ -550,8 +551,18 @@ export default function AdminDetalleCliente() {
         </View>
       </Modal>
 
+      {/* Propiedades que le quedan, según su presupuesto y zona. */}
+      <PropiedadesSugeridas
+        clienteId={cliente.id}
+        clienteNombre={cliente.nombre}
+        clienteTelefono={cliente.telefono}
+        presupuesto={cliente.presupuesto}
+        zonaBusqueda={cliente.zona_busqueda}
+        tipoOperacion={cliente.tipo_operacion}
+      />
+
       {/* Recordatorios — solo lectura */}
-      <Text style={styles.secTitle}>Recordatorios</Text>
+      <Text style={[styles.secTitle, { marginTop: 16 }]}>Recordatorios</Text>
 
       {recPendientes.length === 0 ? (
         <Text style={styles.emptyText}>Sin recordatorios pendientes.</Text>
