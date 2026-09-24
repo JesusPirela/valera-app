@@ -113,8 +113,8 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
       }
       onSaved?.(); onClose()
     }
-    if (Platform.OS === 'web') { if (window.confirm('¿La cita se canceló? Se marcará como CANCELADA.')) hazlo() }
-    else Alert.alert('Cancelar cita', '¿La cita se canceló? Se marcará como CANCELADA.', [{ text: 'No', style: 'cancel' }, { text: 'Sí, se canceló', style: 'destructive', onPress: hazlo }])
+    if (Platform.OS === 'web') { if (window.confirm('¿La cita se canceló o se reagendó? Se marcará como CANCELADA/REAGENDA.')) hazlo() }
+    else Alert.alert('Cancelar cita', '¿La cita se canceló o se reagendó? Se marcará como CANCELADA/REAGENDA.', [{ text: 'No', style: 'cancel' }, { text: 'Sí', style: 'destructive', onPress: hazlo }])
   }
 
   const esUltimo = paso === PASOS.length - 1
@@ -205,7 +205,7 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
 
           {/* Marcar la cita como cancelada */}
           <TouchableOpacity style={s.cancelar} onPress={cancelarCita} disabled={guardando}>
-            <Text style={s.cancelarTxt}>❌ La cita se canceló</Text>
+            <Text style={s.cancelarTxt}>❌ Se canceló / reagendó</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

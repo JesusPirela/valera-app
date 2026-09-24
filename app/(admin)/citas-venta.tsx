@@ -39,7 +39,7 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   { key: 'retro_info_extra', label: 'Info extra del cliente', w: 250, tipo: 'texto' },
   { key: 'retro_plan_accion', label: 'Plan de acción', w: 250, tipo: 'texto' },
   { key: 'estado_seguimiento', label: 'Estado seguimiento', w: 170, tipo: 'texto' },
-  { key: 'fecha_prox_seguimiento', label: 'Próx. seguimiento', w: 150, tipo: 'texto' },
+  { key: 'fecha_prox_seguimiento', label: 'Próx. seguimiento', w: 150, tipo: 'fecha' },
 ]
 const NUM_W = 48    // contador de fila (izquierda)
 const RETRO_W = 100 // columna de retroalimentación
@@ -126,14 +126,14 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
         // derivada del timestamp real (no del texto guardado, que venía en inglés).
         const display = col.key === 'dia_cita' ? fmtFechaCitaEs(f.fecha_cita, val) : val
         const esEstadoCancelada = col.key === 'estado_seguimiento' && esCancelada(val)
-        // En la columna del CLIENTE (siempre visible) mostrar "🚫 CANCELADA" para
+        // En la columna del CLIENTE (siempre visible) mostrar "🚫 CANCELADA/REAGENDA" para
         // que se note aunque la columna de estado esté scrolleada a la derecha.
         const esClienteCancelada = cancelada && col.key === 'cliente_nombre'
         const rojo = esEstadoCancelada || esClienteCancelada
         return (
           <TouchableOpacity key={col.key} style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
             onPress={() => onTap(f.id, col.key, col.tipo, val)}>
-            <Text style={{ color: rojo ? '#c0392b' : (val ? c.text : c.textMute), fontSize: 12.5, fontWeight: rojo ? '800' : '400' }} numberOfLines={2}>{esClienteCancelada ? `🚫 CANCELADA · ${val || '—'}` : (display || '—')}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
+            <Text style={{ color: rojo ? '#c0392b' : (val ? c.text : c.textMute), fontSize: 12.5, fontWeight: rojo ? '800' : '400' }} numberOfLines={2}>{esClienteCancelada ? `🚫 CANCELADA/REAGENDA · ${val || '—'}` : (display || '—')}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
           </TouchableOpacity>
         )
       })}
@@ -772,7 +772,10 @@ export default function CitasVenta() {
                 <Text style={[st.headCell, st.headTxt, { width: NUM_W, textAlign: 'center' }]}>#</Text>
                 {COLS.map(col => {
                   const activo = !!filtrosSel[col.key]
-                  const esFecha = col.tipo === 'fecha'
+                  // El botón de orden ordena por la fecha de la CITA, así que
+                  // solo va en esa columna (no en "Próx. seguimiento", que
+                  // también es de tipo fecha pero ordena por otro campo).
+                  const esFecha = col.key === 'dia_cita'
                   return (
                     <TouchableOpacity key={col.key} style={[st.headCell, { width: col.w }]} activeOpacity={0.7} onPress={() => abrirDropdown(col.key)}>
                       <Text style={st.headTxt} numberOfLines={2}>{col.label}</Text>
@@ -879,7 +882,17 @@ export default function CitasVenta() {
         <TouchableOpacity style={st.dropOverlay} activeOpacity={1} onPress={() => setPicker(null)}>
           <TouchableOpacity activeOpacity={1} onPress={e => e.stopPropagation?.()}>
             {picker?.tipo === 'fecha' ? (
-              <CalendarioHora onConfirm={(disp, iso) => { aplicarCambio(picker.id, { dia_cita: disp, fecha_cita: iso }); setPicker(null) }} onClose={() => setPicker(null)} />
+              <CalendarioHora
+                onConfirm={(disp, iso) => {
+                  // El calendario sirve a dos columnas: el día de la cita y el
+                  // próximo seguimiento. Cada una guarda su texto y su fecha real.
+                  const patch = picker.key === 'fecha_prox_seguimiento'
+                    ? { fecha_prox_seguimiento: disp, fecha_prox_seguimiento_ts: iso }
+                    : { dia_cita: disp, fecha_cita: iso }
+                  aplicarCambio(picker.id, patch); setPicker(null)
+                }}
+                onClose={() => setPicker(null)}
+              />
             ) : (
               <View style={[st.dropCard, { backgroundColor: c.card }]}>
                 <Text style={[st.dropTitulo, { color: c.text }]}>{picker?.tipo === 'cliente' ? 'Elegir cliente' : 'Elegir usuario'}</Text>
