@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, Linking, Share, TextInput,
+  ScrollView,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
@@ -9,6 +10,7 @@ import { getUsuarioActual } from '../lib/sesion'
 import { useColors } from '../lib/ThemeContext'
 import { parsePresupuesto, parseZonas, formatPrecioCorto } from '../lib/match-propiedades'
 import { avisar } from '../lib/db'
+import { ThumbImage } from './ThumbImage'
 
 // Propiedades que le quedan a este cliente, dentro de su propia ficha.
 //
@@ -17,15 +19,21 @@ import { avisar } from '../lib/db'
 // enlaza con lo que ya existía: de aquí salen directo a la colección del
 // cliente, que es como se le mandan.
 //
+// Se presentan como tarjetas con foto en un carrusel horizontal, al estilo de
+// los portales inmobiliarios: la foto es lo que hace que una propiedad se
+// reconozca de un vistazo, y en una lista de texto había que abrir cada una
+// para saber de qué se trataba.
+//
 // Los resultados vienen en tres niveles (ver la migración
-// 20260927_sugerencias_propiedades_cliente.sql). Cada tanda dice POR QUÉ
-// aparece: si no se avisa, el asesor puede pensar que todo está en la zona que
-// pidió el cliente y enseñarle algo que no le sirve.
+// 20260927_sugerencias_propiedades_cliente.sql), cada uno en su propia fila con
+// su motivo escrito. Si no se avisa, el asesor puede pensar que todo está en la
+// zona que pidió el cliente y enseñarle algo que no le sirve.
 
 type Sugerencia = {
   id: string; codigo: string | null; titulo: string | null; direccion: string | null
   precio: number; operacion: string; tipo: string | null
-  recamaras: number | null; banos: number | null; m2: number | null; nivel: number
+  recamaras: number | null; banos: number | null; m2: number | null
+  imagen_url: string | null; nivel: number
 }
 
 type Props = {
@@ -39,11 +47,14 @@ type Props = {
   rutaDetalle?: string
 }
 
-const NIVELES: Record<number, { etiqueta: string; icono: string; color: string }> = {
-  1: { etiqueta: 'En su zona y en su presupuesto', icono: '🎯', color: '#0f9d58' },
-  2: { etiqueta: 'En su zona, un poco arriba de su presupuesto', icono: '↗️', color: '#e8a33d' },
-  3: { etiqueta: 'En su presupuesto, pero en otra zona', icono: '📍', color: '#5b8def' },
+const NIVELES: Record<number, { etiqueta: string; sub: string; color: string }> = {
+  1: { etiqueta: 'En su zona y en su presupuesto', sub: 'Lo que mejor le queda', color: '#0f9d58' },
+  2: { etiqueta: 'En su zona, un poco arriba',     sub: 'Hasta 15% sobre su presupuesto', color: '#e8a33d' },
+  3: { etiqueta: 'En su presupuesto, otra zona',   sub: 'Fuera de las zonas que pidió', color: '#5b8def' },
 }
+
+const CARD_W = 232
+const CARD_GAP = 12
 
 function waNumero(tel: string | null | undefined): string | null {
   if (!tel) return null
@@ -54,7 +65,7 @@ function waNumero(tel: string | null | undefined): string | null {
   return p.length >= 12 ? p : null
 }
 
-const precioLargo = (n: number) => `$${Number(n).toLocaleString('es-MX')}`
+const precioLargo = (n: number) => `$${Number(n).toLocaleString('es-MX')} MXN`
 
 export default function PropiedadesSugeridas({
   clienteId, clienteNombre, clienteTelefono, presupuesto, zonaBusqueda, tipoOperacion,
@@ -95,7 +106,7 @@ export default function PropiedadesSugeridas({
       p_max: nMax,
       p_zonas: zonasTxt.split(',').map(z => z.trim()).filter(z => z.length >= 4),
       p_operacion: operacion,
-      p_limite: 24,
+      p_limite: 36,
     })
     if (err) { setError(err.message); setSugerencias([]) }
     else setSugerencias((data ?? []) as Sugerencia[])
@@ -103,7 +114,10 @@ export default function PropiedadesSugeridas({
   }, [clienteId, min, max, zonasTxt, operacion])
 
   // Solo se consulta al abrir la sección: si no, cada visita a la ficha pagaría
-  // una consulta que casi nadie mira.
+  // una consulta (y la descarga de sus fotos) que casi nadie mira. La lista de
+  // dependencias es a propósito solo `abierto`: con las demás se volvería a
+  // consultar sola al cambiar el filtro, y ese disparo lo hace el botón.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (abierto && !sugerencias.length && !cargando && !error) cargar() }, [abierto])
 
   async function descartar(p: Sugerencia) {
@@ -151,8 +165,6 @@ export default function PropiedadesSugeridas({
     }
   }
 
-  // Sin presupuesto no hay nada que buscar: se dice y se ofrece el ajuste
-  // manual, en vez de esconder la sección y dejar al asesor sin saber por qué.
   const sinDatos = !rangoFicha
 
   const porNivel = useMemo(() => {
@@ -165,7 +177,7 @@ export default function PropiedadesSugeridas({
     <View style={[st.caja, { backgroundColor: c.card, borderColor: c.border }]}>
       <TouchableOpacity style={st.cabecera} onPress={() => setAbierto(v => !v)} activeOpacity={0.8}>
         <View style={{ flex: 1 }}>
-          <Text style={[st.titulo, { color: c.text }]}>🏘️  Propiedades para este cliente</Text>
+          <Text style={[st.titulo, { color: c.text }]}>Opciones para este cliente</Text>
           <Text style={[st.sub, { color: c.textMute }]}>
             {sinDatos
               ? 'Sin presupuesto en su ficha — tócalo para buscar a mano'
@@ -173,16 +185,13 @@ export default function PropiedadesSugeridas({
           </Text>
         </View>
         {abierto && !!sugerencias.length && (
-          <View style={[st.contador, { backgroundColor: '#1a647015' }]}>
-            <Text style={st.contadorTxt}>{sugerencias.length}</Text>
-          </View>
+          <View style={st.contador}><Text style={st.contadorTxt}>{sugerencias.length}</Text></View>
         )}
         <Ionicons name={abierto ? 'chevron-up' : 'chevron-down'} size={18} color={c.textMute} />
       </TouchableOpacity>
 
       {abierto && (
-        <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
-          {/* Ajustar la búsqueda sin tocar la ficha del cliente */}
+        <View style={{ paddingBottom: 12 }}>
           <TouchableOpacity onPress={() => setAjustando(v => !v)} style={st.ajustarLink}>
             <Ionicons name="options-outline" size={14} color="#1a6470" />
             <Text style={st.ajustarTxt}>{ajustando ? 'Ocultar ajustes' : 'Ajustar búsqueda'}</Text>
@@ -213,7 +222,7 @@ export default function PropiedadesSugeridas({
           )}
 
           {cargando ? (
-            <ActivityIndicator color="#1a6470" style={{ marginVertical: 24 }} />
+            <ActivityIndicator color="#1a6470" style={{ marginVertical: 28 }} />
           ) : error ? (
             <View style={st.vacio}>
               <Text style={[st.vacioTxt, { color: '#c0392b' }]}>{error}</Text>
@@ -232,52 +241,19 @@ export default function PropiedadesSugeridas({
               {[1, 2, 3].map(nivel => {
                 const lista = porNivel[nivel] ?? []
                 if (!lista.length) return null
-                const info = NIVELES[nivel]
                 return (
-                  <View key={nivel} style={{ marginTop: 10 }}>
-                    <Text style={[st.nivelLbl, { color: info.color }]}>
-                      {info.icono}  {info.etiqueta}  ({lista.length})
-                    </Text>
-                    {lista.map(p => {
-                      const elegida = seleccion.has(p.id)
-                      return (
-                        <View key={p.id} style={[st.fila, { borderColor: elegida ? '#1a6470' : c.border, backgroundColor: elegida ? '#1a647008' : 'transparent' }]}>
-                          <TouchableOpacity
-                            style={[st.check, elegida && st.checkOn]}
-                            onPress={() => setSeleccion(prev => {
-                              const s = new Set(prev); elegida ? s.delete(p.id) : s.add(p.id); return s
-                            })}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          >
-                            {elegida && <Text style={st.checkTick}>✓</Text>}
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={{ flex: 1 }}
-                            activeOpacity={0.7}
-                            onPress={() => router.push({ pathname: rutaDetalle as any, params: { id: p.id } })}
-                          >
-                            <Text style={[st.filaTitulo, { color: c.text }]} numberOfLines={2}>{p.titulo ?? 'Sin título'}</Text>
-                            <Text style={[st.filaMeta, { color: c.textMute }]} numberOfLines={1}>
-                              {precioLargo(p.precio)}
-                              {p.recamaras ? ` · ${p.recamaras} rec` : ''}
-                              {p.m2 ? ` · ${p.m2} m²` : ''}
-                              {p.codigo ? ` · ${p.codigo}` : ''}
-                            </Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity onPress={() => mandarAlCliente(p)} style={st.iconoBtn}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                            <Ionicons name="paper-plane-outline" size={16} color="#1a6470" />
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={() => descartar(p)} style={st.iconoBtn}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                            <Ionicons name="close" size={17} color="#b9c4c6" />
-                          </TouchableOpacity>
-                        </View>
-                      )
+                  <Carrusel
+                    key={nivel}
+                    nivel={nivel}
+                    lista={lista}
+                    seleccion={seleccion}
+                    onToggle={(id) => setSeleccion(prev => {
+                      const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
                     })}
-                  </View>
+                    onAbrir={(p) => router.push({ pathname: rutaDetalle as any, params: { id: p.id } })}
+                    onMandar={mandarAlCliente}
+                    onDescartar={descartar}
+                  />
                 )
               })}
 
@@ -301,35 +277,144 @@ export default function PropiedadesSugeridas({
   )
 }
 
+// ── Una fila: su motivo + las tarjetas deslizables ──────────────────────────
+function Carrusel({ nivel, lista, seleccion, onToggle, onAbrir, onMandar, onDescartar }: {
+  nivel: number
+  lista: Sugerencia[]
+  seleccion: Set<string>
+  onToggle: (id: string) => void
+  onAbrir: (p: Sugerencia) => void
+  onMandar: (p: Sugerencia) => void
+  onDescartar: (p: Sugerencia) => void
+}) {
+  const c = useColors()
+  const info = NIVELES[nivel]
+  const ref = useRef<ScrollView>(null)
+  const pos = useRef(0)
+
+  // Flechas solo en web: en móvil se desliza con el dedo y estorbarían.
+  const puedeFlechas = Platform.OS === 'web' && lista.length > 2
+  const mover = (dir: 1 | -1) => {
+    pos.current = Math.max(0, pos.current + dir * (CARD_W + CARD_GAP) * 2)
+    ref.current?.scrollTo({ x: pos.current, animated: true })
+  }
+
+  return (
+    <View style={{ marginTop: 14 }}>
+      <View style={st.nivelCab}>
+        <View style={[st.nivelPunto, { backgroundColor: info.color }]} />
+        <View style={{ flex: 1 }}>
+          <Text style={[st.nivelLbl, { color: c.text }]}>{info.etiqueta}  ({lista.length})</Text>
+          <Text style={[st.nivelSub, { color: c.textMute }]}>{info.sub}</Text>
+        </View>
+        {puedeFlechas && (
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <TouchableOpacity style={[st.flecha, { borderColor: c.border }]} onPress={() => mover(-1)}>
+              <Ionicons name="chevron-back" size={15} color={c.textSub} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[st.flecha, { borderColor: c.border }]} onPress={() => mover(1)}>
+              <Ionicons name="chevron-forward" size={15} color={c.textSub} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      <ScrollView
+        ref={ref}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 14, gap: CARD_GAP, paddingVertical: 4 }}
+        onScroll={(e) => { pos.current = e.nativeEvent.contentOffset.x }}
+        scrollEventThrottle={64}
+      >
+        {lista.map(p => {
+          const elegida = seleccion.has(p.id)
+          return (
+            <View key={p.id} style={[st.card, { backgroundColor: c.card, borderColor: elegida ? '#1a6470' : c.border }, elegida && st.cardOn]}>
+              <TouchableOpacity activeOpacity={0.85} onPress={() => onAbrir(p)}>
+                <View style={st.fotoCaja}>
+                  {p.imagen_url
+                    ? <ThumbImage url={p.imagen_url} opts={{ width: 480 }} style={st.foto} resizeMode="cover" />
+                    : <View style={[st.foto, st.fotoVacia]}><Ionicons name="home-outline" size={26} color="#c3cfd1" /></View>}
+
+                  {/* Descartar: encima de la foto, como la X de los portales. */}
+                  <TouchableOpacity style={st.cerrar} onPress={() => onDescartar(p)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Ionicons name="close" size={14} color="#fff" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={[st.marcar, elegida && st.marcarOn]} onPress={() => onToggle(p.id)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Ionicons name={elegida ? 'checkmark' : 'add'} size={15} color={elegida ? '#fff' : '#1a6470'} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={st.cardCuerpo}>
+                  <Text style={[st.cardTitulo, { color: c.text }]} numberOfLines={2}>{p.titulo ?? 'Sin título'}</Text>
+                  <Text style={st.cardPrecio}>{precioLargo(p.precio)}</Text>
+                  <Text style={[st.cardMeta, { color: c.textMute }]} numberOfLines={1}>
+                    {[p.recamaras ? `${p.recamaras} rec` : null,
+                      p.banos ? `${p.banos} baños` : null,
+                      p.m2 ? `${p.m2} m²` : null].filter(Boolean).join(' · ') || (p.codigo ?? '')}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={st.mandar} onPress={() => onMandar(p)}>
+                <Ionicons name="logo-whatsapp" size={14} color="#25D366" />
+                <Text style={st.mandarTxt}>Mandar al cliente</Text>
+              </TouchableOpacity>
+            </View>
+          )
+        })}
+      </ScrollView>
+    </View>
+  )
+}
+
 const st = StyleSheet.create({
   caja: { borderWidth: 1, borderRadius: 14, marginHorizontal: 16, marginTop: 12, overflow: 'hidden' },
   cabecera: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14 },
-  titulo: { fontSize: 15, fontWeight: '800' },
+  titulo: { fontSize: 16, fontWeight: '800' },
   sub: { fontSize: 12, marginTop: 3 },
-  contador: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 10 },
+  contador: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 10, backgroundColor: '#1a647015' },
   contadorTxt: { color: '#1a6470', fontWeight: '800', fontSize: 12 },
 
-  ajustarLink: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingVertical: 4 },
+  ajustarLink: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingVertical: 4, paddingHorizontal: 14 },
   ajustarTxt: { color: '#1a6470', fontSize: 12.5, fontWeight: '700' },
-  ajustes: { borderWidth: 1, borderRadius: 10, padding: 10, marginTop: 6, marginBottom: 4 },
+  ajustes: { borderWidth: 1, borderRadius: 10, padding: 10, marginTop: 6, marginHorizontal: 14 },
   lbl: { fontSize: 11, fontWeight: '700', marginBottom: 4 },
   input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13.5 },
   btnBuscar: { backgroundColor: '#1a6470', borderRadius: 9, paddingVertical: 10, alignItems: 'center', marginTop: 10 },
   btnBuscarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
 
-  nivelLbl: { fontSize: 12, fontWeight: '800', marginBottom: 6 },
-  fila: { flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderRadius: 10, padding: 9, marginBottom: 6 },
-  filaTitulo: { fontSize: 13, fontWeight: '600' },
-  filaMeta: { fontSize: 11.5, marginTop: 2 },
-  iconoBtn: { padding: 4 },
-  check: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: '#c8d2d4', alignItems: 'center', justifyContent: 'center' },
-  checkOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  checkTick: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  nivelCab: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, marginBottom: 8 },
+  nivelPunto: { width: 8, height: 8, borderRadius: 4 },
+  nivelLbl: { fontSize: 13.5, fontWeight: '800' },
+  nivelSub: { fontSize: 11, marginTop: 1 },
+  flecha: { width: 26, height: 26, borderRadius: 13, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 
-  btnColeccion: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1a6470', borderRadius: 11, paddingVertical: 12, marginTop: 12 },
+  card: { width: CARD_W, borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
+  cardOn: { borderWidth: 2 },
+  fotoCaja: { position: 'relative' },
+  foto: { width: '100%', height: 140 },
+  fotoVacia: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#eef2f3' },
+  cerrar: { position: 'absolute', top: 7, right: 7, width: 24, height: 24, borderRadius: 12, backgroundColor: '#00000073', alignItems: 'center', justifyContent: 'center' },
+  marcar: { position: 'absolute', top: 7, left: 7, width: 24, height: 24, borderRadius: 12, backgroundColor: '#ffffffe6', alignItems: 'center', justifyContent: 'center' },
+  marcarOn: { backgroundColor: '#1a6470' },
+
+  cardCuerpo: { padding: 10, gap: 3 },
+  cardTitulo: { fontSize: 12.5, fontWeight: '800', lineHeight: 16, minHeight: 32 },
+  cardPrecio: { fontSize: 15, fontWeight: '800', color: '#0f9d58' },
+  cardMeta: { fontSize: 11 },
+
+  mandar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#e8eef0' },
+  mandarTxt: { color: '#1a6470', fontSize: 11.5, fontWeight: '800' },
+
+  btnColeccion: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1a6470', borderRadius: 11, paddingVertical: 12, marginTop: 14, marginHorizontal: 14 },
   btnColeccionTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
 
-  vacio: { alignItems: 'center', gap: 8, paddingVertical: 22, paddingHorizontal: 14 },
+  vacio: { alignItems: 'center', gap: 8, paddingVertical: 22, paddingHorizontal: 20 },
   vacioTxt: { fontSize: 12.5, textAlign: 'center', lineHeight: 18 },
   reintentar: { color: '#1a6470', fontWeight: '800', fontSize: 13 },
 })

@@ -57,7 +57,11 @@ CREATE POLICY sugerencias_descartadas_escribir ON public.sugerencias_descartadas
     OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role IN ('admin','supervisor','gerente'))
   );
 
-CREATE OR REPLACE FUNCTION public.sugerir_propiedades(
+-- DROP antes del CREATE: cambiar las columnas que devuelve un RETURNS TABLE no
+-- se puede con CREATE OR REPLACE, Postgres lo rechaza.
+DROP FUNCTION IF EXISTS public.sugerir_propiedades(uuid, numeric, numeric, text[], text, int);
+
+CREATE FUNCTION public.sugerir_propiedades(
   p_cliente_id uuid,
   p_min        numeric,
   p_max        numeric,
@@ -68,7 +72,7 @@ CREATE OR REPLACE FUNCTION public.sugerir_propiedades(
 RETURNS TABLE(
   id uuid, codigo text, titulo text, direccion text, precio numeric,
   operacion text, tipo text, recamaras smallint, banos smallint, m2 numeric,
-  nivel int
+  imagen_url text, nivel int
 )
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public', 'extensions' AS $fn$
   WITH disponibles AS (
@@ -93,6 +97,10 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public', 'extensions' A
   )
   SELECT c.id, c.codigo, c.titulo, c.direccion, c.precio, c.operacion, c.tipo,
          c.recamaras, c.banos, c.m2,
+         -- Primera foto, para la tarjeta. Se prefiere el thumbnail
+         -- pregenerado: la original pesa hasta 3MB y aquí se ve a 240px.
+         (SELECT coalesce(i.thumb_url, i.url) FROM public.propiedad_imagenes i
+           WHERE i.propiedad_id = c.id ORDER BY i.orden NULLS LAST LIMIT 1) AS imagen_url,
          CASE WHEN c.en_zona AND c.en_precio   THEN 1
               WHEN c.en_zona AND c.poco_arriba THEN 2
               ELSE 3 END AS nivel
