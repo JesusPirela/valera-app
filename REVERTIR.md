@@ -33,6 +33,7 @@ Cada uno es independiente. `git revert <sha>` y push.
 | Recálculo nocturno de contadores | `4a37351e` | Solo base de datos | Los números de propiedades/clientes de un usuario no cuadran |
 | Listas por lotes en el CRM | `0a5d968b` | `crm.tsx` (ambos) | Faltan clientes en la tabla o en una sección |
 | Prueba de humo en CI | `d495e963` | `.github/`, `scripts/`, `package.json` | Solo CI. No afecta a la app |
+| Propiedades sugeridas en la ficha del cliente | `00343b55` | `components/PropiedadesSugeridas.tsx`, `lib/match-propiedades.ts`, los dos `detalle-cliente.tsx` | La ficha del cliente no abre, o la sección sugiere cosas fuera de lugar |
 
 ## Lo de la base de datos
 
@@ -61,6 +62,15 @@ CREATE TRIGGER tr_citas_venta_desde_coord
   AFTER INSERT OR UPDATE OF asesor_id, estado, cliente_id, coordinado_por, prospectador_id
   ON public.citas_coordinacion
   FOR EACH ROW EXECUTE FUNCTION public.fn_citas_venta_desde_coordinacion();
+```
+
+**Propiedades sugeridas** (migración `20260927_sugerencias_propiedades_cliente.sql`).
+Quitar el componente de las fichas basta para que deje de verse; lo de la base
+no estorba porque nada más lo usa. Para borrarlo del todo:
+
+```sql
+DROP FUNCTION IF EXISTS public.sugerir_propiedades(uuid, numeric, numeric, text[], text, int);
+DROP TABLE IF EXISTS public.sugerencias_descartadas;   -- borra los descartes de los asesores
 ```
 
 ## Si algo falla y no sabes qué fue
