@@ -1491,7 +1491,9 @@ export default function CoordinacionCitas() {
 
   async function cargarAdmins() {
     const { data } = await supabase.from('profiles').select('id, nombre').eq('role', 'admin')
-    if (mountedRef.current) setAdmins(data ?? [])
+    // Sin el filtro salía un chip fantasma "· 0" de una cuenta admin sin
+    // nombre (igual que ya se hace con los asesores).
+    if (mountedRef.current) setAdmins((data ?? []).filter(a => a.nombre?.trim()))
   }
 
   async function cargarAsesores() {
@@ -1927,7 +1929,10 @@ export default function CoordinacionCitas() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           style={s.adminScroll} contentContainerStyle={s.adminContent}>
           {[
-            { id: null,           label: 'Todos', cnt: citasFiltradas.length },
+            // Total real: antes usaba citasFiltradas y mostraba "Todos · 0"
+            // cuando había otro chip seleccionado. Los demás chips ya cuentan
+            // sobre `citas`, así que este queda consistente.
+            { id: null,           label: 'Todos', cnt: citas.length },
             ...admins.map(a => ({ id: a.id, label: a.nombre, cnt: citas.filter(c => c.coordinado_por === a.id).length })),
             ...(citas.some(c => !c.coordinado_por) ? [{ id: 'sin_asignar', label: 'Sin asignar', cnt: citas.filter(c => !c.coordinado_por).length }] : []),
           ].map(item => {
