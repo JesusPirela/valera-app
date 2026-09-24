@@ -90,7 +90,11 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
       onSaved?.()
       onClose()
     } catch (e: any) {
-      // Mostrar el error en el propio botón
+      // Antes el error se tragaba en silencio: el modal se quedaba ahí y
+      // parecía que había guardado (p.ej. "No autorizado" para gerente).
+      const msg = e?.message ?? 'Revisa tu conexión e inténtalo de nuevo.'
+      if (Platform.OS === 'web') window.alert(`No se pudo guardar la retro\n\n${msg}`)
+      else Alert.alert('No se pudo guardar la retro', msg)
       setGuardando(false)
     }
   }
@@ -98,8 +102,16 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
   function cancelarCita() {
     const hazlo = async () => {
       setGuardando(true)
-      try { await supabase.rpc('cancelar_cita_venta', { p_id: cita.id }); onSaved?.(); onClose() }
-      catch { setGuardando(false) }
+      // supabase.rpc NO lanza: devuelve { error }. El try/catch anterior nunca
+      // se activaba y un fallo (p.ej. "No autorizado") pasaba desapercibido.
+      const { error } = await supabase.rpc('cancelar_cita_venta', { p_id: cita.id })
+      if (error) {
+        if (Platform.OS === 'web') window.alert(`No se pudo cancelar\n\n${error.message}`)
+        else Alert.alert('No se pudo cancelar', error.message)
+        setGuardando(false)
+        return
+      }
+      onSaved?.(); onClose()
     }
     if (Platform.OS === 'web') { if (window.confirm('¿La cita se canceló? Se marcará como CANCELADA.')) hazlo() }
     else Alert.alert('Cancelar cita', '¿La cita se canceló? Se marcará como CANCELADA.', [{ text: 'No', style: 'cancel' }, { text: 'Sí, se canceló', style: 'destructive', onPress: hazlo }])

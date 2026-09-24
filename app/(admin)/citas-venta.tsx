@@ -585,9 +585,25 @@ export default function CitasVenta() {
     setDropCol(null)
   }
 
+  // Se pinta el cambio de inmediato (optimista), pero se VERIFICA que la base
+  // lo haya guardado: antes no se revisaba el error ni cuántas filas se
+  // afectaron, así que si RLS bloqueaba o el valor no cuadraba, la pantalla
+  // mostraba el cambio y al recargar no estaba. Ahora se revierte y se avisa.
   const aplicarCambio = useCallback(async (id: string, patch: Record<string, any>) => {
-    setFilas(fs => fs.map(f => f.id === id ? { ...f, ...patch } as Fila : f))
-    await supabase.from('citas_venta').update(patch).eq('id', id)
+    let anterior: Fila | undefined
+    setFilas(fs => fs.map(f => {
+      if (f.id !== id) return f
+      anterior = f
+      return { ...f, ...patch } as Fila
+    }))
+    const { data, error } = await supabase
+      .from('citas_venta').update(patch).eq('id', id).select('id')
+    if (error || !data || data.length === 0) {
+      if (anterior) setFilas(fs => fs.map(f => (f.id === id ? anterior! : f)))
+      const msg = error?.message ?? 'No tienes permiso para editar esta tabla.'
+      if (Platform.OS === 'web') window.alert(`No se guardó el cambio\n\n${msg}`)
+      else Alert.alert('No se guardó el cambio', msg)
+    }
   }, [])
   const onTap = useCallback((id: string, k: ColKey, t: Tipo, val: string) => {
     if (t === 'texto') setEditTxt({ id, key: k, val })
