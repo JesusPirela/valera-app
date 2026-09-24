@@ -31,7 +31,7 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   { key: 'telefono', label: 'Teléfono', w: 130, tipo: 'texto' },
   { key: 'detalles_pago', label: 'Forma de pago', w: 230, tipo: 'texto' },
   { key: 'interesado_en', label: 'Interesado en', w: 250, tipo: 'texto' },
-  { key: 'dia_cita', label: 'Día de la cita', w: 170, tipo: 'fecha' },
+  { key: 'dia_cita', label: 'Día y hora de la cita', w: 200, tipo: 'fecha' },
   { key: 'prospecto', label: 'Prospectador', w: 160, tipo: 'usuario' },
   { key: 'coordino', label: 'Coordinada por', w: 150, tipo: 'usuario' },
   { key: 'atendio', label: 'Asesor que atendió', w: 160, tipo: 'usuario' },
@@ -193,23 +193,42 @@ function parseDiaTexto(txt: string): { day: number; mes: number } | null {
   return null
 }
 
-// Fecha de la cita SIEMPRE en español y con día de la semana ("Miércoles 30 de
-// diciembre"). Con fecha_cita (ISO) se deriva del timestamp real (hora de México,
-// UTC-6 fijo). Sin ISO, se intenta parsear el texto libre asumiendo 2026 y se
-// calcula el día de la semana; si no hay una fecha clara, se deja el texto tal cual.
+// Saca la hora TAL COMO VIENE ESCRITA en un texto libre ("26/07 4:30 pm",
+// "11am"). Si el registro no trae am/pm no se inventa: se muestra lo que haya.
+function parseHoraTexto(txt: string): string | null {
+  const t = txt.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\./g, '')
+  let hh: number | null = null, mm = '00', suf: string | null = null
+  let m = t.match(/\b(\d{1,2})\s*:\s*(\d{2})\s*(am|pm)?/)
+  if (m) { hh = +m[1]; mm = m[2]; suf = m[3] ?? null }
+  else {
+    m = t.match(/\b(\d{1,2})\s*(am|pm)\b/)
+    if (m) { hh = +m[1]; suf = m[2] }
+  }
+  if (hh === null || hh > 23 || +mm > 59) return null
+  return `${hh}:${mm}${suf ? ` ${suf}` : ''}`
+}
+
+// Fecha de la cita SIEMPRE en español, con día de la semana Y HORA ("Miércoles
+// 30 de diciembre, 1:30 pm"). Con fecha_cita (ISO) se deriva del timestamp real
+// (hora de México, UTC-6 fijo). Sin ISO, se intenta parsear el texto libre
+// asumiendo 2026 y se calcula el día de la semana, conservando la hora escrita;
+// si no hay una fecha clara, se deja el texto tal cual.
 function fmtFechaCitaEs(iso: string | null | undefined, fallback: string): string {
   if (iso) {
     const t = new Date(iso)
     if (!isNaN(t.getTime())) {
       const mx = new Date(t.getTime() - 6 * 3600 * 1000)
-      return `${DIAS[mx.getUTCDay()]} ${mx.getUTCDate()} de ${MESES[mx.getUTCMonth()]}`
+      const h = mx.getUTCHours()
+      const hora = `${h % 12 || 12}:${String(mx.getUTCMinutes()).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`
+      return `${DIAS[mx.getUTCDay()]} ${mx.getUTCDate()} de ${MESES[mx.getUTCMonth()]}, ${hora}`
     }
   }
   if (fallback) {
     const p = parseDiaTexto(fallback)
     if (p) {
       const d = new Date(Date.UTC(2026, p.mes, p.day))
-      return `${DIAS[d.getUTCDay()]} ${p.day} de ${MESES[p.mes]}`
+      const hora = parseHoraTexto(fallback)
+      return `${DIAS[d.getUTCDay()]} ${p.day} de ${MESES[p.mes]}${hora ? `, ${hora}` : ''}`
     }
   }
   return fallback || '—'
