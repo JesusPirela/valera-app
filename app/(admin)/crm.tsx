@@ -77,6 +77,9 @@ export default function AdminCRM() {
   const [busqueda, setBusqueda] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null)
   const [seccionesColapsadas, setSeccionesColapsadas] = useState<Set<string>>(new Set())
+  // Cuántos clientes se pintan de cada sección (ver el botón "Ver más").
+  const LOTE_SECCION = 40
+  const [visiblesPorSeccion, setVisiblesPorSeccion] = useState<Record<string, number>>({})
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
   const [miId, setMiId] = useState<string | null>(null)
@@ -582,8 +585,12 @@ export default function AdminCRM() {
                   </View>
                 </TouchableOpacity>
 
-                {/* Cards de clientes */}
-                {!colapsada && sec.data.map((item) => {
+                {/* Cards de clientes.
+                    Por lotes: al abrir una sección se pintaban TODOS sus
+                    clientes de golpe y hay quien tiene 452, lo que congelaba
+                    la pantalla al desplegarla. Se muestran los primeros y
+                    el resto con un botón. */}
+                {!colapsada && sec.data.slice(0, visiblesPorSeccion[sec.responsableId] ?? LOTE_SECCION).map((item) => {
                   const info = estadoInfo(item.estado)
                   const initials = iniciales(item.nombre)
                   return (
@@ -659,6 +666,21 @@ export default function AdminCRM() {
                     </TouchableOpacity>
                   )
                 })}
+
+                {!colapsada && sec.data.length > (visiblesPorSeccion[sec.responsableId] ?? LOTE_SECCION) && (
+                  <TouchableOpacity
+                    style={[styles.verMasBtn, { borderColor: c.border }]}
+                    onPress={() => setVisiblesPorSeccion(prev => ({
+                      ...prev,
+                      [sec.responsableId]: (prev[sec.responsableId] ?? LOTE_SECCION) + LOTE_SECCION,
+                    }))}
+                  >
+                    <Text style={styles.verMasTxt}>
+                      Ver {Math.min(LOTE_SECCION, sec.data.length - (visiblesPorSeccion[sec.responsableId] ?? LOTE_SECCION))} más
+                      {'  '}·{'  '}quedan {sec.data.length - (visiblesPorSeccion[sec.responsableId] ?? LOTE_SECCION)}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )
           })}
@@ -902,6 +924,8 @@ const styles = StyleSheet.create({
   secSub: { fontSize: 11, color: '#aaa', marginTop: 1 },
 
   // Card
+  verMasBtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 11, alignItems: 'center', marginHorizontal: 14, marginBottom: 10, borderStyle: 'dashed' },
+  verMasTxt: { color: '#1a6470', fontSize: 12.5, fontWeight: '800' },
   card: {
     borderRadius: 14, marginBottom: 8,
     flexDirection: 'row', overflow: 'hidden',

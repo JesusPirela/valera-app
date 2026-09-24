@@ -842,6 +842,33 @@ export default function CRM() {
     })
   }, [filtrados, excelSort])
 
+  // ── Render por lotes de la tabla ──────────────────────────────
+  // La vista LISTA va en un FlatList, que solo monta lo que se ve. La vista
+  // EXCEL no: pintaba las filas con un .map(), así que con 2,000 clientes
+  // montaba 2,000 filas de golpe (y cada una con sus celdas). Eso es lo que
+  // hacía que la tabla tardara en abrir y que scrollear fuera pesado.
+  //
+  // No se cambia a FlatList a propósito: la tabla vive dentro de un ScrollView
+  // horizontal y anidar listas virtualizadas dentro de ScrollViews trae
+  // problemas. En vez de eso se pinta de LOTE_EXCEL en LOTE_EXCEL y se pide
+  // más al acercarse al final, que para el usuario se siente igual.
+  const LOTE_EXCEL = 60
+  const [visiblesExcel, setVisiblesExcel] = useState(LOTE_EXCEL)
+  useEffect(() => { setVisiblesExcel(LOTE_EXCEL) }, [filtradosExcel.length])
+  const excelVisibles = useMemo(
+    () => filtradosExcel.slice(0, visiblesExcel),
+    [filtradosExcel, visiblesExcel],
+  )
+  const faltanExcel = filtradosExcel.length - excelVisibles.length
+  const onScrollExcel = useCallback((e: any) => {
+    if (faltanExcel <= 0) return
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent
+    // 600px antes del final, para que el siguiente lote ya esté puesto al llegar.
+    if (contentOffset.y + layoutMeasurement.height >= contentSize.height - 600) {
+      setVisiblesExcel(v => v + LOTE_EXCEL)
+    }
+  }, [faltanExcel])
+
   function handleColSort(colId: string) {
     setExcelSort(prev => {
       if (prev?.col === colId) {
@@ -1865,12 +1892,16 @@ export default function CRM() {
             const table = (
               <View style={[s.excelTable, { minWidth: screenWidth - 32 }]}>
                 {tableHeader}
-                {filtradosExcel.map((item, idx) => renderExcelRow(item, idx))}
+                {excelVisibles.map((item, idx) => renderExcelRow(item, idx))}
+                {faltanExcel > 0 && (
+                  <Text style={s.excelFaltan}>Cargando {faltanExcel} más…</Text>
+                )}
                 <View style={{ height: 100 }} />
               </View>
             )
             return (
-              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 12 }}>
+              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 12 }}
+                onScroll={onScrollExcel} scrollEventThrottle={16}>
                 {crmListHeader}
                 <View style={[s.excelTableWrap, { backgroundColor: c.card }]}>{table}</View>
               </ScrollView>
@@ -1879,12 +1910,16 @@ export default function CRM() {
 
           const mobileTableWidth = TABLE_COLS.reduce((sum, col) => sum + col.mw, 0)
           return (
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
+              onScroll={onScrollExcel} scrollEventThrottle={16}>
               {crmListHeader}
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={{ width: mobileTableWidth }}>
                   {tableHeader}
-                  {filtradosExcel.map((item, idx) => renderExcelRow(item, idx))}
+                  {excelVisibles.map((item, idx) => renderExcelRow(item, idx))}
+                  {faltanExcel > 0 && (
+                    <Text style={s.excelFaltan}>Cargando {faltanExcel} más…</Text>
+                  )}
                   <View style={{ height: 100 }} />
                 </View>
               </ScrollView>
@@ -2671,6 +2706,7 @@ const s = StyleSheet.create({
   presBtn:     { flex: 1, borderWidth: 1, borderColor: 'transparent', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
 
   // ── Vista Tabla Monday.com ───────────────────────────────────────
+  excelFaltan: { textAlign: 'center', paddingVertical: 14, fontSize: 12.5, color: '#94a3b8', fontWeight: '600' },
   excelTableWrap: {
     backgroundColor: '#fff',
     borderRadius: 14,
