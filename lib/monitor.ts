@@ -1,6 +1,7 @@
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
-import { supabase } from './supabase'
+import { supabase, setReporteFallos } from './supabase'
+import { setReporteGuardados } from './db'
 
 // ── Monitoreo ligero (errores + analítica), 100% en JS ──────────────────────
 // Escribe a las tablas error_log / event_log vía RPC. Es un "Sentry/PostHog"
@@ -47,15 +48,24 @@ const MENSAJES_RUIDO = [
 // minificada ("fa", "a.J", "Maximum call stack"). No los registramos.
 let haySesion = false
 
+// Pantalla en la que está el usuario, para adjuntarla al contexto del error.
+// Los stacks de producción son ilegibles porque el bundle va minificado y sin
+// sourcemaps ("index-3f7eb…js:1210:4931"), así que saber la PANTALLA es lo que
+// convierte un reporte en algo accionable: reduce la búsqueda de toda la app a
+// un archivo. Lo actualiza _layout.tsx en cada cambio de ruta.
+let pantallaActual = ''
+export function setPantalla(ruta: string): void { pantallaActual = ruta || '' }
+
 export function captureError(error: unknown, contexto?: string): void {
   try {
     const mensaje = error instanceof Error ? error.message : String(error)
     const stack = error instanceof Error ? error.stack ?? null : null
     if (!mensaje || MENSAJES_RUIDO.some(m => mensaje.includes(m)) || repetido(mensaje + (contexto ?? ''))) return
+    const ctx = [contexto, pantallaActual && `@ ${pantallaActual}`].filter(Boolean).join(' ') || null
     supabase.rpc('log_error', {
       p_mensaje: mensaje,
       p_stack: stack,
-      p_contexto: contexto ?? null,
+      p_contexto: ctx,
       p_plataforma: PLATAFORMA,
       p_version: VERSION,
     }).then(undefined, () => {})   // reportar nunca debe romper
@@ -77,6 +87,14 @@ let iniciado = false
 export function initMonitoreo(): void {
   if (iniciado) return
   iniciado = true
+
+  // Registrar el reporte de fallos de la API (ver setReporteFallos en
+  // supabase.ts): con esto, toda respuesta 4xx/5xx de Supabase llega al panel,
+  // venga de donde venga, sin tocar las ~300 llamadas de la app.
+  setReporteFallos((mensaje, contexto) => captureError(mensaje, contexto))
+  // Y los guardados que RLS deja en 0 filas, que el fetch no puede ver porque
+  // el servidor responde OK (ver lib/db.ts).
+  setReporteGuardados((mensaje, contexto) => captureError(mensaje, contexto))
 
   if (Platform.OS === 'web') {
     // Mantener actualizado si hay sesión para descartar el ruido anónimo (bots).

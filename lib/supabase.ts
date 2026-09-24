@@ -78,6 +78,57 @@ const TIMEOUT_FUNCTIONS_MS = 120000
 function esAuth(url: string): boolean { return url.includes('/auth/v1/') }
 function esFunction(url: string): boolean { return url.includes('/functions/v1/') }
 
+// ── Reporte de fallos de la API ─────────────────────────────────────────────
+// Casi ninguna escritura de la app comprueba el error que devuelve Supabase:
+// supabase.rpc() no LANZA, devuelve { error }, así que un try/catch alrededor
+// nunca se entera y la app sigue como si hubiera guardado. De ahí salieron la
+// retro que no se guardaba, el anuncio que no publicaba y los campos que se
+// revertían al recargar: los tres tardaron días en detectarse porque nadie veía
+// un error. Revisarlas una por una son ~300 llamadas; en vez de eso se observan
+// TODAS aquí, que es el único sitio por el que pasan.
+//
+// Esto solo MIRA: no cambia la respuesta ni el flujo. Si el reporte falla, la
+// petición sigue su curso igual.
+//
+// El reportero se inyecta desde monitor.ts (setReporteFallos) para no importar
+// monitor aquí: monitor ya importa este módulo y sería un ciclo.
+type ReporteFallo = (mensaje: string, contexto: string) => void
+let reportarFallo: ReporteFallo | null = null
+export function setReporteFallos(fn: ReporteFallo): void { reportarFallo = fn }
+
+// "…/rest/v1/clientes?id=eq.123" → "clientes"; "…/rest/v1/rpc/get_ranking" →
+// "rpc/get_ranking". Sin los parámetros, para que el panel agrupe las
+// ocurrencias en una sola línea en vez de una por registro.
+function rutaCorta(url: string): string {
+  const m = url.match(/\/(?:rest|functions)\/v1\/([^?]+)/)
+  return m ? m[1] : url.slice(0, 80)
+}
+
+function reportarSiFalla(res: Response, url: string, init: RequestInit | undefined): void {
+  try {
+    if (res.status < 400 || !reportarFallo) return
+    if (esAuth(url)) return                       // login/refresh: los maneja auth-js
+    if (res.status === 401) return                // ya se reintenta arriba con token nuevo
+    if (res.status === 406) return                // .single() sin filas; es un caso normal
+    const metodo = (init?.method ?? 'GET').toUpperCase()
+    const ruta = rutaCorta(url)
+    // El detalle del error (el mensaje de Postgres, que es lo realmente útil:
+    // "violates row-level security policy") se lee de una COPIA de la
+    // respuesta, y solo en web. En nativo el fetch es un polyfill y no vale la
+    // pena arriesgar que clonar interfiera con el cuerpo que va a leer
+    // supabase-js: ahí se reporta el status y la ruta, que ya ubican el fallo.
+    if (Platform.OS !== 'web') { reportarFallo(`API ${res.status} ${metodo} ${ruta}`, 'supabase'); return }
+    res.clone().text().then(
+      (txt) => {
+        let detalle = ''
+        try { const j = JSON.parse(txt); detalle = j.message ?? j.error ?? j.hint ?? '' } catch { detalle = txt.slice(0, 200) }
+        reportarFallo?.(`API ${res.status} ${metodo} ${ruta}${detalle ? ` — ${detalle}` : ''}`, 'supabase')
+      },
+      () => { reportarFallo?.(`API ${res.status} ${metodo} ${ruta}`, 'supabase') },
+    )
+  } catch { /* observar nunca debe romper la petición */ }
+}
+
 function fetchConTimeout(input: any, init: RequestInit | undefined, ms: number): Promise<Response> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), ms)
@@ -95,8 +146,8 @@ const fetchConAuth: typeof fetch = async (input, init) => {
     : (input as Request).url ?? ''
   const ms = esAuth(url) ? TIMEOUT_AUTH_MS : esFunction(url) ? TIMEOUT_FUNCTIONS_MS : TIMEOUT_MS
   const res = await fetchConTimeout(input as any, init, ms)
-  if (res.status !== 401) return res
-  if (!url || !url.includes('/rest/v1/')) return res
+  if (res.status !== 401) { reportarSiFalla(res, url, init); return res }
+  if (!url || !url.includes('/rest/v1/')) { reportarSiFalla(res, url, init); return res }
 
   try {
     const { data, error } = await supabase.auth.refreshSession()
@@ -109,7 +160,9 @@ const fetchConAuth: typeof fetch = async (input, init) => {
     headers.set('Authorization', `Bearer ${token}`)
     headers.set('apikey', supabaseAnonKey)
     const destino = typeof input === 'string' || input instanceof URL ? input : (input as Request).url
-    return await fetchConTimeout(destino, { ...(init ?? {}), headers }, TIMEOUT_MS)
+    const res2 = await fetchConTimeout(destino, { ...(init ?? {}), headers }, TIMEOUT_MS)
+    reportarSiFalla(res2, url, init)   // el reintento con token nuevo también cuenta
+    return res2
   } catch {
     return res  // si el refresh falla, devolvemos el 401 original
   }

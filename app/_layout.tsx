@@ -10,7 +10,7 @@ import { ThemeProvider, useColors } from '../lib/ThemeContext'
 import { VistaComoProvider } from '../lib/VistaComo'
 import { CargaDatosProvider } from '../lib/CargaDatos'
 import { actualizarNombreRole, guardarTokensSesion, accountSwitch, userSignOut } from '../lib/cuentas'
-import { initMonitoreo, track, captureError } from '../lib/monitor'
+import { initMonitoreo, track, captureError, setPantalla } from '../lib/monitor'
 import { navegarSeguro } from '../lib/navegar'
 import { useCuentaActiva } from '../hooks/useCuentaActiva'
 import * as Updates from 'expo-updates'
@@ -125,6 +125,9 @@ export default function RootLayout() {
   const pathname = usePathname()
   const pathnameRef = useRef('')
   pathnameRef.current = pathname
+  // Que el monitoreo sepa en qué pantalla estaba el usuario al fallar: los
+  // stacks van minificados y sin la pantalla no se puede ubicar el error.
+  setPantalla(pathname)
   const ultimaRevisionUpdateRef = useRef(0)
 
   // Cierra la sesión si un admin inhabilita la cuenta (o expira por inactividad).
