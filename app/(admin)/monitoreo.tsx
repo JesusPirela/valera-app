@@ -28,17 +28,29 @@ export default function Monitoreo() {
   const [ocurrencias, setOcurrencias] = useState<Ocurrencia[]>([])
   const [cargandoOcur, setCargandoOcur] = useState(false)
   const [revisados, setRevisados] = useState<Set<string>>(new Set())   // errores ya vistos/atendidos
+  const [errorCarga, setErrorCarga] = useState<string | null>(null)    // falló la consulta, no "todo bien"
 
+  // Ojo con el error de la consulta: sin comprobarlo, un fallo de red o de
+  // permisos dejaba la lista vacía y la pantalla anunciaba "Ningún error en
+  // este periodo. Todo tranquilo." — justo lo contrario de lo que pasaba. Un
+  // panel de monitoreo que miente cuando falla es peor que no tenerlo.
   const cargar = useCallback(async () => {
-    const [e, ev, rev] = await Promise.all([
-      supabase.rpc('get_monitoreo_errores', { p_dias: dias }),
-      supabase.rpc('get_monitoreo_eventos', { p_dias: dias }),
-      supabase.from('monitoreo_errores_revisados').select('mensaje'),
-    ])
-    setErrores((e.data ?? []) as ErrRow[])
-    setEventos((ev.data ?? []) as EvtRow[])
-    setRevisados(new Set((rev.data ?? []).map((r: any) => r.mensaje)))
-    setLoading(false)
+    try {
+      const [e, ev, rev] = await Promise.all([
+        supabase.rpc('get_monitoreo_errores', { p_dias: dias }),
+        supabase.rpc('get_monitoreo_eventos', { p_dias: dias }),
+        supabase.from('monitoreo_errores_revisados').select('mensaje'),
+      ])
+      const fallo = e.error ?? ev.error ?? rev.error
+      setErrorCarga(fallo ? (fallo.message || 'No se pudieron cargar los datos') : null)
+      setErrores((e.data ?? []) as ErrRow[])
+      setEventos((ev.data ?? []) as EvtRow[])
+      setRevisados(new Set((rev.data ?? []).map((r: any) => r.mensaje)))
+    } catch (err: any) {
+      setErrorCarga(err?.message ?? 'No se pudieron cargar los datos')
+    } finally {
+      setLoading(false)
+    }
   }, [dias])
 
   // Marcar/desmarcar un error como revisado (check/uncheck). Se persiste para
@@ -101,13 +113,27 @@ export default function Monitoreo() {
           ))}
         </View>
 
+        {errorCarga && !loading ? (
+          <View style={s.avisoFallo}>
+            <Text style={s.avisoFalloTxt}>
+              ⚠️ No se pudieron cargar los datos, así que lo de abajo puede estar incompleto.{'\n'}{errorCarga}
+            </Text>
+            <TouchableOpacity onPress={() => { setLoading(true); cargar() }}>
+              <Text style={s.avisoFalloBtn}>Reintentar</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {loading ? (
           <ActivityIndicator size="large" color={TEAL} style={{ marginTop: 40 }} />
         ) : tab === 'errores' ? (
           errores.length === 0 ? (
             <View style={s.vacio}>
-              <Text style={{ fontSize: 40 }}>✅</Text>
-              <Text style={[s.vacioTxt, { color: c.textMute }]}>Ningún error en este periodo. Todo tranquilo.</Text>
+              <Text style={{ fontSize: 40 }}>{errorCarga ? '❓' : '✅'}</Text>
+              <Text style={[s.vacioTxt, { color: c.textMute }]}>
+                {errorCarga ? 'No se pudo consultar. Reintenta para saber si hay errores.'
+                            : 'Ningún error en este periodo. Todo tranquilo.'}
+              </Text>
             </View>
           ) : (
             errores.map((e, i) => {
@@ -211,6 +237,9 @@ const s = StyleSheet.create({
   tabTxtOn: { color: '#fff' },
 
   vacio: { alignItems: 'center', marginTop: 50, gap: 10, paddingHorizontal: 30 },
+  avisoFallo: { backgroundColor: '#fef2f2', borderColor: '#fecaca', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 12, gap: 8 },
+  avisoFalloTxt: { color: '#991b1b', fontSize: 12.5, lineHeight: 18 },
+  avisoFalloBtn: { color: '#dc2626', fontSize: 13, fontWeight: '800' },
   vacioTxt: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
   errCard: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 8 },

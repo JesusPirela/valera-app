@@ -631,7 +631,7 @@ export default function CRM() {
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
 
-  const { data: clientes = [], isLoading, refetch } = useQuery<Cliente[]>({
+  const { data: clientesRaw = [], isLoading, refetch } = useQuery<Cliente[]>({
     // Sufijo de versión: invalida el caché persistido en disco. Se subió a 'v3'
     // (30/jun/2026) porque algunos usuarios quedaron con una lista VACÍA cacheada
     // que no se reemplazaba, viendo su CRM en blanco pese a tener sus clientes
@@ -656,6 +656,15 @@ export default function CRM() {
     networkMode: 'offlineFirst',
     staleTime: 1000 * 60 * 5,
   })
+
+  // El caché persistido en disco puede volver con huecos: si la escritura se
+  // trunca (se llena la cuota de localStorage, se cierra la pestaña a medias)
+  // el array se rehidrata con algún null dentro. Un solo hueco tumbaba TODA la
+  // pantalla — "Cannot read properties of null (reading 'tipo_operacion')" en
+  // el monitoreo — y seguía tumbándola en cada visita hasta limpiar el caché,
+  // dejando al usuario sin CRM. Se sanea aquí una vez y quedan protegidos
+  // todos los derivados (KPIs, chips, filtros y la lista).
+  const clientes = useMemo(() => clientesRaw.filter((c): c is Cliente => !!c), [clientesRaw])
 
   // Jalar para actualizar
   const [refreshing, setRefreshing] = useState(false)

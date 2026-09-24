@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { AppState, Platform, Alert } from 'react-native'
-import { router } from 'expo-router'
 import { supabase } from '../lib/supabase'
+import { navegarSeguro } from '../lib/navegar'
 
 // Cierra la sesión del usuario si un admin inhabilita su cuenta (o si se
 // auto-inhabilitó por inactividad).
@@ -27,7 +27,9 @@ export function useCuentaActiva(enabled: boolean): void {
       const msg = 'Tu cuenta está inhabilitada temporalmente. Contacta a un administrador para reactivarla.'
       if (Platform.OS === 'web') { try { window.alert(msg) } catch { /* no-op */ } }
       else Alert.alert('Cuenta inhabilitada', msg)
-      router.replace('/(auth)/login')
+      // navegarSeguro: Realtime puede disparar esto durante el arranque, antes
+      // de que monte el layout raíz, y ahí router.replace lanza.
+      navegarSeguro('/(auth)/login')
     }
 
     async function revisar() {

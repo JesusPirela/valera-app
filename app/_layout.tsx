@@ -10,7 +10,8 @@ import { ThemeProvider, useColors } from '../lib/ThemeContext'
 import { VistaComoProvider } from '../lib/VistaComo'
 import { CargaDatosProvider } from '../lib/CargaDatos'
 import { actualizarNombreRole, guardarTokensSesion, accountSwitch, userSignOut } from '../lib/cuentas'
-import { initMonitoreo, track } from '../lib/monitor'
+import { initMonitoreo, track, captureError } from '../lib/monitor'
+import { navegarSeguro } from '../lib/navegar'
 import { useCuentaActiva } from '../hooks/useCuentaActiva'
 import * as Updates from 'expo-updates'
 import { useFonts } from 'expo-font'
@@ -397,9 +398,11 @@ export default function RootLayout() {
           setSession(null)
         } else if (userSignOut.pending) {
           // Cierre de sesión DELIBERADO del usuario (tocó "Cerrar sesión") → login.
+          // navegarSeguro: este callback puede dispararse durante el arranque,
+          // antes de que monte el layout raíz, y ahí router.replace lanza.
           setSession(null)
           queryClient.clear()
-          router.replace('/(auth)/login')
+          navegarSeguro('/(auth)/login')
         } else {
           // SIGNED_OUT NO solicitado (falso positivo de Android: token expirado en
           // background, red caída durante el refresh…). No sacar al usuario: se
@@ -496,6 +499,12 @@ export default function RootLayout() {
 // Es puramente aditivo: si nada truena, nunca se ve. Renderiza FUERA del
 // ThemeProvider, por eso usa colores fijos (no useColors).
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  // Avisar al monitoreo. Sin esto, los crashes de pantalla eran INVISIBLES: el
+  // usuario veía esta tarjeta y el panel nunca se enteraba, porque el
+  // ErrorBoundary de React atrapa el error ANTES de que llegue a
+  // window.onerror, que es de donde se alimenta el monitoreo en web.
+  useEffect(() => { captureError(error, 'pantalla-crash') }, [error])
+
   return (
     <View style={styles.overlay}>
       <View style={styles.card}>

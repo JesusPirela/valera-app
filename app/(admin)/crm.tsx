@@ -314,7 +314,9 @@ export default function AdminCRM() {
   }
 
   const { todosClientes, totalGlobal, totalPipeline, enProceso, comprados, conteosPorEstado } = useMemo(() => {
-    const todos = secciones.flatMap((s) => s.data)
+    // .filter(Boolean): misma defensa que en el CRM del prospectador — un hueco
+    // en los datos tumbaba la pantalla al filtrar por tipo_operacion.
+    const todos = secciones.flatMap((s) => s.data).filter((c): c is ClienteAdmin => !!c)
     const pipeline = operacionFiltro ? todos.filter(c => c.tipo_operacion === operacionFiltro) : todos
     return {
       todosClientes: todos,
