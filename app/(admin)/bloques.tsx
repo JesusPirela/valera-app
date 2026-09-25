@@ -12,6 +12,7 @@ import { usePullRefresh } from '../../hooks/usePullRefresh'
 const TEAL = '#1a6470'
 const PURPLE = '#5e35b1'
 const SIN_ASIGNAR = '__sin__'
+const GENERAL = '__general__'  // pseudo-bloque: TODOS los usuarios, sin importar su bloque real
 
 const hoyISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -151,6 +152,7 @@ export default function Bloques() {
   }
 
   const grupos: { key: string; nombre: string; users: ResumenRow[] }[] = [
+    { key: GENERAL, nombre: 'Bloque general', users: usuarios },
     ...bloques.map((b) => ({ key: b.id, nombre: b.nombre, users: usuarios.filter((u) => u.bloque_id === b.id) })),
     { key: SIN_ASIGNAR, nombre: 'Sin asignar', users: usuarios.filter((u) => !u.bloque_id) },
   ]

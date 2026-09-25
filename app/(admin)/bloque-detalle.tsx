@@ -8,6 +8,8 @@ import { supabase } from '../../lib/supabase'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
+const GENERAL = '__general__'  // pseudo-bloque "Bloque general" de bloques.tsx: todos los usuarios
+
 const hoyISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 function fmtFechaCorta(iso: string | null): string {
@@ -413,8 +415,12 @@ export default function BloqueDetalle() {
     periodoPedidoRef.current = p
     if (!yaCargoRef.current) setLoading(true)
     const { inicio, fin } = getRango(p)
+    // "Bloque general" (id === GENERAL) no es un bloque real: trae a TODOS los
+    // usuarios en vez de filtrar por bloque_id.
     const [miembrosRes, prodRes, diariosRes, notasRes] = await Promise.all([
-      supabase.from('profiles').select('id').eq('bloque_id', id),
+      id === GENERAL
+        ? supabase.from('profiles').select('id').neq('role', 'admin')
+        : supabase.from('profiles').select('id').eq('bloque_id', id),
       supabase.rpc('get_productividad_equipo', { p_inicio: inicio.toISOString(), p_fin: fin.toISOString() }),
       supabase.from('bloque_diario').select('user_id, contesto, nota').eq('fecha', hoyISO()),
       supabase.from('bloque_notas').select('id, user_id, texto, tipo, fecha, created_at').order('created_at', { ascending: false }),
@@ -497,25 +503,30 @@ export default function BloqueDetalle() {
         <View style={{ width: 90 }} />
       </View>
 
-      {/* Sub-apartado de estadísticas en gráficas del bloque */}
-      <TouchableOpacity
-        style={[s.btnCalendario, { backgroundColor: '#1a647022', borderColor: '#1a6470' }]}
-        activeOpacity={0.85}
-        onPress={() => router.push(`/(admin)/bloque-estadisticas?id=${id}&nombre=${encodeURIComponent(String(nombre ?? ''))}`)}
-      >
-        <Text style={[s.btnCalendarioTxt, { color: '#7fd1c4' }]}>📊 Estadísticas en gráficas</Text>
-        <Text style={[s.btnCalendarioChevron, { color: '#7fd1c4' }]}>›</Text>
-      </TouchableOpacity>
+      {/* Estadísticas en gráficas y calendario de actividad: ambos filtran por
+          bloque_id en su RPC/consulta, así que no aplican al pseudo-bloque
+          "Bloque general" (no es una fila real de la tabla `bloques`). */}
+      {id !== GENERAL && (
+        <>
+          <TouchableOpacity
+            style={[s.btnCalendario, { backgroundColor: '#1a647022', borderColor: '#1a6470' }]}
+            activeOpacity={0.85}
+            onPress={() => router.push(`/(admin)/bloque-estadisticas?id=${id}&nombre=${encodeURIComponent(String(nombre ?? ''))}`)}
+          >
+            <Text style={[s.btnCalendarioTxt, { color: '#7fd1c4' }]}>📊 Estadísticas en gráficas</Text>
+            <Text style={[s.btnCalendarioChevron, { color: '#7fd1c4' }]}>›</Text>
+          </TouchableOpacity>
 
-      {/* Acceso al calendario de actividad (vive dentro del bloque) */}
-      <TouchableOpacity
-        style={s.btnCalendario}
-        activeOpacity={0.85}
-        onPress={() => router.push(`/(admin)/bloque-calendario?id=${id}&nombre=${encodeURIComponent(String(nombre ?? ''))}`)}
-      >
-        <Text style={s.btnCalendarioTxt}>📅 Calendario de actividad</Text>
-        <Text style={s.btnCalendarioChevron}>›</Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={s.btnCalendario}
+            activeOpacity={0.85}
+            onPress={() => router.push(`/(admin)/bloque-calendario?id=${id}&nombre=${encodeURIComponent(String(nombre ?? ''))}`)}
+          >
+            <Text style={s.btnCalendarioTxt}>📅 Calendario de actividad</Text>
+            <Text style={s.btnCalendarioChevron}>›</Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       {/* Tabs de período */}
       <View style={s.tabsContainer}>
