@@ -80,6 +80,10 @@ function mapear(n: string | undefined): string { const v = (n ?? '').trim(); ret
 // Una cita cuenta como cancelada si su estado menciona "cancel" (cubre
 // CANCELADA, cancelada, canceló, "cancelada por cliente", etc.).
 function esCancelada(s: string | null | undefined): boolean { return normalizar(s ?? '').includes('cancel') }
+// Apartó es el mejor desenlace posible de una cita, así que se marca igual de
+// visible que la cancelación —desde la columna del cliente, sin tener que
+// buscar la de estado a la derecha— pero en verde.
+function esApartado(s: string | null | undefined): boolean { return normalizar(s ?? '').includes('apart') }
 function arreglarEncoding(s: string): string {
   if (!s || !/[ÃÂ]/.test(s)) return s
   try {
@@ -114,11 +118,15 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
 }) {
   const c = useColors()
   const cancelada = esCancelada(f.estado_seguimiento)
+  const apartado  = esApartado(f.estado_seguimiento)
   return (
     <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
-      {/* Contador de fila (como Excel); en rojo si está cancelada */}
+      {/* Contador de fila (como Excel); en rojo si está cancelada, verde si apartó */}
       <View style={[st.cell, st.counterCell, { width: NUM_W, borderColor: c.border }]}>
-        <Text style={[st.counterTxt, { color: cancelada ? '#c0392b' : c.textMute, fontWeight: cancelada ? '800' : '400' }]}>{cancelada ? '🚫' : idx + 1}</Text>
+        <Text style={[st.counterTxt, {
+          color: cancelada ? '#c0392b' : apartado ? '#0f9d58' : c.textMute,
+          fontWeight: (cancelada || apartado) ? '800' : '400',
+        }]}>{cancelada ? '🚫' : apartado ? '🔑' : idx + 1}</Text>
       </View>
       {COLS.map(col => {
         const val = (f[col.key] as string) ?? ''
@@ -126,14 +134,24 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
         // derivada del timestamp real (no del texto guardado, que venía en inglés).
         const display = col.key === 'dia_cita' ? fmtFechaCitaEs(f.fecha_cita, val) : val
         const esEstadoCancelada = col.key === 'estado_seguimiento' && esCancelada(val)
-        // En la columna del CLIENTE (siempre visible) mostrar "🚫 CANCELADA/REAGENDA" para
-        // que se note aunque la columna de estado esté scrolleada a la derecha.
+        const esEstadoApartado  = col.key === 'estado_seguimiento' && esApartado(val)
+        // En la columna del CLIENTE (siempre visible) mostrar "🚫 CANCELADA/REAGENDA"
+        // o "🔑 APARTADO" para que se note aunque la columna de estado esté
+        // scrolleada a la derecha.
         const esClienteCancelada = cancelada && col.key === 'cliente_nombre'
-        const rojo = esEstadoCancelada || esClienteCancelada
+        const esClienteApartado  = apartado && col.key === 'cliente_nombre'
+        const rojo  = esEstadoCancelada || esClienteCancelada
+        const verde = esEstadoApartado || esClienteApartado
+        const marca = esClienteCancelada ? `🚫 CANCELADA/REAGENDA · ${val || '—'}`
+                    : esClienteApartado  ? `🔑 APARTADO · ${val || '—'}`
+                    : (display || '—')
         return (
           <TouchableOpacity key={col.key} style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
             onPress={() => onTap(f.id, col.key, col.tipo, val)}>
-            <Text style={{ color: rojo ? '#c0392b' : (val ? c.text : c.textMute), fontSize: 12.5, fontWeight: rojo ? '800' : '400' }} numberOfLines={2}>{esClienteCancelada ? `🚫 CANCELADA/REAGENDA · ${val || '—'}` : (display || '—')}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
+            <Text style={{
+              color: rojo ? '#c0392b' : verde ? '#0f9d58' : (val ? c.text : c.textMute),
+              fontSize: 12.5, fontWeight: (rojo || verde) ? '800' : '400',
+            }} numberOfLines={2}>{marca}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
           </TouchableOpacity>
         )
       })}
