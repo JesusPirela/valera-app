@@ -56,6 +56,7 @@ import MiniMapa from '../../components/MiniMapa'
 import { getDesbloqueadas } from '../../lib/publicarUnlock'
 import { fetchPublicacionesUsuario, type PublicacionesData } from '../../lib/publicaciones'
 import { actualizarWidgetMiDia } from '../../lib/widgetUpdate'
+import { esCerrada, etiquetaEstado } from '../../lib/estado-propiedad'
 
 type Propiedad = {
   id: string
@@ -215,16 +216,16 @@ const PropiedadCard = memo(function PropiedadCard({
           >
             <Text style={styles.lupitaText}>🔍</Text>
           </TouchableOpacity>
-          {totalPublicadores === 0 && item.estado !== 'vendida' && (
+          {totalPublicadores === 0 && !esCerrada(item.estado) && (
             <View style={styles.nuncaPublicadaBadge}>
               <Text style={styles.nuncaPublicadaText}>🔥 NADIE LO HA PUBLICADO</Text>
             </View>
           )}
         </View>
       )}
-      {item.estado === 'vendida' && (
+      {esCerrada(item.estado) && (
         <View style={styles.vendidaBanner}>
-          <Text style={styles.vendidaBannerText}>🏷️ Vendida</Text>
+          <Text style={styles.vendidaBannerText}>🏷️ {etiquetaEstado(item.estado)}</Text>
         </View>
       )}
       {item.exclusiva && (
@@ -242,7 +243,7 @@ const PropiedadCard = memo(function PropiedadCard({
           </Text>
         </View>
       )}
-      {!primera?.url && totalPublicadores === 0 && item.estado !== 'vendida' && (
+      {!primera?.url && totalPublicadores === 0 && !esCerrada(item.estado) && (
         <View style={styles.nuncaPublicadaBadgeSinImagen}>
           <Text style={styles.nuncaPublicadaText}>🔥 NADIE LO HA PUBLICADO</Text>
         </View>
@@ -288,7 +289,7 @@ const PropiedadCard = memo(function PropiedadCard({
             {item.estacionamientos != null && <Text style={styles.metaItem}>Est {item.estacionamientos}</Text>}
           </View>
         )}
-        {isNuevaParaTi && item.estado !== 'vendida' && (
+        {isNuevaParaTi && !esCerrada(item.estado) && (
           <View style={styles.nuevaBadge}>
             <Text style={styles.nuevaText}>✨ Nueva para ti</Text>
           </View>
@@ -300,7 +301,7 @@ const PropiedadCard = memo(function PropiedadCard({
             </Text>
           </View>
         )}
-        {totalPublicadores < 3 && veces === 0 && item.estado !== 'vendida' && (
+        {totalPublicadores < 3 && veces === 0 && !esCerrada(item.estado) && (
           <View style={styles.primeraVezBadge}>
             <Text style={styles.primeraVezText}>
               {totalPublicadores === 0
@@ -484,7 +485,7 @@ export default function ProspectadorPropiedades() {
         const { data, error } = await supabase
           .from('propiedades')
           .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, estado_mx, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, directa, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, total_publicadores, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
-          .in('estado', ['disponible', 'vendida'])
+          .in('estado', ['disponible', 'vendida', 'rentada'])
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
           .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
@@ -1009,7 +1010,7 @@ export default function ProspectadorPropiedades() {
 
   // Vendidas siempre al fondo, por debajo de cualquier otro criterio de orden.
   propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
-    (a.estado === 'vendida' ? 1 : 0) - (b.estado === 'vendida' ? 1 : 0)
+    (esCerrada(a.estado) ? 1 : 0) - (esCerrada(b.estado) ? 1 : 0)
   )
 
   // Garantía final: ningún sort puede colarse sobre el filtro de operación.

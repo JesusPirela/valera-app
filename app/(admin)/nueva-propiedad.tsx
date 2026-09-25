@@ -28,6 +28,7 @@ import { detectarEstadoMexico } from '../../lib/estados-mexico'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import CensorEditorModal from '../../components/CensorEditorModal'
+import { EstadoPropiedad } from '../../lib/estado-propiedad'
 
 function generarUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -170,7 +171,7 @@ export default function NuevaPropiedad() {
   const [modeloDesarrollo, setModeloDesarrollo] = useState('')  // modelo detectado al importar (ej. "Lisboa VI")
   const [operacion, setOperacion] = useState<'venta' | 'renta'>('venta')
   const [tipo, setTipo] = useState<'casa' | 'departamento' | 'local' | 'terreno'>('casa')
-  const [estado, setEstado] = useState<'disponible' | 'vendida'>('disponible')
+  const [estado, setEstado] = useState<EstadoPropiedad>('disponible')
   const [recamaras, setRecamaras] = useState<number | null>(null)
   const [banos, setBanos] = useState<number | null>(null)
   const [m2, setM2] = useState('')
@@ -1233,7 +1234,7 @@ export default function NuevaPropiedad() {
 
         <Text style={styles.label}>Estado</Text>
         <PillSelector
-          options={[{ value: 'disponible', label: 'Disponible' }, { value: 'vendida', label: 'Vendida' }]}
+          options={[{ value: 'disponible', label: 'Disponible' }, { value: 'vendida', label: 'Vendida' }, { value: 'rentada', label: 'Rentada' }]}
           value={estado}
           onChange={setEstado}
         />

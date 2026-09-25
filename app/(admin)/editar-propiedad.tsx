@@ -31,6 +31,7 @@ import { detectarEstadoMexico } from '../../lib/estados-mexico'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import CensorEditorModal from '../../components/CensorEditorModal'
 import * as Clipboard from 'expo-clipboard'
+import { EstadoPropiedad } from '../../lib/estado-propiedad'
 
 type ImagenExistente = { id: string; url: string; orden: number }
 // Lista unificada de imágenes (existentes + nuevas) en su orden final de visualización.
@@ -159,7 +160,7 @@ export default function EditarPropiedad() {
   const [modeloDesarrollo, setModeloDesarrollo] = useState('')  // modelo detectado al importar (ej. "Lisboa VI")
   const [operacion, setOperacion] = useState<'venta' | 'renta'>('venta')
   const [tipo, setTipo] = useState<'casa' | 'departamento' | 'local' | 'terreno'>('casa')
-  const [estado, setEstado] = useState<'disponible' | 'vendida'>('disponible')
+  const [estado, setEstado] = useState<EstadoPropiedad>('disponible')
   const [recamaras, setRecamaras] = useState<number | null>(null)
   const [banos, setBanos] = useState<number | null>(null)
   const [mediosBanos, setMediosBanos] = useState<number | null>(null)
@@ -307,7 +308,7 @@ export default function EditarPropiedad() {
     setLng((data as any).lng ?? null)
     setOperacion((data.operacion as 'venta' | 'renta') ?? 'venta')
     setTipo((data.tipo as 'casa' | 'departamento' | 'local' | 'terreno') ?? 'casa')
-    setEstado((data.estado as 'disponible' | 'vendida') ?? 'disponible')
+    setEstado((data.estado as EstadoPropiedad) ?? 'disponible')
     setZona((data.zona as 'queretaro' | 'monterrey' | 'puebla') ?? null)
     setRecamaras(data.recamaras ?? null)
     setBanos(data.banos ?? null)
@@ -1352,7 +1353,7 @@ export default function EditarPropiedad() {
 
         <Text style={styles.label}>Estado</Text>
         <PillSelector
-          options={[{ value: 'disponible', label: 'Disponible' }, { value: 'vendida', label: 'Vendida' }]}
+          options={[{ value: 'disponible', label: 'Disponible' }, { value: 'vendida', label: 'Vendida' }, { value: 'rentada', label: 'Rentada' }]}
           value={estado}
           onChange={setEstado}
         />

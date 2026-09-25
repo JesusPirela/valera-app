@@ -287,7 +287,7 @@ export default function Estadisticas() {
   // ── Distribución propiedades ──
   const tipoCount = { casa: 0, departamento: 0, local: 0, terreno: 0, otro: 0 }
   const opCount   = { venta: 0, renta: 0 }
-  const estCount  = { disponible: 0, vendida: 0 }
+  const estCount  = { disponible: 0, vendida: 0, rentada: 0 }
   for (const p of propDist) {
     if (p.tipo === 'casa') tipoCount.casa++
     else if (p.tipo === 'departamento') tipoCount.departamento++
@@ -300,6 +300,7 @@ export default function Estadisticas() {
 
     if (p.estado === 'disponible') estCount.disponible++
     else if (p.estado === 'vendida') estCount.vendida++
+    else if (p.estado === 'rentada') estCount.rentada++
   }
 
   const slicesTipo: Slice[] = [
@@ -318,6 +319,7 @@ export default function Estadisticas() {
   const slicesEst: Slice[] = [
     { label: 'Disponible', value: estCount.disponible, color: C.green },
     { label: 'Vendida', value: estCount.vendida, color: C.red },
+    { label: 'Rentada', value: estCount.rentada, color: '#2c7fb8' },
   ].filter(s => s.value > 0)
 
   // ── Distribución CRM ──

@@ -23,6 +23,7 @@ import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { useScrollHorizontalConRueda } from '../../hooks/useScrollHorizontalConRueda'
+import { EstadoPropiedad, esCerrada, etiquetaEstado, colorEstado } from '../../lib/estado-propiedad'
 
 type Propiedad = {
   id: string
@@ -60,7 +61,7 @@ function contactoLabel(p: { asesores?: { nombre: string; inmobiliaria: string | 
 }
 
 type FiltroOperacion = 'venta' | 'renta' | null
-type FiltroEstado = 'disponible' | 'vendida' | null
+type FiltroEstado = EstadoPropiedad | null
 type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
 type OrdenPublicaciones = 'desc' | 'asc' | null
@@ -668,6 +669,7 @@ export default function AdminPropiedades() {
             <FiltroChip label="Todos" active={filtroEstado === null} onPress={() => setFiltroEstado(null)}  textSubColor={c.textSub}/>
             <FiltroChip label="Disponible" active={filtroEstado === 'disponible'} onPress={() => setFiltroEstado(filtroEstado === 'disponible' ? null : 'disponible')}  textSubColor={c.textSub}/>
             <FiltroChip label="Vendida" active={filtroEstado === 'vendida'} onPress={() => setFiltroEstado(filtroEstado === 'vendida' ? null : 'vendida')}  textSubColor={c.textSub}/>
+            <FiltroChip label="Rentada" active={filtroEstado === 'rentada'} onPress={() => setFiltroEstado(filtroEstado === 'rentada' ? null : 'rentada')}  textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Tipo</Text>
           <ScrollView ref={scrollTipoRef} horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
@@ -783,9 +785,10 @@ export default function AdminPropiedades() {
             <Text style={styles.codigoBadge}>{item.codigo ?? '—'}</Text>
             {item.destacada && <Text style={styles.destacadaBadge}>★ Destacada</Text>}
             {item.directa && <Text style={styles.directaBadge}>🎯 Directa</Text>}
-            <View style={[styles.estadoBadge, item.estado === 'vendida' && styles.estadoVendida]}>
-              <Text style={[styles.estadoText, item.estado === 'vendida' && styles.estadoTextVendida]}>
-                {item.estado === 'vendida' ? 'Vendida' : 'Disponible'}
+            <View style={[styles.estadoBadge, esCerrada(item.estado) && styles.estadoVendida]}>
+              <Text style={[styles.estadoText, esCerrada(item.estado) && styles.estadoTextVendida,
+                            item.estado === 'rentada' && { color: colorEstado('rentada') }]}>
+                {etiquetaEstado(item.estado)}
               </Text>
             </View>
           </View>

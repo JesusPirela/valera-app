@@ -43,6 +43,7 @@ import { actualizarMisionesPorCategoria, registrarAccion } from '../../lib/gamif
 import { marcarDesbloqueada, estaDesbloqueada } from '../../lib/publicarUnlock'
 import { fetchPublicacionesUsuario, type PublicacionesData } from '../../lib/publicaciones'
 import { actualizarWidgetMiDia } from '../../lib/widgetUpdate'
+import { esCerrada } from '../../lib/estado-propiedad'
 
 
 type Propiedad = {
@@ -1754,7 +1755,7 @@ export default function DetallePropiedad() {
 
   async function abrirModalCita(forzar = false) {
     if (!propiedad) return
-    if (propiedad.estado === 'vendida' && !forzar) {
+    if (esCerrada(propiedad.estado) && !forzar) {
       Alert.alert(
         '⚠️ Propiedad no disponible',
         'Esta propiedad ya fue vendida. ¿Deseas coordinar la cita de todos modos?',
@@ -2174,7 +2175,7 @@ export default function DetallePropiedad() {
           {propiedad.estado && (
             <Text style={[
               styles.estadoBadge,
-              propiedad.estado === 'vendida' && styles.estadoVendida,
+              esCerrada(propiedad.estado) && styles.estadoVendida,
             ]}>
               {capitalize(propiedad.estado)}
             </Text>
@@ -2634,10 +2635,10 @@ export default function DetallePropiedad() {
           </Text>
         </TouchableOpacity>
 
-        {propiedad?.estado === 'vendida' && (
+        {esCerrada(propiedad?.estado) && (
           <View style={styles.avisoVendida}>
             <Text style={styles.avisoVendidaText}>
-              ⚠️ Esta propiedad ya fue vendida. Si coordinás la cita, avisa al cliente que puede no estar disponible.
+              ⚠️ Esta propiedad ya se {propiedad?.estado === 'rentada' ? 'rentó' : 'vendió'}. Si coordinás la cita, avisa al cliente que puede no estar disponible.
             </Text>
           </View>
         )}
