@@ -4,7 +4,7 @@
 // - VIRTUALIZADA (FlatList, altura de fila fija): solo dibuja lo visible → RAM baja.
 // - Filtros estilo Excel, celdas editables (menús para cliente/usuarios, calendario
 //   para el día), borrar filas, encabezado sticky y barras de scroll siempre visibles.
-import { useCallback, useEffect, useMemo, useRef, useState, memo, createElement } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, memo, createElement } from 'react'
 import {
   View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator,
   TextInput, Platform, Modal, Alert, Animated, Easing, KeyboardAvoidingView,
@@ -146,21 +146,27 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
                     : esClienteApartado  ? `🔑 APARTADO · ${val || '—'}`
                     : (display || '—')
         return (
-          <TouchableOpacity key={col.key} style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
-            onPress={() => onTap(f.id, col.key, col.tipo, val)}>
-            <Text style={{
-              color: rojo ? '#c0392b' : verde ? '#0f9d58' : (val ? c.text : c.textMute),
-              fontSize: 12.5, fontWeight: (rojo || verde) ? '800' : '400',
-            }} numberOfLines={2}>{marca}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
-          </TouchableOpacity>
+          <Fragment key={col.key}>
+            <TouchableOpacity style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
+              onPress={() => onTap(f.id, col.key, col.tipo, val)}>
+              <Text style={{
+                color: rojo ? '#c0392b' : verde ? '#0f9d58' : (val ? c.text : c.textMute),
+                fontSize: 12.5, fontWeight: (rojo || verde) ? '800' : '400',
+              }} numberOfLines={2}>{marca}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
+            </TouchableOpacity>
+
+            {/* La retro va pegada a "Asesor que atendió": es quien la da, y
+                antes estaba al final de todo, a varias columnas de distancia. */}
+            {col.key === 'atendio' && (
+              <View style={[st.cell, { width: RETRO_W, borderColor: c.border, alignItems: 'center' }]}>
+                <TouchableOpacity style={[st.retroBtn, f.retro_completada_at ? st.retroHecha : st.retroPend]} onPress={() => onRetro(f)}>
+                  <Text style={[st.retroBtnTxt, { color: f.retro_completada_at ? '#1a6855' : '#fff' }]}>{f.retro_completada_at ? '✓ Retro' : '📝 Retro'}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </Fragment>
         )
       })}
-      {/* Retroalimentación */}
-      <View style={[st.cell, { width: RETRO_W, borderColor: c.border, alignItems: 'center' }]}>
-        <TouchableOpacity style={[st.retroBtn, f.retro_completada_at ? st.retroHecha : st.retroPend]} onPress={() => onRetro(f)}>
-          <Text style={[st.retroBtnTxt, { color: f.retro_completada_at ? '#1a6855' : '#fff' }]}>{f.retro_completada_at ? '✓ Retro' : '📝 Retro'}</Text>
-        </TouchableOpacity>
-      </View>
       {/* Copiar datos (columna aparte, antes de borrar) */}
       <View style={[st.cell, { width: COPY_W, borderColor: c.border, alignItems: 'center' }]}>
         <TouchableOpacity style={st.copyBtn} onPress={() => onCopy(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
@@ -814,23 +820,27 @@ export default function CitasVenta() {
                   // también es de tipo fecha pero ordena por otro campo).
                   const esFecha = col.key === 'dia_cita'
                   return (
-                    <TouchableOpacity key={col.key} style={[st.headCell, { width: col.w }]} activeOpacity={0.7} onPress={() => abrirDropdown(col.key)}>
-                      <Text style={st.headTxt} numberOfLines={2}>{col.label}</Text>
-                      {esFecha && (
-                        <TouchableOpacity
-                          onPress={(e: any) => { e?.stopPropagation?.(); toggleOrdenFecha() }}
-                          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} style={st.sortBtn}
-                        >
-                          <Text style={[st.sortTxt, ordenFecha != null && st.sortActivo]}>
-                            {ordenFecha === 'desc' ? '↓' : ordenFecha === 'asc' ? '↑' : '↕'}
-                          </Text>
-                        </TouchableOpacity>
+                    <Fragment key={col.key}>
+                      <TouchableOpacity style={[st.headCell, { width: col.w }]} activeOpacity={0.7} onPress={() => abrirDropdown(col.key)}>
+                        <Text style={st.headTxt} numberOfLines={2}>{col.label}</Text>
+                        {esFecha && (
+                          <TouchableOpacity
+                            onPress={(e: any) => { e?.stopPropagation?.(); toggleOrdenFecha() }}
+                            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} style={st.sortBtn}
+                          >
+                            <Text style={[st.sortTxt, ordenFecha != null && st.sortActivo]}>
+                              {ordenFecha === 'desc' ? '↓' : ordenFecha === 'asc' ? '↑' : '↕'}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        <Text style={[st.embudo, activo && st.embudoActivo]}>{activo ? '▼●' : '▾'}</Text>
+                      </TouchableOpacity>
+                      {col.key === 'atendio' && (
+                        <Text style={[st.headCell, st.headTxt, { width: RETRO_W, textAlign: 'center' }]}>Retro</Text>
                       )}
-                      <Text style={[st.embudo, activo && st.embudoActivo]}>{activo ? '▼●' : '▾'}</Text>
-                    </TouchableOpacity>
+                    </Fragment>
                   )
                 })}
-                <Text style={[st.headCell, st.headTxt, { width: RETRO_W, textAlign: 'center' }]}>Retro</Text>
                 <Text style={[st.headCell, st.headTxt, { width: COPY_W, textAlign: 'center' }]}>Copiar</Text>
                 <Text style={[st.headCell, st.headTxt, { width: DEL_W, textAlign: 'center' }]}>Borrar</Text>
               </View>

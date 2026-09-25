@@ -218,40 +218,46 @@ function Spin({ label, value, onUp, onDown }: { label: string; value: string | n
 
 // ── SectionTitle ─────────────────────────────────────────
 function SectionTitle({ icon, label, accentColor }: { icon: string; label: string; accentColor: string }) {
+  // El color del título lo pone el tema: estaba fijo en un azul casi negro y en
+  // modo oscuro quedaba del color del fondo, ilegible.
+  const c = useColors()
   return (
     <View style={stStyles.row}>
       <View style={[stStyles.bar, { backgroundColor: accentColor }]} />
       <Ionicons name={icon as any} size={15} color={accentColor} />
-      <Text style={stStyles.text}>{label}</Text>
+      <Text style={[stStyles.text, { color: c.text }]}>{label}</Text>
     </View>
   )
 }
 const stStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   bar: { width: 3, height: 16, borderRadius: 2 },
-  text: { fontSize: 13, fontWeight: '800', color: '#1a1a2e', letterSpacing: 0.2 },
+  text: { fontSize: 13, fontWeight: '800', letterSpacing: 0.2 },
 })
 
 // ── InfoRow ──────────────────────────────────────────────
 function InfoRow({ icon, label, value, isLast, accentColor }: {
   icon: string; label: string; value: string; isLast?: boolean; accentColor: string
 }) {
+  const c = useColors()
   return (
-    <View style={[irStyles.row, !isLast && irStyles.rowBorder]}>
+    <View style={[irStyles.row, !isLast && [irStyles.rowBorder, { borderBottomColor: c.border }]]}>
       <View style={[irStyles.iconWrap, { backgroundColor: accentColor + '18' }]}>
         <Ionicons name={icon as any} size={14} color={accentColor} />
       </View>
-      <Text style={irStyles.label}>{label}</Text>
-      <Text style={irStyles.value} numberOfLines={2}>{value}</Text>
+      <Text style={[irStyles.label, { color: c.textMute }]} numberOfLines={1}>{label}</Text>
+      <Text style={[irStyles.value, { color: c.text }]} numberOfLines={2}>{value}</Text>
     </View>
   )
 }
 const irStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, gap: 10 },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: '#f0f3f5' },
+  rowBorder: { borderBottomWidth: 1 },
   iconWrap: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 12, color: '#9eafb2', width: 88 },
-  value: { flex: 1, fontSize: 13, color: '#1a1a2e', fontWeight: '600' },
+  // 96 y no 88: "Presupuesto" no cabía y se partía en dos líneas, dejando una
+  // "o" suelta debajo.
+  label: { fontSize: 12, width: 96 },
+  value: { flex: 1, fontSize: 13, fontWeight: '600' },
 })
 
 // ── Pantalla principal ───────────────────────────────────
@@ -684,14 +690,14 @@ export default function DetalleCliente() {
           }}
         >
           <Ionicons name="call" size={20} color="#fff" />
-          <Text style={styles.actionBtnTxt}>Llamar</Text>
+          <Text style={styles.actionBtnTxt} numberOfLines={1}>Llamar</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: '#25d366' }]}
           onPress={() => abrirWhatsApp(waDefault)}
         >
           <Ionicons name="logo-whatsapp" size={20} color="#fff" />
-          <Text style={styles.actionBtnTxt}>WhatsApp</Text>
+          <Text style={styles.actionBtnTxt} numberOfLines={1}>WhatsApp</Text>
         </TouchableOpacity>
         {puedeEnviarClienteAChatbot(userRole) && (
           <TouchableOpacity
@@ -699,7 +705,7 @@ export default function DetalleCliente() {
             onPress={abrirModalChatbot}
           >
             <Ionicons name="chatbubbles-outline" size={20} color="#fff" />
-            <Text style={styles.actionBtnTxt}>Chatbot</Text>
+            <Text style={styles.actionBtnTxt} numberOfLines={1}>Chatbot</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -709,7 +715,7 @@ export default function DetalleCliente() {
         <View style={{ marginBottom: 12 }}>
           <SectionTitle icon="person-circle-outline" label="Información" accentColor={info.color} />
         </View>
-        <View style={styles.infoCard}>
+        <View style={[styles.infoCard, { backgroundColor: c.card }]}>
           <InfoRow icon="call-outline"       label="Teléfono"    value={cliente.telefono}                                                         accentColor={info.color} />
           {cliente.email          ? <InfoRow icon="mail-outline"   label="Email"       value={cliente.email}                                      accentColor={info.color} /> : null}
           <InfoRow icon="megaphone-outline"   label="Fuente"      value={FUENTE_LABELS[cliente.fuente_lead] ?? cliente.fuente_lead}               accentColor={info.color} />
@@ -719,12 +725,12 @@ export default function DetalleCliente() {
           <InfoRow icon="cash-outline"   label="Presupuesto" value={cliente.presupuesto ?? '—'} isLast                          accentColor={info.color} />
         </View>
         {cliente.notas ? (
-          <View style={[styles.notasCard, { borderLeftColor: info.color }]}>
+          <View style={[styles.notasCard, { backgroundColor: c.card, borderLeftColor: info.color }]}>
             <View style={styles.notasHeader}>
               <Ionicons name="document-text-outline" size={14} color={info.color} />
               <Text style={[styles.notasLabel, { color: info.color }]}>Notas</Text>
             </View>
-            <Text style={styles.notasText}>{cliente.notas}</Text>
+            <Text style={[styles.notasText, { color: c.text }]}>{cliente.notas}</Text>
           </View>
         ) : null}
       </View>
@@ -784,7 +790,7 @@ export default function DetalleCliente() {
         <View style={{ marginBottom: 12 }}>
           <SectionTitle icon="chatbubbles-outline" label="Mensajes rápidos" accentColor={info.color} />
         </View>
-        <View style={styles.waCard}>
+        <View style={[styles.waCard, { backgroundColor: c.card }]}>
           {(() => {
             const proxCita = recPendientes[0]
             const horaStr = proxCita ? formatFechaHora(proxCita.fecha_hora) : '[hora pendiente]'
@@ -807,7 +813,7 @@ export default function DetalleCliente() {
                 <View style={[styles.waIconWrap, { backgroundColor: t.iconBg }]}>
                   <Ionicons name={t.icon} size={16} color={t.iconColor} />
                 </View>
-                <Text style={styles.waLabel}>{t.label}</Text>
+                <Text style={[styles.waLabel, { color: c.text }]}>{t.label}</Text>
                 <Ionicons name="logo-whatsapp" size={18} color="#25d366" />
               </TouchableOpacity>
             ))
@@ -839,13 +845,13 @@ export default function DetalleCliente() {
         {recPendientes.map((r) => {
           const vencido = new Date(r.fecha_hora) < new Date()
           return (
-            <View key={r.id} style={[styles.recCard, { borderLeftColor: vencido ? '#e53935' : info.color }]}>
+            <View key={r.id} style={[styles.recCard, { backgroundColor: c.card, borderLeftColor: vencido ? '#e53935' : info.color }]}>
               <View style={[styles.recIconWrap, { backgroundColor: vencido ? '#fde8e8' : info.color + '18' }]}>
                 <Ionicons name={vencido ? 'warning-outline' : 'alarm-outline'} size={18} color={vencido ? '#e53935' : info.color} />
               </View>
               <View style={{ flex: 1 }}>
                 <View style={styles.recTituloRow}>
-                  <Text style={[styles.recTitulo, vencido && styles.recTituloVencido]}>{r.titulo}</Text>
+                  <Text style={[styles.recTitulo, { color: c.text }, vencido && styles.recTituloVencido]}>{r.titulo}</Text>
                   {vencido && <View style={styles.recVencidoPill}><Text style={styles.recVencidoTxt}>Vencido</Text></View>}
                 </View>
                 <Text style={styles.recFecha}>{formatFechaHora(r.fecha_hora)}</Text>
@@ -895,7 +901,7 @@ export default function DetalleCliente() {
                   </View>
                   {idx < interacciones.length - 1 && <View style={styles.timelineLine} />}
                 </View>
-                <View style={styles.timelineBody}>
+                <View style={[styles.timelineBody, { backgroundColor: c.card }]}>
                   <View style={styles.timelineMeta}>
                     {tipoLabel && (
                       <View style={[styles.tipoPill, { backgroundColor: ti.color + '18' }]}>
@@ -904,7 +910,7 @@ export default function DetalleCliente() {
                     )}
                     <Text style={styles.timelineFecha}>{tiempoRelativo(item.created_at)}</Text>
                   </View>
-                  <Text style={styles.timelineDesc}>{item.descripcion}</Text>
+                  <Text style={[styles.timelineDesc, { color: c.text }]}>{item.descripcion}</Text>
                 </View>
               </View>
             )
@@ -1299,11 +1305,14 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 14, borderRadius: 16,
+    gap: 6, paddingVertical: 14, paddingHorizontal: 4, borderRadius: 16, minWidth: 0,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15, shadowRadius: 6, elevation: 3,
   },
-  actionBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  // 13.5 y no 15, y el texto encoge si hace falta: con los tres botones
+  // (Llamar, WhatsApp, Chatbot) el de en medio no cabía y las etiquetas se
+  // montaban unas sobre otras en pantallas de móvil.
+  actionBtnTxt: { color: '#fff', fontSize: 13.5, fontWeight: '700', flexShrink: 1 },
 
   // Sections
   section: { marginHorizontal: 16, marginTop: 24 },
