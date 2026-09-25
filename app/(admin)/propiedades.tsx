@@ -774,21 +774,38 @@ export default function AdminPropiedades() {
         )}
         <View style={styles.imagenWrapper}>
           {primera?.url ? (
-            <ThumbImage url={primera.thumb_url ?? primera.url} style={styles.cardImagen} />
+            <ThumbImage url={primera.thumb_url ?? primera.url} style={[styles.cardImagen, esCerrada(item.estado) && styles.fotoCerrada]} />
           ) : (
             <View style={styles.cardImagenPlaceholder}>
               <Text style={styles.cardImagenPlaceholderText}>🏠</Text>
             </View>
           )}
           <View style={styles.imagenOverlay} />
+
+          {/* Sello de cerrada, igual que en el catálogo: con la foto a todo
+              color la tarjeta se sigue leyendo como disponible aunque lleve
+              su etiqueta arriba. */}
+          {esCerrada(item.estado) && (
+            <View style={styles.selloCapa}>
+              <View style={[styles.selloCaja, { borderColor: colorEstado(item.estado) }]}>
+                <Text style={[styles.selloTxt, { color: colorEstado(item.estado) }]}>
+                  {etiquetaEstado(item.estado).toUpperCase()}
+                </Text>
+                <Text style={styles.selloSub}>YA NO ESTÁ DISPONIBLE</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.badgesTop}>
             <Text style={styles.codigoBadge}>{item.codigo ?? '—'}</Text>
             {item.destacada && <Text style={styles.destacadaBadge}>★ Destacada</Text>}
             {item.directa && <Text style={styles.directaBadge}>🎯 Directa</Text>}
-            <View style={[styles.estadoBadge, esCerrada(item.estado) && styles.estadoVendida]}>
-              <Text style={[styles.estadoText, esCerrada(item.estado) && styles.estadoTextVendida,
-                            item.estado === 'rentada' && { color: colorEstado('rentada') }]}>
-                {etiquetaEstado(item.estado)}
+            {/* El color va en el FONDO, no en el texto: el texto siempre en
+                blanco, que es lo que se lee sobre cualquier foto. */}
+            <View style={[styles.estadoBadge, { backgroundColor: colorEstado(item.estado) },
+                          esCerrada(item.estado) && styles.estadoCerrada]}>
+              <Text style={styles.estadoText}>
+                {esCerrada(item.estado) ? etiquetaEstado(item.estado).toUpperCase() : etiquetaEstado(item.estado)}
               </Text>
             </View>
           </View>
@@ -1238,6 +1255,21 @@ const styles = StyleSheet.create({
   // Imagen con badges superpuestos
   imagenWrapper: { position: 'relative' },
   cardImagen: { width: '100%', height: 180 },
+  // La foto apagada es lo que hace que la tarjeta se lea como cerrada de un
+  // vistazo; la etiqueta sola se pierde entre las demás.
+  fotoCerrada: { opacity: 0.38 },
+  selloCapa: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(17,24,39,0.34)', zIndex: 2,
+  },
+  selloCaja: {
+    borderWidth: 3, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.94)', alignItems: 'center',
+    transform: [{ rotate: '-9deg' }],
+  },
+  selloTxt: { fontSize: 22, fontWeight: '900', letterSpacing: 2.5 },
+  selloSub: { fontSize: 9.5, fontWeight: '800', color: '#374151', letterSpacing: 0.8, marginTop: 1 },
   cardImagenPlaceholder: {
     width: '100%',
     height: 120,
@@ -1298,9 +1330,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  estadoVendida: { backgroundColor: 'rgba(198,40,40,0.85)' },
-  estadoText: { fontSize: 11, fontWeight: '700', color: '#fff' },
-  estadoTextVendida: { color: '#fff' },
+  // Vendida o rentada se marcan con más fuerza que "disponible": borde blanco
+  // para que recorten contra la foto, y la letra más grande y espaciada. Antes
+  // era el mismo chip translúcido para los tres estados y se perdía.
+  estadoCerrada: { borderWidth: 1.5, borderColor: '#fff', paddingHorizontal: 10, paddingVertical: 4 },
+  estadoText: { fontSize: 11, fontWeight: '900', color: '#fff', letterSpacing: 0.6 },
   precioBadge: {
     position: 'absolute',
     bottom: 10,

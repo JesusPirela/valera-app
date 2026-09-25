@@ -56,7 +56,7 @@ import MiniMapa from '../../components/MiniMapa'
 import { getDesbloqueadas } from '../../lib/publicarUnlock'
 import { fetchPublicacionesUsuario, type PublicacionesData } from '../../lib/publicaciones'
 import { actualizarWidgetMiDia } from '../../lib/widgetUpdate'
-import { esCerrada, etiquetaEstado } from '../../lib/estado-propiedad'
+import { esCerrada, etiquetaEstado, colorEstado } from '../../lib/estado-propiedad'
 
 type Propiedad = {
   id: string
@@ -199,13 +199,13 @@ const PropiedadCard = memo(function PropiedadCard({
           {Platform.OS === 'web' ? (
             <ThumbImage
               url={primera.thumb_url ?? primera.url}
-              style={styles.cardImagen}
+              style={[styles.cardImagen, esCerrada(item.estado) && styles.fotoCerrada]}
               resizeMode="cover"
             />
           ) : (
             <ThumbImage
               url={primera.thumb_url ?? primera.url}
-              style={styles.cardImagenMovil}
+              style={[styles.cardImagenMovil, esCerrada(item.estado) && styles.fotoCerrada]}
               resizeMode="cover"
             />
           )}
@@ -221,11 +221,21 @@ const PropiedadCard = memo(function PropiedadCard({
               <Text style={styles.nuncaPublicadaText}>🔥 NADIE LO HA PUBLICADO</Text>
             </View>
           )}
-        </View>
-      )}
-      {esCerrada(item.estado) && (
-        <View style={styles.vendidaBanner}>
-          <Text style={styles.vendidaBannerText}>🏷️ {etiquetaEstado(item.estado)}</Text>
+
+          {/* Sello de cerrada SOBRE la foto. Antes era una franja gris debajo
+              de la imagen, con letra del tamaño del resto: se confundía con un
+              dato más de la ficha y se seguía ofreciendo lo ya vendido. Encima
+              de la foto y con la foto apagada no hay forma de pasarlo por alto. */}
+          {esCerrada(item.estado) && (
+            <View style={styles.selloCapa}>
+              <View style={[styles.selloCaja, { borderColor: colorEstado(item.estado) }]}>
+                <Text style={[styles.selloTxt, { color: colorEstado(item.estado) }]}>
+                  {etiquetaEstado(item.estado).toUpperCase()}
+                </Text>
+                <Text style={styles.selloSub}>YA NO ESTÁ DISPONIBLE</Text>
+              </View>
+            </View>
+          )}
         </View>
       )}
       {item.exclusiva && (
@@ -2009,16 +2019,21 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 0.3,
   },
-  vendidaBanner: {
-    backgroundColor: '#374151',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+  // La foto de lo cerrado se apaga: el color vivo es lo que hace que una
+  // tarjeta se lea como "disponible" al recorrer la lista de un vistazo.
+  fotoCerrada: { opacity: 0.38 },
+  selloCapa: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(17,24,39,0.34)',
   },
-  vendidaBannerText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#fff',
+  selloCaja: {
+    borderWidth: 3, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.94)', alignItems: 'center',
+    transform: [{ rotate: '-9deg' }],
   },
+  selloTxt: { fontSize: 24, fontWeight: '900', letterSpacing: 2.5 },
+  selloSub: { fontSize: 9.5, fontWeight: '800', color: '#374151', letterSpacing: 0.8, marginTop: 1 },
   nuevaBadge: {
     backgroundColor: '#eff6ff', borderLeftWidth: 3, borderLeftColor: '#3b82f6',
     marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,

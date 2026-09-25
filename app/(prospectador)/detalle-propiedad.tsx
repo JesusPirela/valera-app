@@ -43,7 +43,7 @@ import { actualizarMisionesPorCategoria, registrarAccion } from '../../lib/gamif
 import { marcarDesbloqueada, estaDesbloqueada } from '../../lib/publicarUnlock'
 import { fetchPublicacionesUsuario, type PublicacionesData } from '../../lib/publicaciones'
 import { actualizarWidgetMiDia } from '../../lib/widgetUpdate'
-import { esCerrada } from '../../lib/estado-propiedad'
+import { esCerrada, colorEstado } from '../../lib/estado-propiedad'
 
 
 type Propiedad = {
@@ -2176,8 +2176,11 @@ export default function DetallePropiedad() {
             <Text style={[
               styles.estadoBadge,
               esCerrada(propiedad.estado) && styles.estadoVendida,
+              propiedad.estado === 'rentada' && { backgroundColor: colorEstado('rentada') },
             ]}>
-              {capitalize(propiedad.estado)}
+              {esCerrada(propiedad.estado)
+                ? `${capitalize(propiedad.estado)} · no disponible`
+                : capitalize(propiedad.estado)}
             </Text>
           )}
           {propiedad.es_constructora && (
@@ -3312,9 +3315,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     fontWeight: '600',
   },
+  // En la ficha es donde alguien decide coordinar una cita, así que el estado
+  // cerrado no se insinúa en tono pastel: va en sólido y en mayúsculas.
   estadoVendida: {
-    color: '#8b2a2a',
-    backgroundColor: '#f5d4d4',
+    color: '#fff',
+    backgroundColor: '#c0392b',
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   avisoVendida: {
     backgroundColor: '#fff8e1',
