@@ -56,6 +56,10 @@ const NIVELES: Record<number, { etiqueta: string; sub: string; color: string }> 
 const CARD_W = 232
 const CARD_GAP = 12
 
+// A quién se le piden opciones cuando el inventario no tiene nada para el
+// cliente. Con el 52 delante, que es lo que espera wa.me.
+const WA_SOPORTE = '524428679083'
+
 function waNumero(tel: string | null | undefined): string | null {
   if (!tel) return null
   let p = tel.replace(/\D/g, '')
@@ -127,6 +131,26 @@ export default function PropiedadesSugeridas({
     const { error: err } = await supabase.from('sugerencias_descartadas')
       .upsert({ cliente_id: clienteId, propiedad_id: p.id, descartado_por: user?.id ?? null })
     if (err) { avisar('No se pudo descartar: ' + err.message); cargar() }
+  }
+
+  // Cuando el inventario no tiene nada para este cliente, el asesor no se queda
+  // con las manos vacías: escribe a la casa y ahí le buscan. El mensaje va con
+  // los datos del cliente puestos, para que quien lo reciba no tenga que
+  // preguntar qué busca ni con cuánto.
+  function pedirOpciones() {
+    const partes = [
+      'Hola, no encontré opciones en la app para este cliente:',
+      '',
+      `Cliente: ${clienteNombre}`,
+      `Busca: ${operacion === 'renta' ? 'Renta' : 'Venta'}`,
+      presupuesto ? `Presupuesto: ${presupuesto}` : null,
+      zonaBusqueda ? `Zona: ${zonaBusqueda}` : null,
+      '',
+      '¿Me pueden ayudar a buscarle opciones?',
+    ].filter(v => v !== null)
+    const url = `https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent(partes.join('\n'))}`
+    if (Platform.OS === 'web') window.open(url, '_blank')
+    else Linking.openURL(url).catch(() => {})
   }
 
   function mandarAlCliente(p: Sugerencia) {
@@ -227,14 +251,29 @@ export default function PropiedadesSugeridas({
             <View style={st.vacio}>
               <Text style={[st.vacioTxt, { color: '#c0392b' }]}>{error}</Text>
               <TouchableOpacity onPress={cargar}><Text style={st.reintentar}>Reintentar</Text></TouchableOpacity>
+              {/* Si el cliente no tiene presupuesto capturado tampoco hay nada
+                  que buscarle, así que desde aquí también se puede pedir. */}
+              {sinDatos && (
+                <TouchableOpacity style={st.pedirBtn} onPress={pedirOpciones}>
+                  <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                  <Text style={st.pedirTxt}>Pedir opciones por WhatsApp</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : !sugerencias.length ? (
             <View style={st.vacio}>
               <Text style={{ fontSize: 30 }}>🤷</Text>
-              <Text style={[st.vacioTxt, { color: c.textMute }]}>
-                No hay propiedades disponibles que le queden con esos datos. Prueba a ampliar el
-                presupuesto o quitar la zona en "Ajustar búsqueda".
+              <Text style={[st.vacioTxt, { color: c.text, fontWeight: '700' }]}>
+                No hay opciones en la app para este cliente
               </Text>
+              <Text style={[st.vacioTxt, { color: c.textMute }]}>
+                Puedes ampliar el presupuesto o quitar la zona en "Ajustar búsqueda",
+                o mandarnos un mensaje y le buscamos opciones.
+              </Text>
+              <TouchableOpacity style={st.pedirBtn} onPress={pedirOpciones}>
+                <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                <Text style={st.pedirTxt}>Pedir opciones por WhatsApp</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <>
@@ -442,6 +481,11 @@ const st = StyleSheet.create({
   btnColeccionTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
 
   vacio: { alignItems: 'center', gap: 8, paddingVertical: 22, paddingHorizontal: 20 },
+  pedirBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    backgroundColor: '#25D366', borderRadius: 11, paddingVertical: 11, paddingHorizontal: 18, marginTop: 6,
+  },
+  pedirTxt: { color: '#fff', fontWeight: '800', fontSize: 13.5 },
   vacioTxt: { fontSize: 12.5, textAlign: 'center', lineHeight: 18 },
   reintentar: { color: '#1a6470', fontWeight: '800', fontSize: 13 },
 })
