@@ -24,6 +24,7 @@ import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { useScrollHorizontalConRueda } from '../../hooks/useScrollHorizontalConRueda'
 import { EstadoPropiedad, esCerrada, etiquetaEstado, colorEstado } from '../../lib/estado-propiedad'
+import { puedeVerPublicaciones } from '../../lib/permisos'
 
 type Propiedad = {
   id: string
@@ -284,15 +285,23 @@ export default function AdminPropiedades() {
   async function cargarRolEInmobiliarias() {
     const { data: { session } } = await supabase.auth.getSession()
     const uid = session?.user?.id ?? null
-    const [perfilRes, conteoRes, pendRes, campRes, solWebRes, candRecRes] = await Promise.all([
-      uid ? supabase.from('profiles').select('role').eq('id', uid).maybeSingle() : Promise.resolve({ data: null }),
-      supabase.rpc('get_publicaciones_conteo'),
+    // El rol se resuelve ANTES que el resto: el conteo de publicaciones sale de
+    // una función que exige admin o supervisor, y esta pantalla también la abren
+    // gerencia y supervisión parcial. Pedirlo sin mirar el rol devolvía "Access
+    // denied" en silencio. No se amplía el permiso: solo se pide a quien puede.
+    const perfilRes = uid
+      ? await supabase.from('profiles').select('role').eq('id', uid).maybeSingle()
+      : { data: null }
+    const rolActual = (perfilRes as any).data?.role ?? null
+
+    const [conteoRes, pendRes, campRes, solWebRes, candRecRes] = await Promise.all([
+      puedeVerPublicaciones(rolActual) ? supabase.rpc('get_publicaciones_conteo') : Promise.resolve({ data: null }),
       supabase.rpc('get_compras_pendientes_count'),
       supabase.from('campanias').select('id, asignado_a, leads_campania(count)'),
       supabase.from('solicitudes_sitio_web').select('id', { count: 'exact', head: true }).eq('estado', 'nuevo'),
       supabase.from('candidatos_reclutamiento').select('id', { count: 'exact', head: true }).eq('estado', 'nuevo'),
     ])
-    setRole((perfilRes as any).data?.role ?? null)
+    setRole(rolActual)
     const conteo = (conteoRes as any).data
     if (conteo) {
       setPublicacionesMap(Object.fromEntries(

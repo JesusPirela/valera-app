@@ -21,7 +21,7 @@ import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import CompartirFormulario from '../../components/CompartirFormulario'
-import { esPlusOMejor, esStaffSupervision } from '../../lib/permisos'
+import { esPlusOMejor, esStaffSupervision, puedeVerPublicaciones } from '../../lib/permisos'
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb, proxyImagen } from '../../lib/img'
 import {
@@ -346,7 +346,10 @@ export default function DetallePropiedad() {
       if (error) return [] as { user_id: string; nombre: string; veces: number }[]
       return (data ?? []) as { user_id: string; nombre: string; veces: number }[]
     },
-    enabled: !!id && esStaff,
+    // La función SQL exige admin o supervisor. Con esStaff entraban también
+    // asesor y gerente, que recibían "Access denied" en silencio. No se toca el
+    // permiso de la base: simplemente no se pide cuando el rol no puede verlo.
+    enabled: !!id && puedeVerPublicaciones(rol),
     staleTime: 1000 * 30,
   })
 

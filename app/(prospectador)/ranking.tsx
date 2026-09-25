@@ -132,7 +132,8 @@ export default function Ranking() {
       const { data: rows } = await supabase
         .from('clientes')
         .select('presupuesto, estado')
-        .eq('agente_id', session.user.id)
+        .eq('responsable_id', session.user.id)
+        .is('eliminado_at', null)
       if (!rows) return 0
       let total = 0
       for (const c of rows) {

@@ -198,7 +198,7 @@ export default function Perfil() {
     const [{ data }, statsData, { data: clientesData }] = await Promise.all([
       supabase.from('profiles').select('nombre, telefono, avatar_url, color_acento, figura_acento, colores_desbloqueados, avatares_desbloqueados, role').eq('id', user.id).single(),
       getUserStats(user.id),
-      supabase.from('clientes').select('presupuesto, estado').eq('agente_id', user.id),
+      supabase.from('clientes').select('presupuesto, estado').eq('responsable_id', user.id).is('eliminado_at', null),
     ])
     setStats(statsData)
     if (clientesData) {
