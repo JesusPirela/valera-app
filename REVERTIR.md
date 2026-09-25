@@ -34,6 +34,7 @@ Cada uno es independiente. `git revert <sha>` y push.
 | Listas por lotes en el CRM | `0a5d968b` | `crm.tsx` (ambos) | Faltan clientes en la tabla o en una sección |
 | Prueba de humo en CI | `d495e963` | `.github/`, `scripts/`, `package.json` | Solo CI. No afecta a la app |
 | Propiedades sugeridas en la ficha del cliente | `00343b55` | `components/PropiedadesSugeridas.tsx`, `lib/match-propiedades.ts`, los dos `detalle-cliente.tsx` | La ficha del cliente no abre, o la sección sugiere cosas fuera de lugar |
+| Estado 'rentada' de las propiedades | `e5c2b717` | `lib/estado-propiedad.ts`, alta/edición/listado de propiedades, estadísticas | Una propiedad rentada no sale en el catálogo, o sale marcada como "Vendida" |
 
 ## Lo de la base de datos
 
@@ -71,6 +72,16 @@ no estorba porque nada más lo usa. Para borrarlo del todo:
 ```sql
 DROP FUNCTION IF EXISTS public.sugerir_propiedades(uuid, numeric, numeric, text[], text, int);
 DROP TABLE IF EXISTS public.sugerencias_descartadas;   -- borra los descartes de los asesores
+```
+
+**Estado 'rentada'** (migraciones `20260928_estado_rentada.sql` y
+`20260923_cron_cerrar_rentas_baratas.sql`). Devolver las propiedades cerradas y
+apagar el cron; el CHECK se puede dejar ampliado sin que estorbe:
+
+```sql
+UPDATE public.propiedades p SET estado = b.estado
+  FROM public.propiedades_respaldo_rentadas_20260924 b WHERE b.id = p.id;
+SELECT cron.unschedule('cerrar-rentas-baratas');
 ```
 
 ## Si algo falla y no sabes qué fue
