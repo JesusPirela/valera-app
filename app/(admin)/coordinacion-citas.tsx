@@ -55,6 +55,9 @@ type Cita = {
   coordinador: { nombre: string } | null
   asesor: { nombre: string } | null
   propiedad: { titulo: string } | null
+  /** Si ya se le escribió la retro. No viene de la tabla: se calcula al cargar
+   *  cruzando con citas_venta (ver cargar()). */
+  retro_escrita?: boolean
 }
 
 type Profile = { id: string; nombre: string }
@@ -1220,9 +1223,19 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging, onRet
         {/* Retroalimentación (cita realizada) — el admin la escribe y se rellena
             en la tabla de Citas de venta */}
         {cita.estado === 'realizada' && onRetro && (
-          <TouchableOpacity style={kc.retroBtn} activeOpacity={0.8} onPress={() => onRetro(cita)}>
-            <Ionicons name="create-outline" size={13} color="#0d9488" />
-            <Text style={kc.retroBtnTxt}>Escribir retroalimentación</Text>
+          <TouchableOpacity
+            style={[kc.retroBtn, cita.retro_escrita && kc.retroBtnHecha]}
+            activeOpacity={0.8}
+            onPress={() => onRetro(cita)}
+          >
+            <Ionicons
+              name={cita.retro_escrita ? 'checkmark-circle' : 'create-outline'}
+              size={13}
+              color={cita.retro_escrita ? '#0f7a4a' : '#0d9488'}
+            />
+            <Text style={[kc.retroBtnTxt, cita.retro_escrita && kc.retroBtnTxtHecha]}>
+              {cita.retro_escrita ? 'Retroalimentación escrita' : 'Escribir retroalimentación'}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -1267,6 +1280,10 @@ const kc = StyleSheet.create({
     borderRadius: 8, paddingVertical: 7,
   },
   retroBtnTxt: { fontSize: 11.5, fontWeight: '800', color: '#0d9488' },
+  // Ya escrita: verde y relleno, para que se distinga de un vistazo de las que
+  // siguen pendientes sin tener que abrir cada una.
+  retroBtnHecha: { backgroundColor: '#0f7a4a1f', borderColor: '#0f7a4a66' },
+  retroBtnTxtHecha: { color: '#0f7a4a' },
   tratoBanner: {
     flexDirection: 'row' as const, alignItems: 'center' as const,
     backgroundColor: '#fef3c7', borderRadius: 6,
@@ -1470,18 +1487,31 @@ export default function CoordinacionCitas() {
 
   async function cargar() {
     try {
-      const { data } = await supabase
-        .from('citas_coordinacion')
-        .select(`
-          *,
-          clientes ( nombre, telefono, tipo_operacion, estado ),
-          prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre, telefono ),
-          coordinador:profiles!citas_coordinacion_coordinado_por_fkey ( nombre ),
-          asesor:profiles!citas_coordinacion_asesor_id_fkey ( nombre ),
-          propiedad:propiedades ( titulo )
-        `)
-        .order('updated_at', { ascending: false })
-      if (mountedRef.current) setCitas((data ?? []) as unknown as Cita[])
+      // La retro no vive en citas_coordinacion sino en citas_venta, así que se
+      // piden a la vez las citas y los ids de las que ya la tienen escrita.
+      // Con eso, la tarjeta puede decirlo sin abrir nada.
+      const [citasRes, retrosRes] = await Promise.all([
+        supabase
+          .from('citas_coordinacion')
+          .select(`
+            *,
+            clientes ( nombre, telefono, tipo_operacion, estado ),
+            prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre, telefono ),
+            coordinador:profiles!citas_coordinacion_coordinado_por_fkey ( nombre ),
+            asesor:profiles!citas_coordinacion_asesor_id_fkey ( nombre ),
+            propiedad:propiedades ( titulo )
+          `)
+          .order('updated_at', { ascending: false }),
+        supabase
+          .from('citas_venta')
+          .select('cita_coordinacion_id')
+          .not('cita_coordinacion_id', 'is', null)
+          .not('retro_completada_at', 'is', null),
+      ])
+      const conRetro = new Set((retrosRes.data ?? []).map((r: any) => r.cita_coordinacion_id))
+      const citasConRetro = ((citasRes.data ?? []) as unknown as Cita[])
+        .map(c => ({ ...c, retro_escrita: conRetro.has(c.id) }))
+      if (mountedRef.current) setCitas(citasConRetro)
     } catch {
       // Red caída / sesión: no dejar el spinner "Cargando pipeline" colgado.
     } finally {
