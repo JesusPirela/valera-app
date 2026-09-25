@@ -15,6 +15,7 @@ import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
+import { ESTADOS_CITA } from './coordinacion-citas'
 
 type Fila = CitaRetro & {
   orden: number | null; telefono: string | null; detalles_pago: string | null
@@ -81,9 +82,15 @@ function mapear(n: string | undefined): string { const v = (n ?? '').trim(); ret
 // CANCELADA, cancelada, canceló, "cancelada por cliente", etc.).
 function esCancelada(s: string | null | undefined): boolean { return normalizar(s ?? '').includes('cancel') }
 // Apartó es el mejor desenlace posible de una cita, así que se marca igual de
-// visible que la cancelación —desde la columna del cliente, sin tener que
-// buscar la de estado a la derecha— pero en verde.
+// visible que la cancelación: desde la columna del cliente, sin tener que
+// buscar la de estado a la derecha.
+//
+// El color y el emoji se toman del dashboard de citas en vez de escribirlos
+// otra vez aquí, para que un estado no acabe de dos colores según la pantalla.
 function esApartado(s: string | null | undefined): boolean { return normalizar(s ?? '').includes('apart') }
+const APARTO_COLOR = ESTADOS_CITA.aparto.color
+const APARTO_EMOJI = ESTADOS_CITA.aparto.emoji
+const APARTO_BG    = ESTADOS_CITA.aparto.bg
 function arreglarEncoding(s: string): string {
   if (!s || !/[ÃÂ]/.test(s)) return s
   try {
@@ -124,9 +131,9 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
       {/* Contador de fila (como Excel); en rojo si está cancelada, verde si apartó */}
       <View style={[st.cell, st.counterCell, { width: NUM_W, borderColor: c.border }]}>
         <Text style={[st.counterTxt, {
-          color: cancelada ? '#c0392b' : apartado ? '#0f9d58' : c.textMute,
+          color: cancelada ? '#c0392b' : apartado ? APARTO_COLOR : c.textMute,
           fontWeight: (cancelada || apartado) ? '800' : '400',
-        }]}>{cancelada ? '🚫' : apartado ? '🔑' : idx + 1}</Text>
+        }]}>{cancelada ? '🚫' : apartado ? APARTO_EMOJI : idx + 1}</Text>
       </View>
       {COLS.map(col => {
         const val = (f[col.key] as string) ?? ''
@@ -143,16 +150,26 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
         const rojo  = esEstadoCancelada || esClienteCancelada
         const verde = esEstadoApartado || esClienteApartado
         const marca = esClienteCancelada ? `🚫 CANCELADA/REAGENDA · ${val || '—'}`
-                    : esClienteApartado  ? `🔑 APARTADO · ${val || '—'}`
+                    : esClienteApartado  ? `${APARTO_EMOJI} APARTADO · ${val || '—'}`
                     : (display || '—')
         return (
           <Fragment key={col.key}>
-            <TouchableOpacity style={[st.cell, { width: col.w, borderColor: c.border }]} activeOpacity={0.6}
+            <TouchableOpacity
+              style={[st.cell, { width: col.w, borderColor: c.border },
+                      // La celda del estado se tiñe, como el chip del dashboard.
+                      // El fondo va translúcido sobre el propio color en vez del
+                      // tono claro de allá, que en modo oscuro sería una mancha
+                      // casi blanca.
+                      esEstadoApartado && { backgroundColor: APARTO_COLOR + '26' }]}
+              activeOpacity={0.6}
               onPress={() => onTap(f.id, col.key, col.tipo, val)}>
               <Text style={{
-                color: rojo ? '#c0392b' : verde ? '#0f9d58' : (val ? c.text : c.textMute),
+                color: rojo ? '#c0392b' : verde ? APARTO_COLOR : (val ? c.text : c.textMute),
                 fontSize: 12.5, fontWeight: (rojo || verde) ? '800' : '400',
-              }} numberOfLines={2}>{marca}{col.tipo !== 'texto' ? '  ▾' : ''}</Text>
+              }} numberOfLines={2}>
+                {esEstadoApartado ? `${APARTO_EMOJI} ${ESTADOS_CITA.aparto.label}` : marca}
+                {col.tipo !== 'texto' ? '  ▾' : ''}
+              </Text>
             </TouchableOpacity>
 
             {/* La retro va pegada a "Asesor que atendió": es quien la da, y
