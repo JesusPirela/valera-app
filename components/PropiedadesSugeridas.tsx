@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { getUsuarioActual } from '../lib/sesion'
-import { useColors } from '../lib/ThemeContext'
+import { useColors, useTheme } from '../lib/ThemeContext'
 import { parsePresupuesto, parseZonas, formatPrecioCorto } from '../lib/match-propiedades'
 import { avisar } from '../lib/db'
 import { ThumbImage } from './ThumbImage'
@@ -288,6 +288,10 @@ function Carrusel({ nivel, lista, seleccion, onToggle, onAbrir, onMandar, onDesc
   onDescartar: (p: Sugerencia) => void
 }) {
   const c = useColors()
+  // El teal de la marca casi no se distingue del fondo oscuro de la tarjeta, así
+  // que en modo oscuro los botones del pie usan una versión más luminosa.
+  const { darkMode } = useTheme()
+  const tealBtn = darkMode ? '#5fc6d8' : '#1a6470'
   const info = NIVELES[nivel]
   const ref = useRef<ScrollView>(null)
   const pos = useRef(0)
@@ -335,18 +339,21 @@ function Carrusel({ nivel, lista, seleccion, onToggle, onAbrir, onMandar, onDesc
                 <View style={st.fotoCaja}>
                   {p.imagen_url
                     ? <ThumbImage url={p.imagen_url} opts={{ width: 480 }} style={st.foto} resizeMode="cover" />
-                    : <View style={[st.foto, st.fotoVacia]}><Ionicons name="home-outline" size={26} color="#c3cfd1" /></View>}
+                    : <View style={[st.foto, st.fotoVacia, { backgroundColor: c.bg }]}><Ionicons name="home-outline" size={26} color="#c3cfd1" /></View>}
 
-                  {/* Descartar: encima de la foto, como la X de los portales. */}
+                  {/* Descartar: encima de la foto, como la X de los portales.
+                      Es la única que va flotando porque ahí ya se entiende. */}
                   <TouchableOpacity style={st.cerrar} onPress={() => onDescartar(p)}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <Ionicons name="close" size={14} color="#fff" />
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close" size={15} color="#fff" />
                   </TouchableOpacity>
 
-                  <TouchableOpacity style={[st.marcar, elegida && st.marcarOn]} onPress={() => onToggle(p.id)}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <Ionicons name={elegida ? 'checkmark' : 'add'} size={15} color={elegida ? '#fff' : '#1a6470'} />
-                  </TouchableOpacity>
+                  {elegida && (
+                    <View style={st.elegidaCinta}>
+                      <Ionicons name="checkmark-circle" size={13} color="#fff" />
+                      <Text style={st.elegidaCintaTxt}>Agregada</Text>
+                    </View>
+                  )}
                 </View>
 
                 <View style={st.cardCuerpo}>
@@ -360,10 +367,23 @@ function Carrusel({ nivel, lista, seleccion, onToggle, onAbrir, onMandar, onDesc
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={st.mandar} onPress={() => onMandar(p)}>
-                <Ionicons name="logo-whatsapp" size={14} color="#25D366" />
-                <Text style={st.mandarTxt}>Mandar al cliente</Text>
-              </TouchableOpacity>
+              {/* Las dos acciones, con su nombre escrito. Antes "agregar" era
+                  un + flotando sobre la foto: no se entendía qué hacía y sobre
+                  las fotos claras se perdía. */}
+              <View style={[st.pie, { borderTopColor: c.border }]}>
+                <TouchableOpacity
+                  style={[st.pieBtn, elegida && st.pieBtnOn]}
+                  onPress={() => onToggle(p.id)}
+                >
+                  <Ionicons name={elegida ? 'checkmark' : 'add'} size={15} color={elegida ? '#fff' : tealBtn} />
+                  <Text style={[st.pieTxt, { color: tealBtn }, elegida && st.pieTxtOn]}>{elegida ? 'Agregada' : 'Agregar'}</Text>
+                </TouchableOpacity>
+                <View style={[st.pieSep, { backgroundColor: c.border }]} />
+                <TouchableOpacity style={st.pieBtn} onPress={() => onMandar(p)}>
+                  <Ionicons name="logo-whatsapp" size={15} color="#25D366" />
+                  <Text style={[st.pieTxt, { color: tealBtn }]}>Mandar</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )
         })}
@@ -398,18 +418,25 @@ const st = StyleSheet.create({
   cardOn: { borderWidth: 2 },
   fotoCaja: { position: 'relative' },
   foto: { width: '100%', height: 140 },
-  fotoVacia: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#eef2f3' },
-  cerrar: { position: 'absolute', top: 7, right: 7, width: 24, height: 24, borderRadius: 12, backgroundColor: '#00000073', alignItems: 'center', justifyContent: 'center' },
-  marcar: { position: 'absolute', top: 7, left: 7, width: 24, height: 24, borderRadius: 12, backgroundColor: '#ffffffe6', alignItems: 'center', justifyContent: 'center' },
-  marcarOn: { backgroundColor: '#1a6470' },
+  fotoVacia: { alignItems: 'center', justifyContent: 'center' },
+  // Más opaca que antes: sobre una foto clara, el gris translúcido se perdía.
+  cerrar: { position: 'absolute', top: 7, right: 7, width: 26, height: 26, borderRadius: 13, backgroundColor: '#000000a6', alignItems: 'center', justifyContent: 'center' },
+  elegidaCinta: { position: 'absolute', top: 7, left: 7, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#1a6470', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 11 },
+  elegidaCintaTxt: { color: '#fff', fontSize: 10.5, fontWeight: '800' },
 
   cardCuerpo: { padding: 10, gap: 3 },
   cardTitulo: { fontSize: 12.5, fontWeight: '800', lineHeight: 16, minHeight: 32 },
   cardPrecio: { fontSize: 15, fontWeight: '800', color: '#0f9d58' },
   cardMeta: { fontSize: 11 },
 
-  mandar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#e8eef0' },
-  mandarTxt: { color: '#1a6470', fontSize: 11.5, fontWeight: '800' },
+  // El color del borde y del hueco de la foto los pone el tema: en modo oscuro
+  // un gris claro fijo dejaba una raya luminosa cruzando la tarjeta.
+  pie: { flexDirection: 'row', alignItems: 'stretch', borderTopWidth: 1 },
+  pieBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 9 },
+  pieBtnOn: { backgroundColor: '#1a6470' },
+  pieSep: { width: 1 },
+  pieTxt: { color: '#1a6470', fontSize: 11.5, fontWeight: '800' },
+  pieTxtOn: { color: '#fff' },
 
   btnColeccion: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1a6470', borderRadius: 11, paddingVertical: 12, marginTop: 14, marginHorizontal: 14 },
   btnColeccionTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
