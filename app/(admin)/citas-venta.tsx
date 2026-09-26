@@ -88,9 +88,16 @@ function esCancelada(s: string | null | undefined): boolean { return normalizar(
 // El color y el emoji se toman del dashboard de citas en vez de escribirlos
 // otra vez aquí, para que un estado no acabe de dos colores según la pantalla.
 function esApartado(s: string | null | undefined): boolean { return normalizar(s ?? '').includes('apart') }
+// Reagendada va aparte de cancelada aunque el texto de las canceladas diga
+// "CANCELADA/REAGENDA": ahí manda la cancelación, así que se excluye.
+function esReagendada(s: string | null | undefined): boolean {
+  const n = normalizar(s ?? '')
+  return n.includes('reagend') && !n.includes('cancel')
+}
 const APARTO_COLOR = ESTADOS_CITA.aparto.color
 const APARTO_EMOJI = ESTADOS_CITA.aparto.emoji
-const APARTO_BG    = ESTADOS_CITA.aparto.bg
+const REAG_COLOR   = ESTADOS_CITA.reagendada.color
+const REAG_EMOJI   = ESTADOS_CITA.reagendada.emoji
 function arreglarEncoding(s: string): string {
   if (!s || !/[ÃÂ]/.test(s)) return s
   try {
@@ -124,33 +131,41 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
   onRetro: (f: Fila) => void; onCopy: (f: Fila) => void; onDelete: (f: Fila) => void
 }) {
   const c = useColors()
-  const cancelada = esCancelada(f.estado_seguimiento)
-  const apartado  = esApartado(f.estado_seguimiento)
+  // Un solo sitio decide cómo se resalta la fila. Antes era una variable
+  // booleana por estado (cancelada, apartado…) y cada una había que colarla en
+  // cuatro sitios del render; así añadir uno nuevo es una línea.
+  // El orden importa: el texto de las canceladas dice "CANCELADA/REAGENDA", así
+  // que la cancelación se comprueba primero.
+  const resaltado = esCancelada(f.estado_seguimiento)
+      ? { color: '#c0392b', emoji: '🚫', texto: 'CANCELADA/REAGENDA' }
+    : esApartado(f.estado_seguimiento)
+      ? { color: APARTO_COLOR, emoji: APARTO_EMOJI, texto: 'APARTADO' }
+    : esReagendada(f.estado_seguimiento)
+      ? { color: REAG_COLOR, emoji: REAG_EMOJI, texto: 'REAGENDADA' }
+    : null
+
   return (
     <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
-      {/* Contador de fila (como Excel); en rojo si está cancelada, verde si apartó */}
+      {/* Contador de fila (como Excel); con el color del estado si lo tiene */}
       <View style={[st.cell, st.counterCell, { width: NUM_W, borderColor: c.border }]}>
         <Text style={[st.counterTxt, {
-          color: cancelada ? '#c0392b' : apartado ? APARTO_COLOR : c.textMute,
-          fontWeight: (cancelada || apartado) ? '800' : '400',
-        }]}>{cancelada ? '🚫' : apartado ? APARTO_EMOJI : idx + 1}</Text>
+          color: resaltado?.color ?? c.textMute,
+          fontWeight: resaltado ? '800' : '400',
+        }]}>{resaltado?.emoji ?? idx + 1}</Text>
       </View>
       {COLS.map(col => {
         const val = (f[col.key] as string) ?? ''
         // La fecha de la cita se muestra en español con día de la semana,
         // derivada del timestamp real (no del texto guardado, que venía en inglés).
         const display = col.key === 'dia_cita' ? fmtFechaCitaEs(f.fecha_cita, val) : val
-        const esEstadoCancelada = col.key === 'estado_seguimiento' && esCancelada(val)
-        const esEstadoApartado  = col.key === 'estado_seguimiento' && esApartado(val)
-        // En la columna del CLIENTE (siempre visible) mostrar "🚫 CANCELADA/REAGENDA"
-        // o "🔑 APARTADO" para que se note aunque la columna de estado esté
-        // scrolleada a la derecha.
-        const esClienteCancelada = cancelada && col.key === 'cliente_nombre'
-        const esClienteApartado  = apartado && col.key === 'cliente_nombre'
-        const rojo  = esEstadoCancelada || esClienteCancelada
-        const verde = esEstadoApartado || esClienteApartado
-        const marca = esClienteCancelada ? `🚫 CANCELADA/REAGENDA · ${val || '—'}`
-                    : esClienteApartado  ? `${APARTO_EMOJI} APARTADO · ${val || '—'}`
+        // La columna del CLIENTE va siempre a la vista, así que ahí se repite la
+        // marca del estado: si no, hay que irse hasta la columna de estado, a la
+        // derecha del todo, para saber qué pasó con la cita.
+        const esColEstado  = col.key === 'estado_seguimiento' && !!resaltado
+        const esColCliente = col.key === 'cliente_nombre' && !!resaltado
+        const pintada = esColEstado || esColCliente
+        const marca = esColCliente ? `${resaltado!.emoji} ${resaltado!.texto} · ${val || '—'}`
+                    : esColEstado  ? `${resaltado!.emoji} ${resaltado!.texto}`
                     : (display || '—')
         return (
           <Fragment key={col.key}>
@@ -160,14 +175,14 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
                       // El fondo va translúcido sobre el propio color en vez del
                       // tono claro de allá, que en modo oscuro sería una mancha
                       // casi blanca.
-                      esEstadoApartado && { backgroundColor: APARTO_COLOR + '26' }]}
+                      esColEstado && { backgroundColor: resaltado!.color + '26' }]}
               activeOpacity={0.6}
               onPress={() => onTap(f.id, col.key, col.tipo, val)}>
               <Text style={{
-                color: rojo ? '#c0392b' : verde ? APARTO_COLOR : (val ? c.text : c.textMute),
-                fontSize: 12.5, fontWeight: (rojo || verde) ? '800' : '400',
+                color: pintada ? resaltado!.color : (val ? c.text : c.textMute),
+                fontSize: 12.5, fontWeight: pintada ? '800' : '400',
               }} numberOfLines={2}>
-                {esEstadoApartado ? `${APARTO_EMOJI} ${ESTADOS_CITA.aparto.label}` : marca}
+                {marca}
                 {col.tipo !== 'texto' ? '  ▾' : ''}
               </Text>
             </TouchableOpacity>
