@@ -141,10 +141,18 @@ export default function UnoAUno() {
   async function guardarEnHistorial() {
     if (!sel || !miId) return
     const snapshot = puntos.map(p => `• ${p.texto}${p.hecho ? ' ✓' : ''}${p.nota ? `\n   ${p.nota}` : ''}`).join('\n')
-    await supabase.from('uno_a_uno_sesiones').insert({
+    // Comprobar el error: sin esto, un fallo al guardar (permisos, red) pasaba
+    // desapercibido y aun así se limpiaban los campos, así que lo anotado se
+    // perdía sin avisar.
+    const { error } = await supabase.from('uno_a_uno_sesiones').insert({
       owner_id: miId, prospectador_id: sel.id, duracion_seg: seg, notas: snapshot || null,
       problema: problema.trim() || null, compromiso: compromiso.trim() || null,
     })
+    if (error) {
+      const err = `No se pudo guardar la charla: ${error.message}`
+      Platform.OS === 'web' ? window.alert(err) : Alert.alert('Error', err)
+      return
+    }
     setSeg(0); setCorriendo(false); setProblema(''); setCompromiso('')
     const msg = `Charla con ${sel.nombre} guardada en el historial.`
     Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Guardado', msg)
@@ -293,6 +301,25 @@ export default function UnoAUno() {
                   <TouchableOpacity onPress={() => borrarSesion(x.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={{ color: '#c0392b', fontSize: 15 }}>🗑</Text></TouchableOpacity>
                   <Text style={{ color: TEAL, fontWeight: '800' }}>{open ? '▲' : '▼'}</Text>
                 </View>
+
+                {/* Con la tarjeta cerrada solo se veían el nombre y la fecha, así
+                    que lo anotado parecía no haberse guardado: había que dar con
+                    el ▼ para que apareciera. Ahora el problema y el compromiso
+                    asoman aquí, recortados a una línea. */}
+                {!open && (x.problema || x.compromiso) ? (
+                  <View style={{ marginTop: 8, gap: 3 }}>
+                    {x.problema ? (
+                      <Text style={{ color: c.textSub, fontSize: 12.5 }} numberOfLines={1}>
+                        <Text style={{ color: '#c0392b', fontWeight: '800' }}>❗ </Text>{x.problema}
+                      </Text>
+                    ) : null}
+                    {x.compromiso ? (
+                      <Text style={{ color: c.textSub, fontSize: 12.5 }} numberOfLines={1}>
+                        <Text style={{ color: '#16a34a', fontWeight: '800' }}>🤝 </Text>{x.compromiso}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
                 {open && (
                   <View style={{ marginTop: 10, gap: 8 }}>
                     {x.notas ? <Text style={{ color: c.textSub, fontSize: 13.5, lineHeight: 19 }}>{x.notas}</Text> : null}
