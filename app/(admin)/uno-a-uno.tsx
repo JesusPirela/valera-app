@@ -10,7 +10,7 @@ import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity,
   ActivityIndicator, Alert, Platform, Modal,
 } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
@@ -20,6 +20,35 @@ const TEAL = '#1a6470'
 type Persona = { id: string; nombre: string; role: string }
 type Punto = { id: string; texto: string; nota: string | null; hecho: boolean; orden: number }
 type Sesion = { id: string; prospectador_id: string; duracion_seg: number; notas: string | null; problema: string | null; compromiso: string | null; created_at: string }
+
+// Lo que devuelve get_stats_uno_a_uno: cómo va esa persona, para la charla.
+type StatsUno = {
+  clientes_activos: number; clientes_total: number
+  sin_contacto_30d: number; seguimiento_vencido: number
+  clientes_nuevos_mes: number; citas_mes: number
+  publicaciones_mes: number; cierres_mes: number
+  xp: number; racha: number; propiedades_total: number
+  ultima_actividad: string | null
+}
+
+// Un número con su etiqueta. En rojo o ámbar cuando el dato pide atención.
+function Dato({ label, valor, c, color }: { label: string; valor: number; c: any; color?: string }) {
+  return (
+    <View style={s.dato}>
+      <Text style={[s.datoNum, { color: color ?? c.text }]}>{valor}</Text>
+      <Text style={[s.datoLbl, { color: c.textMute }]} numberOfLines={2}>{label}</Text>
+    </View>
+  )
+}
+
+function tiempoDesde(iso: string): string {
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (min < 60) return `hace ${Math.max(1, min)} min`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `hace ${h} h`
+  const d = Math.floor(h / 24)
+  return d === 1 ? 'ayer' : `hace ${d} días`
+}
 
 function fmtDur(s: number): string {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
@@ -37,6 +66,8 @@ export default function UnoAUno() {
   const [vista, setVista] = useState<'preparar' | 'historial'>('preparar')
 
   const [sel, setSel] = useState<Persona | null>(null)
+  const [stats, setStats] = useState<StatsUno | null>(null)
+  const [cargandoStats, setCargandoStats] = useState(false)
   const [pickerAbierto, setPickerAbierto] = useState(false)
   const [modoCopiar, setModoCopiar] = useState(false)
   const [busca, setBusca] = useState('')
@@ -106,6 +137,16 @@ export default function UnoAUno() {
     }
     setSel(p); setPickerAbierto(false); setSeg(0); setCorriendo(false); setProblema(''); setCompromiso('')
     cargarDe(p)
+    cargarStats(p.id)
+  }
+
+  // Los números de esa persona, para tenerlos delante en la llamada.
+  async function cargarStats(userId: string) {
+    setCargandoStats(true); setStats(null)
+    const { data, error } = await supabase.rpc('get_stats_uno_a_uno', { p_user_id: userId })
+    if (error) setStats(null)
+    else setStats(data as StatsUno)
+    setCargandoStats(false)
   }
 
   async function agregarPunto() {
@@ -220,6 +261,50 @@ export default function UnoAUno() {
             <ActivityIndicator color={TEAL} style={{ marginTop: 30 }} />
           ) : (
             <>
+              {/* Cómo va esa persona, para no tener que ir saltando entre el
+                  CRM, las publicaciones y el ranking antes de la llamada.
+                  Es solo lectura: desde aquí no se toca nada suyo. */}
+              <View style={[s.statsCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={s.statsHead}>
+                  <Text style={[s.h2, { color: c.text, marginBottom: 0 }]}>Cómo va {sel.nombre.split(' ')[0]}</Text>
+                  <TouchableOpacity onPress={() => router.push(`/(prospectador)/crm?verUid=${sel.id}`)}>
+                    <Text style={s.verCrm}>Ver su CRM ›</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {cargandoStats ? (
+                  <ActivityIndicator color={TEAL} style={{ marginVertical: 16 }} />
+                ) : !stats ? (
+                  <Text style={{ color: c.textMute, fontSize: 12.5 }}>No se pudieron cargar sus números.</Text>
+                ) : (
+                  <>
+                    <Text style={[s.statsGrupo, { color: c.textMute }]}>SU CARTERA</Text>
+                    <View style={s.statsFila}>
+                      <Dato label="Clientes activos" valor={stats.clientes_activos} c={c} />
+                      {/* En rojo porque es lo que suele abrir la conversación. */}
+                      <Dato label="Sin contacto 30d" valor={stats.sin_contacto_30d} c={c}
+                            color={stats.sin_contacto_30d > 0 ? '#c0392b' : undefined} />
+                      <Dato label="Segu. vencido" valor={stats.seguimiento_vencido} c={c}
+                            color={stats.seguimiento_vencido > 0 ? '#e8a33d' : undefined} />
+                    </View>
+
+                    <Text style={[s.statsGrupo, { color: c.textMute }]}>ESTE MES</Text>
+                    <View style={s.statsFila}>
+                      <Dato label="Clientes nuevos" valor={stats.clientes_nuevos_mes} c={c} />
+                      <Dato label="Citas hechas" valor={stats.citas_mes} c={c} />
+                      <Dato label="Publicaciones" valor={stats.publicaciones_mes} c={c} />
+                      <Dato label="Cierres" valor={stats.cierres_mes} c={c}
+                            color={stats.cierres_mes > 0 ? '#16a34a' : undefined} />
+                    </View>
+
+                    <Text style={[s.statsPie, { color: c.textMute }]}>
+                      🔥 {stats.racha} días de racha · {Number(stats.xp).toLocaleString('es-MX')} XP
+                      {stats.ultima_actividad ? ` · visto ${tiempoDesde(stats.ultima_actividad)}` : ''}
+                    </Text>
+                  </>
+                )}
+              </View>
+
               <View style={s.puntosHead}>
                 <Text style={[s.h2, { color: c.text }]}>Puntos con {sel.nombre.split(' ')[0]}</Text>
                 {puntos.length > 0 && <TouchableOpacity onPress={abrirCopiar}><Text style={s.copiar}>📋 Copiar a otra persona</Text></TouchableOpacity>}
@@ -376,6 +461,16 @@ const s = StyleSheet.create({
   selTxt: { flex: 1, fontSize: 15, fontWeight: '700' },
   vacio: { alignItems: 'center', marginTop: 44, gap: 12, paddingHorizontal: 30 },
   vacioTxt: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  statsCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 16 },
+  statsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 },
+  verCrm: { color: TEAL, fontWeight: '800', fontSize: 12.5 },
+  statsGrupo: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.6, marginTop: 6, marginBottom: 6 },
+  statsFila: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  dato: { minWidth: 78, flexGrow: 1, flexBasis: 78 },
+  datoNum: { fontSize: 19, fontWeight: '900' },
+  datoLbl: { fontSize: 10.5, marginTop: 1 },
+  statsPie: { fontSize: 11.5, marginTop: 12 },
+
   puntosHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, gap: 10 },
   copiar: { color: TEAL, fontWeight: '800', fontSize: 12.5 },
   punto: { borderWidth: 1.5, borderRadius: 12, padding: 12, marginBottom: 10, marginTop: 10 },
