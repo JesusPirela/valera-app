@@ -265,12 +265,7 @@ export default function UnoAUno() {
                   CRM, las publicaciones y el ranking antes de la llamada.
                   Es solo lectura: desde aquí no se toca nada suyo. */}
               <View style={[s.statsCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                <View style={s.statsHead}>
-                  <Text style={[s.h2, { color: c.text, marginBottom: 0 }]}>Cómo va {sel.nombre.split(' ')[0]}</Text>
-                  <TouchableOpacity onPress={() => router.push(`/(prospectador)/crm?verUid=${sel.id}`)}>
-                    <Text style={s.verCrm}>Ver su CRM ›</Text>
-                  </TouchableOpacity>
-                </View>
+                <Text style={[s.h2, { color: c.text, marginBottom: 10 }]}>Cómo va {sel.nombre.split(' ')[0]}</Text>
 
                 {cargandoStats ? (
                   <ActivityIndicator color={TEAL} style={{ marginVertical: 16 }} />
@@ -303,6 +298,24 @@ export default function UnoAUno() {
                     </Text>
                   </>
                 )}
+
+                {/* Las dos pantallas que se abren durante un 1 a 1, sin salir a
+                    buscarlas: la de gráficas por día y su CRM. Las dos son de
+                    mirar, no de tocar. */}
+                <View style={s.statsBtns}>
+                  <TouchableOpacity
+                    style={[s.statsBtn, { borderColor: c.border }]}
+                    onPress={() => router.push({ pathname: '/(admin)/usuario-actividad', params: { id: sel.id, nombre: sel.nombre } })}
+                  >
+                    <Text style={s.statsBtnTxt}>📈 Ver sus gráficas</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.statsBtn, { borderColor: c.border }]}
+                    onPress={() => router.push(`/(prospectador)/crm?verUid=${sel.id}`)}
+                  >
+                    <Text style={s.statsBtnTxt}>👥 Ver su CRM</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={s.puntosHead}>
@@ -462,8 +475,9 @@ const s = StyleSheet.create({
   vacio: { alignItems: 'center', marginTop: 44, gap: 12, paddingHorizontal: 30 },
   vacioTxt: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   statsCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 16 },
-  statsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 },
-  verCrm: { color: TEAL, fontWeight: '800', fontSize: 12.5 },
+  statsBtns: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  statsBtn: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 9, alignItems: 'center' },
+  statsBtnTxt: { color: TEAL, fontWeight: '800', fontSize: 12.5 },
   statsGrupo: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.6, marginTop: 6, marginBottom: 6 },
   statsFila: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   dato: { minWidth: 78, flexGrow: 1, flexBasis: 78 },
