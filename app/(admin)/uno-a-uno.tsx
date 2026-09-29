@@ -31,10 +31,17 @@ type StatsUno = {
   ultima_actividad: string | null
 }
 
-// Un número con su etiqueta. En rojo o ámbar cuando el dato pide atención.
+// Un número con su etiqueta, dentro de su propia cajita.
+//
+// Antes iban sueltos sobre el fondo y, en pantalla ancha, el flexGrow los
+// repartía hasta dejarlos flotando a medio metro unos de otros. Con caja y un
+// ancho tope se leen como una rejilla.
+//
+// El color solo se usa cuando el dato pide atención (rojo o ámbar); si no, va
+// en el color normal del texto.
 function Dato({ label, valor, c, color }: { label: string; valor: number; c: any; color?: string }) {
   return (
-    <View style={s.dato}>
+    <View style={[s.dato, { backgroundColor: c.bg, borderColor: color ? color + '44' : c.border }]}>
       <Text style={[s.datoNum, { color: color ?? c.text }]}>{valor}</Text>
       <Text style={[s.datoLbl, { color: c.textMute }]} numberOfLines={2}>{label}</Text>
     </View>
@@ -273,17 +280,17 @@ export default function UnoAUno() {
                   <Text style={{ color: c.textMute, fontSize: 12.5 }}>No se pudieron cargar sus números.</Text>
                 ) : (
                   <>
-                    <Text style={[s.statsGrupo, { color: c.textMute }]}>SU CARTERA</Text>
+                    <Text style={[s.statsGrupo, { color: c.textMute }]}>Su cartera</Text>
                     <View style={s.statsFila}>
                       <Dato label="Clientes activos" valor={stats.clientes_activos} c={c} />
                       {/* En rojo porque es lo que suele abrir la conversación. */}
-                      <Dato label="Sin contacto 30d" valor={stats.sin_contacto_30d} c={c}
+                      <Dato label="Sin contacto en 30 días" valor={stats.sin_contacto_30d} c={c}
                             color={stats.sin_contacto_30d > 0 ? '#c0392b' : undefined} />
-                      <Dato label="Segu. vencido" valor={stats.seguimiento_vencido} c={c}
+                      <Dato label="Seguimiento vencido" valor={stats.seguimiento_vencido} c={c}
                             color={stats.seguimiento_vencido > 0 ? '#e8a33d' : undefined} />
                     </View>
 
-                    <Text style={[s.statsGrupo, { color: c.textMute }]}>ESTE MES</Text>
+                    <Text style={[s.statsGrupo, { color: c.textMute }]}>Este mes</Text>
                     <View style={s.statsFila}>
                       <Dato label="Clientes nuevos" valor={stats.clientes_nuevos_mes} c={c} />
                       <Dato label="Citas hechas" valor={stats.citas_mes} c={c} />
@@ -478,12 +485,14 @@ const s = StyleSheet.create({
   statsBtns: { flexDirection: 'row', gap: 8, marginTop: 14 },
   statsBtn: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 9, alignItems: 'center' },
   statsBtnTxt: { color: TEAL, fontWeight: '800', fontSize: 12.5 },
-  statsGrupo: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.6, marginTop: 6, marginBottom: 6 },
-  statsFila: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  dato: { minWidth: 78, flexGrow: 1, flexBasis: 78 },
-  datoNum: { fontSize: 19, fontWeight: '900' },
-  datoLbl: { fontSize: 10.5, marginTop: 1 },
-  statsPie: { fontSize: 11.5, marginTop: 12 },
+  statsGrupo: { fontSize: 11.5, fontWeight: '800', letterSpacing: 0.3, marginTop: 14, marginBottom: 7 },
+  statsFila: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  // maxWidth para que en pantalla ancha no se estiren hasta quedar flotando
+  // separadísimos; con el tope, las cajas se agrupan a la izquierda.
+  dato: { minWidth: 132, maxWidth: 210, flexGrow: 1, flexBasis: 132, borderWidth: 1, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 },
+  datoNum: { fontSize: 21, fontWeight: '900' },
+  datoLbl: { fontSize: 11.5, marginTop: 2 },
+  statsPie: { fontSize: 11.5, marginTop: 14 },
 
   puntosHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, gap: 10 },
   copiar: { color: TEAL, fontWeight: '800', fontSize: 12.5 },
