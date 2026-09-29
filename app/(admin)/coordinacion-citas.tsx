@@ -215,6 +215,13 @@ function alerta(msg: string) {
   else Alert.alert('Error', msg)
 }
 
+// Igual que alerta() pero sin titularlo "Error": es un aviso, no un fallo, y
+// el guardado sigue adelante después de cerrarlo.
+function avisoInfo(msg: string) {
+  if (Platform.OS === 'web') window.alert(msg)
+  else Alert.alert('Aviso', msg)
+}
+
 // ─── DropdownSelector ─────────────────────────────────────────────────────────
 
 function DropdownSelector({
@@ -644,35 +651,38 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
         if (!nuevoNombre.trim() || !nuevoTelefono.trim()) {
           alerta('Nombre y teléfono son obligatorios.'); setGuardando(false); return
         }
-        // Antes de crear, verificar que no exista YA un cliente con ese
-        // teléfono. Sin esto, si el coordinador no lo encontró al buscar por
-        // nombre (typo, apodo, nombre distinto al de otro sistema…), se
-        // creaba un cliente DUPLICADO con su propio responsable_id — el
-        // mismo prospecto termina repartido en dos fichas de dos
-        // prospectadores distintos. Coincide por los últimos 10 dígitos para
-        // no fallar por el prefijo 52/521 ni espacios/guiones.
+        // Si ya hay un cliente con ese teléfono, se AVISA y se crea igual.
+        //
+        // Antes se cancelaba el guardado y se seleccionaba al cliente
+        // encontrado, con lo que aparecía en el formulario un nombre que nadie
+        // había escrito. Duplicar está permitido a propósito: un mismo teléfono
+        // puede ser de dos personas (una pareja, un familiar) y el coordinador
+        // es quien sabe si es el mismo o no. El aviso es para que lo sepa, no
+        // para impedírselo.
+        //
+        // Solo se busca con los 10 dígitos completos. Con menos, el sufijo
+        // parcial coincidía con cualquier teléfono que terminara igual: basta
+        // teclear "9981" para que saliera el aviso de un cliente sin relación.
         const ultimos10 = normalizarTelefono(nuevoTelefono).slice(-10)
-        const { data: existentes } = await supabase.from('clientes')
-          .select('id, nombre, telefono, tipo_operacion, responsable_id')
-          .ilike('telefono', `%${ultimos10}`)
-          .is('eliminado_at', null)
-          .limit(1)
-        if (existentes?.length) {
-          const match = existentes[0] as any
-          let nombreResp = ''
-          if (match.responsable_id) {
-            const { data: resp } = await supabase.from('profiles').select('nombre').eq('id', match.responsable_id).maybeSingle()
-            nombreResp = resp?.nombre ?? ''
+        if (ultimos10.length === 10) {
+          const { data: existentes } = await supabase.from('clientes')
+            .select('id, nombre, telefono, responsable_id')
+            .ilike('telefono', `%${ultimos10}`)
+            .is('eliminado_at', null)
+            .limit(1)
+          if (existentes?.length) {
+            const match = existentes[0] as any
+            let nombreResp = ''
+            if (match.responsable_id) {
+              const { data: resp } = await supabase.from('profiles').select('nombre').eq('id', match.responsable_id).maybeSingle()
+              nombreResp = resp?.nombre ?? ''
+            }
+            avisoInfo(
+              `Ojo: "${match.nombre}" ya está registrado con ese teléfono` +
+              `${nombreResp ? ` (asignado a ${nombreResp})` : ' (sin prospectador asignado)'}.` +
+              `\n\nSe va a crear igual, por si es otra persona con el mismo número.`,
+            )
           }
-          setGuardando(false)
-          alerta(
-            `"${match.nombre}" ya está registrado con ese teléfono` +
-            `${nombreResp ? ` (asignado a ${nombreResp})` : ' (sin prospectador asignado)'}` +
-            `. Se seleccionó para que no se duplique — revisa los datos y guarda de nuevo.`,
-          )
-          setModoNuevo(false)
-          seleccionarCliente(match)
-          return
         }
         const { data: { user } } = await getUsuarioActual()
         const { data: nuevo, error: errC } = await supabase.from('clientes').insert({
