@@ -95,6 +95,19 @@ const LIGAS: Liga[] = [
   { nombre: 'Plata',    emoji: '🥈', color: '#9fb3c0', maxPos: 25 },
   { nombre: 'Bronce',   emoji: '🥉', color: '#b0703c', maxPos: Infinity },
 ]
+// "2026-09" → "Septiembre 2026". Se arma a mediodía UTC para que el día 1 no se
+// escape al mes anterior por el desfase horario.
+function nombreMes(ym: string): string {
+  const txt = new Date(`${ym}-01T12:00:00Z`)
+    .toLocaleDateString('es-MX', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+  return txt.charAt(0).toUpperCase() + txt.slice(1)
+}
+
+// El mes en curso según México, para no listarlo dos veces junto a "Este mes".
+function mesActualMX(): string {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' }).slice(0, 7)
+}
+
 function ligaDeIndice(idx0: number): Liga {
   const pos = idx0 + 1
   return LIGAS.find(l => pos <= l.maxPos) ?? LIGAS[LIGAS.length - 1]
@@ -106,15 +119,29 @@ export default function Ranking() {
   // Histórico = XP de siempre; Mensual = XP ganado en el mes en curso.
   const [modo, setModo] = useState<'historico' | 'mensual'>('historico')
   const [tipo, setTipo] = useState<'xp' | 'propiedades' | 'clientes' | 'seguimientos'>('xp')
+  // Mes que se está viendo en el ranking mensual. null = el mes en curso.
+  const [mesSel, setMesSel] = useState<string | null>(null)
+
+  // Los meses que tuvieron movimiento, para no ofrecer meses vacíos.
+  const { data: mesesDisponibles } = useQuery({
+    queryKey: ['meses-ranking'],
+    queryFn: async () => {
+      const { data } = await supabase.rpc('meses_con_ranking')
+      return ((data ?? []) as { mes: string }[]).map(m => String(m.mes).slice(0, 7))
+    },
+    staleTime: 1000 * 60 * 60,
+  })
 
   // React Query: el ranking cacheado aparece al instante al volver a la pantalla;
   // solo se vuelve a pedir en segundo plano si pasaron >2 min (antes recargaba
   // desde cero en cada foco). getSession() es local (no red) para el userId.
   const { data, isLoading: loading, refetch } = useQuery({
-    queryKey: ['ranking', modo],
+    queryKey: ['ranking', modo, mesSel],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession()
-      const { data: rows } = await supabase.rpc(modo === 'mensual' ? 'get_ranking_mensual' : 'get_ranking')
+      const { data: rows } = modo === 'mensual'
+        ? await supabase.rpc('get_ranking_mensual', mesSel ? { p_mes: `${mesSel}-01` } : {})
+        : await supabase.rpc('get_ranking')
       return { userId: session?.user?.id ?? null, entries: (rows ?? []) as RankEntry[] }
     },
     staleTime: 1000 * 60 * 2,
@@ -230,7 +257,9 @@ export default function Ranking() {
       <View style={s.header}>
         <Text style={s.headerTitle}>🏆 Ranking</Text>
         <Text style={s.headerSub}>
-          {modo === 'mensual' ? 'Top del mes en curso (se reinicia cada mes)' : 'Top por XP acumulado de siempre'}
+          {modo === 'mensual'
+            ? (mesSel ? `Top de ${nombreMes(mesSel)}` : 'Top del mes en curso (se reinicia cada mes)')
+            : 'Top por XP acumulado de siempre'}
         </Text>
       </View>
 
@@ -251,6 +280,30 @@ export default function Ranking() {
           <Text style={[s.toggleTxt, modo === 'historico' && s.toggleTxtActivo]}>♾️ Histórico</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Selector de mes: solo tiene sentido en el ranking mensual. Se ofrecen
+          únicamente los meses con movimiento, para no entrar en uno vacío. */}
+      {modo === 'mensual' && (mesesDisponibles?.length ?? 0) > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.mesRow} contentContainerStyle={s.mesRowInner}>
+          <TouchableOpacity
+            style={[s.mesChip, !mesSel && s.mesChipActivo]}
+            onPress={() => setMesSel(null)}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.mesTxt, !mesSel && s.mesTxtActivo]}>Este mes</Text>
+          </TouchableOpacity>
+          {(mesesDisponibles ?? []).filter(m => m !== mesActualMX()).map(m => (
+            <TouchableOpacity
+              key={m}
+              style={[s.mesChip, mesSel === m && s.mesChipActivo]}
+              onPress={() => setMesSel(m)}
+              activeOpacity={0.8}
+            >
+              <Text style={[s.mesTxt, mesSel === m && s.mesTxtActivo]}>{nombreMes(m)}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Selector de métrica */}
       <View style={s.metricaRow}>
@@ -467,6 +520,15 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff' },
   headerSub:   { fontSize: 12, color: '#7a9ab5', marginTop: 3 },
   toggleRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 },
+  mesRow: { flexGrow: 0, paddingTop: 8 },
+  mesRowInner: { paddingHorizontal: 14, gap: 7 },
+  mesChip: {
+    paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999,
+    backgroundColor: '#122030', borderWidth: 1.5, borderColor: '#1e3448',
+  },
+  mesChipActivo: { borderColor: '#c9a84c', backgroundColor: '#1b2a3d' },
+  mesTxt: { fontSize: 12.5, fontWeight: '800', color: '#7a9ab5' },
+  mesTxtActivo: { color: '#c9a84c' },
   toggleBtn: {
     flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: 'center',
     backgroundColor: '#122030', borderWidth: 1.5, borderColor: '#1e3448',
