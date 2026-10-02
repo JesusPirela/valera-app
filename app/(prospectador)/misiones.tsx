@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { infoNivel, tituloPorNivel, sincronizarMisionesBase } from '../../lib/gamification'
 import PanelRacha from '../../components/PanelRacha'
+import { limitesDiaMX } from '../../lib/fecha-mx'
 
 type UserStats = {
   xp: number
@@ -61,39 +62,11 @@ const bStyles = StyleSheet.create({
 
 const getHoyMX = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' })
 
-function getMXDayBounds(hoyMX: string): { start: string; end: string } {
-  // Calcular el offset correcto para Mexico City, incluyendo semanas de transición DST.
-  // CDT (UTC-5): desde el 2° domingo de marzo hasta el 1° domingo de noviembre.
-  // CST (UTC-6): resto del año.
-  // new Date(localeString) no es fiable: lo parsea en la tz del dispositivo, no en MX,
-  // lo que daba offset = 0 para usuarios en CDT y desplazaba el rango 5h hacia atrás.
-  const [year, month, day] = hoyMX.split('-').map(Number)
-  let offsetHours: number
-  if (month === 3) {
-    // Transición DST: 2° domingo de marzo a las 2am
-    const firstDay = new Date(Date.UTC(year, 2, 1))
-    while (firstDay.getUTCDay() !== 0) firstDay.setUTCDate(firstDay.getUTCDate() + 1)
-    offsetHours = day >= firstDay.getUTCDate() + 7 ? 5 : 6
-  } else if (month === 11) {
-    // Fin DST: 1° domingo de noviembre
-    const firstDay = new Date(Date.UTC(year, 10, 1))
-    while (firstDay.getUTCDay() !== 0) firstDay.setUTCDate(firstDay.getUTCDate() + 1)
-    offsetHours = day >= firstDay.getUTCDate() ? 6 : 5
-  } else {
-    offsetHours = (month >= 4 && month <= 10) ? 5 : 6
-  }
-  const startMs = new Date(hoyMX + 'T00:00:00Z').getTime() + offsetHours * 3600000
-  return {
-    start: new Date(startMs).toISOString(),
-    end:   new Date(startMs + 86400000).toISOString(),
-  }
-}
-
 async function getConteosDiarios(uid: string): Promise<Map<string, number>> {
   const m = new Map<string, number>()
   try {
     const hoy = getHoyMX()
-    const { start, end } = getMXDayBounds(hoy)
+    const { inicio: start, fin: end } = limitesDiaMX(hoy)
 
     const [propRes, crmRes, segRes, intRes, cursoRes] = await Promise.all([
       supabase.from('propiedad_publicacion').select('propiedad_id')

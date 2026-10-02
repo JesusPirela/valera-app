@@ -7,6 +7,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
+import { hoyMX, limitesDiaMX } from '../../lib/fecha-mx'
 
 const TEAL = '#1a6470'
 
@@ -83,8 +84,12 @@ export default function MiDia() {
     const { data: { user } } = await getUsuarioActual()
     if (!user) { setLoading(false); return }
 
-    const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
-    const manana = new Date(hoy); manana.setDate(hoy.getDate() + 1)
+    // El día va de medianoche a medianoche EN MÉXICO, no según el reloj del
+    // teléfono. Con setHours(0,0,0,0) se usaba la medianoche del dispositivo, y
+    // a quien lo tuviera en otra zona se le adelantaba o atrasaba el día: las
+    // misiones y los seguimientos "de hoy" se le vaciaban antes de tiempo.
+    const diaMX = hoyMX()
+    const { inicio, fin } = limitesDiaMX(diaMX)
     const hace7dias = new Date(Date.now() - 7 * 86_400_000)
 
     const [perfilRes, recsRes, dormidosRes, segHoyRes, misionesRes, pubsRes] = await Promise.all([
@@ -93,8 +98,8 @@ export default function MiDia() {
         .select('id, titulo, descripcion, fecha_hora, cliente_id, clientes(nombre)')
         .eq('user_id', user.id)
         .eq('completado', false)
-        .gte('fecha_hora', hoy.toISOString())
-        .lt('fecha_hora', manana.toISOString())
+        .gte('fecha_hora', inicio)
+        .lt('fecha_hora', fin)
         .order('fecha_hora', { ascending: true }),
       supabase.from('clientes')
         .select('id, nombre, estado, updated_at')
@@ -110,19 +115,19 @@ export default function MiDia() {
         .eq('responsable_id', user.id)
         .is('eliminado_at', null)
         .not('estado', 'in', '("compro","compro_externo","descartado")')
-        .gte('proximo_contacto', hoy.toISOString())
-        .lt('proximo_contacto', manana.toISOString())
+        .gte('proximo_contacto', inicio)
+        .lt('proximo_contacto', fin)
         .order('proximo_contacto', { ascending: true })
         .limit(15),
       supabase.from('user_misiones')
         .select('id, progreso, fecha_reset, mision:misiones(nombre:titulo, descripcion, meta, tipo)')
         .eq('user_id', user.id)
-        .eq('fecha_reset', hoy.toISOString().slice(0, 10))
+        .eq('fecha_reset', diaMX)
         .eq('completada', false),
       supabase.from('publicacion_log')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
-        .gte('created_at', hoy.toISOString()),
+        .gte('created_at', inicio),
     ])
 
     setNombreUsuario((perfilRes.data as any)?.nombre?.split(' ')[0] ?? '')
