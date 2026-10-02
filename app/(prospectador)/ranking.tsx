@@ -46,25 +46,6 @@ function AvatarRanking({ entry, size, esYo }: {
   )
 }
 
-function _parsePresu(txt: string | null | undefined): number | null {
-  if (!txt) return null
-  const s = String(txt).toLowerCase().replace(/[, $]/g, '')
-  const m = s.match(/(\d+(\.\d+)?)\s*(m|k)?/)
-  if (!m) return null
-  let n = parseFloat(m[1])
-  if (isNaN(n)) return null
-  const suf = m[3]
-  if (suf === 'm') n *= 1_000_000
-  else if (suf === 'k') n *= 1_000
-  else if (n < 100) n *= 1_000_000
-  return n
-}
-function _formatPresu(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`
-  if (n >= 1_000) return `$${Math.round(n / 1_000)}k`
-  return `$${Math.round(n)}`
-}
-
 // El ranking es de PRODUCTIVIDAD: no incluye valera_coins a propósito.
 type RankEntry = {
   id: string
@@ -149,31 +130,6 @@ export default function Ranking() {
   })
   const userId = data?.userId ?? null
   const entries = data?.entries ?? []
-
-  // Presupuesto activo del usuario actual (sus clientes activos)
-  const { data: presuData } = useQuery({
-    queryKey: ['mi-presupuesto-activo'],
-    queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.user?.id) return 0
-      const { data: rows } = await supabase
-        .from('clientes')
-        .select('presupuesto, estado')
-        .eq('responsable_id', session.user.id)
-        .is('eliminado_at', null)
-      if (!rows) return 0
-      let total = 0
-      for (const c of rows) {
-        if (c.estado === 'descartado' || c.estado === 'compro' || c.estado === 'compro_externo') continue
-        const v = _parsePresu(c.presupuesto)
-        if (v != null && v > 0) total += v
-      }
-      return total
-    },
-    staleTime: 1000 * 60 * 2,
-    networkMode: 'offlineFirst',
-  })
-  const miPresupuesto = presuData ?? 0
 
   const { data: segsMap } = useQuery({
     queryKey: ['ranking-seguimientos', modo],
@@ -341,17 +297,6 @@ export default function Ranking() {
       )}
       {modo === 'mensual' && entries.length > 0 && (
         <Text style={s.ligaLeyenda}>💎 Top 3 · 🥇 Top 10 · 🥈 Top 25 · 🥉 resto · se reinicia cada mes</Text>
-      )}
-
-      {/* Mi presupuesto activo */}
-      {miPresupuesto > 0 && (
-        <View style={s.presuBanner}>
-          <Text style={s.presuIco}>💵</Text>
-          <View>
-            <Text style={s.presuNum}>{_formatPresu(miPresupuesto)}</Text>
-            <Text style={s.presuLbl}>Mi presupuesto activo en pipeline</Text>
-          </View>
-        </View>
       )}
 
       {/* Mi posición (si no está visible en el top) */}
@@ -555,17 +500,6 @@ const s = StyleSheet.create({
   metricaIco: { fontSize: 14 },
   metricaTxt: { fontSize: 10, fontWeight: '700', color: '#7a9ab5', marginTop: 2 },
   metricaTxtActivo: { color: '#fff' },
-
-  presuBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    marginHorizontal: 14, marginTop: 10,
-    backgroundColor: '#0a2218', borderRadius: 12,
-    borderWidth: 1, borderColor: '#10b98144',
-    paddingHorizontal: 14, paddingVertical: 10,
-  },
-  presuIco:  { fontSize: 22 },
-  presuNum:  { fontSize: 16, fontWeight: '900', color: '#10b981' },
-  presuLbl:  { fontSize: 11, color: '#4a8a6a', marginTop: 1 },
 
   entryCard: {
     flexDirection: 'row', alignItems: 'center',
