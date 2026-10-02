@@ -210,6 +210,12 @@ function abrirFichaCliente(clienteId: string | null) {
   router.push({ pathname: '/(admin)/detalle-cliente', params: { id: clienteId } })
 }
 
+// Cómo se nombra cada rol en el desplegable de quién atendió.
+const ROL_CORTO: Record<string, string> = {
+  admin: 'admin', supervisor: 'supervisión', gerente: 'gerencia',
+  prospectador_plus: 'prospectador plus', prospectador: 'prospectador', nuevo: 'nuevo',
+}
+
 function alerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
   else Alert.alert('Error', msg)
@@ -1536,9 +1542,26 @@ export default function CoordinacionCitas() {
     if (mountedRef.current) setAdmins((data ?? []).filter(a => a.nombre?.trim()))
   }
 
+  // Quién puede figurar como "atendió" la cita: CUALQUIER usuario activo, no
+  // solo los de rol asesor. En la práctica atiende quien esté disponible —un
+  // prospectador plus, gerencia, quien sea— y con solo 2 asesores activos de 71
+  // usuarios la lista se quedaba corta.
+  //
+  // Van primero los asesores, que siguen siendo el caso habitual, y detrás el
+  // resto por nombre. El rol se muestra al lado para distinguir entre tantos, y
+  // además sirve para filtrar escribiéndolo en el buscador del desplegable.
   async function cargarAsesores() {
-    const { data } = await supabase.from('profiles').select('id, nombre').eq('role', 'asesor')
-    if (mountedRef.current) setAsesores((data ?? []).filter(a => a.nombre?.trim()))
+    const { data } = await supabase.from('profiles')
+      .select('id, nombre, role')
+      .eq('activo', true)
+      .order('nombre')
+    if (!mountedRef.current) return
+    const conNombre = (data ?? []).filter(a => a.nombre?.trim())
+    const etiqueta = (a: any) => (a.role === 'asesor' ? a.nombre : `${a.nombre} · ${ROL_CORTO[a.role] ?? a.role}`)
+    setAsesores([
+      ...conNombre.filter(a => a.role === 'asesor').map(a => ({ id: a.id, nombre: etiqueta(a) })),
+      ...conNombre.filter(a => a.role !== 'asesor').map(a => ({ id: a.id, nombre: etiqueta(a) })),
+    ])
   }
 
   async function cargarMiPerfil() {
