@@ -76,16 +76,16 @@ async function llamarGemini(apiKey: string, model: string, prompt: string): Prom
 // hacen es nombrar un canal fuera de Marketplace (WhatsApp, teléfono,
 // enlaces): eso es lo que Facebook penaliza, no la invitación en sí.
 const PLANTILLAS = [
-  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',       equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agenda una visita y conócela.' },
-  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Ven a conocer esta {TIPO}.' },
+  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',       equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agenda una visita y conóce{LO}.' },
+  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Ven a conocer {ESTE} {TIPO}.' },
   { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',            equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Agenda tu visita cuando gustes.' },
-  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Te invito a conocerla en persona.' },
-  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Pide tu cita para verla.' },
-  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Agenda una cita y pásala a ver.' },
-  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Ven a verla y checa si es la tuya.' },
-  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Agenda tu recorrido por esta {TIPO}.' },
-  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Pásala a conocer, agenda tu visita.' },
-  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Te espero para mostrarte esta {TIPO}.' },
+  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Te invito a conocer{LO} en persona.' },
+  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Pide tu cita para ver{LO}.' },
+  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Agenda una cita y pása{LO} a ver.' },
+  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Ven a ver{LO} y checa si es para ti.' },
+  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Agenda tu recorrido por {ESTE} {TIPO}.' },
+  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Pása{LO} a conocer, agenda tu visita.' },
+  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Te espero para mostrarte {ESTE} {TIPO}.' },
 ]
 
 serve(async (req) => {
@@ -118,6 +118,14 @@ serve(async (req) => {
     // misma. Si el asesor vuelve a tocar "mejorar descripción", le toca otro
     // armazón, que es justo lo deseable.
     const t = PLANTILLAS[Math.floor(Math.random() * PLANTILLAS.length)]
+
+    // Concordancia: casa y propiedad son femeninas; departamento, local y
+    // terreno, masculinos. Sin esto salía "Ven a conocer esta departamento".
+    const fem = tipo === 'casa' || !['departamento', 'local', 'terreno'].includes(tipo)
+    const cierreResuelto = t.cierre
+      .replace(/\{TIPO\}/g, tipoLabel.toLowerCase())
+      .replace(/\{ESTE\}/g, fem ? 'esta' : 'este')
+      .replace(/\{LO\}/g, fem ? 'la' : 'lo')
 
     const prompt = `Eres un experto copywriter inmobiliario en México. Genera una descripción profesional para esta propiedad.
 
@@ -178,7 +186,7 @@ ${t.amenidades}
 (línea en blanco)]
 ` : ''}📍 [2-3 oraciones sobre ubicación: fraccionamiento/colonia, conectividad, qué tiene cerca. Sin números, sin nombres de inmobiliarias/personas, sin teléfonos]
 
-📲 ${t.cierre.replace("{TIPO}", tipoLabel.toLowerCase())}`
+📲 ${cierreResuelto}`
 
     const errores: string[] = []
 

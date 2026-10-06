@@ -64,7 +64,8 @@ const ENFOQUES = [
 // titula las secciones y cómo cierra. Medido en la base: 1,239 descripciones
 // terminaban con la misma frase y 1,344 traían el mismo bloque "Precio:" —
 // esa huella repetida es justo lo que agarra un filtro antispam.
-// {TIPO} se reemplaza por "casa"/"departamento"/etc. Los cierres se escriben
+// Marcas que se resuelven al armar el prompt: {TIPO} → "casa"/"departamento",
+// {ESTE} → este/esta y {LO} → lo/la, según el género del tipo. Los cierres se escriben
 // COMPLETOS, con su punto final: la primera versión salía cortada ("conoce
 // este excelente") porque el tipo se armaba aparte y aquí no se pegaba.
 //
@@ -72,16 +73,16 @@ const ENFOQUES = [
 // hacen es nombrar un canal fuera de Marketplace (WhatsApp, teléfono,
 // enlaces): eso es lo que Facebook penaliza, no la invitación en sí.
 const PLANTILLAS = [
-  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',      equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agenda una visita y conócela.' },
-  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Ven a conocer esta {TIPO}.' },
+  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',      equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agenda una visita y conóce{LO}.' },
+  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Ven a conocer {ESTE} {TIPO}.' },
   { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',           equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Agenda tu visita cuando gustes.' },
-  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Te invito a conocerla en persona.' },
-  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Pide tu cita para verla.' },
-  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Agenda una cita y pásala a ver.' },
-  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Ven a verla y checa si es la tuya.' },
-  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Agenda tu recorrido por esta {TIPO}.' },
-  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Pásala a conocer, agenda tu visita.' },
-  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Te espero para mostrarte esta {TIPO}.' },
+  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Te invito a conocer{LO} en persona.' },
+  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Pide tu cita para ver{LO}.' },
+  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Agenda una cita y pása{LO} a ver.' },
+  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Ven a ver{LO} y checa si es para ti.' },
+  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Agenda tu recorrido por {ESTE} {TIPO}.' },
+  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Pása{LO} a conocer, agenda tu visita.' },
+  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Te espero para mostrarte {ESTE} {TIPO}.' },
 ]
 
 /** fetch con tope de tiempo: sin esto, un modelo colgado bloquea la corrida. */
@@ -129,6 +130,14 @@ function armarPrompt(p: any, idx: number) {
   if (p.banos)            lineasDatos.push(`🚿 ${p.banos} baño${p.banos > 1 ? 's completos' : ' completo'}${p.medios_banos ? ` + ${p.medios_banos} medio baño${p.medios_banos > 1 ? 's' : ''}` : ''}`)
   if (p.estacionamientos) lineasDatos.push(`🚗 ${p.estacionamientos} estacionamiento${p.estacionamientos > 1 ? 's' : ''}`)
 
+  // Concordancia: casa y propiedad son femeninas; departamento, local y
+  // terreno, masculinos. Sin esto salía "Ven a conocer esta departamento".
+  const fem = p.tipo === 'casa' || !['departamento', 'local', 'terreno'].includes(p.tipo)
+  const cierreResuelto = t.cierre
+    .replace(/\{TIPO\}/g, tipoLabel.toLowerCase())
+    .replace(/\{ESTE\}/g, fem ? 'esta' : 'este')
+    .replace(/\{LO\}/g, fem ? 'la' : 'lo')
+
   return `Eres un experto copywriter inmobiliario en México. Genera una descripción profesional para publicar esta propiedad en portales y redes (Facebook Marketplace, grupos, etc.).
 
 🎲 ESTA ES LA VERSIÓN #${idx + 1} de esta propiedad. Cada versión la publica una persona DISTINTA, así que debe leerse como un anuncio escrito por otra persona: cambia la apertura, el orden de las ideas, los adjetivos y el largo de las frases. ⚠️ Los DATOS y NÚMEROS deben ser EXACTAMENTE los mismos; solo cambia la redacción.
@@ -173,7 +182,7 @@ ${p.tipo !== 'terreno' ? `
 ` : ''}
 📍 [2-3 oraciones sobre ubicación/conectividad. Sin números, sin nombres, sin teléfonos]
 
-📲 ${t.cierre.replace('{TIPO}', tipoLabel.toLowerCase())}`
+📲 ${cierreResuelto}`
 }
 
 // Último filtro antes de guardar: si la IA se saltó una regla, la versión no
