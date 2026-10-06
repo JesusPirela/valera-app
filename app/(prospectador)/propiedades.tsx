@@ -306,6 +306,17 @@ const PropiedadCard = memo(function PropiedadCard({
             <Text style={styles.nuevaText}>✨ Nueva para ti</Text>
           </View>
         )}
+        {/* Aviso en la propia tarjeta: el motivo tiene que verse SIN tener que
+            tocar el botón. Si solo saliera al tocarlo, parecería que la app
+            está fallando. */}
+        {saturada && (
+          <View style={styles.saturadaAviso}>
+            <Text style={styles.saturadaAvisoText}>
+              ⏸ Ya la publicaron {saturada.personas} personas esta semana ({saturada.veces} veces).
+              Si varios subimos la misma, Facebook rechaza los anuncios de todos. Toca para ver cuándo se libera.
+            </Text>
+          </View>
+        )}
         {precioBajo && (
           <View style={styles.precioBajoBadge}>
             <Text style={styles.precioBajoText}>
@@ -336,7 +347,11 @@ const PropiedadCard = memo(function PropiedadCard({
               styles.publicadaBtn,
               { borderColor: primaryColor },
               veces > 0 && { backgroundColor: primaryColor, borderColor: primaryColor },
-              (isToggling || veces >= 10 || !!saturada) && styles.publicadaBtnDisabled,
+              (isToggling || veces >= 10) && styles.publicadaBtnDisabled,
+              // Estilo propio en vez de la opacidad de "deshabilitado": ese
+              // botón SÍ responde (explica el motivo), así que tiene que
+              // leerse bien. Con opacity 0.4 el texto casi no se veía.
+              !!saturada && styles.publicadaBtnSaturada,
             ]}
             onPress={(e) => {
               e.stopPropagation()
@@ -370,7 +385,13 @@ const PropiedadCard = memo(function PropiedadCard({
             {isToggling ? (
               <ActivityIndicator size="small" color={veces > 0 ? '#fff' : primaryColor} />
             ) : (
-              <Text style={[styles.publicadaBtnText, { color: veces > 0 ? '#fff' : primaryColor }]} maxFontSizeMultiplier={1.2} numberOfLines={1}>
+              <Text
+                // Sobre el ámbar va texto café oscuro, no el color del tema:
+                // el morado sobre amarillo claro no se leía.
+                style={[styles.publicadaBtnText, { color: saturada ? '#92400e' : veces > 0 ? '#fff' : primaryColor }]}
+                maxFontSizeMultiplier={1.2}
+                numberOfLines={1}
+              >
                 {saturada ? '⏸ Muy publicada' : veces >= 10 ? '10/10 ✅' : veces > 0 ? `${veces}/10` : 'Marcar como publicada'}
               </Text>
             )}
@@ -2088,6 +2109,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,
   },
   nuevaText: { fontSize: 11, fontWeight: '700', color: '#1d4ed8' },
+  saturadaAviso: {
+    backgroundColor: '#fff7ed', borderLeftWidth: 3, borderLeftColor: '#ea580c',
+    marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 4,
+  },
+  saturadaAvisoText: { fontSize: 10.5, fontWeight: '600', color: '#9a3412', lineHeight: 14.5 },
+  // Ámbar sólido: se lee igual en claro y en oscuro, y dice "ojo" sin
+  // parecer un botón roto.
+  publicadaBtnSaturada: { backgroundColor: '#fef3c7', borderColor: '#d97706' },
   precioBajoBadge: {
     backgroundColor: '#f0fdf4', borderLeftWidth: 3, borderLeftColor: '#16a34a',
     marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,
