@@ -52,17 +52,22 @@ const ENFOQUES = [
 // {TIPO} se reemplaza por "casa"/"departamento"/etc. Los cierres se escriben
 // COMPLETOS, con su punto final: la primera versión salía cortada ("conoce
 // este excelente") porque el tipo se armaba aparte y aquí no se pegaba.
+//
+// Los cierres NO mandan a contactar por fuera ("escríbeme", "mándame mensaje",
+// "déjame tus datos"). Marketplace penaliza los anuncios que sacan la
+// conversación de la plataforma: el comprador ya tiene ahí su botón de
+// mensaje. Son frases neutras, y varias ni siquiera piden nada.
 const PLANTILLAS = [
-  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',      equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agenda tu cita y conoce esta excelente {TIPO}.' },
-  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Escríbeme y la vemos sin compromiso.' },
-  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',           equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Con gusto te la muestro cuando puedas.' },
-  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Déjame tus datos y coordinamos la visita.' },
-  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: '¿Vemos esta {TIPO} esta semana?' },
-  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Aquí estoy para cualquier duda y para agendar.' },
-  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Mándame mensaje y la conocemos.' },
-  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Con una visita te vas a dar cuenta.' },
-  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Escríbeme para apartar una visita.' },
-  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Platícame qué buscas y te muestro esta {TIPO}.' },
+  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',      equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Se muestra con cita previa.' },
+  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Una {TIPO} que se aprecia mejor en persona.' },
+  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',           equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Disponible para visitas.' },
+  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Quedo al pendiente de cualquier duda sobre la propiedad.' },
+  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Vale la pena conocerla.' },
+  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Se pueden coordinar visitas.' },
+  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Una opción a considerar en la zona.' },
+  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Lista para visitas.' },
+  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'El recorrido completo se hace en la visita.' },
+  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Esta {TIPO} está disponible para conocerla.' },
 ]
 
 async function llamarOpenRouter(apiKey: string, model: string, prompt: string) {
@@ -208,20 +213,25 @@ serve(async (req) => {
         const prompt = armarPrompt(prop, idx)
         let texto: string | null = null
         let modelo = ''
+        const fallos: string[] = []
 
         if (openrouterKey) {
           for (const m of MODELOS_OPENROUTER) {
             const r = await llamarOpenRouter(openrouterKey, m, prompt)
             if (r.ok) { texto = r.texto!; modelo = m; break }
+            fallos.push(`or/${m.split('/')[1]}: ${String(r.err).slice(0, 90)}`)
           }
         }
         if (!texto && geminiKey) {
           for (const m of MODELOS_GEMINI) {
             const g = await llamarGemini(geminiKey, m, prompt)
             if (g.ok) { texto = g.texto!; modelo = `gemini/${m}`; break }
+            fallos.push(`gem/${m}: ${String(g.err).slice(0, 90)}`)
           }
         }
-        if (!texto) { resumen.push({ codigo: prop.codigo, idx, error: 'todas las IAs fallaron' }); break }
+        // Se corta la propiedad entera: si ninguna IA responde, las siguientes
+        // versiones tampoco van a salir. La próxima corrida reintenta.
+        if (!texto) { resumen.push({ codigo: prop.codigo, idx, error: 'todas las IAs fallaron', fallos }); break }
 
         const motivo = pasaRevision(texto)
         if (motivo) { resumen.push({ codigo: prop.codigo, idx, descartada: motivo, final: texto.slice(-70) }); continue }

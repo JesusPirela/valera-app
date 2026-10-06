@@ -63,6 +63,32 @@ async function llamarGemini(apiKey: string, model: string, prompt: string): Prom
   return { ok: true, texto }
 }
 
+// Esta función es la que arma la descripción que se GUARDA al crear o editar
+// una propiedad. Antes el armazón era fijo, y se notaba: de 2,255 propiedades,
+// 1,239 terminaban con la misma frase exacta y 1,344 traían el mismo bloque
+// "💰 Precio:". Esa huella repetida es justo lo que un filtro antispam de
+// Facebook agarra para decir que son la misma publicación.
+//
+// Ahora cada propiedad toma una plantilla al azar: cambia el rótulo del precio,
+// los títulos de las secciones y el cierre.
+//
+// Y los cierres YA NO mandan a contactar ("agenda tu cita", "escríbeme"):
+// Marketplace penaliza los anuncios que sacan la conversación de la
+// plataforma, donde el comprador ya tiene su propio botón de mensaje. Son
+// frases neutras sobre la propiedad, y varias no piden nada.
+const PLANTILLAS = [
+  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',       equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Se muestra con cita previa.' },
+  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Una {TIPO} que se aprecia mejor en persona.' },
+  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',            equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Disponible para visitas.' },
+  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Quedo al pendiente de cualquier duda sobre la propiedad.' },
+  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Vale la pena conocerla.' },
+  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Se pueden coordinar visitas.' },
+  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Una opción a considerar en la zona.' },
+  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Lista para visitas.' },
+  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'El recorrido completo se hace en la visita.' },
+  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Esta {TIPO} está disponible para conocerla.' },
+]
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -88,6 +114,12 @@ serve(async (req) => {
     if (banos)            lineasDatos.push(`🚿 ${banos} baño${banos > 1 ? 's completos' : ' completo'}${mediosBanos ? ` + ${mediosBanos} medio baño${mediosBanos > 1 ? 's' : ''}` : ''}`)
     if (estacionamientos) lineasDatos.push(`🚗 ${estacionamientos} estacionamiento${estacionamientos > 1 ? 's' : ''}`)
 
+    // Al azar y no derivado de la propiedad: lo que se busca es repartir las
+    // plantillas entre el inventario, no que una propiedad siempre reciba la
+    // misma. Si el asesor vuelve a tocar "mejorar descripción", le toca otro
+    // armazón, que es justo lo deseable.
+    const t = PLANTILLAS[Math.floor(Math.random() * PLANTILLAS.length)]
+
     const prompt = `Eres un experto copywriter inmobiliario en México. Genera una descripción profesional para esta propiedad.
 
 DATOS (usa estos números exactos, no inventes):
@@ -103,23 +135,23 @@ DATOS (usa estos números exactos, no inventes):
 
 ⛔ REGLAS ESTRICTAS (OBLIGATORIAS — la descripción se rechaza si las incumples):
 1. NUNCA incluyas nombres de inmobiliarias, agencias, marcas, asesores, brokers ni nombres de personas. Aunque aparezcan en la descripción original, elimínalos por completo.
-2. NUNCA incluyas números de teléfono, WhatsApp, claves/códigos de propiedad (EB-XXXX, MLS, folios), correos, sitios web ni enlaces.
+2. NUNCA incluyas números de teléfono, WhatsApp, claves/códigos de propiedad (EB-XXXX, VR-XXXX, MLS, folios), correos, sitios web ni enlaces.
 3. NUNCA hables de comisiones, "comparto comisión", porcentajes de comisión, honorarios ni acuerdos entre asesores. Omite por completo cualquier mención.
-4. En el texto libre (secciones ✨, 🏠 Distribución, 🏢, 🌟 y 📍) NO escribas cifras numéricas: nada de precios, metros, cantidades de recámaras/baños ni años. Los únicos números permitidos en toda la respuesta son los de las líneas de datos estructurados (💰 Precio, 📐 Construcción, 🛏️/🚿/🚗) que se generan abajo con los datos exactos. La prosa describe cualidades, no números.
+4. En el texto libre (las secciones de prosa: ✨, distribución, equipamiento, amenidades y 📍) NO escribas cifras numéricas: nada de precios, metros, cantidades de recámaras/baños ni años. Los únicos números permitidos en toda la respuesta son los de las líneas de datos estructurados (el precio, 📐 Construcción, 🛏️/🚿/🚗) que se generan abajo con los datos exactos. La prosa describe cualidades, no números.
 5. La descripción debe ser exclusivamente sobre la propiedad: sus espacios, acabados, ambiente y entorno. Nada de información de contacto, condiciones comerciales ni terceros.
 6. EMOJIS — regla crítica: cada emoji debe representar visualmente lo que dice su línea (🍳 cocina, 🛋️ sala, 🌳 jardín, 🚗 estacionamiento, 🏊 alberca, 🏋️ gimnasio, 🔒 seguridad, etc.). NUNCA uses el mismo emoji más de una vez en toda la descripción, salvo 🛏️ cuando hay varias recámaras distintas. Varía los emojis; no pongas ✨ o 🏠 repetidamente.
-7. Si abajo aparece la línea "🏷️ Modelo: …", CONSÉRVALA TAL CUAL y EXACTAMENTE en su lugar: justo DEBAJO de la línea de "💰 Precio". No la muevas al final ni a otra sección, no la borres ni la modifiques.
+7. Si abajo aparece la línea "🏷️ Modelo: …", CONSÉRVALA TAL CUAL y EXACTAMENTE en su lugar: justo DEBAJO de la línea del precio. No la muevas al final ni a otra sección, no la borres ni la modifiques.
 
 Responde ÚNICAMENTE con la descripción en este formato exacto:
 
 ${emojiTipo} ${tipoLabel} ${opLabel}${direccion ? ` en ${direccion}` : ''}
 
-💰 Precio: ${precioFmt || 'Consultar precio'}${modelo && String(modelo).trim() ? `\n🏷️ Modelo: ${String(modelo).trim()}` : ''}
+${t.precio}${precioFmt || 'Consultar precio'}${modelo && String(modelo).trim() ? `\n🏷️ Modelo: ${String(modelo).trim()}` : ''}
 ${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Construcción: ${m2} m²` : ''}
 
 ✨ [2-3 oraciones atractivas: qué hace especial esta propiedad, para quién es ideal. Sin números, sin nombres de inmobiliarias/personas, sin comisiones]
 
-🏠 Distribución
+${t.distribucion}
 
 [Lista de espacios interiores, un emoji por línea. Basarte en la descripción original e inferir espacios típicos:
 🛋️ Sala y comedor integrados
@@ -132,21 +164,21 @@ ${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Constru
 ${tipo !== 'terreno' ? `[INSTRUCCIÓN CRÍTICA: Las siguientes dos secciones (Equipamiento y Amenidades) SOLO aparecen si hay información real en la descripción original. Si no hay datos, NO escribas el encabezado ni nada relacionado con esa sección. Elimínala completamente del texto.]
 
 [SI hay equipamiento mencionado en la descripción original, escribe exactamente:
-🏢 Equipamiento
+${t.equipo}
 
 🛗 (elemento)
 ...
 (línea en blanco)]
 
 [SI hay amenidades mencionadas en la descripción original, escribe exactamente:
-🌟 Amenidades
+${t.amenidades}
 
 🏊 (elemento)
 ...
 (línea en blanco)]
 ` : ''}📍 [2-3 oraciones sobre ubicación: fraccionamiento/colonia, conectividad, qué tiene cerca. Sin números, sin nombres de inmobiliarias/personas, sin teléfonos]
 
-📲 Agenda tu cita y conoce este excelente ${tipoLabel.toLowerCase()}.`
+📲 ${t.cierre.replace("{TIPO}", tipoLabel.toLowerCase())}`
 
     const errores: string[] = []
 

@@ -75,6 +75,29 @@ async function llamarGemini(apiKey: string, model: string, prompt: string, temp:
   return { ok: true, texto }
 }
 
+// Cada generación toma además una PLANTILLA: cambia el rótulo del precio, los
+// títulos de las secciones y el cierre. Variar solo la prosa no alcanzaba —
+// medido en la base, 1,239 descripciones terminaban con la misma frase exacta
+// y 1,344 traían el mismo bloque "💰 Precio:", y esa huella repetida es la que
+// agarra el filtro antispam de Facebook.
+//
+// Los cierres NO mandan a contactar por fuera ("agenda tu cita", "escríbeme"):
+// Marketplace penaliza los anuncios que sacan la conversación de la plataforma,
+// donde el comprador ya tiene su botón de mensaje. {TIPO} se reemplaza por
+// "casa"/"departamento"/etc.
+const PLANTILLAS = [
+  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',       equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Se muestra con cita previa.' },
+  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Una {TIPO} que se aprecia mejor en persona.' },
+  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',            equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Disponible para visitas.' },
+  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Quedo al pendiente de cualquier duda sobre la propiedad.' },
+  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Vale la pena conocerla.' },
+  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Se pueden coordinar visitas.' },
+  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Una opción a considerar en la zona.' },
+  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Lista para visitas.' },
+  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'El recorrido completo se hace en la visita.' },
+  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Esta {TIPO} está disponible para conocerla.' },
+]
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -124,6 +147,7 @@ serve(async (req) => {
     if (estacionamientos) lineasDatos.push(`🚗 ${estacionamientos} estacionamiento${estacionamientos > 1 ? 's' : ''}`)
 
     const enfoque = ENFOQUES[Math.floor(Math.random() * ENFOQUES.length)]
+    const t = PLANTILLAS[Math.floor(Math.random() * PLANTILLAS.length)]
     const semilla = Math.floor(Math.random() * 1e9)
 
     const prompt = `Eres un experto copywriter inmobiliario en México. Genera una descripción profesional para publicar esta propiedad en portales y redes (Facebook Marketplace, grupos, etc.).
@@ -144,9 +168,9 @@ DATOS (usa estos números exactos, no inventes):
 
 ⛔ REGLAS ESTRICTAS (OBLIGATORIAS):
 1. NUNCA incluyas nombres de inmobiliarias, agencias, marcas, asesores, brokers ni personas.
-2. NUNCA incluyas teléfonos, WhatsApp, claves/códigos (EB-XXXX, MLS, folios), correos, sitios web ni enlaces.
+2. NUNCA incluyas teléfonos, WhatsApp, claves/códigos (EB-XXXX, VR-XXXX, MLS, folios), correos, sitios web ni enlaces.
 3. NUNCA hables de comisiones, "comparto comisión", porcentajes ni acuerdos entre asesores.
-4. En el texto libre (✨, 🏠 Distribución, 🏢, 🌟 y 📍) NO escribas cifras: nada de precios, metros, cantidades ni años. Los únicos números permitidos son los de las líneas de datos (💰, 📐, 🛏️/🚿/🚗) generadas abajo. La prosa describe cualidades, no números.
+4. En el texto libre (✨, distribución, equipamiento, amenidades y 📍) NO escribas cifras: nada de precios, metros, cantidades ni años. Los únicos números permitidos son los de las líneas de datos (el precio, 📐, 🛏️/🚿/🚗) generadas abajo. La prosa describe cualidades, no números.
 5. La descripción es SOLO sobre la propiedad: espacios, acabados, ambiente y entorno.
 6. EMOJIS: cada emoji debe representar lo que dice su línea. No repitas el mismo emoji (salvo 🛏️ para varias recámaras). Varía.
 
@@ -154,21 +178,21 @@ Responde ÚNICAMENTE con la descripción en este formato:
 
 ${emojiTipo} ${tipoLabel} ${opLabel}${direccion ? ` en ${direccion}` : ''}
 
-💰 Precio: ${precioFmt || 'Consultar precio'}
+${t.precio}${precioFmt || 'Consultar precio'}
 ${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Construcción: ${m2} m²` : ''}
 
 ✨ [2-3 oraciones atractivas según el enfoque indicado. Sin números, sin nombres, sin comisiones]
 
-🏠 Distribución
+${t.distribucion}
 
 [Lista de espacios, un emoji por línea, inferidos de la descripción original]
 ${tipo !== 'terreno' ? `
-[Si la descripción original menciona equipamiento, agrega la sección "🏢 Equipamiento" con sus líneas; si no, omítela por completo.]
-[Si menciona amenidades, agrega "🌟 Amenidades" con sus líneas; si no, omítela.]
+[Si la descripción original menciona equipamiento, agrega la sección "${t.equipo}" con sus líneas; si no, omítela por completo.]
+[Si menciona amenidades, agrega "${t.amenidades}" con sus líneas; si no, omítela.]
 ` : ''}
 📍 [2-3 oraciones sobre ubicación/conectividad. Sin números, sin nombres, sin teléfonos]
 
-📲 Agenda tu cita y conoce este excelente ${tipoLabel.toLowerCase()}.`
+📲 ${t.cierre.replace("{TIPO}", tipoLabel.toLowerCase())}`
 
     const errores: string[] = []
 
