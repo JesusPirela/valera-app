@@ -159,7 +159,7 @@ function mezclar<T>(arr: T[]): T[] {
 const PropiedadCard = memo(function PropiedadCard({
   item, width, veces, isToggling, destacada, esAdmin, primaryColor,
   cardBg, cardBorder, isOnline, imgOpts, empresaMatriz, totalPublicadores,
-  isNuevaParaTi, isUnlocked, onOpen, onShare, onPublish, onZoom,
+  isNuevaParaTi, isUnlocked, saturada, onOpen, onShare, onPublish, onZoom,
 }: {
   item: Propiedad; width?: number; veces: number; isToggling: boolean
   destacada: boolean; esAdmin: boolean; primaryColor: string
@@ -168,6 +168,8 @@ const PropiedadCard = memo(function PropiedadCard({
   totalPublicadores: number
   isNuevaParaTi: boolean
   isUnlocked: boolean
+  /** Si la propiedad topó el tope de la semana, con el detalle para explicarlo. */
+  saturada?: { veces: number; personas: number; libre_desde: string } | null
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
 }) {
@@ -334,10 +336,23 @@ const PropiedadCard = memo(function PropiedadCard({
               styles.publicadaBtn,
               { borderColor: primaryColor },
               veces > 0 && { backgroundColor: primaryColor, borderColor: primaryColor },
-              (isToggling || veces >= 10) && styles.publicadaBtnDisabled,
+              (isToggling || veces >= 10 || !!saturada) && styles.publicadaBtnDisabled,
             ]}
             onPress={(e) => {
               e.stopPropagation()
+              // Esta propiedad ya la publicó mucha gente esta semana. No se
+              // bloquea en silencio: se explica POR QUÉ, porque desde fuera
+              // parece que el botón está roto.
+              if (saturada) {
+                const dia = new Date(saturada.libre_desde).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+                const msg =
+                  `Esta propiedad ya se publicó ${saturada.veces} veces esta semana, por ${saturada.personas} personas distintas.\n\n` +
+                  'Cuando varios publicamos la misma propiedad en pocos días, Facebook lo toma como spam y empieza a rechazar los anuncios de TODOS, no solo el de esa propiedad.\n\n' +
+                  `Se vuelve a habilitar el ${dia}. Mientras tanto, mejor escoge otra: hay muchas que casi nadie ha publicado.`
+                if (Platform.OS === 'web') window.alert(msg)
+                else Alert.alert('Mejor no publiques esta', msg, [{ text: 'Entendido' }])
+                return
+              }
               if (!isUnlocked) {
                 const msg = 'Para marcarla como publicada, entra al detalle de la propiedad y copia la descripción o descarga las imágenes.'
                 if (Platform.OS === 'web') window.alert(msg)
@@ -346,6 +361,9 @@ const PropiedadCard = memo(function PropiedadCard({
               }
               onPublish(item.id)
             }}
+            // "saturada" NO va aquí a propósito: si el botón quedara
+            // deshabilitado, el toque no dispararía nada y el prospectador se
+            // quedaría sin saber por qué. Se ve apagado, pero responde.
             disabled={isToggling || veces >= 10}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
@@ -353,7 +371,7 @@ const PropiedadCard = memo(function PropiedadCard({
               <ActivityIndicator size="small" color={veces > 0 ? '#fff' : primaryColor} />
             ) : (
               <Text style={[styles.publicadaBtnText, { color: veces > 0 ? '#fff' : primaryColor }]} maxFontSizeMultiplier={1.2} numberOfLines={1}>
-                {veces >= 10 ? '10/10 ✅' : veces > 0 ? `${veces}/10` : 'Marcar como publicada'}
+                {saturada ? '⏸ Muy publicada' : veces >= 10 ? '10/10 ✅' : veces > 0 ? `${veces}/10` : 'Marcar como publicada'}
               </Text>
             )}
           </TouchableOpacity>
@@ -532,6 +550,22 @@ export default function ProspectadorPropiedades() {
   // (a) nunca se persiste al disco (no puede quedar un update optimista "pegado"
   // entre sesiones tras un crash), y (b) siempre se trae fresco del servidor
   // al montar el componente o al regresar a esta pantalla.
+  // Propiedades que ya toparon el tope de la semana (10 publicaciones entre
+  // todos). Son un puñado — hoy 4 de 832 —, así que la consulta es chica y se
+  // refresca sola cada 5 min: el tope es móvil y una propiedad se libera sola
+  // al pasar los 7 días.
+  const { data: saturadasMap } = useQuery<Record<string, { veces: number; personas: number; libre_desde: string }>>({
+    queryKey: ['propiedades-saturadas'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('propiedades_saturadas')
+      if (error) throw error
+      return Object.fromEntries((data ?? []).map((r: any) => [r.propiedad_id, {
+        veces: r.veces, personas: r.personas, libre_desde: r.libre_desde,
+      }]))
+    },
+    staleTime: 5 * 60_000,
+  })
+
   const { data: pubData, refetch: refetchPub } = useQuery<PublicacionesData>({
     queryKey: ['publicaciones-usuario', queryData?.userId ?? null],
     queryFn: async () => {
@@ -793,6 +827,20 @@ export default function ProspectadorPropiedades() {
       } else if (data?.error === 'limite') {
         setVeces(data.veces_publicada ?? 10)
         avisar('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
+      } else if ((data as any)?.error === 'saturada') {
+        // El servidor rechazó porque la propiedad topó el tope de la semana.
+        // Puede pasar aunque el botón se vea bien: la lista de saturadas se
+        // refresca cada 5 min y alguien más pudo topar el contador en medio.
+        const d = data as any
+        const dia = d.libre_desde
+          ? new Date(d.libre_desde).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+          : 'en unos días'
+        setVeces(vecesActual)
+        queryClient.invalidateQueries({ queryKey: ['propiedades-saturadas'] })
+        avisar('Mejor no publiques esta',
+          `Ya se publicó ${d.veces_semana} veces esta semana, por ${d.personas} personas distintas. ` +
+          'Cuando varios publicamos la misma en pocos días, Facebook lo toma como spam y rechaza los anuncios de todos. ' +
+          `Se vuelve a habilitar el ${dia}.`)
       } else if (ok && data && data.ok === false) {
         // Error de negocio del servidor distinto de límite: reintentar no ayuda.
         setVeces(vecesActual)
@@ -1192,6 +1240,7 @@ export default function ProspectadorPropiedades() {
       totalPublicadores={item.total_publicadores}
       isNuevaParaTi={!esAdmin && !viewsData?.get(item.id)}
       isUnlocked={esAdmin || desbloqueadas.has(item.id) || (publicaciones[item.id] ?? 0) > 0}
+      saturada={saturadasMap?.[item.id] ?? null}
       onOpen={onOpenCard}
       onShare={onShareCard}
       onPublish={onPublishCard}
