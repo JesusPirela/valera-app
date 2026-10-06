@@ -94,3 +94,105 @@ SELECT cron.unschedule('cerrar-rentas-baratas');
    peticiones fallan o van lentas, empieza por ahí.
 3. `0a5d968b` no puede perder datos: solo cambia cuántas filas se pintan a la
    vez. Si falta gente en una lista, es que quedó un lote sin pedir.
+
+---
+
+# Cómo revertir los cambios de Marketplace (05/10/2026)
+
+Facebook Marketplace empezó a rechazar las publicaciones. La causa medida: la
+misma propiedad la publican 8.3 personas en promedio (máximo 58) pegando el
+MISMO texto y las MISMAS fotos en el mismo orden. Estos tres commits hacen que
+cada persona publique algo distinto.
+
+Punto estable anterior: tag `estable-antes-marketplace` (commit `7d49535d`).
+
+```bash
+git checkout main
+git reset --hard estable-antes-marketplace
+git push --force origin main             # OJO: reescribe main, avisa antes
+```
+
+O sin reescribir historia:
+
+```bash
+git revert --no-commit 84853451 2aae5805 d1e7f38c
+git commit -m "revert: cambios de marketplace del 05/10"
+git push origin main
+```
+
+## Revertir UN solo cambio
+
+| Cambio | Commit | Qué toca | Si sale mal se nota en |
+|---|---|---|---|
+| Banco de versiones de descripción | `d1e7f38c` | tabla + 3 funciones en BD, edge function, cron | Nada visible en la app: el banco solo se llena. Si falla, la app sigue copiando la descripción guardada |
+| Teléfonos fuera de la descripción | `2aae5805` | 60 filas de `propiedades` | 60 propiedades se quedan sin descripción (es lo correcto: su "descripción" era un teléfono). El teléfono está en `inv_notas` |
+| Copiar por persona + rotar fotos + aviso | `84853451` | `detalle-propiedad.tsx`, `lib/orden-fotos.ts` | "📋 Copiar" no copia, o copia sin el `ID: VR-####`; las fotos se bajan en orden raro; el aviso amarillo no se va |
+
+## Revertir la parte de BASE DE DATOS
+
+El `git revert` NO deshace la base. Si hay que volver atrás también ahí:
+
+```sql
+-- 1) Apagar el generador (lo primero, para que no siga llenando)
+SELECT cron.unschedule('generar-variantes-descripcion');
+
+-- 2) Que la app deje de usar las versiones: con la función devolviendo NULL,
+--    detalle-propiedad.tsx cae solo a la descripción guardada. Esto es
+--    suficiente y NO requiere soltar nada.
+CREATE OR REPLACE FUNCTION public.variante_descripcion(p_propiedad_id uuid)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT NULL::text $$;
+
+-- 3) Si además se quiere borrar todo el banco (no hace falta para revertir):
+DROP TABLE IF EXISTS public.propiedad_descripcion_variantes;
+DROP FUNCTION IF EXISTS public.variante_descripcion(uuid);
+DROP FUNCTION IF EXISTS public.propiedades_sin_variantes(int);
+DROP FUNCTION IF EXISTS public.publicaciones_recientes(uuid);
+
+-- 4) Devolver los 60 teléfonos a la descripción. El texto original de las
+--    2,256 propiedades quedó respaldado ANTES de tocar nada.
+UPDATE public.propiedades p
+   SET descripcion = r.descripcion
+  FROM public.propiedades_descripcion_respaldo r
+ WHERE r.propiedad_id = p.id
+   AND p.descripcion IS NULL
+   AND r.descripcion IS NOT NULL;
+
+-- Y quitar la nota que se les agregó:
+UPDATE public.propiedades
+   SET inv_notas = NULLIF(trim(regexp_replace(inv_notas,
+         E'\n?📞 Contacto \(estaba en la descripción\): [0-9 -]+', '', 'g')), '')
+ WHERE inv_notas LIKE '%Contacto (estaba en la descripción)%';
+```
+
+## Comprobar que quedó bien (sin revertir)
+
+```sql
+-- Cómo va el banco
+SELECT COUNT(*) AS versiones, COUNT(DISTINCT propiedad_id) AS propiedades
+  FROM public.propiedad_descripcion_variantes;
+
+-- Cuántas faltan
+SELECT COUNT(*) AS propiedades, SUM(faltan) AS versiones
+  FROM public.propiedades_sin_variantes(5000);
+
+-- Que el cron esté corriendo
+SELECT j.jobname, d.status, d.start_time
+  FROM cron.job_run_details d JOIN cron.job j ON j.jobid = d.jobid
+ WHERE j.jobname = 'generar-variantes-descripcion'
+ ORDER BY d.start_time DESC LIMIT 5;
+
+-- Ninguna descripción debe traer teléfono (debe dar 0)
+SELECT COUNT(*) FROM public.propiedades
+ WHERE descripcion IS NOT NULL
+   AND (descripcion ILIKE '%whatsapp%' OR descripcion ~ '[0-9]{3}[- ]?[0-9]{3}[- ]?[0-9]{4}');
+```
+
+## Lo que NO se tocó
+
+- `propiedades.descripcion` de las 2,195 propiedades con descripción de verdad:
+  intacta. Sigue siendo la que se ve en la app y la fuente de los datos.
+- El `ID: VR-####` al inicio de lo que se copia: se mantiene tal cual.
+- El botón "✨ Copiar descripción para publicar (IA)" y su límite de 5/día:
+  sin cambios.
+- Las 65 propiedades con descripción de menos de 120 caracteres: no se les
+  generan versiones, porque ahí no hay información que reacomodar.
