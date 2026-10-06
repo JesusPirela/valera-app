@@ -33,6 +33,9 @@ type LeccionDraft = {
 
 const NIVELES = ['basico', 'intermedio', 'avanzado'] as const
 const CATEGORIAS = ['Fundamentos', 'Ventas', 'CRM', 'Producto', 'Soft skills', 'Otro']
+// Los cursos "contenedor" de 20261006c_university_videos_automaticos.sql
+// reutilizan estas mismas categorías ('Ventas', 'Fundamentos', 'Soft skills'),
+// así que no hace falta agregar nada nuevo a esta lista.
 
 function alerta(titulo: string, msg: string) {
   if (Platform.OS === 'web') window.alert(`${titulo}: ${msg}`)

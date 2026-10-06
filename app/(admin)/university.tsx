@@ -42,6 +42,7 @@ export default function AdminUniversity() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [cursos, setCursos] = useState<CursoAdmin[]>([])
   const [loading, setLoading] = useState(true)
+  const [videosPendientes, setVideosPendientes] = useState(0)
 
   // Config intro video
   const [introUrl, setIntroUrl] = useState('')
@@ -56,11 +57,13 @@ export default function AdminUniversity() {
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
     yaCargoRef.current = true
-    const [{ data: statsData }, { data: cursosData }, { data: configData }] = await Promise.all([
+    const [{ data: statsData }, { data: cursosData }, { data: configData }, { count: videosCount }] = await Promise.all([
       supabase.rpc('get_vu_stats_admin'),
       supabase.from('vu_cursos').select('id, titulo, nivel, publicado, categoria, vu_lecciones(id), vu_certificados(id)').order('orden'),
       supabase.from('vu_config').select('clave, valor').in('clave', ['intro_video_url', 'intro_video_titulo']),
+      supabase.from('vu_video_candidatos').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente'),
     ])
+    setVideosPendientes(videosCount ?? 0)
 
     if (statsData) setStats(statsData as Stats)
 
@@ -143,6 +146,26 @@ export default function AdminUniversity() {
             onPress={() => router.push('/(admin)/university-entregas')}
           >
             <Text style={estilos.btnEntregasLinkText}>📥 Ver todas las entregas de tareas</Text>
+          </TouchableOpacity>
+
+          {/* Cola de videos encontrados automáticamente (ver edge function
+              university-buscar-videos) — acceso rápido, destacado si hay pendientes. */}
+          {videosPendientes > 0 && (
+            <TouchableOpacity
+              style={estilos.entregasBanner}
+              onPress={() => router.push('/(admin)/university-videos-cola')}
+            >
+              <Text style={estilos.entregasBannerText}>
+                🎬 {videosPendientes} video{videosPendientes > 1 ? 's' : ''} por revisar
+              </Text>
+              <Text style={estilos.entregasBannerArrow}>→</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[estilos.btnEntregasLink, { backgroundColor: c.card, borderColor: '#1a6470' }]}
+            onPress={() => router.push('/(admin)/university-videos-cola')}
+          >
+            <Text style={estilos.btnEntregasLinkText}>🎬 Ver cola de videos (YouTube)</Text>
           </TouchableOpacity>
 
           {/* ── Config video de introducción ── */}
