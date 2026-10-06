@@ -28,10 +28,11 @@ type Fila = CitaRetro & {
   orden: number | null; telefono: string | null; detalles_pago: string | null
   dia_cita: string | null; fecha_cita: string | null; prospecto: string | null; coordino: string | null; atendio: string | null
   estado_seguimiento: string | null; fecha_prox_seguimiento: string | null; retro_completada_at: string | null
+  zona_interesada: string | null
   asesor_id: string | null
 }
 type ColKey = keyof Fila
-type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha' | 'estado'
+type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha' | 'estado' | 'zona'
 const VACIO = '(Vacías)'
 const ROW_H = 54  // altura fija de fila (necesaria para virtualizar con getItemLayout)
 
@@ -39,7 +40,11 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   { key: 'cliente_nombre', label: 'Cliente', w: 190, tipo: 'cliente' },
   { key: 'telefono', label: 'Teléfono', w: 130, tipo: 'texto' },
   { key: 'detalles_pago', label: 'Forma de pago', w: 230, tipo: 'texto' },
-  { key: 'interesado_en', label: 'Interesado en', w: 250, tipo: 'texto' },
+  // Se parte en dos: la PROPIEDAD que fueron a ver y la ZONA. La zona se
+  // llena sola a partir del texto (código VR, link o nombre del desarrollo) y
+  // se puede corregir a mano.
+  { key: 'interesado_en', label: 'Propiedad que vieron', w: 250, tipo: 'texto' },
+  { key: 'zona_interesada', label: 'Zona', w: 160, tipo: 'zona' },
   { key: 'dia_cita', label: 'Día y hora de la cita', w: 200, tipo: 'fecha' },
   { key: 'prospecto', label: 'Prospectador', w: 160, tipo: 'usuario' },
   { key: 'coordino', label: 'Coordinada por', w: 150, tipo: 'usuario' },
@@ -357,7 +362,8 @@ const PASOS_ADD: { key: string; label: string; icono: string; tipo: Tipo; kb?: '
   { key: 'cliente_nombre', label: '¿Quién es el cliente?', icono: '🧑', tipo: 'cliente' },
   { key: 'telefono', label: 'Teléfono', icono: '📞', tipo: 'texto', kb: 'phone-pad' },
   { key: 'detalles_pago', label: 'Forma de pago', icono: '💳', tipo: 'texto' },
-  { key: 'interesado_en', label: '¿En qué propiedad está interesado?', icono: '🏠', tipo: 'texto' },
+  { key: 'interesado_en', label: '¿Qué propiedad fueron a ver?', icono: '🏠', tipo: 'texto' },
+  { key: 'zona_interesada', label: '¿De qué zona?', icono: '📍', tipo: 'zona' },
   { key: 'dia_cita', label: 'Día y hora de la cita', icono: '📅', tipo: 'fecha' },
   { key: 'prospecto', label: '¿Quién prospectó?', icono: '🌱', tipo: 'usuario' },
   { key: 'coordino', label: '¿Quién coordinó?', icono: '🧭', tipo: 'usuario' },
@@ -374,6 +380,10 @@ function AgregarCitaModal({ profiles, clientes, miId, onCrearCliente, onClose, o
 }) {
   const c = useColors()
   const [paso, setPaso] = useState(0)
+  const [zonasAlta, setZonasAlta] = useState<string[]>([])
+  useEffect(() => {
+    supabase.rpc('zonas_conocidas').then(({ data }) => setZonasAlta((data ?? []).map((z: any) => z.zona)))
+  }, [])
   const [datos, setDatos] = useState<Record<string, any>>({})
   const [busca, setBusca] = useState('')
   const [txt, setTxt] = useState('')
@@ -442,6 +452,29 @@ function AgregarCitaModal({ profiles, clientes, miId, onCrearCliente, onClose, o
                 value={txt} onChangeText={setTxt} autoFocus keyboardType={P.kb === 'phone-pad' ? 'phone-pad' : 'default'}
                 placeholder="Escribe aquí…" placeholderTextColor={c.textMute}
                 onSubmitEditing={() => avanzar({ [P.key]: txt.trim() || null })} />
+            )}
+
+            {P.tipo === 'zona' && (
+              <>
+                <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
+                  value={busca} onChangeText={setBusca} autoFocus
+                  placeholder="Buscar o escribir una zona…" placeholderTextColor={c.textMute} />
+                {busca.trim().length > 1 && (
+                  <TouchableOpacity style={st.otroBtn} onPress={() => avanzar({ zona_interesada: busca.trim() })}>
+                    <Text style={st.otroBtnTxt}>✏️ Usar «{busca.trim()}»</Text>
+                  </TouchableOpacity>
+                )}
+                <ScrollView style={{ maxHeight: 260 }} keyboardShouldPersistTaps="handled">
+                  {zonasAlta.filter(z => !busca.trim() || z.toLowerCase().includes(busca.trim().toLowerCase())).slice(0, 50).map(z => (
+                    <TouchableOpacity key={z} style={st.dropItem} onPress={() => avanzar({ zona_interesada: z })}>
+                      <Text style={{ fontSize: 13.5, color: c.text }}>📍 {z}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity style={st.dropItem} onPress={() => avanzar({ zona_interesada: null })}>
+                    <Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin zona —</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </>
             )}
 
             {P.tipo === 'estado' && (
@@ -522,6 +555,12 @@ export default function CitasVenta() {
   const [loading, setLoading] = useState(true)
   const [profiles, setProfiles] = useState<{ id: string; nombre: string }[]>([])
   const [verGraficas, setVerGraficas] = useState(false)
+  // Zonas para el selector: los desarrollos que de verdad existen en el
+  // inventario. Se cargan una vez; son ~227.
+  const [zonas, setZonas] = useState<string[]>([])
+  useEffect(() => {
+    supabase.rpc('zonas_conocidas').then(({ data }) => setZonas((data ?? []).map((z: any) => z.zona)))
+  }, [])
   // id → nombre, para que las gráficas agrupen por la llave LIMPIA (asesor_id)
   // en vez del texto libre de "atendió", que trae apodos y erratas.
   const nombrePorId = useMemo(
@@ -565,7 +604,7 @@ export default function CitasVenta() {
   }
 
   const cargar = useCallback(async () => {
-    const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, fecha_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at, asesor_id'
+    const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, fecha_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at, asesor_id, zona_interesada'
     const todas: Fila[] = []; const paso = 1000
     try {
       for (let desde = 0; ; desde += paso) {
@@ -1036,6 +1075,35 @@ export default function CitasVenta() {
                 }}
                 onClose={() => setPicker(null)}
               />
+            ) : picker?.tipo === 'zona' ? (
+              <View style={[st.dropCard, { backgroundColor: c.card }]}>
+                <Text style={[st.dropTitulo, { color: c.text }]}>Zona</Text>
+                <TextInput
+                  style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
+                  value={pickBusca} onChangeText={setPickBusca} autoFocus
+                  placeholder="Buscar o escribir una zona…" placeholderTextColor={c.textMute}
+                />
+                {/* Se puede escribir una que no esté en el inventario: hay
+                    desarrollos que todavía no tenemos dados de alta. */}
+                {pickBusca.trim().length > 1 && !zonas.some(z => z.toLowerCase() === pickBusca.trim().toLowerCase()) && (
+                  <TouchableOpacity style={st.otroBtn} onPress={() => { aplicarCambio(picker.id, { zona_interesada: pickBusca.trim() }); setPicker(null) }}>
+                    <Text style={st.otroBtnTxt}>✏️ Usar «{pickBusca.trim()}»</Text>
+                  </TouchableOpacity>
+                )}
+                <ScrollView style={{ maxHeight: 340, marginTop: 8 }} keyboardShouldPersistTaps="handled">
+                  {zonas
+                    .filter(z => !pickBusca.trim() || z.toLowerCase().includes(pickBusca.trim().toLowerCase()))
+                    .slice(0, 60)
+                    .map(z => (
+                      <TouchableOpacity key={z} style={st.dropItem} onPress={() => { aplicarCambio(picker.id, { zona_interesada: z }); setPicker(null) }}>
+                        <Text style={{ fontSize: 13.5, color: c.text }}>📍 {z}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  <TouchableOpacity style={st.dropItem} onPress={() => { aplicarCambio(picker.id, { zona_interesada: null }); setPicker(null) }}>
+                    <Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin zona —</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
             ) : picker?.tipo === 'estado' ? (
               <View style={[st.dropCard, { backgroundColor: c.card }]}>
                 <Text style={[st.dropTitulo, { color: c.text }]}>Estado de seguimiento</Text>
