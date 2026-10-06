@@ -109,7 +109,13 @@ export default function UniversityVideosCola() {
     setBuscando(true)
     try {
       const { data, error } = await supabase.functions.invoke('university-buscar-videos')
-      if (error) throw error
+      if (error) {
+        // El SDK solo da "Edge Function returned a non-2xx status code" — el
+        // motivo real (falta YOUTUBE_API_KEY, no autorizado, etc.) viene en el
+        // body de la respuesta, que hay que leer aparte de error.context.
+        const body = await (error as any)?.context?.json?.().catch(() => null)
+        throw new Error(body?.error ?? error.message)
+      }
       if (data?.ok === false) throw new Error(data.error ?? 'Error desconocido')
       const resumen = data?.resumen ?? {}
       const total = Object.values(resumen).reduce((a: number, b: any) => a + Number(b ?? 0), 0)
