@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 import { hoyMX, limitesDiaMX } from '../../lib/fecha-mx'
+import AlarmaPendientes from '../../components/AlarmaPendientes'
 
 const TEAL = '#1a6470'
 
@@ -164,6 +165,11 @@ export default function MiDia() {
       contentContainerStyle={st.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={TEAL} />}
     >
+      {/* Lo que la alarma está reclamando. Va ARRIBA del saludo a propósito:
+          si el push dice "pospón el aviso desde la app", el botón tiene que ser
+          lo primero que se ve al abrirla, no algo que haya que buscar. */}
+      <AlarmaPendientes />
+
       {/* Header saludo */}
       <View style={[st.headerCard, { backgroundColor: TEAL }]}>
         <Text style={st.saludoSub}>
