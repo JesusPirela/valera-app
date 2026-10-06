@@ -16,14 +16,22 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
 import { ESTADOS_CITA } from './coordinacion-citas'
+import { ESTADOS as ESTADOS_ASESOR, ORDEN as ORDEN_ASESOR } from '../(prospectador)/asesor-citas'
+// Las opciones del selector salen del TABLERO DEL ASESOR, no del de
+// coordinación: es el vocabulario con el que la gente ya trabaja, y ahí
+// 'Reagendada' y 'Cancelada' van separadas (en el de coordinación son un solo
+// estado 'Reagendada/cancelada').
+const OPCIONES_ESTADO = ORDEN_ASESOR.map(k => ESTADOS_ASESOR[k])
+import GraficasCitas from '../../components/GraficasCitas'
 
 type Fila = CitaRetro & {
   orden: number | null; telefono: string | null; detalles_pago: string | null
   dia_cita: string | null; fecha_cita: string | null; prospecto: string | null; coordino: string | null; atendio: string | null
   estado_seguimiento: string | null; fecha_prox_seguimiento: string | null; retro_completada_at: string | null
+  asesor_id: string | null
 }
 type ColKey = keyof Fila
-type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha'
+type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha' | 'estado'
 const VACIO = '(Vacías)'
 const ROW_H = 54  // altura fija de fila (necesaria para virtualizar con getItemLayout)
 
@@ -39,7 +47,11 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   { key: 'retro_como_estuvo', label: 'Cómo estuvo la cita', w: 250, tipo: 'texto' },
   { key: 'retro_info_extra', label: 'Info extra del cliente', w: 250, tipo: 'texto' },
   { key: 'retro_plan_accion', label: 'Plan de acción', w: 250, tipo: 'texto' },
-  { key: 'estado_seguimiento', label: 'Estado seguimiento', w: 170, tipo: 'texto' },
+  // Se elige de una lista cerrada, la MISMA del dashboard de citas. Antes era
+  // texto libre y por eso en la base conviven 'realizada' y 'Realizada',
+  // 'REAGENDADA' y 'Reagenda', 'APARTADO' y 'apartado': el mismo estado contado
+  // como tres cosas distintas.
+  { key: 'estado_seguimiento', label: 'Estado seguimiento', w: 170, tipo: 'estado' },
   { key: 'fecha_prox_seguimiento', label: 'Próx. seguimiento', w: 150, tipo: 'fecha' },
 ]
 const NUM_W = 48    // contador de fila (izquierda)
@@ -74,10 +86,13 @@ const MAPEO: Record<string, string> = {
   'wendy l': 'Wendoly Lefranc', wendy: 'Wendoly Lefranc', sofia: 'Sofia Camacho',
   oswaldo: 'Oswaldo Andrés Balderas', steve: 'Esteban Astor', 'jose fernando': 'Jose Fernando', kary: 'Kary Mama Beto',
 }
-function normalizar(s: string): string {
+// Se exportan para que la pantalla de cierres agrupe con el MISMO criterio:
+// si cada una normaliza a su manera, "Rayo" y "ruben" acaban separados en una
+// tabla y juntos en la otra.
+export function normalizar(s: string): string {
   return (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim().replace(/\s+/g, ' ')
 }
-function mapear(n: string | undefined): string { const v = (n ?? '').trim(); return v ? (MAPEO[normalizar(v)] ?? v) : v }
+export function mapear(n: string | undefined): string { const v = (n ?? '').trim(); return v ? (MAPEO[normalizar(v)] ?? v) : v }
 // Una cita cuenta como cancelada si su estado menciona "cancel" (cubre
 // CANCELADA, cancelada, canceló, "cancelada por cliente", etc.).
 function esCancelada(s: string | null | undefined): boolean { return normalizar(s ?? '').includes('cancel') }
@@ -347,7 +362,7 @@ const PASOS_ADD: { key: string; label: string; icono: string; tipo: Tipo; kb?: '
   { key: 'prospecto', label: '¿Quién prospectó?', icono: '🌱', tipo: 'usuario' },
   { key: 'coordino', label: '¿Quién coordinó?', icono: '🧭', tipo: 'usuario' },
   { key: 'atendio', label: '¿Quién atendió? (asesor)', icono: '🤝', tipo: 'usuario' },
-  { key: 'estado_seguimiento', label: 'Estado de seguimiento', icono: '📌', tipo: 'texto' },
+  { key: 'estado_seguimiento', label: 'Estado de seguimiento', icono: '📌', tipo: 'estado' },
 ]
 
 function AgregarCitaModal({ profiles, clientes, miId, onCrearCliente, onClose, onSaved }: {
@@ -429,6 +444,19 @@ function AgregarCitaModal({ profiles, clientes, miId, onCrearCliente, onClose, o
                 onSubmitEditing={() => avanzar({ [P.key]: txt.trim() || null })} />
             )}
 
+            {P.tipo === 'estado' && (
+              <ScrollView style={{ maxHeight: 300 }} keyboardShouldPersistTaps="handled">
+                {OPCIONES_ESTADO.map(e => (
+                  <TouchableOpacity key={e.label} style={st.dropItem} onPress={() => avanzar({ estado_seguimiento: e.label })}>
+                    <Text style={{ fontSize: 13.5, color: e.color, fontWeight: '700' }}>{e.emoji}  {e.label}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity style={st.dropItem} onPress={() => avanzar({ estado_seguimiento: null })}>
+                  <Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin estado —</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+
             {(P.tipo === 'cliente' || P.tipo === 'usuario') && (
               <>
                 <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={busca} onChangeText={setBusca} placeholder={P.tipo === 'usuario' ? 'Buscar o escribir un nombre…' : 'Buscar o escribir uno nuevo…'} placeholderTextColor={c.textMute} autoFocus />
@@ -493,6 +521,13 @@ export default function CitasVenta() {
   const [filas, setFilas] = useState<Fila[]>([])
   const [loading, setLoading] = useState(true)
   const [profiles, setProfiles] = useState<{ id: string; nombre: string }[]>([])
+  const [verGraficas, setVerGraficas] = useState(false)
+  // id → nombre, para que las gráficas agrupen por la llave LIMPIA (asesor_id)
+  // en vez del texto libre de "atendió", que trae apodos y erratas.
+  const nombrePorId = useMemo(
+    () => Object.fromEntries(profiles.map(p => [p.id, p.nombre])),
+    [profiles],
+  )
   const [clientes, setClientes] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
   const [filtrosSel, setFiltrosSel] = useState<Record<string, Set<string>>>({})
   const [sinAsignar, setSinAsignar] = useState<null | 'any' | 'prospecto' | 'coordino' | 'atendio'>(null)
@@ -530,7 +565,7 @@ export default function CitasVenta() {
   }
 
   const cargar = useCallback(async () => {
-    const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, fecha_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at'
+    const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, fecha_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at, asesor_id'
     const todas: Fila[] = []; const paso = 1000
     try {
       for (let desde = 0; ; desde += paso) {
@@ -788,6 +823,14 @@ export default function CitasVenta() {
           <Text style={[st.sub, { color: c.textMute }]}>{filas.length} citas · {visibles.length} visibles · exclusiva admin/supervisor</Text>
         </View>
         {Object.keys(filtrosSel).length > 0 && <TouchableOpacity style={st.btnLimpiar} onPress={() => setFiltrosSel({})}><Text style={st.btnLimpiarTxt}>✕ Quitar filtros</Text></TouchableOpacity>}
+        <TouchableOpacity
+          style={[st.btnGraficas, verGraficas && st.btnGraficasOn]}
+          onPress={() => setVerGraficas(v => !v)}
+        >
+          <Text style={[st.btnGraficasTxt, verGraficas && { color: '#fff' }]}>
+            {verGraficas ? '✕ Cerrar gráficas' : '📊 Gráficas'}
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity style={st.btnHoy} onPress={irAHoy}><Text style={st.btnHoyTxt}>📅 Ir a hoy</Text></TouchableOpacity>
         <TouchableOpacity style={st.btnAgregar} onPress={() => setAgregar(true)}><Text style={st.btnAgregarTxt}>＋ Añadir cita</Text></TouchableOpacity>
         <TouchableOpacity style={st.btnExport} onPress={exportarCSV}><Text style={st.btnExportTxt}>⬇ Exportar</Text></TouchableOpacity>
@@ -838,7 +881,28 @@ export default function CitasVenta() {
         {sinAsignar != null && <Text style={{ color: c.textMute, fontSize: 12 }}>· {visibles.length} sin asignar</Text>}
       </View>
 
-      {loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : (
+      {/* Gráficas. Reciben `visibles`, no `filas`: así siguen los filtros de
+          arriba (fechas, "sin asignar" y los de cada columna) y no hay dos
+          controles de periodo que se contradigan. */}
+      {verGraficas && !loading && (
+        <ScrollView style={{ flex: 1, marginTop: 10 }} contentContainerStyle={st.graficasCaja}>
+          <Text style={[st.sub, { color: c.textMute, marginBottom: 10 }]}>
+            Calculadas sobre las {visibles.length} citas visibles
+            {Object.keys(filtrosSel).length || rango || sinAsignar ? ' (con los filtros de arriba aplicados)' : ''}.
+          </Text>
+          <GraficasCitas
+            filas={visibles}
+            nombrePorId={nombrePorId}
+            normalizar={normalizar}
+            mapear={mapear}
+            esApartado={esApartado}
+            esCancelada={esCancelada}
+            esReagendada={esReagendada}
+          />
+        </ScrollView>
+      )}
+
+      {!verGraficas && (loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : (
         <View style={{ flex: 1, marginTop: 8, flexDirection: 'row' }}>
           <View style={{ flex: 1 }}>
             {/* Encabezado (fijo arriba, scroll horizontal sincronizado) */}
@@ -910,7 +974,7 @@ export default function CitasVenta() {
             <View style={{ width: 1, height: Math.max(visibles.length * ROW_H, 1) }} />
           </ScrollView>
         </View>
-      )}
+      ))}
 
       {/* Editar celda de texto */}
       <Modal visible={editTxt !== null} transparent animationType="fade" onRequestClose={() => setEditTxt(null)}>
@@ -972,6 +1036,31 @@ export default function CitasVenta() {
                 }}
                 onClose={() => setPicker(null)}
               />
+            ) : picker?.tipo === 'estado' ? (
+              <View style={[st.dropCard, { backgroundColor: c.card }]}>
+                <Text style={[st.dropTitulo, { color: c.text }]}>Estado de seguimiento</Text>
+                <ScrollView style={{ maxHeight: 420, marginTop: 8 }} keyboardShouldPersistTaps="handled">
+                  {OPCIONES_ESTADO.map(e => (
+                    <TouchableOpacity
+                      key={e.label}
+                      style={st.dropItem}
+                      onPress={() => { aplicarCambio(picker.id, { estado_seguimiento: e.label }); setPicker(null) }}
+                    >
+                      <Text style={{ fontSize: 13.5, color: e.color, fontWeight: '700' }}>
+                        {e.emoji}  {e.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {/* Dejar vaciarlo: hay 718 citas viejas sin estado y forzar
+                      uno sería inventar en qué acabaron. */}
+                  <TouchableOpacity
+                    style={st.dropItem}
+                    onPress={() => { aplicarCambio(picker.id, { estado_seguimiento: null }); setPicker(null) }}
+                  >
+                    <Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin estado —</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
             ) : (
               <View style={[st.dropCard, { backgroundColor: c.card }]}>
                 <Text style={[st.dropTitulo, { color: c.text }]}>{picker?.tipo === 'cliente' ? 'Elegir cliente' : 'Elegir usuario'}</Text>
@@ -1056,6 +1145,10 @@ const st = StyleSheet.create({
   counterCell: { alignItems: 'center', backgroundColor: '#0f4c580d' },
   counterTxt: { fontSize: 11, fontWeight: '700' },
   vacio: { textAlign: 'center', padding: 30, fontSize: 13.5, lineHeight: 20, maxWidth: 420 },
+  btnGraficas: { borderWidth: 1, borderColor: '#1a6470', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8 },
+  btnGraficasOn: { backgroundColor: '#1a6470' },
+  btnGraficasTxt: { color: '#1a6470', fontSize: 12.5, fontWeight: '700' },
+  graficasCaja: { paddingHorizontal: 2, paddingBottom: 18 },
   barraAbajo: { height: 16, flexGrow: 0, marginTop: 2 },
   barraDer: { width: 16, flexGrow: 0, marginLeft: 2 },
   editArea: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14, minHeight: 120 },

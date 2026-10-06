@@ -40,6 +40,27 @@ function fmtProx(v: string): string {
   return `${d.getDate()} ${MESES_C[d.getMonth()]} ${d.getFullYear()}, ${h12}:${String(d.getMinutes()).padStart(2, '0')} ${ampm}`
 }
 
+// ¿La retro dice que la cita se reagendó?
+//
+// Cubre la raíz "reagend" (reagenda, reagendó, reagendar, reagendada) y también
+// "se pasó/movió/cambió la cita", que es como se escribe la mitad de las veces.
+//
+// Lo importante es lo que NO cuenta: "no se reagendó", "sin reagendar", "no
+// quiso reagendar", "todavía no reagenda". Sin esto, una retro que dice que el
+// cliente NO quiso reagendar marcaría la cita como reagendada, al revés de lo
+// que pasó.
+function mencionaReagenda(texto: string): boolean {
+  const t = (texto ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')   // quita acentos
+    .replace(/\s+/g, ' ')
+  const raiz = /(reagend|re agend|se (paso|movio|cambio) (la )?cita|cambio de (fecha|dia|horario))/
+  if (!raiz.test(t)) return false
+  // Si justo antes de la mención hay una negación, no cuenta.
+  const negada = /\b(no|sin|nunca|tampoco|todavia no|aun no|aun sin)\b[^.;]{0,28}(reagend|re agend|se (paso|movio|cambio))/
+  return !negada.test(t)
+}
+
 export default function RetroCitaWizard({ cita, onClose, onSaved }: {
   cita: CitaRetro
   onClose: () => void
@@ -87,6 +108,23 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
         p_prox_seguimiento_ts: prox && !isNaN(new Date(prox).getTime()) ? new Date(prox).toISOString() : null,
       })
       if (error) throw error
+
+      // Si la retro dice que se reagendó, la cita pasa SOLA a
+      // CANCELADA/REAGENDA, sin tener que acordarse de tocar el botón de
+      // abajo. Antes había que hacer las dos cosas y se quedaban citas
+      // reagendadas marcadas como si nada hubiera pasado.
+      //
+      // No es silencioso: se avisa al terminar. Un cambio de estado que nadie
+      // ve es justo como se ensucian estas tablas.
+      if (mencionaReagenda(resp.join(' \n '))) {
+        const { error: eReag } = await supabase.rpc('cancelar_cita_venta', { p_id: cita.id })
+        const aviso = eReag
+          ? `La retro se guardó, pero no se pudo marcar como reagendada:\n${eReag.message}`
+          : 'Guardado. Como la retro menciona una reagenda, la cita quedó marcada como CANCELADA/REAGENDA.'
+        if (Platform.OS === 'web') window.alert(aviso)
+        else Alert.alert(eReag ? 'Ojo' : 'Listo', aviso)
+      }
+
       onSaved?.()
       onClose()
     } catch (e: any) {

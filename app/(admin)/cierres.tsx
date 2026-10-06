@@ -10,6 +10,8 @@ import {
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import GraficasCierres from '../../components/GraficasCierres'
+import { normalizar, mapear } from './citas-venta'
 
 type Tipo = 'texto' | 'op' | 'etapa' | 'fecha' | 'dinero' | 'usuario'
 type Fila = {
@@ -151,6 +153,7 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onDel }: {
 export default function Cierres() {
   const c = useColors()
   const [filas, setFilas] = useState<Fila[]>([])
+  const [verGraficas, setVerGraficas] = useState(false)
   const [loading, setLoading] = useState(true)
   const [profiles, setProfiles] = useState<string[]>([])
   const [fTipo, setFTipo] = useState<'todos' | 'venta' | 'renta'>('todos')
@@ -235,6 +238,14 @@ export default function Cierres() {
           <Text style={[st.h1, { color: c.text }]}>🤝 Cierres</Text>
           <Text style={[st.sub, { color: c.textMute }]}>Venta y renta · cómo vamos, escrituración y comisión</Text>
         </View>
+        <TouchableOpacity
+          style={[st.btnGraficas, verGraficas && st.btnGraficasOn]}
+          onPress={() => setVerGraficas(v => !v)}
+        >
+          <Text style={[st.btnGraficasTxt, verGraficas && { color: '#fff' }]}>
+            {verGraficas ? '✕ Cerrar gráficas' : '📊 Gráficas'}
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity style={st.btnAgregar} onPress={agregar}><Text style={st.btnAgregarTxt}>+ Cierre</Text></TouchableOpacity>
       </View>
 
@@ -272,7 +283,19 @@ export default function Cierres() {
         )}
       </View>
 
-      {loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : (
+      {/* Gráficas. Reciben `visibles`, así que siguen los filtros de arriba
+          (venta/renta y la etapa que se toque en los recuadros). */}
+      {verGraficas && !loading && (
+        <ScrollView style={{ flex: 1, marginTop: 10 }} contentContainerStyle={{ paddingBottom: 18 }}>
+          <Text style={[st.sub, { color: c.textMute, marginBottom: 10 }]}>
+            Calculadas sobre los {visibles.length} registros visibles
+            {fTipo !== 'todos' || fEtapa ? ' (con los filtros de arriba aplicados)' : ''}.
+          </Text>
+          <GraficasCierres filas={visibles} normalizar={normalizar} mapear={mapear} />
+        </ScrollView>
+      )}
+
+      {!verGraficas && (loading ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} /> : (
         // Contenedor con alto acotado: el scroll HORIZONTAL vive aquí (su barra
         // queda al fondo del área visible, no hasta el final de todas las filas),
         // y las filas hacen su propio scroll VERTICAL adentro. Encabezado fijo.
@@ -297,7 +320,7 @@ export default function Cierres() {
             </View>
           </ScrollView>
         </View>
-      )}
+      ))}
 
       {/* ─── Editor ─── */}
       <Modal visible={!!edit} transparent animationType="fade" onRequestClose={() => setEdit(null)}>
@@ -390,6 +413,9 @@ export default function Cierres() {
 const st = StyleSheet.create({
   page: { flex: 1, paddingHorizontal: 12, paddingTop: 8 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  btnGraficas: { borderWidth: 1, borderColor: '#1a6470', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8 },
+  btnGraficasOn: { backgroundColor: '#1a6470' },
+  btnGraficasTxt: { color: '#1a6470', fontSize: 12.5, fontWeight: '700' },
   h1: { fontSize: 20, fontWeight: '800' },
   sub: { fontSize: 12, marginTop: 1 },
   btnAgregar: { backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },

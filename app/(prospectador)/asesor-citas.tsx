@@ -18,7 +18,10 @@ type Estado =
   | 'coordinada' | 'realizada' | 'buscando_opciones'
   | 'seguimiento_cierre_alto' | 'seguimiento_cierre_bajo'
   | 'falta_perfilamiento' | 'compra_futuro' | 'aparto' | 'reagendada' | 'cancelada'
-const ESTADOS: Record<Estado, { label: string; color: string; bg: string; emoji: string }> = {
+// Se exporta para que la tabla de Citas de venta ofrezca EXACTAMENTE estos
+// estados: es el tablero que usa el asesor, así que es el vocabulario que la
+// gente ya conoce.
+export const ESTADOS: Record<Estado, { label: string; color: string; bg: string; emoji: string }> = {
   coordinada:              { label: 'Por atender',                color: '#16a34a', bg: '#f0fdf4', emoji: '🟢' },
   realizada:               { label: 'Esperando retroalimentación', color: '#0d9488', bg: '#f0fdfa', emoji: '⏳' },
   buscando_opciones:       { label: 'Buscar más opciones',        color: '#ca8a04', bg: '#fefce8', emoji: '🔎' },
@@ -30,7 +33,7 @@ const ESTADOS: Record<Estado, { label: string; color: string; bg: string; emoji:
   reagendada:              { label: 'Reagendada',                 color: '#b45309', bg: '#fef3c7', emoji: '🟤' },
   cancelada:               { label: 'Cancelada',                  color: '#64748b', bg: '#f1f5f9', emoji: '⚫' },
 }
-const ORDEN: Estado[] = [
+export const ORDEN: Estado[] = [
   'coordinada', 'realizada', 'buscando_opciones',
   'seguimiento_cierre_alto', 'seguimiento_cierre_bajo',
   'falta_perfilamiento', 'compra_futuro', 'aparto', 'reagendada', 'cancelada',
