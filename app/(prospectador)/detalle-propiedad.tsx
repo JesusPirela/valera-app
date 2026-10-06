@@ -24,6 +24,7 @@ import CompartirFormulario from '../../components/CompartirFormulario'
 import { esPlusOMejor, esStaffSupervision, puedeVerPublicaciones } from '../../lib/permisos'
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb, proxyImagen } from '../../lib/img'
+import { rotarFotos } from '../../lib/orden-fotos'
 import {
   IdiomaFicha, tf, tipoOperacionLabel, formatPrecioLang, traducirFicha,
 } from '../../lib/ficha-i18n'
@@ -425,6 +426,13 @@ export default function DetallePropiedad() {
   useEffect(() => { cargarDisenoTokens() }, [cargarDisenoTokens])
   const [generandoPDF, setGenerandoPDF] = useState(false)
   const [descripcionCopiada, setDescripcionCopiada] = useState(false)
+  // La versión de la descripción que le toca a ESTA persona para ESTA propiedad.
+  // Se trae al abrir la ficha, no al tocar "Copiar": en web el portapapeles solo
+  // acepta escrituras dentro del gesto del usuario, y si el botón se pone a
+  // esperar una consulta primero, el navegador lo bloquea y la copia falla
+  // callada. Null = la propiedad todavía no tiene versiones generadas → se copia
+  // la descripción guardada, igual que antes.
+  const [varianteDesc, setVarianteDesc] = useState<string | null>(null)
   const [generandoDescIA, setGenerandoDescIA] = useState(false)
   const [descIAMsg, setDescIAMsg] = useState<string | null>(null)
   const [togglingPublicacion, setTogglingPublicacion] = useState(false)
@@ -861,9 +869,46 @@ export default function DetallePropiedad() {
     }
   }
 
+  // Facebook Marketplace rechaza publicaciones duplicadas, y la misma propiedad
+  // la publican 8.3 personas en promedio (máximo medido: 58), casi siempre
+  // pegando este mismo texto. Por eso cada persona recibe una versión distinta
+  // del banco (propiedad_descripcion_variantes): misma información, otra
+  // redacción. La misma persona siempre recibe la suya, así que si vuelve a
+  // copiar le sale igual.
+  useEffect(() => {
+    let vigente = true
+    setVarianteDesc(null)
+    if (!propiedad?.id) return
+    supabase.rpc('variante_descripcion', { p_propiedad_id: propiedad.id })
+      .then(({ data, error }) => {
+        // supabase.rpc no lanza: devuelve { error }. Si falla, se queda en null
+        // y se copia la descripción guardada.
+        if (vigente && !error && typeof data === 'string' && data.trim()) setVarianteDesc(data)
+      })
+    return () => { vigente = false }
+  }, [propiedad?.id])
+
+  // Cuánta gente ya publicó esta propiedad. Publicar la misma el mismo día
+  // desde varias cuentas es la señal más fuerte de spam para Facebook: se
+  // midieron 138 ocasiones con 5 o más asesores publicando lo mismo el mismo
+  // día (récord: 13). El aviso NO bloquea nada, solo informa para que el asesor
+  // decida esperar o elegir otra.
+  const [publicadaPor, setPublicadaPor] = useState<{ hoy: number; semana: number } | null>(null)
+  useEffect(() => {
+    let vigente = true
+    setPublicadaPor(null)
+    if (!propiedad?.id) return
+    supabase.rpc('publicaciones_recientes', { p_propiedad_id: propiedad.id })
+      .then(({ data, error }) => {
+        const fila = Array.isArray(data) ? data[0] : data
+        if (vigente && !error && fila) setPublicadaPor({ hoy: fila.hoy ?? 0, semana: fila.semana ?? 0 })
+      })
+    return () => { vigente = false }
+  }, [propiedad?.id])
+
   async function copiarDescripcion() {
     if (!propiedad?.descripcion) return
-    const texto = `ID: ${propiedad.codigo}\n\n${propiedad.descripcion}`
+    const texto = `ID: ${propiedad.codigo}\n\n${varianteDesc ?? propiedad.descripcion}`
     if (Platform.OS === 'web') {
       try { await navigator.clipboard.writeText(texto) } catch { /* ignorar */ }
     } else {
@@ -1877,8 +1922,13 @@ export default function DetallePropiedad() {
     if (!propiedad) return
     // "Descargar todas": pedir la lista completa (el cache puede tener solo la
     // portada sembrada desde el listado — bajaba 1 sola foto).
-    const imagenes = seleccion ?? await obtenerImagenesCompletas()
-    if (imagenes.length === 0) return
+    const crudas = seleccion ?? await obtenerImagenesCompletas()
+    if (crudas.length === 0) return
+    // Cada persona baja las mismas fotos en un orden distinto (la primera, la
+    // fachada, no se mueve) para que Marketplace no vea publicaciones idénticas.
+    // El orden de descarga es el de los nombres de archivo, que es el orden en
+    // que se suben al anuncio.
+    const imagenes = rotarFotos(crudas, propiedad.id, uid)
 
     setDescargando(true)
     registrarActividad('descarga')
@@ -2304,6 +2354,24 @@ export default function DetallePropiedad() {
             </View>
           </View>
         )}
+
+        {/* Aviso para espaciar las publicaciones. Solo aparece si alguien más
+            ya la publicó hoy o esta semana: si nadie lo hizo, no estorba. */}
+        {publicadaPor && (publicadaPor.hoy >= 2 || publicadaPor.semana >= 4) ? (
+          <View style={[styles.seccion, styles.avisoEspaciar]}>
+            <Text style={styles.avisoEspaciarTitulo}>
+              {publicadaPor.hoy >= 2
+                ? `⏳ ${publicadaPor.hoy} personas ya publicaron esta propiedad hoy`
+                : `⏳ ${publicadaPor.semana} personas la publicaron esta semana`}
+            </Text>
+            <Text style={styles.avisoEspaciarTexto}>
+              Cuando varios publican la misma propiedad el mismo día, Facebook lo toma
+              como spam y empieza a rechazar los anuncios de todos. Mejor espera un día
+              o escoge otra propiedad — la descripción y el orden de las fotos ya salen
+              distintos para cada persona, pero el día sí cuenta.
+            </Text>
+          </View>
+        ) : null}
 
         {/* Descripción */}
         {propiedad.descripcion ? (
@@ -3341,6 +3409,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     lineHeight: 18,
+  },
+
+  // Mismos tonos que el aviso de "vendida" (ya probados en claro y oscuro),
+  // porque es el mismo tipo de mensaje: algo que conviene saber antes de actuar.
+  avisoEspaciar: {
+    backgroundColor: '#fff8e1',
+    borderColor: '#fbc02d',
+  },
+  avisoEspaciarTitulo: {
+    color: '#7c5a00',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  avisoEspaciarTexto: {
+    color: '#7c5a00',
+    fontSize: 13,
+    lineHeight: 19,
   },
 
   titulo: { fontSize: 22, fontWeight: '800', color: '#1a6470', marginBottom: 6 },
