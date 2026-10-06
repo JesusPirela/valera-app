@@ -56,6 +56,10 @@ export function detectarEstadoMexico(texto: string): string | null {
 
 export const ESTADO_PRINCIPAL = 'Querétaro'
 
+// Lista plana de los 32 estados (Querétaro primero, por ser el principal) —
+// para poblar selects/filtros sin tener que repetir el catálogo.
+export const ESTADOS_MEXICO: string[] = ESTADOS.map(([nombre]) => nombre)
+
 export type InfoEstado = {
   estado: string | null   // estado resuelto (o null si no se pudo determinar)
   esQueretaro: boolean     // true si es del estado principal
