@@ -115,7 +115,7 @@ git push --force origin main             # OJO: reescribe main, avisa antes
 O sin reescribir historia:
 
 ```bash
-git revert --no-commit 84853451 2aae5805 d1e7f38c
+git revert --no-commit e6e18d9f fc57b023 84853451 2aae5805 d1e7f38c
 git commit -m "revert: cambios de marketplace del 05/10"
 git push origin main
 ```
@@ -127,6 +127,8 @@ git push origin main
 | Banco de versiones de descripción | `d1e7f38c` | tabla + 3 funciones en BD, edge function, cron | Nada visible en la app: el banco solo se llena. Si falla, la app sigue copiando la descripción guardada |
 | Teléfonos fuera de la descripción | `2aae5805` | 60 filas de `propiedades` | 60 propiedades se quedan sin descripción (es lo correcto: su "descripción" era un teléfono). El teléfono está en `inv_notas` |
 | Copiar por persona + rotar fotos + aviso | `84853451` | `detalle-propiedad.tsx`, `lib/orden-fotos.ts` | "📋 Copiar" no copia, o copia sin el `ID: VR-####`; las fotos se bajan en orden raro; el aviso amarillo no se va |
+| Cierres que invitan + m² de terreno + modelos de IA vivos | `e6e18d9f` | las 3 edge functions de descripción, nueva/editar-propiedad | El botón ✨ o "mejorar descripción" deja de responder, o la descripción sale sin cierre |
+| Fuera el "agenda tu cita" fijo, armazón variado | `fc57b023` | las 3 edge functions de descripción | Todas las descripciones nuevas salen con el mismo armazón otra vez |
 
 ## Revertir la parte de BASE DE DATOS
 
