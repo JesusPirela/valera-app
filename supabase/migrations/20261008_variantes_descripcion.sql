@@ -114,7 +114,12 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public' AS $fn$
                  FROM public.propiedad_descripcion_variantes
                 GROUP BY propiedad_id) v ON v.propiedad_id = o.id
    WHERE COALESCE(v.n, 0) < o.meta
-   ORDER BY o.meta DESC, COALESCE(v.n, 0) ASC
+   -- A lo ANCHO primero: las que tienen MENOS versiones van antes. Si se
+   -- ordenara por meta, las 635 calientes llegarían a 10 mientras el resto del
+   -- inventario sigue en 0, y una propiedad con 0 versiones no sirve de nada
+   -- (todos copian el mismo texto guardado). Así todas llegan pronto a 3, que
+   -- es donde empieza el beneficio, y después se profundiza.
+   ORDER BY COALESCE(v.n, 0) ASC, o.meta DESC
    LIMIT p_limite;
 $fn$;
 

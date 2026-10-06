@@ -19,11 +19,22 @@ const CORS = {
   'Content-Type': 'application/json',
 }
 
-// Cuánto se genera por corrida. Con el cron cada 2 min son ~4,300 al día, que
-// es lo que aguantan las cuotas gratis de OpenRouter + Gemini juntas. Si se
-// agotan, la corrida falla sin daño y la siguiente reintenta. Ajustable aquí.
-const PROPIEDADES_POR_CORRIDA = 3
-const VARIANTES_POR_PROPIEDAD = 2
+// Cuánto se genera por corrida.
+const PROPIEDADES_POR_CORRIDA = 10
+const VARIANTES_POR_PROPIEDAD = 3
+
+// Cuántas versiones se piden a la vez. En serie una corrida apenas alcanzaba 1
+// o 2 antes de que la plataforma la matara.
+const EN_PARALELO = 8
+
+// Las edge functions mueren a los 150s con "IDLE_TIMEOUT". Se corta en 115s
+// para alcanzar a responder con el resumen de lo que sí se generó, en vez de
+// que la respuesta se pierda.
+const LIMITE_MS = 115_000
+
+// Tope por llamada a una IA. Un modelo que se queda colgado se llevaba todo el
+// presupuesto de la corrida completa.
+const LIMITE_LLAMADA_MS = 30_000
 
 // Los tres modelos :free que tenía (llama-3.3, deepseek-v3, mistral-7b) ya
 // no existen en OpenRouter: responden "This model is unavailable for free" y
@@ -73,8 +84,14 @@ const PLANTILLAS = [
   { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Te espero para mostrarte esta {TIPO}.' },
 ]
 
+/** fetch con tope de tiempo: sin esto, un modelo colgado bloquea la corrida. */
+async function fetchConTope(url: string, opciones: RequestInit) {
+  const corte = AbortSignal.timeout(LIMITE_LLAMADA_MS)
+  return await fetch(url, { ...opciones, signal: corte })
+}
+
 async function llamarOpenRouter(apiKey: string, model: string, prompt: string) {
-  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const r = await fetchConTope('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://valera.app' },
     body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.95, max_tokens: 4000 }),
@@ -86,7 +103,7 @@ async function llamarOpenRouter(apiKey: string, model: string, prompt: string) {
 }
 
 async function llamarGemini(apiKey: string, model: string, prompt: string) {
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+  const r = await fetchConTope(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.95, maxOutputTokens: 6500 } }),
@@ -196,63 +213,97 @@ serve(async (req) => {
 
     const resumen: any[] = []
 
-    for (const pend of pendientes) {
-      const { data: prop, error: eProp } = await supa
-        .from('propiedades')
+    // ── 1) Se arma la lista de trabajos (propiedad + índice que falta) ────────
+    // Una sola consulta para las propiedades y otra para los índices ya
+    // ocupados, en vez de dos por propiedad: con 8 propiedades eran 16 viajes
+    // a la base antes de llamar a la primera IA.
+    const ids = pendientes.map((p: any) => p.propiedad_id)
+    const [{ data: props }, { data: yaHay }] = await Promise.all([
+      supa.from('propiedades')
         .select('id, codigo, titulo, direccion, precio, descripcion, tipo, operacion, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos')
-        .eq('id', pend.propiedad_id)
-        .single()
-      if (eProp || !prop) { resumen.push({ codigo: pend.codigo, error: eProp?.message ?? 'no encontrada' }); continue }
+        .in('id', ids),
+      supa.from('propiedad_descripcion_variantes').select('propiedad_id, idx').in('propiedad_id', ids),
+    ])
+    const porId = new Map((props ?? []).map((p: any) => [p.id, p]))
+    const ocupados = new Map<string, Set<number>>()
+    for (const v of yaHay ?? []) {
+      if (!ocupados.has(v.propiedad_id)) ocupados.set(v.propiedad_id, new Set())
+      ocupados.get(v.propiedad_id)!.add(v.idx)
+    }
 
-      // Qué índices ya existen, para rellenar solo los huecos.
-      const { data: yaHay } = await supa
-        .from('propiedad_descripcion_variantes')
-        .select('idx').eq('propiedad_id', prop.id)
-      const ocupados = new Set((yaHay ?? []).map((v: any) => v.idx))
-
-      let hechas = 0
-      for (let idx = 0; idx < pend.objetivo && hechas < nVars; idx++) {
-        if (ocupados.has(idx)) continue
-
-        const prompt = armarPrompt(prop, idx)
-        let texto: string | null = null
-        let modelo = ''
-        const fallos: string[] = []
-
-        if (openrouterKey) {
-          for (const m of MODELOS_OPENROUTER) {
-            const r = await llamarOpenRouter(openrouterKey, m, prompt)
-            if (r.ok) { texto = r.texto!; modelo = m; break }
-            fallos.push(`or/${m.split('/')[1]}: ${String(r.err).slice(0, 90)}`)
-          }
-        }
-        if (!texto && geminiKey) {
-          for (const m of MODELOS_GEMINI) {
-            const g = await llamarGemini(geminiKey, m, prompt)
-            if (g.ok) { texto = g.texto!; modelo = `gemini/${m}`; break }
-            fallos.push(`gem/${m}: ${String(g.err).slice(0, 90)}`)
-          }
-        }
-        // Se corta la propiedad entera: si ninguna IA responde, las siguientes
-        // versiones tampoco van a salir. La próxima corrida reintenta.
-        if (!texto) { resumen.push({ codigo: prop.codigo, idx, error: 'todas las IAs fallaron', fallos }); break }
-
-        const motivo = pasaRevision(texto)
-        if (motivo) { resumen.push({ codigo: prop.codigo, idx, descartada: motivo, final: texto.slice(-70) }); continue }
-
-        const { error: eIns } = await supa
-          .from('propiedad_descripcion_variantes')
-          .insert({ propiedad_id: prop.id, idx, texto, modelo })
-        if (eIns) { resumen.push({ codigo: prop.codigo, idx, error: eIns.message }); continue }
-
-        hechas++
-        resumen.push({ codigo: prop.codigo, idx, ok: true, modelo, largo: texto.length })
+    type Trabajo = { prop: any; idx: number }
+    const trabajos: Trabajo[] = []
+    for (const pend of pendientes) {
+      const prop = porId.get(pend.propiedad_id)
+      if (!prop) { resumen.push({ codigo: pend.codigo, error: 'no encontrada' }); continue }
+      const usados = ocupados.get(pend.propiedad_id) ?? new Set<number>()
+      let puestas = 0
+      for (let idx = 0; idx < pend.objetivo && puestas < nVars; idx++) {
+        if (usados.has(idx)) continue
+        trabajos.push({ prop, idx })
+        puestas++
       }
     }
 
+    // ── 2) Se generan en PARALELO, con presupuesto de tiempo ─────────────────
+    // Las edge functions mueren a los 150s ("IDLE_TIMEOUT"). En serie, una
+    // corrida apenas alcanzaba 1 o 2 versiones porque cada llamada a la IA
+    // tarda segundos y encima se iban round-trips tropezando con modelos
+    // muertos. En paralelo entran muchas más en el mismo presupuesto.
+    //
+    // Cada versión que sale se guarda de inmediato, así que si la corrida se
+    // corta a medias lo ya generado NO se pierde y la siguiente sigue donde
+    // quedó.
+    const arranque = Date.now()
+    const quedaTiempo = () => Date.now() - arranque < LIMITE_MS
+
+    async function generarUna({ prop, idx }: Trabajo) {
+      const prompt = armarPrompt(prop, idx)
+      const fallos: string[] = []
+
+      // Se prueba OpenRouter y luego Gemini, pero con tope por llamada: un
+      // modelo colgado se llevaba todo el presupuesto de la corrida.
+      const intentos: Array<() => Promise<{ ok: boolean; texto?: string; err?: string; modelo: string }>> = []
+      if (openrouterKey) for (const m of MODELOS_OPENROUTER) {
+        intentos.push(async () => ({ ...(await llamarOpenRouter(openrouterKey, m, prompt)), modelo: m }))
+      }
+      if (geminiKey) for (const m of MODELOS_GEMINI) {
+        intentos.push(async () => ({ ...(await llamarGemini(geminiKey, m, prompt)), modelo: `gemini/${m}` }))
+      }
+
+      for (const intento of intentos) {
+        if (!quedaTiempo()) return { codigo: prop.codigo, idx, error: 'se acabó el tiempo de la corrida' }
+        let r
+        try { r = await intento() } catch (e: any) { fallos.push('excepción: ' + (e?.message ?? e)); continue }
+        if (!r.ok) { fallos.push(`${r.modelo}: ${String(r.err).slice(0, 90)}`); continue }
+
+        const motivo = pasaRevision(r.texto!)
+        // Si el texto no pasa revisión se prueba el siguiente modelo en vez de
+        // rendirse: antes se descartaba la versión y quedaba el hueco.
+        if (motivo) { fallos.push(`${r.modelo}: descartado (${motivo})`); continue }
+
+        const { error: eIns } = await supa
+          .from('propiedad_descripcion_variantes')
+          .insert({ propiedad_id: prop.id, idx, texto: r.texto, modelo: r.modelo })
+        // 23505 = ya existe ese (propiedad, idx). Pasa si dos corridas se
+        // cruzan; no es un error que valga la pena reportar.
+        if (eIns) return { codigo: prop.codigo, idx, error: eIns.code === '23505' ? 'ya existía' : eIns.message }
+        return { codigo: prop.codigo, idx, ok: true, modelo: r.modelo, largo: r.texto!.length }
+      }
+      return { codigo: prop.codigo, idx, error: 'ninguna IA dio un texto válido', fallos }
+    }
+
+    for (let i = 0; i < trabajos.length && quedaTiempo(); i += EN_PARALELO) {
+      const tanda = trabajos.slice(i, i + EN_PARALELO)
+      resumen.push(...await Promise.all(tanda.map(generarUna)))
+    }
+
     const generadas = resumen.filter(r => r.ok).length
-    console.log(`[variantes-lote] ${generadas} generadas de ${pendientes.length} propiedades`)
-    return new Response(JSON.stringify({ ok: true, generadas, detalle: resumen }), { headers: CORS })
+    const segundos = Math.round((Date.now() - arranque) / 1000)
+    console.log(`[variantes-lote] ${generadas}/${trabajos.length} en ${segundos}s`)
+    return new Response(JSON.stringify({
+      ok: true, generadas, pedidas: trabajos.length, segundos, detalle: resumen,
+    }), { headers: CORS })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[variantes-descripcion-lote]', msg)

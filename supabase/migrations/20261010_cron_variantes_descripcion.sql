@@ -24,15 +24,15 @@ BEGIN
     $f$SELECT net.http_post(
          url     := 'https://ystxicgrryyzhrxinsbq.supabase.co/functions/v1/variantes-descripcion-lote',
          headers := %L::jsonb,
-         body    := '{"propiedades":2,"porPropiedad":2}'::jsonb
+         body    := '{}'::jsonb
        );$f$,
     jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || v_llave)
   );
 
-  -- Cada 3 minutos → ~1,900 versiones al día, que es lo que aguantan las
-  -- cuotas gratis. Son 15,680 por generar; la cola va primero por las
-  -- propiedades que más gente publica, así el beneficio llega antes.
-  PERFORM cron.schedule('generar-variantes-descripcion', '*/3 * * * *', v_cmd);
+  -- Cada 2 minutos. Cada corrida saca ~23 versiones en ~90s (en paralelo, con
+  -- tope de 115s porque la plataforma mata la funcion a los 150s). Son ~16,000
+  -- al dia: el inventario completo queda en algo mas de un dia.
+  PERFORM cron.schedule('generar-variantes-descripcion', '*/2 * * * *', v_cmd);
 END $do$;
 
 SELECT jobname, schedule, active,
