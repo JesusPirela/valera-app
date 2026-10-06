@@ -52,6 +52,7 @@ export default function UniversityVideosCola() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [procesando, setProcesando] = useState<string | null>(null)
+  const [buscando, setBuscando] = useState(false)
 
   const cargar = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -104,6 +105,25 @@ export default function UniversityVideosCola() {
     setProcesando(null)
   }
 
+  async function buscarAhora() {
+    setBuscando(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('university-buscar-videos')
+      if (error) throw error
+      if (data?.ok === false) throw new Error(data.error ?? 'Error desconocido')
+      const resumen = data?.resumen ?? {}
+      const total = Object.values(resumen).reduce((a: number, b: any) => a + Number(b ?? 0), 0)
+      alerta(total > 0
+        ? `Se encontraron ${total} video${total !== 1 ? 's' : ''} nuevo${total !== 1 ? 's' : ''}.`
+        : 'No se encontraron videos nuevos (puede que ya estén todos en la cola).')
+      await cargar(true)
+    } catch (e: any) {
+      alerta('Error al buscar: ' + (e.message ?? String(e)))
+    } finally {
+      setBuscando(false)
+    }
+  }
+
   if (loading) return <View style={[st.center, { backgroundColor: c.bg }]}><ActivityIndicator size="large" color={TEAL} /></View>
 
   return (
@@ -116,6 +136,12 @@ export default function UniversityVideosCola() {
       <Text style={[st.sub, { color: c.textMute }]}>
         Candidatos encontrados automáticamente en YouTube. {lista.length} pendiente{lista.length !== 1 ? 's' : ''} de revisión.
       </Text>
+
+      <TouchableOpacity style={[st.btnBuscar, buscando && { opacity: 0.6 }]} onPress={buscarAhora} disabled={buscando}>
+        {buscando
+          ? <><ActivityIndicator size="small" color="#fff" /><Text style={st.btnBuscarTxt}>Buscando en YouTube…</Text></>
+          : <><Ionicons name="search" size={16} color="#fff" /><Text style={st.btnBuscarTxt}>Buscar videos ahora</Text></>}
+      </TouchableOpacity>
 
       {lista.length === 0 ? (
         <Text style={[st.vacio, { color: c.textMute }]}>
@@ -181,6 +207,8 @@ const st = StyleSheet.create({
   h1: { fontSize: 22, fontWeight: '900' },
   sub: { fontSize: 12.5, marginTop: 2, marginBottom: 14 },
   vacio: { fontSize: 13.5, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24, marginTop: 30 },
+  btnBuscar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: TEAL, borderRadius: 10, paddingVertical: 12, marginBottom: 16 },
+  btnBuscarTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
   card: { borderWidth: 1, borderRadius: 14, marginBottom: 16, overflow: 'hidden' },
   temaRow: { paddingHorizontal: 12, paddingTop: 10 },
   temaTxt: { fontSize: 11.5, fontWeight: '800', color: TEAL, textTransform: 'uppercase', letterSpacing: 0.4 },

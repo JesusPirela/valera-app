@@ -91,7 +91,23 @@ serve(async (req) => {
     const apiKey = Deno.env.get('YOUTUBE_API_KEY')
     if (!apiKey) return err('Falta configurar el secreto YOUTUBE_API_KEY en Supabase.', 500)
 
-    const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const db = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey)
+
+    // Autorización: el cron llama con el service_role key directo (bypass);
+    // el botón "Buscar ahora" del admin llama con su propia sesión — ahí se
+    // exige que su perfil sea 'admin'. Así nadie más puede gastar la cuota de
+    // YouTube llamando a la función a mano.
+    const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
+    let autorizado = token === serviceKey
+    if (!autorizado && token) {
+      const { data: { user } } = await db.auth.getUser(token)
+      if (user) {
+        const { data: perfil } = await db.from('profiles').select('role').eq('id', user.id).maybeSingle()
+        autorizado = perfil?.role === 'admin'
+      }
+    }
+    if (!autorizado) return err('No autorizado.', 403)
 
     const { data: cursos, error: eCursos } = await db.from('vu_cursos').select('id, titulo')
     if (eCursos) return err('No se pudieron leer los cursos contenedor.', 500)
