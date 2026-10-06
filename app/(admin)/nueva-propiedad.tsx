@@ -646,7 +646,7 @@ export default function NuevaPropiedad() {
   async function mejorarConDatos(d?: {
     titulo?: string; descripcion?: string; precio?: string; direccion?: string
     tipo?: string; operacion?: string; recamaras?: number | null; banos?: number | null
-    mediosBanos?: number | null; m2?: string; estacionamientos?: number | null; modelo?: string
+    mediosBanos?: number | null; m2?: string; m2Terreno?: string; estacionamientos?: number | null; modelo?: string
   }): Promise<void> {
     setMejorando(true)
     setMejorandoMsg('')
@@ -662,6 +662,7 @@ export default function NuevaPropiedad() {
         banos:            d?.banos            != null ? d.banos            : banos,
         mediosBanos:      d?.mediosBanos      != null ? d.mediosBanos      : mediosBanos,
         m2:               d?.m2               != null ? d.m2               : m2,
+        m2Terreno:        d?.m2Terreno        != null ? d.m2Terreno        : m2Terreno,
         estacionamientos: d?.estacionamientos != null ? d.estacionamientos : estacionamientos,
         modelo:           d?.modelo           != null ? d.modelo           : modeloDesarrollo,
       }

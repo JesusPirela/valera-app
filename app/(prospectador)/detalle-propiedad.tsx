@@ -938,7 +938,8 @@ export default function DetallePropiedad() {
           titulo: propiedad.titulo, direccion: propiedad.direccion, precio: propiedad.precio,
           descripcion: propiedad.descripcion, tipo: propiedad.tipo, operacion: propiedad.operacion,
           recamaras: propiedad.recamaras, banos: propiedad.banos, mediosBanos: propiedad.medios_banos,
-          m2: propiedad.m2, estacionamientos: propiedad.estacionamientos,
+          m2: propiedad.m2, m2Terreno: propiedad.m2_terreno,
+          estacionamientos: propiedad.estacionamientos,
         },
       })
       // El límite responde 429; supabase.functions.invoke mete el body en error.context.

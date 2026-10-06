@@ -72,21 +72,20 @@ async function llamarGemini(apiKey: string, model: string, prompt: string): Prom
 // Ahora cada propiedad toma una plantilla al azar: cambia el rótulo del precio,
 // los títulos de las secciones y el cierre.
 //
-// Y los cierres YA NO mandan a contactar ("agenda tu cita", "escríbeme"):
-// Marketplace penaliza los anuncios que sacan la conversación de la
-// plataforma, donde el comprador ya tiene su propio botón de mensaje. Son
-// frases neutras sobre la propiedad, y varias no piden nada.
+// Los cierres invitan a agendar o a venir a conocer la propiedad. Lo que NO
+// hacen es nombrar un canal fuera de Marketplace (WhatsApp, teléfono,
+// enlaces): eso es lo que Facebook penaliza, no la invitación en sí.
 const PLANTILLAS = [
-  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',       equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Se muestra con cita previa.' },
-  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Una {TIPO} que se aprecia mejor en persona.' },
-  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',            equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Disponible para visitas.' },
-  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Quedo al pendiente de cualquier duda sobre la propiedad.' },
-  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Vale la pena conocerla.' },
-  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Se pueden coordinar visitas.' },
-  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Una opción a considerar en la zona.' },
-  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Lista para visitas.' },
-  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'El recorrido completo se hace en la visita.' },
-  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Esta {TIPO} está disponible para conocerla.' },
+  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',       equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agenda una visita y conócela.' },
+  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Ven a conocer esta {TIPO}.' },
+  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',            equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Agenda tu visita cuando gustes.' },
+  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Te invito a conocerla en persona.' },
+  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Pide tu cita para verla.' },
+  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Agenda una cita y pásala a ver.' },
+  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Ven a verla y checa si es la tuya.' },
+  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Agenda tu recorrido por esta {TIPO}.' },
+  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Pásala a conocer, agenda tu visita.' },
+  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Te espero para mostrarte esta {TIPO}.' },
 ]
 
 serve(async (req) => {
@@ -95,7 +94,7 @@ serve(async (req) => {
   try {
     const {
       titulo, direccion, precio, descripcion,
-      tipo, operacion, recamaras, banos, mediosBanos, m2, estacionamientos, modelo,
+      tipo, operacion, recamaras, banos, mediosBanos, m2, m2Terreno, estacionamientos, modelo,
     } = await req.json()
 
     const openrouterKey = Deno.env.get('OPENROUTER_API_KEY')
@@ -126,7 +125,8 @@ DATOS (usa estos números exactos, no inventes):
 - Tipo: ${tipoLabel} ${opLabel}
 - Zona: ${direccion || 'No especificada'}
 - Precio: ${precioFmt || 'Consultar'}
-- M²: ${m2 ? `${m2} m²` : 'No especificado'}
+- M² de construcción: ${m2 ? `${m2} m²` : 'No especificado'}
+- M² de terreno: ${m2Terreno ? `${m2Terreno} m²` : 'No especificado'}
 - Recámaras: ${recamaras ?? 'No especificado'}
 - Baños completos: ${banos ?? 'No especificado'}
 - Medios baños: ${mediosBanos ?? 0}
@@ -147,7 +147,7 @@ Responde ÚNICAMENTE con la descripción en este formato exacto:
 ${emojiTipo} ${tipoLabel} ${opLabel}${direccion ? ` en ${direccion}` : ''}
 
 ${t.precio}${precioFmt || 'Consultar precio'}${modelo && String(modelo).trim() ? `\n🏷️ Modelo: ${String(modelo).trim()}` : ''}
-${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Construcción: ${m2} m²` : ''}
+${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${m2 ? `\n📐 Construcción: ${m2} m²` : ''}${m2Terreno ? `\n🌐 Terreno: ${m2Terreno} m²` : ''}
 
 ✨ [2-3 oraciones atractivas: qué hace especial esta propiedad, para quién es ideal. Sin números, sin nombres de inmobiliarias/personas, sin comisiones]
 

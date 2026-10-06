@@ -25,12 +25,16 @@ const CORS = {
 const PROPIEDADES_POR_CORRIDA = 3
 const VARIANTES_POR_PROPIEDAD = 2
 
+// Los tres modelos :free que tenía (llama-3.3, deepseek-v3, mistral-7b) ya
+// no existen en OpenRouter: responden "This model is unavailable for free" y
+// "No endpoints found". Estos sí están vigentes (verificado contra
+// openrouter.ai/api/v1/models).
 const MODELOS_OPENROUTER = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'deepseek/deepseek-chat-v3-0324:free',
-  'mistralai/mistral-7b-instruct:free',
+  'google/gemma-4-31b-it:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
 ]
-const MODELOS_GEMINI = ['gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash']
+const MODELOS_GEMINI = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.6-flash', 'gemini-2.5-flash']
 
 const ENFOQUES = [
   'Resalta el ESTILO DE VIDA y la comodidad para la familia.',
@@ -53,21 +57,20 @@ const ENFOQUES = [
 // COMPLETOS, con su punto final: la primera versión salía cortada ("conoce
 // este excelente") porque el tipo se armaba aparte y aquí no se pegaba.
 //
-// Los cierres NO mandan a contactar por fuera ("escríbeme", "mándame mensaje",
-// "déjame tus datos"). Marketplace penaliza los anuncios que sacan la
-// conversación de la plataforma: el comprador ya tiene ahí su botón de
-// mensaje. Son frases neutras, y varias ni siquiera piden nada.
+// Los cierres invitan a agendar o a venir a conocer la propiedad. Lo que NO
+// hacen es nombrar un canal fuera de Marketplace (WhatsApp, teléfono,
+// enlaces): eso es lo que Facebook penaliza, no la invitación en sí.
 const PLANTILLAS = [
-  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',      equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Se muestra con cita previa.' },
-  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Una {TIPO} que se aprecia mejor en persona.' },
-  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',           equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Disponible para visitas.' },
-  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Quedo al pendiente de cualquier duda sobre la propiedad.' },
-  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Vale la pena conocerla.' },
-  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Se pueden coordinar visitas.' },
-  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Una opción a considerar en la zona.' },
-  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Lista para visitas.' },
-  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'El recorrido completo se hace en la visita.' },
-  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Esta {TIPO} está disponible para conocerla.' },
+  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',      equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agenda una visita y conócela.' },
+  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Ven a conocer esta {TIPO}.' },
+  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',           equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Agenda tu visita cuando gustes.' },
+  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Te invito a conocerla en persona.' },
+  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Pide tu cita para verla.' },
+  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Agenda una cita y pásala a ver.' },
+  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Ven a verla y checa si es la tuya.' },
+  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Agenda tu recorrido por esta {TIPO}.' },
+  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Pásala a conocer, agenda tu visita.' },
+  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Te espero para mostrarte esta {TIPO}.' },
 ]
 
 async function llamarOpenRouter(apiKey: string, model: string, prompt: string) {
@@ -118,7 +121,8 @@ DATOS (usa estos números exactos, no inventes):
 - Tipo: ${tipoLabel} ${opLabel}
 - Zona: ${p.direccion || 'No especificada'}
 - Precio: ${precioFmt || 'Consultar'}
-- M²: ${p.m2 ? `${p.m2} m²` : 'No especificado'}
+- M² de construcción: ${p.m2 ? `${p.m2} m²` : 'No especificado'}
+- M² de terreno: ${p.m2_terreno ? `${p.m2_terreno} m²` : 'No especificado'}
 - Recámaras: ${p.recamaras ?? 'No especificado'}
 - Baños completos: ${p.banos ?? 'No especificado'}
 - Medios baños: ${p.medios_banos ?? 0}
@@ -139,7 +143,7 @@ Responde ÚNICAMENTE con la descripción en este formato:
 ${emojiTipo} ${tipoLabel} ${opLabel}${p.direccion ? ` en ${p.direccion}` : ''}
 
 ${t.precio}${precioFmt || 'Consultar precio'}
-${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${p.m2 ? `\n📐 Construcción: ${p.m2} m²` : ''}
+${lineasDatos.length ? '\n' + lineasDatos.join('\n') : ''}${p.m2 ? `\n📐 Construcción: ${p.m2} m²` : ''}${p.m2_terreno ? `\n🌐 Terreno: ${p.m2_terreno} m²` : ''}
 
 ✨ [2-3 oraciones atractivas según el enfoque indicado. Sin números, sin nombres, sin comisiones]
 
@@ -195,7 +199,7 @@ serve(async (req) => {
     for (const pend of pendientes) {
       const { data: prop, error: eProp } = await supa
         .from('propiedades')
-        .select('id, codigo, titulo, direccion, precio, descripcion, tipo, operacion, recamaras, banos, medios_banos, m2, estacionamientos')
+        .select('id, codigo, titulo, direccion, precio, descripcion, tipo, operacion, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos')
         .eq('id', pend.propiedad_id)
         .single()
       if (eProp || !prop) { resumen.push({ codigo: pend.codigo, error: eProp?.message ?? 'no encontrada' }); continue }
