@@ -21,7 +21,17 @@ import { ESTADOS as ESTADOS_ASESOR, ORDEN as ORDEN_ASESOR } from '../(prospectad
 // coordinación: es el vocabulario con el que la gente ya trabaja, y ahí
 // 'Reagendada' y 'Cancelada' van separadas (en el de coordinación son un solo
 // estado 'Reagendada/cancelada').
-const OPCIONES_ESTADO = ORDEN_ASESOR.map(k => ESTADOS_ASESOR[k])
+const OPCIONES_ESTADO = [
+  ...ORDEN_ASESOR.map(k => ESTADOS_ASESOR[k]),
+  // Dos que el tablero del asesor no tiene y esta tabla sí necesita:
+  // · "Realizada": ahí el estado realizada se llama "Esperando
+  //   retroalimentación", que es correcto mientras falte la retro. Pero aquí
+  //   hay 39 citas que YA la tienen escrita; decir que la esperan sería falso.
+  // · "No responde el cliente": existe en el tablero de coordinación y había
+  //   citas con "No contesta" que no tenían dónde caer.
+  { label: 'Realizada',              color: '#0d9488', emoji: '✅' },
+  { label: 'No responde el cliente', color: '#dc2626', emoji: '🔴' },
+]
 import GraficasCitas from '../../components/GraficasCitas'
 
 type Fila = CitaRetro & {
@@ -126,7 +136,7 @@ export function fechaEfectiva(f: { estado_seguimiento?: string | null; fecha_apa
   return f.fecha_cita ?? null
 }
 // Reagendada va aparte de cancelada aunque el texto de las canceladas diga
-// "CANCELADA/REAGENDA": ahí manda la cancelación, así que se excluye.
+// "CANCELADA/REAGENDA" de los registros viejos: ahí manda la cancelación.
 function esReagendada(s: string | null | undefined): boolean {
   const n = normalizar(s ?? '')
   return n.includes('reagend') && !n.includes('cancel')
@@ -171,10 +181,12 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
   // Un solo sitio decide cómo se resalta la fila. Antes era una variable
   // booleana por estado (cancelada, apartado…) y cada una había que colarla en
   // cuatro sitios del render; así añadir uno nuevo es una línea.
-  // El orden importa: el texto de las canceladas dice "CANCELADA/REAGENDA", así
-  // que la cancelación se comprueba primero.
+  // El orden importa por los datos VIEJOS: antes el texto de las canceladas
+  // decía "CANCELADA/REAGENDA" (las dos cosas en uno), así que la cancelación
+  // se comprueba primero. Hoy ya están separadas, pero la comprobación se deja
+  // por si queda algún registro viejo o importado.
   const resaltado = esCancelada(f.estado_seguimiento)
-      ? { color: '#c0392b', emoji: '🚫', texto: 'CANCELADA/REAGENDA' }
+      ? { color: '#c0392b', emoji: '🚫', texto: 'CANCELADA' }
     : esApartado(f.estado_seguimiento)
       ? { color: APARTO_COLOR, emoji: APARTO_EMOJI, texto: 'APARTADO' }
     : esReagendada(f.estado_seguimiento)

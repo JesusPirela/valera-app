@@ -117,10 +117,12 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
       // No es silencioso: se avisa al terminar. Un cambio de estado que nadie
       // ve es justo como se ensucian estas tablas.
       if (mencionaReagenda(resp.join(' \n '))) {
-        const { error: eReag } = await supabase.rpc('cancelar_cita_venta', { p_id: cita.id })
+        // 'Reagendada', no 'Cancelada': la retro dijo que se reagendó, que
+        // ahora es un estado propio y distinto de cancelada.
+        const { error: eReag } = await supabase.rpc('cancelar_cita_venta', { p_id: cita.id, p_estado: 'Reagendada' })
         const aviso = eReag
           ? `La retro se guardó, pero no se pudo marcar como reagendada:\n${eReag.message}`
-          : 'Guardado. Como la retro menciona una reagenda, la cita quedó marcada como CANCELADA/REAGENDA.'
+          : 'Guardado. Como la retro menciona una reagenda, la cita quedó marcada como Reagendada.'
         if (Platform.OS === 'web') window.alert(aviso)
         else Alert.alert(eReag ? 'Ojo' : 'Listo', aviso)
       }
@@ -142,7 +144,7 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
       setGuardando(true)
       // supabase.rpc NO lanza: devuelve { error }. El try/catch anterior nunca
       // se activaba y un fallo (p.ej. "No autorizado") pasaba desapercibido.
-      const { error } = await supabase.rpc('cancelar_cita_venta', { p_id: cita.id })
+      const { error } = await supabase.rpc('cancelar_cita_venta', { p_id: cita.id, p_estado: 'Cancelada' })
       if (error) {
         if (Platform.OS === 'web') window.alert(`No se pudo cancelar\n\n${error.message}`)
         else Alert.alert('No se pudo cancelar', error.message)
@@ -151,8 +153,8 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
       }
       onSaved?.(); onClose()
     }
-    if (Platform.OS === 'web') { if (window.confirm('¿La cita se canceló o se reagendó? Se marcará como CANCELADA/REAGENDA.')) hazlo() }
-    else Alert.alert('Cancelar cita', '¿La cita se canceló o se reagendó? Se marcará como CANCELADA/REAGENDA.', [{ text: 'No', style: 'cancel' }, { text: 'Sí', style: 'destructive', onPress: hazlo }])
+    if (Platform.OS === 'web') { if (window.confirm('¿La cita se canceló? Se marcará como Cancelada.')) hazlo() }
+    else Alert.alert('Cancelar cita', '¿La cita se canceló? Se marcará como Cancelada.', [{ text: 'No', style: 'cancel' }, { text: 'Sí', style: 'destructive', onPress: hazlo }])
   }
 
   const esUltimo = paso === PASOS.length - 1
