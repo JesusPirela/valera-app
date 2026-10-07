@@ -29,6 +29,7 @@ type Fila = CitaRetro & {
   dia_cita: string | null; fecha_cita: string | null; prospecto: string | null; coordino: string | null; atendio: string | null
   estado_seguimiento: string | null; fecha_prox_seguimiento: string | null; retro_completada_at: string | null
   zona_interesada: string | null
+  fecha_apartado: string | null; dia_apartado: string | null
   asesor_id: string | null
 }
 type ColKey = keyof Fila
@@ -57,6 +58,9 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   // 'REAGENDADA' y 'Reagenda', 'APARTADO' y 'apartado': el mismo estado contado
   // como tres cosas distintas.
   { key: 'estado_seguimiento', label: 'Estado seguimiento', w: 170, tipo: 'estado' },
+  // Fecha en que se apartó. Manda sobre la de la cita para ordenar y para el
+  // mes: una cita de agosto apartada en septiembre es un apartado de septiembre.
+  { key: 'dia_apartado', label: 'Fecha de apartado', w: 170, tipo: 'fecha' },
   { key: 'fecha_prox_seguimiento', label: 'Próx. seguimiento', w: 150, tipo: 'fecha' },
 ]
 const NUM_W = 48    // contador de fila (izquierda)
@@ -108,6 +112,19 @@ function esCancelada(s: string | null | undefined): boolean { return normalizar(
 // El color y el emoji se toman del dashboard de citas en vez de escribirlos
 // otra vez aquí, para que un estado no acabe de dos colores según la pantalla.
 function esApartado(s: string | null | undefined): boolean { return normalizar(s ?? '').includes('apart') }
+
+// La fecha que MANDA para ordenar, filtrar y agrupar por mes.
+//
+// Una cita de agosto que se apartó en septiembre es un apartado de
+// SEPTIEMBRE, así que cuenta en septiembre. Si no está apartada, o está
+// apartada pero nadie capturó cuándo, se queda la fecha de la cita.
+//
+// Es el mismo criterio que la función fecha_efectiva_cita() de la base, para
+// que la tabla y cualquier reporte no discrepen.
+export function fechaEfectiva(f: { estado_seguimiento?: string | null; fecha_apartado?: string | null; fecha_cita?: string | null }): string | null {
+  if (f.fecha_apartado && esApartado(f.estado_seguimiento)) return f.fecha_apartado
+  return f.fecha_cita ?? null
+}
 // Reagendada va aparte de cancelada aunque el texto de las canceladas diga
 // "CANCELADA/REAGENDA": ahí manda la cancelación, así que se excluye.
 function esReagendada(s: string | null | undefined): boolean {
@@ -604,7 +621,7 @@ export default function CitasVenta() {
   }
 
   const cargar = useCallback(async () => {
-    const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, fecha_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at, asesor_id, zona_interesada'
+    const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, fecha_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at, asesor_id, zona_interesada, fecha_apartado, dia_apartado'
     const todas: Fila[] = []; const paso = 1000
     try {
       for (let desde = 0; ; desde += paso) {
@@ -662,8 +679,12 @@ export default function CitasVenta() {
         else if (!vacio(f, sinAsignar)) return false
       }
       if (rango) {
-        if (!f.fecha_cita) return false                     // sin fecha real → fuera del filtro de fechas
-        const d = f.fecha_cita.slice(0, 10)                 // YYYY-MM-DD
+        // Se filtra por la fecha EFECTIVA: si está apartada y tiene fecha de
+        // apartado, manda esa. Una cita de agosto apartada en septiembre tiene
+        // que caer dentro de un filtro de septiembre.
+        const fe = fechaEfectiva(f)
+        if (!fe) return false                               // sin fecha real → fuera del filtro de fechas
+        const d = fe.slice(0, 10)                           // YYYY-MM-DD
         if (d < rango.desde || d > rango.hasta) return false
       }
       return true
@@ -673,10 +694,11 @@ export default function CitasVenta() {
     if (ordenFecha) {
       const dir = ordenFecha === 'desc' ? -1 : 1
       arr.sort((a, b) => {
-        if (!a.fecha_cita && !b.fecha_cita) return 0
-        if (!a.fecha_cita) return 1
-        if (!b.fecha_cita) return -1
-        return a.fecha_cita < b.fecha_cita ? -dir : a.fecha_cita > b.fecha_cita ? dir : 0
+        const fa = fechaEfectiva(a), fb = fechaEfectiva(b)
+        if (!fa && !fb) return 0
+        if (!fa) return 1
+        if (!fb) return -1
+        return fa < fb ? -dir : fa > fb ? dir : 0
       })
     }
     return arr
@@ -693,7 +715,9 @@ export default function CitasVenta() {
     const hoy = new Date().toISOString().slice(0, 10)
     let idx = -1
     for (let i = visibles.length - 1; i >= 0; i--) {
-      const fc = visibles[i].fecha_cita?.slice(0, 10)
+      // Misma fecha efectiva que el resto, para que "Ir a hoy" no caiga en
+      // otro renglón del que muestra el orden.
+      const fc = fechaEfectiva(visibles[i])?.slice(0, 10)
       if (!fc) continue
       if (fc === hoy) { idx = i; break }
       if (fc < hoy && idx === -1) { idx = i; break }
@@ -1066,10 +1090,13 @@ export default function CitasVenta() {
             {picker?.tipo === 'fecha' ? (
               <CalendarioHora
                 onConfirm={(disp, iso) => {
-                  // El calendario sirve a dos columnas: el día de la cita y el
-                  // próximo seguimiento. Cada una guarda su texto y su fecha real.
+                  // El calendario sirve a tres columnas: el día de la cita, el
+                  // próximo seguimiento y la fecha de apartado. Cada una guarda
+                  // su texto (para mostrar) y su fecha real (para ordenar).
                   const patch = picker.key === 'fecha_prox_seguimiento'
                     ? { fecha_prox_seguimiento: disp, fecha_prox_seguimiento_ts: iso }
+                    : picker.key === 'dia_apartado'
+                    ? { dia_apartado: disp, fecha_apartado: iso }
                     : { dia_cita: disp, fecha_cita: iso }
                   aplicarCambio(picker.id, patch); setPicker(null)
                 }}
@@ -1112,7 +1139,18 @@ export default function CitasVenta() {
                     <TouchableOpacity
                       key={e.label}
                       style={st.dropItem}
-                      onPress={() => { aplicarCambio(picker.id, { estado_seguimiento: e.label }); setPicker(null) }}
+                      onPress={() => {
+                        aplicarCambio(picker.id, { estado_seguimiento: e.label })
+                        // Al marcar "Apartó" se encadena el calendario para
+                        // capturar CUÁNDO se apartó. Si no se pidiera aquí,
+                        // habría que acordarse de llenar la columna aparte y
+                        // el apartado seguiría contando en el mes de la cita.
+                        if (normalizar(e.label).includes('apart')) {
+                          setPicker({ id: picker.id, key: 'dia_apartado', tipo: 'fecha' })
+                        } else {
+                          setPicker(null)
+                        }
+                      }}
                     >
                       <Text style={{ fontSize: 13.5, color: e.color, fontWeight: '700' }}>
                         {e.emoji}  {e.label}

@@ -29,6 +29,8 @@ import { COL, Dona, BarraAsesor, BarrasPeriodo, Leyenda, s } from './graficas-ba
 // ─── Lo que necesita de cada cita ────────────────────────────────────────────
 export type CitaParaGrafica = {
   fecha_cita: string | null
+  /** Si está apartada y tiene esta fecha, manda sobre la de la cita. */
+  fecha_apartado?: string | null
   atendio: string | null
   asesor_id?: string | null
   prospecto: string | null
@@ -132,10 +134,15 @@ export default function GraficasCitas({
     }
 
     // ── Citas por mes ──
+    // El mes sale de la fecha EFECTIVA: una cita de agosto apartada en
+    // septiembre cuenta en septiembre, que es cuando se cerró el trato.
+    const fechaDe = (f: CitaParaGrafica) =>
+      (f.fecha_apartado && esApartado(f.estado_seguimiento)) ? f.fecha_apartado : f.fecha_cita
     const meses = new Map<string, number>()
     for (const f of base) {
-      if (!f.fecha_cita) continue
-      const k = f.fecha_cita.slice(0, 7)          // YYYY-MM
+      const fe = fechaDe(f)
+      if (!fe) continue
+      const k = fe.slice(0, 7)                    // YYYY-MM
       meses.set(k, (meses.get(k) ?? 0) + 1)
     }
     const NOMBRE_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -150,7 +157,7 @@ export default function GraficasCitas({
     return {
       total: base.length, cuenta, conEstado, asesores, conversion, porMes,
       coordino: ranking('coordino'), prospecto: ranking('prospecto'),
-      retroEscrita, sinFecha: base.filter(f => !f.fecha_cita).length,
+      retroEscrita, sinFecha: base.filter(f => !fechaDe(f)).length,
     }
   }, [filas, nombrePorId, normalizar, mapear, esApartado, esCancelada, esReagendada])
 
