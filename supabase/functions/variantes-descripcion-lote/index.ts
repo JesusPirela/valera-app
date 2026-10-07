@@ -45,6 +45,7 @@ const MODELOS_OPENROUTER = [
   'google/gemma-4-26b-a4b-it:free',
   'nvidia/nemotron-3-super-120b-a12b:free',
 ]
+const MODELOS_GROQ = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
 const MODELOS_GEMINI = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.6-flash', 'gemini-2.5-flash']
 
 const ENFOQUES = [
@@ -95,6 +96,18 @@ async function llamarOpenRouter(apiKey: string, model: string, prompt: string) {
   const r = await fetchConTope('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://valera.app' },
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.95, max_tokens: 4000 }),
+  })
+  const json = await r.json()
+  if (!r.ok) return { ok: false, err: json?.error?.message ?? JSON.stringify(json) }
+  const texto = (json.choices?.[0]?.message?.content ?? '').replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+  return texto ? { ok: true, texto } : { ok: false, err: 'Respuesta vacia' }
+}
+
+async function llamarGroq(apiKey: string, model: string, prompt: string) {
+  const r = await fetchConTope('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.95, max_tokens: 4000 }),
   })
   const json = await r.json()
@@ -206,8 +219,9 @@ serve(async (req) => {
   try {
     const supa = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
     const openrouterKey = Deno.env.get('OPENROUTER_API_KEY')
+    const groqKey = Deno.env.get('GROQ_API_KEY')
     const geminiKey = Deno.env.get('GEMINI_API_KEY')
-    if (!openrouterKey && !geminiKey) throw new Error('No hay ninguna IA configurada')
+    if (!openrouterKey && !groqKey && !geminiKey) throw new Error('No hay ninguna IA configurada')
 
     let cuerpo: any = {}
     try { cuerpo = await req.json() } catch { /* el cron manda {} */ }
@@ -275,6 +289,9 @@ serve(async (req) => {
       const intentos: Array<() => Promise<{ ok: boolean; texto?: string; err?: string; modelo: string }>> = []
       if (openrouterKey) for (const m of MODELOS_OPENROUTER) {
         intentos.push(async () => ({ ...(await llamarOpenRouter(openrouterKey, m, prompt)), modelo: m }))
+      }
+      if (groqKey) for (const m of MODELOS_GROQ) {
+        intentos.push(async () => ({ ...(await llamarGroq(groqKey, m, prompt)), modelo: `groq/${m}` }))
       }
       if (geminiKey) for (const m of MODELOS_GEMINI) {
         intentos.push(async () => ({ ...(await llamarGemini(geminiKey, m, prompt)), modelo: `gemini/${m}` }))

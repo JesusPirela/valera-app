@@ -39,20 +39,23 @@ async function traducirDeepL(textos: string[]): Promise<string[] | null> {
 
 // ── Groq (respaldo) ──────────────────────────────────────────────────────────
 // Traduce cada texto por separado y devuelve SOLO la traducción, sin adornos.
+// IMPORTANTE: llama a la API de Groq de verdad (api.groq.com), NO a
+// OpenRouter — antes esta función leía GROQ_API_KEY pero terminaba llamando a
+// OpenRouter con esa key si no había OPENROUTER_API_KEY, así que "el
+// respaldo" en realidad compartía la MISMA cuota de cuenta que el motor
+// principal de mejorar-descripcion/descripcion-marketing. Groq es una cuenta
+// y cuota 100% aparte — por eso sirve como respaldo de verdad.
 async function traducirGroq(textos: string[]): Promise<string[] | null> {
   const key = Deno.env.get('GROQ_API_KEY')
   if (!key) return null
   const out: string[] = []
   for (const t of textos) {
     if (!t?.trim()) { out.push(''); continue }
-    const orKey = Deno.env.get('OPENROUTER_API_KEY') ?? key
-  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${orKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://valera.app' },
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        // Ver nota de modelos vigentes en mejorar-descripcion/index.ts —
-        // OpenRouter retira sus modelos ":free" seguido.
-        model: 'google/gemma-4-31b-it:free',
+        model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: 'You are a professional real-estate translator. Translate the user text from Spanish to natural US English. Reply with ONLY the translation, no quotes, no notes, no preamble. Keep line breaks.' },
           { role: 'user', content: t },

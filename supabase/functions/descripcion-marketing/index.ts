@@ -22,7 +22,13 @@ const MODELOS_OPENROUTER = [
   'nvidia/nemotron-3-super-120b-a12b:free',
 ]
 
-// Gemini como respaldo (cuota gratis independiente, por proyecto de Google).
+// Groq como segundo respaldo: cuenta/cuota 100% independiente de OpenRouter.
+const MODELOS_GROQ = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+]
+
+// Gemini como tercer respaldo (cuota gratis independiente, por proyecto de Google).
 const MODELOS_GEMINI = [
   'gemini-3.5-flash-lite',
   'gemini-flash-lite-latest',
@@ -50,6 +56,23 @@ async function llamarOpenRouter(apiKey: string, model: string, prompt: string, t
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': 'https://valera.app',
+    },
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: temp, max_tokens: 2000 }),
+  })
+  const json = await response.json()
+  if (!response.ok) return { ok: false, status: response.status, err: json?.error?.message ?? JSON.stringify(json) }
+  const crudo: string = json.choices?.[0]?.message?.content ?? ''
+  const texto = crudo.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+  if (!texto) return { ok: false, err: 'Respuesta vacia' }
+  return { ok: true, texto }
+}
+
+async function llamarGroq(apiKey: string, model: string, prompt: string, temp: number) {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: temp, max_tokens: 2000 }),
   })
@@ -134,9 +157,10 @@ serve(async (req) => {
     const restantes: number = rl.restantes ?? 0
 
     const openrouterKey = Deno.env.get('OPENROUTER_API_KEY')
+    const groqKey = Deno.env.get('GROQ_API_KEY')
     const geminiKey = Deno.env.get('GEMINI_API_KEY')
-    if (!openrouterKey && !geminiKey) {
-      throw new Error('No hay ninguna IA configurada (falta OPENROUTER_API_KEY o GEMINI_API_KEY en Supabase Secrets).')
+    if (!openrouterKey && !groqKey && !geminiKey) {
+      throw new Error('No hay ninguna IA configurada (falta OPENROUTER_API_KEY, GROQ_API_KEY o GEMINI_API_KEY en Supabase Secrets).')
     }
 
     const emojiTipo = tipo === 'casa' ? '🏡' : tipo === 'departamento' ? '🏢' : tipo === 'local' ? '🏪' : tipo === 'terreno' ? '🌄' : '🏠'
@@ -218,7 +242,17 @@ ${tipo !== 'terreno' ? `
       }
     }
 
-    // 2) Gemini (respaldo; se prueban varios nombres de modelo)
+    // 2) Groq (respaldo — cuota/cuenta independiente de OpenRouter)
+    if (groqKey) {
+      for (const modelo of MODELOS_GROQ) {
+        const r = await llamarGroq(groqKey, modelo, prompt, 0.95)
+        if (r.ok) return new Response(JSON.stringify({ texto: r.texto, modelo: `groq/${modelo}`, restantes }), { headers: CORS })
+        errores.push(`groq/${modelo}: ${r.err}`)
+        console.warn(`[descripcion-marketing] groq ${modelo} fallo (${r.status}): ${r.err}`)
+      }
+    }
+
+    // 3) Gemini (último respaldo; se prueban varios nombres de modelo)
     if (geminiKey) {
       for (const modelo of MODELOS_GEMINI) {
         const g = await llamarGemini(geminiKey, modelo, prompt, 0.95)
