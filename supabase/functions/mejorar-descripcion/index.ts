@@ -7,10 +7,14 @@ const CORS = {
 }
 
 // OpenRouter primero (cuota gratis confiable, funciona con la key configurada).
+// OpenRouter rota su catálogo de modelos ":free" seguido — si estos vuelven a
+// fallar con "model unavailable for free"/"no endpoints found", hay que
+// revisar https://openrouter.ai/api/v1/models y reemplazar por los vigentes
+// (mismos usados en variantes-descripcion-lote/index.ts).
 const MODELOS_OPENROUTER = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'google/gemini-2.0-flash-exp:free',
-  'deepseek/deepseek-chat-v3-0324:free',
+  'google/gemma-4-31b-it:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
 ]
 
 // Gemini como respaldo (cuota gratis independiente). Se prueban varios nombres

@@ -50,7 +50,9 @@ async function traducirGroq(textos: string[]): Promise<string[] | null> {
       method: 'POST',
       headers: { Authorization: `Bearer ${orKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://valera.app' },
       body: JSON.stringify({
-        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        // Ver nota de modelos vigentes en mejorar-descripcion/index.ts —
+        // OpenRouter retira sus modelos ":free" seguido.
+        model: 'google/gemma-4-31b-it:free',
         messages: [
           { role: 'system', content: 'You are a professional real-estate translator. Translate the user text from Spanish to natural US English. Reply with ONLY the translation, no quotes, no notes, no preamble. Keep line breaks.' },
           { role: 'user', content: t },

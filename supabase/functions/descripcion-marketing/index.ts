@@ -13,18 +13,22 @@ const CORS = {
 const LIMITE_DIARIO = 5
 
 // OpenRouter primero (cuota gratis confiable, funciona con la key configurada).
+// OpenRouter rota su catálogo de modelos ":free" seguido — si estos vuelven a
+// fallar con "model unavailable for free"/"no endpoints found", hay que
+// revisar https://openrouter.ai/api/v1/models y reemplazar por los vigentes.
 const MODELOS_OPENROUTER = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'deepseek/deepseek-chat-v3-0324:free',
-  'mistralai/mistral-7b-instruct:free',
+  'google/gemma-4-31b-it:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
 ]
 
-// Modelos Gemini vigentes (confirmados en agosto 2026).
+// Gemini como respaldo (cuota gratis independiente, por proyecto de Google).
 const MODELOS_GEMINI = [
-  'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-flash-latest',
+  'gemini-3.6-flash',
   'gemini-2.5-flash',
-  'gemini-1.5-flash',
 ]
 
 // Enfoques para diversificar: cada generación toma uno al azar → dos versiones
