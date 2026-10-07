@@ -21,6 +21,16 @@ import { ESTADOS as ESTADOS_ASESOR, ORDEN as ORDEN_ASESOR } from '../(prospectad
 // coordinación: es el vocabulario con el que la gente ya trabaja, y ahí
 // 'Reagendada' y 'Cancelada' van separadas (en el de coordinación son un solo
 // estado 'Reagendada/cancelada').
+// Las mismas 5 del CRM al crear un cliente (TIPOS_CREDITO en cliente-form).
+// Si aquí hubiera otras, el dato dejaría de poder cruzarse entre pantallas.
+const OPCIONES_PAGO = [
+  { label: 'Infonavit', emoji: '🏛️' },
+  { label: 'Fovisste',  emoji: '🏦' },
+  { label: 'Bancario',  emoji: '💳' },
+  { label: 'Contado',   emoji: '💵' },
+  { label: 'Otro',      emoji: '📄' },
+]
+
 const OPCIONES_ESTADO = [
   ...ORDEN_ASESOR.map(k => ESTADOS_ASESOR[k]),
   // Dos que el tablero del asesor no tiene y esta tabla sí necesita:
@@ -30,6 +40,10 @@ const OPCIONES_ESTADO = [
   // · "No responde el cliente": existe en el tablero de coordinación y había
   //   citas con "No contesta" que no tenían dónde caer.
   { label: 'Realizada',              color: '#0d9488', emoji: '✅' },
+  // El equipo lo llama así: cuando una cita no se dio se reporta como
+  // cancelada o por reagendar, y se decide después. Va APARTE de
+  // 'Reagendada', que es cuando ya tiene fecha nueva.
+  { label: 'Cancelada/Reagenda',     color: '#64748b', emoji: '⚫' },
   { label: 'No responde el cliente', color: '#dc2626', emoji: '🔴' },
 ]
 import GraficasCitas from '../../components/GraficasCitas'
@@ -43,14 +57,16 @@ type Fila = CitaRetro & {
   asesor_id: string | null
 }
 type ColKey = keyof Fila
-type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha' | 'estado' | 'zona'
+type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha' | 'estado' | 'zona' | 'pago'
 const VACIO = '(Vacías)'
 const ROW_H = 54  // altura fija de fila (necesaria para virtualizar con getItemLayout)
 
 const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
   { key: 'cliente_nombre', label: 'Cliente', w: 190, tipo: 'cliente' },
   { key: 'telefono', label: 'Teléfono', w: 130, tipo: 'texto' },
-  { key: 'detalles_pago', label: 'Forma de pago', w: 230, tipo: 'texto' },
+  // Menú con la MISMA lista del CRM (clientes.tipo_credito). Se llena sola
+  // desde la ficha del cliente cuando este la tiene.
+  { key: 'detalles_pago', label: 'Forma de pago', w: 230, tipo: 'pago' },
   // Se parte en dos: la PROPIEDAD que fueron a ver y la ZONA. La zona se
   // llena sola a partir del texto (código VR, link o nombre del desarrollo) y
   // se puede corregir a mano.
@@ -186,7 +202,7 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
   // se comprueba primero. Hoy ya están separadas, pero la comprobación se deja
   // por si queda algún registro viejo o importado.
   const resaltado = esCancelada(f.estado_seguimiento)
-      ? { color: '#c0392b', emoji: '🚫', texto: 'CANCELADA' }
+      ? { color: '#c0392b', emoji: '🚫', texto: 'CANCELADA/REAGENDA' }
     : esApartado(f.estado_seguimiento)
       ? { color: APARTO_COLOR, emoji: APARTO_EMOJI, texto: 'APARTADO' }
     : esReagendada(f.estado_seguimiento)
@@ -390,7 +406,7 @@ function CalendarioHora({ onConfirm, onClose }: { onConfirm: (display: string, i
 const PASOS_ADD: { key: string; label: string; icono: string; tipo: Tipo; kb?: 'phone-pad' }[] = [
   { key: 'cliente_nombre', label: '¿Quién es el cliente?', icono: '🧑', tipo: 'cliente' },
   { key: 'telefono', label: 'Teléfono', icono: '📞', tipo: 'texto', kb: 'phone-pad' },
-  { key: 'detalles_pago', label: 'Forma de pago', icono: '💳', tipo: 'texto' },
+  { key: 'detalles_pago', label: 'Forma de pago', icono: '💳', tipo: 'pago' },
   { key: 'interesado_en', label: '¿Qué propiedad fueron a ver?', icono: '🏠', tipo: 'texto' },
   { key: 'zona_interesada', label: '¿De qué zona?', icono: '📍', tipo: 'zona' },
   { key: 'dia_cita', label: 'Día y hora de la cita', icono: '📅', tipo: 'fecha' },
@@ -481,6 +497,19 @@ function AgregarCitaModal({ profiles, clientes, miId, onCrearCliente, onClose, o
                 value={txt} onChangeText={setTxt} autoFocus keyboardType={P.kb === 'phone-pad' ? 'phone-pad' : 'default'}
                 placeholder="Escribe aquí…" placeholderTextColor={c.textMute}
                 onSubmitEditing={() => avanzar({ [P.key]: txt.trim() || null })} />
+            )}
+
+            {P.tipo === 'pago' && (
+              <View style={{ gap: 2 }}>
+                {OPCIONES_PAGO.map(o => (
+                  <TouchableOpacity key={o.label} style={st.dropItem} onPress={() => avanzar({ detalles_pago: o.label })}>
+                    <Text style={{ fontSize: 13.5, color: c.text, fontWeight: '600' }}>{o.emoji}  {o.label}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity style={st.dropItem} onPress={() => avanzar({ detalles_pago: null })}>
+                  <Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin forma de pago —</Text>
+                </TouchableOpacity>
+              </View>
             )}
 
             {P.tipo === 'zona' && (
@@ -599,6 +628,9 @@ export default function CitasVenta() {
   const [clientes, setClientes] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
   const [filtrosSel, setFiltrosSel] = useState<Record<string, Set<string>>>({})
   const [sinAsignar, setSinAsignar] = useState<null | 'any' | 'prospecto' | 'coordino' | 'atendio'>(null)
+  // Filtro de retroalimentación: ver solo las que YA la tienen escrita o solo
+  // las que faltan. Es la pregunta que más se hace sobre esta tabla.
+  const [filtroRetro, setFiltroRetro] = useState<null | 'con' | 'sin'>(null)
   const [miId, setMiId] = useState<string | null>(null)
   const [copiadoId, setCopiadoId] = useState<string | null>(null)
   const [rango, setRango] = useState<{ desde: string; hasta: string } | null>(null)  // YYYY-MM-DD
@@ -686,6 +718,11 @@ export default function CitasVenta() {
     const vacio = (f: Fila, k: ColKey) => String((f[k] as string) ?? '').trim() === ''
     const arr = filas.filter(f => {
       if (!Object.entries(filtrosSel).every(([k, set]) => set.has(valorDe(f, k as ColKey)))) return false
+      if (filtroRetro) {
+        const tiene = !!f.retro_completada_at
+        if (filtroRetro === 'con' && !tiene) return false
+        if (filtroRetro === 'sin' && tiene) return false
+      }
       if (sinAsignar) {
         if (sinAsignar === 'any') { if (!(vacio(f, 'prospecto') || vacio(f, 'coordino') || vacio(f, 'atendio'))) return false }
         else if (!vacio(f, sinAsignar)) return false
@@ -714,7 +751,7 @@ export default function CitasVenta() {
       })
     }
     return arr
-  }, [filas, filtrosSel, sinAsignar, rango, ordenFecha])
+  }, [filas, filtrosSel, sinAsignar, filtroRetro, rango, ordenFecha])
 
   // Cicla: sin orden → más reciente primero → más antigua primero → sin orden.
   function toggleOrdenFecha() {
@@ -954,6 +991,26 @@ export default function CitasVenta() {
           )
         })}
         {sinAsignar != null && <Text style={{ color: c.textMute, fontSize: 12 }}>· {visibles.length} sin asignar</Text>}
+
+        {/* Retro: cuáles ya la tienen y cuáles faltan. Los contadores salen de
+            `filas` (todas), no de `visibles`, para que el número no cambie al
+            activar el propio filtro. */}
+        <Text style={[st.fechaLabel, { color: c.textSub, marginLeft: 10 }]}>📝 Retro:</Text>
+        {([
+          { k: 'con', l: 'Con retro', n: filas.filter(f => !!f.retro_completada_at).length, color: '#1a6855' },
+          { k: 'sin', l: 'Falta retro', n: filas.filter(f => !f.retro_completada_at).length, color: '#c2410c' },
+        ] as const).map(o => {
+          const on = filtroRetro === o.k
+          return (
+            <TouchableOpacity
+              key={o.k}
+              style={[st.fechaChip, { borderColor: o.color }, on && { backgroundColor: o.color, borderColor: o.color }]}
+              onPress={() => setFiltroRetro(v => (v === o.k ? null : o.k))}
+            >
+              <Text style={[st.fechaChipTxt, { color: on ? '#fff' : o.color }]}>{o.l} · {o.n}</Text>
+            </TouchableOpacity>
+          )
+        })}
       </View>
 
       {/* Gráficas. Reciben `visibles`, no `filas`: así siguen los filtros de
@@ -1114,6 +1171,28 @@ export default function CitasVenta() {
                 }}
                 onClose={() => setPicker(null)}
               />
+            ) : picker?.tipo === 'pago' ? (
+              <View style={[st.dropCard, { backgroundColor: c.card }]}>
+                <Text style={[st.dropTitulo, { color: c.text }]}>Forma de pago</Text>
+                <Text style={{ fontSize: 11.5, color: c.textMute, marginTop: 2, marginBottom: 6 }}>
+                  Las mismas del CRM. Si el cliente ya la tiene en su ficha, se llena sola.
+                </Text>
+                {OPCIONES_PAGO.map(o => (
+                  <TouchableOpacity
+                    key={o.label}
+                    style={st.dropItem}
+                    onPress={() => { aplicarCambio(picker.id, { detalles_pago: o.label }); setPicker(null) }}
+                  >
+                    <Text style={{ fontSize: 13.5, color: c.text, fontWeight: '600' }}>{o.emoji}  {o.label}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={st.dropItem}
+                  onPress={() => { aplicarCambio(picker.id, { detalles_pago: null }); setPicker(null) }}
+                >
+                  <Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin forma de pago —</Text>
+                </TouchableOpacity>
+              </View>
             ) : picker?.tipo === 'zona' ? (
               <View style={[st.dropCard, { backgroundColor: c.card }]}>
                 <Text style={[st.dropTitulo, { color: c.text }]}>Zona</Text>

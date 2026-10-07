@@ -144,7 +144,7 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
       setGuardando(true)
       // supabase.rpc NO lanza: devuelve { error }. El try/catch anterior nunca
       // se activaba y un fallo (p.ej. "No autorizado") pasaba desapercibido.
-      const { error } = await supabase.rpc('cancelar_cita_venta', { p_id: cita.id, p_estado: 'Cancelada' })
+      const { error } = await supabase.rpc('cancelar_cita_venta', { p_id: cita.id, p_estado: 'Cancelada/Reagenda' })
       if (error) {
         if (Platform.OS === 'web') window.alert(`No se pudo cancelar\n\n${error.message}`)
         else Alert.alert('No se pudo cancelar', error.message)
@@ -153,8 +153,8 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
       }
       onSaved?.(); onClose()
     }
-    if (Platform.OS === 'web') { if (window.confirm('¿La cita se canceló? Se marcará como Cancelada.')) hazlo() }
-    else Alert.alert('Cancelar cita', '¿La cita se canceló? Se marcará como Cancelada.', [{ text: 'No', style: 'cancel' }, { text: 'Sí', style: 'destructive', onPress: hazlo }])
+    if (Platform.OS === 'web') { if (window.confirm('¿La cita se canceló o hay que reagendarla? Se marcará como Cancelada/Reagenda.')) hazlo() }
+    else Alert.alert('Cancelar cita', '¿La cita se canceló o hay que reagendarla? Se marcará como Cancelada/Reagenda.', [{ text: 'No', style: 'cancel' }, { text: 'Sí', style: 'destructive', onPress: hazlo }])
   }
 
   const esUltimo = paso === PASOS.length - 1
