@@ -64,27 +64,43 @@ async function llamarOpenRouter(apiKey: string, model: string, prompt: string): 
 
 // Groq expone una API compatible con OpenAI (mismo formato que OpenRouter),
 // así que el request es casi idéntico — solo cambian URL y key.
+//
+// Su free tier limita por TOKENS POR MINUTO (no por día): con prompts largos
+// como este (reglas + datos), 2-3 generaciones seguidas ya lo agotan. A
+// diferencia de OpenRouter/Gemini, Groq SÍ dice cuántos segundos faltan
+// ("Please try again in 5.6s") — se parsea y se reintenta UNA vez tras
+// esperar, en vez de darse por vencido de inmediato.
 async function llamarGroq(apiKey: string, model: string, prompt: string): Promise<{ ok: boolean; texto?: string; status?: number; err?: string }> {
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 2000,
-      reasoning_effort: 'low',
-    }),
-  })
-  const json = await response.json()
-  if (!response.ok) return { ok: false, status: response.status, err: json?.error?.message ?? JSON.stringify(json) }
-  const crudo: string = json.choices?.[0]?.message?.content ?? ''
-  const texto = crudo.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
-  if (!texto) return { ok: false, err: 'Respuesta vacia' }
-  return { ok: true, texto }
+  for (let intento = 1; intento <= 2; intento++) {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 2000,
+        reasoning_effort: 'low',
+      }),
+    })
+    const json = await response.json()
+    if (response.ok) {
+      const crudo: string = json.choices?.[0]?.message?.content ?? ''
+      const texto = crudo.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+      return texto ? { ok: true, texto } : { ok: false, err: 'Respuesta vacia' }
+    }
+    const msg: string = json?.error?.message ?? JSON.stringify(json)
+    const esperaMatch = msg.match(/try again in ([\d.]+)s/i)
+    if (response.status === 429 && esperaMatch && intento === 1) {
+      await new Promise(res => setTimeout(res, Math.ceil(parseFloat(esperaMatch[1]) * 1000) + 500))
+      continue
+    }
+    return { ok: false, status: response.status, err: msg }
+  }
+  return { ok: false, err: 'No se pudo completar tras reintentar' }
 }
 
 async function llamarGemini(apiKey: string, model: string, prompt: string): Promise<{ ok: boolean; texto?: string; err?: string }> {
