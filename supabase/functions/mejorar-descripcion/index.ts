@@ -17,12 +17,16 @@ const MODELOS_OPENROUTER = [
   'nvidia/nemotron-3-super-120b-a12b:free',
 ]
 
-// Groq como segundo respaldo: cuenta/cuota 100% independiente de OpenRouter
-// (aunque ambos sirvan modelos "gratis", comparten el límite diario de la
-// cuenta de OpenRouter — Groq no).
+// Groq como segundo respaldo: cuenta/cuota 100% independiente de OpenRouter.
+// OJO: llama-3.3-70b-versatile / llama-3.1-8b-instant YA NO están disponibles
+// (Groq los retiró) — confirmado contra /openai/v1/models con la key real.
+// Los "gpt-oss" son modelos "reasoning": razonan antes de responder y ese
+// razonamiento NO sale en choices[0].message.content (sale aparte en
+// .message.reasoning), así que si no se limita con reasoning_effort:'low' se
+// comen el max_tokens pensando y content queda vacío.
 const MODELOS_GROQ = [
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
 ]
 
 // Gemini como tercer respaldo (cuota gratis independiente, de Google). Se
@@ -71,7 +75,8 @@ async function llamarGroq(apiKey: string, model: string, prompt: string): Promis
       model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7,
-      max_tokens: 1200,
+      max_tokens: 2000,
+      reasoning_effort: 'low',
     }),
   })
   const json = await response.json()

@@ -45,7 +45,9 @@ const MODELOS_OPENROUTER = [
   'google/gemma-4-26b-a4b-it:free',
   'nvidia/nemotron-3-super-120b-a12b:free',
 ]
-const MODELOS_GROQ = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
+// llama-3.3-70b-versatile / llama-3.1-8b-instant YA NO están disponibles
+// (Groq los retiró) — confirmado contra /openai/v1/models con la key real.
+const MODELOS_GROQ = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b']
 const MODELOS_GEMINI = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.6-flash', 'gemini-2.5-flash']
 
 const ENFOQUES = [
@@ -108,7 +110,9 @@ async function llamarGroq(apiKey: string, model: string, prompt: string) {
   const r = await fetchConTope('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.95, max_tokens: 4000 }),
+    // reasoning_effort:'low' — los "gpt-oss" son modelos de razonamiento: sin
+    // esto, el razonamiento se come max_tokens y el content queda vacío.
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.95, max_tokens: 4500, reasoning_effort: 'low' }),
   })
   const json = await r.json()
   if (!r.ok) return { ok: false, err: json?.error?.message ?? JSON.stringify(json) }

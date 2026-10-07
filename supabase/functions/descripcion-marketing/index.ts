@@ -23,9 +23,11 @@ const MODELOS_OPENROUTER = [
 ]
 
 // Groq como segundo respaldo: cuenta/cuota 100% independiente de OpenRouter.
+// OJO: llama-3.3-70b-versatile / llama-3.1-8b-instant YA NO están disponibles
+// (Groq los retiró) — confirmado contra /openai/v1/models con la key real.
 const MODELOS_GROQ = [
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
 ]
 
 // Gemini como tercer respaldo (cuota gratis independiente, por proyecto de Google).
@@ -74,7 +76,9 @@ async function llamarGroq(apiKey: string, model: string, prompt: string, temp: n
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: temp, max_tokens: 2000 }),
+    // reasoning_effort:'low' — los "gpt-oss" son modelos de razonamiento: sin
+    // esto, el razonamiento se come max_tokens y el content queda vacío.
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: temp, max_tokens: 2500, reasoning_effort: 'low' }),
   })
   const json = await response.json()
   if (!response.ok) return { ok: false, status: response.status, err: json?.error?.message ?? JSON.stringify(json) }

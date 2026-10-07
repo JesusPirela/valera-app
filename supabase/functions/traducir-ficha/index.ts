@@ -55,13 +55,17 @@ async function traducirGroq(textos: string[]): Promise<string[] | null> {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        // llama-3.3-70b-versatile ya no está disponible (Groq lo retiró);
+        // gpt-oss es modelo de razonamiento — reasoning_effort:'low' evita
+        // que se coma max_tokens pensando y deje el content vacío.
+        model: 'openai/gpt-oss-120b',
+        reasoning_effort: 'low',
         messages: [
           { role: 'system', content: 'You are a professional real-estate translator. Translate the user text from Spanish to natural US English. Reply with ONLY the translation, no quotes, no notes, no preamble. Keep line breaks.' },
           { role: 'user', content: t },
         ],
         temperature: 0.3,
-        max_tokens: 1500,
+        max_tokens: 2000,
       }),
     })
     if (!r.ok) { console.error('[traducir] Groq', r.status); return null }
