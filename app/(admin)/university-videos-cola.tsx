@@ -1,7 +1,11 @@
-// Cola de revisión de videos encontrados automáticamente para Valera
-// University (ver supabase/functions/university-buscar-videos). Nunca se
-// publica nada solo: un admin aprueba o descarta cada candidato aquí. Al
-// aprobar, se crea la lección real dentro del curso contenedor de su tema.
+// Cola de revisión + publicación de videos encontrados automáticamente para
+// Valera University (ver supabase/functions/university-buscar-videos). Nunca
+// se publica nada solo apenas se encuentra: un admin aprueba o descarta cada
+// candidato aquí. "Aprobar" ya NO crea la lección de inmediato — la mete a
+// una cola de publicación que un cron vacía de a UNO, lunes/miércoles/viernes
+// (ver vu_publicar_siguiente_video() / 20261007_university_cola_publicacion.sql),
+// para que entren los 3 videos semanales a ese ritmo aunque se aprueben
+// varios de un jalón.
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
@@ -45,54 +49,65 @@ function fmtDuracion(s: number | null): string {
   return `${m}:${String(r).padStart(2, '0')}`
 }
 
+// Próximas N fechas de publicación (lunes=1, miércoles=3, viernes=5), solo
+// para mostrar un estimado junto a cada posición de la cola — el cron real
+// corre 9:00 am esos días y siempre publica el más antiguo primero.
+function proximasFechasPublicacion(n: number): Date[] {
+  const dias = [1, 3, 5]
+  const fechas: Date[] = []
+  const cursor = new Date()
+  cursor.setHours(9, 0, 0, 0)
+  while (fechas.length < n) {
+    cursor.setDate(cursor.getDate() + 1)
+    if (dias.includes(cursor.getDay())) fechas.push(new Date(cursor))
+  }
+  return fechas
+}
+function fmtFechaCorta(d: Date): string {
+  return d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
 export default function UniversityVideosCola() {
   useSupervisorBlock()
   const c = useColors()
-  const [lista, setLista] = useState<Candidato[]>([])
+  const [pendientes, setPendientes] = useState<Candidato[]>([])
+  const [enCola, setEnCola] = useState<Candidato[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [procesando, setProcesando] = useState<string | null>(null)
   const [buscando, setBuscando] = useState(false)
+  const [publicando, setPublicando] = useState(false)
+
+  const COLS = 'id, tema, curso_id, youtube_url, titulo, descripcion, canal, miniatura_url, duracion_segundos'
 
   const cargar = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
-    const { data } = await supabase.from('vu_video_candidatos')
-      .select('id, tema, curso_id, youtube_url, titulo, descripcion, canal, miniatura_url, duracion_segundos')
-      .eq('estado', 'pendiente')
-      .order('encontrado_en', { ascending: false })
-    setLista((data ?? []) as Candidato[])
+    const [{ data: pend }, { data: cola }] = await Promise.all([
+      supabase.from('vu_video_candidatos').select(COLS).eq('estado', 'pendiente').order('encontrado_en', { ascending: false }),
+      supabase.from('vu_video_candidatos').select(COLS).eq('estado', 'aprobado').order('revisado_en', { ascending: true }),
+    ])
+    setPendientes((pend ?? []) as Candidato[])
+    setEnCola((cola ?? []) as Candidato[])
     setLoading(false)
     setRefreshing(false)
   }, [])
   useFocusEffect(useCallback(() => { cargar(true) }, [cargar]))
 
+  // Ya NO crea la lección: solo mete el candidato a la cola de publicación.
+  // El cron (lunes/miércoles/viernes) es quien la crea de verdad.
   async function aprobar(cand: Candidato) {
     setProcesando(cand.id)
-    try {
-      const { data: { user } } = await getUsuarioActual()
-      const { data: ultima } = await supabase.from('vu_lecciones')
-        .select('orden').eq('curso_id', cand.curso_id).order('orden', { ascending: false }).limit(1).maybeSingle()
-      const siguienteOrden = (ultima?.orden ?? 0) + 1
-
-      const { data: leccion, error: eLec } = await supabase.from('vu_lecciones').insert({
-        curso_id: cand.curso_id,
-        titulo: cand.titulo,
-        descripcion: cand.descripcion,
-        youtube_url: cand.youtube_url,
-        orden: siguienteOrden,
-      }).select('id').single()
-      if (eLec) throw eLec
-
-      await supabase.from('vu_video_candidatos').update({
-        estado: 'aprobado', leccion_id: leccion.id, revisado_por: user?.id ?? null, revisado_en: new Date().toISOString(),
-      }).eq('id', cand.id)
-
-      setLista(prev => prev.filter(x => x.id !== cand.id))
-    } catch (e: any) {
-      alerta('Error al aprobar: ' + e.message)
-    } finally {
-      setProcesando(null)
+    const { data: { user } } = await getUsuarioActual()
+    const { error } = await supabase.from('vu_video_candidatos').update({
+      estado: 'aprobado', revisado_por: user?.id ?? null, revisado_en: new Date().toISOString(),
+    }).eq('id', cand.id)
+    if (!error) {
+      setPendientes(prev => prev.filter(x => x.id !== cand.id))
+      setEnCola(prev => [...prev, cand])
+    } else {
+      alerta('Error al aprobar: ' + error.message)
     }
+    setProcesando(null)
   }
 
   async function descartar(cand: Candidato) {
@@ -101,7 +116,22 @@ export default function UniversityVideosCola() {
     await supabase.from('vu_video_candidatos').update({
       estado: 'descartado', revisado_por: user?.id ?? null, revisado_en: new Date().toISOString(),
     }).eq('id', cand.id)
-    setLista(prev => prev.filter(x => x.id !== cand.id))
+    setPendientes(prev => prev.filter(x => x.id !== cand.id))
+    setProcesando(null)
+  }
+
+  // Lo regresa a "pendientes" (no lo descarta) por si se aprobó por error.
+  async function quitarDeCola(cand: Candidato) {
+    setProcesando(cand.id)
+    const { error } = await supabase.from('vu_video_candidatos').update({
+      estado: 'pendiente', revisado_por: null, revisado_en: null,
+    }).eq('id', cand.id)
+    if (!error) {
+      setEnCola(prev => prev.filter(x => x.id !== cand.id))
+      setPendientes(prev => [cand, ...prev])
+    } else {
+      alerta('Error: ' + error.message)
+    }
     setProcesando(null)
   }
 
@@ -130,7 +160,25 @@ export default function UniversityVideosCola() {
     }
   }
 
+  // Dispara a mano lo que normalmente hace el cron del lunes/miércoles/viernes
+  // — publica el siguiente de la cola, sin esperar al día que toque.
+  async function publicarSiguienteAhora() {
+    setPublicando(true)
+    try {
+      const { data, error } = await supabase.rpc('vu_publicar_siguiente_video')
+      if (error) throw error
+      alerta(data ? 'Se publicó el siguiente video de la cola.' : 'La cola de publicación está vacía.')
+      await cargar(true)
+    } catch (e: any) {
+      alerta('Error al publicar: ' + (e.message ?? String(e)))
+    } finally {
+      setPublicando(false)
+    }
+  }
+
   if (loading) return <View style={[st.center, { backgroundColor: c.bg }]}><ActivityIndicator size="large" color={TEAL} /></View>
+
+  const fechasCola = proximasFechasPublicacion(enCola.length)
 
   return (
     <ScrollView
@@ -140,7 +188,7 @@ export default function UniversityVideosCola() {
     >
       <Text style={[st.h1, { color: c.text }]}>🎬 Cola de videos</Text>
       <Text style={[st.sub, { color: c.textMute }]}>
-        Candidatos encontrados automáticamente en YouTube. {lista.length} pendiente{lista.length !== 1 ? 's' : ''} de revisión.
+        Candidatos encontrados automáticamente en YouTube. {pendientes.length} pendiente{pendientes.length !== 1 ? 's' : ''} de revisión.
       </Text>
 
       <TouchableOpacity style={[st.btnBuscar, buscando && { opacity: 0.6 }]} onPress={buscarAhora} disabled={buscando}>
@@ -149,13 +197,52 @@ export default function UniversityVideosCola() {
           : <><Ionicons name="search" size={16} color="#fff" /><Text style={st.btnBuscarTxt}>Buscar videos ahora</Text></>}
       </TouchableOpacity>
 
-      {lista.length === 0 ? (
+      {/* ── Cola de publicación: se suben solos lunes/miércoles/viernes ── */}
+      {enCola.length > 0 && (
+        <View style={[st.colaBox, { backgroundColor: c.card, borderColor: '#7c3aed55' }]}>
+          <View style={st.colaHeader}>
+            <Text style={[st.colaTitulo, { color: c.text }]}>
+              📅 En cola para publicar ({enCola.length})
+            </Text>
+            <TouchableOpacity style={[st.btnPublicar, publicando && { opacity: 0.6 }]} onPress={publicarSiguienteAhora} disabled={publicando}>
+              {publicando
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={st.btnPublicarTxt}>Publicar siguiente ahora</Text>}
+            </TouchableOpacity>
+          </View>
+          <Text style={[st.colaSub, { color: c.textMute }]}>
+            Se publican solos de a uno, lunes/miércoles/viernes 9:00 am — el más antiguo primero.
+          </Text>
+          {enCola.map((cand, i) => (
+            <View key={cand.id} style={[st.colaFila, { borderTopColor: c.border }]}>
+              <View style={st.colaPos}><Text style={st.colaPosTxt}>{i + 1}</Text></View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[st.colaFilaTitulo, { color: c.text }]} numberOfLines={1}>{cand.titulo}</Text>
+                <Text style={[st.colaFilaMeta, { color: c.textMute }]}>
+                  {TEMAS[cand.tema]?.label ?? cand.tema} · aprox. {fmtFechaCorta(fechasCola[i])}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={st.colaQuitarBtn}
+                disabled={procesando === cand.id}
+                onPress={() => quitarDeCola(cand)}
+              >
+                {procesando === cand.id
+                  ? <ActivityIndicator size="small" color="#dc2626" />
+                  : <Text style={st.colaQuitarTxt}>Quitar</Text>}
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {pendientes.length === 0 ? (
         <Text style={[st.vacio, { color: c.textMute }]}>
           No hay candidatos pendientes. Se buscan solos cada lunes — o pídele a quien administre Supabase que dispare la función a mano.
         </Text>
       ) : (
       <View style={st.grid}>
-      {lista.map(cand => {
+      {pendientes.map(cand => {
         const t = TEMAS[cand.tema]
         return (
           <View key={cand.id} style={[st.card, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -219,6 +306,21 @@ const st = StyleSheet.create({
   vacio: { fontSize: 13.5, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24, marginTop: 30 },
   btnBuscar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: TEAL, borderRadius: 10, paddingVertical: 10, marginBottom: 16, maxWidth: 260 },
   btnBuscarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+
+  colaBox: { borderWidth: 1.5, borderRadius: 12, padding: 12, marginBottom: 18 },
+  colaHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
+  colaTitulo: { fontSize: 14.5, fontWeight: '800' },
+  colaSub: { fontSize: 11, marginTop: 3, marginBottom: 4 },
+  btnPublicar: { backgroundColor: '#7c3aed', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
+  btnPublicarTxt: { color: '#fff', fontWeight: '700', fontSize: 11.5 },
+  colaFila: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1 },
+  colaPos: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#7c3aed22', alignItems: 'center', justifyContent: 'center' },
+  colaPosTxt: { fontSize: 11, fontWeight: '800', color: '#7c3aed' },
+  colaFilaTitulo: { fontSize: 12.5, fontWeight: '700' },
+  colaFilaMeta: { fontSize: 10.5, marginTop: 1 },
+  colaQuitarBtn: { paddingHorizontal: 10, paddingVertical: 5 },
+  colaQuitarTxt: { fontSize: 11, fontWeight: '700', color: '#dc2626' },
+
   // Grid responsivo: cada card tiene un ancho fijo chico y el navegador va
   // acomodando las que quepan por fila (RN Web respeta flexWrap como CSS).
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
