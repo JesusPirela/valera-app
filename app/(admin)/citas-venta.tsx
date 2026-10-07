@@ -714,15 +714,14 @@ export default function CitasVenta() {
   }, [])
 
   const valorDe = (f: Fila, key: ColKey) => String((f[key] as string) ?? '').trim() || VACIO
-  const visibles = useMemo(() => {
+  // Todo lo filtrado MENOS el propio filtro de retro. De aquí salen los
+  // contadores de "Con retro / Falta retro": así respetan el rango de fechas y
+  // los demás filtros (si filtras septiembre, dicen cuántas retros faltaron en
+  // septiembre), pero no cambian al encender el filtro de retro mismo.
+  const sinFiltroRetro = useMemo(() => {
     const vacio = (f: Fila, k: ColKey) => String((f[k] as string) ?? '').trim() === ''
-    const arr = filas.filter(f => {
+    return filas.filter(f => {
       if (!Object.entries(filtrosSel).every(([k, set]) => set.has(valorDe(f, k as ColKey)))) return false
-      if (filtroRetro) {
-        const tiene = !!f.retro_completada_at
-        if (filtroRetro === 'con' && !tiene) return false
-        if (filtroRetro === 'sin' && tiene) return false
-      }
       if (sinAsignar) {
         if (sinAsignar === 'any') { if (!(vacio(f, 'prospecto') || vacio(f, 'coordino') || vacio(f, 'atendio'))) return false }
         else if (!vacio(f, sinAsignar)) return false
@@ -738,6 +737,12 @@ export default function CitasVenta() {
       }
       return true
     })
+  }, [filas, filtrosSel, sinAsignar, rango])
+
+  const visibles = useMemo(() => {
+    const arr = !filtroRetro
+      ? [...sinFiltroRetro]
+      : sinFiltroRetro.filter(f => (filtroRetro === 'con') === !!f.retro_completada_at)
     // Orden por fecha de la cita (clic en la columna "Día de la cita"). Las filas
     // sin fecha_cita real siempre van al final, no se mezclan con las fechadas.
     if (ordenFecha) {
@@ -751,7 +756,7 @@ export default function CitasVenta() {
       })
     }
     return arr
-  }, [filas, filtrosSel, sinAsignar, filtroRetro, rango, ordenFecha])
+  }, [sinFiltroRetro, filtroRetro, ordenFecha])
 
   // Cicla: sin orden → más reciente primero → más antigua primero → sin orden.
   function toggleOrdenFecha() {
@@ -992,13 +997,15 @@ export default function CitasVenta() {
         })}
         {sinAsignar != null && <Text style={{ color: c.textMute, fontSize: 12 }}>· {visibles.length} sin asignar</Text>}
 
-        {/* Retro: cuáles ya la tienen y cuáles faltan. Los contadores salen de
-            `filas` (todas), no de `visibles`, para que el número no cambie al
-            activar el propio filtro. */}
+        {/* Retro: cuáles ya la tienen y cuáles faltan.
+            Los contadores salen de `sinFiltroRetro`, que ya trae aplicados el
+            rango de fechas y los demás filtros pero NO el de retro. Así, si
+            filtras septiembre, dicen cuántas retros faltaron en septiembre; y
+            no cambian al encender el filtro de retro mismo. */}
         <Text style={[st.fechaLabel, { color: c.textSub, marginLeft: 10 }]}>📝 Retro:</Text>
         {([
-          { k: 'con', l: 'Con retro', n: filas.filter(f => !!f.retro_completada_at).length, color: '#1a6855' },
-          { k: 'sin', l: 'Falta retro', n: filas.filter(f => !f.retro_completada_at).length, color: '#c2410c' },
+          { k: 'con', l: 'Con retro', n: sinFiltroRetro.filter(f => !!f.retro_completada_at).length, color: '#1a6855' },
+          { k: 'sin', l: 'Falta retro', n: sinFiltroRetro.filter(f => !f.retro_completada_at).length, color: '#c2410c' },
         ] as const).map(o => {
           const on = filtroRetro === o.k
           return (
