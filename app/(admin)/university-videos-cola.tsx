@@ -153,7 +153,9 @@ export default function UniversityVideosCola() {
         <Text style={[st.vacio, { color: c.textMute }]}>
           No hay candidatos pendientes. Se buscan solos cada lunes — o pídele a quien administre Supabase que dispare la función a mano.
         </Text>
-      ) : lista.map(cand => {
+      ) : (
+      <View style={st.grid}>
+      {lista.map(cand => {
         const t = TEMAS[cand.tema]
         return (
           <View key={cand.id} style={[st.card, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -204,6 +206,8 @@ export default function UniversityVideosCola() {
           </View>
         )
       })}
+      </View>
+      )}
     </ScrollView>
   )
 }
@@ -213,20 +217,23 @@ const st = StyleSheet.create({
   h1: { fontSize: 22, fontWeight: '900' },
   sub: { fontSize: 12.5, marginTop: 2, marginBottom: 14 },
   vacio: { fontSize: 13.5, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24, marginTop: 30 },
-  btnBuscar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: TEAL, borderRadius: 10, paddingVertical: 12, marginBottom: 16 },
-  btnBuscarTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  card: { borderWidth: 1, borderRadius: 14, marginBottom: 16, overflow: 'hidden' },
-  temaRow: { paddingHorizontal: 12, paddingTop: 10 },
-  temaTxt: { fontSize: 11.5, fontWeight: '800', color: TEAL, textTransform: 'uppercase', letterSpacing: 0.4 },
-  miniatura: { width: '100%', aspectRatio: 16 / 9, marginTop: 6, backgroundColor: '#0003' },
-  duracionBadge: { position: 'absolute', right: 8, bottom: 8, backgroundColor: '#000000cc', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
-  duracionTxt: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  titulo: { fontSize: 15, fontWeight: '800', marginBottom: 2 },
-  canal: { fontSize: 12, marginBottom: 6 },
-  desc: { fontSize: 12.5, lineHeight: 17, marginBottom: 10 },
-  acciones: { flexDirection: 'row', gap: 8 },
-  btn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 10, paddingVertical: 10 },
-  btnTxt: { fontSize: 12.5, fontWeight: '700' },
+  btnBuscar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: TEAL, borderRadius: 10, paddingVertical: 10, marginBottom: 16, maxWidth: 260 },
+  btnBuscarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  // Grid responsivo: cada card tiene un ancho fijo chico y el navegador va
+  // acomodando las que quepan por fila (RN Web respeta flexWrap como CSS).
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  card: { width: 240, borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
+  temaRow: { paddingHorizontal: 9, paddingTop: 7 },
+  temaTxt: { fontSize: 10, fontWeight: '800', color: TEAL, textTransform: 'uppercase', letterSpacing: 0.3 },
+  miniatura: { width: '100%', aspectRatio: 16 / 9, marginTop: 4, backgroundColor: '#0003' },
+  duracionBadge: { position: 'absolute', right: 6, bottom: 6, backgroundColor: '#000000cc', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  duracionTxt: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  titulo: { fontSize: 12.5, fontWeight: '800', marginBottom: 2 },
+  canal: { fontSize: 10.5, marginBottom: 4 },
+  desc: { fontSize: 11, lineHeight: 14.5, marginBottom: 8 },
+  acciones: { flexDirection: 'row', gap: 5 },
+  btn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 8, paddingVertical: 7 },
+  btnTxt: { fontSize: 10.5, fontWeight: '700' },
   btnVer: { borderWidth: 1 },
   btnDescartar: { backgroundColor: '#fee2e2' },
   btnAprobar: { backgroundColor: '#2e7d32' },
