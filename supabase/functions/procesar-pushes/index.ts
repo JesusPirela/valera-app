@@ -43,6 +43,24 @@ const CANAL_ALARMAS = 'alarmas_v1'
 const CATEGORIA_ALARMA = 'alarma'
 const SONIDO_ALARMA = 'alarma_valera.wav'
 
+// Canal de respaldo para quien todavia no tiene la 1.0.7.
+//
+// El cartel que sale encima de la pantalla lo decide la IMPORTANCIA del canal,
+// no el push. Sin canal, Android mete el aviso en uno generico de importancia
+// media ("Miscellaneous") que solo llega a la bandeja. Pero la app ya crea
+// desde hace tiempo 'recordatorios' en importancia alta, y ese si hace cartel:
+// comprobado en un aparato real, pantalla desbloqueada y fuera de la app.
+//
+// Se usa solo para alarmas. El sonido sera el del canal (corto), no los 20 s,
+// porque el wav vive en el binario de la 1.0.7.
+//
+// El riesgo conocido: 'recordatorios' lo crea programarRecordatorios() al
+// montar el layout de prospectador, asi que falta en un aparato que nunca haya
+// entrado ahi, y un canal inexistente hace que Android tire el aviso en
+// silencio. Hoy no muerde: la alarma solo cubre leads de campana, que son de
+// prospector_plus y gerentes, y todos viven en ese layout.
+const CANAL_RESPALDO = 'recordatorios'
+
 // El wav y la categoría viven dentro del binario; la 1.0.7 es la primera que
 // los trae. Pedírselos a una app vieja no es inofensivo: en iOS, un sonido que
 // no está en el paquete deja la notificación MUDA, que es justo lo contrario de
@@ -156,25 +174,30 @@ serve(async (_req) => {
       if (n.cliente_id) data.cliente_id = n.cliente_id
       if (n.chatbot_lead_id) data.chatbot_lead_id = n.chatbot_lead_id
       if (n.accion_url) data.accion_url = n.accion_url
-      // Alarma de verdad solo si la app de esa persona ya trae el sonido.
-      const esAlarma = TIPOS_ALARMA.has(n.tipo) && sonidoOk.get(n.user_id) === true
+      const esAlarma = TIPOS_ALARMA.has(n.tipo)
+      // La alarma completa —20 s de pitidos y botones— solo si esa persona ya
+      // tiene el binario que los trae. Si no, el canal de respaldo: cartel y
+      // sonido corto, que es casi todo lo que importa y funciona hoy.
+      const alarmaCompleta = esAlarma && sonidoOk.get(n.user_id) === true
       return {
         to: token,
         title: n.titulo,
         body: n.mensaje,
         // En Android el sonido lo pone el canal y este campo solo sirve para
         // encenderlo; en iOS, que no tiene canales, es el que elige el archivo.
-        sound: esAlarma ? SONIDO_ALARMA : 'default',
+        sound: alarmaCompleta ? SONIDO_ALARMA : 'default',
         data,
         // Sin priority 'high', Android guarda el push mientras el celular está
         // en reposo y lo suelta cuando algo lo despierta —abrir la app, por
         // ejemplo—. Por eso el aviso "solo salía al entrar".
         priority: 'high' as const,
-        // El canal manda sobre el cartel y el sonido: el de alarmas está en
-        // importancia MAX con 20 s de pitidos. El resto de avisos siguen en el
-        // canal por defecto para no volverlos igual de ruidosos.
+        // El canal manda sobre el cartel y el sonido. Los avisos que no son
+        // alarma se quedan sin canal, en el genérico de importancia media, para
+        // no volverlos igual de ruidosos.
         // La categoría es la que dibuja los botones Atender / Posponer 1 h.
-        ...(esAlarma ? { channelId: CANAL_ALARMAS, categoryId: CATEGORIA_ALARMA } : {}),
+        ...(alarmaCompleta
+              ? { channelId: CANAL_ALARMAS, categoryId: CATEGORIA_ALARMA }
+              : esAlarma ? { channelId: CANAL_RESPALDO } : {}),
       }
     })
     .filter((m): m is NonNullable<typeof m> => m !== null)
