@@ -1,0 +1,39 @@
+-- ⚠️ ESTE ARCHIVO NO SE APLICA SOLO. Hay que pegarlo en el SQL Editor de
+--    Supabase a mano, y conviene leer antes a quién le va a sonar.
+--
+-- Enciende la alarma insistente: cada 5 minutos, entre 8am y 9pm hora de
+-- México, hasta que la persona atienda o posponga.
+--
+-- ── A quién le va a empezar a sonar en cuanto se encienda ───────────────────
+-- Medido el 8/oct/2026. Son los pendientes que ya existen; a cada persona le
+-- llega UN aviso que dice cuántos lleva, no uno por pendiente.
+--
+--   Andres Asesor (gerente) ....... 17 retros
+--   Hugo Prado (asesor) ............ 6 retros
+--   Carlos Carbajal (admin) ........ 1 retro
+--   Chucho plus (asesor) ........... 1 retro
+--   Bibiana Rodríguez (prospectador) 1 retro
+--   Rayo⚡ (supervisor) ............ 1 retro
+--   Alexis Plus (gerente) .......... 1 lead  ← el de prueba
+--
+-- A esas 6 personas les va a sonar cada 5 minutos hasta que escriban la retro
+-- o pospongan. Si no es lo que quieres, avísales antes o resuelve esas retros
+-- viejas primero.
+--
+-- ── Cómo apagarlo ───────────────────────────────────────────────────────────
+--   UPDATE cron.job SET active = false WHERE jobname = 'generar-alarmas';
+--
+-- ── Qué calla la alarma, del lado de la persona ─────────────────────────────
+--   · Lead:  picarle a WhatsApp o a Llamar en "Leads de campaña".
+--   · Retro: escribirla.
+--   · Las dos: el botón Posponer, que da una hora de silencio.
+
+SELECT cron.unschedule('generar-alarmas')
+ WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'generar-alarmas');
+
+SELECT cron.schedule('generar-alarmas', '*/5 * * * *', $cron$
+  SELECT public.generar_alarmas();
+$cron$);
+
+-- Comprobación.
+SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'generar-alarmas';
