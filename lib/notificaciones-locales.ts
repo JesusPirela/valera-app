@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
+import Constants from 'expo-constants'
 import { supabase } from './supabase'
 
 import { getUsuarioActual } from './sesion'
@@ -37,33 +38,76 @@ export function notificarWeb(title: string, body: string, onClick?: () => void) 
   } catch {}
 }
 
-// Canales de Android para los push que manda el servidor.
+// Identificadores del canal y de la categoría de las alarmas.
+//
+// El canal lleva "_v1" a propósito. Android congela la configuración de un
+// canal en el momento de crearlo: el sonido, la importancia y la vibración no
+// se pueden cambiar después, porque a partir de ahí manda el usuario desde
+// ajustes. La única forma de cambiar el tono más adelante es publicar un canal
+// nuevo, y para eso el nombre tiene que poder subir a _v2.
+export const CANAL_ALARMAS = 'alarmas_v1'
+export const CATEGORIA_ALARMA = 'alarma'
+
+// Canal de Android para los push de alarma que manda el servidor.
 //
 // Sin esto, todo push del servidor cae en el canal "default" que crea Expo con
 // importancia media: Android lo mete en la bandeja sin cartel ni sonido
-// garantizado y, si el celular está en reposo, lo guarda hasta que algo lo
-// despierte —normalmente abrir la app—. Eso es justo el "solo me aparece
-// cuando entro a la app".
+// garantizado. Este va en MAX, que es lo que saca el cartel encima de lo que
+// estés viendo aunque el celular esté bloqueado.
 //
-// El canal "alarmas" va en MAX: cartel encima de lo que estés viendo, sonido y
-// vibración, y salta el reposo. Se usa solo para las alarmas de leads y retros,
-// no para avisos normales de propiedades.
-//
-// Un canal solo se puede configurar la PRIMERA vez que se crea: Android ignora
-// cambios posteriores, porque a partir de ahí manda el usuario desde ajustes.
+// El sonido es alarma_valera.wav, 20 segundos de pitidos. Android reproduce el
+// sonido del canal UNA vez por notificación y no hay forma de pedirle que lo
+// repita, así que para que "suene como alarma" el archivo tiene que durar. El
+// nombre va sin extensión: Android lo busca en res/raw, donde el plugin de
+// expo-notifications lo deja al compilar.
+// El wav vive dentro del binario, no en el paquete OTA: lo mete el plugin de
+// expo-notifications al compilar. Esta es la primera versión que lo trae.
+const VERSION_CON_SONIDO = [1, 0, 7]
+
+function binarioTraeElSonido(): boolean {
+  const v = (Constants.expoConfig?.version ?? '0.0.0').split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    const a = v[i] ?? 0, b = VERSION_CON_SONIDO[i]
+    if (a !== b) return a > b
+  }
+  return true
+}
+
 export async function crearCanalesAndroid() {
   if (Platform.OS !== 'android') return
+  // Si este código llega por OTA a un binario viejo, el canal se crearía
+  // apuntando a un res/raw que ahí no existe: quedaría mudo PARA SIEMPRE,
+  // porque Android congela la configuración del canal al crearlo y ni siquiera
+  // instalar la versión nueva lo arregla. Mejor no crearlo todavía.
+  if (!binarioTraeElSonido()) return
   try {
-    await Notifications.setNotificationChannelAsync('alarmas', {
+    await Notifications.setNotificationChannelAsync(CANAL_ALARMAS, {
       name: 'Alarmas de pendientes',
       description: 'Leads sin contactar y citas sin retroalimentar',
       importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 400, 200, 400, 200, 400],
-      sound: 'default',
+      vibrationPattern: [0, 600, 300, 600, 300, 600, 300, 600],
+      sound: 'alarma_valera',
       enableVibrate: true,
+      enableLights: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     })
   } catch { /* si falla, el push cae en el canal por defecto: peor, pero llega */ }
+}
+
+// Botones que salen EN la notificación, para no tener que buscar la pantalla.
+//
+// Los dos abren la app. Se intentó que "Posponer" no la abriera
+// (opensAppToForeground: false), pero esa variante solo funciona si el proceso
+// de la app sigue vivo: con la app cerrada —que es justo cuando importa— el
+// botón no haría nada y el usuario creería que pospuso. Abrir y posponer de
+// inmediato es menos elegante y siempre funciona.
+export async function crearCategoriasNotificacion() {
+  try {
+    await Notifications.setNotificationCategoryAsync(CATEGORIA_ALARMA, [
+      { identifier: 'atender',  buttonTitle: 'Atender',      options: { opensAppToForeground: true } },
+      { identifier: 'posponer', buttonTitle: 'Posponer 1 h', options: { opensAppToForeground: true } },
+    ])
+  } catch { /* sin categoría la notificación sale igual, solo que sin botones */ }
 }
 
 export async function programarRecordatorios() {

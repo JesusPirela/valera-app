@@ -33,6 +33,31 @@ type MensajePush = {
   data?: Record<string, unknown>
   priority: 'default' | 'high'
   channelId?: string
+  categoryId?: string
+}
+
+// Tienen que coincidir EXACTO con lib/notificaciones-locales.ts. Si el nombre
+// del canal no existe en el celular, Android manda el push al canal por defecto
+// y se pierden el sonido largo y el cartel, sin dar ningún error.
+const CANAL_ALARMAS = 'alarmas_v1'
+const CATEGORIA_ALARMA = 'alarma'
+const SONIDO_ALARMA = 'alarma_valera.wav'
+
+// El wav y la categoría viven dentro del binario; la 1.0.7 es la primera que
+// los trae. Pedírselos a una app vieja no es inofensivo: en iOS, un sonido que
+// no está en el paquete deja la notificación MUDA, que es justo lo contrario de
+// lo que busca una alarma. Así que a quien siga en una versión anterior se le
+// manda el aviso normal.
+const VERSION_CON_SONIDO = [1, 0, 7]
+
+function traeElSonido(version: string | null): boolean {
+  if (!version) return false
+  const v = version.split('.').map(n => Number(n) || 0)
+  for (let i = 0; i < 3; i++) {
+    const a = v[i] ?? 0, b = VERSION_CON_SONIDO[i]
+    if (a !== b) return a > b
+  }
+  return true
 }
 
 async function enviarBatch(
@@ -104,13 +129,17 @@ serve(async (_req) => {
   const userIds = [...new Set(pendientes.map(n => n.user_id))]
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, push_token')
+    .select('id, push_token, app_version')
     .in('id', userIds)
     .not('push_token', 'is', null)
 
   const tokenMap = new Map<string, string>()
+  const sonidoOk = new Map<string, boolean>()
   for (const p of profiles ?? []) {
-    if (p.push_token) tokenMap.set(p.id, p.push_token)
+    if (p.push_token) {
+      tokenMap.set(p.id, p.push_token as string)
+      sonidoOk.set(p.id, traeElSonido(p.app_version as string | null))
+    }
   }
 
   // Construir mensajes incluyendo data para deep linking al tocar la notificación
@@ -123,21 +152,25 @@ serve(async (_req) => {
       if (n.cliente_id) data.cliente_id = n.cliente_id
       if (n.chatbot_lead_id) data.chatbot_lead_id = n.chatbot_lead_id
       if (n.accion_url) data.accion_url = n.accion_url
-      const esAlarma = TIPOS_ALARMA.has(n.tipo)
+      // Alarma de verdad solo si la app de esa persona ya trae el sonido.
+      const esAlarma = TIPOS_ALARMA.has(n.tipo) && sonidoOk.get(n.user_id) === true
       return {
         to: token,
         title: n.titulo,
         body: n.mensaje,
-        sound: 'default',
+        // En Android el sonido lo pone el canal y este campo solo sirve para
+        // encenderlo; en iOS, que no tiene canales, es el que elige el archivo.
+        sound: esAlarma ? SONIDO_ALARMA : 'default',
         data,
         // Sin priority 'high', Android guarda el push mientras el celular está
         // en reposo y lo suelta cuando algo lo despierta —abrir la app, por
         // ejemplo—. Por eso el aviso "solo salía al entrar".
         priority: 'high' as const,
-        // El canal manda sobre el cartel y el sonido. 'alarmas' está en
-        // importancia MAX; el resto de avisos siguen en el canal por defecto
-        // para no volverlos igual de ruidosos.
-        ...(esAlarma ? { channelId: 'alarmas' } : {}),
+        // El canal manda sobre el cartel y el sonido: el de alarmas está en
+        // importancia MAX con 20 s de pitidos. El resto de avisos siguen en el
+        // canal por defecto para no volverlos igual de ruidosos.
+        // La categoría es la que dibuja los botones Atender / Posponer 1 h.
+        ...(esAlarma ? { channelId: CANAL_ALARMAS, categoryId: CATEGORIA_ALARMA } : {}),
       }
     })
     .filter((m): m is NonNullable<typeof m> => m !== null)

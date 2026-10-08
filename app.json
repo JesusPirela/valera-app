@@ -3,7 +3,7 @@
     "name": "Valera App",
     "slug": "valera-app",
     "scheme": "valera-app",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -81,7 +81,9 @@
         {
           "icon": "./assets/icon.png",
           "color": "#1a6470",
-          "sounds": []
+          "sounds": [
+            "./assets/sounds/alarma_valera.wav"
+          ]
         }
       ],
       [

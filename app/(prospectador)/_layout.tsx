@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Image, View, Platform, StyleSheet, TouchableOpacity } from 'react-native'
+import { Image, View, Platform, StyleSheet, TouchableOpacity, Alert } from 'react-native'
 import { Tabs, usePathname, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -178,6 +178,29 @@ export default function ProspectadorLayout() {
       const propiedadId = data?.propiedad_id as string | undefined
       const chatbotLeadId = data?.chatbot_lead_id as string | undefined
       const accionUrl = data?.accion_url as string | undefined
+
+      // Botón "Posponer 1 h" de la notificación de alarma. Se atiende ANTES
+      // que nada y se corta: tocarlo no debe navegar a ningún lado.
+      //
+      // Pospone todos los pendientes de ese tipo, no uno: el aviso es por
+      // persona y dice cuántos lleva ("3 leads sin atender"), así que no hay un
+      // solo pendiente al que apuntar.
+      if (response.actionIdentifier === 'posponer' &&
+          (tipo === 'alarma_lead' || tipo === 'alarma_retro')) {
+        const { data: r, error } = await supabase.rpc('posponer_alarma_todo', {
+          p_tipo: tipo, p_minutos: 60,
+        })
+        // supabase.rpc NO lanza: devuelve { error }. Sin esto, un fallo se
+        // vería como si hubiera pospuesto y la alarma volvería al rato sin
+        // que la persona entienda por qué.
+        if (error || !(r as any)?.ok) {
+          const msg = error?.message ?? (r as any)?.error ?? 'Inténtalo desde "Mi día".'
+          if (Platform.OS === 'web') window.alert('No se pudo posponer: ' + msg)
+          else Alert.alert('No se pudo posponer', msg)
+        }
+        return
+      }
+
       if (accionUrl) {
         router.push(accionUrl as any)
       } else if (clienteId) {
