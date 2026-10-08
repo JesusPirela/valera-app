@@ -122,6 +122,10 @@ function limpiarUrlImg(u: string): string {
   try {
     const p = new URL(dec)
     if (/(^|\.)firebasestorage\.googleapis\.com$/i.test(p.hostname) ||
+        // EasyBroker firma sus imágenes con ?s=…&version=…  Sin esa firma el
+        // servidor responde 403 y la foto se guarda como un enlace muerto: se
+        // importaban las 10 y en la ficha salían las 10 casillas en blanco.
+        (/(^|\.)easybroker\.com$/i.test(p.hostname) && p.searchParams.has('s')) ||
         p.searchParams.has('token') || p.searchParams.get('alt') === 'media' ||
         p.searchParams.has('X-Amz-Signature') || p.searchParams.has('Signature') || p.searchParams.has('Expires')) {
       return dec
@@ -1870,7 +1874,10 @@ serve(async (req) => {
     const imgPatterns = [
       /https?:\/\/[^\s"'<>?]*tuhabi\.(?:mx|co)\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,     // TuHabi MX/CO
       /https?:\/\/[^\s"'<>?]*habi\.co\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,               // Habi (filial)
-      /https?:\/\/assets\.easybroker\.com\/property_images\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,
+      // EasyBroker: CON su query. Las imágenes van FIRMADAS (?s=…&version=…) y
+      // sin la firma el servidor responde 403, así que se guardaban enlaces
+      // muertos: las fotos se importaban pero salían en blanco en la ficha.
+      /https?:\/\/assets\.easybroker\.com\/property_images\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)(?:\?[^\s"'<>]+)?/gi,
       /https?:\/\/static\.tokkobroker\.com\/pictures\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,    // reval (Tokko)
       /https?:\/\/[^\s"'<>?]*inmobay\.com\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi, // inmobay (cualquier ruta)
       /https?:\/\/[^\s"'<>?]+\/wp-content\/uploads\/[^\s"'<>?]+\.(?:jpg|jpeg|png|webp)/gi,        // WordPress (gminmobiliaria)
@@ -1934,6 +1941,21 @@ serve(async (req) => {
         imagenes = imagenes.filter(u =>
           !/assets\.easybroker\.com\/property_images\//.test(u) || folderOf(u) === target)
       }
+
+      // La MISMA foto aparece dos veces: la del og:image lleva ?height=300
+      // (miniatura) y la de la galería va a tamaño completo. Como ahora se
+      // conserva el query para no perder la firma, las dos se veían distintas
+      // y la portada salía duplicada. Se agrupa por la ruta de la foto y se
+      // prefiere la que NO pide un tamaño reducido.
+      const porFoto = new Map<string, string>()
+      for (const u of imagenes) {
+        if (!/assets\.easybroker\.com\/property_images\//.test(u)) { porFoto.set(u, u); continue }
+        const clave = u.split('?')[0]
+        const previa = porFoto.get(clave)
+        const esChica = /[?&](height|width)=/i.test(u)
+        if (!previa || (/[?&](height|width)=/i.test(previa) && !esChica)) porFoto.set(clave, u)
+      }
+      imagenes = [...porFoto.values()]
     }
 
     // ── 10a-navent. inmuebles24 / Navent: fotos del aviso en máxima resolución ─
