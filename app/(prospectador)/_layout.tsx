@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Image, View, Platform, StyleSheet, TouchableOpacity } from 'react-native'
 import { Tabs, usePathname, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
@@ -229,7 +230,19 @@ export default function ProspectadorLayout() {
     )
   }
 
-  const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 72 : 64
+  // Android pinta la app de borde a borde, así que la barra del sistema —los
+  // tres botones de atrás/inicio/recientes, o la pastilla de gestos— queda
+  // ENCIMA de las pestañas y tapa los iconos. Hay que reservarle su alto.
+  //
+  // No sirve un número fijo: con gestos el inset son ~24dp y con tres botones
+  // ~48dp. Se lo preguntamos al sistema.
+  //
+  // iOS y web se quedan como estaban: ahí el 82/24 de iOS ya cubre el indicador
+  // de inicio y sumarle el inset lo dejaría demasiado alto.
+  const insets = useSafeAreaInsets()
+  const INSET_ABAJO = Platform.OS === 'android' ? insets.bottom : 0
+  const TAB_BAR_HEIGHT = (Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 72 : 64) + INSET_ABAJO
+  const TAB_BAR_PADDING_BOTTOM = (Platform.OS === 'ios' ? 24 : Platform.OS === 'web' ? 12 : 8) + INSET_ABAJO
   // Rol efectivo: si un admin está "viendo como" otro rol, manda el simulado.
   const rolEf = vistaComo ?? role
   const esAdminGlobal = rolEf === 'admin'
@@ -267,7 +280,7 @@ export default function ProspectadorLayout() {
           borderTopColor: darkMode ? '#2a4560' : '#e8eef0',
           borderTopWidth: 1,
           height: TAB_BAR_HEIGHT,
-          paddingBottom: Platform.OS === 'ios' ? 24 : Platform.OS === 'web' ? 12 : 8,
+          paddingBottom: TAB_BAR_PADDING_BOTTOM,
           paddingTop: Platform.OS === 'web' ? 8 : 6,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },

@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons'
 import Constants from 'expo-constants'
 import * as Notifications from 'expo-notifications'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
 
 const OTA_FORCE_KEY = '@valera_ota_force_ts'
 
@@ -454,6 +455,10 @@ export default function RootLayout() {
   }
 
   return (
+    // SafeAreaProvider: sin él, useSafeAreaInsets() revienta. initialWindowMetrics
+    // le da los insets que el nativo ya midió al arrancar, así no hay un frame
+    // en blanco mientras los mide de nuevo.
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
     <ThemeProvider>
       <WebThemeCSS />
       <PersistQueryClientProvider
@@ -493,6 +498,7 @@ export default function RootLayout() {
         </VistaComoProvider>
       </PersistQueryClientProvider>
     </ThemeProvider>
+    </SafeAreaProvider>
   )
 }
 
