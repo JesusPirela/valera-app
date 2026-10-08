@@ -36,6 +36,19 @@ const LIMITE_MS = 115_000
 // presupuesto de la corrida completa.
 const LIMITE_LLAMADA_MS = 30_000
 
+// TOPE DIARIO DEL BANCO. Lo más importante de este archivo.
+//
+// Las cuotas gratis son COMPARTIDAS con el botón "mejorar descripción" que usan
+// los asesores al crear una propiedad. El 07/10 este job generó 766 versiones
+// en un día contra un límite de ~500 de Gemini: se comió la cuota entera y el
+// botón de la gente empezó a fallar con "todos los modelos agotaron sus
+// créditos".
+//
+// El banco es un lujo que puede tardar meses; el botón lo usa alguien que está
+// dando de alta una propiedad AHORA. Así que el banco se queda con una parte
+// chica y el resto es para las personas.
+const TOPE_DIARIO = 150
+
 // Los tres modelos :free que tenía (llama-3.3, deepseek-v3, mistral-7b) ya
 // no existen en OpenRouter: responden "This model is unavailable for free" y
 // "No endpoints found". Estos sí están vigentes (verificado contra
@@ -232,6 +245,24 @@ serve(async (req) => {
     const nProps = Math.min(Number(cuerpo.propiedades) || PROPIEDADES_POR_CORRIDA, 10)
     const nVars = Math.min(Number(cuerpo.porPropiedad) || VARIANTES_POR_PROPIEDAD, 10)
 
+    // ── Freno: el banco no se come la cuota que necesitan las personas ───────
+    // Se cuenta lo generado en las últimas 24h y se para en seco al llegar al
+    // tope. Sin esto, el job agota las cuotas gratis y el botón de "mejorar
+    // descripción" de los asesores empieza a fallar.
+    const { count: hechasHoy } = await supa
+      .from('propiedad_descripcion_variantes')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+
+    if ((hechasHoy ?? 0) >= TOPE_DIARIO) {
+      return new Response(JSON.stringify({
+        ok: true, pausado: true, hechas_24h: hechasHoy, tope: TOPE_DIARIO,
+        mensaje: 'Tope diario del banco alcanzado. La cuota que queda es para el botón de los asesores.',
+      }), { headers: CORS })
+    }
+    // No pasarse del tope dentro de esta misma corrida.
+    const margen = TOPE_DIARIO - (hechasHoy ?? 0)
+
     const { data: pendientes, error: ePend } = await supa.rpc('propiedades_sin_variantes', { p_limite: nProps })
     if (ePend) throw new Error('No se pudo leer la cola: ' + ePend.message)
     if (!pendientes?.length) {
@@ -323,16 +354,19 @@ serve(async (req) => {
       return { codigo: prop.codigo, idx, error: 'ninguna IA dio un texto válido', fallos }
     }
 
-    for (let i = 0; i < trabajos.length && quedaTiempo(); i += EN_PARALELO) {
-      const tanda = trabajos.slice(i, i + EN_PARALELO)
+    // El margen recorta la tanda para no rebasar el tope diario a mitad de
+    // corrida.
+    const aGenerar = trabajos.slice(0, margen)
+    for (let i = 0; i < aGenerar.length && quedaTiempo(); i += EN_PARALELO) {
+      const tanda = aGenerar.slice(i, i + EN_PARALELO)
       resumen.push(...await Promise.all(tanda.map(generarUna)))
     }
 
     const generadas = resumen.filter(r => r.ok).length
     const segundos = Math.round((Date.now() - arranque) / 1000)
-    console.log(`[variantes-lote] ${generadas}/${trabajos.length} en ${segundos}s`)
+    console.log(`[variantes-lote] ${generadas}/${aGenerar.length} en ${segundos}s (tope diario ${TOPE_DIARIO}, llevaba ${hechasHoy})`)
     return new Response(JSON.stringify({
-      ok: true, generadas, pedidas: trabajos.length, segundos, detalle: resumen,
+      ok: true, generadas, pedidas: aGenerar.length, hechas_24h: hechasHoy, tope: TOPE_DIARIO, segundos, detalle: resumen,
     }), { headers: CORS })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
