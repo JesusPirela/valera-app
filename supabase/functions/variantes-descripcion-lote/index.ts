@@ -89,16 +89,16 @@ const ENFOQUES = [
 // hacen es nombrar un canal fuera de Marketplace (WhatsApp, teléfono,
 // enlaces): eso es lo que Facebook penaliza, no la invitación en sí.
 const PLANTILLAS = [
-  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',      equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agenda una visita y conóce{LO}.' },
-  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Ven a conocer {ESTE} {TIPO}.' },
-  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',           equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Agenda tu visita cuando gustes.' },
-  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Te invito a conocer{LO} en persona.' },
-  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Pide tu cita para ver{LO}.' },
-  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Agenda una cita y pása{LO} a ver.' },
-  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Ven a ver{LO} y checa si es para ti.' },
-  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Agenda tu recorrido por {ESTE} {TIPO}.' },
-  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Pása{LO} a conocer, agenda tu visita.' },
-  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Te espero para mostrarte {ESTE} {TIPO}.' },
+  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',      equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agende una visita para conocer{LO} con detalle.' },
+  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Con gusto le mostramos {ESTE} {TIPO} cuando guste.' },
+  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',           equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Programe su visita sin compromiso.' },
+  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Quedamos a sus órdenes para coordinar una visita.' },
+  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Le invitamos a conocer{LO} personalmente.' },
+  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Solicite su cita y con gusto le atendemos.' },
+  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Estamos a sus órdenes para agendar un recorrido.' },
+  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Agende su visita y conozca {ESTE} {TIPO} en persona.' },
+  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Con gusto coordinamos una cita a su conveniencia.' },
+  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Le atendemos con gusto para programar su visita.' },
 ]
 
 /** fetch con tope de tiempo: sin esto, un modelo colgado bloquea la corrida. */
@@ -192,7 +192,8 @@ DATOS (usa estos números exactos, no inventes):
 4. En el texto libre NO escribas cifras: nada de precios, metros, cantidades ni años. Los únicos números permitidos son los de las líneas de datos (precio, 📐, 🛏️/🚿/🚗). La prosa describe cualidades, no números.
 5. La descripción es SOLO sobre la propiedad: espacios, acabados, ambiente y entorno.
 6. EMOJIS: cada emoji debe representar lo que dice su línea. No repitas el mismo emoji (salvo 🛏️ para varias recámaras). Varía.
-7. Todo hecho que menciones tiene que salir de los DATOS o de la descripción original. Si algo no viene ahí, no lo pongas.
+7. TRATO DE USTED en todo el texto. Nada de "descubre", "ven", "tu hogar": va "descubra", "venga", "su hogar". Es un anuncio formal, no un mensaje entre amigos.
+8. Todo hecho que menciones tiene que salir de los DATOS o de la descripción original. Si algo no viene ahí, no lo pongas.
 
 Responde ÚNICAMENTE con la descripción en este formato:
 

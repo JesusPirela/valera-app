@@ -133,16 +133,16 @@ async function llamarGemini(apiKey: string, model: string, prompt: string): Prom
 // hacen es nombrar un canal fuera de Marketplace (WhatsApp, teléfono,
 // enlaces): eso es lo que Facebook penaliza, no la invitación en sí.
 const PLANTILLAS = [
-  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',       equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agenda una visita y conóce{LO}.' },
-  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Ven a conocer {ESTE} {TIPO}.' },
-  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',            equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Agenda tu visita cuando gustes.' },
-  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Te invito a conocer{LO} en persona.' },
-  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Pide tu cita para ver{LO}.' },
-  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Agenda una cita y pása{LO} a ver.' },
-  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Ven a ver{LO} y checa si es para ti.' },
-  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Agenda tu recorrido por {ESTE} {TIPO}.' },
-  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Pása{LO} a conocer, agenda tu visita.' },
-  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Te espero para mostrarte {ESTE} {TIPO}.' },
+  { precio: '💰 Precio: ', distribucion: '🏠 Distribución',       equipo: '🏢 Equipamiento',   amenidades: '🌟 Amenidades',     cierre: 'Agende una visita para conocer{LO} con detalle.' },
+  { precio: '🏷️ ',         distribucion: '📐 Cómo está repartida', equipo: '🔧 Con qué cuenta', amenidades: '🎯 Extras',         cierre: 'Con gusto le mostramos {ESTE} {TIPO} cuando guste.' },
+  { precio: '💵 Pide: ',   distribucion: '🗝️ Espacios',            equipo: '⚙️ Instalaciones',  amenidades: '🏖️ Para disfrutar', cierre: 'Programe su visita sin compromiso.' },
+  { precio: '📊 En ',      distribucion: '🚪 Por dentro',          equipo: '🧰 Equipada con',   amenidades: '✨ Además',         cierre: 'Quedamos a sus órdenes para coordinar una visita.' },
+  { precio: '💲 ',         distribucion: '🧭 Distribución',        equipo: '🔌 Servicios',      amenidades: '🌳 Amenidades',     cierre: 'Le invitamos a conocer{LO} personalmente.' },
+  { precio: '🪙 Precio ',  distribucion: '🛋️ Áreas',               equipo: '🚰 Incluye',        amenidades: '🎈 Disfruta de',    cierre: 'Solicite su cita y con gusto le atendemos.' },
+  { precio: '🧾 Valor: ',  distribucion: '📋 Lo que tiene',        equipo: '🛠️ Equipamiento',   amenidades: '🥂 Amenidades',     cierre: 'Estamos a sus órdenes para agendar un recorrido.' },
+  { precio: '💰 ',         distribucion: '🏡 Interior',            equipo: '💡 Equipada',       amenidades: '🌞 Comunidad',      cierre: 'Agende su visita y conozca {ESTE} {TIPO} en persona.' },
+  { precio: '🔖 Precio: ', distribucion: '📏 Espacios y medidas',  equipo: '🧱 Acabados',       amenidades: '🏊 Amenidades',     cierre: 'Con gusto coordinamos una cita a su conveniencia.' },
+  { precio: '🤝 ',         distribucion: '🚶 Recorrido',           equipo: '📦 Lo que incluye', amenidades: '🎪 Zona común',     cierre: 'Le atendemos con gusto para programar su visita.' },
 ]
 
 serve(async (req) => {
@@ -206,7 +206,8 @@ DATOS (usa estos números exactos, no inventes):
 4. En el texto libre (las secciones de prosa: ✨, distribución, equipamiento, amenidades y 📍) NO escribas cifras numéricas: nada de precios, metros, cantidades de recámaras/baños ni años. Los únicos números permitidos en toda la respuesta son los de las líneas de datos estructurados (el precio, 📐 Construcción, 🛏️/🚿/🚗) que se generan abajo con los datos exactos. La prosa describe cualidades, no números.
 5. La descripción debe ser exclusivamente sobre la propiedad: sus espacios, acabados, ambiente y entorno. Nada de información de contacto, condiciones comerciales ni terceros.
 6. EMOJIS — regla crítica: cada emoji debe representar visualmente lo que dice su línea (🍳 cocina, 🛋️ sala, 🌳 jardín, 🚗 estacionamiento, 🏊 alberca, 🏋️ gimnasio, 🔒 seguridad, etc.). NUNCA uses el mismo emoji más de una vez en toda la descripción, salvo 🛏️ cuando hay varias recámaras distintas. Varía los emojis; no pongas ✨ o 🏠 repetidamente.
-7. Si abajo aparece la línea "🏷️ Modelo: …", CONSÉRVALA TAL CUAL y EXACTAMENTE en su lugar: justo DEBAJO de la línea del precio. No la muevas al final ni a otra sección, no la borres ni la modifiques.
+7. TRATO DE USTED en todo el texto. Nada de "descubre", "ven", "tu hogar": va "descubra", "venga", "su hogar". Es un anuncio formal, no un mensaje entre amigos.
+8. Si abajo aparece la línea "🏷️ Modelo: …", CONSÉRVALA TAL CUAL y EXACTAMENTE en su lugar: justo DEBAJO de la línea del precio. No la muevas al final ni a otra sección, no la borres ni la modifiques.
 
 Responde ÚNICAMENTE con la descripción en este formato exacto:
 
