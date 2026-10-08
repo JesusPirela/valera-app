@@ -844,6 +844,24 @@ function esDesafioBot(html: string): boolean {
 async function fetchViaUnblocker(url: string): Promise<string | null> {
   const key = (globalThis as any).Deno?.env?.get?.('SCRAPER_API_KEY')
   if (!key) return null
+
+  // Primero el endpoint SÍNCRONO. El comentario de abajo decía que en el plan
+  // free era intermitente, y era cierto entonces; con el plan actual responde
+  // en ~10s y trae el HTML correcto (probado contra easybroker). El asíncrono
+  // tarda 55s de espera y es lo que hacía fallar la importación de EasyBroker
+  // con "el servicio de desbloqueo no respondió a tiempo".
+  //
+  // Si falla, se sigue al asíncrono de siempre: no se pierde nada.
+  try {
+    const directa = `https://api.scraperapi.com/?api_key=${encodeURIComponent(key)}` +
+      `&url=${encodeURIComponent(url)}&render=true&country_code=mx`
+    const r = await fetch(directa, { signal: AbortSignal.timeout(35_000) })
+    if (r.ok) {
+      const html = await r.text()
+      if (html && html.length > 2000) return html
+    }
+  } catch { /* se intenta con el asíncrono */ }
+
   // Se usa la API ASÍNCRONA de ScraperAPI: el endpoint síncrono con render en el
   // plan free es intermitente (Cloudflare bloquea la IP de datacenter y devuelve
   // 500), pero el async reintenta/rota internamente hasta lograrlo. Se envía el
@@ -934,7 +952,15 @@ async function fetchHtml(url: string): Promise<string> {
   let host = ''
   try { host = new URL(url).hostname } catch { /* url rara */ }
   if (/(^|\.)easybroker\.com$/i.test(host)) {
-    const viaApi = await fetchViaUnblocker(url)
+    // Las URLs de /agent/... son del panel privado: aunque el navegador las
+    // redirige a la ficha pública, el desbloqueador recibe apenas 2 KB sin una
+    // sola foto. La misma propiedad en /listings/<slug> devuelve 92 KB con sus
+    // imágenes. Así que se traduce antes de pedirla.
+    const publica = url.replace(
+      /^(https?:\/\/[^/]*easybroker\.com)\/agent\/(?:mls_properties|properties)\/([^/?#]+).*$/i,
+      '$1/listings/$2',
+    )
+    const viaApi = await fetchViaUnblocker(publica)
     if (viaApi) return viaApi
     throw new Error('No se pudo acceder a este anuncio de EasyBroker (el servicio de desbloqueo no respondió a tiempo o no está configurado). Copia la ficha y pégala manualmente en el campo de descripción.')
   }
@@ -1100,9 +1126,30 @@ function buildEbApiResponse(p: any, corsH: Record<string, string>): Response {
 // rápido, sin caer al scraping. Devuelve la propiedad COMPLETA (fetch por id) para
 // que buildEbApiResponse tenga todos los campos (imágenes, descripción, etc.).
 const _norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+// Palabras que NO identifican nada: las tiene media Querétaro. Si se cuentan,
+// "casa-en-renta-...-queretaro" coincide con CUALQUIER casa en renta de
+// Querétaro. Pasó de verdad: al importar la casa de Zen Life Residencial II, el
+// buscador devolvió "CASA EN RENTA CENTRO QUERÉTARO, AVENIDA UNIVERSIDADES"
+// —otra propiedad, con otro precio y otras fotos— porque compartían justo esas
+// tres palabras y el umbral pedía tres.
+const PALABRAS_VACIAS = new Set([
+  'casa', 'casas', 'depa', 'depto', 'departamento', 'departamentos', 'local',
+  'locales', 'terreno', 'terrenos', 'oficina', 'oficinas', 'bodega', 'villa',
+  'renta', 'rentar', 'venta', 'vender', 'preventa', 'nueva', 'nuevo',
+  'residencial', 'condominio', 'fraccionamiento', 'privada', 'coto',
+  'queretaro', 'mexico', 'marques', 'corregidora', 'juriquilla',
+  'zona', 'col', 'colonia', 'calle', 'avenida', 'blvd', 'boulevard',
+  'recamaras', 'banos', 'metros', 'amueblada', 'amueblado',
+])
+
 async function buscarEbPorSlug(apiKey: string, urlSlug: string): Promise<any | null> {
-  const slugWords = new Set(_norm(urlSlug).split('-').filter(w => w.length > 3))
-  if (slugWords.size < 3) return null
+  const todasLasPalabras = new Set(_norm(urlSlug).split('-').filter(w => w.length > 3))
+  // Solo puntúan las palabras que distinguen una propiedad de otra.
+  const slugWords = new Set([...todasLasPalabras].filter(w => !PALABRAS_VACIAS.has(w)))
+  // Sin ninguna palabra distintiva no hay forma de identificarla: mejor
+  // devolver null y que el scraping de HTML traiga los datos de la página real,
+  // que traer la propiedad equivocada.
+  if (slugWords.size < 1) return null
   const H = { accept: 'application/json', 'X-Authorization': apiKey }
   for (let page = 1; page <= 20; page++) {
     let j: any
@@ -1118,12 +1165,18 @@ async function buscarEbPorSlug(apiKey: string, urlSlug: string): Promise<any | n
       // 1) por public_url (por si algún día lo devuelve). 2) por TÍTULO.
       const propSlug = (p.public_url ?? '').split('/').filter(Boolean).pop()?.toLowerCase() ?? ''
       if (propSlug && propSlug === urlSlug) return await ebPropCompleta(apiKey, p)
-      const titleWords = new Set(_norm(p.title ?? '').split(/[^a-z0-9]+/).filter((w: string) => w.length > 3))
+      const titleWords = new Set(
+        _norm(p.title ?? '').split(/[^a-z0-9]+/)
+          .filter((w: string) => w.length > 3 && !PALABRAS_VACIAS.has(w)),
+      )
       const common = [...slugWords].filter(w => titleWords.has(w)).length
       if (common > mejorComun) { mejorComun = common; mejor = p }
     }
-    // Match fuerte: comparten ≥4 palabras (o ≥60% de las del slug) con el título.
-    if (mejor && (mejorComun >= 4 || mejorComun >= Math.ceil(slugWords.size * 0.6))) {
+    // Match fuerte: TODAS las palabras distintivas del slug, o al menos dos.
+    // Con una sola no alcanza: "zenlife" podría estar en varias propiedades del
+    // mismo desarrollo y acabaríamos trayendo la casa del vecino.
+    const suficientes = slugWords.size === 1 ? 1 : Math.max(2, Math.ceil(slugWords.size * 0.6))
+    if (mejor && mejorComun >= suficientes) {
       return await ebPropCompleta(apiKey, mejor)
     }
     if (props.length < 50) break // Última página
