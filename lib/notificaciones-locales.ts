@@ -37,6 +37,35 @@ export function notificarWeb(title: string, body: string, onClick?: () => void) 
   } catch {}
 }
 
+// Canales de Android para los push que manda el servidor.
+//
+// Sin esto, todo push del servidor cae en el canal "default" que crea Expo con
+// importancia media: Android lo mete en la bandeja sin cartel ni sonido
+// garantizado y, si el celular está en reposo, lo guarda hasta que algo lo
+// despierte —normalmente abrir la app—. Eso es justo el "solo me aparece
+// cuando entro a la app".
+//
+// El canal "alarmas" va en MAX: cartel encima de lo que estés viendo, sonido y
+// vibración, y salta el reposo. Se usa solo para las alarmas de leads y retros,
+// no para avisos normales de propiedades.
+//
+// Un canal solo se puede configurar la PRIMERA vez que se crea: Android ignora
+// cambios posteriores, porque a partir de ahí manda el usuario desde ajustes.
+export async function crearCanalesAndroid() {
+  if (Platform.OS !== 'android') return
+  try {
+    await Notifications.setNotificationChannelAsync('alarmas', {
+      name: 'Alarmas de pendientes',
+      description: 'Leads sin contactar y citas sin retroalimentar',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 400, 200, 400, 200, 400],
+      sound: 'default',
+      enableVibrate: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    })
+  } catch { /* si falla, el push cae en el canal por defecto: peor, pero llega */ }
+}
+
 export async function programarRecordatorios() {
   if (Platform.OS === 'web') return
   const permiso = await solicitarPermisosNotificaciones()

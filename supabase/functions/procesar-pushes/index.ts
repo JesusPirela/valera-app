@@ -21,9 +21,23 @@ interface Notificacion {
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 const BATCH_SIZE = 100
 
+// Los avisos que no admiten espera. El resto puede llegar cuando el celular
+// despierte; estos no, porque su razón de ser es insistir.
+const TIPOS_ALARMA = new Set(['alarma_lead', 'alarma_retro'])
+
+type MensajePush = {
+  to: string
+  title: string
+  body: string
+  sound: string
+  data?: Record<string, unknown>
+  priority: 'default' | 'high'
+  channelId?: string
+}
+
 async function enviarBatch(
   supabase: ReturnType<typeof createClient>,
-  mensajes: { to: string; title: string; body: string; sound: string; data?: Record<string, unknown> }[]
+  mensajes: MensajePush[]
 ) {
   if (!mensajes.length) return
   try {
@@ -109,7 +123,22 @@ serve(async (_req) => {
       if (n.cliente_id) data.cliente_id = n.cliente_id
       if (n.chatbot_lead_id) data.chatbot_lead_id = n.chatbot_lead_id
       if (n.accion_url) data.accion_url = n.accion_url
-      return { to: token, title: n.titulo, body: n.mensaje, sound: 'default', data }
+      const esAlarma = TIPOS_ALARMA.has(n.tipo)
+      return {
+        to: token,
+        title: n.titulo,
+        body: n.mensaje,
+        sound: 'default',
+        data,
+        // Sin priority 'high', Android guarda el push mientras el celular está
+        // en reposo y lo suelta cuando algo lo despierta —abrir la app, por
+        // ejemplo—. Por eso el aviso "solo salía al entrar".
+        priority: 'high' as const,
+        // El canal manda sobre el cartel y el sonido. 'alarmas' está en
+        // importancia MAX; el resto de avisos siguen en el canal por defecto
+        // para no volverlos igual de ruidosos.
+        ...(esAlarma ? { channelId: 'alarmas' } : {}),
+      }
     })
     .filter((m): m is NonNullable<typeof m> => m !== null)
 

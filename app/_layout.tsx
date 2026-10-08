@@ -20,6 +20,7 @@ import Constants from 'expo-constants'
 import * as Notifications from 'expo-notifications'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
+import { crearCanalesAndroid } from '../lib/notificaciones-locales'
 
 const OTA_FORCE_KEY = '@valera_ota_force_ts'
 
@@ -56,6 +57,10 @@ async function registrarPushToken(userId: string) {
       console.warn('[Push] Permiso denegado:', finalStatus)
       return
     }
+    // El canal tiene que existir ANTES de que llegue el primer push que lo pide:
+    // si Android no lo conoce, tira el push al canal por defecto y se pierde el
+    // cartel y el sonido.
+    await crearCanalesAndroid()
     const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? 'c8a64954-8c24-4d51-829d-55ede1f5fb6d'
     console.log('[Push] Obteniendo token con projectId:', projectId)
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data
