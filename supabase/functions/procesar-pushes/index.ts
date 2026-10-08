@@ -50,8 +50,12 @@ const SONIDO_ALARMA = 'alarma_valera.wav'
 // manda el aviso normal.
 const VERSION_CON_SONIDO = [1, 0, 7]
 
-function traeElSonido(version: string | null): boolean {
+function traeElSonido(version: string | null, plataforma: string | null): boolean {
   if (!version) return false
+  // 'web' aquí significa que lo último que escribió fue un navegador, así que
+  // no sabemos qué versión tiene el celular dueño del token. Ante la duda, el
+  // aviso normal: equivocarse al alza deja la notificación muda en iOS.
+  if (plataforma !== 'android' && plataforma !== 'ios') return false
   const v = version.split('.').map(n => Number(n) || 0)
   for (let i = 0; i < 3; i++) {
     const a = v[i] ?? 0, b = VERSION_CON_SONIDO[i]
@@ -129,7 +133,7 @@ serve(async (_req) => {
   const userIds = [...new Set(pendientes.map(n => n.user_id))]
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, push_token, app_version')
+    .select('id, push_token, app_version, app_platform')
     .in('id', userIds)
     .not('push_token', 'is', null)
 
@@ -138,7 +142,7 @@ serve(async (_req) => {
   for (const p of profiles ?? []) {
     if (p.push_token) {
       tokenMap.set(p.id, p.push_token as string)
-      sonidoOk.set(p.id, traeElSonido(p.app_version as string | null))
+      sonidoOk.set(p.id, traeElSonido(p.app_version as string | null, p.app_platform as string | null))
     }
   }
 

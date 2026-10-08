@@ -35,6 +35,18 @@ Notifications.setNotificationHandler({
 })
 
 async function registrarVersionApp(userId: string) {
+  // Desde el navegador NO se toca.
+  //
+  // Estas dos columnas describen al aparato que tiene el push_token, y el token
+  // solo lo registra el celular (registrarPushToken sale temprano en web). Si
+  // la web escribiera aquí, el perfil quedaría con el token del celular y la
+  // versión del navegador: dos aparatos distintos en la misma fila.
+  //
+  // Eso no era inofensivo. El servidor decide por app_version si mandar el
+  // sonido largo de alarma, que vive dentro del binario del celular. Con la
+  // versión del navegador ahí, le pediría a un celular viejo un sonido que no
+  // tiene, y en iOS un sonido ausente deja la notificación MUDA.
+  if (Platform.OS === 'web') return
   try {
     const version = Constants.expoConfig?.version ?? null
     await supabase.from('profiles').update({ app_version: version, app_platform: Platform.OS }).eq('id', userId)
