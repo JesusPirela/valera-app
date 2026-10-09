@@ -103,15 +103,15 @@ class ValeraMessagingService : ExpoFirebaseMessagingService() {
       // NEW_TASK es obligatorio: un Service no tiene pila de pantallas propia.
       // CLEAR_TOP evita que se apilen cinco alarmas si llegan cinco push.
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-      putExtra(AlarmaActivity.EXTRA_TITULO, msg.notification?.title ?: titulo(msg))
-      putExtra(AlarmaActivity.EXTRA_CUERPO, msg.notification?.body ?: cuerpo(msg))
+      // El titulo y el cuerpo son fijos, como en el popup que la app ya
+      // muestra por dentro. Lo que cambia es el recuadro lila: ahi va el
+      // nombre del lead y su zona y presupuesto, que es la informacion por la
+      // que la persona decide si contestar ya o no.
+      putExtra(AlarmaActivity.EXTRA_TITULO, "¡Nuevo lead de campaña!")
+      putExtra(AlarmaActivity.EXTRA_CUERPO, "Atiéndelo lo antes posible para no perder la oportunidad.")
+      putExtra(AlarmaActivity.EXTRA_NOMBRE, leerDato(msg, "lead_nombre"))
+      putExtra(AlarmaActivity.EXTRA_DETALLE, leerDato(msg, "lead_detalle"))
     }
     startActivity(intent)
   }
-
-  private fun titulo(msg: RemoteMessage): String =
-    msg.data["title"] ?: "Tienes un lead sin atender"
-
-  private fun cuerpo(msg: RemoteMessage): String =
-    msg.data["message"] ?: "Contáctalo por WhatsApp o llámalo."
 }

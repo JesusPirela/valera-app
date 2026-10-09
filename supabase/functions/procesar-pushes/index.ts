@@ -159,6 +159,24 @@ serve(async (_req) => {
     .in('id', userIds)
     .not('push_token', 'is', null)
 
+  // Datos de los leads que menciona alguna alarma, para el recuadro del cuadro.
+  // Una sola consulta para todos, no una por aviso.
+  const idsLead = [...new Set(
+    pendientes.filter(n => TIPOS_ALARMA.has(n.tipo) && n.cliente_id).map(n => n.cliente_id as string),
+  )]
+  const leads = new Map<string, { nombre: string | null; zona_busqueda: string | null; presupuesto: string | null }>()
+  if (idsLead.length) {
+    const { data: cls } = await supabase
+      .from('clientes').select('id, nombre, zona_busqueda, presupuesto').in('id', idsLead)
+    for (const c of cls ?? []) {
+      leads.set(c.id as string, {
+        nombre: c.nombre as string | null,
+        zona_busqueda: c.zona_busqueda as string | null,
+        presupuesto: c.presupuesto as string | null,
+      })
+    }
+  }
+
   const tokenMap = new Map<string, string>()
   const sonidoOk = new Map<string, boolean>()
   for (const p of profiles ?? []) {
@@ -187,7 +205,19 @@ serve(async (_req) => {
       // salir en todos los aparatos de inmediato. Sin esto, cualquier problema
       // costaría otra build y otra revisión de Google, con días de por medio,
       // porque lo nativo no se arregla por OTA.
-      if (esAlarma && PANTALLA_ALARMA) data.pantalla_alarma = '1'
+      if (esAlarma && PANTALLA_ALARMA) {
+        data.pantalla_alarma = '1'
+        // Lo que va en el recuadro lila del cuadro: el nombre del lead con su
+        // zona y presupuesto. Es la información por la que la persona decide
+        // si contesta ya; sin ella el cuadro solo diría "tienes un lead" y
+        // habría que entrar a la app para saber cuál.
+        const lead = n.cliente_id ? leads.get(n.cliente_id) : null
+        // Con varios pendientes no hay un cliente al que apuntar, así que se
+        // usa el título, que ya dice cuántos son.
+        data.lead_nombre = lead?.nombre ?? n.titulo.replace(/^[^\p{L}\d]+/u, '')
+        const detalle = [lead?.zona_busqueda, lead?.presupuesto].filter(Boolean).join(' · ')
+        if (detalle) data.lead_detalle = detalle
+      }
       // La alarma completa —20 s de pitidos y botones— solo si esa persona ya
       // tiene el binario que los trae. Si no, el canal de respaldo: cartel y
       // sonido corto, que es casi todo lo que importa y funciona hoy.

@@ -45,8 +45,10 @@ class AlarmaActivity : Activity() {
 
   companion object {
     private const val TAG = "ValeraAlarma"
-    const val EXTRA_TITULO = "titulo"
-    const val EXTRA_CUERPO = "cuerpo"
+    const val EXTRA_TITULO  = "titulo"
+    const val EXTRA_CUERPO  = "cuerpo"
+    const val EXTRA_NOMBRE  = "nombre"    // el nombre del lead, en el recuadro lila
+    const val EXTRA_DETALLE = "detalle"   // zona · presupuesto, debajo del nombre
 
     /**
      * Techo de 60 s sonando. La alarma vuelve sola a los 5 minutos, así que
@@ -77,17 +79,24 @@ class AlarmaActivity : Activity() {
       if (puedeSuperponerse()) {
         setContentView(construirVista(
           "✓ Todo listo",
-          "El permiso está activo y el cuadro funciona. Así se va a ver cuando entre un lead.",
+          "El permiso ya está activo. Así vas a ver tus leads nuevos, encima de lo que estés usando.",
+          nombreLead = "Así se verá cuando entre un lead",
+          detalle = "zona_sur_(milenio,_el_mirador) · $2m_a_$2,4m",
         ))
         empezarASonar()
         cronometro.postDelayed(cerrarSolo, MAX_SONANDO_MS)
       } else {
         // Sin sonido: no es una alarma, es un aviso de configuración.
+        //
+        // Se nombra el interruptor EXACTO. Decir "falta un permiso" a secas
+        // obliga a adivinar entre una lista larga, y la gente lo abandona ahí.
         setContentView(construirVista(
-          "Falta un permiso",
-          "Para que este cuadro salga encima de otras apps, Android pide activar " +
-          "“Mostrar sobre otras apps” para Valera.",
-          textoBoton = "Activar el permiso",
+          "Falta activar un permiso",
+          "Para que el aviso te salga encima de WhatsApp o de cualquier otra app, " +
+          "Android pide tu autorización. Toca el botón y activa el interruptor que dice:",
+          nombreLead = "Mostrar sobre otras apps",
+          detalle = "En Xiaomi se llama “Mostrar ventanas emergentes mientras se ejecuta en segundo plano”",
+          textoBoton = "Llévame ahí",
           alTocar = { abrirAjustesDePermiso() },
         ))
       }
@@ -95,8 +104,10 @@ class AlarmaActivity : Activity() {
     }
 
     setContentView(construirVista(
-      intent?.getStringExtra(EXTRA_TITULO) ?: "Lead sin atender",
-      intent?.getStringExtra(EXTRA_CUERPO) ?: "Contáctalo por WhatsApp o llámalo.",
+      intent?.getStringExtra(EXTRA_TITULO) ?: "¡Nuevo lead de campaña!",
+      intent?.getStringExtra(EXTRA_CUERPO) ?: "Atiéndelo lo antes posible para no perder la oportunidad.",
+      nombreLead = intent?.getStringExtra(EXTRA_NOMBRE),
+      detalle = intent?.getStringExtra(EXTRA_DETALLE),
     ))
     empezarASonar()
     cronometro.postDelayed(cerrarSolo, MAX_SONANDO_MS)
@@ -138,8 +149,10 @@ class AlarmaActivity : Activity() {
     nuevo?.let {
       setIntent(it)
       setContentView(construirVista(
-        it.getStringExtra(EXTRA_TITULO) ?: "Lead sin atender",
-        it.getStringExtra(EXTRA_CUERPO) ?: "Contáctalo por WhatsApp o llámalo.",
+        it.getStringExtra(EXTRA_TITULO) ?: "¡Nuevo lead de campaña!",
+        it.getStringExtra(EXTRA_CUERPO) ?: "Atiéndelo lo antes posible para no perder la oportunidad.",
+        nombreLead = it.getStringExtra(EXTRA_NOMBRE),
+        detalle = it.getStringExtra(EXTRA_DETALLE),
       ))
     }
   }
@@ -169,20 +182,31 @@ class AlarmaActivity : Activity() {
     TypedValue.COMPLEX_UNIT_DIP, valor, resources.displayMetrics).toInt()
 
   /**
-   * El cuadro. Con textoBoton se reemplazan los dos botones normales por uno
-   * solo, para la pantalla de "falta un permiso": ahí no hay ningún lead que
-   * ver ni que posponer, y ofrecerlo confundiría.
+   * El cuadro, calcado del popup que la app ya muestra por dentro
+   * (components/PopupLeadsCampania.tsx): tarjeta blanca, morado #7c3aed,
+   * megáfono y los mismos dos botones.
+   *
+   * Se copia a propósito en vez de inventar otro diseño. La persona ya conoce
+   * ese cuadro y sabe qué hacer con él; que el de fuera se vea distinto solo
+   * haría dudar si es de Valera o de otra app. Los valores de color y tamaño
+   * son los mismos del archivo de la app, para que no se despeguen.
+   *
+   * `detalle` es la línea de zona y presupuesto, en su recuadro lila.
+   * `textoBoton` reemplaza los dos botones por uno solo: lo usa la pantalla de
+   * permiso, donde no hay ningún lead que atender ni que posponer.
    */
   private fun construirVista(
     titulo: String,
     cuerpo: String,
+    detalle: String? = null,
+    nombreLead: String? = null,
     textoBoton: String? = null,
     alTocar: (() -> Unit)? = null,
   ): ViewGroup {
     val fondo = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
       gravity = Gravity.CENTER
-      setBackgroundColor(Color.parseColor("#CC000000"))   // negro translúcido
+      setBackgroundColor(Color.parseColor("#8C000000"))   // igual que el de dentro
       setPadding(dp(24f), dp(24f), dp(24f), dp(24f))
     }
 
@@ -190,61 +214,112 @@ class AlarmaActivity : Activity() {
       orientation = LinearLayout.VERTICAL
       gravity = Gravity.CENTER_HORIZONTAL
       background = GradientDrawable().apply {
-        setColor(Color.parseColor("#102A3A"))
-        cornerRadius = dp(22f).toFloat()
-        setStroke(dp(2f), Color.parseColor("#C9A84C"))    // dorado de la marca
+        setColor(Color.WHITE)
+        cornerRadius = dp(20f).toFloat()
       }
-      setPadding(dp(26f), dp(30f), dp(26f), dp(24f))
+      setPadding(dp(22f), dp(22f), dp(22f), dp(22f))
     }
 
+    // Megáfono dentro del círculo lila.
     tarjeta.addView(TextView(this).apply {
-      text = "🔔"
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 46f)
+      text = if (textoBoton != null) "🔒" else "📣"
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 30f)
       gravity = Gravity.CENTER
+      background = GradientDrawable().apply {
+        setColor(Color.parseColor("#f3e8ff"))
+        cornerRadius = dp(31f).toFloat()
+      }
+      layoutParams = LinearLayout.LayoutParams(dp(62f), dp(62f))
+        .apply { bottomMargin = dp(10f) }
     })
 
     tarjeta.addView(TextView(this).apply {
       text = titulo
-      setTextColor(Color.WHITE)
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 23f)
+      setTextColor(Color.parseColor("#4c1d95"))
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
       gravity = Gravity.CENTER
-      setPadding(0, dp(12f), 0, 0)
+      typeface = android.graphics.Typeface.DEFAULT_BOLD
     })
 
     tarjeta.addView(TextView(this).apply {
       text = cuerpo
-      setTextColor(Color.parseColor("#B9C9D2"))
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+      setTextColor(Color.parseColor("#555555"))
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
       gravity = Gravity.CENTER
-      setPadding(0, dp(10f), 0, dp(26f))
+      setPadding(0, dp(6f), 0, dp(12f))
     })
 
+    if (!nombreLead.isNullOrBlank() || !detalle.isNullOrBlank()) {
+      val caja = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = GradientDrawable().apply {
+          setColor(Color.parseColor("#faf5ff"))
+          cornerRadius = dp(12f).toFloat()
+        }
+        setPadding(dp(12f), dp(12f), dp(12f), dp(12f))
+        layoutParams = LinearLayout.LayoutParams(
+          LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(16f) }
+      }
+      if (!nombreLead.isNullOrBlank()) caja.addView(TextView(this).apply {
+        text = "• $nombreLead"
+        setTextColor(Color.parseColor("#3b0764"))
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+      })
+      if (!detalle.isNullOrBlank()) caja.addView(TextView(this).apply {
+        text = detalle
+        setTextColor(Color.parseColor("#7c3aed"))
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        setPadding(0, dp(3f), 0, 0)
+      })
+      tarjeta.addView(caja)
+    }
+
     if (textoBoton != null) {
-      tarjeta.addView(boton(textoBoton, "#1A6470", Color.WHITE) { alTocar?.invoke() })
-      tarjeta.addView(boton("Ahora no", "#24405280", Color.parseColor("#B9C9D2")) { cerrar() })
+      tarjeta.addView(botonMorado(textoBoton) { alTocar?.invoke() })
+      tarjeta.addView(botonTexto("Ahora no") { cerrar() })
     } else {
-      tarjeta.addView(boton("Ver el lead", "#1A6470", Color.WHITE) { abrir(ENLACE_LEADS) })
-      tarjeta.addView(boton("Posponer 1 hora", "#24405280", Color.parseColor("#B9C9D2")) { abrir(ENLACE_POSPONER) })
+      tarjeta.addView(botonMorado("📋  Atender ahora") { abrir(ENLACE_LEADS) })
+      tarjeta.addView(botonTexto("Posponer 1 hora") { abrir(ENLACE_POSPONER) })
     }
 
     fondo.addView(tarjeta, LinearLayout.LayoutParams(
-      LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      Math.min(dp(380f), resources.displayMetrics.widthPixels - dp(48f)),
+      LinearLayout.LayoutParams.WRAP_CONTENT))
     return fondo
   }
 
-  private fun boton(texto: String, fondoHex: String, colorTexto: Int, alTocar: () -> Unit) =
+  /** El botón principal, morado. Mismo color y medidas que el de la app. */
+  private fun botonMorado(texto: String, alTocar: () -> Unit) =
     Button(this).apply {
       text = texto
-      setTextColor(colorTexto)
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+      setTextColor(Color.WHITE)
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
       isAllCaps = false
+      typeface = android.graphics.Typeface.DEFAULT_BOLD
       background = GradientDrawable().apply {
-        setColor(Color.parseColor(fondoHex))
+        setColor(Color.parseColor("#7c3aed"))
         cornerRadius = dp(12f).toFloat()
       }
       layoutParams = LinearLayout.LayoutParams(
-        LinearLayout.LayoutParams.MATCH_PARENT, dp(52f)
-      ).apply { topMargin = dp(10f) }
+        LinearLayout.LayoutParams.MATCH_PARENT, dp(48f)
+      ).apply { topMargin = dp(2f) }
+      setOnClickListener { alTocar() }
+    }
+
+  /** El secundario: solo texto gris, sin fondo, como el "Después" de la app. */
+  private fun botonTexto(texto: String, alTocar: () -> Unit) =
+    Button(this).apply {
+      text = texto
+      setTextColor(Color.parseColor("#888888"))
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+      isAllCaps = false
+      typeface = android.graphics.Typeface.DEFAULT_BOLD
+      background = null
+      layoutParams = LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams.MATCH_PARENT, dp(42f)
+      ).apply { topMargin = dp(4f) }
       setOnClickListener { alTocar() }
     }
 
