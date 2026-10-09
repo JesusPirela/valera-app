@@ -61,6 +61,10 @@ const SONIDO_ALARMA = 'alarma_valera.wav'
 // prospector_plus y gerentes, y todos viven en ese layout.
 const CANAL_RESPALDO = 'recordatorios'
 
+// Interruptor de la pantalla de alarma. Ponerlo en false y desplegar la apaga
+// en todos los celulares al instante. Ver dónde se usa, más abajo.
+const PANTALLA_ALARMA = true
+
 // El wav y la categoría viven dentro del binario; la 1.0.7 es la primera que
 // los trae. Pedírselos a una app vieja no es inofensivo: en iOS, un sonido que
 // no está en el paquete deja la notificación MUDA, que es justo lo contrario de
@@ -175,6 +179,15 @@ serve(async (_req) => {
       if (n.chatbot_lead_id) data.chatbot_lead_id = n.chatbot_lead_id
       if (n.accion_url) data.accion_url = n.accion_url
       const esAlarma = TIPOS_ALARMA.has(n.tipo)
+      // Interruptor de emergencia de la pantalla que sale encima de otras apps.
+      //
+      // El código nativo abre esa pantalla SOLO si ve esta bandera, nunca por
+      // el tipo del aviso. Si resultara molesta o fallara en algún celular,
+      // basta con poner PANTALLA_ALARMA en false aquí y desplegar: deja de
+      // salir en todos los aparatos de inmediato. Sin esto, cualquier problema
+      // costaría otra build y otra revisión de Google, con días de por medio,
+      // porque lo nativo no se arregla por OTA.
+      if (esAlarma && PANTALLA_ALARMA) data.pantalla_alarma = '1'
       // La alarma completa —20 s de pitidos y botones— solo si esa persona ya
       // tiene el binario que los trae. Si no, el canal de respaldo: cartel y
       // sonido corto, que es casi todo lo que importa y funciona hoy.

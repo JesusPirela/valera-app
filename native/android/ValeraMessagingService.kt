@@ -1,6 +1,5 @@
 package com.valerarealestate.app
 
-import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
@@ -28,8 +27,17 @@ class ValeraMessagingService : ExpoFirebaseMessagingService() {
   companion object {
     private const val TAG = "ValeraAlarma"
 
-    /** Tienen que coincidir con TIPOS_ALARMA de supabase/functions/procesar-pushes. */
-    private val TIPOS_ALARMA = setOf("alarma_lead", "alarma_retro")
+    /**
+     * Interruptor de emergencia.
+     *
+     * La pantalla NO se abre por el tipo del aviso, sino porque el servidor
+     * manda esta bandera. Si la pantalla resultara molesta o diera problemas en
+     * algún celular, basta con dejar de mandarla desde procesar-pushes y deja
+     * de salir en todos los aparatos en el acto. Lo nativo no se puede arreglar
+     * por OTA: sin esto, cualquier problema costaría otra build y otra revisión
+     * de Google, con días de por medio.
+     */
+    private const val BANDERA_PANTALLA = "pantalla_alarma"
   }
 
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
@@ -45,8 +53,7 @@ class ValeraMessagingService : ExpoFirebaseMessagingService() {
   }
 
   private fun debeAbrirPantalla(msg: RemoteMessage): Boolean {
-    val tipo = leerTipo(msg) ?: return false
-    if (tipo !in TIPOS_ALARMA) return false
+    if (leerDato(msg, BANDERA_PANTALLA) != "1") return false
 
     // Sin "mostrar sobre otras apps" Android bloquea arrancar una pantalla
     // desde segundo plano. Intentarlo igual no muestra nada y además ensucia el
@@ -59,15 +66,15 @@ class ValeraMessagingService : ExpoFirebaseMessagingService() {
   }
 
   /**
-   * Expo empaqueta los datos del push en message.data["body"] como un JSON en
-   * texto, no como claves sueltas del mapa. Se intentan las dos formas porque
-   * ese detalle es interno de la librería y podría cambiar entre versiones.
+   * Expo empaqueta el `data` del push dentro de message.data["body"] como un
+   * JSON en texto, no como claves sueltas del mapa. Se intentan las dos formas
+   * porque ese detalle es interno de la librería y podría cambiar de versión.
    */
-  private fun leerTipo(msg: RemoteMessage): String? {
-    msg.data["tipo"]?.let { return it }
+  private fun leerDato(msg: RemoteMessage, clave: String): String? {
+    msg.data[clave]?.let { return it }
     val body = msg.data["body"] ?: return null
     return try {
-      JSONObject(body).optString("tipo").ifEmpty { null }
+      JSONObject(body).optString(clave).ifEmpty { null }
     } catch (e: Throwable) {
       Log.w(TAG, "No se pudo leer el cuerpo del push", e)
       null

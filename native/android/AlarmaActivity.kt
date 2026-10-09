@@ -190,12 +190,21 @@ class AlarmaActivity : Activity() {
       // que el proyecto compile.
       val id = resources.getIdentifier("alarma_valera", "raw", packageName)
       if (id != 0) {
-        reproductor = MediaPlayer.create(this, id)?.apply {
-          isLooping = true
+        // Se arma a mano en vez de con MediaPlayer.create(). create() devuelve
+        // el reproductor YA preparado, y setAudioAttributes() después de
+        // prepare() lanza IllegalStateException: el orden correcto es
+        // atributos → fuente → prepare → start. Los atributos no son opcionales,
+        // son los que hacen que suene como alarma aunque el timbre esté bajo.
+        reproductor = MediaPlayer().apply {
           setAudioAttributes(AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)            // suena aunque el timbre esté bajo
+            .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build())
+          resources.openRawResourceFd(id).use { fd ->
+            setDataSource(fd.fileDescriptor, fd.startOffset, fd.length)
+          }
+          isLooping = true
+          prepare()
           start()
         }
       } else {
@@ -248,8 +257,23 @@ class AlarmaActivity : Activity() {
     finish()
   }
 
-  // El sonido se corta pase lo que pase: si el usuario sale con el botón atrás,
-  // si Android mata la pantalla, o si llega una llamada.
-  override fun onPause()   { super.onPause();   callar() }
-  override fun onDestroy() { super.onDestroy(); callar(); cronometro.removeCallbacks(cerrarSolo) }
+  /**
+   * Se calla y se cierra cuando la pantalla deja de verse: si el usuario se va
+   * al inicio o abre otra app, la alarma no puede seguir sonando a ciegas.
+   *
+   * Va en onStop y NO en onPause a propósito. onPause también se dispara por
+   * cosas que no ocultan la pantalla —desbloquear el teléfono con la alarma
+   * encima del bloqueo es la típica—, y ahí el sonido se cortaría justo en el
+   * momento en que la persona está a punto de leerla.
+   */
+  override fun onStop() {
+    super.onStop()
+    cerrar()
+  }
+
+  override fun onDestroy() {
+    super.onDestroy()
+    callar()
+    cronometro.removeCallbacks(cerrarSolo)
+  }
 }
