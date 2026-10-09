@@ -102,6 +102,23 @@ export default function AlarmaPendientes() {
     setPendientes(prev => prev.filter(x => !(x.tipo === p.tipo && x.referencia_id === p.referencia_id)))
   }
 
+  // Abre la pantalla de alarma a mano, sin esperar un push.
+  //
+  // Sirve para separar dos fallas que se ven igual: que el cuadro no funcione,
+  // o que Android no deje abrirlo desde segundo plano. Esto es un arranque en
+  // primer plano y no necesita permiso, así que si el cuadro SALE aquí pero no
+  // con los avisos, el problema es el permiso o la restricción del fabricante,
+  // no el cuadro.
+  async function probarCuadro() {
+    try {
+      await Linking.openURL('valera-alarma://probar')
+    } catch {
+      const msg = 'Tu versión de la app todavía no trae el cuadro de alarma. Llega con la siguiente actualización.'
+      if (Platform.OS === 'web') window.alert(msg)
+      else Alert.alert('Aún no disponible', msg)
+    }
+  }
+
   function atender(p: Pendiente) {
     if (p.tipo === 'alarma_lead') router.push(`/detalle-cliente?id=${p.referencia_id}` as any)
     else router.push('/asesor-citas' as any)
@@ -129,14 +146,30 @@ export default function AlarmaPendientes() {
         activado no le estorba.
       */}
       {Platform.OS === 'android' && (
-        <TouchableOpacity
-          onPress={() => Linking.sendIntent('android.settings.MANAGE_OVERLAY_PERMISSION')
-            .catch(() => Linking.openSettings().catch(() => {}))}
-        >
-          <Text style={s.permiso}>
-            ¿No te sale el cuadro encima de otras apps? Actívalo aquí ›
+        <View style={s.permisoCaja}>
+          <TouchableOpacity onPress={probarCuadro}>
+            <Text style={s.permisoBtn}>🔔  Probar el cuadro de alarma</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => Linking.sendIntent('android.settings.MANAGE_OVERLAY_PERMISSION')
+              .catch(() => Linking.openSettings().catch(() => {}))}
+          >
+            <Text style={s.permiso}>
+              ¿No sale encima de otras apps? Activa “Mostrar sobre otras apps” ›
+            </Text>
+          </TouchableOpacity>
+          {/*
+            En Xiaomi no basta el permiso general: hay otro aparte, apagado de
+            fábrica, que es el que de verdad deja abrir una pantalla con la app
+            cerrada. Se nombra tal cual aparece en MIUI porque está enterrado y
+            con otro nombre no se encuentra.
+          */}
+          <Text style={s.permisoNota}>
+            En Xiaomi activa además: Ajustes › Aplicaciones › Valera › Permisos ›
+            Otros permisos › “Mostrar ventanas emergentes mientras se ejecuta en
+            segundo plano”, y el Inicio automático.
           </Text>
-        </TouchableOpacity>
+        </View>
       )}
 
       {pendientes.map(p => {
@@ -182,7 +215,10 @@ const s = StyleSheet.create({
   caja: { borderRadius: 14, borderWidth: 1.5, padding: 14, marginBottom: 14 },
   cabecera: { fontSize: 15, fontWeight: '800', color: '#c2410c' },
   sub: { fontSize: 12, color: '#9aa5ab', marginTop: 3, marginBottom: 10, lineHeight: 17 },
-  permiso: { fontSize: 11.5, color: '#e08e3c', fontWeight: '600', marginBottom: 10 },
+  permisoCaja: { marginBottom: 10, gap: 6 },
+  permisoBtn: { fontSize: 12.5, color: '#c2410c', fontWeight: '800' },
+  permiso: { fontSize: 11.5, color: '#e08e3c', fontWeight: '600' },
+  permisoNota: { fontSize: 10.5, color: '#9aa5ab', lineHeight: 14 },
   fila: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderTopWidth: 1 },
   titulo: { fontSize: 13.5, fontWeight: '700' },
   detalle: { fontSize: 11.5, color: '#9aa5ab', marginTop: 2 },

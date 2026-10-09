@@ -66,9 +66,16 @@ class AlarmaActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     mostrarSobreElBloqueo()
+    // Abierta a mano desde el botón de prueba de "Mi día" (valera-alarma://),
+    // en vez de por un push. Se rotula distinto para que nadie crea que le
+    // entró un lead de verdad.
+    val esPrueba = intent?.data?.scheme == "valera-alarma"
     setContentView(construirVista(
-      intent?.getStringExtra(EXTRA_TITULO) ?: "Lead sin atender",
-      intent?.getStringExtra(EXTRA_CUERPO) ?: "Contáctalo por WhatsApp o llámalo.",
+      intent?.getStringExtra(EXTRA_TITULO)
+        ?: if (esPrueba) "Prueba de alarma" else "Lead sin atender",
+      intent?.getStringExtra(EXTRA_CUERPO)
+        ?: if (esPrueba) "Si ves este cuadro, la alarma funciona. Toca para cerrarlo."
+           else "Contáctalo por WhatsApp o llámalo.",
     ))
     empezarASonar()
     cronometro.postDelayed(cerrarSolo, MAX_SONANDO_MS)

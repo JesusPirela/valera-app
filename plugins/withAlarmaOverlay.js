@@ -56,10 +56,21 @@ function withPermisoYComponentes(config) {
     app.activity = app.activity || []
     const nombrePantalla = `${PAQUETE}.AlarmaActivity`
     app.activity = app.activity.filter((a) => a.$?.['android:name'] !== nombrePantalla)
+    //
+    // El intent-filter con el esquema valera-alarma existe para poder abrir la
+    // pantalla A MANO desde la app, con un botón de prueba. Sin él no había
+    // forma de saber en qué punto se cortaba la cadena: si el push no llegaba
+    // al código nativo, si faltaba el permiso, o si MIUI bloqueaba el arranque
+    // en segundo plano. Abriéndola desde la app —que es un arranque en primer
+    // plano y no necesita permiso— se separan esos casos en un toque.
+    //
+    // exported=true es obligatorio para que un intent implícito resuelva. Lo
+    // único que otra app podría hacer con esto es mostrar el cuadro de alarma;
+    // no lee ni escribe nada.
     app.activity.push({
       $: {
         'android:name': nombrePantalla,
-        'android:exported': 'false',
+        'android:exported': 'true',
         'android:excludeFromRecents': 'true',
         'android:launchMode': 'singleTask',
         'android:taskAffinity': '',
@@ -67,6 +78,14 @@ function withPermisoYComponentes(config) {
         'android:showWhenLocked': 'true',
         'android:turnScreenOn': 'true',
       },
+      'intent-filter': [{
+        action: [{ $: { 'android:name': 'android.intent.action.VIEW' } }],
+        category: [
+          { $: { 'android:name': 'android.intent.category.DEFAULT' } },
+          { $: { 'android:name': 'android.intent.category.BROWSABLE' } },
+        ],
+        data: [{ $: { 'android:scheme': 'valera-alarma' } }],
+      }],
     })
 
     return cfg

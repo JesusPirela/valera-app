@@ -66,19 +66,36 @@ class ValeraMessagingService : ExpoFirebaseMessagingService() {
   }
 
   /**
-   * Expo empaqueta el `data` del push dentro de message.data["body"] como un
-   * JSON en texto, no como claves sueltas del mapa. Se intentan las dos formas
-   * porque ese detalle es interno de la librería y podría cambiar de versión.
+   * Busca una clave dentro del push, mire donde mire.
+   *
+   * Expo mete el `data` del push dentro de message.data["body"] como un JSON en
+   * texto, no como claves sueltas. Ese detalle es interno de la librería y
+   * puede cambiar entre versiones, y si cambia la pantalla deja de salir SIN
+   * ningún error visible: la bandera simplemente no se encuentra.
+   *
+   * Por eso se busca en tres sitios, de lo más probable a lo menos: la clave
+   * suelta, el JSON de "body", y por último cualquier otro valor del mapa que
+   * resulte ser un JSON. Cuesta microsegundos y evita que una alarma se pierda
+   * por un cambio de formato.
    */
   private fun leerDato(msg: RemoteMessage, clave: String): String? {
-    msg.data[clave]?.let { return it }
-    val body = msg.data["body"] ?: return null
-    return try {
-      JSONObject(body).optString(clave).ifEmpty { null }
-    } catch (e: Throwable) {
-      Log.w(TAG, "No se pudo leer el cuerpo del push", e)
-      null
+    msg.data[clave]?.let { if (it.isNotEmpty()) return it }
+
+    msg.data["body"]?.let { body ->
+      leerDeJson(body, clave)?.let { return it }
     }
+
+    for ((k, v) in msg.data) {
+      if (k == "body" || !v.startsWith("{")) continue
+      leerDeJson(v, clave)?.let { return it }
+    }
+    return null
+  }
+
+  private fun leerDeJson(texto: String, clave: String): String? = try {
+    JSONObject(texto).optString(clave).ifEmpty { null }
+  } catch (e: Throwable) {
+    null
   }
 
   private fun abrirPantalla(msg: RemoteMessage) {
