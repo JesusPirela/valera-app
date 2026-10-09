@@ -34,7 +34,10 @@ serve(async (req) => {
     const ACC = Deno.env.get('FB_AD_ACCOUNT_ID')!
 
     // ── 1) Campañas → upsert ──────────────────────────────────────
-    const campaigns = await gAll(`${GRAPH}/${ACC}/campaigns?fields=id,name,effective_status&limit=100&access_token=${TOKEN}`)
+    // `objective` es clave para el diagnóstico: una campaña de clic-a-WhatsApp
+    // o de tráfico NO genera leads de formulario, así que "0 leads" ahí es lo
+    // correcto y no una falla. Sin este dato parecía que el sync no servía.
+    const campaigns = await gAll(`${GRAPH}/${ACC}/campaigns?fields=id,name,effective_status,objective&limit=100&access_token=${TOKEN}`)
     // Detectar campañas NUEVAS activas (para avisar a los admins una sola vez).
     const { data: existentes } = await db.from('campanias').select('meta_id')
     const yaExistian = new Set((existentes ?? []).map((c: any) => c.meta_id))
@@ -59,13 +62,27 @@ serve(async (req) => {
 
     // ── 2) Leads: solo de campañas ACTIVE o ya asignadas ──────────
     let nuevosTotal = 0, clientesCreados = 0
+    // Desglose por campaña: cuántos leads vio en Facebook y cuántos eran
+    // nuevos. Sin esto, "0 leads" no distingue entre "la campaña no ha
+    // generado ninguno" y "Facebook nos los está negando", que es justo la
+    // duda que surge cuando el asesor dice que sí le llegaron.
+    const porCampania: { campania: string; estado: string; objetivo: string; destinos: string; anuncios: number; vistos: number; nuevos: number; revisada: boolean }[] = []
     for (const c of campaigns) {
       const camp = porMeta.get(c.id)
       if (!camp) continue
       const activa = c.effective_status === 'ACTIVE'
-      if (!activa && !camp.asignado_a) continue   // pausada y sin asignar → saltar
+      if (!activa && !camp.asignado_a) {
+        porCampania.push({ campania: c.name, estado: c.effective_status, objetivo: c.objective ?? '?', destinos: '-', anuncios: 0, vistos: 0, nuevos: 0, revisada: false })
+        continue   // pausada y sin asignar → saltar
+      }
 
-      const rows = await leadsDeCampania(c.id, TOKEN)
+      const { leads: rows, anuncios, destinos } = await leadsDeCampania(c.id, TOKEN)
+      // Se guarda el destino para que la pantalla pueda explicar por qué una
+      // campaña de WhatsApp no trae leads, en vez de aparentar estar rota.
+      if (destinos.length) {
+        await db.from('campanias').update({ destino: destinos.join(',') }).eq('id', camp.id)
+      }
+      porCampania.push({ campania: c.name, estado: c.effective_status, objetivo: c.objective ?? '?', destinos: destinos.join(',') || '-', anuncios, vistos: rows.length, nuevos: 0, revisada: true })
       if (!rows.length) continue
 
       // Insertar solo los nuevos (dedup por meta_lead_id).
@@ -74,6 +91,7 @@ serve(async (req) => {
         .select('id, meta_lead_id, nombre, telefono, email, extra')
       const nuevos = insertados ?? []
       nuevosTotal += nuevos.length
+      porCampania[porCampania.length - 1].nuevos = nuevos.length
 
       // Si la campaña está asignada, cada lead nuevo → cliente + notificación push.
       // (WhatsApp al prospectador queda pendiente; su número ya vive en profiles.telefono.)
@@ -120,18 +138,36 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, nuevos: nuevosTotal, clientes: clientesCreados, whatsapp: waEnviados }), { headers: CORS })
+    return new Response(JSON.stringify({
+      ok: true,
+      nuevos: nuevosTotal,
+      clientes: clientesCreados,
+      whatsapp: waEnviados,
+      errores_facebook: erroresFb,
+      por_campania: porCampania.sort((a, b) => b.vistos - a.vistos),
+    }), { headers: CORS })
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String((e as any)?.message ?? e) }), { status: 500, headers: CORS })
   }
 })
 
 // Trae los leads de una campaña (campaign → adsets → ads → leads), solo desde DESDE.
-async function leadsDeCampania(campaignId: string, token: string): Promise<any[]> {
+async function leadsDeCampania(campaignId: string, token: string): Promise<{ leads: any[]; anuncios: number; destinos: string[] }> {
   const out: any[] = []
-  const adsets = await gAll(`${GRAPH}/${campaignId}/adsets?fields=id,name&limit=100&access_token=${token}`)
+  // Se cuentan los anuncios para distinguir "la campaña no tiene anuncios" de
+  // "tiene anuncios pero ninguno ha dado leads". Son problemas distintos.
+  let anuncios = 0
+  // destination_type es lo que de verdad decide si habrá leads que traer.
+  // El objetivo OUTCOME_LEADS abarca varios destinos: formulario instantáneo
+  // (ON_AD), WhatsApp, Messenger, llamadas, sitio web... y solo el formulario
+  // produce leads descargables. Con cualquier otro destino, cero leads es el
+  // resultado CORRECTO, no una falla del sync.
+  const destinos = new Set<string>()
+  const adsets = await gAll(`${GRAPH}/${campaignId}/adsets?fields=id,name,destination_type&limit=100&access_token=${token}`)
   for (const as of adsets) {
+    if (as.destination_type) destinos.add(as.destination_type)
     const ads = await gAll(`${GRAPH}/${as.id}/ads?fields=id,name&limit=100&access_token=${token}`)
+    anuncios += ads.length
     for (const ad of ads) {
       const leads = await gAll(`${GRAPH}/${ad.id}/leads?fields=id,created_time,field_data&limit=100&access_token=${token}`)
       for (const l of leads) {
@@ -144,7 +180,7 @@ async function leadsDeCampania(campaignId: string, token: string): Promise<any[]
       }
     }
   }
-  return out
+  return { leads: out, anuncios, destinos: [...destinos] }
 }
 
 /**
@@ -185,15 +221,42 @@ function parseLead(fd: any[]): { nombre: string; telefono: string; email: string
   return { nombre, telefono, email, extra }
 }
 
+/**
+ * Errores que Facebook devolvió durante esta corrida.
+ *
+ * Antes gAll() escribía el error en consola y devolvía vacío. Una campaña a la
+ * que Facebook niega los leads —falta de permiso sobre la página del
+ * formulario es lo típico— quedaba en CERO y el sync reportaba éxito. Nadie se
+ * enteraba hasta que el asesor decía "me llegaron 7 y la app dice 0".
+ *
+ * Ahora se juntan y salen en la respuesta, junto al desglose por campaña.
+ */
+const erroresFb: string[] = []
+
 async function gAll(url: string): Promise<any[]> {
   const out: any[] = []
   let next: string | null = url
   while (next) {
-    const r = await fetch(next)
-    const j: any = await r.json()
-    if (j.error) { console.error('[fb]', j.error.message); break }
-    for (const it of (j.data || [])) out.push(it)
-    next = j.paging?.next ?? null
+    try {
+      const r = await fetch(next)
+      const j: any = await r.json()
+      if (j.error) {
+        // Sin el token: el mensaje de Facebook lleva la URL completa y ahí va
+        // el access_token.
+        const donde = next.replace(/access_token=[^&]*/, 'access_token=***')
+        const msg = `${j.error.message}${j.error.error_user_msg ? ' — ' + j.error.error_user_msg : ''}`
+        console.error('[fb]', msg, donde)
+        erroresFb.push(msg)
+        break
+      }
+      for (const it of (j.data || [])) out.push(it)
+      next = j.paging?.next ?? null
+    } catch (e) {
+      const msg = `Sin respuesta de Facebook: ${String((e as any)?.message ?? e)}`
+      console.error('[fb]', msg)
+      erroresFb.push(msg)
+      break
+    }
   }
   return out
 }

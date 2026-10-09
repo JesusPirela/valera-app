@@ -5,9 +5,20 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
-type Campania = { id: string; nombre: string; estado: string | null; asignado_a: string | null; leads: number; asignadoNombre: string | null }
+type Campania = { id: string; nombre: string; estado: string | null; destino: string | null; asignado_a: string | null; leads: number; asignadoNombre: string | null }
 type Lead = { id: string; nombre: string | null; telefono: string | null; email: string | null; ad_set: string | null; extra: Record<string, string> | null; cliente_id: string | null; lead_created_at: string | null }
 type Asesor = { id: string; nombre: string }
+
+// A dónde manda cada campaña, en palabras. Solo ON_AD —el formulario
+// instantáneo— genera leads que se puedan descargar; con cualquier otro
+// destino la persona contacta al asesor por fuera y cero leads es lo correcto.
+const DESTINOS: Record<string, string> = {
+  WHATSAPP:          'Esta campaña abre WhatsApp, no un formulario.',
+  MESSENGER:         'Esta campaña abre Messenger, no un formulario.',
+  INSTAGRAM_DIRECT:  'Esta campaña abre un mensaje de Instagram, no un formulario.',
+  PHONE_CALL:        'Esta campaña marca por teléfono, no abre un formulario.',
+  WEBSITE:           'Esta campaña manda al sitio web, no a un formulario.',
+}
 
 function alerta(m: string) { if (Platform.OS === 'web') window.alert(m); else Alert.alert('', m) }
 function fmtFecha(iso: string | null) { return iso ? new Date(iso).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '' }
@@ -24,13 +35,13 @@ export default function LeadsCampanias() {
 
   const cargar = useCallback(async () => {
     const [{ data: cData }, { data: pData }] = await Promise.all([
-      supabase.from('campanias').select('id, nombre, estado, asignado_a, leads_campania(count)'),
+      supabase.from('campanias').select('id, nombre, estado, destino, asignado_a, leads_campania(count)'),
       supabase.from('profiles').select('id, nombre').neq('role', 'admin').order('nombre', { ascending: true }),
     ])
     const perfiles = (pData ?? []).filter((p: any) => p.nombre?.trim())
     const nombreDe: Record<string, string> = Object.fromEntries(perfiles.map((p: any) => [p.id, p.nombre]))
     const list: Campania[] = (cData ?? []).map((x: any) => ({
-      id: x.id, nombre: x.nombre, estado: x.estado, asignado_a: x.asignado_a,
+      id: x.id, nombre: x.nombre, estado: x.estado, destino: x.destino, asignado_a: x.asignado_a,
       leads: x.leads_campania?.[0]?.count ?? 0,
       asignadoNombre: x.asignado_a ? (nombreDe[x.asignado_a] ?? '—') : null,
     }))
@@ -108,6 +119,21 @@ export default function LeadsCampanias() {
                       <Text style={[s.leadsCount, { color: c.textSub }]}>{camp.leads} lead{camp.leads === 1 ? '' : 's'}</Text>
                       {camp.asignadoNombre && <Text style={s.asignada}>→ {camp.asignadoNombre}</Text>}
                     </View>
+                    {/*
+                      Sin esto, una campaña de WhatsApp aparecía con 0 leads y
+                      parecía rota. Pasó de verdad: el asesor reportó 7 clientes
+                      y la app marcaba cero. Las dos cosas eran ciertas — esos
+                      contactos le llegaron al celular y nunca pasaron por un
+                      formulario, así que no hay nada que descargar.
+                    */}
+                    {!!camp.destino && camp.destino !== 'ON_AD' && (
+                      <View style={s.destinoAviso}>
+                        <Text style={s.destinoTxt}>
+                          {DESTINOS[camp.destino] ?? `Esta campaña manda a ${camp.destino}, no a un formulario.`}
+                          {' '}Sus contactos le llegan directo al asesor y no aparecen aquí.
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={{ color: c.textMute, fontSize: 16 }}>{abierta ? '▲' : '▼'}</Text>
                 </TouchableOpacity>
@@ -178,6 +204,16 @@ const s = StyleSheet.create({
   badges: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 5, flexWrap: 'wrap' },
   badge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
   badgeTxt: { fontSize: 11, fontWeight: '800' },
+  destinoAviso: {
+    marginTop: 7,
+    backgroundColor: '#fff6e5',
+    borderLeftWidth: 3,
+    borderLeftColor: '#e08e3c',
+    borderRadius: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+  },
+  destinoTxt: { fontSize: 11.5, lineHeight: 16, color: '#5c4a2a' },
   leadsCount: { fontSize: 12.5, fontWeight: '700' },
   asignada: { fontSize: 12, fontWeight: '800', color: '#1a6470' },
   asignarBtn: { backgroundColor: 'rgba(26,100,112,0.08)', paddingVertical: 10, alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(26,100,112,0.15)' },
