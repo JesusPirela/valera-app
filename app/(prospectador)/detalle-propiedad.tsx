@@ -24,7 +24,7 @@ import CompartirFormulario from '../../components/CompartirFormulario'
 import { esPlusOMejor, esStaffSupervision, puedeVerPublicaciones } from '../../lib/permisos'
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb, proxyImagen } from '../../lib/img'
-import { rotarFotos } from '../../lib/orden-fotos'
+import { rotarFotos, lotePublicacion, TOPE_LOTE } from '../../lib/orden-fotos'
 import {
   IdiomaFicha, tf, tipoOperacionLabel, formatPrecioLang, traducirFicha,
 } from '../../lib/ficha-i18n'
@@ -1907,11 +1907,30 @@ export default function DetallePropiedad() {
     // portada sembrada desde el listado — bajaba 1 sola foto).
     const crudas = seleccion ?? await obtenerImagenesCompletas()
     if (crudas.length === 0) return
-    // Cada persona baja las mismas fotos en un orden distinto (la primera, la
-    // fachada, no se mueve) para que Marketplace no vea publicaciones idénticas.
-    // El orden de descarga es el de los nombres de archivo, que es el orden en
-    // que se suben al anuncio.
-    const imagenes = rotarFotos(crudas, propiedad.id, uid)
+
+    // Qué fotos se bajan, y por qué no siempre todas.
+    //
+    // Rotar el orden no basta cuando hay muchas fotos: dos personas que suben
+    // LAS MISMAS 30 imágenes publican dos anuncios con el mismo contenido,
+    // nomás empezando en otro punto. Facebook compara las imágenes, no su orden.
+    //
+    // Antes de publicar se baja un lote distinto por persona. Ya publicada, se
+    // bajan todas: el lote es para que el primer anuncio no salga idéntico al
+    // del compañero, no para esconderle fotos a nadie.
+    //
+    // Si la persona eligió a mano cuáles quiere (botón "Elegir"), se respeta su
+    // elección y no se recorta nada.
+    const yaPublico = vecesPublicada > 0
+    const imagenes = (seleccion || yaPublico)
+      ? rotarFotos(crudas, propiedad.id, uid)
+      : lotePublicacion(crudas, propiedad.id, uid)
+    const recortadas = crudas.length - imagenes.length
+    // Se explica SIEMPRE que se recorte. Que a uno le falten fotos sin saber
+    // por qué parece una falla de la app, y lo que haría es volver a intentarlo
+    // una y otra vez.
+    const avisoLote = recortadas > 0
+      ? `\n\nTe tocaron ${imagenes.length} de las ${crudas.length} fotos, y es a propósito: si varios subimos las mismas, Facebook ve los anuncios como repetidos y los baja. A cada quien le toca un juego distinto.\n\nEn cuanto marques la publicación aquí, vuelve a tocar este botón y bajas las ${recortadas} que faltan.`
+      : ''
 
     setDescargando(true)
     registrarActividad('descarga')
@@ -1949,9 +1968,10 @@ export default function DetallePropiedad() {
           premiarDescarga(); marcarDesbloqueada(propiedad.id)
           const total = imagenes.length
           window.alert(
-            bajadas === total
+            (bajadas === total
               ? `Se ${bajadas === 1 ? 'descargó' : 'descargaron'} ${bajadas} ${bajadas === 1 ? 'foto' : 'fotos'}.`
               : `Se descargaron ${bajadas} de ${total} fotos (${total - bajadas} no se pudieron).`
+            ) + avisoLote
           )
         } else {
           window.alert('No se pudo descargar ninguna imagen.')
@@ -2025,9 +2045,10 @@ export default function DetallePropiedad() {
         guardadas > 0 ? 'Listo' : 'Error',
         guardadas === 0
           ? `No se pudo guardar ninguna imagen.\n\nError: ${errores[0] ?? 'desconocido'}`
-          : guardadas === total
-            ? `Se ${guardadas === 1 ? 'guardó' : 'guardaron'} ${guardadas} ${guardadas === 1 ? 'foto' : 'fotos'} en tu galería.`
-            : `Se guardaron ${guardadas} de ${total} fotos (${total - guardadas} no se pudieron descargar).`
+          : (guardadas === total
+              ? `Se ${guardadas === 1 ? 'guardó' : 'guardaron'} ${guardadas} ${guardadas === 1 ? 'foto' : 'fotos'} en tu galería.`
+              : `Se guardaron ${guardadas} de ${total} fotos (${total - guardadas} no se pudieron descargar).`
+            ) + avisoLote
       )
     }
   }
@@ -2544,6 +2565,25 @@ export default function DetallePropiedad() {
                 ? <ActivityIndicator color="#fff" size="small" />
                 : <Text style={styles.descargarText}>☑ Elegir</Text>}
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/*
+          Se avisa ANTES de descargar, no solo después. Encontrarse con menos
+          fotos de las que se ven en pantalla, sin explicación, parece una falla
+          de la app: lo natural sería volver a intentarlo varias veces.
+
+          Solo sale cuando de verdad va a recortar, o sea con más de TOPE_LOTE
+          fotos y sin haber publicado todavía. Con "Elegir" no aplica, porque
+          ahí manda la selección de la persona.
+        */}
+        {imagenes.length > TOPE_LOTE && (
+          <View style={[styles.loteAviso, vecesPublicada > 0 && styles.loteAvisoListo]}>
+            <Text style={[styles.loteAvisoTxt, vecesPublicada > 0 && styles.loteAvisoTxtListo]}>
+              {vecesPublicada > 0
+                ? `✓ Ya publicaste esta propiedad, así que "${Platform.OS === 'web' ? 'Todas' : 'Guardar todas'}" te baja las ${imagenes.length} fotos completas.`
+                : `📸 "${Platform.OS === 'web' ? 'Todas' : 'Guardar todas'}" te va a bajar ${TOPE_LOTE} de las ${imagenes.length} fotos. A cada quien le toca un juego distinto, para que Facebook no vea los anuncios como repetidos. Al marcar tu publicación aquí se desbloquean las demás.`}
+            </Text>
           </View>
         )}
 
@@ -3503,6 +3543,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginBottom: 12,
+  },
+  loteAviso: {
+    backgroundColor: '#fff6e5',
+    borderLeftWidth: 3,
+    borderLeftColor: '#e08e3c',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  loteAvisoListo: {
+    backgroundColor: '#e8f5ee',
+    borderLeftColor: '#1a8a5a',
+  },
+  loteAvisoTxt: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#5c4a2a',
+  },
+  // El café del aviso ámbar no se lee sobre el verde del aviso ya publicado.
+  loteAvisoTxtListo: {
+    color: '#1d4b36',
   },
   descargarBtn: {
     backgroundColor: '#1a6470',

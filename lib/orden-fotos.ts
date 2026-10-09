@@ -37,3 +37,68 @@ export function rotarFotos<T>(fotos: T[], propiedadId: string, userId: string | 
   if (giro === 0) return fotos
   return [fotos[0], ...resto.slice(giro), ...resto.slice(0, giro)]
 }
+
+// ── Lote de publicación ──────────────────────────────────────────────────────
+//
+// Rotar el orden ya no alcanza cuando la propiedad tiene muchas fotos: dos
+// personas que suben LAS MISMAS 30 imágenes siguen publicando dos anuncios con
+// el mismo contenido, nomás empezando en otro punto. Facebook compara las
+// imágenes, no su orden.
+//
+// Con un lote distinto por persona, dos anuncios de la misma casa ya no
+// comparten el juego completo de fotos. De 30 fotos tomando 20, hay millones de
+// combinaciones posibles, así que dos personas prácticamente nunca coinciden.
+//
+// Esto NO le esconde nada a nadie: en cuanto la persona publica, se le ofrecen
+// las que faltaron. El lote es para el primer anuncio, no un candado.
+
+/** Cuántas fotos lleva el lote. Por debajo de esto no se recorta nada. */
+export const TOPE_LOTE = 20
+
+/** Generador reproducible: la misma semilla da siempre la misma secuencia. */
+function generador(semilla: number): () => number {
+  let s = semilla >>> 0
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/**
+ * Devuelve el lote de fotos que le toca a esta persona para esta propiedad.
+ *
+ * La primera NO se mueve ni se quita: casi siempre es la fachada y es la que
+ * queda de portada del anuncio.
+ *
+ * El resto se revuelve y se recorta. Se revuelve de verdad —no se rota— porque
+ * al quitar fotos el agrupamiento original (sala con comedor, recámaras
+ * juntas) ya se rompe de todas formas, y revolver separa más los anuncios.
+ *
+ * Es estable: la misma persona y la misma propiedad dan SIEMPRE el mismo lote.
+ * Si le borran el anuncio y vuelve a bajar las fotos, baja exactamente las
+ * mismas y el anuncio nuevo le queda igual que el anterior.
+ */
+export function lotePublicacion<T>(fotos: T[], propiedadId: string, userId: string | null): T[] {
+  if (!userId || fotos.length <= TOPE_LOTE) return rotarFotos(fotos, propiedadId, userId)
+
+  const resto = fotos.slice(1)
+  const azar = generador(hash(propiedadId + userId))
+
+  // Fisher-Yates: revuelve y selecciona de una vez, sin sesgo hacia ninguna
+  // posición. Cortar las primeras N de una lista revuelta equivale a una
+  // selección al azar sin repetición.
+  for (let i = resto.length - 1; i > 0; i--) {
+    const j = Math.floor(azar() * (i + 1))
+    ;[resto[i], resto[j]] = [resto[j], resto[i]]
+  }
+
+  return [fotos[0], ...resto.slice(0, TOPE_LOTE - 1)]
+}
+
+/** Las que quedaron fuera del lote, para ofrecerlas una vez publicada. */
+export function fotosRestantes<T>(fotos: T[], lote: T[]): T[] {
+  const enLote = new Set(lote)
+  return fotos.filter(f => !enLote.has(f))
+}
