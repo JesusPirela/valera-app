@@ -84,8 +84,8 @@ serve(async (req) => {
             telefono: n.telefono || '', email: n.email || null,
             fuente_lead: 'campana_fb', estado: 'por_perfilar', responsable_id: camp.asignado_a,
             es_lead_campania: true,
-            zona_busqueda: n.extra?.['¿que_zona_prefieres?'] ?? null,
-            presupuesto: n.extra?.['¿cuál_es_tu_presupuesto_para_tu_nuevo_hogar?'] ?? null,
+            zona_busqueda: respuesta(n.extra, 'zona'),
+            presupuesto: respuesta(n.extra, 'presupuesto'),
           }).select('id').single()
           if (cli) {
             clientesCreados++
@@ -145,6 +145,30 @@ async function leadsDeCampania(campaignId: string, token: string): Promise<any[]
     }
   }
   return out
+}
+
+/**
+ * Busca una respuesta por PALABRA CLAVE, no por el texto exacto de la pregunta.
+ *
+ * Antes se leía la clave literal, por ejemplo
+ * '¿cuál_es_tu_presupuesto_para_tu_nuevo_hogar?'. Cada anuncio redacta sus
+ * preguntas a su manera —otra campaña preguntaba '...para_tu_casa?'— y con una
+ * sola palabra distinta el dato se perdía EN SILENCIO: llegaba a `extra` pero
+ * nunca pasaba al CRM. Así fue como Reyna Segura dijo su presupuesto y el campo
+ * quedó vacío.
+ *
+ * Buscando por palabra clave, y sin acentos, cualquier redacción que mencione
+ * "presupuesto" o "zona" entra.
+ */
+function respuesta(extra: Record<string, string> | null | undefined, ...claves: string[]): string | null {
+  if (!extra) return null
+  const limpiar = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  for (const [pregunta, valor] of Object.entries(extra)) {
+    if (!valor) continue
+    const p = limpiar(pregunta)
+    if (claves.some(c => p.includes(c))) return valor
+  }
+  return null
 }
 
 function parseLead(fd: any[]): { nombre: string; telefono: string; email: string; extra: Record<string, string> } {

@@ -31,6 +31,10 @@ type Lead = {
   enviado_crm: boolean | null
   enviado_crm_at: string | null
   created_at: string
+  // Todas las respuestas del formulario de Facebook, tal como llegaron. Es un
+  // arreglo porque PostgREST devuelve así las tablas relacionadas, aunque en la
+  // práctica cada cliente viene de un solo lead.
+  leads_campania?: { extra: Record<string, string> | null }[] | null
 }
 
 type SortCol = 'nombre' | 'telefono' | 'zona' | 'presupuesto' | 'ingreso'
@@ -59,6 +63,28 @@ function prettyZona(z: string | null): string {
 function prettyPresu(p: string | null): string {
   if (!p) return '—'
   return p.replace(/_/g, ' ').trim()
+}
+
+/**
+ * Lo que la persona contestó en el anuncio y NO cabe en las otras columnas:
+ * recámaras, plazos, tipo de crédito... lo que cada campaña haya preguntado.
+ *
+ * Se descartan presupuesto y zona porque ya tienen columna propia, y el
+ * nombre, teléfono y correo porque son los datos de contacto, no respuestas.
+ *
+ * Las preguntas de Facebook llegan como '¿cuántas_recámaras_buscas?' y las
+ * respuestas como '3_recámaras'. Se limpian las dos para que se lean.
+ */
+function otrasRespuestas(lead: Lead): { pregunta: string; valor: string }[] {
+  const extra = lead.leads_campania?.[0]?.extra
+  if (!extra) return []
+  const YA_TIENEN_COLUMNA = /presupuesto|zona|nombre|tel[eé]fono|phone|correo|email|full_name/i
+  return Object.entries(extra)
+    .filter(([pregunta, valor]) => valor && !YA_TIENEN_COLUMNA.test(pregunta))
+    .map(([pregunta, valor]) => ({
+      pregunta: pregunta.replace(/[¿?]/g, '').replace(/_/g, ' ').trim(),
+      valor: valor.replace(/_/g, ' ').trim(),
+    }))
 }
 
 function llamar(tel: string) { Linking.openURL(`tel:${tel}`) }
@@ -118,7 +144,7 @@ export default function LeadsCampania() {
       }
       const { data, error } = await supabase
         .from('clientes')
-        .select('id, nombre, telefono, zona_busqueda, presupuesto, estado, notas, wa_count, call_count, enviado_crm, enviado_crm_at, created_at')
+        .select('id, nombre, telefono, zona_busqueda, presupuesto, estado, notas, wa_count, call_count, enviado_crm, enviado_crm_at, created_at, leads_campania(extra)')
         .eq('es_lead_campania', true)
         .eq('responsable_id', respId)
         .is('eliminado_at', null)
@@ -329,6 +355,7 @@ export default function LeadsCampania() {
                 <HeaderCell col="telefono" label="Teléfono" w={150} />
                 <HeaderCell col="zona" label="Zona" w={190} />
                 <HeaderCell col="presupuesto" label="Presupuesto" w={150} />
+                <View style={[styles.th, { width: 210 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Lo que contestó</Text></View>
                 <HeaderCell col="ingreso" label="Ingresó" w={140} />
                 <View style={[styles.th, { width: 92 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>WhatsApp</Text></View>
                 <View style={[styles.th, { width: 88 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Llamar</Text></View>
@@ -362,6 +389,19 @@ export default function LeadsCampania() {
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.td, { width: 150 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
                     <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{prettyPresu(l.presupuesto)}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.td, { width: 210 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
+                    {otrasRespuestas(l).length === 0 ? (
+                      <Text style={[styles.tdTxt, { color: c.textMute }]}>—</Text>
+                    ) : otrasRespuestas(l).map(r => (
+                      // La pregunta va arriba en chico y la respuesta debajo:
+                      // cada campaña pregunta cosas distintas, así que sin la
+                      // pregunta un "3 recámaras" suelto no se entiende.
+                      <View key={r.pregunta} style={{ marginBottom: 3 }}>
+                        <Text style={[styles.respPregunta, { color: c.textMute }]} numberOfLines={1}>{r.pregunta}</Text>
+                        <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={2}>{r.valor}</Text>
+                      </View>
+                    ))}
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.td, { width: 140 }]} onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${l.id}` as any)}>
                     <Text style={[styles.tdTxt, { color: c.textSub }]} numberOfLines={1}>{fechaIngreso(l.created_at)}</Text>
@@ -473,6 +513,9 @@ const styles = StyleSheet.create({
   tr: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, alignItems: 'stretch', minHeight: 64 },
   td: { paddingVertical: 14, paddingHorizontal: 11, justifyContent: 'center' },
   tdTxt: { fontSize: 15, lineHeight: 20 },
+  // La pregunta va más chica y en versalitas para que la respuesta resalte:
+  // en la columna caben varias preguntas y conviene distinguirlas de un vistazo.
+  respPregunta: { fontSize: 10, lineHeight: 13, textTransform: 'uppercase', letterSpacing: 0.3, fontWeight: '700' },
   semDot: { width: 13, height: 13, borderRadius: 7 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginTop: 10 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
