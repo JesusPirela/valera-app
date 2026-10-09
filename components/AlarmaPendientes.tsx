@@ -8,9 +8,9 @@
 //
 // Si no hay nada pendiente no dibuja nada: no vale la pena ocupar espacio para
 // decir "todo bien".
-import { useCallback, useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert } from 'react-native'
-import { useFocusEffect, router } from 'expo-router'
+import { useCallback, useRef, useState } from 'react'
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, Linking } from 'react-native'
+import { useFocusEffect, router, useLocalSearchParams } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
 
@@ -44,6 +44,14 @@ export default function AlarmaPendientes() {
   const [abierto, setAbierto] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
 
+  // "Posponer 1 hora" de la pantalla de alarma que sale encima de otras apps.
+  //
+  // Esa pantalla es nativa y no tiene la sesión del usuario, así que no puede
+  // llamar a Supabase por su cuenta: abre la app con ?alarma=posponer y el
+  // trabajo se hace aquí, que es donde sí hay sesión.
+  const { alarma } = useLocalSearchParams<{ alarma?: string }>()
+  const yaPospuesto = useRef(false)
+
   const cargar = useCallback(() => {
     supabase.rpc('mis_pendientes_alarma').then(({ data, error }) => {
       if (error) return                       // sin red: el panel simplemente no sale
@@ -53,6 +61,28 @@ export default function AlarmaPendientes() {
     })
   }, [])
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
+
+  useFocusEffect(useCallback(() => {
+    // El guardia evita que volver a esta pantalla repita el posponer: el
+    // parámetro sigue en la ruta y useFocusEffect se dispara en cada entrada.
+    if (alarma !== 'posponer' || yaPospuesto.current) return
+    yaPospuesto.current = true
+    supabase.rpc('posponer_alarma_todo', { p_tipo: 'alarma_lead', p_minutos: 60 })
+      .then(({ data, error }) => {
+        // supabase.rpc NO lanza: devuelve { error }. Sin esta comprobación un
+        // fallo se vería como si hubiera pospuesto, y la alarma volvería a los
+        // 5 minutos sin que la persona entienda por qué.
+        if (error || !(data as any)?.ok) {
+          yaPospuesto.current = false
+          const msg = error?.message ?? (data as any)?.error ?? 'Inténtalo con el botón de abajo.'
+          if (Platform.OS === 'web') window.alert('No se pudo posponer: ' + msg)
+          else Alert.alert('No se pudo posponer', msg)
+          return
+        }
+        setPendientes([])
+        if (Platform.OS !== 'web') Alert.alert('Listo', 'No te avisaremos durante una hora.')
+      })
+  }, [alarma]))
 
   async function posponer(p: Pendiente, minutos: number) {
     setOcupado(true)
@@ -87,6 +117,27 @@ export default function AlarmaPendientes() {
       <Text style={s.sub}>
         Mientras sigan aquí, la app te va a estar avisando al celular. Atiéndelos o posponlos.
       </Text>
+
+      {/*
+        El cuadro grande que sale encima de otras apps necesita el permiso de
+        "mostrar sobre otras apps", que solo puede conceder la persona desde
+        ajustes de Android. Sin él, el aviso se queda en la notificación.
+
+        No se puede saber desde aquí si ya está concedido —haría falta código
+        nativo—, así que el enlace sale siempre. Va dentro del panel, que solo
+        aparece cuando hay un pendiente, y en letra pequeña: a quien ya lo tenga
+        activado no le estorba.
+      */}
+      {Platform.OS === 'android' && (
+        <TouchableOpacity
+          onPress={() => Linking.sendIntent('android.settings.MANAGE_OVERLAY_PERMISSION')
+            .catch(() => Linking.openSettings().catch(() => {}))}
+        >
+          <Text style={s.permiso}>
+            ¿No te sale el cuadro encima de otras apps? Actívalo aquí ›
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {pendientes.map(p => {
         const clave = p.tipo + p.referencia_id
@@ -131,6 +182,7 @@ const s = StyleSheet.create({
   caja: { borderRadius: 14, borderWidth: 1.5, padding: 14, marginBottom: 14 },
   cabecera: { fontSize: 15, fontWeight: '800', color: '#c2410c' },
   sub: { fontSize: 12, color: '#9aa5ab', marginTop: 3, marginBottom: 10, lineHeight: 17 },
+  permiso: { fontSize: 11.5, color: '#e08e3c', fontWeight: '600', marginBottom: 10 },
   fila: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderTopWidth: 1 },
   titulo: { fontSize: 13.5, fontWeight: '700' },
   detalle: { fontSize: 11.5, color: '#9aa5ab', marginTop: 2 },
