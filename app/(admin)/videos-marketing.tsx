@@ -11,6 +11,44 @@ import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors } from '../../lib/ThemeContext'
 
+// supabase.storage.upload() usa fetch por debajo, que en RN/web no expone
+// progreso de subida — con un video de cientos de MB, la pantalla se quedaba
+// en "Subiendo video…" sin moverse y SIN TOPE DE TIEMPO: si la conexión se
+// estancaba (o algún límite global del proyecto Supabase cortaba la subida a
+// medias sin responder), se quedaba colgada para siempre sin ningún error.
+// Con XMLHttpRequest sí hay progreso real (para saber si de verdad avanza) y
+// se le pone un timeout explícito para que, si se cuelga, al menos truene
+// con un mensaje en vez de cargar eternamente.
+function subirConProgreso(
+  bucket: string, path: string, blob: Blob, contentType: string,
+  onProgress: (pct: number) => void,
+): Promise<void> {
+  return new Promise(async (resolve, reject) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) { reject(new Error('Sesión expirada. Vuelve a iniciar sesión e intenta de nuevo.')); return }
+
+    const xhr = new XMLHttpRequest()
+    const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${path}`
+    xhr.open('POST', url)
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.setRequestHeader('apikey', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!)
+    xhr.setRequestHeader('Content-Type', contentType)
+    xhr.setRequestHeader('x-upsert', 'false')
+    xhr.timeout = 10 * 60 * 1000 // 10 min — antes no había tope y se quedaba colgado sin avisar
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error(`Error al subir (${xhr.status}): ${xhr.responseText.slice(0, 200)}`))
+    }
+    xhr.onerror = () => reject(new Error('Error de red al subir el archivo. Revisa tu conexión e intenta de nuevo.'))
+    xhr.ontimeout = () => reject(new Error('La subida tardó más de 10 minutos y se canceló. Prueba con una conexión más estable o un archivo más chico.'))
+    xhr.send(blob)
+  })
+}
+
 type VideoMarketing = {
   id: string
   titulo: string
@@ -93,12 +131,9 @@ export default function VideosMarketing() {
       const videoPath = `${user.id}/${ts}.${ext}`
 
       // Subir video
-      setProgreso('Subiendo video…')
       const videoBlob = await fetch(videoFile.uri).then(r => r.blob())
-      const { error: errVideo } = await supabase.storage
-        .from('videos-marketing')
-        .upload(videoPath, videoBlob, { contentType: videoFile.mimeType, upsert: false })
-      if (errVideo) throw errVideo
+      setProgreso('Subiendo video… 0%')
+      await subirConProgreso('videos-marketing', videoPath, videoBlob, videoFile.mimeType, pct => setProgreso(`Subiendo video… ${pct}%`))
 
       const { data: { publicUrl: videoUrl } } = supabase.storage
         .from('videos-marketing')
@@ -107,19 +142,17 @@ export default function VideosMarketing() {
       // Subir thumbnail (opcional)
       let thumbnailUrl: string | null = null
       if (thumbFile) {
-        setProgreso('Subiendo portada…')
         const thumbExt = thumbFile.name.split('.').pop() ?? 'jpg'
         const thumbPath = `thumbnails/${user.id}/${ts}.${thumbExt}`
         const thumbBlob = await fetch(thumbFile.uri).then(r => r.blob())
-        const { error: errThumb } = await supabase.storage
-          .from('videos-marketing')
-          .upload(thumbPath, thumbBlob, { contentType: thumbFile.mimeType, upsert: false })
-        if (!errThumb) {
+        setProgreso('Subiendo portada…')
+        try {
+          await subirConProgreso('videos-marketing', thumbPath, thumbBlob, thumbFile.mimeType, () => {})
           const { data: { publicUrl } } = supabase.storage
             .from('videos-marketing')
             .getPublicUrl(thumbPath)
           thumbnailUrl = publicUrl
-        }
+        } catch { /* la portada es opcional: si falla, se sigue sin ella */ }
       }
 
       setProgreso('Guardando…')
