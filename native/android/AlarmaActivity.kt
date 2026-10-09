@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -66,19 +67,69 @@ class AlarmaActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     mostrarSobreElBloqueo()
-    // Abierta a mano desde el botón de prueba de "Mi día" (valera-alarma://),
-    // en vez de por un push. Se rotula distinto para que nadie crea que le
-    // entró un lead de verdad.
-    val esPrueba = intent?.data?.scheme == "valera-alarma"
+
+    // Abierta a mano desde el botón de "Mi día" (valera-alarma://), no por un
+    // push. Además de probar, sirve de diagnóstico: en Android moderno NO hay
+    // forma de dibujar encima de otras apps sin el permiso de superposición
+    // —ni con servicio en primer plano ni por otra vía—, así que si falta, el
+    // cuadro jamás va a salir por un aviso. Aquí es donde se entera la persona.
+    if (intent?.data?.scheme == "valera-alarma") {
+      if (puedeSuperponerse()) {
+        setContentView(construirVista(
+          "✓ Todo listo",
+          "El permiso está activo y el cuadro funciona. Así se va a ver cuando entre un lead.",
+        ))
+        empezarASonar()
+        cronometro.postDelayed(cerrarSolo, MAX_SONANDO_MS)
+      } else {
+        // Sin sonido: no es una alarma, es un aviso de configuración.
+        setContentView(construirVista(
+          "Falta un permiso",
+          "Para que este cuadro salga encima de otras apps, Android pide activar " +
+          "“Mostrar sobre otras apps” para Valera.",
+          textoBoton = "Activar el permiso",
+          alTocar = { abrirAjustesDePermiso() },
+        ))
+      }
+      return
+    }
+
     setContentView(construirVista(
-      intent?.getStringExtra(EXTRA_TITULO)
-        ?: if (esPrueba) "Prueba de alarma" else "Lead sin atender",
-      intent?.getStringExtra(EXTRA_CUERPO)
-        ?: if (esPrueba) "Si ves este cuadro, la alarma funciona. Toca para cerrarlo."
-           else "Contáctalo por WhatsApp o llámalo.",
+      intent?.getStringExtra(EXTRA_TITULO) ?: "Lead sin atender",
+      intent?.getStringExtra(EXTRA_CUERPO) ?: "Contáctalo por WhatsApp o llámalo.",
     ))
     empezarASonar()
     cronometro.postDelayed(cerrarSolo, MAX_SONANDO_MS)
+  }
+
+  private fun puedeSuperponerse(): Boolean =
+    Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+
+  /**
+   * Abre la pantalla de ajustes del permiso YA POSICIONADA en Valera.
+   *
+   * La diferencia con lanzar la acción a secas es grande: sin el "package:" se
+   * abre la lista de todas las apps del teléfono y hay que buscar Valera a
+   * mano entre decenas. Con él, se abre su interruptor directo.
+   */
+  private fun abrirAjustesDePermiso() {
+    try {
+      startActivity(Intent(
+        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+        Uri.parse("package:$packageName"),
+      ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (e: Throwable) {
+      Log.e(TAG, "No se pudo abrir los ajustes del permiso", e)
+      // Algunos fabricantes no aceptan el package: en esa acción. Se cae a la
+      // ficha de la app, desde donde el permiso queda a un par de toques.
+      try {
+        startActivity(Intent(
+          Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+          Uri.parse("package:$packageName"),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      } catch (e2: Throwable) { Log.e(TAG, "Tampoco se pudo abrir la ficha", e2) }
+    }
+    cerrar()
   }
 
   /** Si llega otra alarma con esta pantalla abierta, se refresca en vez de apilarse. */
@@ -117,7 +168,17 @@ class AlarmaActivity : Activity() {
   private fun dp(valor: Float): Int = TypedValue.applyDimension(
     TypedValue.COMPLEX_UNIT_DIP, valor, resources.displayMetrics).toInt()
 
-  private fun construirVista(titulo: String, cuerpo: String): ViewGroup {
+  /**
+   * El cuadro. Con textoBoton se reemplazan los dos botones normales por uno
+   * solo, para la pantalla de "falta un permiso": ahí no hay ningún lead que
+   * ver ni que posponer, y ofrecerlo confundiría.
+   */
+  private fun construirVista(
+    titulo: String,
+    cuerpo: String,
+    textoBoton: String? = null,
+    alTocar: (() -> Unit)? = null,
+  ): ViewGroup {
     val fondo = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
       gravity = Gravity.CENTER
@@ -158,8 +219,13 @@ class AlarmaActivity : Activity() {
       setPadding(0, dp(10f), 0, dp(26f))
     })
 
-    tarjeta.addView(boton("Ver el lead", "#1A6470", Color.WHITE) { abrir(ENLACE_LEADS) })
-    tarjeta.addView(boton("Posponer 1 hora", "#24405280", Color.parseColor("#B9C9D2")) { abrir(ENLACE_POSPONER) })
+    if (textoBoton != null) {
+      tarjeta.addView(boton(textoBoton, "#1A6470", Color.WHITE) { alTocar?.invoke() })
+      tarjeta.addView(boton("Ahora no", "#24405280", Color.parseColor("#B9C9D2")) { cerrar() })
+    } else {
+      tarjeta.addView(boton("Ver el lead", "#1A6470", Color.WHITE) { abrir(ENLACE_LEADS) })
+      tarjeta.addView(boton("Posponer 1 hora", "#24405280", Color.parseColor("#B9C9D2")) { abrir(ENLACE_POSPONER) })
+    }
 
     fondo.addView(tarjeta, LinearLayout.LayoutParams(
       LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))

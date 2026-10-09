@@ -147,17 +147,19 @@ export default function AlarmaPendientes() {
       */}
       {Platform.OS === 'android' && (
         <View style={s.permisoCaja}>
+          {/*
+            Un solo botón, no dos. Antes había además un enlace a los ajustes
+            del permiso, pero abría la lista de TODAS las apps del teléfono y
+            había que buscar Valera entre decenas. Ahora el cuadro comprueba el
+            permiso por su cuenta y, si falta, lleva directo al interruptor de
+            Valera.
+          */}
           <TouchableOpacity onPress={probarCuadro}>
             <Text style={s.permisoBtn}>🔔  Probar el cuadro de alarma</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => Linking.sendIntent('android.settings.MANAGE_OVERLAY_PERMISSION')
-              .catch(() => Linking.openSettings().catch(() => {}))}
-          >
-            <Text style={s.permiso}>
-              ¿No sale encima de otras apps? Activa “Mostrar sobre otras apps” ›
-            </Text>
-          </TouchableOpacity>
+          <Text style={s.permiso}>
+            Te dice si está todo listo o si falta darle permiso.
+          </Text>
           {/*
             En Xiaomi no basta el permiso general: hay otro aparte, apagado de
             fábrica, que es el que de verdad deja abrir una pantalla con la app
