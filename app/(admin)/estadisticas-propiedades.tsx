@@ -9,7 +9,8 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { zonaDetallada } from '../../lib/zonas-interes'
 
-type Row = { codigo: string; titulo: string; direccion: string | null; dev: string | null; veces: number }
+type Row = { id: string; codigo: string; titulo: string; direccion: string | null; dev: string | null; veces: number }
+type Publicador = { user_id: string; nombre: string; veces: number }
 type Dev = { desarrollo: string; propiedades: number; veces: number }
 
 // Zona (colonia) detectada de la dirección/título — misma lógica que la tabla
@@ -45,6 +46,21 @@ export default function EstadisticasPropiedades() {
   const [pickerVeces, setPickerVeces] = useState(false)
   const [zonaAbierta, setZonaAbierta] = useState<string | null>(null)
   const [zonaOrden, setZonaOrden] = useState<'desc' | 'asc'>('desc')
+  // Propiedad cuyos publicadores se están viendo, y la lista ya cargada.
+  const [quienPublico, setQuienPublico] = useState<Row | null>(null)
+  const [publicadores, setPublicadores] = useState<Publicador[] | null>(null)
+
+  // Se pide al abrir, no de antemano: son ~2,000 propiedades en la lista y
+  // traer los publicadores de todas sería una consulta enorme para un dato que
+  // casi siempre se mira de una en una.
+  async function verPublicadores(r: Row) {
+    setQuienPublico(r)
+    setPublicadores(null)
+    const { data, error } = await supabase.rpc('get_publicadores_propiedad', { p_propiedad_id: r.id })
+    // supabase.rpc NO lanza: devuelve { error }. Sin esto, un fallo se vería
+    // igual que "nadie la ha publicado", que es una conclusión muy distinta.
+    setPublicadores(error ? [] : ((data ?? []) as Publicador[]))
+  }
 
   const { data, isLoading, error, refetch, isRefetching } = useQuery<Stats>({
     queryKey: ['estadisticas-publicaciones'],
@@ -213,7 +229,14 @@ export default function EstadisticasPropiedades() {
       renderItem={({ item: r }) => {
         const col = r.veces === 0 ? '#ef4444' : r.veces >= maxVeces * 0.5 ? '#16a34a' : '#f59e0b'
         return (
-          <View style={[s.trow, { borderColor: c.border }]}>
+          // Tocar el renglón abre quién la publicó. Solo tiene sentido si
+          // alguien la publicó: con cero no hay nada que enseñar.
+          <TouchableOpacity
+            style={[s.trow, { borderColor: c.border }]}
+            onPress={() => verPublicadores(r)}
+            disabled={r.veces === 0}
+            activeOpacity={0.6}
+          >
             <Text style={[s.tCodigo, { color: col }]}>{r.codigo}</Text>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[s.tTitulo, { color: c.text }]} numberOfLines={1}>{r.titulo}</Text>
@@ -223,10 +246,58 @@ export default function EstadisticasPropiedades() {
               </View>
             </View>
             <Text style={[s.tVeces, { color: col }]}>{r.veces}</Text>
-          </View>
+            {r.veces > 0 && <Ionicons name="chevron-forward" size={15} color={c.textMute} style={{ marginLeft: 2 }} />}
+          </TouchableOpacity>
         )
       }}
     />
+
+    {/* Quién publicó esta propiedad */}
+    <Modal
+      visible={!!quienPublico}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setQuienPublico(null)}
+    >
+      <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setQuienPublico(null)}>
+        <TouchableOpacity activeOpacity={1} style={[s.modalCard, { backgroundColor: c.card }]} onPress={e => e.stopPropagation()}>
+          <Text style={[s.modalTit, { color: c.text }]}>¿Quién la publicó?</Text>
+          <Text style={[s.pubSub, { color: c.textMute }]} numberOfLines={2}>
+            {quienPublico?.codigo} · {quienPublico?.titulo}
+          </Text>
+
+          {publicadores === null ? (
+            <ActivityIndicator color={TEAL} style={{ marginVertical: 22 }} />
+          ) : publicadores.length === 0 ? (
+            <Text style={[s.muted, { color: c.textMute, marginVertical: 18 }]}>
+              No se pudo cargar quién la publicó.
+            </Text>
+          ) : (
+            <>
+              <Text style={[s.pubResumen, { color: c.textSub }]}>
+                {publicadores.length === 1
+                  ? '1 persona, '
+                  : `${publicadores.length} personas, `}
+                {quienPublico?.veces} {quienPublico?.veces === 1 ? 'publicación' : 'publicaciones'} en total
+              </Text>
+              <ScrollView style={{ maxHeight: 340 }}>
+                {publicadores.map((p, i) => (
+                  <View key={p.user_id} style={[s.modalRow, { borderColor: c.border }]}>
+                    {/* El número de orden ayuda a leer de un vistazo cuántos
+                        van, que es la cifra que importa para los duplicados. */}
+                    <Text style={[s.pubPos, { color: c.textMute }]}>{i + 1}</Text>
+                    <Text style={[s.modalRowTxt, { color: c.text, flex: 1 }]} numberOfLines={1}>{p.nombre}</Text>
+                    <Text style={[s.modalRowCnt, { color: p.veces > 1 ? '#b45309' : c.textMute }]}>
+                      {p.veces} {p.veces === 1 ? 'vez' : 'veces'}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+            </>
+          )}
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
 
     {/* Lista completa de cantidades para saltar directo */}
     <Modal visible={pickerVeces} transparent animationType="fade" onRequestClose={() => setPickerVeces(false)}>
@@ -377,6 +448,10 @@ const s = StyleSheet.create({
   modalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
   modalRowTxt: { fontSize: 15 },
   modalRowCnt: { fontSize: 13, fontWeight: '700' },
+  pubSub: { fontSize: 12.5, lineHeight: 17, marginTop: 2, marginBottom: 10 },
+  pubResumen: { fontSize: 12.5, fontWeight: '700', marginBottom: 8 },
+  // Ancho fijo para que los números queden en columna aunque pasen de 9.
+  pubPos: { fontSize: 12, fontWeight: '700', width: 22 },
   searchWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: Platform.OS === 'web' ? 10 : 8, marginBottom: 8 },
   searchInput: { flex: 1, fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}) },
   trow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth },
