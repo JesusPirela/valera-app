@@ -1,0 +1,107 @@
+{
+    "description": "DO NOT DELETE THIS FILE. This file is used to keep track of which files have been synced in the most recent deployment. If you delete this file a resync will need to be done (which can take a while) - read more: https://github.com/SamKirkland/FTP-Deploy-Action",
+    "version": "1.0.0",
+    "generatedTime": 1791603929612,
+    "data": [
+        {
+            "type": "file",
+            "name": ".htaccess",
+            "size": 1882,
+            "hash": "c5466b4e69cf6a819b8ca76f6db87914c858210b0a09a3a01beea60e33be042d"
+        },
+        {
+            "type": "folder",
+            "name": "_expo"
+        },
+        {
+            "type": "folder",
+            "name": "assets"
+        },
+        {
+            "type": "file",
+            "name": "favicon.ico",
+            "size": 14510,
+            "hash": "90c202cd363f483395d0d00340572e4399b784e3e30b3019649b46aa866672bd"
+        },
+        {
+            "type": "file",
+            "name": "ficha.php",
+            "size": 6110,
+            "hash": "0e7e7ca7bd5bb9fe115568d12cefd81618d0dc85f5d7b468b5650dd1c8e4d00a"
+        },
+        {
+            "type": "folder",
+            "name": "fonts"
+        },
+        {
+            "type": "file",
+            "name": "index.html",
+            "size": 1216,
+            "hash": "6be95bc3f9917fc1dae13279816d10b193a2c61c78ba4a7c4612ce1e0018044b"
+        },
+        {
+            "type": "file",
+            "name": "metadata.json",
+            "size": 49,
+            "hash": "aa5f19cc84d41c0f8c70ececb2bc82e863227ea1e121632aca879eb616056991"
+        },
+        {
+            "type": "folder",
+            "name": "_expo/static"
+        },
+        {
+            "type": "folder",
+            "name": "assets/assets"
+        },
+        {
+            "type": "file",
+            "name": "fonts/Ionicons.ttf",
+            "size": 442604,
+            "hash": "9c7fb9071a6c28582c6b84468cbff2c7a71e02b17e3a3b4548a159938d22916b"
+        },
+        {
+            "type": "folder",
+            "name": "_expo/static/js"
+        },
+        {
+            "type": "file",
+            "name": "assets/assets/logo-recortado.68081439602dcdd44abbbb6c07ef945d.png",
+            "size": 17854,
+            "hash": "dbea34b2be75320d8ef7799ffff464ad85d5b03d473ff4981edb0df04569ed7f"
+        },
+        {
+            "type": "folder",
+            "name": "_expo/static/js/web"
+        },
+        {
+            "type": "file",
+            "name": "_expo/static/js/web/html2canvas-d37946a764141f92fbd1dac103523fd7.js",
+            "size": 202155,
+            "hash": "ac48de4803220b1317773391d66c9418d8450bb4b408c7e9c0b2f176ba7607ca"
+        },
+        {
+            "type": "file",
+            "name": "_expo/static/js/web/index-07cfcb549108044b987324c6c77d3bd1.js",
+            "size": 168605,
+            "hash": "45b577b1f070479b9e8642d22b25d71c0c0db6c0551ac04d6074d5d88a9d9a48"
+        },
+        {
+            "type": "file",
+            "name": "_expo/static/js/web/index-a675f684cc744436d62abd7f4f9b88f4.js",
+            "size": 4167909,
+            "hash": "2685ae5658602be62bd7fcb757119ac5cf45f2c13dcc745b91a21997c880fd59"
+        },
+        {
+            "type": "file",
+            "name": "_expo/static/js/web/jspdf.es-2280f821747812a5f85025478d716a3d.js",
+            "size": 449294,
+            "hash": "4c36d7ea415656ddc1ddaa5fa56b5609a0ef4f18fe2919320a536d1b2eb0f7c4"
+        },
+        {
+            "type": "file",
+            "name": "_expo/static/js/web/purify-a1adf8b3e0717475d6eb5e5d59cc96b8.js",
+            "size": 23269,
+            "hash": "ca7859148b7f750e5f2dae9b32eea09f5578e096ac62bf1cd2686850c4db8b9b"
+        }
+    ]
+}
