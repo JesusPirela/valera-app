@@ -49,6 +49,15 @@ function subirConProgreso(
   })
 }
 
+// Alert.alert() de React Native no tiene implementación en web (no muestra
+// nada, ni siquiera un warning visible) — por eso un error en la subida se
+// veía como "no pasa nada": la excepción sí se lanzaba, pero el aviso nunca
+// se veía. El resto de pantallas admin ya resuelven esto así.
+function alerta(msg: string) {
+  if (Platform.OS === 'web') window.alert(msg)
+  else Alert.alert('Error', msg)
+}
+
 type VideoMarketing = {
   id: string
   titulo: string
@@ -118,8 +127,8 @@ export default function VideosMarketing() {
   }
 
   async function subirVideo() {
-    if (!titulo.trim()) { alert('El título es requerido.'); return }
-    if (!videoFile) { alert('Selecciona un video.'); return }
+    if (!titulo.trim()) { alerta('El título es requerido.'); return }
+    if (!videoFile) { alerta('Selecciona un video.'); return }
 
     setSubiendo(true)
     try {
@@ -170,7 +179,7 @@ export default function VideosMarketing() {
       setModalVisible(false)
       cargar()
     } catch (e: any) {
-      Alert.alert('Error', e.message ?? 'No se pudo subir el video.')
+      alerta(e.message ?? 'No se pudo subir el video.')
     } finally {
       setSubiendo(false)
       setProgreso('')
