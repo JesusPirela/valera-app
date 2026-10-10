@@ -210,6 +210,28 @@ function explicarBloqueo(data: any): { titulo: string; mensaje: string } {
     }
   }
 
+  if (data?.error === 'una_por_semana') {
+    let cuando = ''
+    if (data.libre_mia) {
+      const d = new Date(data.libre_mia)
+      if (!isNaN(d.getTime())) {
+        const hoy = new Date()
+        const dias = Math.max(1, Math.ceil((d.getTime() - hoy.getTime()) / 86_400_000))
+        cuando = `\n\nLa vuelves a tener disponible en ${dias} ${dias === 1 ? 'día' : 'días'}, ` +
+                 `el ${d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}.`
+      }
+    }
+    return {
+      titulo: '🚦 Ya publicaste esta casa esta semana',
+      mensaje:
+        'Ahora es una publicación por propiedad cada 7 días.\n\n' +
+        'Subir la misma casa varias veces desde tu cuenta es lo que Facebook lee como ' +
+        'anuncio duplicado: te la baja y puede restringirte. Dejándola una semana ' +
+        'completa, tu anuncio dura arriba y lo ve más gente.' + cuando + '\n\n' +
+        'Hoy publica otra: cuenta igual para tus números.',
+    }
+  }
+
   if (data?.error === 'limite') {
     return {
       titulo: '🚦 Ya la publicaste 10 veces',
