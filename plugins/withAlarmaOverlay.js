@@ -3,6 +3,7 @@ const path = require('path')
 const {
   withAndroidManifest,
   withDangerousMod,
+  withAppBuildGradle,
   AndroidConfig,
 } = require('@expo/config-plugins')
 
@@ -114,6 +115,29 @@ function withFuentesKotlin(config) {
   }])
 }
 
+// ValeraMessagingService.kt extiende ExpoFirebaseMessagingService (de
+// expo-notifications), que a su vez extiende FirebaseMessagingService. Esa
+// clase la trae expo-notifications con `implementation` en SU build.gradle —
+// o sea, queda en el classpath de ejecución pero NO se expone al classpath de
+// compilación de `app`. Por eso el build fallaba con "Cannot access
+// FirebaseMessagingService ... Check your module classpath" y, en cadena,
+// decenas de "Unresolved reference" más abajo en el mismo archivo (RemoteMessage,
+// putExtra, addFlags...: todo lo que depende de que la superclase resuelva).
+// Se agrega la MISMA versión que ya trae expo-notifications (ver
+// node_modules/expo-notifications/android/build.gradle) para no duplicar ni
+// chocar versiones de Firebase.
+function withDependenciaFirebaseMessaging(config) {
+  return withAppBuildGradle(config, (cfg) => {
+    const marca = 'com.google.firebase:firebase-messaging'
+    if (cfg.modResults.contents.includes(marca)) return cfg
+    cfg.modResults.contents = cfg.modResults.contents.replace(
+      /dependencies\s*\{/,
+      `dependencies {\n    implementation '${marca}:24.0.1'`,
+    )
+    return cfg
+  })
+}
+
 module.exports = function withAlarmaOverlay(config) {
-  return withFuentesKotlin(withPermisoYComponentes(config))
+  return withFuentesKotlin(withPermisoYComponentes(withDependenciaFirebaseMessaging(config)))
 }
