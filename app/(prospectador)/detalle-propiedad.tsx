@@ -176,6 +176,67 @@ function publicadaHace(iso: string | null | undefined): string | null {
   const a = Math.floor(d / 365); return a === 1 ? 'hace 1 año' : `hace ${a} años`
 }
 
+/**
+ * Convierte el código de error del servidor en algo que una persona entienda.
+ *
+ * Los bloqueos de publicación no son un fallo de la app: son a propósito, para
+ * que Facebook no vea la misma casa repetida y empiece a bajar anuncios y a
+ * restringir cuentas. Si el aviso no explica eso, se lee como que la app está
+ * rota y la gente insiste una y otra vez, que es lo peor que puede pasar.
+ *
+ * Cada mensaje responde tres cosas: qué pasó, por qué, y qué hacer ahora.
+ */
+function explicarBloqueo(data: any): { titulo: string; mensaje: string } {
+  if (data?.error === 'saturada') {
+    const veces = data.veces_semana ?? 10
+    const personas = data.personas ?? 0
+    const quienes = personas > 1 ? ` por ${personas} personas distintas` : ''
+    let cuando = ''
+    if (data.libre_desde) {
+      const d = new Date(data.libre_desde)
+      if (!isNaN(d.getTime())) {
+        cuando = `\n\nSe desbloquea el ${d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}.`
+      }
+    }
+    return {
+      titulo: '🚦 Esta propiedad está saturada',
+      mensaje:
+        `Entre todo el equipo ya se publicó ${veces} veces esta semana${quienes}.\n\n` +
+        'Cuando la misma casa aparece tantas veces, Facebook los toma por anuncios ' +
+        'repetidos: los baja y puede restringir las cuentas de quienes los subieron. ' +
+        'Por eso se frena aquí.' + cuando + '\n\n' +
+        'Mientras tanto publica otra: hay inventario de sobra y esas sí te van a durar ' +
+        'arriba. Si de verdad necesitas esta, pide luz verde a dirección.',
+    }
+  }
+
+  if (data?.error === 'limite') {
+    return {
+      titulo: '🚦 Ya la publicaste 10 veces',
+      mensaje:
+        'Ese es el máximo de una misma propiedad por persona.\n\n' +
+        'Repetirla desde tu cuenta es justo lo que Facebook detecta como anuncio ' +
+        'duplicado, y lo que hace que empiecen a bajarte publicaciones.\n\n' +
+        'Elige otra propiedad: cuenta igual para tus números y te va a durar publicada.',
+    }
+  }
+
+  if (data?.error === 'No autenticado') {
+    return {
+      titulo: 'Tu sesión expiró',
+      mensaje: 'Cierra la app y vuelve a abrirla para seguir publicando.',
+    }
+  }
+
+  // Cualquier otro caso: al menos no dejar al usuario sin saber qué hacer.
+  return {
+    titulo: 'No se pudo publicar',
+    mensaje:
+      `${data?.error ?? 'El servidor no respondió como se esperaba'}.\n\n` +
+      'Vuelve a intentarlo en un momento. Si sigue igual, avísale a dirección.',
+  }
+}
+
 function capitalize(s: string | null) {
   if (!s) return ''
   return s.charAt(0).toUpperCase() + s.slice(1)
@@ -528,8 +589,11 @@ export default function DetallePropiedad() {
     }
 
     if (vecesPublicada >= 10) {
-      if (Platform.OS === 'web') window.alert('Esta propiedad alcanzó el límite de 10 publicaciones.')
-      else Alert.alert('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
+      // Mismo texto que cuando lo frena el servidor: el aviso no debe cambiar
+      // según dónde se detecte el tope.
+      const { titulo, mensaje } = explicarBloqueo({ error: 'limite' })
+      if (Platform.OS === 'web') window.alert(`${titulo}\n\n${mensaje}`)
+      else Alert.alert(titulo, mensaje)
       return
     }
 
@@ -618,17 +682,17 @@ export default function DetallePropiedad() {
         exito(data.veces_publicada ?? vecesPublicada + 1, data.fecha_publicacion)
         return
       }
-      if (data?.error === 'limite') {
-        const msg = 'Esta propiedad alcanzó el límite de 10 publicaciones.'
-        if (Platform.OS === 'web') window.alert(msg)
-        else Alert.alert('Límite alcanzado', msg)
-        return
-      }
       if (ok && data && data.ok === false) {
-        // Error de negocio del servidor: reintentar no ayuda.
-        const msg = `No se pudo publicar: ${data.error ?? 'error del servidor'}`
-        if (Platform.OS === 'web') window.alert(msg)
-        else Alert.alert('No se pudo publicar', msg)
+        // Error de negocio del servidor: reintentar no ayuda, así que en vez
+        // de un reintento lo que toca es EXPLICAR.
+        //
+        // Antes salía la palabra clave cruda del servidor —"No se pudo
+        // publicar: saturada"— que no le dice nada a nadie: ni qué pasó, ni
+        // por qué, ni qué hacer. La función ya devuelve los números (cuántas
+        // van, cuántas personas, desde cuándo se libera); solo faltaba usarlos.
+        const { titulo, mensaje } = explicarBloqueo(data)
+        if (Platform.OS === 'web') window.alert(`${titulo}\n\n${mensaje}`)
+        else Alert.alert(titulo, mensaje)
         return
       }
       // Red/timeout/error transitorio → encolar (nunca se pierde).
