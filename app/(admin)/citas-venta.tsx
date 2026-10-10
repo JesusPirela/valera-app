@@ -229,9 +229,7 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
         const esColEstado  = col.key === 'estado_seguimiento' && !!resaltado
         const esColCliente = col.key === 'cliente_nombre' && !!resaltado
         const pintada = esColEstado || esColCliente
-        const marca = esColCliente ? `${resaltado!.emoji} ${resaltado!.texto} · ${val || '—'}`
-                    : esColEstado  ? `${resaltado!.emoji} ${resaltado!.texto}`
-                    : (display || '—')
+        const marca = esColEstado ? `${resaltado!.emoji} ${resaltado!.texto}` : (display || '—')
         return (
           <Fragment key={col.key}>
             <TouchableOpacity
@@ -243,13 +241,31 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
                       esColEstado && { backgroundColor: resaltado!.color + '26' }]}
               activeOpacity={0.6}
               onPress={() => onTap(f.id, col.key, col.tipo, val)}>
-              <Text style={{
-                color: pintada ? resaltado!.color : (val ? c.text : c.textMute),
-                fontSize: 12.5, fontWeight: pintada ? '800' : '400',
-              }} numberOfLines={2}>
-                {marca}
-                {col.tipo !== 'texto' ? '  ▾' : ''}
-              </Text>
+              {esColCliente ? (
+                // El nombre ARRIBA y la etiqueta debajo, en chico.
+                //
+                // Antes iba todo en un renglón: "🚫 CANCELADA/REAGENDA · Juan
+                // Pérez". En 190px la etiqueta se comía el ancho y el nombre
+                // quedaba cortado o fuera, justo en las canceladas, que son las
+                // que más se revisan. Partido en dos, el nombre se lee entero y
+                // la marca sigue a la vista.
+                <>
+                  <Text style={{ color: resaltado!.color, fontSize: 12.5, fontWeight: '800' }} numberOfLines={1}>
+                    {val || '—'}
+                  </Text>
+                  <Text style={{ color: resaltado!.color, fontSize: 9.5, fontWeight: '700', marginTop: 1 }} numberOfLines={1}>
+                    {resaltado!.emoji} {resaltado!.texto}
+                  </Text>
+                </>
+              ) : (
+                <Text style={{
+                  color: pintada ? resaltado!.color : (val ? c.text : c.textMute),
+                  fontSize: 12.5, fontWeight: pintada ? '800' : '400',
+                }} numberOfLines={2}>
+                  {marca}
+                  {col.tipo !== 'texto' ? '  ▾' : ''}
+                </Text>
+              )}
             </TouchableOpacity>
 
             {/* La retro va pegada a "Asesor que atendió": es quien la da, y
