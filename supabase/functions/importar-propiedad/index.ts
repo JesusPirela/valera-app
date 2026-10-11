@@ -640,6 +640,75 @@ function parseSadasiModelos(html: string, url: string): VinteModelo[] {
   return modelos
 }
 
+// ── Terrasoles Residencial (terrasolesresidencial.mx) — WordPress/Elementor ──
+// /prototipos/casas/ y /prototipos/departamentos/ listan TODOS los modelos en
+// una sola página (no hay página individual por modelo). Cada uno vive en un
+// bloque <div class="proto-card">…</div> con markup propio del sitio (clases
+// proto-*, no un theme genérico), así que se parsea con selectores de texto
+// dedicados en vez del flujo genérico de specs.
+//
+// Dentro de cada tarjeta, "proto-galeria" viene DESPUÉS de "proto-planos" (los
+// planos arquitectónicos PLANTA BAJA/ALTA) en el HTML — se usa esa posición
+// para quedarse solo con las fotos reales y no mezclar dibujos de planos como
+// si fueran fotos de la propiedad.
+function parseTerrasolesModelos(html: string, url: string): VinteModelo[] {
+  try {
+    if (!/(^|\.)terrasolesresidencial\.mx$/i.test(new URL(url).hostname)) return []
+  } catch { return [] }
+
+  const desarrollo = 'Terrasoles Residencial'
+  const direccion = 'Terrasoles Residencial, Nuevo Querétaro, Querétaro'
+
+  const modelos: VinteModelo[] = []
+  const marcadores = [...html.matchAll(/<div class="proto-card">/g)]
+
+  for (let i = 0; i < marcadores.length; i++) {
+    const inicio = marcadores[i].index!
+    const fin = i + 1 < marcadores.length ? marcadores[i + 1].index! : html.length
+    const tarjeta = html.slice(inicio, fin)
+
+    const nombre = decodeEntities(tarjeta.match(/<h3>([^<]+)<\/h3>/)?.[1] ?? '').trim()
+    if (!nombre) continue
+
+    const m2M = tarjeta.match(/proto-m2["'][^>]*>\s*<strong>([\d.]+)\s*m/i)
+    const m2 = m2M ? String(Math.round(parseFloat(m2M[1]))) : null
+
+    const precioM = tarjeta.match(/class="num">\s*\$\s*([\d,]+)/)
+    const precio = precioM ? parseInt(precioM[1].replace(/,/g, ''), 10) : 0
+
+    let recamaras: number | null = null, banos: number | null = null, mediosBanos: number | null = null
+    let estacionamientos: number | null = null
+    for (const spec of tarjeta.matchAll(/<div class="val">([^<]*)<\/div>\s*<div class="lab">([\s\S]*?)<\/div>/g)) {
+      const valor = spec[1].trim()
+      const etiqueta = spec[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
+      if (etiqueta.includes('recámara') || etiqueta.includes('recamara')) {
+        recamaras = parseInt(valor, 10) || null
+      } else if (etiqueta.includes('baño')) {
+        const f = parseFloat(valor)
+        if (!isNaN(f)) { banos = Math.floor(f); mediosBanos = (f - Math.floor(f)) >= 0.5 ? 1 : null }
+      } else if (etiqueta.includes('estacionamiento') || etiqueta.includes('cajon') || etiqueta.includes('cajón')) {
+        estacionamientos = parseInt(valor, 10) || null
+      }
+    }
+
+    // Solo la galería de fotos reales, nunca los planos (que van antes en el HTML).
+    const idxGaleria = tarjeta.indexOf('proto-galeria')
+    const imagenes: string[] = []
+    if (idxGaleria !== -1) {
+      for (const m of tarjeta.slice(idxGaleria).matchAll(/data-back="([^"]+)"/g)) {
+        if (!imagenes.includes(m[1])) imagenes.push(m[1])
+      }
+    }
+
+    modelos.push({
+      nombre, precio, recamaras, banos, mediosBanos, estacionamientos,
+      m2, m2Terreno: null, imagenes, direccion, desarrollo,
+    })
+  }
+
+  return modelos
+}
+
 // ── JSON-LD (schema.org) ──────────────────────────────────────────────────
 // Lamudi y muchos otros portales publican los datos en bloques
 // <script type="application/ld+json">. Devuelve todos los nodos aplanados.
@@ -1334,6 +1403,33 @@ serve(async (req) => {
         _modelos: bpcModelos,
         _desarrollo: primero.desarrollo,
         _empresa_matriz: 'BPC Casa',   // marca la constructora al importar
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── Terrasoles Residencial: devuelve todos los modelos de /prototipos/{casas|departamentos}/ ──
+    const terrasolesModelos = parseTerrasolesModelos(html, url)
+    if (terrasolesModelos.length > 0) {
+      const primero = terrasolesModelos[0]
+      const tipoTerrasoles = /\/departamentos\//i.test(new URL(url).pathname) ? 'departamento' : 'casa'
+      return new Response(JSON.stringify({
+        titulo: '',
+        descripcion: '',
+        precio: primero.precio > 0 ? String(primero.precio) : '',
+        direccion: primero.direccion,
+        zona: 'queretaro',
+        modelo: primero.nombre,
+        recamaras: primero.recamaras,
+        banos: primero.banos,
+        mediosBanos: primero.mediosBanos ?? null,
+        estacionamientos: primero.estacionamientos,
+        m2: primero.m2 ?? '',
+        m2Terreno: null,
+        tipo: tipoTerrasoles,
+        operacion: 'venta',
+        imagenes: primero.imagenes,
+        _modelos: terrasolesModelos,
+        _desarrollo: primero.desarrollo,
+        _empresa_matriz: 'Terrasoles',   // marca la constructora al importar
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
