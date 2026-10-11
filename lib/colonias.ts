@@ -64,6 +64,7 @@ export const COLONIAS: ColoniaSugerida[] = [
   { label: 'Prados del Marqués',        zona: 'queretaro', ciudad: 'El Marqués', lat: 20.6230, lng: -100.2620 },
   { label: 'Vista Hermosa',             zona: 'queretaro', ciudad: 'El Marqués', lat: 20.6300, lng: -100.2500 },
   { label: 'Los Mezquites',             zona: 'queretaro', ciudad: 'El Marqués', lat: 20.6350, lng: -100.2350 },
+  { label: 'El Mayorazgo',              zona: 'queretaro', ciudad: 'El Marqués', lat: 20.6550, lng: -100.2850 },
   // ── Monterrey ─────────────────────────────────────────────────────────────
   { label: 'San Pedro Garza García', zona: 'monterrey', ciudad: 'Monterrey', lat: 25.6500, lng: -100.4000 },
   { label: 'Santa Catarina',      zona: 'monterrey', ciudad: 'Monterrey', lat: 25.6731, lng: -100.4569 },

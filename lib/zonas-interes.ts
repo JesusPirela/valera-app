@@ -9,7 +9,7 @@
 export const ZONAS_INTERES: string[] = [
   'Altozano', 'Capital Sur', 'Centro', 'Centro Sur', 'Ciudad del Sol', 'Ciudad Maderas',
   'Ciudad Meseta',
-  'Corregidora', 'Cumbres', 'El Campanario', 'El Marqués', 'El Mirador', 'El Refugio',
+  'Corregidora', 'Cumbres', 'El Campanario', 'El Marqués', 'El Mayorazgo', 'El Mirador', 'El Refugio',
   'Jurica', 'Juriquilla', 'La Loma', 'Loma Dorada', 'Los Héroes', 'Milenio',
   'Real Solare', 'Riscos', 'Santaluz', 'Sonterra', 'Valencia', 'Zakia', 'Zibatá',
 ]
@@ -27,6 +27,7 @@ const ALIASES: Array<[string, RegExp]> = [
   ['El Mirador',     /mirador|albia|provenza/],
   ['Real Solare',    /solare|\brs\b|valvento/],
   ['Corregidora',    /corregidora|correguidora|casa magna|paseos del bosque|mision mariana|mision cimatario/],
+  ['El Mayorazgo',   /mayorazgo/],
   ['El Marqués',     /marqu?e[sz]|sendas/],
   ['Zakia',          /zakia|la pradera/],
   ['Zibatá',         /zibat|\bzire\b|\bziran?\b|\bzaru\b/],
