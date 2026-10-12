@@ -245,14 +245,61 @@ serve(async (_req) => {
     })
     .filter((m): m is NonNullable<typeof m> => m !== null)
 
+  // ── El segundo envío: el que despierta a la app ──────────────────────────
+  //
+  // Por qué hacen falta dos y no uno.
+  //
+  // Cuando el envío lleva título y cuerpo, Android muestra la notificación POR
+  // SU CUENTA y nunca llama al código de la app. Es el comportamiento normal de
+  // FCM con la app en segundo plano, y da igual qué servicio tengas registrado.
+  // Por eso el cuadro salía al probarlo desde la app y jamás con un aviso real:
+  // nuestro código no llegaba a ejecutarse.
+  //
+  // Un envío SOLO CON DATOS no lo puede mostrar el sistema —no hay texto que
+  // mostrar—, así que Android se lo entrega a la app. Ahí es donde se dibuja el
+  // cuadro. Medido en un teléfono real: con título y cuerpo no sale nunca; solo
+  // con datos, sale.
+  //
+  // Se mandan los dos: el normal deja la notificación en la bandeja, y este
+  // despierta a la app. El segundo no muestra nada por su cuenta, así que no
+  // hay aviso duplicado.
+  const despertadores = pendientes
+    .filter(n => TIPOS_ALARMA.has(n.tipo) && PANTALLA_ALARMA && tokenMap.has(n.user_id))
+    .map(n => {
+      const lead = n.cliente_id ? leads.get(n.cliente_id) : null
+      const detalle = [lead?.zona_busqueda, lead?.presupuesto].filter(Boolean).join(' · ')
+      return {
+        to: tokenMap.get(n.user_id)!,
+        // Sin title ni body A PROPÓSITO: son justo los que harían que el
+        // sistema se lo quede.
+        priority: 'high' as const,
+        data: {
+          pantalla_alarma: '1',
+          lead_nombre: lead?.nombre ?? n.titulo.replace(/^[^\p{L}\d]+/u, ''),
+          ...(detalle ? { lead_detalle: detalle } : {}),
+        },
+      }
+    })
+
   for (let i = 0; i < mensajes.length; i += BATCH_SIZE) {
     await enviarBatch(supabase, mensajes.slice(i, i + BATCH_SIZE))
   }
 
-  console.log(`[Push] Enviadas: ${mensajes.length} / ${pendientes.length} pendientes`)
+  // Después de los normales, para que la notificación ya esté puesta cuando
+  // aparezca el cuadro y no al revés.
+  for (let i = 0; i < despertadores.length; i += BATCH_SIZE) {
+    await enviarBatch(supabase, despertadores.slice(i, i + BATCH_SIZE) as any)
+  }
+
+  console.log(`[Push] Enviadas: ${mensajes.length} / ${pendientes.length} pendientes · despertadores: ${despertadores.length}`)
 
   return new Response(
-    JSON.stringify({ ok: true, pendientes: pendientes.length, enviadas: mensajes.length }),
+    JSON.stringify({
+      ok: true,
+      pendientes: pendientes.length,
+      enviadas: mensajes.length,
+      despertadores: despertadores.length,
+    }),
     { headers: { 'Content-Type': 'application/json' } }
   )
 })
