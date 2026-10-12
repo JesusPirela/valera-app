@@ -29,6 +29,45 @@ const OPCIONES_POSPONER: { label: string; minutos: number }[] = [
   { label: 'Mañana', minutos: 60 * 20 },
 ]
 
+/**
+ * El ajuste extra que pide el fabricante, si es que pide alguno.
+ *
+ * Varias marcas chinas añaden sus propios candados encima de Android: apagan
+ * de fábrica un permiso que el sistema sí concede, y sin él la app no puede
+ * mostrar nada con la pantalla cerrada. Cada una lo llama distinto y lo
+ * entierra en otro menú, así que hay que nombrarlo tal cual aparece o no se
+ * encuentra.
+ *
+ * Se calcula una sola vez: el fabricante no cambia mientras corre la app.
+ */
+const notaDelFabricante: string | null = (() => {
+  if (Platform.OS !== 'android') return null
+  const marca = String(
+    (Platform.constants as any)?.Manufacturer ?? (Platform.constants as any)?.Brand ?? '',
+  ).toLowerCase()
+
+  if (/xiaomi|redmi|poco/.test(marca)) {
+    return 'En tu Xiaomi activa además: Ajustes › Aplicaciones › Valera › Permisos › ' +
+           'Otros permisos › “Mostrar ventanas emergentes mientras se ejecuta en segundo ' +
+           'plano”, y el Inicio automático.'
+  }
+  if (/huawei|honor/.test(marca)) {
+    return 'En tu Huawei activa además: Ajustes › Aplicaciones › Valera › Inicio de aplicación › ' +
+           'gestionar manualmente, con “Inicio automático” y “Ejecutar en segundo plano” encendidos.'
+  }
+  if (/oppo|realme|oneplus/.test(marca)) {
+    return 'En tu teléfono activa además: Ajustes › Aplicaciones › Valera › Inicio automático, ' +
+           'y en Batería elige “No restringir”.'
+  }
+  if (/vivo/.test(marca)) {
+    return 'En tu vivo activa además: Ajustes › Batería › Consumo en segundo plano › Valera, ' +
+           'y permite el inicio automático.'
+  }
+  // Samsung, Motorola, Google y el resto no tienen candado extra: no se les
+  // dice nada en vez de darles instrucciones de un menú que no existe.
+  return null
+})()
+
 function haceCuanto(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()
   const h = Math.floor(ms / 3_600_000)
@@ -170,16 +209,19 @@ export default function AlarmaPendientes() {
             Te dice si está todo listo o si falta darle permiso.
           </Text>
           {/*
-            En Xiaomi no basta el permiso general: hay otro aparte, apagado de
-            fábrica, que es el que de verdad deja abrir una pantalla con la app
-            cerrada. Se nombra tal cual aparece en MIUI porque está enterrado y
-            con otro nombre no se encuentra.
+            El aviso del fabricante solo se le enseña a quien le sirve.
+
+            Antes salía a TODOS los de Android, así que a alguien con Samsung o
+            Motorola se le daban instrucciones de un menú que no existe en su
+            teléfono. Eso no es solo ruido: hace dudar de todo lo demás que dice
+            la app.
+
+            Solo se nombra a las marcas que de verdad tienen un ajuste extra
+            escondido. En las que no lo tienen, no sale nada.
           */}
-          <Text style={s.permisoNota}>
-            En Xiaomi activa además: Ajustes › Aplicaciones › Valera › Permisos ›
-            Otros permisos › “Mostrar ventanas emergentes mientras se ejecuta en
-            segundo plano”, y el Inicio automático.
-          </Text>
+          {!!notaDelFabricante && (
+            <Text style={s.permisoNota}>{notaDelFabricante}</Text>
+          )}
         </View>
       )}
 

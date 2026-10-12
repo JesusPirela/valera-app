@@ -1,13 +1,15 @@
 package com.valerarealestate.app
 
+import android.content.Intent
+import android.os.Build
 import android.util.Log
 import com.google.firebase.messaging.RemoteMessage
 import expo.modules.notifications.service.ExpoFirebaseMessagingService
 import org.json.JSONObject
 
 /**
- * Intercepta los push de alarma para abrir la pantalla de AlarmaActivity encima
- * de lo que el usuario esté haciendo, y le deja TODO lo demás a Expo.
+ * Intercepta los push de alarma para mostrar el cuadro encima de lo que el
+ * usuario esté haciendo, y le deja TODO lo demás a Expo.
  *
  * Por qué se puede heredar en vez de reemplazar:
  * ExpoFirebaseMessagingService es `open` y sus tres métodos delegan. Llamando a
@@ -47,16 +49,43 @@ class ValeraMessagingService : ExpoFirebaseMessagingService() {
     try {
       val bandera = leerDato(remoteMessage, BANDERA_PANTALLA) == "1"
       val permiso = CuadroOverlay.hayPermiso(this)
+      // Android degrada la prioridad del mensaje si cree que la app abusa de
+      // ella, y con la prioridad degradada NO se puede arrancar un servicio en
+      // primer plano: el intento lanzaría ForegroundServiceStartNotAllowedException.
+      // Por eso se comprueba antes de intentarlo.
+      val altaPrioridad = remoteMessage.priority == RemoteMessage.PRIORITY_HIGH
+
       val desenlace = when {
         !bandera -> "el aviso no pedía cuadro"
         !permiso -> "falta el permiso de superposición"
-        else -> CuadroOverlay.mostrar(
-          this,
-          "¡Nuevo lead de campaña!",
-          "Atiéndelo lo antes posible para no perder la oportunidad.",
-          leerDato(remoteMessage, "lead_nombre"),
-          leerDato(remoteMessage, "lead_detalle"),
-        ) ?: "se mostró el cuadro"
+        else -> try {
+          // Se delega en un servicio EN PRIMER PLANO en vez de dibujar aquí.
+          //
+          // Dibujar desde este servicio no funcionaba: el cuadro salía al
+          // probarlo desde la app pero nunca con un aviso real, y la diferencia
+          // entre los dos casos es el estado del proceso. Recibir un mensaje de
+          // alta prioridad por FCM da permiso para arrancar un servicio en
+          // primer plano, y con eso el proceso deja de estar en segundo plano.
+          val i = Intent(this, AlarmaForegroundService::class.java).apply {
+            putExtra(AlarmaForegroundService.EXTRA_NOMBRE, leerDato(remoteMessage, "lead_nombre"))
+            putExtra(AlarmaForegroundService.EXTRA_DETALLE, leerDato(remoteMessage, "lead_detalle"))
+          }
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
+          else startService(i)
+          "lanzado el servicio en primer plano" + (if (!altaPrioridad) " (prioridad NO alta)" else "")
+        } catch (e: Throwable) {
+          Log.e(TAG, "No se pudo arrancar el servicio en primer plano", e)
+          // Último recurso: intentarlo desde aquí. En segundo plano es probable
+          // que no se vea, pero perder la alarma en silencio es peor.
+          val r = CuadroOverlay.mostrar(
+            this,
+            "¡Nuevo lead de campaña!",
+            "Atiéndelo lo antes posible para no perder la oportunidad.",
+            leerDato(remoteMessage, "lead_nombre"),
+            leerDato(remoteMessage, "lead_detalle"),
+          )
+          "ERROR al lanzar el servicio (" + (e.message ?: e.javaClass.simpleName) + ") · directo: " + (r ?: "ok")
+        }
       }
       anotar(bandera, permiso, desenlace)
     } catch (e: Throwable) {

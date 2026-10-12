@@ -27,12 +27,18 @@ const FUENTES = [
   'CuadroVista.kt',             // dibuja el cuadro (un solo sitio para los dos usos)
   'CuadroOverlay.kt',           // lo muestra como ventana superpuesta
   'AlarmaActivity.kt',          // la pantalla del botón de prueba
+  'AlarmaForegroundService.kt', // lo muestra desde primer plano, que es lo que Android exige
 ]
 
 function withPermisoYComponentes(config) {
   return withAndroidManifest(config, (cfg) => {
     const manifest = cfg.modResults
     AndroidConfig.Permissions.ensurePermission(manifest, 'android.permission.SYSTEM_ALERT_WINDOW')
+    // Un servicio en primer plano necesita su permiso, y desde Android 14
+    // además el de su TIPO. Se usa shortService: tarea corta y acotada, sin
+    // tener que justificar un uso continuo ante Google.
+    AndroidConfig.Permissions.ensurePermission(manifest, 'android.permission.FOREGROUND_SERVICE')
+    AndroidConfig.Permissions.ensurePermission(manifest, 'android.permission.FOREGROUND_SERVICE_SHORT_SERVICE')
 
     const app = manifest.manifest.application?.[0]
     if (!app) throw new Error('withAlarmaOverlay: no se encontró <application> en el manifiesto')
@@ -46,6 +52,17 @@ function withPermisoYComponentes(config) {
       'intent-filter': [{
         action: [{ $: { 'android:name': 'com.google.firebase.MESSAGING_EVENT' } }],
       }],
+    })
+
+    // El servicio en primer plano que dibuja el cuadro.
+    const nombrePrimerPlano = `${PAQUETE}.AlarmaForegroundService`
+    app.service = app.service.filter((s) => s.$?.['android:name'] !== nombrePrimerPlano)
+    app.service.push({
+      $: {
+        'android:name': nombrePrimerPlano,
+        'android:exported': 'false',
+        'android:foregroundServiceType': 'shortService',
+      },
     })
 
 
