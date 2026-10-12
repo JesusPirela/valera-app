@@ -38,6 +38,9 @@ class ValeraMessagingService : ExpoFirebaseMessagingService() {
      * de Google, con días de por medio.
      */
     private const val BANDERA_PANTALLA = "pantalla_alarma"
+
+    /** Donde queda el registro del último aviso, para la pantalla de prueba. */
+    const val PREFS = "valera_alarma_diag"
   }
 
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
@@ -45,24 +48,47 @@ class ValeraMessagingService : ExpoFirebaseMessagingService() {
     // bloque va en try/catch y super() se llama SIEMPRE, incluso si la pantalla
     // falla: es preferible una alarma sin pantalla que una alarma perdida.
     try {
-      if (debeAbrirPantalla(remoteMessage)) abrirPantalla(remoteMessage)
+      val bandera = leerDato(remoteMessage, BANDERA_PANTALLA) == "1"
+      val permiso = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+      var desenlace = when {
+        !bandera -> "el aviso no pedía cuadro"
+        !permiso -> "falta el permiso de superposición"
+        else -> "intentando abrir…"
+      }
+      if (bandera && permiso) {
+        desenlace = try { abrirPantalla(remoteMessage); "se abrió sin error" }
+                    catch (e: Throwable) { "ERROR al abrir: " + (e.message ?: e.javaClass.simpleName) }
+      }
+      anotar(bandera, permiso, desenlace)
     } catch (e: Throwable) {
       Log.e(TAG, "No se pudo abrir la pantalla de alarma", e)
+      anotar(false, false, "ERROR antes de intentar: " + (e.message ?: e.javaClass.simpleName))
     }
     super.onMessageReceived(remoteMessage)
   }
 
-  private fun debeAbrirPantalla(msg: RemoteMessage): Boolean {
-    if (leerDato(msg, BANDERA_PANTALLA) != "1") return false
-
-    // Sin "mostrar sobre otras apps" Android bloquea arrancar una pantalla
-    // desde segundo plano. Intentarlo igual no muestra nada y además ensucia el
-    // log con una excepción por cada push.
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-      Log.w(TAG, "Falta el permiso de mostrar sobre otras apps; solo sale la notificación")
-      return false
-    }
-    return true
+  /**
+   * Deja constancia de lo que pasó con el último aviso, para que la pantalla de
+   * prueba pueda enseñarlo.
+   *
+   * Nace de una sesión entera a ciegas: el permiso estaba bien y la pantalla
+   * abría al probarla a mano, pero con un aviso de verdad no salía nada, y
+   * desde fuera no había forma de saber si el mensaje siquiera llegaba hasta
+   * aquí. Un servicio que falla en silencio no se puede depurar.
+   *
+   * En SharedPreferences y no en la base: esto corre con la app cerrada y sin
+   * sesión, así que no hay a quién preguntarle el token. Son cuatro datos y se
+   * leen desde el mismo teléfono.
+   */
+  private fun anotar(bandera: Boolean, permiso: Boolean, desenlace: String) {
+    try {
+      getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+        .putLong("cuando", System.currentTimeMillis())
+        .putBoolean("bandera", bandera)
+        .putBoolean("permiso", permiso)
+        .putString("desenlace", desenlace)
+        .apply()
+    } catch (e: Throwable) { Log.w(TAG, "No se pudo anotar el diagnóstico", e) }
   }
 
   /**

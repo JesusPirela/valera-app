@@ -78,10 +78,10 @@ class AlarmaActivity : Activity() {
     if (intent?.data?.scheme == "valera-alarma") {
       if (puedeSuperponerse()) {
         setContentView(construirVista(
-          "✓ Todo listo",
-          "El permiso ya está activo. Así vas a ver tus leads nuevos, encima de lo que estés usando.",
-          nombreLead = "Así se verá cuando entre un lead",
-          detalle = "zona_sur_(milenio,_el_mirador) · $2m_a_$2,4m",
+          "✓ El cuadro funciona",
+          "El permiso está activo y la pantalla abre. Abajo, qué pasó con el último aviso que llegó:",
+          nombreLead = "Último aviso recibido",
+          detalle = ultimoDiagnostico(),
         ))
         empezarASonar()
         cronometro.postDelayed(cerrarSolo, MAX_SONANDO_MS)
@@ -115,6 +115,37 @@ class AlarmaActivity : Activity() {
 
   private fun puedeSuperponerse(): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+
+  /**
+   * Qué pasó con el último aviso que llegó al servicio.
+   *
+   * Es la pieza que faltaba para depurar esto: el permiso estaba bien y la
+   * pantalla abría al probarla a mano, pero con un aviso de verdad no salía
+   * nada, y no había forma de saber si el mensaje llegaba siquiera. Si aquí
+   * dice que nunca ha llegado ninguno, el problema está antes —el aviso no
+   * entra a nuestro servicio—; si dice que se abrió sin error pero no se vio,
+   * el sistema lo está bloqueando al arrancar desde segundo plano.
+   */
+  private fun ultimoDiagnostico(): String = try {
+    val p = getSharedPreferences(ValeraMessagingService.PREFS, MODE_PRIVATE)
+    val cuando = p.getLong("cuando", 0L)
+    if (cuando == 0L) {
+      "Nunca ha llegado un aviso a este servicio"
+    } else {
+      val mins = ((System.currentTimeMillis() - cuando) / 60000L).toInt()
+      val hace = when {
+        mins < 1    -> "hace menos de un minuto"
+        mins < 60   -> "hace $mins min"
+        mins < 1440 -> "hace " + (mins / 60) + " h"
+        else        -> "hace " + (mins / 1440) + " días"
+      }
+      "$hace · pedía cuadro: " + (if (p.getBoolean("bandera", false)) "sí" else "NO") +
+      " · permiso: " + (if (p.getBoolean("permiso", false)) "sí" else "NO") +
+      " · " + (p.getString("desenlace", "?") ?: "?")
+    }
+  } catch (e: Throwable) {
+    "No se pudo leer el diagnóstico"
+  }
 
   /**
    * Abre la pantalla de ajustes del permiso YA POSICIONADA en Valera.
