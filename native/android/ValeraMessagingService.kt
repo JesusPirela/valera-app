@@ -1,8 +1,5 @@
 package com.valerarealestate.app
 
-import android.content.Intent
-import android.os.Build
-import android.provider.Settings
 import android.util.Log
 import com.google.firebase.messaging.RemoteMessage
 import expo.modules.notifications.service.ExpoFirebaseMessagingService
@@ -49,15 +46,17 @@ class ValeraMessagingService : ExpoFirebaseMessagingService() {
     // falla: es preferible una alarma sin pantalla que una alarma perdida.
     try {
       val bandera = leerDato(remoteMessage, BANDERA_PANTALLA) == "1"
-      val permiso = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
-      var desenlace = when {
+      val permiso = CuadroOverlay.hayPermiso(this)
+      val desenlace = when {
         !bandera -> "el aviso no pedía cuadro"
         !permiso -> "falta el permiso de superposición"
-        else -> "intentando abrir…"
-      }
-      if (bandera && permiso) {
-        desenlace = try { abrirPantalla(remoteMessage); "se abrió sin error" }
-                    catch (e: Throwable) { "ERROR al abrir: " + (e.message ?: e.javaClass.simpleName) }
+        else -> CuadroOverlay.mostrar(
+          this,
+          "¡Nuevo lead de campaña!",
+          "Atiéndelo lo antes posible para no perder la oportunidad.",
+          leerDato(remoteMessage, "lead_nombre"),
+          leerDato(remoteMessage, "lead_detalle"),
+        ) ?: "se mostró el cuadro"
       }
       anotar(bandera, permiso, desenlace)
     } catch (e: Throwable) {
@@ -124,20 +123,4 @@ class ValeraMessagingService : ExpoFirebaseMessagingService() {
     null
   }
 
-  private fun abrirPantalla(msg: RemoteMessage) {
-    val intent = Intent(this, AlarmaActivity::class.java).apply {
-      // NEW_TASK es obligatorio: un Service no tiene pila de pantallas propia.
-      // CLEAR_TOP evita que se apilen cinco alarmas si llegan cinco push.
-      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-      // El titulo y el cuerpo son fijos, como en el popup que la app ya
-      // muestra por dentro. Lo que cambia es el recuadro lila: ahi va el
-      // nombre del lead y su zona y presupuesto, que es la informacion por la
-      // que la persona decide si contestar ya o no.
-      putExtra(AlarmaActivity.EXTRA_TITULO, "¡Nuevo lead de campaña!")
-      putExtra(AlarmaActivity.EXTRA_CUERPO, "Atiéndelo lo antes posible para no perder la oportunidad.")
-      putExtra(AlarmaActivity.EXTRA_NOMBRE, leerDato(msg, "lead_nombre"))
-      putExtra(AlarmaActivity.EXTRA_DETALLE, leerDato(msg, "lead_detalle"))
-    }
-    startActivity(intent)
-  }
 }
