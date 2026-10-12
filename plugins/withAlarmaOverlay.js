@@ -27,7 +27,6 @@ const FUENTES = [
   'CuadroVista.kt',             // dibuja el cuadro (un solo sitio para los dos usos)
   'CuadroOverlay.kt',           // lo muestra como ventana superpuesta
   'AlarmaActivity.kt',          // la pantalla del botón de prueba
-  'ProbarFueraService.kt',      // espera unos segundos para probarlo en segundo plano
 ]
 
 function withPermisoYComponentes(config) {
@@ -49,14 +48,6 @@ function withPermisoYComponentes(config) {
       }],
     })
 
-    // El servicio que espera unos segundos antes de mostrar el cuadro, para
-    // poder probarlo con la app en segundo plano. No lleva intent-filter: solo
-    // lo arranca la propia app.
-    const nombreProbar = `${PAQUETE}.ProbarFueraService`
-    app.service = app.service.filter((s) => s.$?.['android:name'] !== nombreProbar)
-    app.service.push({
-      $: { 'android:name': nombreProbar, 'android:exported': 'false' },
-    })
 
     // ── La pantalla ──
     //

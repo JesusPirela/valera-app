@@ -127,6 +127,81 @@ object CuadroVista {
     return fondo
   }
 
+  /**
+   * La segunda cara del cuadro: elegir por cuánto tiempo posponer.
+   *
+   * Antes "Posponer" daba una hora fija y ya. Una hora es mucho si estás
+   * saliendo de una junta de diez minutos, y poco si vas manejando a una cita.
+   * Con opciones, posponer deja de ser "callarlo y olvidarlo".
+   */
+  fun construirOpciones(
+    c: Context,
+    opciones: List<Pair<String, Int>>,     // etiqueta -> minutos
+    alElegir: (Int) -> Unit,
+    alVolver: () -> Unit,
+  ): ViewGroup {
+    val fondo = LinearLayout(c).apply {
+      orientation = LinearLayout.VERTICAL
+      gravity = Gravity.CENTER
+      setBackgroundColor(Color.parseColor("#E0140000"))
+      setPadding(dp(c, 24f), dp(c, 24f), dp(c, 24f), dp(c, 24f))
+    }
+
+    val tarjeta = LinearLayout(c).apply {
+      orientation = LinearLayout.VERTICAL
+      gravity = Gravity.CENTER_HORIZONTAL
+      background = GradientDrawable().apply {
+        setColor(Color.parseColor("#1A0505"))
+        cornerRadius = dp(c, 20f).toFloat()
+        setStroke(dp(c, 3f), Color.parseColor("#FF2222"))
+      }
+      setPadding(dp(c, 22f), dp(c, 24f), dp(c, 22f), dp(c, 22f))
+    }
+
+    tarjeta.addView(TextView(c).apply {
+      text = "¿CUÁNTO TIEMPO?"
+      setTextColor(Color.parseColor("#FF4D4D"))
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
+      gravity = Gravity.CENTER
+      letterSpacing = 0.02f
+      typeface = Typeface.DEFAULT_BOLD
+    })
+
+    tarjeta.addView(TextView(c).apply {
+      text = "No te avisaremos de este lead hasta entonces."
+      setTextColor(Color.parseColor("#E8C4C4"))
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+      gravity = Gravity.CENTER
+      setPadding(0, dp(c, 6f), 0, dp(c, 14f))
+    })
+
+    for ((etiqueta, minutos) in opciones) {
+      tarjeta.addView(Button(c).apply {
+        text = etiqueta
+        setTextColor(Color.WHITE)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+        isAllCaps = false
+        typeface = Typeface.DEFAULT_BOLD
+        background = GradientDrawable().apply {
+          setColor(Color.parseColor("#2E0A0A"))
+          cornerRadius = dp(c, 12f).toFloat()
+          setStroke(dp(c, 1f), Color.parseColor("#7A1F1F"))
+        }
+        layoutParams = LinearLayout.LayoutParams(
+          LinearLayout.LayoutParams.MATCH_PARENT, dp(c, 50f)
+        ).apply { topMargin = dp(c, 6f) }
+        setOnClickListener { alElegir(minutos) }
+      })
+    }
+
+    tarjeta.addView(botonTexto(c, "← Volver") { alVolver() })
+
+    fondo.addView(tarjeta, LinearLayout.LayoutParams(
+      minOf(dp(c, 380f), c.resources.displayMetrics.widthPixels - dp(c, 48f)),
+      LinearLayout.LayoutParams.WRAP_CONTENT))
+    return fondo
+  }
+
   /** El botón principal: rojo encendido, alto, imposible de no ver. */
   private fun botonRojo(c: Context, texto: String, alTocar: () -> Unit): View =
     Button(c).apply {

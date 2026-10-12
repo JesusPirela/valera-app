@@ -51,32 +51,40 @@ class AlarmaActivity : Activity() {
 
     setContentView(CuadroVista.construir(
       this,
-      "Sal de la app ahora",
-      "El cuadro va a salir solo en 8 segundos, encima de lo que estés usando. " +
-      "Te mando a la pantalla de inicio al tocar el botón.",
+      "Probar el cuadro",
+      "Sale ahora mismo y se queda encima aunque cambies de app. " +
+      "Pruébalo: ábrelo y vete a WhatsApp, debe seguir ahí.",
       nombreLead = "Último aviso recibido",
       detalle = ultimoDiagnostico(),
-      textoBoton = "Empezar la prueba",
+      textoBoton = "Mostrar el cuadro",
       alPrincipal = { lanzarPrueba() },
       alSecundario = { finish() },
     ))
   }
 
+  /**
+   * Muestra el cuadro al momento, sin esperar.
+   *
+   * La primera versión esperaba 8 segundos para probarlo con la app en segundo
+   * plano. No servía: Android congela los procesos en caché, así que el
+   * temporizador no corría hasta que algo despertaba la app —de ahí que
+   * apareciera al abrir otra app, o tardara minutos—. Era un fallo de la prueba,
+   * no del cuadro.
+   *
+   * Sin espera no hace falta que el proceso siga vivo, y la ventana se queda
+   * encima al cambiar de app, que es justo lo que había que comprobar. El caso
+   * de segundo plano de verdad lo cubre un aviso real: el push despierta el
+   * proceso al llegar.
+   */
   private fun lanzarPrueba() {
-    try {
-      startService(Intent(this, ProbarFueraService::class.java))
-    } catch (e: Throwable) {
-      Log.e(TAG, "No se pudo programar la prueba", e)
-    }
-    // Se manda a la pantalla de inicio sin pedirlo: la prueba solo vale si la
-    // app queda en segundo plano, y dejarlo a la memoria de la persona es la
-    // forma más fácil de sacar una conclusión equivocada.
-    try {
-      startActivity(Intent(Intent.ACTION_MAIN).apply {
-        addCategory(Intent.CATEGORY_HOME)
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-      })
-    } catch (e: Throwable) { Log.w(TAG, "No se pudo ir al inicio", e) }
+    val fallo = CuadroOverlay.mostrar(
+      applicationContext,
+      "¡Nuevo lead de campaña!",
+      "Atiéndelo lo antes posible para no perder la oportunidad.",
+      "Prueba del cuadro",
+      "Cambia de app: esto debe seguir encima",
+    )
+    if (fallo != null) Log.e(TAG, "La prueba falló: $fallo")
     finish()
   }
 

@@ -49,7 +49,7 @@ export default function AlarmaPendientes() {
   // Esa pantalla es nativa y no tiene la sesión del usuario, así que no puede
   // llamar a Supabase por su cuenta: abre la app con ?alarma=posponer y el
   // trabajo se hace aquí, que es donde sí hay sesión.
-  const { alarma } = useLocalSearchParams<{ alarma?: string }>()
+  const { alarma, minutos } = useLocalSearchParams<{ alarma?: string; minutos?: string }>()
   const yaPospuesto = useRef(false)
 
   const cargar = useCallback(() => {
@@ -67,7 +67,10 @@ export default function AlarmaPendientes() {
     // parámetro sigue en la ruta y useFocusEffect se dispara en cada entrada.
     if (alarma !== 'posponer' || yaPospuesto.current) return
     yaPospuesto.current = true
-    supabase.rpc('posponer_alarma_todo', { p_tipo: 'alarma_lead', p_minutos: 60 })
+    // El cuadro manda los minutos que la persona eligió; si llega sin ellos
+    // —versión vieja de la app, o enlace a mano— se usa una hora.
+    const mins = Math.max(5, Number(minutos) || 60)
+    supabase.rpc('posponer_alarma_todo', { p_tipo: 'alarma_lead', p_minutos: mins })
       .then(({ data, error }) => {
         // supabase.rpc NO lanza: devuelve { error }. Sin esta comprobación un
         // fallo se vería como si hubiera pospuesto, y la alarma volvería a los
@@ -80,7 +83,13 @@ export default function AlarmaPendientes() {
           return
         }
         setPendientes([])
-        if (Platform.OS !== 'web') Alert.alert('Listo', 'No te avisaremos durante una hora.')
+        // Se confirma el tiempo que de verdad se aplicó, no uno fijo: si la
+        // persona eligió 15 minutos y le dijéramos "una hora", la próxima vez
+        // no sabría en qué creer.
+        const cuanto = mins >= 60 * 12 ? 'hasta mañana'
+                     : mins >= 60 ? `durante ${Math.round(mins / 60)} ${mins >= 120 ? 'horas' : 'hora'}`
+                     : `durante ${mins} minutos`
+        if (Platform.OS !== 'web') Alert.alert('Listo', `No te avisaremos ${cuanto}.`)
       })
   }, [alarma]))
 

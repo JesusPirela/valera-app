@@ -48,6 +48,14 @@ object CuadroOverlay {
    *  de todo sin forma de quitarla sería motivo para desinstalar la app. */
   private const val MAX_MS = 60_000L
 
+  /** Cuánto se puede posponer. Las etiquetas son las que lee la persona. */
+  private val OPCIONES_POSPONER = listOf(
+    "15 minutos" to 15,
+    "1 hora" to 60,
+    "4 horas" to 240,
+    "Hasta mañana" to 60 * 20,
+  )
+
   private var vista: View? = null
   private var reproductor: MediaPlayer? = null
   private var vibrador: Vibrator? = null
@@ -73,25 +81,11 @@ object CuadroOverlay {
         val v = CuadroVista.construir(
           c, titulo, cuerpo, nombre, detalle,
           alPrincipal = { abrir(c, "valera-app://leads-campania") },
-          alSecundario = { abrir(c, "valera-app://mi-dia?alarma=posponer") },
+          // "Posponer" ya no decide por la persona: abre las opciones.
+          alSecundario = { mostrarOpciones(c, titulo, cuerpo, nombre, detalle) },
         )
 
-        val tipo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-          WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        else
-          @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
-
-        val lp = WindowManager.LayoutParams(
-          WindowManager.LayoutParams.MATCH_PARENT,
-          WindowManager.LayoutParams.MATCH_PARENT,
-          tipo,
-          // Sin NOT_TOUCHABLE: los botones tienen que poder tocarse.
-          // Sin NOT_FOCUSABLE: así el botón "atrás" también lo cierra.
-          WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-          PixelFormat.TRANSLUCENT,
-        )
-
-        wm.addView(v, lp)
+        wm.addView(v, parametrosVentana())
         vista = v
         sonar(c)
         reloj.removeCallbacks(quitarSolo)
@@ -119,6 +113,48 @@ object CuadroOverlay {
       }
       vista = null
     }
+  }
+
+  /**
+   * Cambia el contenido de la ventana por las opciones de tiempo.
+   *
+   * Se reemplaza la vista en la MISMA ventana en vez de abrir otra: así no hace
+   * falta otro permiso ni otro arranque, y "Volver" devuelve al cuadro sin que
+   * la alarma se haya perdido por el camino.
+   */
+  private fun mostrarOpciones(c: Context, titulo: String, cuerpo: String, nombre: String?, detalle: String?) {
+    ejecutarEnPrincipal {
+      val anterior = vista ?: return@ejecutarEnPrincipal
+      try {
+        val wm = c.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val nueva = CuadroVista.construirOpciones(
+          c, OPCIONES_POSPONER,
+          alElegir = { minutos -> abrir(c, "valera-app://mi-dia?alarma=posponer&minutos=$minutos") },
+          alVolver = { mostrar(c, titulo, cuerpo, nombre, detalle) },
+        )
+        wm.removeView(anterior)
+        wm.addView(nueva, parametrosVentana())
+        vista = nueva
+      } catch (e: Throwable) {
+        Log.e(TAG, "No se pudieron mostrar las opciones de posponer", e)
+      }
+    }
+  }
+
+  private fun parametrosVentana(): WindowManager.LayoutParams {
+    val tipo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+    else
+      @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+    return WindowManager.LayoutParams(
+      WindowManager.LayoutParams.MATCH_PARENT,
+      WindowManager.LayoutParams.MATCH_PARENT,
+      tipo,
+      // Sin NOT_TOUCHABLE: los botones tienen que poder tocarse.
+      // Sin NOT_FOCUSABLE: así el botón "atrás" también lo cierra.
+      WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+      PixelFormat.TRANSLUCENT,
+    )
   }
 
   private fun abrir(c: Context, enlace: String) {

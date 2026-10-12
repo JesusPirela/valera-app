@@ -108,12 +108,32 @@ serve(async (req) => {
           if (cli) {
             clientesCreados++
             await db.from('leads_campania').update({ cliente_id: cli.id }).eq('id', n.id)
-            await db.from('notificaciones').insert({
-              user_id: camp.asignado_a, tipo: 'nuevo_cliente', cliente_id: cli.id,
-              titulo: '📢 Nuevo lead de campaña',
-              mensaje: `${n.nombre || 'Lead'} · ${n.telefono || ''} — ${camp.nombre}`,
-              accion_url: `/(prospectador)/detalle-cliente?id=${cli.id}`,
-            })
+            // La alarma se dispara AQUÍ, no se deja para el cron.
+            //
+            // Antes el camino era: este sync (cada 15 min) → generar_alarmas
+            // (cada 5) → procesar-pushes (cada 1). En el peor caso, 21 minutos
+            // entre que la persona deja sus datos en Facebook y al asesor le
+            // suena el teléfono. Para un lead, 21 minutos es haberlo perdido.
+            //
+            // Insertando el aviso en el mismo momento se quitan 6 de esos
+            // minutos, y el push sale en cuanto termine esta corrida.
+            //
+            // No se duplica con el cron: generar_alarmas no manda otro aviso a
+            // la misma persona si ya hubo uno en los últimos 5 minutos.
+            await db.from('notificaciones').insert([
+              {
+                user_id: camp.asignado_a, tipo: 'nuevo_cliente', cliente_id: cli.id,
+                titulo: '📢 Nuevo lead de campaña',
+                mensaje: `${n.nombre || 'Lead'} · ${n.telefono || ''} — ${camp.nombre}`,
+                accion_url: `/(prospectador)/detalle-cliente?id=${cli.id}`,
+              },
+              {
+                user_id: camp.asignado_a, tipo: 'alarma_lead', cliente_id: cli.id,
+                titulo: '🔔 1 lead sin atender',
+                mensaje: `${(n.nombre || 'Lead').trim()} acaba de llegar. Mándale WhatsApp o llámalo, o pospón el aviso.`,
+                accion_url: '/leads-campania',
+              },
+            ])
           }
         }
       }
@@ -138,8 +158,29 @@ serve(async (req) => {
       }
     }
 
+    // Se empuja el push YA, sin esperar al cron del minuto.
+    //
+    // Es el último minuto de los 21 del peor caso, y el más fácil de quitar:
+    // procesar-pushes ya sabe qué hacer, solo había que llamarlo. Si falla no
+    // se pierde nada —el cron lo recoge igual al minuto siguiente—, por eso no
+    // rompe la respuesta.
+    let pushInmediato = 'no hacía falta'
+    if (clientesCreados > 0) {
+      try {
+        const r = await fetch(`${url}/functions/v1/procesar-pushes`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${service}`, 'Content-Type': 'application/json' },
+          body: '{}',
+        })
+        pushInmediato = r.ok ? 'enviado' : `falló (${r.status}), lo recoge el cron`
+      } catch (e) {
+        pushInmediato = `falló (${String((e as any)?.message ?? e)}), lo recoge el cron`
+      }
+    }
+
     return new Response(JSON.stringify({
       ok: true,
+      push_inmediato: pushInmediato,
       nuevos: nuevosTotal,
       clientes: clientesCreados,
       whatsapp: waEnviados,
