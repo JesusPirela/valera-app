@@ -40,6 +40,21 @@ function withPermisoYComponentes(config) {
     AndroidConfig.Permissions.ensurePermission(manifest, 'android.permission.FOREGROUND_SERVICE')
     AndroidConfig.Permissions.ensurePermission(manifest, 'android.permission.FOREGROUND_SERVICE_SHORT_SERVICE')
 
+    // ── Dejar UN SOLO servicio de mensajes ──
+    //
+    // expo-notifications declara el suyo para la misma accion de Firebase. Con
+    // dos servicios compitiendo, cual gana es indefinido: android:priority esta
+    // documentado para actividades y receptores, NO para servicios. En la
+    // practica ganaba el de Expo y nuestro codigo no corria nunca —el cuadro
+    // salia al probarlo desde la app, jamas con un aviso real, y el diagnostico
+    // del telefono decia que nunca habia llegado ningun aviso—.
+    //
+    // Se quita el suyo del manifiesto final. No se pierde nada: nuestro
+    // servicio HEREDA de el y llama a super(), asi que sigue haciendo
+    // exactamente su trabajo, y ademas el nuestro.
+    manifest.manifest.$ = manifest.manifest.$ || {}
+    manifest.manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools'
+
     const app = manifest.manifest.application?.[0]
     if (!app) throw new Error('withAlarmaOverlay: no se encontró <application> en el manifiesto')
 
@@ -48,10 +63,22 @@ function withPermisoYComponentes(config) {
     const nombreServicio = `${PAQUETE}.ValeraMessagingService`
     app.service = app.service.filter((s) => s.$?.['android:name'] !== nombreServicio)
     app.service.push({
-      $: { 'android:name': nombreServicio, 'android:exported': 'false' },
+      $: {
+        'android:name': nombreServicio,
+        'android:exported': 'false',
+      },
       'intent-filter': [{
         action: [{ $: { 'android:name': 'com.google.firebase.MESSAGING_EVENT' } }],
       }],
+    })
+
+    // Y se borra el de Expo del manifiesto fusionado, para que no haya duda de
+    // cuál atiende el mensaje. tools:node="remove" es la forma soportada de
+    // quitar algo que aporta una librería.
+    const nombreExpo = 'expo.modules.notifications.service.ExpoFirebaseMessagingService'
+    app.service = app.service.filter((s) => s.$?.['android:name'] !== nombreExpo)
+    app.service.push({
+      $: { 'android:name': nombreExpo, 'tools:node': 'remove' },
     })
 
     // El servicio en primer plano que dibuja el cuadro.
