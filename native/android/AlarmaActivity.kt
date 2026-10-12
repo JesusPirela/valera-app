@@ -237,7 +237,7 @@ class AlarmaActivity : Activity() {
     val fondo = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
       gravity = Gravity.CENTER
-      setBackgroundColor(Color.parseColor("#8C000000"))   // igual que el de dentro
+      setBackgroundColor(Color.parseColor("#E0140000"))   // casi opaco: esto interrumpe
       setPadding(dp(24f), dp(24f), dp(24f), dp(24f))
     }
 
@@ -245,37 +245,39 @@ class AlarmaActivity : Activity() {
       orientation = LinearLayout.VERTICAL
       gravity = Gravity.CENTER_HORIZONTAL
       background = GradientDrawable().apply {
-        setColor(Color.WHITE)
+        setColor(Color.parseColor("#1A0505"))
         cornerRadius = dp(20f).toFloat()
+        setStroke(dp(3f), Color.parseColor("#FF2222"))
       }
-      setPadding(dp(22f), dp(22f), dp(22f), dp(22f))
+      setPadding(dp(22f), dp(24f), dp(22f), dp(22f))
     }
 
     // Megáfono dentro del círculo lila.
     tarjeta.addView(TextView(this).apply {
-      text = if (textoBoton != null) "🔒" else "📣"
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 30f)
+      text = if (textoBoton != null) "🔒" else "🔔"
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 34f)
       gravity = Gravity.CENTER
       background = GradientDrawable().apply {
-        setColor(Color.parseColor("#f3e8ff"))
-        cornerRadius = dp(31f).toFloat()
+        setColor(Color.parseColor("#D11A1A"))
+        cornerRadius = dp(34f).toFloat()
       }
-      layoutParams = LinearLayout.LayoutParams(dp(62f), dp(62f))
-        .apply { bottomMargin = dp(10f) }
+      layoutParams = LinearLayout.LayoutParams(dp(68f), dp(68f))
+        .apply { bottomMargin = dp(12f) }
     })
 
     tarjeta.addView(TextView(this).apply {
-      text = titulo
-      setTextColor(Color.parseColor("#4c1d95"))
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
+      text = titulo.uppercase()
+      setTextColor(Color.parseColor("#FF4D4D"))
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 21f)
       gravity = Gravity.CENTER
+      letterSpacing = 0.02f
       typeface = android.graphics.Typeface.DEFAULT_BOLD
     })
 
     tarjeta.addView(TextView(this).apply {
       text = cuerpo
-      setTextColor(Color.parseColor("#555555"))
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+      setTextColor(Color.parseColor("#E8C4C4"))
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
       gravity = Gravity.CENTER
       setPadding(0, dp(6f), 0, dp(12f))
     })
@@ -284,8 +286,9 @@ class AlarmaActivity : Activity() {
       val caja = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         background = GradientDrawable().apply {
-          setColor(Color.parseColor("#faf5ff"))
+          setColor(Color.parseColor("#2E0A0A"))
           cornerRadius = dp(12f).toFloat()
+          setStroke(dp(1f), Color.parseColor("#7A1F1F"))
         }
         setPadding(dp(12f), dp(12f), dp(12f), dp(12f))
         layoutParams = LinearLayout.LayoutParams(
@@ -294,24 +297,24 @@ class AlarmaActivity : Activity() {
       }
       if (!nombreLead.isNullOrBlank()) caja.addView(TextView(this).apply {
         text = "• $nombreLead"
-        setTextColor(Color.parseColor("#3b0764"))
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        setTextColor(Color.WHITE)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
         typeface = android.graphics.Typeface.DEFAULT_BOLD
       })
       if (!detalle.isNullOrBlank()) caja.addView(TextView(this).apply {
         text = detalle
-        setTextColor(Color.parseColor("#7c3aed"))
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        setTextColor(Color.parseColor("#FF8A8A"))
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
         setPadding(0, dp(3f), 0, 0)
       })
       tarjeta.addView(caja)
     }
 
     if (textoBoton != null) {
-      tarjeta.addView(botonMorado(textoBoton) { alTocar?.invoke() })
+      tarjeta.addView(botonRojo(textoBoton) { alTocar?.invoke() })
       tarjeta.addView(botonTexto("Ahora no") { cerrar() })
     } else {
-      tarjeta.addView(botonMorado("📋  Atender ahora") { abrir(ENLACE_LEADS) })
+      tarjeta.addView(botonRojo("📋  Atender ahora") { abrir(ENLACE_LEADS) })
       tarjeta.addView(botonTexto("Posponer 1 hora") { abrir(ENLACE_POSPONER) })
     }
 
@@ -321,8 +324,8 @@ class AlarmaActivity : Activity() {
     return fondo
   }
 
-  /** El botón principal, morado. Mismo color y medidas que el de la app. */
-  private fun botonMorado(texto: String, alTocar: () -> Unit) =
+  /** El botón principal: rojo encendido, alto, imposible de no ver. */
+  private fun botonRojo(texto: String, alTocar: () -> Unit) =
     Button(this).apply {
       text = texto
       setTextColor(Color.WHITE)
@@ -330,12 +333,12 @@ class AlarmaActivity : Activity() {
       isAllCaps = false
       typeface = android.graphics.Typeface.DEFAULT_BOLD
       background = GradientDrawable().apply {
-        setColor(Color.parseColor("#7c3aed"))
+        setColor(Color.parseColor("#E01B1B"))
         cornerRadius = dp(12f).toFloat()
       }
       layoutParams = LinearLayout.LayoutParams(
-        LinearLayout.LayoutParams.MATCH_PARENT, dp(48f)
-      ).apply { topMargin = dp(2f) }
+        LinearLayout.LayoutParams.MATCH_PARENT, dp(54f)
+      ).apply { topMargin = dp(4f) }
       setOnClickListener { alTocar() }
     }
 
@@ -343,7 +346,7 @@ class AlarmaActivity : Activity() {
   private fun botonTexto(texto: String, alTocar: () -> Unit) =
     Button(this).apply {
       text = texto
-      setTextColor(Color.parseColor("#888888"))
+      setTextColor(Color.parseColor("#C98A8A"))
       setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
       isAllCaps = false
       typeface = android.graphics.Typeface.DEFAULT_BOLD
