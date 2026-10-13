@@ -49,7 +49,20 @@ async function registrarVersionApp(userId: string) {
   if (Platform.OS === 'web') return
   try {
     const version = Constants.expoConfig?.version ?? null
-    await supabase.from('profiles').update({ app_version: version, app_platform: Platform.OS }).eq('id', userId)
+    // Marca y modelo del aparato. React Native ya los expone; solo faltaba
+    // conservarlos.
+    //
+    // Sirven para no volver a depurar a ciegas: varias marcas chinas ponen
+    // candados propios encima de Android y apagan de fábrica permisos que el
+    // sistema sí concede. Sin este dato, cuando alguien dice "no me llega" no
+    // hay forma de saber si su teléfono es de los que dan guerra.
+    const c = Platform.constants as any
+    await supabase.from('profiles').update({
+      app_version: version,
+      app_platform: Platform.OS,
+      telefono_marca: c?.Manufacturer ?? c?.Brand ?? null,
+      telefono_modelo: c?.Model ?? null,
+    }).eq('id', userId)
   } catch (e) {
     console.warn('[Version] Error registrando versión de app:', e)
   }

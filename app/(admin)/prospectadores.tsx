@@ -32,9 +32,32 @@ type Prospectador = {
   last_seen: string | null
   valera_coins: number
   app_version: string | null
+  telefono_marca: string | null
+  telefono_modelo: string | null
   app_platform: string | null
   activo: boolean | null
   inhabilitada_en: string | null
+}
+
+/**
+ * Marcas que ponen candados propios encima de Android.
+ *
+ * Apagan de fábrica permisos que el sistema sí concede —iniciar en segundo
+ * plano, mostrar ventanas emergentes— y cada una los llama distinto y los
+ * entierra en otro menú. Son las primeras que hay que mirar cuando alguien
+ * reporta que no le llegan los avisos.
+ */
+/**
+ * Roles a los que tiene sentido reclamarles publicaciones.
+ *
+ * Deja fuera a admin y a "nuevo": al primero no le toca publicar y al segundo
+ * todavía no. Incluirlos inflaría la cuenta de "sin publicar" con gente a la
+ * que nadie va a ir a preguntarle.
+ */
+const PUEDE_PUBLICAR = new Set(['prospectador', 'prospectador_plus', 'asesor'])
+
+function marcaConCandados(marca: string | null): boolean {
+  return /xiaomi|redmi|poco|huawei|honor|oppo|realme|oneplus|vivo/i.test(marca ?? '')
 }
 
 const PLATAFORMA_BADGE: Record<string, { label: string; bg: string; color: string }> = {
@@ -170,6 +193,11 @@ export default function Prospectadores() {
     router.setParams({ buscar: '' })
   }, [buscar])
   const [pubMap, setPubMap] = useState<Map<string, number>>(new Map())
+  // Publicaciones de los ULTIMOS 7 DIAS, aparte del total de toda la vida.
+  // Son cosas distintas: alguien con 400 acumuladas puede llevar tres semanas
+  // sin publicar, y en la lista se veria igual de bien que quien publico ayer.
+  const [pubSemana, setPubSemana] = useState<Map<string, number>>(new Map())
+  const [soloSinPublicar, setSoloSinPublicar] = useState(false)
   const [ordenPub, setOrdenPub] = useState<'no' | 'asc' | 'desc'>('no')  // por publicaciones
 
   // Selector de rol inline
@@ -212,7 +240,10 @@ export default function Prospectadores() {
 
   const listaFiltrada = useMemo(() => {
     const q = normalizar(busqueda)
-    const base = lista.filter(p => !busqueda.trim() || normalizar(p.nombre).includes(q) || normalizar(p.email).includes(q))
+    let base = lista.filter(p => !busqueda.trim() || normalizar(p.nombre).includes(q) || normalizar(p.email).includes(q))
+    // Solo quien PODRIA publicar: a un admin o a alguien recien dado de alta no
+    // se le reclama no haber publicado.
+    if (soloSinPublicar) base = base.filter(p => !(pubSemana.get(p.id) ?? 0) && PUEDE_PUBLICAR.has(p.role))
     if (ordenPub !== 'no') {
       return [...base].sort((a, b) => {
         const d = (pubMap.get(a.id) ?? 0) - (pubMap.get(b.id) ?? 0)
@@ -224,7 +255,7 @@ export default function Prospectadores() {
       const dr = r(a.role) - r(b.role)
       return dr !== 0 ? dr : (a.nombre ?? a.email).localeCompare(b.nombre ?? b.email)
     })
-  }, [lista, busqueda, ordenPub, pubMap])
+  }, [lista, busqueda, ordenPub, pubMap, pubSemana, soloSinPublicar])
 
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
@@ -232,6 +263,9 @@ export default function Prospectadores() {
     if (!error) setLista(data ?? [])
     supabase.rpc('get_publicaciones_por_usuario').then(({ data: pubs }) => {
       setPubMap(new Map((pubs ?? []).map((r: any) => [r.user_id, r.total])))
+    })
+    supabase.rpc('publicaciones_semana_por_usuario').then(({ data: sem }) => {
+      setPubSemana(new Map((sem ?? []).map((r: any) => [r.user_id, r.total])))
     })
     yaCargoRef.current = true
     setLoading(false)
@@ -495,6 +529,33 @@ export default function Prospectadores() {
         </Text>
       </TouchableOpacity>
 
+      {/*
+        Quién lleva CERO esta semana.
+
+        La app sabía enseñar quién publica mucho, pero no quién no publica nada,
+        que es el dato con el que se puede hacer algo. El número va en el propio
+        botón para que se vea sin tener que entrar.
+      */}
+      {(() => {
+        const sinPublicar = lista.filter(p => !(pubSemana.get(p.id) ?? 0) && PUEDE_PUBLICAR.has(p.role)).length
+        if (sinPublicar === 0) return null
+        return (
+          <TouchableOpacity
+            style={[styles.ordenPub, {
+              marginTop: 8,
+              borderColor: soloSinPublicar ? '#b45309' : c.border,
+              backgroundColor: soloSinPublicar ? '#b4530912' : 'transparent',
+            }]}
+            onPress={() => setSoloSinPublicar(v => !v)}
+          >
+            <Text style={[styles.ordenPubTxt, { color: soloSinPublicar ? '#b45309' : c.textSub }]}>
+              {soloSinPublicar ? '✕  ' : '⚠️ '}
+              {sinPublicar} sin publicar esta semana
+            </Text>
+          </TouchableOpacity>
+        )
+      })()}
+
       {loading ? (
         <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 40 }} />
       ) : lista.length === 0 ? (
@@ -524,6 +585,19 @@ export default function Prospectadores() {
                     <Text style={[styles.cardNombre, { color: c.text }]}>{item.nombre || item.email}</Text>
                     {ordenPub !== 'no' && (
                       <View style={styles.pubPill}><Text style={styles.pubPillTxt}>📊 {pubMap.get(item.id) ?? 0}</Text></View>
+                    )}
+                    {/*
+                      Lo de la SEMANA, siempre a la vista y no solo al ordenar.
+                      En ámbar cuando es cero: el total de toda la vida puede ser
+                      alto y aun así llevar semanas sin mover nada, y es ese cero
+                      el que hay que poder ver de un vistazo.
+                    */}
+                    {PUEDE_PUBLICAR.has(item.role) && (
+                      <View style={[styles.pubPill, { backgroundColor: (pubSemana.get(item.id) ?? 0) === 0 ? '#b4530918' : '#1a647012' }]}>
+                        <Text style={[styles.pubPillTxt, { color: (pubSemana.get(item.id) ?? 0) === 0 ? '#b45309' : '#1a6470' }]}>
+                          {pubSemana.get(item.id) ?? 0} esta semana
+                        </Text>
+                      </View>
                     )}
                     {(() => {
                       const est = estadoConexion(item.last_seen)
@@ -559,6 +633,19 @@ export default function Prospectadores() {
                         </View>
                         {item.app_version
                           ? <Text style={[styles.cardFecha, { color: c.textMute }]}>v{item.app_version}</Text>
+                          : null}
+                        {/*
+                          El telefono, junto a la version. Las marcas con
+                          candados propios —Xiaomi, Huawei, Oppo, vivo— se
+                          marcan en ambar: son las que apagan de fabrica
+                          permisos que el sistema si concede, y por tanto a las
+                          que hay que mirar primero cuando alguien reporta que
+                          no le llegan los avisos.
+                        */}
+                        {item.telefono_modelo
+                          ? <Text style={[styles.cardFecha, { color: marcaConCandados(item.telefono_marca) ? '#b45309' : c.textMute }]} numberOfLines={1}>
+                              📱 {[item.telefono_marca, item.telefono_modelo].filter(Boolean).join(' ')}
+                            </Text>
                           : null}
                       </View>
                     )
