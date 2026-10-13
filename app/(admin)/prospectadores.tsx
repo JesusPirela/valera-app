@@ -56,6 +56,46 @@ type Prospectador = {
  */
 const PUEDE_PUBLICAR = new Set(['prospectador', 'prospectador_plus', 'asesor'])
 
+/**
+ * A quién tiene sentido reclamarle: puede publicar y su cuenta sigue viva.
+ *
+ * Sin lo de "activo" la cuenta miente: de las 49 personas con rol de publicar,
+ * 19 están inhabilitadas, y salían todas marcadas como que no publicaron. El
+ * número que importa es el de quien sí puede entrar hoy a publicar.
+ */
+function seLeReclama(p: { role: string; activo?: boolean | null }): boolean {
+  return PUEDE_PUBLICAR.has(p.role) && p.activo !== false
+}
+
+/**
+ * Días de calendario desde la última publicación. Infinity si nunca publicó.
+ *
+ * Se cuenta por día y no por horas: quien publicó anoche a las 23:00 publicó
+ * "ayer", que es como lo diría cualquiera mirando la lista, y no "hace 9 horas".
+ */
+function diasSinPublicar(ultima: number | null | undefined): number {
+  if (!ultima) return Infinity
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+  const dia = new Date(ultima); dia.setHours(0, 0, 0, 0)
+  return Math.round((hoy.getTime() - dia.getTime()) / 86400000)
+}
+
+/**
+ * Los periodos del filtro, con los días que hay que llevar sin publicar.
+ *
+ * "hoy" es no haber publicado hoy; "ayer" es no haber publicado ni hoy ni
+ * ayer. Así cada opción contesta la pregunta tal como se hace en voz alta:
+ * "¿quién no publicó ayer?".
+ */
+const PERIODOS_SIN_PUBLICAR = [
+  ['hoy',  'hoy',      0],
+  ['ayer', 'ayer',     1],
+  ['7',    '7 días',   7],
+  ['30',   '30 días', 30],
+] as const
+
+type PeriodoSinPublicar = typeof PERIODOS_SIN_PUBLICAR[number][0]
+
 function marcaConCandados(marca: string | null): boolean {
   return /xiaomi|redmi|poco|huawei|honor|oppo|realme|oneplus|vivo/i.test(marca ?? '')
 }
@@ -193,11 +233,11 @@ export default function Prospectadores() {
     router.setParams({ buscar: '' })
   }, [buscar])
   const [pubMap, setPubMap] = useState<Map<string, number>>(new Map())
-  // Publicaciones de los ULTIMOS 7 DIAS, aparte del total de toda la vida.
+  // CUANDO publico cada quien por ultima vez, aparte del total de toda la vida.
   // Son cosas distintas: alguien con 400 acumuladas puede llevar tres semanas
   // sin publicar, y en la lista se veria igual de bien que quien publico ayer.
-  const [pubSemana, setPubSemana] = useState<Map<string, number>>(new Map())
-  const [soloSinPublicar, setSoloSinPublicar] = useState(false)
+  const [ultimaPub, setUltimaPub] = useState<Map<string, { ultima: number | null; total30: number }>>(new Map())
+  const [sinPublicar, setSinPublicar] = useState<PeriodoSinPublicar | 'no'>('no')
   const [ordenPub, setOrdenPub] = useState<'no' | 'asc' | 'desc'>('no')  // por publicaciones
 
   // Selector de rol inline
@@ -241,9 +281,12 @@ export default function Prospectadores() {
   const listaFiltrada = useMemo(() => {
     const q = normalizar(busqueda)
     let base = lista.filter(p => !busqueda.trim() || normalizar(p.nombre).includes(q) || normalizar(p.email).includes(q))
-    // Solo quien PODRIA publicar: a un admin o a alguien recien dado de alta no
-    // se le reclama no haber publicado.
-    if (soloSinPublicar) base = base.filter(p => !(pubSemana.get(p.id) ?? 0) && PUEDE_PUBLICAR.has(p.role))
+    // Solo quien PODRIA publicar: a un admin, a alguien recien dado de alta o a
+    // una cuenta inhabilitada no se le reclama no haber publicado.
+    if (sinPublicar !== 'no') {
+      const dias = PERIODOS_SIN_PUBLICAR.find(([k]) => k === sinPublicar)![2]
+      base = base.filter(p => seLeReclama(p) && diasSinPublicar(ultimaPub.get(p.id)?.ultima) > dias)
+    }
     if (ordenPub !== 'no') {
       return [...base].sort((a, b) => {
         const d = (pubMap.get(a.id) ?? 0) - (pubMap.get(b.id) ?? 0)
@@ -255,7 +298,7 @@ export default function Prospectadores() {
       const dr = r(a.role) - r(b.role)
       return dr !== 0 ? dr : (a.nombre ?? a.email).localeCompare(b.nombre ?? b.email)
     })
-  }, [lista, busqueda, ordenPub, pubMap, pubSemana, soloSinPublicar])
+  }, [lista, busqueda, ordenPub, pubMap, ultimaPub, sinPublicar])
 
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
@@ -264,8 +307,11 @@ export default function Prospectadores() {
     supabase.rpc('get_publicaciones_por_usuario').then(({ data: pubs }) => {
       setPubMap(new Map((pubs ?? []).map((r: any) => [r.user_id, r.total])))
     })
-    supabase.rpc('publicaciones_semana_por_usuario').then(({ data: sem }) => {
-      setPubSemana(new Map((sem ?? []).map((r: any) => [r.user_id, r.total])))
+    supabase.rpc('ultima_publicacion_por_usuario').then(({ data: ult }) => {
+      setUltimaPub(new Map((ult ?? []).map((r: any) => [
+        r.user_id,
+        { ultima: r.ultima ? new Date(r.ultima).getTime() : null, total30: r.total_30d ?? 0 },
+      ])))
     })
     yaCargoRef.current = true
     setLoading(false)
@@ -530,29 +576,36 @@ export default function Prospectadores() {
       </TouchableOpacity>
 
       {/*
-        Quién lleva CERO esta semana.
+        Quién NO publicó, y en qué plazo.
 
         La app sabía enseñar quién publica mucho, pero no quién no publica nada,
-        que es el dato con el que se puede hacer algo. El número va en el propio
-        botón para que se vea sin tener que entrar.
+        que es el dato con el que se puede hacer algo. Cuatro plazos porque no
+        son la misma conversación: quien no publicó hoy puede estar en una cita,
+        y quien no publica en 30 días hace tiempo que dejó de trabajar aquí.
+        El número va en cada chip para no tener que picarlos uno por uno.
       */}
       {(() => {
-        const sinPublicar = lista.filter(p => !(pubSemana.get(p.id) ?? 0) && PUEDE_PUBLICAR.has(p.role)).length
-        if (sinPublicar === 0) return null
+        const candidatos = lista.filter(seLeReclama)
+        const cuenta = (dias: number) =>
+          candidatos.filter(p => diasSinPublicar(ultimaPub.get(p.id)?.ultima) > dias).length
         return (
-          <TouchableOpacity
-            style={[styles.ordenPub, {
-              marginTop: 8,
-              borderColor: soloSinPublicar ? '#b45309' : c.border,
-              backgroundColor: soloSinPublicar ? '#b4530912' : 'transparent',
-            }]}
-            onPress={() => setSoloSinPublicar(v => !v)}
-          >
-            <Text style={[styles.ordenPubTxt, { color: soloSinPublicar ? '#b45309' : c.textSub }]}>
-              {soloSinPublicar ? '✕  ' : '⚠️ '}
-              {sinPublicar} sin publicar esta semana
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.periodosRow}>
+            <Text style={[styles.periodosLbl, { color: c.textMute }]}>Sin publicar</Text>
+            {PERIODOS_SIN_PUBLICAR.map(([clave, etiqueta, dias]) => {
+              const activo = sinPublicar === clave
+              return (
+                <TouchableOpacity
+                  key={clave}
+                  style={[styles.periodoChip, { borderColor: activo ? '#b45309' : c.border, backgroundColor: activo ? '#b45309' : 'transparent' }]}
+                  onPress={() => setSinPublicar(activo ? 'no' : clave)}
+                >
+                  <Text style={[styles.periodoChipTxt, { color: activo ? '#fff' : c.textSub }]}>
+                    {activo ? '✕ ' : ''}{etiqueta} · {cuenta(dias)}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
         )
       })()}
 
@@ -587,18 +640,25 @@ export default function Prospectadores() {
                       <View style={styles.pubPill}><Text style={styles.pubPillTxt}>📊 {pubMap.get(item.id) ?? 0}</Text></View>
                     )}
                     {/*
-                      Lo de la SEMANA, siempre a la vista y no solo al ordenar.
-                      En ámbar cuando es cero: el total de toda la vida puede ser
-                      alto y aun así llevar semanas sin mover nada, y es ese cero
-                      el que hay que poder ver de un vistazo.
+                      CUÁNDO publicó por última vez, siempre a la vista y no
+                      solo al ordenar. El total de toda la vida puede ser alto y
+                      aun así llevar semanas sin mover nada; es esa fecha la que
+                      hay que poder ver de un vistazo. Ámbar al pasar una semana,
+                      que es cuando ya hay algo que preguntar.
                     */}
-                    {PUEDE_PUBLICAR.has(item.role) && (
-                      <View style={[styles.pubPill, { backgroundColor: (pubSemana.get(item.id) ?? 0) === 0 ? '#b4530918' : '#1a647012' }]}>
-                        <Text style={[styles.pubPillTxt, { color: (pubSemana.get(item.id) ?? 0) === 0 ? '#b45309' : '#1a6470' }]}>
-                          {pubSemana.get(item.id) ?? 0} esta semana
-                        </Text>
-                      </View>
-                    )}
+                    {seLeReclama(item) && (() => {
+                      const u = ultimaPub.get(item.id)
+                      const d = diasSinPublicar(u?.ultima)
+                      const alerta = d > 7
+                      const cuando = d === Infinity ? 'nunca ha publicado' : d === 0 ? 'publicó hoy' : d === 1 ? 'publicó ayer' : `hace ${d} días`
+                      return (
+                        <View style={[styles.pubPill, { backgroundColor: alerta ? '#b4530918' : '#1a647012' }]}>
+                          <Text style={[styles.pubPillTxt, { color: alerta ? '#b45309' : '#1a6470' }]}>
+                            {cuando}{d === Infinity ? '' : ` · ${u?.total30 ?? 0} en 30 d`}
+                          </Text>
+                        </View>
+                      )
+                    })()}
                     {(() => {
                       const est = estadoConexion(item.last_seen)
                       return (
@@ -1108,6 +1168,10 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14 },
   ordenPub: { borderWidth: 1.5, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, alignItems: 'center', marginBottom: 12 },
   ordenPubTxt: { fontSize: 13, fontWeight: '800' },
+  periodosRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 7, marginBottom: 12 },
+  periodosLbl: { fontSize: 12, fontWeight: '800' },
+  periodoChip: { borderWidth: 1.5, borderRadius: 18, paddingHorizontal: 11, paddingVertical: 6 },
+  periodoChipTxt: { fontSize: 12, fontWeight: '800' },
   pubPill: { backgroundColor: '#1a647018', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
   pubPillTxt: { color: '#1a6470', fontSize: 11.5, fontWeight: '800' },
 
