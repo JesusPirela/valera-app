@@ -24,6 +24,9 @@
         "NSPhotoLibraryAddUsageDescription": "Valera necesita permiso para guardar imágenes en tu galería.",
         "NSLocationWhenInUseUsageDescription": "Valera usa tu ubicación para mostrarte propiedades cercanas en el mapa.",
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.developer.usernotifications.time-sensitive": true
       }
     },
     "android": {

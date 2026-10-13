@@ -34,6 +34,8 @@ type MensajePush = {
   priority: 'default' | 'high'
   channelId?: string
   categoryId?: string
+  /** iOS. Con guion: 'timeSensitive' lo rechaza el API de Expo. */
+  interruptionLevel?: 'active' | 'critical' | 'passive' | 'time-sensitive'
 }
 
 // Tienen que coincidir EXACTO con lib/notificaciones-locales.ts. Si el nombre
@@ -234,6 +236,19 @@ serve(async (_req) => {
         // en reposo y lo suelta cuando algo lo despierta —abrir la app, por
         // ejemplo—. Por eso el aviso "solo salía al entrar".
         priority: 'high' as const,
+        // Lo único que iOS ofrece parecido al cuadro de Android, que allá es
+        // imposible: un aviso de "tiempo sensible" atraviesa Concentración y No
+        // Molestar, enciende la pantalla al instante y suena aunque el teléfono
+        // esté silenciado por Focus.
+        //
+        // Solo para alarmas. Ponerlo en todos los avisos sería abusar: iOS
+        // aprende de eso y acaba degradando los que sí importan.
+        //
+        // La grafía es 'time-sensitive' con guion. Comprobado contra el API de
+        // Expo: 'timeSensitive' lo rechaza con error de validación.
+        //
+        // En Android este campo se ignora.
+        ...(esAlarma ? { interruptionLevel: 'time-sensitive' as const } : {}),
         // El canal manda sobre el cartel y el sonido. Los avisos que no son
         // alarma se quedan sin canal, en el genérico de importancia media, para
         // no volverlos igual de ruidosos.
