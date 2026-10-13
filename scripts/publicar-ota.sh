@@ -21,10 +21,10 @@
 #    where push_token is not null and app_platform in ('android','ios')
 #    group by 1 order by 2 desc;
 #
-# Medido el 9/oct/2026: 83 personas en 1.0.6, 5 en 1.0.7, 3 en 1.0.4 y 1 en
-# 1.0.8. Las de 1.0.4 quedan fuera a propósito: son 3 instalaciones de hace
-# meses, y publicar a una versión tan vieja arriesga mandar JavaScript que
-# espera código nativo que ese binario no tiene.
+# Medido el 13/oct/2026: 54 personas en 1.0.6, 18 en 1.0.7, 13 en 1.0.8, 7 en
+# 1.0.9 y 2 en 1.0.4. Las de 1.0.4 quedan fuera a propósito: son 2
+# instalaciones de hace meses, y publicar a una versión tan vieja arriesga
+# mandar JavaScript que espera código nativo que ese binario no tiene.
 #
 # ── Cuándo NO usar esto ────────────────────────────────────────────────────
 # Si el cambio toca código nativo —plugins, permisos, pantallas en Kotlin, un
@@ -36,7 +36,7 @@
 set -euo pipefail
 
 MSG="${1:-actualizacion}"
-VERSIONES=("1.0.6" "1.0.7" "1.0.8")
+VERSIONES=("1.0.6" "1.0.7" "1.0.8" "1.0.9")
 
 if [[ -z "${EXPO_TOKEN:-}" ]] && ! npx eas-cli whoami >/dev/null 2>&1; then
   echo "✗ No hay sesión de Expo. Corre 'npx eas-cli login' o exporta EXPO_TOKEN." >&2
