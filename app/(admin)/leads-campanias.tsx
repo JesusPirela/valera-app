@@ -32,6 +32,10 @@ export default function LeadsCampanias() {
   const [expandida, setExpandida] = useState<string | null>(null)
   const [leadsPorCamp, setLeadsPorCamp] = useState<Record<string, Lead[]>>({})
   const [asignando, setAsignando] = useState<Campania | null>(null)
+  // Si además de los leads nuevos se le entrega al nuevo asesor la cartera que
+  // ya tenía el anterior. Apagado por defecto: lo normal es que el trabajo ya
+  // hecho se quede con quien lo hizo.
+  const [moverExistentes, setMoverExistentes] = useState(false)
 
   const cargar = useCallback(async () => {
     const [{ data: cData }, { data: pData }] = await Promise.all([
@@ -78,9 +82,26 @@ export default function LeadsCampanias() {
     const camp = asignando
     setAsignando(null)
     if (!camp) return
-    const { data, error } = await supabase.rpc('asignar_campania', { p_campania_id: camp.id, p_user_id: asesor.id })
+    const { data, error } = await supabase.rpc('asignar_campania', {
+      p_campania_id: camp.id,
+      p_user_id: asesor.id,
+      p_mover_existentes: moverExistentes,
+    })
     if (error) { alerta('Error al asignar: ' + error.message); return }
-    alerta(`Campaña asignada a ${asesor.nombre}.\n${data ?? 0} lead(s) pasaron a su CRM.`)
+
+    // Se dice exactamente qué pasó con cada grupo. Un "listo" a secas dejaría
+    // la duda de si los clientes del asesor anterior se movieron o no, que es
+    // justo lo que no debe quedar en el aire al reasignar.
+    const nuevos = (data as any)?.nuevos ?? 0
+    const movidos = (data as any)?.movidos ?? 0
+    const partes = [
+      `${nuevos} lead${nuevos === 1 ? '' : 's'} nuevo${nuevos === 1 ? '' : 's'} pasaron a su CRM.`,
+    ]
+    if (movidos > 0) partes.push(`${movidos} cliente${movidos === 1 ? '' : 's'} que ya tenía el asesor anterior cambiaron de dueño.`)
+    else if (camp.asignadoNombre) partes.push(`Los clientes que ${camp.asignadoNombre} ya atendía se quedan con ${camp.asignadoNombre}.`)
+
+    alerta(`Campaña asignada a ${asesor.nombre}.\n\n${partes.join('\n')}`)
+    setMoverExistentes(false)
     cargar()
   }
 
@@ -171,7 +192,41 @@ export default function LeadsCampanias() {
         <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setAsignando(null)}>
           <TouchableOpacity activeOpacity={1} style={[s.modalCard, { backgroundColor: c.card }]} onPress={e => e.stopPropagation()}>
             <Text style={[s.modalTitulo, { color: c.text }]}>Asignar "{asignando?.nombre}" a:</Text>
-            <Text style={[s.modalSub, { color: c.textMute }]}>Sus leads pasarán al CRM de ese asesor.</Text>
+            <Text style={[s.modalSub, { color: c.textMute }]}>
+              Los leads que lleguen de ahora en adelante irán a su CRM.
+            </Text>
+
+            {/*
+              La opción solo aparece si hay un asesor anterior: sin él no hay
+              nada que mover y el interruptor solo confundiría.
+
+              Apagado por defecto a propósito. Reasignar una campaña es lo
+              común; entregar la cartera entera es la excepción, y arrastrar
+              clientes a los que alguien ya les dedicó trabajo no debe pasar
+              por descuido.
+            */}
+            {!!asignando?.asignadoNombre && (
+              <TouchableOpacity
+                style={[s.opcionMover, { borderColor: moverExistentes ? '#b45309' : c.border }]}
+                onPress={() => setMoverExistentes(v => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={[s.opcionCaja, { color: moverExistentes ? '#b45309' : c.textMute }]}>
+                  {moverExistentes ? '☑' : '☐'}
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.opcionTitulo, { color: moverExistentes ? '#b45309' : c.text }]}>
+                    Pasarle también los clientes que ya tiene {asignando.asignadoNombre}
+                  </Text>
+                  <Text style={[s.opcionNota, { color: c.textMute }]}>
+                    {moverExistentes
+                      ? `Toda la cartera de esta campaña cambia de dueño, incluidos los que ${asignando.asignadoNombre} ya contactó.`
+                      : `Sin marcar, los clientes que ${asignando.asignadoNombre} ya atendió se quedan con él.`}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
             <ScrollView style={{ maxHeight: 360, marginTop: 8 }}>
               {asesores.map(a => (
                 <TouchableOpacity key={a.id} style={[s.asesorRow, { borderBottomColor: c.border }]} onPress={() => confirmarAsignar(a)}>
@@ -230,6 +285,13 @@ const s = StyleSheet.create({
   modalCard: { borderRadius: 16, padding: 18 },
   modalTitulo: { fontSize: 16, fontWeight: '800' },
   modalSub: { fontSize: 12.5, marginTop: 3 },
+  opcionMover: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 9,
+    borderWidth: 1.5, borderRadius: 10, padding: 11, marginTop: 11,
+  },
+  opcionCaja: { fontSize: 17, lineHeight: 20 },
+  opcionTitulo: { fontSize: 13, fontWeight: '800', lineHeight: 18 },
+  opcionNota: { fontSize: 11.5, lineHeight: 16, marginTop: 3 },
   asesorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 13, borderBottomWidth: 1 },
   asesorNombre: { fontSize: 14.5, fontWeight: '600' },
 })
