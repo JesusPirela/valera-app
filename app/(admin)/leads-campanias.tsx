@@ -6,12 +6,29 @@ import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
 type Campania = { id: string; nombre: string; estado: string | null; destino: string | null; asignado_a: string | null; leads: number; asignadoNombre: string | null }
-type Lead = { id: string; nombre: string | null; telefono: string | null; email: string | null; ad_set: string | null; extra: Record<string, string> | null; cliente_id: string | null; lead_created_at: string | null }
+type Lead = { id: string; nombre: string | null; telefono: string | null; email: string | null; ad_set: string | null; extra: Record<string, string> | null; cliente_id: string | null; lead_created_at: string | null; asesor: string | null }
 type Asesor = { id: string; nombre: string }
 
 // A dónde manda cada campaña, en palabras. Solo ON_AD —el formulario
 // instantáneo— genera leads que se puedan descargar; con cualquier otro
 // destino la persona contacta al asesor por fuera y cero leads es lo correcto.
+/**
+ * Cuántos leads lleva cada asesor en esta campaña, de más a menos.
+ *
+ * Se cuenta por el responsable ACTUAL del cliente, no por a quién está
+ * asignada la campaña. Son cosas distintas en cuanto se reasigna: los leads
+ * viejos pueden quedarse con el asesor anterior y los nuevos irse al nuevo, y
+ * entonces el nombre de la campaña ya no dice de quién es su cartera.
+ */
+function repartoPorAsesor(leads: Lead[]): [string, number][] {
+  const cuenta = new Map<string, number>()
+  for (const l of leads) {
+    const quien = l.asesor ?? 'Sin asignar'
+    cuenta.set(quien, (cuenta.get(quien) ?? 0) + 1)
+  }
+  return [...cuenta.entries()].sort((a, b) => b[1] - a[1])
+}
+
 const DESTINOS: Record<string, string> = {
   WHATSAPP:          'Esta campaña abre WhatsApp, no un formulario.',
   MESSENGER:         'Esta campaña abre Messenger, no un formulario.',
@@ -63,7 +80,28 @@ export default function LeadsCampanias() {
     setExpandida(id)
     if (!leadsPorCamp[id]) {
       const { data } = await supabase.from('leads_campania').select('*').eq('campania_id', id).order('lead_created_at', { ascending: false })
-      setLeadsPorCamp(prev => ({ ...prev, [id]: (data ?? []) as Lead[] }))
+      const filas = (data ?? []) as Lead[]
+
+      // De quien es cada lead HOY. Se resuelve en dos consultas en vez de un
+      // join porque clientes.responsable_id apunta a auth.users, no a profiles,
+      // y PostgREST no puede encadenar la relacion por su cuenta.
+      //
+      // Importa porque al reasignar una campana los leads viejos pueden
+      // quedarse con el asesor anterior: sin esto no habria forma de ver
+      // cuantos son de cada quien.
+      const ids = [...new Set(filas.map(l => l.cliente_id).filter(Boolean))] as string[]
+      if (ids.length) {
+        const { data: cls } = await supabase.from('clientes').select('id, responsable_id').in('id', ids)
+        const respDe = Object.fromEntries((cls ?? []).map((c: any) => [c.id, c.responsable_id]))
+        const { data: profs } = await supabase.from('profiles').select('id, nombre')
+          .in('id', [...new Set(Object.values(respDe).filter(Boolean))] as string[])
+        const nombrePorId = Object.fromEntries((profs ?? []).map((p: any) => [p.id, p.nombre]))
+        for (const l of filas) {
+          const r = l.cliente_id ? respDe[l.cliente_id] : null
+          l.asesor = r ? (nombrePorId[r] ?? '—') : null
+        }
+      }
+      setLeadsPorCamp(prev => ({ ...prev, [id]: filas }))
     }
   }
 
@@ -165,6 +203,22 @@ export default function LeadsCampanias() {
 
                 {abierta && (
                   <View style={s.leadsWrap}>
+                    {/*
+                      Cuántos lleva cada asesor, antes de la lista.
+                      Al reasignar una campaña los leads viejos pueden quedarse
+                      con el asesor anterior, así que el nombre de la campaña ya
+                      no dice de quién es su cartera. Esto sí.
+                    */}
+                    {leads.length > 0 && repartoPorAsesor(leads).length > 1 && (
+                      <View style={s.reparto}>
+                        {repartoPorAsesor(leads).map(([quien, n]) => (
+                          <View key={quien} style={[s.repartoChip, { borderColor: c.border }]}>
+                            <Text style={[s.repartoTxt, { color: c.text }]}>{quien}</Text>
+                            <Text style={s.repartoNum}>{n}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                     {leads.length === 0 ? (
                       <Text style={[s.vacioLead, { color: c.textMute }]}>Cargando / sin leads.</Text>
                     ) : leads.map(l => (
@@ -172,6 +226,7 @@ export default function LeadsCampanias() {
                         <View style={{ flex: 1 }}>
                           <Text style={[s.leadNombre, { color: c.text }]}>{l.nombre || 'Sin nombre'}{l.cliente_id ? '  ✓ en CRM' : ''}</Text>
                           <Text style={[s.leadTel, { color: c.textSub }]}>{l.telefono || 's/n'}{l.email ? ` · ${l.email}` : ''}</Text>
+                          {!!l.asesor && <Text style={s.leadAsesor} numberOfLines={1}>👤 {l.asesor}</Text>}
                           {l.extra && Object.entries(l.extra).slice(0, 3).map(([k, v]) => (
                             <Text key={k} style={[s.leadExtra, { color: c.textMute }]} numberOfLines={1}>{k.replace(/[¿?_]/g, ' ').trim()}: {String(v).replace(/_/g, ' ')}</Text>
                           ))}
@@ -278,6 +333,17 @@ const s = StyleSheet.create({
   leadRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderTopWidth: 1, paddingVertical: 9 },
   leadNombre: { fontSize: 13.5, fontWeight: '700' },
   leadTel: { fontSize: 12.5, marginTop: 1 },
+  leadAsesor: { fontSize: 11.5, fontWeight: '700', color: '#1a6470', marginTop: 2 },
+  reparto: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingBottom: 10 },
+  repartoChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 10,
+  },
+  repartoTxt: { fontSize: 12, fontWeight: '700' },
+  repartoNum: {
+    fontSize: 11.5, fontWeight: '900', color: '#fff', backgroundColor: '#1a6470',
+    borderRadius: 9, minWidth: 18, textAlign: 'center', paddingHorizontal: 5, paddingVertical: 1,
+  },
   leadExtra: { fontSize: 11, marginTop: 1 },
   leadFecha: { fontSize: 10.5 },
 
