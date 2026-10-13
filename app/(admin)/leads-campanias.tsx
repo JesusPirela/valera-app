@@ -53,6 +53,8 @@ export default function LeadsCampanias() {
   // ya tenía el anterior. Apagado por defecto: lo normal es que el trabajo ya
   // hecho se quede con quien lo hizo.
   const [moverExistentes, setMoverExistentes] = useState(false)
+  // Asesor por el que se filtra la lista de leads abierta, si hay alguno.
+  const [filtroAsesor, setFiltroAsesor] = useState<string | null>(null)
 
   const cargar = useCallback(async () => {
     const [{ data: cData }, { data: pData }] = await Promise.all([
@@ -76,6 +78,10 @@ export default function LeadsCampanias() {
   const { refreshControl } = usePullRefresh(cargar)
 
   async function toggle(id: string) {
+    // El filtro se limpia al cambiar de campaña: si no, se abriría la
+    // siguiente mostrando solo los de un asesor que quizá ni aparezca ahí, y
+    // parecería que no tiene leads.
+    setFiltroAsesor(null)
     if (expandida === id) { setExpandida(null); return }
     setExpandida(id)
     if (!leadsPorCamp[id]) {
@@ -211,17 +217,35 @@ export default function LeadsCampanias() {
                     */}
                     {leads.length > 0 && repartoPorAsesor(leads).length > 1 && (
                       <View style={s.reparto}>
-                        {repartoPorAsesor(leads).map(([quien, n]) => (
-                          <View key={quien} style={[s.repartoChip, { borderColor: c.border }]}>
-                            <Text style={[s.repartoTxt, { color: c.text }]}>{quien}</Text>
-                            <Text style={s.repartoNum}>{n}</Text>
-                          </View>
-                        ))}
+                        {repartoPorAsesor(leads).map(([quien, n]) => {
+                          const activo = filtroAsesor === quien
+                          return (
+                            // Tocar una ficha deja solo los leads de esa
+                            // persona; tocarla otra vez los muestra todos. Es
+                            // lo natural al ver un reparto: después de saber
+                            // que son 25, lo siguiente es querer ver cuáles.
+                            <TouchableOpacity
+                              key={quien}
+                              style={[s.repartoChip, {
+                                borderColor: activo ? TEAL : c.border,
+                                backgroundColor: activo ? 'rgba(26,100,112,0.10)' : 'transparent',
+                              }]}
+                              onPress={() => setFiltroAsesor(activo ? null : quien)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={[s.repartoTxt, { color: activo ? TEAL : c.text }]}>{quien}</Text>
+                              <Text style={s.repartoNum}>{n}</Text>
+                              {activo && <Text style={s.repartoQuitar}>✕</Text>}
+                            </TouchableOpacity>
+                          )
+                        })}
                       </View>
                     )}
                     {leads.length === 0 ? (
                       <Text style={[s.vacioLead, { color: c.textMute }]}>Cargando / sin leads.</Text>
-                    ) : leads.map(l => (
+                    ) : leads
+                        .filter(l => !filtroAsesor || (l.asesor ?? 'Sin asignar') === filtroAsesor)
+                        .map(l => (
                       <View key={l.id} style={[s.leadRow, { borderTopColor: c.border }]}>
                         <View style={{ flex: 1 }}>
                           <Text style={[s.leadNombre, { color: c.text }]}>{l.nombre || 'Sin nombre'}{l.cliente_id ? '  ✓ en CRM' : ''}</Text>
@@ -340,6 +364,7 @@ const s = StyleSheet.create({
     borderWidth: 1, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 10,
   },
   repartoTxt: { fontSize: 12, fontWeight: '700' },
+  repartoQuitar: { fontSize: 11, fontWeight: '900', color: TEAL, marginLeft: 1 },
   repartoNum: {
     fontSize: 11.5, fontWeight: '900', color: '#fff', backgroundColor: '#1a6470',
     borderRadius: 9, minWidth: 18, textAlign: 'center', paddingHorizontal: 5, paddingVertical: 1,
