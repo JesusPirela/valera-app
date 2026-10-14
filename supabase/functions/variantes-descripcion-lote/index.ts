@@ -49,6 +49,20 @@ const LIMITE_LLAMADA_MS = 30_000
 // chica y el resto es para las personas.
 const TOPE_DIARIO = 150
 
+// LO QUE SE GUARDA PARA LAS PROPIEDADES NUEVAS.
+//
+// El tope de arriba se lo comia entero el lote de la madrugada, que se dedica
+// al rezago. Medido hoy: a mediodia ya iba en 150 de 150, asi que una
+// propiedad dada de alta por la maniana no tenia cuota con que generar sus 3
+// versiones y se iba a la cola otra vez. El caso que mas importa era el unico
+// desatendido.
+//
+// Asi que el rezago se para antes, en TOPE_DIARIO - RESERVA, y esta parte
+// queda solo para lo recien creado. Se dimensiona con el dato real: se crean
+// entre 2 y 15 propiedades al dia (44 el dia del volcado grande), y son 3
+// versiones cada una.
+const RESERVA_NUEVAS = 45
+
 // Los tres modelos :free que tenía (llama-3.3, deepseek-v3, mistral-7b) ya
 // no existen en OpenRouter: responden "This model is unavailable for free" y
 // "No endpoints found". Estos sí están vigentes (verificado contra
@@ -245,6 +259,13 @@ serve(async (req) => {
     try { cuerpo = await req.json() } catch { /* el cron manda {} */ }
     const nProps = Math.min(Number(cuerpo.propiedades) || PROPIEDADES_POR_CORRIDA, 10)
     const nVars = Math.min(Number(cuerpo.porPropiedad) || VARIANTES_POR_PROPIEDAD, 10)
+    // Solo las propiedades creadas en las ultimas N horas.
+    //
+    // Es lo que separa la corrida de DIA (lo que alguien acaba de dar de alta
+    // y va a publicar hoy) de la de MADRUGADA, que se come el rezago. Sin esto
+    // una propiedad nueva caia en la bolsa de 1,306 sin versiones y no le
+    // tocaba turno en semanas.
+    const horas = Number(cuerpo.horas) > 0 ? Number(cuerpo.horas) : null
 
     // ── Freno: el banco no se come la cuota que necesitan las personas ───────
     // Se cuenta lo generado en las últimas 24h y se para en seco al llegar al
@@ -255,19 +276,31 @@ serve(async (req) => {
       .select('id', { count: 'exact', head: true })
       .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
 
-    if ((hechasHoy ?? 0) >= TOPE_DIARIO) {
+    // El rezago se para antes para no dejar sin cuota a lo que se dio de alta
+    // hoy; la corrida de lo nuevo puede llegar hasta el tope completo.
+    const topeDeEstaCorrida = horas ? TOPE_DIARIO : TOPE_DIARIO - RESERVA_NUEVAS
+
+    if ((hechasHoy ?? 0) >= topeDeEstaCorrida) {
       return new Response(JSON.stringify({
-        ok: true, pausado: true, hechas_24h: hechasHoy, tope: TOPE_DIARIO,
-        mensaje: 'Tope diario del banco alcanzado. La cuota que queda es para el botón de los asesores.',
+        ok: true, pausado: true, hechas_24h: hechasHoy, tope: topeDeEstaCorrida, tope_total: TOPE_DIARIO,
+        mensaje: horas
+          ? 'Tope diario del banco alcanzado. La cuota que queda es para el botón de los asesores.'
+          : 'Rezago pausado: lo que queda del tope está reservado para las propiedades nuevas.',
       }), { headers: CORS })
     }
     // No pasarse del tope dentro de esta misma corrida.
-    const margen = TOPE_DIARIO - (hechasHoy ?? 0)
+    const margen = topeDeEstaCorrida - (hechasHoy ?? 0)
 
-    const { data: pendientes, error: ePend } = await supa.rpc('propiedades_sin_variantes', { p_limite: nProps })
+    const { data: pendientes, error: ePend } = await supa.rpc('propiedades_sin_variantes',
+      { p_limite: nProps, p_meta: nVars, p_horas: horas })
     if (ePend) throw new Error('No se pudo leer la cola: ' + ePend.message)
     if (!pendientes?.length) {
-      return new Response(JSON.stringify({ ok: true, mensaje: 'Banco completo, nada por generar.' }), { headers: CORS })
+      return new Response(JSON.stringify({
+        ok: true,
+        mensaje: horas
+          ? `Sin altas en las ultimas ${horas}h, nada por generar.`
+          : 'Banco completo, nada por generar.',
+      }), { headers: CORS })
     }
 
     const resumen: any[] = []
@@ -367,7 +400,8 @@ serve(async (req) => {
     const segundos = Math.round((Date.now() - arranque) / 1000)
     console.log(`[variantes-lote] ${generadas}/${aGenerar.length} en ${segundos}s (tope diario ${TOPE_DIARIO}, llevaba ${hechasHoy})`)
     return new Response(JSON.stringify({
-      ok: true, generadas, pedidas: aGenerar.length, hechas_24h: hechasHoy, tope: TOPE_DIARIO, segundos, detalle: resumen,
+      ok: true, generadas, pedidas: aGenerar.length, hechas_24h: hechasHoy, tope: topeDeEstaCorrida, segundos,
+      modo: horas ? `solo lo creado en ${horas}h` : 'rezago completo', detalle: resumen,
     }), { headers: CORS })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
