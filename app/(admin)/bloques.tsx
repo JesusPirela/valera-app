@@ -8,10 +8,6 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
-import {
-  diasSinPublicar, diasDelPeriodo, textoUltimaPublicacion, mapaUltimaPublicacion,
-  PERIODOS_SIN_PUBLICAR, type PeriodoSinPublicar, type UltimaPublicacion,
-} from '../../lib/publicacion'
 
 const TEAL = '#1a6470'
 const PURPLE = '#5e35b1'
@@ -62,11 +58,10 @@ export default function Bloques() {
   const [histAbierto, setHistAbierto] = useState<Set<string>>(new Set())
   const [notasGuardando, setNotasGuardando] = useState<Set<string>>(new Set())
   const [contestoGuardando, setContesoGuardando] = useState<Set<string>>(new Set())
-  // CUANDO publico cada quien por ultima vez. Es un dato aparte del periodo
-  // de arriba: ese cuenta lo hecho en la ventana elegida, y este contesta
-  // desde cuando alguien no mueve nada, que es otra pregunta.
-  const [ultimaPub, setUltimaPub] = useState<Map<string, UltimaPublicacion>>(new Map())
-  const [sinPublicar, setSinPublicar] = useState<PeriodoSinPublicar | 'no'>('no')
+  // La lista de publicaciones del bloque general, cerrada hasta que se pida.
+  // Son 106 personas: dejarla abierta de entrada entierra todo lo demas.
+  const [pubAbierto, setPubAbierto] = useState(false)
+  const [ordenPub, setOrdenPub] = useState<'asc' | 'desc'>('asc')
   const yaCargoRef = useRef(false)
   // Periodo actual en un ref: el useFocusEffect tiene deps [] y su closure
   // capturaría el periodo INICIAL (Hoy) para siempre, recargando "Hoy" al
@@ -79,18 +74,16 @@ export default function Bloques() {
 
   async function cargar(p: Periodo, silencioso = false) {
     if (!silencioso) setLoading(true)
-    const [blqRes, resRes, perfilRes, notasRes, ultRes] = await Promise.all([
+    const [blqRes, resRes, perfilRes, notasRes] = await Promise.all([
       supabase.from('bloques').select('id, nombre, orden').order('orden'),
       supabase.rpc('get_bloques_resumen', { p_dias: p }),
       supabase.from('profiles').select('id, notas_bloque, contesto_fecha, contesto_ok, activo').neq('role', 'admin'),
       supabase.from('bloque_notas').select('id, user_id, texto, tipo, fecha, created_at').order('created_at', { ascending: false }),
-      supabase.rpc('ultima_publicacion_por_usuario'),
     ])
     // Si el usuario cambió de periodo mientras esta carga estaba en vuelo,
     // descartar la respuesta vieja (evita que una respuesta lenta pise a la nueva).
     if (periodoRef.current !== p) return
     setBloques((blqRes.data ?? []) as Bloque[])
-    setUltimaPub(mapaUltimaPublicacion(ultRes.data as any[]))
     const perfilMap: Record<string, { notas_bloque: string | null; contesto_fecha: string | null; contesto_ok: boolean; activo: boolean }> = {}
     for (const p of (perfilRes.data ?? []) as any[]) {
       perfilMap[p.id] = { notas_bloque: p.notas_bloque ?? null, contesto_fecha: p.contesto_fecha ?? null, contesto_ok: p.contesto_ok ?? false, activo: p.activo !== false }
@@ -212,6 +205,7 @@ export default function Bloques() {
           {grupos.map((g) => {
             const t = totales(g.users)
             const esSinAsignar = g.key === SIN_ASIGNAR
+            const esGeneral = g.key === GENERAL
             const abierta = expandidas[g.key]
             return (
               <View key={g.key} style={[s.bloqueCard, { backgroundColor: c.card, borderColor: abierta ? PURPLE : c.border }]}>
@@ -237,6 +231,20 @@ export default function Bloques() {
                     {!esSinAsignar && <Text style={s.verEstadisticas}>Ver estadísticas →</Text>}
                   </TouchableOpacity>
 
+                  {/*
+                    Quién publica y quién no, sin tener que entrar a Asignar.
+                    Ese panel trae notas, contacté hoy y mover de bloque: para
+                    la pregunta de "¿quién no está publicando?" es un rodeo.
+                  */}
+                  {esGeneral && (
+                    <TouchableOpacity
+                      style={[s.pubBtn, pubAbierto && s.pubBtnOn]}
+                      onPress={() => setPubAbierto(v => !v)}
+                    >
+                      <Text style={[s.pubBtnTxt, pubAbierto && { color: '#fff' }]}>{pubAbierto ? '✓ Listo' : '📊 Publicaciones'}</Text>
+                    </TouchableOpacity>
+                  )}
+
                   <TouchableOpacity
                     style={[s.asignarBtn, abierta && s.asignarBtnOn]}
                     onPress={() => toggleExpand(g.key)}
@@ -245,60 +253,53 @@ export default function Bloques() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Panel expandido */}
-                {abierta && (() => {
-                  /*
-                    Quién NO publicó, y en qué plazo. Solo en el bloque general,
-                    que es donde se ven todos.
+                {/*
+                  La lista, ordenada por las publicaciones del periodo de arriba.
 
-                    El periodo de arriba (Hoy/Semana/Mes) cuenta lo HECHO en esa
-                    ventana; esto contesta otra cosa: desde cuándo alguien no
-                    mueve nada. Y van cuatro plazos porque no son la misma
-                    conversación: quien no publicó hoy puede estar en una cita, y
-                    quien no publica en 30 días hace tiempo que dejó de trabajar
-                    aquí.
+                  De menos a más de entrada: los ceros arriba, que es lo que se
+                  busca al abrir esto. Se toca el encabezado para darle la vuelta.
 
-                    Las cuentas inhabilitadas quedan fuera del conteo: de las 106
-                    personas que salen aquí, 49 están apagadas, y meterlas como
-                    "sin publicar" ahogaba el dato con gente a la que nadie va a
-                    ir a preguntarle.
-                  */
-                  const esGeneral = g.key === GENERAL
-                  const candidatos = g.users.filter((u) => u.activo)
-                  const cuenta = (dias: number) =>
-                    candidatos.filter((u) => diasSinPublicar(ultimaPub.get(u.user_id)?.ultima) > dias).length
-                  const vistos = esGeneral && sinPublicar !== 'no'
-                    ? candidatos.filter((u) => diasSinPublicar(ultimaPub.get(u.user_id)?.ultima) > diasDelPeriodo(sinPublicar))
-                    : g.users
+                  Las cuentas inhabilitadas quedan fuera: son 49 de las 106, y
+                  todas con cero, así que llenarían la cabecera de la lista con
+                  gente a la que nadie va a ir a preguntarle.
+                */}
+                {esGeneral && pubAbierto && (() => {
+                  const activos = g.users.filter((u) => u.activo)
+                  const orden = [...activos].sort((a, b) => {
+                    const d = a.publicaciones - b.publicaciones
+                    return ordenPub === 'asc' ? d : -d
+                  })
+                  const enCero = activos.filter((u) => u.publicaciones === 0).length
+                  const etiquetaPeriodo = (PERIODOS.find((p) => p.value === periodo)?.label ?? '').toLowerCase()
                   return (
-                  <View style={s.bloqueBody}>
-                    {esGeneral && (
-                      <View style={s.sinPubRow}>
-                        <Text style={[s.sinPubLbl, { color: c.textMute }]}>Sin publicar</Text>
-                        {PERIODOS_SIN_PUBLICAR.map(([clave, etiqueta, dias]) => {
-                          const on = sinPublicar === clave
-                          return (
-                            <TouchableOpacity
-                              key={clave}
-                              style={[s.sinPubChip, { borderColor: on ? '#b45309' : c.border, backgroundColor: on ? '#b45309' : 'transparent' }]}
-                              onPress={() => setSinPublicar(on ? 'no' : clave)}
-                            >
-                              <Text style={[s.sinPubChipTxt, { color: on ? '#fff' : c.textMute }]}>
-                                {on ? '✕ ' : ''}{etiqueta} · {cuenta(dias)}
-                              </Text>
-                            </TouchableOpacity>
-                          )
-                        })}
-                      </View>
-                    )}
-                    {vistos.length === 0 ? (
-                      <Text style={s.vacio}>
-                        {esSinAsignar ? 'Todos los usuarios están asignados.'
-                          : esGeneral && sinPublicar !== 'no' ? 'Nadie en ese plazo: todos publicaron.'
-                          : 'Sin usuarios en este bloque.'}
+                    <View style={s.bloqueBody}>
+                      <TouchableOpacity style={s.ordenFila} onPress={() => setOrdenPub((o) => o === 'asc' ? 'desc' : 'asc')}>
+                        <Text style={[s.ordenTxt, { color: c.textMute }]}>
+                          {ordenPub === 'asc' ? '↑ De menos a más' : '↓ De más a menos'}   ·   toca para cambiar
+                        </Text>
+                      </TouchableOpacity>
+                      <Text style={[s.ordenSub, { color: c.textMute }]}>
+                        {activos.length} activos · {enCero} en cero ({etiquetaPeriodo})
                       </Text>
+                      {orden.map((u) => (
+                        <View key={u.user_id} style={[s.pubFila, { borderTopColor: c.border }]}>
+                          <Text style={[s.pubNombre, { color: c.text }]} numberOfLines={1}>{u.nombre ?? 'Sin nombre'}</Text>
+                          <View style={[s.metricChip, { backgroundColor: (u.publicaciones === 0 ? '#b45309' : TEAL) + '18' }]}>
+                            <Text style={[s.metricTxt, { color: u.publicaciones === 0 ? '#b45309' : TEAL }]}>📤 {u.publicaciones}</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )
+                })()}
+
+                {/* Panel expandido */}
+                {abierta && (
+                  <View style={s.bloqueBody}>
+                    {g.users.length === 0 ? (
+                      <Text style={s.vacio}>{esSinAsignar ? 'Todos los usuarios están asignados.' : 'Sin usuarios en este bloque.'}</Text>
                     ) : (
-                      vistos.map((u) => {
+                      g.users.map((u) => {
                         const hoy = hoyISO()
                         const contestoHoy = u.contesto_fecha === hoy && u.contesto_ok
                         const cargandoContesto = contestoGuardando.has(u.user_id)
@@ -320,23 +321,6 @@ export default function Bloques() {
                                 <View style={[s.metricChip, { backgroundColor: TEAL + '18' }]}><Text style={[s.metricTxt, { color: TEAL }]}>📤 {u.publicaciones}</Text></View>
                                 <View style={[s.metricChip, { backgroundColor: '#2e7d3218' }]}><Text style={[s.metricTxt, { color: '#2e7d32' }]}>👤 {u.clientes_nuevos}</Text></View>
                                 <View style={[s.metricChip, { backgroundColor: '#c8960c18' }]}><Text style={[s.metricTxt, { color: '#c8960c' }]}>✅ {u.seguimientos}</Text></View>
-                                {/*
-                                  Desde cuándo no publica. Las tres de al lado
-                                  cuentan el periodo elegido arriba, así que un
-                                  cero no distingue entre quien publicó anteayer
-                                  y quien lleva medio año sin entrar. Ámbar al
-                                  pasar la semana, que es cuando ya hay algo que
-                                  preguntar.
-                                */}
-                                {(() => {
-                                  const d = diasSinPublicar(ultimaPub.get(u.user_id)?.ultima)
-                                  const col = d > 7 ? '#b45309' : c.textMute
-                                  return (
-                                    <View style={[s.metricChip, { backgroundColor: col + '18' }]}>
-                                      <Text style={[s.metricTxt, { color: col }]}>{textoUltimaPublicacion(d)}</Text>
-                                    </View>
-                                  )
-                                })()}
                               </View>
                             </View>
 
@@ -448,8 +432,7 @@ export default function Bloques() {
                       })
                     )}
                   </View>
-                  )
-                })()}
+                )}
               </View>
             )
           })}
@@ -479,15 +462,19 @@ const s = StyleSheet.create({
   bloqueCount: { fontSize: 12, fontWeight: '600', marginTop: 3 },
   verEstadisticas: { fontSize: 12, fontWeight: '700', color: PURPLE },
 
+  pubBtn: { borderWidth: 1.5, borderColor: TEAL, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+  pubBtnOn: { backgroundColor: TEAL, borderColor: TEAL },
+  pubBtnTxt: { fontSize: 12, fontWeight: '700', color: TEAL },
+  ordenFila: { paddingTop: 12, paddingBottom: 2 },
+  ordenTxt: { fontSize: 12.5, fontWeight: '800' },
+  ordenSub: { fontSize: 11.5, fontWeight: '600', paddingBottom: 4 },
+  pubFila: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderTopWidth: 1, paddingVertical: 8 },
+  pubNombre: { fontSize: 14, fontWeight: '700', flex: 1 },
   asignarBtn: { borderWidth: 1.5, borderColor: PURPLE, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
   asignarBtnOn: { backgroundColor: PURPLE, borderColor: PURPLE },
   asignarBtnTxt: { fontSize: 12, fontWeight: '700', color: PURPLE },
 
   bloqueBody: { paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: 'rgba(148,163,184,0.2)' },
-  sinPubRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 7, paddingTop: 12 },
-  sinPubLbl: { fontSize: 12, fontWeight: '800' },
-  sinPubChip: { borderWidth: 1.5, borderRadius: 18, paddingHorizontal: 11, paddingVertical: 6 },
-  sinPubChipTxt: { fontSize: 12, fontWeight: '800' },
 
   vacio: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic', paddingVertical: 10 },
 
