@@ -8,6 +8,10 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
+import {
+  diasSinPublicar, diasDelPeriodo, textoUltimaPublicacion, mapaUltimaPublicacion,
+  PERIODOS_SIN_PUBLICAR, type PeriodoSinPublicar, type UltimaPublicacion,
+} from '../../lib/publicacion'
 
 const TEAL = '#1a6470'
 const PURPLE = '#5e35b1'
@@ -34,6 +38,7 @@ type ResumenRow = {
   notas_bloque: string | null
   contesto_fecha: string | null
   contesto_ok: boolean
+  activo: boolean
 }
 type Periodo = 1 | 7 | 30
 const PERIODOS: { value: Periodo; label: string }[] = [
@@ -57,6 +62,11 @@ export default function Bloques() {
   const [histAbierto, setHistAbierto] = useState<Set<string>>(new Set())
   const [notasGuardando, setNotasGuardando] = useState<Set<string>>(new Set())
   const [contestoGuardando, setContesoGuardando] = useState<Set<string>>(new Set())
+  // CUANDO publico cada quien por ultima vez. Es un dato aparte del periodo
+  // de arriba: ese cuenta lo hecho en la ventana elegida, y este contesta
+  // desde cuando alguien no mueve nada, que es otra pregunta.
+  const [ultimaPub, setUltimaPub] = useState<Map<string, UltimaPublicacion>>(new Map())
+  const [sinPublicar, setSinPublicar] = useState<PeriodoSinPublicar | 'no'>('no')
   const yaCargoRef = useRef(false)
   // Periodo actual en un ref: el useFocusEffect tiene deps [] y su closure
   // capturaría el periodo INICIAL (Hoy) para siempre, recargando "Hoy" al
@@ -69,25 +79,28 @@ export default function Bloques() {
 
   async function cargar(p: Periodo, silencioso = false) {
     if (!silencioso) setLoading(true)
-    const [blqRes, resRes, perfilRes, notasRes] = await Promise.all([
+    const [blqRes, resRes, perfilRes, notasRes, ultRes] = await Promise.all([
       supabase.from('bloques').select('id, nombre, orden').order('orden'),
       supabase.rpc('get_bloques_resumen', { p_dias: p }),
-      supabase.from('profiles').select('id, notas_bloque, contesto_fecha, contesto_ok').neq('role', 'admin'),
+      supabase.from('profiles').select('id, notas_bloque, contesto_fecha, contesto_ok, activo').neq('role', 'admin'),
       supabase.from('bloque_notas').select('id, user_id, texto, tipo, fecha, created_at').order('created_at', { ascending: false }),
+      supabase.rpc('ultima_publicacion_por_usuario'),
     ])
     // Si el usuario cambió de periodo mientras esta carga estaba en vuelo,
     // descartar la respuesta vieja (evita que una respuesta lenta pise a la nueva).
     if (periodoRef.current !== p) return
     setBloques((blqRes.data ?? []) as Bloque[])
-    const perfilMap: Record<string, { notas_bloque: string | null; contesto_fecha: string | null; contesto_ok: boolean }> = {}
+    setUltimaPub(mapaUltimaPublicacion(ultRes.data as any[]))
+    const perfilMap: Record<string, { notas_bloque: string | null; contesto_fecha: string | null; contesto_ok: boolean; activo: boolean }> = {}
     for (const p of (perfilRes.data ?? []) as any[]) {
-      perfilMap[p.id] = { notas_bloque: p.notas_bloque ?? null, contesto_fecha: p.contesto_fecha ?? null, contesto_ok: p.contesto_ok ?? false }
+      perfilMap[p.id] = { notas_bloque: p.notas_bloque ?? null, contesto_fecha: p.contesto_fecha ?? null, contesto_ok: p.contesto_ok ?? false, activo: p.activo !== false }
     }
     const rows: ResumenRow[] = ((resRes.data ?? []) as any[]).map(r => ({
       ...r,
       notas_bloque: perfilMap[r.user_id]?.notas_bloque ?? null,
       contesto_fecha: perfilMap[r.user_id]?.contesto_fecha ?? null,
       contesto_ok: perfilMap[r.user_id]?.contesto_ok ?? false,
+      activo: perfilMap[r.user_id]?.activo ?? true,
     }))
     setUsuarios(rows)
     // Agrupar las notas por usuario (ya vienen ordenadas por fecha desc).
@@ -233,12 +246,59 @@ export default function Bloques() {
                 </View>
 
                 {/* Panel expandido */}
-                {abierta && (
+                {abierta && (() => {
+                  /*
+                    Quién NO publicó, y en qué plazo. Solo en el bloque general,
+                    que es donde se ven todos.
+
+                    El periodo de arriba (Hoy/Semana/Mes) cuenta lo HECHO en esa
+                    ventana; esto contesta otra cosa: desde cuándo alguien no
+                    mueve nada. Y van cuatro plazos porque no son la misma
+                    conversación: quien no publicó hoy puede estar en una cita, y
+                    quien no publica en 30 días hace tiempo que dejó de trabajar
+                    aquí.
+
+                    Las cuentas inhabilitadas quedan fuera del conteo: de las 106
+                    personas que salen aquí, 49 están apagadas, y meterlas como
+                    "sin publicar" ahogaba el dato con gente a la que nadie va a
+                    ir a preguntarle.
+                  */
+                  const esGeneral = g.key === GENERAL
+                  const candidatos = g.users.filter((u) => u.activo)
+                  const cuenta = (dias: number) =>
+                    candidatos.filter((u) => diasSinPublicar(ultimaPub.get(u.user_id)?.ultima) > dias).length
+                  const vistos = esGeneral && sinPublicar !== 'no'
+                    ? candidatos.filter((u) => diasSinPublicar(ultimaPub.get(u.user_id)?.ultima) > diasDelPeriodo(sinPublicar))
+                    : g.users
+                  return (
                   <View style={s.bloqueBody}>
-                    {g.users.length === 0 ? (
-                      <Text style={s.vacio}>{esSinAsignar ? 'Todos los usuarios están asignados.' : 'Sin usuarios en este bloque.'}</Text>
+                    {esGeneral && (
+                      <View style={s.sinPubRow}>
+                        <Text style={[s.sinPubLbl, { color: c.textMute }]}>Sin publicar</Text>
+                        {PERIODOS_SIN_PUBLICAR.map(([clave, etiqueta, dias]) => {
+                          const on = sinPublicar === clave
+                          return (
+                            <TouchableOpacity
+                              key={clave}
+                              style={[s.sinPubChip, { borderColor: on ? '#b45309' : c.border, backgroundColor: on ? '#b45309' : 'transparent' }]}
+                              onPress={() => setSinPublicar(on ? 'no' : clave)}
+                            >
+                              <Text style={[s.sinPubChipTxt, { color: on ? '#fff' : c.textMute }]}>
+                                {on ? '✕ ' : ''}{etiqueta} · {cuenta(dias)}
+                              </Text>
+                            </TouchableOpacity>
+                          )
+                        })}
+                      </View>
+                    )}
+                    {vistos.length === 0 ? (
+                      <Text style={s.vacio}>
+                        {esSinAsignar ? 'Todos los usuarios están asignados.'
+                          : esGeneral && sinPublicar !== 'no' ? 'Nadie en ese plazo: todos publicaron.'
+                          : 'Sin usuarios en este bloque.'}
+                      </Text>
                     ) : (
-                      g.users.map((u) => {
+                      vistos.map((u) => {
                         const hoy = hoyISO()
                         const contestoHoy = u.contesto_fecha === hoy && u.contesto_ok
                         const cargandoContesto = contestoGuardando.has(u.user_id)
@@ -260,6 +320,23 @@ export default function Bloques() {
                                 <View style={[s.metricChip, { backgroundColor: TEAL + '18' }]}><Text style={[s.metricTxt, { color: TEAL }]}>📤 {u.publicaciones}</Text></View>
                                 <View style={[s.metricChip, { backgroundColor: '#2e7d3218' }]}><Text style={[s.metricTxt, { color: '#2e7d32' }]}>👤 {u.clientes_nuevos}</Text></View>
                                 <View style={[s.metricChip, { backgroundColor: '#c8960c18' }]}><Text style={[s.metricTxt, { color: '#c8960c' }]}>✅ {u.seguimientos}</Text></View>
+                                {/*
+                                  Desde cuándo no publica. Las tres de al lado
+                                  cuentan el periodo elegido arriba, así que un
+                                  cero no distingue entre quien publicó anteayer
+                                  y quien lleva medio año sin entrar. Ámbar al
+                                  pasar la semana, que es cuando ya hay algo que
+                                  preguntar.
+                                */}
+                                {(() => {
+                                  const d = diasSinPublicar(ultimaPub.get(u.user_id)?.ultima)
+                                  const col = d > 7 ? '#b45309' : c.textMute
+                                  return (
+                                    <View style={[s.metricChip, { backgroundColor: col + '18' }]}>
+                                      <Text style={[s.metricTxt, { color: col }]}>{textoUltimaPublicacion(d)}</Text>
+                                    </View>
+                                  )
+                                })()}
                               </View>
                             </View>
 
@@ -371,7 +448,8 @@ export default function Bloques() {
                       })
                     )}
                   </View>
-                )}
+                  )
+                })()}
               </View>
             )
           })}
@@ -406,6 +484,10 @@ const s = StyleSheet.create({
   asignarBtnTxt: { fontSize: 12, fontWeight: '700', color: PURPLE },
 
   bloqueBody: { paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: 'rgba(148,163,184,0.2)' },
+  sinPubRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 7, paddingTop: 12 },
+  sinPubLbl: { fontSize: 12, fontWeight: '800' },
+  sinPubChip: { borderWidth: 1.5, borderRadius: 18, paddingHorizontal: 11, paddingVertical: 6 },
+  sinPubChipTxt: { fontSize: 12, fontWeight: '800' },
 
   vacio: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic', paddingVertical: 10 },
 
