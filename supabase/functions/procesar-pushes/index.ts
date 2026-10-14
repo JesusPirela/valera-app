@@ -23,7 +23,10 @@ const BATCH_SIZE = 100
 
 // Los avisos que no admiten espera. El resto puede llegar cuando el celular
 // despierte; estos no, porque su razón de ser es insistir.
-const TIPOS_ALARMA = new Set(['alarma_lead', 'alarma_retro'])
+// 'alarma_prueba' es el aviso que uno se manda a si mismo desde el perfil.
+// Va en la misma lista a proposito: la prueba solo sirve si recorre el camino
+// completo, el mismo que un lead de verdad.
+const TIPOS_ALARMA = new Set(['alarma_lead', 'alarma_retro', 'alarma_prueba'])
 
 type MensajePush = {
   to: string

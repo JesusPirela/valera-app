@@ -17,6 +17,7 @@ import {
 } from '../../lib/patrones'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import CambiarCuenta from '../../components/CambiarCuenta'
+import ConfigAlarma from '../../components/ConfigAlarma'
 import { getUserStats, calcularNivel, infoNivel, tituloPorNivel, type UserStats } from '../../lib/gamification'
 import { marcoPorNivel } from '../../lib/marcos'
 import { AVATARES_PREMIUM, GIF_AVATAR } from '../../lib/avatares'
@@ -799,6 +800,9 @@ export default function Perfil() {
         >
           <Text style={[s.btnActividadText, { color: '#c9a84c' }]}>🏆 Mi historial — estadísticas de toda la vida</Text>
         </TouchableOpacity>
+
+        {/* Configurar la alarma. Se dibuja sola solo a quien tiene campana. */}
+        <ConfigAlarma />
 
         {/* Cambiar de cuenta (solo si hay 2+ guardadas) */}
         <CambiarCuenta />
