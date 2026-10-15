@@ -62,6 +62,16 @@ async function registrarVersionApp(userId: string) {
       app_platform: Platform.OS,
       telefono_marca: c?.Manufacturer ?? c?.Brand ?? null,
       telefono_modelo: c?.Model ?? null,
+      // La version del SISTEMA, que no es la de la app.
+      //
+      // Decide que puede y que no puede hacer el aviso: AlarmKit existe desde
+      // iOS 26, y los candados de segundo plano de Android cambiaron en la 12,
+      // la 14 y la 15. Sin este dato, cualquier plan que dependa de una de
+      // esas versiones es adivinar cuanta gente la tiene.
+      //
+      // Se guarda tal cual lo reporta el sistema; traducirlo aqui solo seria
+      // una oportunidad mas de equivocarse.
+      so_version: String(Platform.Version ?? '') || null,
     }).eq('id', userId)
   } catch (e) {
     console.warn('[Version] Error registrando versión de app:', e)
