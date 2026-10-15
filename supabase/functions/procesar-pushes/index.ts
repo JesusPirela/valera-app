@@ -160,7 +160,7 @@ serve(async (_req) => {
   const userIds = [...new Set(pendientes.map(n => n.user_id))]
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, push_token, app_version, app_platform')
+    .select('id, push_token, app_version, app_platform, push_token_alarmas, alarmas_so_version')
     .in('id', userIds)
     .not('push_token', 'is', null)
 
@@ -182,9 +182,18 @@ serve(async (_req) => {
     }
   }
 
+  // El telefono de la APP DE ALARMAS, que es otro destino.
+  //
+  // Es un programa distinto, con su propia instalacion y su propio token.
+  // Apple entrega por token, no por persona: el aviso que va al token de
+  // Valera llega a Valera, y en iPhone esa es justo la app que no puede hacer
+  // sonar nada con la pantalla bloqueada. Si alguien trae las dos instaladas,
+  // la alarma se manda a las dos y gana la que pueda.
+  const tokenAlarmas = new Map<string, string>()
   const tokenMap = new Map<string, string>()
   const sonidoOk = new Map<string, boolean>()
   for (const p of profiles ?? []) {
+    if (p.push_token_alarmas) tokenAlarmas.set(p.id, p.push_token_alarmas as string)
     if (p.push_token) {
       tokenMap.set(p.id, p.push_token as string)
       sonidoOk.set(p.id, traeElSonido(p.app_version as string | null, p.app_platform as string | null))
@@ -299,8 +308,42 @@ serve(async (_req) => {
       }
     })
 
+  // Lo mismo, pero a la app de alarmas de quien la tenga.
+  //
+  // Lleva title y body a diferencia del despertador: aqui SI queremos que el
+  // sistema lo muestre, porque es el unico aviso que esa app recibe y en
+  // iPhone es lo que la despierta para poner a sonar la alarma.
+  const paraAppAlarmas = pendientes
+    .filter(n => TIPOS_ALARMA.has(n.tipo) && tokenAlarmas.has(n.user_id))
+    .map(n => {
+      const lead = n.cliente_id ? leads.get(n.cliente_id) : null
+      const detalle = [lead?.zona_busqueda, lead?.presupuesto].filter(Boolean).join(' · ')
+      return {
+        to: tokenAlarmas.get(n.user_id)!,
+        title: n.titulo,
+        body: n.mensaje,
+        sound: 'default',
+        priority: 'high' as const,
+        interruptionLevel: 'time-sensitive' as const,
+        // mutable-content, para que la extension de la app de alarmas pueda
+        // correr y programar la alarma antes de que se muestre el aviso.
+        mutableContent: true,
+        data: {
+          alarma: '1',
+          notificacion_id: n.id,
+          lead_nombre: lead?.nombre ?? n.titulo.replace(/^[^\p{L}\d]+/u, ''),
+          ...(detalle ? { lead_detalle: detalle } : {}),
+          ...(n.cliente_id ? { cliente_id: n.cliente_id } : {}),
+        },
+      }
+    })
+
   for (let i = 0; i < mensajes.length; i += BATCH_SIZE) {
     await enviarBatch(supabase, mensajes.slice(i, i + BATCH_SIZE))
+  }
+
+  for (let i = 0; i < paraAppAlarmas.length; i += BATCH_SIZE) {
+    await enviarBatch(supabase, paraAppAlarmas.slice(i, i + BATCH_SIZE) as any)
   }
 
   // Después de los normales, para que la notificación ya esté puesta cuando
@@ -309,7 +352,7 @@ serve(async (_req) => {
     await enviarBatch(supabase, despertadores.slice(i, i + BATCH_SIZE) as any)
   }
 
-  console.log(`[Push] Enviadas: ${mensajes.length} / ${pendientes.length} pendientes · despertadores: ${despertadores.length}`)
+  console.log(`[Push] Enviadas: ${mensajes.length} / ${pendientes.length} pendientes · despertadores: ${despertadores.length} · app de alarmas: ${paraAppAlarmas.length}`)
 
   return new Response(
     JSON.stringify({
@@ -317,6 +360,7 @@ serve(async (_req) => {
       pendientes: pendientes.length,
       enviadas: mensajes.length,
       despertadores: despertadores.length,
+      app_alarmas: paraAppAlarmas.length,
     }),
     { headers: { 'Content-Type': 'application/json' } }
   )
