@@ -58,6 +58,7 @@
     "plugins": [
       "expo-router",
       "./plugins/withCppStandard",
+      "./plugins/withMinDeploymentTarget",
       "./plugins/withAsyncStorageSize",
       "./plugins/withAlarmaOverlay",
       [
