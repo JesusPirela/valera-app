@@ -220,6 +220,15 @@ export default function NuevaPropiedad() {
   const [urlOrigen, setUrlOrigen] = useState('')  // link de donde se importó (se guarda en la propiedad)
   const [importando, setImportando] = useState(false)
   const [importMsg, setImportMsg] = useState('')
+  // Propiedades que YA usan este mismo link.
+  //
+  // Avisa, no bloquea, y a proposito: medido, de 254 propiedades con link 43
+  // lo repiten, pero casi todas son paginas de desarrollos (vinte, terrasoles)
+  // donde un link tiene varios prototipos y repetirlo es lo correcto. En los
+  // portales de anuncio individual (sadasi, easybroker, tuficha) no se repite
+  // ni uno, y ahi un repetido si es un error. Con los codigos a la vista,
+  // quien da de alta decide en dos segundos cual de los dos casos es.
+  const [urlRepetida, setUrlRepetida] = useState<{ codigo: string; titulo: string | null; creada: string; quien: string }[]>([])
   const [modelosVinte, setModelosVinte] = useState<any[] | null>(null)
   const [modeloVinteSeleccionado, setModeloVinteSeleccionado] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -416,9 +425,21 @@ export default function NuevaPropiedad() {
     setImportMsg(`✓ Modelo ${partes.join(' · ')}`)
   }
 
+  // Se revisa sola al pegar el link, no al darle a Importar: la idea es
+  // enterarte ANTES de gastar la llamada a la IA y llenar el formulario.
+  useEffect(() => {
+    const url = urlImport.trim()
+    if (!/^https?:\/\//i.test(url)) { setUrlRepetida([]); return }
+    const t = setTimeout(() => {
+      supabase.rpc('propiedades_con_esta_url', { p_url: url })
+        .then(({ data }) => setUrlRepetida((data as any[]) ?? []))
+    }, 600)
+    return () => clearTimeout(t)
+  }, [urlImport])
+
   async function importarDesdeUrl(pastedHtml?: string) {
     const url = urlImport.trim()
-    if (!pastedHtml && (!url || !/^https?:\/\//.test(url))) {
+    if (!pastedHtml && (!url || !/^https?:\/\//i.test(url))) {
       setImportMsg('⚠ Pega un URL válido (empieza con https://)')
       return
     }
@@ -435,7 +456,11 @@ export default function NuevaPropiedad() {
       if ((data as any)?.error) throw new Error((data as any).error)
       setMostrarPegar(false)
 
-      setUrlOrigen(url)
+      // Solo si es un link de VERDAD. El flujo de "pegar el codigo" se salta
+      // la validacion de arriba, asi que aqui podia llegar la pagina entera:
+      // fue como dos propiedades acabaron con 56,000 y 82,000 caracteres de
+      // HTML guardados donde va el link.
+      setUrlOrigen(/^https?:\/\//i.test(url) && url.length <= 500 ? url : '')
       const d = data as any
 
       // Vinte: múltiples modelos — mostrar picker, aplicar el primero por defecto
@@ -700,7 +725,7 @@ export default function NuevaPropiedad() {
   }
 
   async function subirImagen(uri: string, propiedadId: string, orden: number): Promise<string> {
-    if (/^https?:\/\//.test(uri)) return uri
+    if (/^https?:\/\//i.test(uri)) return uri
 
     // Reintenta la descarga local + subida a Storage: en web una caída de red
     // momentánea lanza "Failed to fetch" y tumbaba todo el guardado.
@@ -973,6 +998,27 @@ export default function NuevaPropiedad() {
               {importMsg}
             </Text>
           ) : null}
+
+          {urlRepetida.length > 0 && (
+            <View style={styles.urlRepetidaBox}>
+              <Text style={styles.urlRepetidaTitulo}>
+                ⚠️ Este link ya se usó en {urlRepetida.length}{' '}
+                {urlRepetida.length === 1 ? 'propiedad' : 'propiedades'}
+              </Text>
+              {urlRepetida.slice(0, 6).map(r => (
+                <Text key={r.codigo} style={styles.urlRepetidaFila} numberOfLines={1}>
+                  · {r.codigo} — {r.titulo ?? 'sin título'} ({r.quien})
+                </Text>
+              ))}
+              {urlRepetida.length > 6 && (
+                <Text style={styles.urlRepetidaFila}>· y {urlRepetida.length - 6} más</Text>
+              )}
+              <Text style={styles.urlRepetidaNota}>
+                Si es otro modelo del mismo desarrollo, sigue adelante. Si es la misma
+                propiedad, ya está dada de alta.
+              </Text>
+            </View>
+          )}
 
           {/* Alternativa SIEMPRE disponible: importar pegando el código del anuncio
               (útil cuando el portal bloquea la lectura por URL, como EasyBroker). */}
@@ -1718,6 +1764,13 @@ const styles = StyleSheet.create({
   fichaToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   fichaToggleText: { fontSize: 14, fontWeight: '700', color: '#1a6470' },
   fichaChevron: { fontSize: 12, color: '#1a6470' },
+  urlRepetidaBox: {
+    marginTop: 10, borderWidth: 1.5, borderColor: '#b45309',
+    backgroundColor: '#b4530918', borderRadius: 10, padding: 11,
+  },
+  urlRepetidaTitulo: { color: '#f59e0b', fontSize: 13, fontWeight: '800', marginBottom: 6 },
+  urlRepetidaFila: { color: '#d4a157', fontSize: 11.5, fontWeight: '600', marginTop: 2 },
+  urlRepetidaNota: { color: '#9a7030', fontSize: 11, marginTop: 8, lineHeight: 15 },
   fichaMsg: { fontSize: 12, color: '#2e7d32', marginTop: 6, fontWeight: '600' },
 })
 
