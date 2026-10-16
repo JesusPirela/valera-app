@@ -709,6 +709,96 @@ function parseTerrasolesModelos(html: string, url: string): VinteModelo[] {
   return modelos
 }
 
+// ── Ruba (ruba.mx) — CMS Strapi vía API pública ───────────────────────────
+// URLs tipo /ruba-casa/{ciudad}/{desarrollo} — ej. /ruba-casa/queretaro/paseo-de-santiago.
+// El HTML de la página es un shell de Next.js App Router: los datos reales
+// (modelos, precios, galería) NO están ahí, se piden en el navegador a la API
+// pública de su CMS Strapi (cms.ruba.mx). Por eso esta función NO recibe
+// `html` — hace su propio fetch a esa API directo, igual que TuFicha.
+//
+// OJO: el mismo nombre de desarrollo se repite en varias ciudades (ej. "Paseo
+// de Santiago" existe en Mexicali Y Querétaro, como desarrollos distintos) —
+// por eso el filtro de la API va por ruba_api_desarrollo Y por el slug de la
+// ciudad a la vez; filtrar solo por desarrollo puede traer el de otra ciudad.
+async function buscarRubaDesarrollo(url: string): Promise<{ modelos: VinteModelo[]; tipo: 'casa' | 'departamento' | null }> {
+  const vacio = { modelos: [] as VinteModelo[], tipo: null as 'casa' | 'departamento' | null }
+  let ciudadSlug = '', desarrolloSlug = ''
+  try {
+    const u = new URL(url)
+    if (!/(^|\.)ruba\.mx$/i.test(u.hostname)) return vacio
+    const segs = u.pathname.split('/').filter(Boolean)
+    // segs = ['ruba-casa', '{ciudad}', '{desarrollo}']
+    if (segs.length < 3 || segs[0] !== 'ruba-casa') return vacio
+    ciudadSlug = segs[1]
+    desarrolloSlug = segs[2]
+  } catch { return vacio }
+
+  const qs = new URLSearchParams({
+    'filters[ruba_api_desarrollo][$eq]': desarrolloSlug,
+    'filters[ciudad][slug][$eq]': ciudadSlug,
+    'populate[Modelos]': '*',
+    'populate[Extracto]': '*',
+    'populate[ciudad]': '*',
+    'populate[tipo]': '*',
+  })
+  // Galeria es una relación anidada: necesita su propio populate profundo, no
+  // alcanza con populate=* (Strapi solo popula un nivel por default).
+  const qsConGaleria = qs.toString() + '&populate[Galeria][populate]=*'
+
+  let registro: any
+  try {
+    const res = await fetch(`https://cms.ruba.mx/api/casas?${qsConGaleria}`, { headers: BROWSER_HEADERS })
+    if (!res.ok) return vacio
+    const json = await res.json()
+    registro = json?.data?.[0]
+  } catch (e) {
+    console.error('[importar-propiedad] error consultando API de Ruba:', e)
+    return vacio
+  }
+  if (!registro) return vacio
+
+  const a = registro.attributes ?? {}
+  const desarrollo = String(a.Titulo_Principal ?? desarrolloSlug)
+  const ciudadNombre = String(a.ciudad?.data?.attributes?.Nombre ?? ciudadSlug)
+  const direccion = `${desarrollo}, ${ciudadNombre}`
+
+  // Specs: Ruba los guarda a nivel DESARROLLO (Extracto), no por modelo — todos
+  // los modelos de un mismo desarrollo comparten recámaras/baños/cochera.
+  const ext = a.Extracto ?? {}
+  const recamaras = ext.Recamaras != null ? cap(parseNum(ext.Recamaras), 6) : null
+  const banoF = ext.Banos != null ? parseFloat(String(ext.Banos)) : null
+  const banos = banoF != null && !isNaN(banoF) ? Math.floor(banoF) : null
+  const mediosBanos = banoF != null && !isNaN(banoF) && (banoF - Math.floor(banoF)) >= 0.5 ? 1 : null
+  const estacionamientos = ext.Cochera != null ? cap(parseNum(ext.Cochera), 6) : null
+
+  // Galería del desarrollo (amenidades/fachada) — Ruba no publica fotos por
+  // modelo individual, todos los modelos de un desarrollo comparten galería.
+  const imagenes: string[] = (a.Galeria?.Slider?.data ?? [])
+    .map((img: any) => img?.attributes?.url ? `https://cms.ruba.mx${img.attributes.url}` : '')
+    .filter((u: string) => u)
+
+  const modelos: VinteModelo[] = []
+  for (const m of (a.Modelos ?? []) as any[]) {
+    const nombre = String(m?.Nombre_modelo ?? '').trim()
+    if (!nombre) continue
+
+    // "Desde $1,110,000.00 MXN" → 1110000
+    const precioMatch = String(m?.Precio ?? '').match(/\$\s*([\d,]+)/)
+    const precio = precioMatch ? parseInt(precioMatch[1].replace(/,/g, ''), 10) : 0
+
+    // "Construcción 47.42 m²" / "Construcción 185 m² | 155.27 m² Habitables"
+    const m2Match = String(m?.Medida ?? '').match(/Construcci[oó]n\s*([\d.]+)\s*m/i)
+    const m2 = m2Match ? String(Math.round(parseFloat(m2Match[1]))) : null
+
+    modelos.push({ nombre, precio, recamaras, banos, mediosBanos, estacionamientos, m2, m2Terreno: null, imagenes, direccion, desarrollo })
+  }
+
+  const tipoNombre = String(a.tipo?.data?.attributes?.Nombre ?? '').toLowerCase()
+  const tipo: 'casa' | 'departamento' | null = tipoNombre.includes('depart') ? 'departamento' : tipoNombre.includes('casa') ? 'casa' : null
+
+  return { modelos, tipo }
+}
+
 // ── JSON-LD (schema.org) ──────────────────────────────────────────────────
 // Lamudi y muchos otros portales publican los datos en bloques
 // <script type="application/ld+json">. Devuelve todos los nodos aplanados.
@@ -1323,6 +1413,137 @@ serve(async (req) => {
       if (ebApiResp) return ebApiResp
     }
 
+    // ── brokers.tuhabi.mx ──────────────────────────────────────────────────
+    // SPA privada que requiere login — el HTML es un shell vacío. Antes de
+    // fetchHtml: sin esto se esperaban ~12-15s del fetch universal (3 capas +
+    // proxy) para terminar lanzando este mismo error de todos modos.
+    if (!htmlPegado && /brokers\.tuhabi\.mx/i.test(url)) {
+      throw new Error(
+        'El portal de brokers de TuHabi requiere inicio de sesión y no puede importarse automáticamente. ' +
+        'Usa el enlace público de tuficha.mx si el portal lo genera, o copia los datos manualmente.'
+      )
+    }
+
+    // ── TuFicha (tuficha.mx) — API pública de Habi/TuHabi MX ─────────────────
+    // SPA React: los datos salen de la API de Habi, no del HTML. Va ANTES de
+    // fetchHtml a propósito — es la causa de la lentitud reportada: el fetch
+    // universal (3 intentos en paralelo + proxy allorigins, hasta 15s) se
+    // pedía igual y el HTML resultante (un shell vacío de React) se tiraba sin
+    // usar ni un solo dato de ahí. Ahora tuficha.mx no toca fetchHtml para nada.
+    if (!htmlPegado && /tuficha\.mx/i.test(url)) {
+      const idMatch = url.match(/inmueble[_/](\d+)/) ?? url.match(/inmueble_id=(\d+)/)
+      if (!idMatch) throw new Error('No se encontró el ID de inmueble en la URL de TuFicha.')
+      const propertyId = idMatch[1]
+
+      const habiRes = await fetch(
+        `https://apiv2.habi.co/cms-globack-api/get_property_card?property_id=${propertyId}&country=MX`,
+        {
+          headers: {
+            'x-api-key': 'eevddBBln771X9bIi7ltt5uooE4lxWef4ITpZR2n',
+            'Content-Type': 'application/json',
+            'Origin': 'https://tuficha.mx',
+            'Referer': 'https://tuficha.mx/',
+            ...BROWSER_HEADERS,
+          },
+        }
+      )
+      if (!habiRes.ok) throw new Error(`Error al obtener datos de TuFicha (HTTP ${habiRes.status})`)
+      const habiJson = await habiRes.json()
+      if (!habiJson?.data?.property) throw new Error('La propiedad no fue encontrada en TuFicha.')
+
+      const p   = habiJson.data.property
+      const det = p.property_detail ?? {}
+      const ico = habiJson.data.icon_details?.distribution_details ?? {}
+
+      // Título: si viene vacío construir desde tipo + colonia
+      const tituloTf = p.title?.trim()
+        || [det.property_type, det.suburb, det.city_name].filter(Boolean).join(' en ')
+
+      let precioTf = ''
+      let operacionTf: 'venta' | 'renta' | null = null
+      const pv = parseNum(det.price)
+      if (pv && pv >= 1000) { precioTf = String(Math.round(pv)); operacionTf = 'venta' }
+      else {
+        const rv = parseNum(det.price_old)
+        if (rv && rv >= 1000) { precioTf = String(Math.round(rv)); operacionTf = 'venta' }
+      }
+
+      const areaVal = parseNum(det.area ?? ico.area)
+
+      // Dirección y zona
+      const parts = [det.suburb, det.city_name].filter(Boolean)
+      let zonaTf: 'queretaro' | 'monterrey' | 'puebla' | null = null
+      const locHay = [det.metropolitan_zone, det.city_name, det.median_zone].join(' ').toLowerCase()
+      if (/quer[eé]taro|qro\b/.test(locHay))                zonaTf = 'queretaro'
+      else if (/monterrey|nuevo\s*le[oó]n|\bmty\b/.test(locHay)) zonaTf = 'monterrey'
+      else if (/puebla/.test(locHay))                        zonaTf = 'puebla'
+
+      // Imágenes: URLs relativas → CDN Habi MX
+      const CDN = 'https://d1yv9l2s30ohmg.cloudfront.net/'
+      const imagenesTf: string[] = Array.isArray(p.images)
+        ? p.images
+            .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+            .map((img: any) => {
+              const u = typeof img === 'string' ? img : (img.url ?? '')
+              return u.startsWith('http') ? u : (u ? CDN + u : '')
+            })
+            .filter((u: string) => u)
+            .slice(0, 30)
+        : []
+
+      return new Response(JSON.stringify({
+        titulo: tituloTf,
+        descripcion: p.description ?? '',
+        precio: precioTf,
+        direccion: parts.length ? parts.join(', ') : '',
+        zona: zonaTf,
+        modelo: '',
+        recamaras: cap(parseNum(det.room_num ?? ico.number_rooms), 5),
+        banos: cap(parseNum(det.bath ?? ico.toilets), 4),
+        mediosBanos: null,
+        estacionamientos: cap(parseNum(det.garage ?? ico.garages), 3),
+        m2: areaVal ? String(Math.round(areaVal)) : '',
+        m2Terreno: '',
+        tipo: mapTipo(String(det.property_type ?? '')),
+        operacion: operacionTf,
+        imagenes: imagenesTf,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── Ruba (ruba.mx) — API pública de su CMS Strapi ────────────────────────
+    // Igual que TuFicha: va ANTES de fetchHtml porque no lo necesita para nada
+    // (el HTML es un shell de Next.js sin los datos; estos viven en cms.ruba.mx).
+    if (!htmlPegado && /(^|\.)ruba\.mx$/i.test(new URL(url).hostname)) {
+      const { modelos: rubaModelos, tipo: rubaTipo } = await buscarRubaDesarrollo(url)
+      if (rubaModelos.length > 0) {
+        const primero = rubaModelos[0]
+        const loc = primero.direccion.toLowerCase()
+        const zonaRuba = /quer[eé]taro/.test(loc) ? 'queretaro'
+          : /monterrey|nuevo\s*le[oó]n/.test(loc) ? 'monterrey'
+          : /puebla/.test(loc) ? 'puebla' : null
+        return new Response(JSON.stringify({
+          titulo: '',
+          descripcion: '',
+          precio: primero.precio > 0 ? String(primero.precio) : '',
+          direccion: primero.direccion,
+          zona: zonaRuba,
+          modelo: primero.nombre,
+          recamaras: primero.recamaras,
+          banos: primero.banos,
+          mediosBanos: primero.mediosBanos ?? null,
+          estacionamientos: primero.estacionamientos,
+          m2: primero.m2 ?? '',
+          m2Terreno: null,
+          tipo: rubaTipo ?? 'casa',
+          operacion: 'venta',
+          imagenes: primero.imagenes,
+          _modelos: rubaModelos,
+          _desarrollo: primero.desarrollo,
+          _empresa_matriz: 'Ruba',
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+    }
+
     const html = htmlPegado ?? await fetchHtml(url)
 
     // ── Vinte: devuelve todos los modelos del desarrollo ──────────────────────
@@ -1458,86 +1679,8 @@ serve(async (req) => {
     let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
     let imagenes: string[] = []
 
-    // ── 0. brokers.tuhabi.mx ─────────────────────────────────────────────────
-    // SPA privada que requiere login — el HTML es un shell vacío.
-    if (/brokers\.tuhabi\.mx/i.test(url)) {
-      throw new Error(
-        'El portal de brokers de TuHabi requiere inicio de sesión y no puede importarse automáticamente. ' +
-        'Usa el enlace público de tuficha.mx si el portal lo genera, o copia los datos manualmente.'
-      )
-    }
-
-    // ── 0b. TuFicha (tuficha.mx) — API pública de Habi/TuHabi MX ────────────
-    // SPA React que usa la API de Habi. Llamamos directamente al endpoint
-    // cms-globack-api con la clave embebida en el bundle de tuficha.mx.
-    if (/tuficha\.mx/i.test(url)) {
-      const idMatch = url.match(/inmueble[_/](\d+)/) ?? url.match(/inmueble_id=(\d+)/)
-      if (!idMatch) throw new Error('No se encontró el ID de inmueble en la URL de TuFicha.')
-      const propertyId = idMatch[1]
-
-      const habiRes = await fetch(
-        `https://apiv2.habi.co/cms-globack-api/get_property_card?property_id=${propertyId}&country=MX`,
-        {
-          headers: {
-            'x-api-key': 'eevddBBln771X9bIi7ltt5uooE4lxWef4ITpZR2n',
-            'Content-Type': 'application/json',
-            'Origin': 'https://tuficha.mx',
-            'Referer': 'https://tuficha.mx/',
-            ...BROWSER_HEADERS,
-          },
-        }
-      )
-      if (!habiRes.ok) throw new Error(`Error al obtener datos de TuFicha (HTTP ${habiRes.status})`)
-      const habiJson = await habiRes.json()
-      if (!habiJson?.data?.property) throw new Error('La propiedad no fue encontrada en TuFicha.')
-
-      const p   = habiJson.data.property
-      const det = p.property_detail ?? {}
-      const ico = habiJson.data.icon_details?.distribution_details ?? {}
-
-      // Título: si viene vacío construir desde tipo + colonia
-      titulo = p.title?.trim()
-        || [det.property_type, det.suburb, det.city_name].filter(Boolean).join(' en ')
-
-      descripcion = p.description ?? ''
-
-      const pv = parseNum(det.price)
-      if (pv && pv >= 1000) { precio = String(Math.round(pv)); operacion = 'venta' }
-      else {
-        const rv = parseNum(det.price_old)
-        if (rv && rv >= 1000) { precio = String(Math.round(rv)); operacion = 'venta' }
-      }
-
-      recamaras        = cap(parseNum(det.room_num  ?? ico.number_rooms), 5)
-      banos            = cap(parseNum(det.bath       ?? ico.toilets), 4)
-      estacionamientos = cap(parseNum(det.garage     ?? ico.garages), 3)
-      const areaVal    = parseNum(det.area ?? ico.area)
-      if (areaVal) m2  = String(Math.round(areaVal))
-
-      const rawTipo = String(det.property_type ?? '')
-      tipo = mapTipo(rawTipo) ?? tipo
-
-      // Dirección y zona
-      const parts = [det.suburb, det.city_name].filter(Boolean)
-      if (parts.length) direccion = parts.join(', ')
-      const locHay = [det.metropolitan_zone, det.city_name, det.median_zone].join(' ').toLowerCase()
-      if (/quer[eé]taro|qro\b/.test(locHay))                zona = 'queretaro'
-      else if (/monterrey|nuevo\s*le[oó]n|\bmty\b/.test(locHay)) zona = 'monterrey'
-      else if (/puebla/.test(locHay))                        zona = 'puebla'
-
-      // Imágenes: URLs relativas → CDN Habi MX
-      const CDN = 'https://d1yv9l2s30ohmg.cloudfront.net/'
-      if (Array.isArray(p.images)) {
-        imagenes = p.images
-          .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
-          .map((img: any) => {
-            const u = typeof img === 'string' ? img : (img.url ?? '')
-            return u.startsWith('http') ? u : (u ? CDN + u : '')
-          })
-          .filter((u: string) => u)
-          .slice(0, 30)
-      }
-    }
+    // brokers.tuhabi.mx y tuficha.mx se resuelven ANTES de fetchHtml (ver arriba,
+    // antes de "const html = …") — no usan el HTML de la página para nada.
 
     // ── 0b2. ficha.info (fichas de Tokko Broker) ────────────────────────────
     // Next.js App Router con RSC streaming. Los datos vienen embebidos en los
