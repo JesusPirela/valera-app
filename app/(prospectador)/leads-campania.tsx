@@ -28,6 +28,8 @@ type Lead = {
   notas: string | null
   wa_count: number | null
   call_count: number | null
+  primer_contacto_at: string | null
+  respuesta_cliente: boolean | null
   enviado_crm: boolean | null
   enviado_crm_at: string | null
   created_at: string
@@ -144,7 +146,7 @@ export default function LeadsCampania() {
       }
       const { data, error } = await supabase
         .from('clientes')
-        .select('id, nombre, telefono, zona_busqueda, presupuesto, estado, notas, wa_count, call_count, enviado_crm, enviado_crm_at, created_at, leads_campania(extra)')
+        .select('id, nombre, telefono, zona_busqueda, presupuesto, estado, notas, wa_count, call_count, primer_contacto_at, respuesta_cliente, enviado_crm, enviado_crm_at, created_at, leads_campania(extra)')
         .eq('es_lead_campania', true)
         .eq('responsable_id', respId)
         .is('eliminado_at', null)
@@ -210,7 +212,18 @@ export default function LeadsCampania() {
     supabase.from('clientes').update(patch).eq('id', id).then(undefined, () => {})
   }
 
+  // El reloj de 24h para el chatbot automático arranca en el PRIMER toque
+  // (WhatsApp o llamada, lo que ocurra primero) — nunca se vuelve a mover en
+  // toques siguientes, por eso solo se fija si todavía está vacío.
+  function marcarPrimerContacto(l: Lead) {
+    const yaHuboContacto = (l.wa_count ?? 0) > 0 || (l.call_count ?? 0) > 0
+    if (!yaHuboContacto && !l.primer_contacto_at) {
+      patchLead(l.id, { primer_contacto_at: new Date().toISOString() })
+    }
+  }
+
   function contactarWhatsApp(l: Lead) {
+    marcarPrimerContacto(l)
     patchLead(l.id, { wa_count: (l.wa_count ?? 0) + 1 })
     abrirWhatsApp(l.telefono, l.nombre)
     if (!soloLectura) getUsuarioActual().then(({ data: { user } }) => {
@@ -218,11 +231,20 @@ export default function LeadsCampania() {
     })
   }
   function contactarLlamada(l: Lead) {
+    marcarPrimerContacto(l)
     patchLead(l.id, { call_count: (l.call_count ?? 0) + 1 })
     llamar(l.telefono)
     if (!soloLectura) getUsuarioActual().then(({ data: { user } }) => {
       if (user) registrarContacto(user.id, l.id, 'llamada').catch(() => {})
     })
+  }
+
+  // Confirmación manual de respuesta — ni WhatsApp personal ni llamada pasan
+  // por Twilio, así que no hay forma de detectarlo solo. Si en 24h nadie
+  // marca "Sí" aquí, el chatbot entra en acción (ver cron
+  // revisar-respuesta-campania).
+  function marcarRespuesta(l: Lead, respondio: boolean) {
+    patchLead(l.id, { respuesta_cliente: respondio })
   }
 
   async function guardarNota() {
@@ -359,6 +381,7 @@ export default function LeadsCampania() {
                 <HeaderCell col="ingreso" label="Ingresó" w={140} />
                 <View style={[styles.th, { width: 92 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>WhatsApp</Text></View>
                 <View style={[styles.th, { width: 88 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Llamar</Text></View>
+                <View style={[styles.th, { width: 130 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>¿Te contestó?</Text></View>
                 <View style={[styles.th, { width: 150 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>Notas</Text></View>
                 <View style={[styles.th, { width: 160 }]}><Text style={[styles.thTxt, { color: '#fff' }]}>{tab === 'activos' ? 'Mandar al CRM' : 'Enviado'}</Text></View>
               </View>
@@ -411,6 +434,28 @@ export default function LeadsCampania() {
                   </View>
                   <View style={[styles.td, { width: 88, alignItems: 'center' }]}>
                     <AccionBtn icon="call" color="#2563eb" count={l.call_count ?? 0} onPress={() => contactarLlamada(l)} />
+                  </View>
+                  <View style={[styles.td, { width: 130, alignItems: 'center' }]}>
+                    {((l.wa_count ?? 0) > 0 || (l.call_count ?? 0) > 0) ? (
+                      <View style={styles.respuestaRow}>
+                        <TouchableOpacity
+                          style={[styles.respBtn, l.respuesta_cliente === true && styles.respBtnSiOn]}
+                          onPress={() => marcarRespuesta(l, true)}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={[styles.respBtnTxt, l.respuesta_cliente === true && { color: '#fff' }]}>Sí</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.respBtn, l.respuesta_cliente === false && styles.respBtnNoOn]}
+                          onPress={() => marcarRespuesta(l, false)}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={[styles.respBtnTxt, l.respuesta_cliente === false && { color: '#fff' }]}>No</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <Text style={[styles.tdTxt, { color: c.textMute, fontSize: 12 }]}>—</Text>
+                    )}
                   </View>
                   <View style={[styles.td, { width: 150 }]}>
                     <TouchableOpacity
@@ -525,6 +570,11 @@ const styles = StyleSheet.create({
   contador: { backgroundColor: '#ede9fe', borderRadius: 9, paddingHorizontal: 7, paddingVertical: 2, minWidth: 34, alignItems: 'center' },
   contadorDone: { backgroundColor: '#16a34a' },
   contadorTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  respuestaRow: { flexDirection: 'row', gap: 6 },
+  respBtn: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, minWidth: 36, alignItems: 'center' },
+  respBtnSiOn: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  respBtnNoOn: { backgroundColor: '#ef4444', borderColor: '#ef4444' },
+  respBtnTxt: { fontSize: 12.5, fontWeight: '800', color: '#64748b' },
   notaBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 8, minHeight: 40, justifyContent: 'center' },
   notaTxt: { fontSize: 13, lineHeight: 17 },
   notaAdd: { fontSize: 13, fontWeight: '700', color: '#7c3aed' },
