@@ -436,26 +436,22 @@ export default function LeadsCampania() {
                     <AccionBtn icon="call" color="#2563eb" count={l.call_count ?? 0} onPress={() => contactarLlamada(l)} />
                   </View>
                   <View style={[styles.td, { width: 130, alignItems: 'center' }]}>
-                    {((l.wa_count ?? 0) > 0 || (l.call_count ?? 0) > 0) ? (
-                      <View style={styles.respuestaRow}>
-                        <TouchableOpacity
-                          style={[styles.respBtn, l.respuesta_cliente === true && styles.respBtnSiOn]}
-                          onPress={() => marcarRespuesta(l, true)}
-                          activeOpacity={0.75}
-                        >
-                          <Text style={[styles.respBtnTxt, l.respuesta_cliente === true && { color: '#fff' }]}>Sí</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.respBtn, l.respuesta_cliente === false && styles.respBtnNoOn]}
-                          onPress={() => marcarRespuesta(l, false)}
-                          activeOpacity={0.75}
-                        >
-                          <Text style={[styles.respBtnTxt, l.respuesta_cliente === false && { color: '#fff' }]}>No</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <Text style={[styles.tdTxt, { color: c.textMute, fontSize: 12 }]}>—</Text>
-                    )}
+                    <View style={styles.respuestaRow}>
+                      <TouchableOpacity
+                        style={[styles.respBtn, l.respuesta_cliente === true && styles.respBtnSiOn]}
+                        onPress={() => marcarRespuesta(l, true)}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={[styles.respBtnTxt, l.respuesta_cliente === true && { color: '#fff' }]}>Sí</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.respBtn, l.respuesta_cliente === false && styles.respBtnNoOn]}
+                        onPress={() => marcarRespuesta(l, false)}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={[styles.respBtnTxt, l.respuesta_cliente === false && { color: '#fff' }]}>No</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                   <View style={[styles.td, { width: 150 }]}>
                     <TouchableOpacity
