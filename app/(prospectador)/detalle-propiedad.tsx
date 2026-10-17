@@ -303,6 +303,23 @@ export default function DetallePropiedad() {
       const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user?.id
 
+      // Sesión fresca ANTES de leer: el mismo problema que ya se resolvió en
+      // togglePublicacion() — si el usuario copia la descripción/fotos y se va
+      // a pegarlas a Marketplace, al volver el token pudo expirar mientras la
+      // app estaba en segundo plano, y el refresh interno de supabase-js se
+      // cuelga a mitad del fetch (sobre todo en Android). Con
+      // refetchOnMount:'always' eso disparaba justo al regresar, la consulta
+      // tronaba y, si ya no quedaba caché de esta propiedad, la ficha completa
+      // se reemplazaba por "No se pudo cargar la propiedad." — literalmente
+      // "se desaparecía" en el peor momento, justo cuando ya se iba a marcar
+      // como publicada.
+      try {
+        const expMs = (session?.expires_at ?? 0) * 1000
+        if (session && expMs - Date.now() < 60_000) {
+          await conTimeout(supabase.auth.refreshSession(), 8000).catch(() => {})
+        }
+      } catch { /* no bloquear la carga por esto */ }
+
       let nombreUsuario: string | null = null
       let rol: string | null = null
       if (userId) {
@@ -313,11 +330,16 @@ export default function DetallePropiedad() {
       }
       rol = vistaComo ?? rol  // rol efectivo (admin "viendo como")
 
-      const { data, error } = await supabase
-        .from('propiedades')
-        .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, video_url, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)')
-        .eq('id', id)
-        .single()
+      const SELECT_PROPIEDAD = 'id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, video_url, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)'
+
+      let { data, error } = await supabase.from('propiedades').select(SELECT_PROPIEDAD).eq('id', id).single()
+
+      // Error de auth (token recién expirado, el refresh de arriba no alcanzó
+      // a tiempo) → refrescar y reintentar UNA vez antes de rendirse.
+      if (error && /jwt|token|expir|unauthor|not authenticated|no autenticado|401|403/i.test(error.message ?? '')) {
+        try { await conTimeout(supabase.auth.refreshSession(), 8000) } catch { /* el reintento decide */ }
+        ;({ data, error } = await supabase.from('propiedades').select(SELECT_PROPIEDAD).eq('id', id).single())
+      }
 
       if (error) throw error
 
