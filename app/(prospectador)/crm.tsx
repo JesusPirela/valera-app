@@ -716,6 +716,17 @@ export default function CRM() {
     () => clientes.filter(c => !c.es_lead_campania || c.enviado_crm),
     [clientes]
   )
+  // TODOS los de campaña, mandados al CRM o no.
+  //
+  // El botón de entrada se dibujaba solo si quedaban leads SIN mandar, y eso
+  // castigaba justo a quien trabajaba todo: Martin mandó sus 134 al CRM, el
+  // contador quedó en cero y el botón desapareció. Sus leads seguían ahí, en
+  // la pestaña "Enviados al CRM", pero ya no existía forma de llegar a esa
+  // pantalla. Quien más trabaja es quien se queda sin puerta.
+  const totalCampania = useMemo(
+    () => clientes.filter(c => c.es_lead_campania).length,
+    [clientes]
+  )
 
   // ── KPIs ──────────────────────────────────────────────────────
   // Base filtrada por operación para que KPIs y chips sean consistentes con la lista
@@ -1525,16 +1536,24 @@ export default function CRM() {
       )}
 
       {/* ── Botón: Leads de campaña ── */}
-      {leadsCampania.length > 0 && (
+      {totalCampania > 0 && (
         <TouchableOpacity style={s.btnLeadsCamp} onPress={() => router.push(`/(prospectador)/leads-campania${verUid ? `?verUid=${verUid}` : ''}`)} activeOpacity={0.88}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
             <Text style={{ fontSize: 28 }}>📣</Text>
             <View style={{ flex: 1 }}>
               <Text style={s.btnLeadsCampTit}>Leads de campaña</Text>
-              <Text style={s.btnLeadsCampSub}>Tu CRM de clientes de campaña</Text>
+              <Text style={s.btnLeadsCampSub}>
+                {leadsCampania.length > 0
+                  ? `${leadsCampania.length} por atender · ${totalCampania} en total`
+                  : `${totalCampania} ${totalCampania === 1 ? 'lead' : 'leads'} · todos en tu CRM`}
+              </Text>
             </View>
           </View>
-          <View style={s.badgeCampaniaBig}><Text style={s.badgeCampaniaBigTxt}>{leadsCampania.length}</Text></View>
+          {/* La insignia solo cuando hay algo que atender: un "0" en rojo
+              parece un problema, y no lo es — es haber terminado. */}
+          {leadsCampania.length > 0 && (
+            <View style={s.badgeCampaniaBig}><Text style={s.badgeCampaniaBigTxt}>{leadsCampania.length}</Text></View>
+          )}
           <Ionicons name="chevron-forward" size={22} color="rgba(255,255,255,0.9)" style={{ marginLeft: 6 }} />
         </TouchableOpacity>
       )}
