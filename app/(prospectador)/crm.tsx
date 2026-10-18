@@ -46,6 +46,7 @@ type Cliente = {
   tipo_credito: string | null
   es_lead_campania?: boolean
   enviado_crm?: boolean
+  responsable_id?: string | null
   donado_por_nombre?: string | null
   recordatorios: { id: string; titulo: string; fecha_hora: string; completado: boolean }[]
 }
@@ -628,6 +629,16 @@ export default function CRM() {
   // quedaba en mes/día/año en vez de día/mes/año). Mismo patrón que detalle-cliente.tsx.
   const [fechaModal, setFechaModal] = useState<{ id: string } | null>(null)
   const [fechaTemp, setFechaTemp] = useState<Date>(new Date())
+  // De quien son los leads que enseña la pantalla de campaña.
+  //
+  // Hace falta porque las dos pantallas no miran lo mismo: la de campaña SIEMPRE
+  // filtra por responsable, mientras que el CRM de un gerente o un admin trae
+  // los clientes de todos. Sin esto, el botón decía "21 por atender · 147 en
+  // total" y al entrar mostraba 4. El botón tiene que contar lo mismo que la
+  // pantalla a la que lleva.
+  const [miUid, setMiUid] = useState<string | null>(null)
+  useEffect(() => { getUsuarioActual().then(({ data: { user } }) => setMiUid(user?.id ?? null)) }, [])
+  const uidCampania = verUid ?? miUid
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
 
@@ -640,7 +651,7 @@ export default function CRM() {
     queryFn: async () => {
       let q = supabase
         .from('clientes')
-        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, es_lead_campania, enviado_crm, donado_por_nombre, recordatorios(id, titulo, fecha_hora, completado)')
+        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, es_lead_campania, enviado_crm, responsable_id, donado_por_nombre, recordatorios(id, titulo, fecha_hora, completado)')
         .is('eliminado_at', null)
         .order('updated_at', { ascending: false })
       if (verUid) {
@@ -709,8 +720,9 @@ export default function CRM() {
   // hacerlo se marca enviado_crm=true y entonces SÍ aparece en el CRM normal
   // (además de quedar en el Historial del apartado de campaña).
   const leadsCampania = useMemo(
-    () => clientes.filter(c => c.es_lead_campania && !c.enviado_crm),
-    [clientes]
+    () => clientes.filter(c => c.es_lead_campania && !c.enviado_crm
+      && (!uidCampania || c.responsable_id === uidCampania)),
+    [clientes, uidCampania]
   )
   const clientesCrm = useMemo(
     () => clientes.filter(c => !c.es_lead_campania || c.enviado_crm),
@@ -724,8 +736,9 @@ export default function CRM() {
   // la pestaña "Enviados al CRM", pero ya no existía forma de llegar a esa
   // pantalla. Quien más trabaja es quien se queda sin puerta.
   const totalCampania = useMemo(
-    () => clientes.filter(c => c.es_lead_campania).length,
-    [clientes]
+    () => clientes.filter(c => c.es_lead_campania
+      && (!uidCampania || c.responsable_id === uidCampania)).length,
+    [clientes, uidCampania]
   )
 
   // ── KPIs ──────────────────────────────────────────────────────
