@@ -1,6 +1,7 @@
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, focusManager } from '@tanstack/react-query'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { AppState, Platform } from 'react-native'
 
 // Incrementar CACHE_BUSTER en deploys que cambien la estructura de datos cacheados.
 // Esto invalida el cache persistido en AsyncStorage para evitar datos corruptos/viejos.
@@ -58,4 +59,26 @@ export function shouldPersistQuery(query: { queryKey: unknown; state: { status: 
   if (query.state.status !== 'success') return false
   const key = Array.isArray(query.queryKey) ? String(query.queryKey[0]) : String(query.queryKey)
   return KEYS_PERSISTIBLES.has(key)
+}
+
+// ── Volver del segundo plano cuenta como "volver a la app" ──────────────────
+//
+// React Query sabe refrescar cuando la ventana recupera el foco, pero en el
+// celular eso no pasa solo: hay que avisarle. Sin este puente, la app
+// resucitada del fondo se quedaba enseñando la lista con la que se durmió.
+//
+// Lo que costó: a Martin le entraron leads durante todo el 16 de octubre y la
+// madrugada del 17, y no los vio. El CRM si recarga al ENTRAR a la pestaña,
+// pero el no entraba y salia: dejaba la app abierta, la mandaba al fondo y la
+// retomaba. La pantalla ya estaba enfocada, asi que no se disparaba nada, y la
+// lista llevaba 28 horas congelada. Los vio todos de golpe el 17 a las 15:52,
+// que es cuando cerro la app por completo y volvio a abrirla. Mientras tanto
+// la alarma le sonaba por leads que el no podia ver.
+//
+// Esto respeta el staleTime de cada pantalla, asi que no es recargar todo a lo
+// bruto: solo se vuelve a pedir lo que ya estaba viejo.
+if (Platform.OS !== 'web') {
+  AppState.addEventListener('change', (estado) => {
+    focusManager.setFocused(estado === 'active')
+  })
 }
