@@ -101,6 +101,7 @@ export default function Constructoras() {
       .select('id, codigo, titulo, precio, nombre_constructora, zona, estado_mx, direccion, exclusiva, inmobiliarias(exclusiva), propiedad_imagenes(url, thumb_url, orden)')
       .eq('es_constructora', true)
       .eq('es_inventario', false)
+      .in('estado', ['disponible', 'vendida', 'rentada'])
       .order('nombre_constructora', { ascending: true, nullsFirst: false })
       .order('precio', { ascending: true, nullsFirst: false })
   }

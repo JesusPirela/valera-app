@@ -70,6 +70,7 @@ export default function VideosProspectador() {
         .from('propiedades')
         .select('id, titulo, codigo, video_url, precio, propiedad_imagenes(url, orden)')
         .not('video_url', 'is', null)
+        .in('estado', ['disponible', 'vendida', 'rentada'])
         .order('created_at', { ascending: false }),
     ])
     setVideos(mkt ?? [])

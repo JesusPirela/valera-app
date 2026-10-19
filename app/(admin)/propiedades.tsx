@@ -23,7 +23,7 @@ import { ThumbImage } from '../../components/ThumbImage'
 import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import { useScrollHorizontalConRueda } from '../../hooks/useScrollHorizontalConRueda'
-import { EstadoPropiedad, esCerrada, etiquetaEstado, colorEstado } from '../../lib/estado-propiedad'
+import { EstadoPropiedad, esCerrada, esBorrador, etiquetaEstado, colorEstado } from '../../lib/estado-propiedad'
 import { puedeVerPublicaciones } from '../../lib/permisos'
 
 type Propiedad = {
@@ -679,6 +679,7 @@ export default function AdminPropiedades() {
             <FiltroChip label="Disponible" active={filtroEstado === 'disponible'} onPress={() => setFiltroEstado(filtroEstado === 'disponible' ? null : 'disponible')}  textSubColor={c.textSub}/>
             <FiltroChip label="Vendida" active={filtroEstado === 'vendida'} onPress={() => setFiltroEstado(filtroEstado === 'vendida' ? null : 'vendida')}  textSubColor={c.textSub}/>
             <FiltroChip label="Rentada" active={filtroEstado === 'rentada'} onPress={() => setFiltroEstado(filtroEstado === 'rentada' ? null : 'rentada')}  textSubColor={c.textSub}/>
+            <FiltroChip label="Borrador" active={filtroEstado === 'borrador'} onPress={() => setFiltroEstado(filtroEstado === 'borrador' ? null : 'borrador')}  textSubColor={c.textSub}/>
           </ScrollView>
           <Text style={[styles.filtroLabel, { color: c.textMute }]}>Tipo</Text>
           <ScrollView ref={scrollTipoRef} horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
@@ -801,6 +802,17 @@ export default function AdminPropiedades() {
                   {etiquetaEstado(item.estado).toUpperCase()}
                 </Text>
                 <Text style={styles.selloSub}>YA NO ESTÁ DISPONIBLE</Text>
+              </View>
+            </View>
+          )}
+
+          {esBorrador(item.estado) && (
+            <View style={styles.selloCapa}>
+              <View style={[styles.selloCaja, { borderColor: colorEstado(item.estado) }]}>
+                <Text style={[styles.selloTxt, { color: colorEstado(item.estado) }]}>
+                  📝 BORRADOR
+                </Text>
+                <Text style={styles.selloSub}>FALTA PONER PRECIO</Text>
               </View>
             </View>
           )}

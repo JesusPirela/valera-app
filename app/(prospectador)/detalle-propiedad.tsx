@@ -357,6 +357,12 @@ export default function DetallePropiedad() {
         }
       }
 
+      // Las propiedades en borrador (sin precio todavía) no se publican: nadie
+      // fuera del staff debe poder verlas aunque entren con el link directo.
+      if (dataNormalizada.estado === 'borrador' && !esStaffSupervision(rol)) {
+        return { propiedad: null, subidoPor: null, nombreUsuario, rol, sinAcceso: true as const }
+      }
+
       let subidoPor: SubidoPor | null = null
 
       // Usar siempre el perfil del admin que creó la propiedad para coordinar citas

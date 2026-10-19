@@ -1281,10 +1281,20 @@ export default function NuevaPropiedad() {
 
         <Text style={styles.label}>Estado</Text>
         <PillSelector
-          options={[{ value: 'disponible', label: 'Disponible' }, { value: 'vendida', label: 'Vendida' }, { value: 'rentada', label: 'Rentada' }]}
+          options={[
+            { value: 'disponible', label: 'Disponible' },
+            { value: 'vendida', label: 'Vendida' },
+            { value: 'rentada', label: 'Rentada' },
+            { value: 'borrador', label: '📝 Borrador (sin precio)' },
+          ]}
           value={estado}
           onChange={setEstado}
         />
+        {estado === 'borrador' && (
+          <Text style={styles.hint}>
+            No va a aparecer en el feed de los prospectadores hasta que le pongas precio — en cuanto lo captures y guardes, se pasa sola a "Disponible".
+          </Text>
+        )}
 
         <Text style={styles.label}>Zona</Text>
         <PillSelector
@@ -1636,6 +1646,7 @@ const dupStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24 },
   label: { fontSize: 14, fontWeight: '600', color: '#1a6470', marginBottom: 6, marginTop: 16 },
+  hint: { fontSize: 12, color: '#9333ea', marginTop: 4, fontStyle: 'italic' },
   input: {
     borderRadius: 10,
     borderWidth: 1,
