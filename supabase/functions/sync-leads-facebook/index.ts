@@ -152,9 +152,30 @@ serve(async (req) => {
       for (const p of pend as any[]) {
         const asesor = p.campanias?.asignado_a
         const tel = asesor ? telDe.get(asesor) : null
-        let marcar = true
-        if (tel) marcar = await enviarWhatsApp(tel, p.nombre, p.telefono, respuestasStr(p.extra))
-        if (marcar) { await db.from('leads_campania').update({ whatsapp_enviado: true }).eq('id', p.id); if (tel) waEnviados++ }
+
+        // Sin telefono del asesor NO se manda nada, y antes se marcaba como
+        // enviado de todas formas. Asi es como 195 leads quedaron con la
+        // bandera en true sin que nadie supiera si de verdad salio algo.
+        if (!tel) {
+          await db.from('leads_campania').update({
+            whatsapp_enviado: true,
+            whatsapp_error: asesor
+              ? 'el asesor no tiene telefono registrado'
+              : 'la campania no tiene asesor asignado',
+          }).eq('id', p.id)
+          continue
+        }
+
+        const r = await enviarWhatsApp(tel, p.nombre, p.telefono, respuestasStr(p.extra))
+        await db.from('leads_campania').update({
+          // Solo se da por enviado si Twilio lo acepto. Si fallo, se queda sin
+          // marcar para que el siguiente ciclo lo reintente.
+          whatsapp_enviado: r.ok,
+          whatsapp_sid: r.sid ?? null,
+          whatsapp_error: r.error ?? null,
+          whatsapp_enviado_at: r.ok ? new Date().toISOString() : null,
+        }).eq('id', p.id)
+        if (r.ok) waEnviados++
       }
     }
 
@@ -304,10 +325,13 @@ async function gAll(url: string): Promise<any[]> {
 
 // Envía la notificación al asesor por WhatsApp usando la PLANTILLA aprobada
 // (obligatoria para mensajes de negocio) desde el número de producción del bot.
-async function enviarWhatsApp(to: string, nombre: string | null, numero: string | null, respuestas: string): Promise<boolean> {
+async function enviarWhatsApp(
+  to: string, nombre: string | null, numero: string | null, respuestas: string,
+): Promise<{ ok: boolean; sid?: string; error?: string }> {
   const sid = Deno.env.get('TWILIO_SID'), tok = Deno.env.get('TWILIO_TOKEN'), from = Deno.env.get('TWILIO_FROM')
   const contentSid = Deno.env.get('TWILIO_CONTENT_SID')
-  if (!sid || !tok || !from || !to) return false
+  if (!sid || !tok || !from) return { ok: false, error: 'faltan credenciales de Twilio' }
+  if (!to) return { ok: false, error: 'sin telefono destino' }
   try {
     const auth = btoa(`${sid}:${tok}`)
     const params: Record<string, string> = { From: `whatsapp:${from}`, To: `whatsapp:${normalizarTel(to)}` }
@@ -315,13 +339,28 @@ async function enviarWhatsApp(to: string, nombre: string | null, numero: string 
       params.ContentSid = contentSid
       params.ContentVariables = JSON.stringify({ '1': nombre || 'Sin nombre', '2': numero || 's/n', '3': respuestas || 'Sin datos' })
     } else {
+      // OJO: sin plantilla aprobada, WhatsApp NO entrega mensajes que inicia
+      // un negocio fuera de la ventana de 24 horas. Twilio lo acepta igual, el
+      // mensaje sale como "enviado" y nunca llega. Este camino es solo un
+      // respaldo; si TWILIO_CONTENT_SID falta, hay que arreglarlo, no confiar
+      // en esto.
       params.Body = `Tienes un nuevo cliente en tu CRM de campaña\nNombre: ${nombre || 'Sin nombre'}\nNúmero: ${numero || 's/n'}\nRespuestas: ${respuestas}`
     }
     const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
       method: 'POST', headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params).toString(),
     })
-    return r.ok
-  } catch { return false }
+    const j = await r.json().catch(() => ({} as any))
+    if (!r.ok) {
+      // El mensaje de Twilio dice exactamente que paso: plantilla no aprobada,
+      // numero sin WhatsApp, saldo agotado. Guardarlo ahorra adivinar.
+      return { ok: false, error: `Twilio ${r.status} ${j?.code ?? ''}: ${j?.message ?? ''}`.slice(0, 300) }
+    }
+    // Twilio ACEPTO el mensaje. Que WhatsApp lo ENTREGUE es otra cosa, y por
+    // eso se guarda el sid: con el se consulta el estado real despues.
+    return { ok: true, sid: j?.sid }
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e).slice(0, 300) }
+  }
 }
 
 // Normaliza un teléfono mexicano a formato internacional (+52…) para WhatsApp.
