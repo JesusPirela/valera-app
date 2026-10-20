@@ -14,9 +14,37 @@ import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS_MEXICO, ESTADO_PRINCIPAL } from '../../lib/estados-mexico'
 import { ZONAS_INTERES } from '../../lib/zonas-interes'
 
-type Asesor = { id: string; nombre: string; telefono: string | null; zona: string | null; estado_mx: string | null }
+type Tipo = 'alianza' | 'independiente'
+type Asesor = {
+  id: string; nombre: string; telefono: string | null; zona: string | null
+  estado_mx: string | null; tipo: Tipo | null; created_at: string
+}
 const TEAL = '#1a6470'
 const TODOS = '__todos__'
+
+/**
+ * Los dos tipos de asesor externo.
+ *
+ * No son lo mismo y hasta ahora vivian revueltos: una ALIANZA es un acuerdo
+ * con otra inmobiliaria, y un INDEPENDIENTE es alguien que nos apoya por su
+ * cuenta. Al repartir una propiedad por zona importa saber cual es cual.
+ */
+const TIPOS: { valor: Tipo; etiqueta: string; color: string; desc: string }[] = [
+  { valor: 'alianza',       etiqueta: 'Alianza',       color: '#5e35b1', desc: 'Acuerdo con otra inmobiliaria' },
+  { valor: 'independiente', etiqueta: 'Independiente', color: '#1a6470', desc: 'Asesor por su cuenta que nos apoya' },
+]
+const tipoDe = (t: Tipo | null | undefined) => TIPOS.find(x => x.valor === t)
+
+/** "hace 3 días", "el 22 sep" — para saber de cuando es cada registro. */
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+function cuandoSeRegistro(iso: string): string {
+  const d = new Date(iso)
+  const dias = Math.floor((Date.now() - d.getTime()) / 86400000)
+  if (dias <= 0) return 'hoy'
+  if (dias === 1) return 'ayer'
+  if (dias < 30) return `hace ${dias} días`
+  return `${d.getDate()} ${MESES[d.getMonth()]}`
+}
 function soloTel(t: string | null | undefined) { return (t ?? '').replace(/[^\d+]/g, '') }
 
 export default function AsesoresExternos() {
@@ -27,6 +55,10 @@ export default function AsesoresExternos() {
   const [busca, setBusca] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<string>(TODOS)
   const [filtroZona, setFiltroZona] = useState<string>(TODOS)
+  const [filtroTipo, setFiltroTipo] = useState<Tipo | 'sin' | typeof TODOS>(TODOS)
+  // Por fecha de registro de entrada: lo que se acaba de dar de alta es lo que
+  // se quiere ver. El alfabetico sigue estando a un toque.
+  const [orden, setOrden] = useState<'recientes' | 'nombre'>('recientes')
   const [editando, setEditando] = useState<Partial<Asesor> | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [selectorEstadoAbierto, setSelectorEstadoAbierto] = useState(false)
@@ -35,7 +67,8 @@ export default function AsesoresExternos() {
     if (!silent) setLoading(true)
     try {
       const { data } = await supabase.from('asesores_externos')
-        .select('id, nombre, telefono, zona, estado_mx').order('nombre')
+        .select('id, nombre, telefono, zona, estado_mx, tipo, created_at')
+        .order('created_at', { ascending: false })
       setLista((data ?? []) as Asesor[])
     } catch { /* red */ } finally { setLoading(false); setRefreshing(false) }
   }, [])
@@ -49,14 +82,17 @@ export default function AsesoresExternos() {
       telefono: editando.telefono?.trim() || null,
       zona: editando.zona?.trim() || null,
       estado_mx: editando.estado_mx?.trim() || null,
+      tipo: editando.tipo ?? null,
     }
-    if (editando.id) {
-      await supabase.from('asesores_externos').update(payload).eq('id', editando.id)
-    } else {
-      const { data: { user } } = await getUsuarioActual()
-      await supabase.from('asesores_externos').insert({ ...payload, created_by: user?.id ?? null })
-    }
-    setGuardando(false); setEditando(null); cargar(true)
+    // Se mira el error. Antes se guardaba a ciegas: si la base rechazaba algo,
+    // la hoja se cerraba igual y parecia que habia guardado.
+    const { error } = editando.id
+      ? await supabase.from('asesores_externos').update(payload).eq('id', editando.id)
+      : await supabase.from('asesores_externos')
+          .insert({ ...payload, created_by: (await getUsuarioActual()).data.user?.id ?? null })
+    setGuardando(false)
+    if (error) { Alert.alert('No se pudo guardar', error.message); return }
+    setEditando(null); cargar(true)
   }
 
   function borrar(a: Asesor) {
@@ -78,8 +114,11 @@ export default function AsesoresExternos() {
   const filtrados = listaPorEstado.filter(a =>
     (!q || normalizar(a.nombre).includes(q) || normalizar(a.zona).includes(q)) &&
     (qDig.length === 0 || soloTel(a.telefono).includes(qDig)) &&
-    (filtroZona === TODOS || a.zona === filtroZona)
-  )
+    (filtroZona === TODOS || a.zona === filtroZona) &&
+    (filtroTipo === TODOS || (filtroTipo === 'sin' ? !a.tipo : a.tipo === filtroTipo))
+  ).sort((a, b) => orden === 'nombre'
+    ? a.nombre.localeCompare(b.nombre, 'es')
+    : new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
   if (loading) return <View style={[st.center, { backgroundColor: c.bg }]}><ActivityIndicator size="large" color={TEAL} /></View>
 
@@ -96,6 +135,46 @@ export default function AsesoresExternos() {
           <Ionicons name="search-outline" size={16} color={c.textMute} />
           <TextInput style={[st.buscaInp, { color: c.text }]} value={busca} onChangeText={setBusca}
             placeholder="Buscar por nombre, zona o teléfono…" placeholderTextColor={c.placeholder} />
+        </View>
+
+        {/* Orden y tipo. Van juntos porque son las dos preguntas que se hacen
+            al abrir esta pantalla: "¿a quién di de alta hace poco?" y "¿quién
+            es alianza y quién va por su cuenta?". */}
+        <View style={st.barraRow}>
+          <TouchableOpacity
+            style={[st.ordenBtn, { borderColor: c.border }]}
+            onPress={() => setOrden(o => o === 'recientes' ? 'nombre' : 'recientes')}
+          >
+            <Ionicons
+              name={orden === 'recientes' ? 'time-outline' : 'text-outline'}
+              size={14} color={TEAL}
+            />
+            <Text style={[st.ordenTxt, { color: c.textSub }]}>
+              {orden === 'recientes' ? 'Más recientes' : 'Por nombre'}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={st.tipoFiltros}>
+            {([[TODOS, 'Todos', c.textSub] as const,
+               ...TIPOS.map(t => [t.valor, t.etiqueta, t.color] as const),
+               ['sin', 'Sin clasificar', '#b45309'] as const,
+              ]).map(([valor, etiqueta, color]) => {
+              const on = filtroTipo === valor
+              const n = valor === TODOS ? listaPorEstado.length
+                : valor === 'sin' ? listaPorEstado.filter(a => !a.tipo).length
+                : listaPorEstado.filter(a => a.tipo === valor).length
+              if (n === 0 && !on && valor !== TODOS) return null
+              return (
+                <TouchableOpacity
+                  key={valor}
+                  style={[st.tipoChip, { borderColor: on ? color : c.border, backgroundColor: on ? color : 'transparent' }]}
+                  onPress={() => setFiltroTipo(prev => prev === valor ? TODOS : valor as any)}
+                >
+                  <Text style={[st.tipoChipTxt, { color: on ? '#fff' : c.textSub }]}>{etiqueta} · {n}</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
         </View>
 
         {estadosPresentes.length > 1 && (
@@ -148,7 +227,19 @@ export default function AsesoresExternos() {
               <Text style={st.avatarTxt}>{a.nombre.trim().charAt(0).toUpperCase()}</Text>
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[st.nombre, { color: c.text }]} numberOfLines={1}>{a.nombre}</Text>
+              <View style={st.nombreRow}>
+                <Text style={[st.nombre, { color: c.text }]} numberOfLines={1}>{a.nombre}</Text>
+                {(() => {
+                  const t = tipoDe(a.tipo)
+                  return (
+                    <View style={[st.tipoPill, { backgroundColor: (t?.color ?? '#b45309') + '1A' }]}>
+                      <Text style={[st.tipoPillTxt, { color: t?.color ?? '#b45309' }]}>
+                        {t?.etiqueta ?? 'Sin clasificar'}
+                      </Text>
+                    </View>
+                  )
+                })()}
+              </View>
               {(a.zona || a.estado_mx) ? (
                 <View style={st.zonaRow}>
                   <Ionicons name="location-outline" size={12} color={TEAL} />
@@ -158,6 +249,7 @@ export default function AsesoresExternos() {
                 </View>
               ) : null}
               {a.telefono ? <Text style={[st.tel, { color: c.textMute }]}>{a.telefono}</Text> : null}
+              <Text style={[st.registrado, { color: c.textMute }]}>Registrado {cuandoSeRegistro(a.created_at)}</Text>
             </View>
             <View style={st.acciones}>
               {a.telefono ? (
@@ -201,6 +293,28 @@ export default function AsesoresExternos() {
             <TextInput style={[st.inp, { color: c.text, borderColor: c.inputBorder, backgroundColor: c.input }]}
               value={editando?.telefono ?? ''} onChangeText={v => setEditando(e => ({ ...e, telefono: v }))}
               placeholder="Ej. 442 123 4567" placeholderTextColor={c.placeholder} keyboardType="phone-pad" />
+
+            <Text style={[st.lbl, { color: c.textSub }]}>¿Qué tipo de asesor es?</Text>
+            <View style={st.tipoOpciones}>
+              {TIPOS.map(t => {
+                const on = editando?.tipo === t.valor
+                return (
+                  <TouchableOpacity
+                    key={t.valor}
+                    style={[st.tipoOpcion, { borderColor: on ? t.color : c.inputBorder, backgroundColor: on ? t.color + '12' : c.input }]}
+                    onPress={() => setEditando(e => ({ ...e, tipo: on ? null : t.valor }))}
+                  >
+                    <View style={[st.tipoRadio, { borderColor: on ? t.color : c.border }]}>
+                      {on && <View style={[st.tipoRadioDot, { backgroundColor: t.color }]} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[st.tipoOpcionTit, { color: on ? t.color : c.text }]}>{t.etiqueta}</Text>
+                      <Text style={[st.tipoOpcionSub, { color: c.textMute }]}>{t.desc}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
 
             <Text style={[st.lbl, { color: c.textSub }]}>Estado</Text>
             <TouchableOpacity
@@ -274,6 +388,31 @@ const st = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   h1: { fontSize: 22, fontWeight: '900' },
   sub: { fontSize: 12.5, marginTop: 2, marginBottom: 14 },
+  barraRow: { marginTop: 10, gap: 8 },
+  ordenBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+    borderWidth: 1.5, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 7,
+  },
+  ordenTxt: { fontSize: 12.5, fontWeight: '800' },
+  tipoFiltros: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  tipoChip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
+  tipoChipTxt: { fontSize: 12, fontWeight: '800' },
+  nombreRow: { flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' },
+  tipoPill: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  tipoPillTxt: { fontSize: 10.5, fontWeight: '800' },
+  registrado: { fontSize: 11, marginTop: 3 },
+  tipoOpciones: { gap: 8, marginBottom: 4 },
+  tipoOpcion: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1.5, borderRadius: 12, padding: 12,
+  },
+  tipoRadio: {
+    width: 20, height: 20, borderRadius: 10, borderWidth: 2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tipoRadioDot: { width: 10, height: 10, borderRadius: 5 },
+  tipoOpcionTit: { fontSize: 14.5, fontWeight: '800' },
+  tipoOpcionSub: { fontSize: 11.5, marginTop: 1 },
   buscaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9, marginBottom: 14 },
   buscaInp: { flex: 1, fontSize: 14, padding: 0 },
   filtroScroll: { marginBottom: 10 },
