@@ -799,6 +799,183 @@ async function buscarRubaDesarrollo(url: string): Promise<{ modelos: VinteModelo
   return { modelos, tipo }
 }
 
+// ── Tokko Broker, plantilla clásica "TFW" ───────────────────────────────────
+// La usan muchas inmobiliarias mexicanas con su propio dominio (sgbienesraices,
+// etc.). Es HTML servido de corrido, no el Next.js de ficha.info: los datos
+// vienen en cuadros con etiqueta, que es mucho más confiable que adivinarlos
+// del texto libre. Sin esto la ficha entraba sin ubicación ninguna.
+
+const _planoTk = (s: string) =>
+  (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').toLowerCase()
+
+// Estado canónico → cómo puede venir escrito. Incluye municipios y ciudades
+// grandes porque Tokko casi nunca escribe el estado: pone "El Marqués" o
+// "Guadalajara". Es la misma tabla que usa la app en lib/estados-mexico.ts.
+const _ESTADOS_TK: [string, string[]][] = [
+  ['Querétaro', ['queretaro', 'qro', 'el marques', 'corregidora', 'san juan del rio', 'tequisquiapan', 'huimilpan', 'pedro escobedo']],
+  ['Nuevo León', ['nuevo leon', 'monterrey', 'san pedro garza', 'apodaca', 'santa catarina', 'san nicolas de los garza']],
+  ['Jalisco', ['jalisco', 'guadalajara', 'zapopan', 'tlaquepaque', 'tonala', 'puerto vallarta', 'tlajomulco']],
+  ['Ciudad de México', ['ciudad de mexico', 'cdmx', 'distrito federal']],
+  ['Estado de México', ['estado de mexico', 'edomex', 'toluca', 'naucalpan', 'tlalnepantla', 'ecatepec', 'metepec', 'huixquilucan', 'atizapan']],
+  ['Puebla', ['puebla', 'cholula', 'atlixco']],
+  ['Guanajuato', ['guanajuato', 'irapuato', 'celaya', 'san miguel de allende', 'leon gto', 'leon, gto']],
+  ['Aguascalientes', ['aguascalientes']],
+  ['Baja California Sur', ['baja california sur', 'los cabos', 'cabo san lucas', 'san jose del cabo']],
+  ['Baja California', ['baja california', 'tijuana', 'mexicali', 'ensenada', 'rosarito']],
+  ['Campeche', ['campeche']],
+  ['Chiapas', ['chiapas', 'tuxtla', 'san cristobal de las casas']],
+  ['Chihuahua', ['chihuahua', 'ciudad juarez', 'cd juarez']],
+  ['Coahuila', ['coahuila', 'saltillo', 'torreon', 'monclova', 'piedras negras']],
+  ['Colima', ['colima', 'manzanillo']],
+  ['Durango', ['durango']],
+  ['Guerrero', ['guerrero', 'acapulco', 'chilpancingo', 'zihuatanejo', 'ixtapa']],
+  ['Hidalgo', ['hidalgo', 'pachuca', 'tulancingo', 'tizayuca']],
+  ['Michoacán', ['michoacan', 'morelia', 'uruapan']],
+  ['Morelos', ['morelos', 'cuernavaca', 'jiutepec', 'temixco']],
+  ['Nayarit', ['nayarit', 'tepic', 'nuevo vallarta', 'bahia de banderas']],
+  ['Oaxaca', ['oaxaca', 'huatulco', 'puerto escondido']],
+  ['Quintana Roo', ['quintana roo', 'cancun', 'playa del carmen', 'tulum', 'cozumel', 'riviera maya']],
+  ['San Luis Potosí', ['san luis potosi', 'slp']],
+  ['Sinaloa', ['sinaloa', 'culiacan', 'mazatlan', 'los mochis']],
+  ['Sonora', ['sonora', 'hermosillo', 'ciudad obregon', 'nogales']],
+  ['Tabasco', ['tabasco', 'villahermosa']],
+  ['Tamaulipas', ['tamaulipas', 'tampico', 'reynosa', 'matamoros', 'nuevo laredo', 'ciudad victoria']],
+  ['Tlaxcala', ['tlaxcala', 'apizaco']],
+  ['Veracruz', ['veracruz', 'xalapa', 'jalapa', 'boca del rio', 'coatzacoalcos', 'orizaba']],
+  ['Yucatán', ['yucatan', 'merida', 'progreso yuc']],
+  ['Zacatecas', ['zacatecas', 'fresnillo']],
+]
+function _estadoTk(texto: string): string {
+  const t = ' ' + _planoTk(texto) + ' '
+  for (const [estado, variantes] of _ESTADOS_TK) {
+    for (const v of variantes) if (t.includes(v)) return estado
+  }
+  return ''
+}
+
+type TokkoFicha = {
+  titulo: string; descripcion: string; precio: string; direccion: string; estado: string
+  tipoTexto: string; m2: string; m2Terreno: string
+  recamaras: number | null; banos: number | null; mediosBanos: number | null
+  estacionamientos: number | null; operacion: 'venta' | 'renta' | null; imagenes: string[]
+}
+
+function parseTokkoTfw(html: string, url: string): TokkoFicha | null {
+  // Sólo las fichas de la plantilla clásica: traen los assets /tfw/ y el cuadro
+  // de detalles. Se reconoce por el marcado, no por el dominio, para que sirva
+  // con cualquier inmobiliaria que use Tokko.
+  const esTokko = /static\.tokkobroker\.com\/tfw\//i.test(html) &&
+                  /ficha_detalle_item|lista_superficies/i.test(html)
+  if (!esTokko) return null
+
+  // Cuadro "DETALLES DEL INMUEBLE": <b>Etiqueta</b><br/>Valor
+  const det: Record<string, string> = {}
+  for (const m of html.matchAll(/<div class="ficha_detalle_item">\s*<b>([^<]+)<\/b>\s*<br\s*\/?>\s*([\s\S]*?)<\/div>/gi)) {
+    det[_planoTk(m[1]).trim()] = htmlText(m[2]).replace(/\s+/g, ' ').trim()
+  }
+
+  // Listas <li>Etiqueta: Valor</li> (superficies e información básica)
+  const lista = (id: string): Record<string, string> => {
+    const i = html.indexOf('id="' + id + '"')
+    if (i < 0) return {}
+    const fin = html.indexOf('</ul>', i)
+    const out: Record<string, string> = {}
+    for (const m of html.slice(i, fin < 0 ? i + 2000 : fin).matchAll(/<li>([\s\S]*?)<\/li>/gi)) {
+      const t = htmlText(m[1]).replace(/\s+/g, ' ').trim()
+      const p = t.split(/\s*:\s*/)
+      if (p.length >= 2) out[_planoTk(p[0]).trim()] = p.slice(1).join(':').trim()
+    }
+    return out
+  }
+  const sup = lista('lista_superficies')
+  const basica = lista('lista_informacion_basica')
+
+  // Conserva el decimal: un terreno de 67.5 m² no es de 68.
+  const num = (v: string | undefined): string => {
+    if (!v) return ''
+    const n = parseFloat(String(v).replace(/[^\d.,]/g, '').replace(/,/g, ''))
+    return isNaN(n) ? '' : String(Math.round(n * 100) / 100)
+  }
+
+  // ── Fotos de la galería ──────────────────────────────────────────────────
+  // Tokko nombra los archivos de dos formas: "<idPropiedad>_<hash>.jpg" y, en
+  // fichas viejas, sólo "<hash>.jpg". Por eso NO se puede exigir el id: eso
+  // dejaba un departamento de Zibatá con 0 de sus 10 fotos. Sólo se descarta
+  // una foto cuando trae un id distinto al de esta ficha (sería de otra).
+  const idFicha = url.match(/\/p\/(\d+)/)?.[1] ?? ''
+  const imagenes: string[] = []
+  for (const m of html.matchAll(/data-thumb="(https:\/\/static\.tokkobroker\.com\/pictures\/[^"]+)"/gi)) {
+    const u = decodeEntities(m[1])
+    const idFoto = u.match(/\/pictures\/(\d{1,12})_/)?.[1]
+    if (idFoto && idFicha && idFoto !== idFicha) continue
+    if (!imagenes.includes(u)) imagenes.push(u)
+  }
+
+  // ── Ubicación ────────────────────────────────────────────────────────────
+  // El cuadro de detalles da la colonia/fraccionamiento sin más ("Ciudad
+  // Meseta"). El municipio y el estado SÓLO están en el alt de las fotos
+  // ("...en Ciudad Meseta, Querétaro ..."), y se toman únicamente si vienen
+  // pegados después de esa misma ubicación: el pie de página trae la dirección
+  // de la OFICINA de la inmobiliaria, y leerla de ahí etiquetaría como de su
+  // ciudad las propiedades que esa agencia vende en otros estados.
+  const ubic = det['ubicacion'] ?? ''
+  const titulo = htmlText(html.match(/class="title-address"[^>]*>([\s\S]*?)<\/div>/i)?.[1] ?? '')
+  let lugar = ubic
+  if (ubic) {
+    for (const m of html.matchAll(/alt="Foto ([^"]+)"/gi)) {
+      const alt = decodeEntities(m[1])
+      const i = _planoTk(alt).indexOf(_planoTk(ubic))
+      if (i < 0) continue
+      let resto = alt.slice(i)
+      const j = titulo ? _planoTk(resto).indexOf(_planoTk(titulo)) : -1
+      if (j > 0) resto = resto.slice(0, j)
+      resto = resto.replace(/\s+/g, ' ').replace(/[\s,]+$/, '').trim()
+      if (resto.length > ubic.length && resto.length < 90) { lugar = resto; break }
+    }
+  }
+  const estado = _estadoTk(lugar || titulo)
+
+  // Descripción: el HTML viene escapado dentro del div.
+  let descripcion = ''
+  const dm = html.match(/id="prop-desc"[^>]*>([\s\S]*?)<\/div>/i)
+  if (dm) descripcion = htmlText(decodeEntities(dm[1])).replace(/\n{3,}/g, '\n\n').trim()
+
+  // ── Operación y precio, emparejados dentro del mismo bloque ──────────────
+  // No basta con buscar la clase suelta en todo el HTML: hay un script con
+  // "operation-type-div-renta-temporal" que hacía pasar una VENTA de 2.8
+  // millones por una renta.
+  const ops: { op: 'venta' | 'renta'; precio: string }[] = []
+  for (const m of html.matchAll(/operation-type-div[^>]*>([^<]*)<[\s\S]{0,400}?operation-val[^>]*>\s*<span>\s*(?:MXN|MN|USD|\$)?\s*([\d.,]*)/gi)) {
+    const etiqueta = _planoTk(htmlText(m[1]))
+    const op = etiqueta.includes('venta') ? 'venta'
+             : (etiqueta.includes('renta') || etiqueta.includes('alquiler')) ? 'renta' : null
+    if (op) ops.push({ op, precio: num(m[2]) })
+  }
+  // Si la publican en venta y en renta, manda la venta (es como se carga aquí).
+  const elegida = ops.find(o => o.op === 'venta') ?? ops[0] ?? null
+
+  return {
+    titulo,
+    descripcion,
+    precio: elegida?.precio ?? '',
+    // "Ciudad Meseta, Querétaro" — sin repetir el estado si el lugar ya lo trae.
+    direccion: [lugar, estado].filter(Boolean)
+      .filter((v, i, a) => i === 0 || !_planoTk(a[0]).includes(_planoTk(v))).join(', '),
+    estado,
+    tipoTexto: det['tipo de inmueble'] ?? '',
+    // "Total construido" es lo que va en construcción, no la superficie
+    // cubierta ni la del terreno.
+    m2: num(sup['total construido'] ?? det['total construido']),
+    m2Terreno: num(sup['terreno'] ?? det['terreno']),
+    recamaras: cap(parseNum(basica['recamaras'] ?? det['recamaras']), 5),
+    banos: cap(parseNum(basica['banos'] ?? det['banos']), 4),
+    mediosBanos: cap(parseNum(basica['medios banos'] ?? det['medios banos']), 2),
+    estacionamientos: cap(parseNum(basica['estacionamientos']), 3),
+    operacion: elegida?.op ?? null,
+    imagenes,
+  }
+}
+
 // ── JSON-LD (schema.org) ──────────────────────────────────────────────────
 // Lamudi y muchos otros portales publican los datos en bloques
 // <script type="application/ld+json">. Devuelve todos los nodos aplanados.
@@ -1676,7 +1853,9 @@ serve(async (req) => {
     let m2Terreno = ''
     let tipo: 'casa' | 'departamento' | 'local' | 'terreno' | null = null
     let operacion: 'venta' | 'renta' | null = null
-    let zona: 'queretaro' | 'monterrey' | 'puebla' | null = null
+    // Las tres ciudades principales llevan su clave; cualquier otro estado se
+    // guarda con su nombre, como ya hay en la base ("Jalisco", "Quintana Roo").
+    let zona: string | null = null
     let imagenes: string[] = []
 
     // brokers.tuhabi.mx y tuficha.mx se resuelven ANTES de fetchHtml (ver arriba,
@@ -1753,6 +1932,39 @@ serve(async (req) => {
           descripcion = plainChunk
             .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
             .replace(/\s+/g, ' ').trim().slice(0, 3000)
+        }
+      }
+    }
+
+    // ── 0b3. Tokko Broker, plantilla clásica (sgbienesraices y similares) ───
+    // Se reconoce por el marcado, no por el dominio: cualquier inmobiliaria con
+    // Tokko entra por aquí. Manda sobre el camino genérico porque sus datos
+    // vienen etiquetados uno por uno en vez de adivinados del texto.
+    let tokkoTrajoFotos = false
+    {
+      const tk = parseTokkoTfw(html, url)
+      if (tk) {
+        if (!titulo)      titulo      = tk.titulo
+        if (!descripcion) descripcion = tk.descripcion
+        if (!precio)      precio      = tk.precio
+        if (!direccion)   direccion   = tk.direccion
+        if (!m2)          m2          = tk.m2
+        if (!m2Terreno)   m2Terreno   = tk.m2Terreno
+        if (recamaras        === null) recamaras        = tk.recamaras
+        if (banos            === null) banos            = tk.banos
+        if (mediosBanos      === null) mediosBanos      = tk.mediosBanos
+        if (estacionamientos === null) estacionamientos = tk.estacionamientos
+        if (!tipo)      tipo      = mapTipo(tk.tipoTexto)
+        if (!operacion) operacion = tk.operacion
+        if (!zona && tk.estado) {
+          zona = tk.estado === 'Querétaro'  ? 'queretaro'
+               : tk.estado === 'Nuevo León' ? 'monterrey'
+               : tk.estado === 'Puebla'     ? 'puebla'
+               : tk.estado
+        }
+        if (!imagenes.length && tk.imagenes.length) {
+          imagenes = tk.imagenes
+          tokkoTrajoFotos = true
         }
       }
     }
@@ -2248,7 +2460,9 @@ serve(async (req) => {
     // ── 10b. Fallback genérico: cualquier <img>/<source>, resolviendo rutas
     // relativas a absolutas. Cubre sitios propios de desarrolladoras que no usan
     // un CDN conocido (p. ej. procesadesarrollos.com.mx, con src="img/foto.webp").
-    if (imagenes.length < 3) {
+    // Si las fotos vienen de la galería de Tokko ya están completas; dejar
+    // entrar el barrido genérico sólo metería logos e íconos de la plantilla.
+    if (imagenes.length < 3 && !tokkoTrajoFotos) {
       const found: string[] = []
       const addImg = (raw: string) => {
         if (!raw) return
