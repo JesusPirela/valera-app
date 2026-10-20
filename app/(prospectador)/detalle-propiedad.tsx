@@ -23,7 +23,7 @@ import { getUsuarioActual } from '../../lib/sesion'
 import CompartirFormulario from '../../components/CompartirFormulario'
 import { esPlusOMejor, esStaffSupervision, puedeVerPublicaciones } from '../../lib/permisos'
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
-import { thumb, proxyImagen } from '../../lib/img'
+import { thumb, proxyImagen, imagenParaGaleria } from '../../lib/img'
 import { rotarFotos, lotePublicacion, TOPE_LOTE } from '../../lib/orden-fotos'
 import {
   IdiomaFicha, tf, tipoOperacionLabel, formatPrecioLang, traducirFicha,
@@ -32,6 +32,7 @@ import { enqueuePublicacion } from '../../lib/offline-queue'
 import { ThumbImage } from '../../components/ThumbImage'
 import { useVistaComo } from '../../lib/VistaComo'
 import * as MediaLibrary from 'expo-media-library'
+import { asegurarPermisoGaleria } from '../../lib/permiso-galeria'
 import * as Clipboard from 'expo-clipboard'
 import * as FileSystem from 'expo-file-system'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -935,11 +936,9 @@ export default function DetallePropiedad() {
   async function guardarVideoEnGaleria() {
     if (!propiedad?.video_url) return
     if (Platform.OS === 'web') { Linking.openURL(propiedad.video_url); return }
-    const { status } = await MediaLibrary.requestPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Sin permiso', 'Activa el acceso a la galería para guardar el video.')
-      return
-    }
+    // Mismo trato que las fotos: explicar antes y ofrecer los Ajustes. Antes
+    // decia 'activa el acceso' sin decir donde, que es un callejon sin salida.
+    if (!(await asegurarPermisoGaleria('el video'))) return
     setDescargandoVideo(true)
     try {
       const ext = propiedad.video_url.split('?')[0].split('.').pop() ?? 'mp4'
@@ -2094,17 +2093,10 @@ export default function DetallePropiedad() {
         setDescargando(false)
       }
     } else {
-      // Pedir permiso completo (no writeOnly) para mayor compatibilidad en iOS
-      const { status } = await MediaLibrary.requestPermissionsAsync()
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permiso requerido',
-          'Ve a Configuración → Valera → Fotos y selecciona "Todas las fotos" para guardar imágenes.',
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            { text: 'Abrir Configuración', onPress: () => Linking.openSettings() },
-          ]
-        )
+      // Explica ANTES de que salga la ventana del sistema, y detecta el caso
+      // de "acceso limitado", que el sistema reporta como concedido pero deja
+      // las fotos donde la galeria no las ensenia.
+      if (!(await asegurarPermisoGaleria('las fotos'))) {
         setDescargando(false)
         return
       }
@@ -2126,22 +2118,37 @@ export default function DetallePropiedad() {
           // Intentar descarga directa con timeout de 15 s. Si falla (CDN externo,
           // 403, redirect que expo-file-system no sigue), reintentar vía el proxy
           // wsrv.nl — mismo mecanismo que usa imagenABase64() para el PDF.
+          // PRIMERO la version normalizada, no la directa.
+          //
+          // Antes era al reves y por eso salian de cabeza: hay propiedades con
+          // fotos en PNG que llevan dentro una etiqueta EXIF de "girar 180
+          // grados" (medido en VR-2419). La app la respeta y se ven bien, pero
+          // la galeria de Android y el selector de Facebook la ignoran. Bajar
+          // el archivo tal cual se lleva la etiqueta y el problema.
+          //
+          // El proxy aplica el giro a los pixeles y entrega un JPEG limpio, asi
+          // que ya no queda etiqueta que nadie pueda ignorar. De paso pesa como
+          // cinco veces menos.
           let dlUri: string | null = null
-          try {
-            const { uri, status: s } = await conTimeout(
-              FileSystem.downloadAsync(url, `${base}.${extValida}`), 15000
-            )
-            if (s === 200) dlUri = uri
-          } catch { /* timeout o error de red */ }
-
-          if (!dlUri) {
-            const proxyUrl = proxyImagen(url, { width: 1080, quality: 90 }) ?? url
+          const urlNormalizada = imagenParaGaleria(url)
+          if (urlNormalizada) {
             try {
               const { uri, status: s } = await conTimeout(
-                FileSystem.downloadAsync(proxyUrl, `${base}_p.jpg`), 15000
+                FileSystem.downloadAsync(urlNormalizada, `${base}.jpg`), 15000
               )
               if (s === 200) dlUri = uri
-            } catch { /* proxy también falló */ }
+            } catch { /* el proxy no respondio */ }
+          }
+
+          // Respaldo: el archivo original. Puede salir girado, pero es mejor
+          // que quedarse sin la foto si el proxy esta caido.
+          if (!dlUri) {
+            try {
+              const { uri, status: s } = await conTimeout(
+                FileSystem.downloadAsync(url, `${base}.${extValida}`), 15000
+              )
+              if (s === 200) dlUri = uri
+            } catch { /* timeout o error de red */ }
           }
 
           if (!dlUri) { errores.push(`img${i + 1}: sin respuesta`); continue }

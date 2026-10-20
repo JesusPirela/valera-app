@@ -70,3 +70,25 @@ export function proxyImagen(url: string | null | undefined, opts: { width?: numb
   const { width = 1080, quality = 72 } = opts
   return `${PROXY}?url=${encodeURIComponent(url)}&w=${width}&q=${quality}&output=jpg`
 }
+
+/**
+ * La misma imagen, pero lista para guardarse en la galería del teléfono.
+ *
+ * El problema que resuelve: hay propiedades cuyas fotos son PNG con un bloque
+ * EXIF adentro que dice "gírame 180 grados" (VR-2419 es el caso medido). La
+ * app respeta esa etiqueta y se ven bien, pero la galería de Android y el
+ * selector de Facebook la IGNORAN —en PNG casi nadie la respeta— y salen de
+ * cabeza. El reporte que llega es "las guardo y en Facebook aparecen al revés".
+ *
+ * Pasarlas por el proxy aplica el giro a los píxeles de verdad y entrega un
+ * JPEG sin metadatos, así que ya no hay etiqueta que nadie pueda ignorar.
+ *
+ * Se va SIN parámetro de ancho a propósito: conserva el tamaño original. Medido
+ * en VR-2419: entra PNG de 1280x960 y 2,111 KB, sale JPEG de 1280x960 y 431 KB.
+ * Misma imagen, derecha, y cinco veces más ligera.
+ */
+export function imagenParaGaleria(url: string | null | undefined): string | undefined {
+  if (!url) return undefined
+  if (url.startsWith(PROXY)) return url
+  return `${PROXY}?url=${encodeURIComponent(url)}&q=92&output=jpg`
+}
