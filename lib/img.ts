@@ -35,22 +35,36 @@ export type ThumbOpts = {
 
 /**
  * Devuelve una URL de miniatura redimensionada por el proxy gratuito.
- * Si la URL no es del storage público de Supabase, la regresa intacta.
+ *
+ * Encoge TODO lo que venga por http, no solo lo de Supabase.
+ *
+ * Antes, cualquier foto que no estuviera en el storage de Supabase se devolvía
+ * intacta. Eso dejaba **16,735 fotos de 933 propiedades** —las importadas de
+ * EasyBroker, CloudFront, Lamudi, Firebase, Tokko— bajándose a tamaño completo
+ * para enseñarlas a 200 píxeles.
+ *
+ * Lo que costaba, medido en una foto de VR-2419: 2,111 KB para una miniatura
+ * que por el proxy pesa 3.6 KB. El selector de 20 fotos bajaba 41 MB en vez de
+ * 72 KB. De ahí el reporte de "llevo 6 minutos esperando y algunas ni cargan".
+ *
+ * Es seguro porque ThumbImage ya cae a la imagen original si la miniatura
+ * falla: si algún CDN bloqueara al proxy, se ve igual que antes.
  */
 export function thumb(url: string | null | undefined, opts: ThumbOpts = {}): string | undefined {
   if (!url) return undefined
   // Ya proxeada, o thumbnail propio pregenerado (/thumbs/) → servir tal cual.
   if (url.startsWith(PROXY) || url.includes('/thumbs/')) return url
+  // Archivos del propio teléfono (file://, content://, data:) y rutas locales:
+  // el proxy no puede alcanzarlos. Son las fotos recién elegidas que todavía no
+  // se suben.
+  if (!/^https?:\/\//i.test(url)) return url
 
-  // Normalizar al ORIGINAL público de Supabase.
+  // Normalizar al ORIGINAL público de Supabase cuando aplique.
   let origen = url
   if (url.includes(RENDER_SEG)) {
     // URL de transformación vieja (de caché): volver al objeto público para que
     // el proxy tome el original y no se dispare otra transformación de Supabase.
     origen = url.split('?')[0].replace(RENDER_SEG, OBJECT_SEG)
-  } else if (!url.includes(OBJECT_SEG)) {
-    // No es del storage público de Supabase → dejar intacta.
-    return url
   }
 
   const { width = 400, quality = 70, resize = 'cover' } = opts
