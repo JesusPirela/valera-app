@@ -154,6 +154,7 @@ export default function AsesoresExternos() {
             </Text>
           </TouchableOpacity>
 
+          <Text style={[st.tipoFiltrosLbl, { color: c.textMute }]}>TIPO DE ASESOR</Text>
           <View style={st.tipoFiltros}>
             {([[TODOS, 'Todos', c.textSub] as const,
                ...TIPOS.map(t => [t.valor, t.etiqueta, t.color] as const),
@@ -388,14 +389,15 @@ const st = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   h1: { fontSize: 22, fontWeight: '900' },
   sub: { fontSize: 12.5, marginTop: 2, marginBottom: 14 },
-  barraRow: { marginTop: 10, gap: 8 },
+  barraRow: { marginTop: 12, gap: 11, marginBottom: 14 },
   ordenBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
     borderWidth: 1.5, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 7,
   },
   ordenTxt: { fontSize: 12.5, fontWeight: '800' },
-  tipoFiltros: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  tipoChip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
+  tipoFiltrosLbl: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.6, marginBottom: -2 },
+  tipoFiltros: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tipoChip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
   tipoChipTxt: { fontSize: 12, fontWeight: '800' },
   nombreRow: { flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' },
   tipoPill: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
@@ -415,9 +417,9 @@ const st = StyleSheet.create({
   tipoOpcionSub: { fontSize: 11.5, marginTop: 1 },
   buscaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9, marginBottom: 14 },
   buscaInp: { flex: 1, fontSize: 14, padding: 0 },
-  filtroScroll: { marginBottom: 10 },
+  filtroScroll: { marginBottom: 13 },
   filtroRow: { flexDirection: 'row', gap: 7, paddingRight: 8 },
-  filtroChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
+  filtroChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
   filtroChipOn: { backgroundColor: TEAL, borderColor: TEAL },
   filtroChipTxt: { fontSize: 12.5, fontWeight: '700' },
   filtroChipTxtOn: { color: '#fff' },
