@@ -9,6 +9,8 @@ import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { normalizar } from '../../lib/texto'
 import { normalizarTelefono } from '../../lib/telefono'
+import * as Clipboard from 'expo-clipboard'
+import { textoClienteWhatsApp } from '../../lib/texto-cliente'
 import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
 
 import { getUsuarioActual } from '../../lib/sesion'
@@ -50,7 +52,15 @@ type Cita = {
   creada_por?: string | null
   created_at: string
   updated_at: string
-  clientes: { nombre: string; telefono: string; tipo_operacion: string | null; estado: string }
+  clientes: {
+    nombre: string; telefono: string; tipo_operacion: string | null; estado: string
+    // El resto del perfil, para poder copiarlo sin abrir la ficha.
+    email: string | null; presupuesto: string | null; tipo_credito: string | null
+    zona_busqueda: string | null; nivel_interes: string | null
+    num_personas: string | null; tiene_mascotas: boolean | null
+    detalle_mascotas: string | null; fecha_mudanza: string | null
+    fuente_lead: string | null; notas: string | null
+  }
   prospectador: { nombre: string; telefono: string | null } | null
   coordinador: { nombre: string } | null
   asesor: { nombre: string } | null
@@ -1126,6 +1136,24 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging, onRet
 
   const isWebDrag = Platform.OS === 'web' && !!onDragStart
 
+  // Copiar el perfil del cliente listo para pegarlo en WhatsApp.
+  const [copiado, setCopiado] = useState(false)
+  const copiadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (copiadoTimer.current) clearTimeout(copiadoTimer.current) }, [])
+  async function copiarCliente() {
+    const texto = textoClienteWhatsApp(
+      { ...cita.clientes, telefono: normalizarTel(cita.clientes.telefono) },
+      {
+        cita: cita.fecha_cita ? `${dia}${hora ? ' · ' + hora : ''}` : undefined,
+        propiedad: cita.propiedad?.titulo ?? cita.propiedad_externa ?? undefined,
+      },
+    )
+    try { await Clipboard.setStringAsync(texto) } catch { return }
+    setCopiado(true)
+    if (copiadoTimer.current) clearTimeout(copiadoTimer.current)
+    copiadoTimer.current = setTimeout(() => setCopiado(false), 1800)
+  }
+
   const card = (
     <TouchableOpacity
       style={[kc.card, esTratoCerrado && kc.cardTratoCerrado, esUrgente && kc.cardUrgente, esInerte && !inerciaCritica && kc.cardInerte, inerciaCritica && kc.cardInerteCritica, !isWebDrag && isDragging && kc.cardDragging, isWebDrag && { marginBottom: 0 }]}
@@ -1143,8 +1171,10 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging, onRet
             <Text style={kc.tratoBannerTxt}>🏆 Apartó · Trato cerrado</Text>
           </View>
         )}
-        {/* Nombre + avatar — toca para ver la ficha completa del cliente */}
-        <TouchableOpacity style={kc.headRow} activeOpacity={0.6} onPress={() => abrirFichaCliente(cita.cliente_id)}>
+        {/* Nombre + avatar — toca para ver la ficha completa del cliente.
+            El botón de copiar va FUERA de ese toque, para que no abra la ficha. */}
+        <View style={kc.headWrap}>
+        <TouchableOpacity style={[kc.headRow, { flex: 1, minWidth: 0 }]} activeOpacity={0.6} onPress={() => abrirFichaCliente(cita.cliente_id)}>
           <View style={[kc.avatar, { backgroundColor: inf.bg }]}>
             <Text style={[kc.avatarTxt, { color: inf.color }]}>{iniciales(cita.clientes.nombre)}</Text>
           </View>
@@ -1156,6 +1186,20 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging, onRet
             <Text style={kc.tel}>{normalizarTel(cita.clientes.telefono)}</Text>
           </View>
         </TouchableOpacity>
+          <TouchableOpacity
+            style={[kc.copiarBtn, copiado && kc.copiarBtnOk]}
+            onPress={copiarCliente}
+            activeOpacity={0.7}
+            accessibilityLabel="Copiar los datos del cliente"
+          >
+            <Ionicons
+              name={copiado ? 'checkmark' : 'copy-outline'}
+              size={14}
+              color={copiado ? '#15803d' : '#64748b'}
+            />
+          </TouchableOpacity>
+        </View>
+        {copiado && <Text style={kc.copiadoAviso}>Datos copiados · pégalos en WhatsApp</Text>}
 
         {/* Fecha de cita */}
         {cita.fecha_cita && (
@@ -1316,7 +1360,14 @@ const kc = StyleSheet.create({
   cardDragging: { opacity: 0.45 },
   colorBar:    { width: 4 },
   body:        { flex: 1, padding: 10, gap: 5 },
+  headWrap:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
   headRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  copiarBtn: {
+    width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#f1f5f9', flexShrink: 0,
+  },
+  copiarBtnOk: { backgroundColor: '#dcfce7' },
+  copiadoAviso: { fontSize: 10, fontWeight: '700', color: '#15803d', marginTop: 4 },
   avatar:      { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   avatarTxt:   { fontSize: 11, fontWeight: '800' },
   nombre:      { fontSize: 13, fontWeight: '700', color: '#0f172a' },
@@ -1511,7 +1562,12 @@ export default function CoordinacionCitas() {
           .from('citas_coordinacion')
           .select(`
             *,
-            clientes ( nombre, telefono, tipo_operacion, estado ),
+            clientes (
+              nombre, telefono, tipo_operacion, estado,
+              email, presupuesto, tipo_credito, zona_busqueda, nivel_interes,
+              num_personas, tiene_mascotas, detalle_mascotas, fecha_mudanza,
+              fuente_lead, notas
+            ),
             prospectador:profiles!citas_coordinacion_prospectador_id_fkey ( nombre, telefono ),
             coordinador:profiles!citas_coordinacion_coordinado_por_fkey ( nombre ),
             asesor:profiles!citas_coordinacion_asesor_id_fkey ( nombre ),
