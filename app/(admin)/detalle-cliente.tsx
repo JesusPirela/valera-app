@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TextInput,
   ActivityIndicator, TouchableOpacity, Modal, Alert, Platform, Linking,
 } from 'react-native'
-import { useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
@@ -284,6 +284,16 @@ export default function AdminDetalleCliente() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Hoja de ruta del recorrido. La pantalla se bloquea sola a quien no sea
+          de asesor para arriba, así que aquí no hace falta repetir la guarda. */}
+      <TouchableOpacity
+        style={styles.hojaRutaBtn}
+        onPress={() => router.push({ pathname: '/(admin)/hoja-de-ruta', params: { clienteId: cliente.id } })}
+      >
+        <Ionicons name="map-outline" size={15} color="#fff" />
+        <Text style={styles.hojaRutaTxt}>Hoja de ruta del recorrido</Text>
+      </TouchableOpacity>
 
       {/* Info principal */}
       <View style={[styles.clienteCard, { backgroundColor: c.card }]}>
@@ -614,6 +624,11 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 52 },
 
+  hojaRutaBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    backgroundColor: '#1e3a5f', borderRadius: 10, paddingVertical: 11, marginBottom: 12,
+  },
+  hojaRutaTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   quickActions: { flexDirection: 'row', gap: 8 },
   qaWa: {
