@@ -1686,38 +1686,41 @@ export default function CRM() {
 
         {/* ── List ── */}
         {vistaExcel ? (() => {
+          function renderHeaderCols(cols: TCol[]) {
+            return cols.map(col => {
+              const isSorted = excelSort?.col === col.id
+              const filtered = isColFiltered(col.id)
+              return (
+                <View key={col.id} style={[s.excelTh, cStyle(col)]}>
+                  <TouchableOpacity
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0 }}
+                    onPress={col.sortable ? () => handleColSort(col.id) : undefined}
+                    disabled={!col.sortable}
+                  >
+                    <Text style={s.excelThTxt} numberOfLines={1}>{col.label}</Text>
+                    {col.sortable && (
+                      <Ionicons
+                        name={!isSorted ? 'swap-vertical-outline' : excelSort!.dir === 'asc' ? 'arrow-up-outline' : 'arrow-down-outline'}
+                        size={11} color={isSorted ? '#fbbf24' : 'rgba(255,255,255,0.45)'}
+                      />
+                    )}
+                  </TouchableOpacity>
+                  {col.filterable && (
+                    <TouchableOpacity style={[s.excelThFilter, filtered && s.excelThFilterOn]} onPress={() => handleOpenColFilter(col.id)}>
+                      <Ionicons name="funnel" size={10} color={filtered ? '#fbbf24' : 'rgba(255,255,255,0.4)'} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )
+            })
+          }
           const tableHeader = (
             <View style={s.excelTrHead}>
-              {TABLE_COLS.map(col => {
-                const isSorted = excelSort?.col === col.id
-                const filtered = isColFiltered(col.id)
-                return (
-                  <View key={col.id} style={[s.excelTh, cStyle(col)]}>
-                    <TouchableOpacity
-                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0 }}
-                      onPress={col.sortable ? () => handleColSort(col.id) : undefined}
-                      disabled={!col.sortable}
-                    >
-                      <Text style={s.excelThTxt} numberOfLines={1}>{col.label}</Text>
-                      {col.sortable && (
-                        <Ionicons
-                          name={!isSorted ? 'swap-vertical-outline' : excelSort!.dir === 'asc' ? 'arrow-up-outline' : 'arrow-down-outline'}
-                          size={11} color={isSorted ? '#fbbf24' : 'rgba(255,255,255,0.45)'}
-                        />
-                      )}
-                    </TouchableOpacity>
-                    {col.filterable && (
-                      <TouchableOpacity style={[s.excelThFilter, filtered && s.excelThFilterOn]} onPress={() => handleOpenColFilter(col.id)}>
-                        <Ionicons name="funnel" size={10} color={filtered ? '#fbbf24' : 'rgba(255,255,255,0.4)'} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )
-              })}
+              {renderHeaderCols(TABLE_COLS)}
             </View>
           )
 
-          function renderExcelRow(item: Cliente, idx: number) {
+          function renderExcelRow(item: Cliente, idx: number, cols: TCol[] = TABLE_COLS) {
             const info = estadoInfo(item.estado)
             const interesRowBg = item.nivel_interes === 'alto'
               ? (darkMode ? '#2d1208' : '#fdeee6')
@@ -1737,7 +1740,7 @@ export default function CRM() {
                     : (idx % 2 !== 0 && { backgroundColor: darkMode ? '#0a1827' : '#f8fafc' }),
                 ]}
               >
-                {TABLE_COLS.map(col => {
+                {cols.map(col => {
                   const cs = cStyle(col)
                   const editando = editCell?.id === item.id && editCell?.col === col.id
                   // Editor de texto inline (nombre, teléfono, notas, zona, presupuesto). "fecha" usa
@@ -1940,21 +1943,32 @@ export default function CRM() {
             )
           }
 
-          const mobileTableWidth = TABLE_COLS.reduce((sum, col) => sum + col.mw, 0)
+          // En celular la primera columna (Nombre) queda fija a la izquierda y
+          // solo el resto hace scroll horizontal — si no, al desplazarte para
+          // ver Presupuesto/Notas perdías de vista de quién era cada fila.
+          const colFija = TABLE_COLS[0]
+          const colsScroll = TABLE_COLS.slice(1)
+          const scrollTableWidth = colsScroll.reduce((sum, col) => sum + col.mw, 0)
           return (
             <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
               onScroll={onScrollExcel} scrollEventThrottle={16}>
               {crmListHeader}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={{ width: mobileTableWidth }}>
-                  {tableHeader}
-                  {excelVisibles.map((item, idx) => renderExcelRow(item, idx))}
-                  {faltanExcel > 0 && (
-                    <Text style={s.excelFaltan}>Cargando {faltanExcel} más…</Text>
-                  )}
-                  <View style={{ height: 100 }} />
+              <View style={[s.excelTableWrap, { backgroundColor: c.card, flexDirection: 'row' }]}>
+                <View style={[s.excelColFija, { width: colFija.mw, borderRightColor: c.border }]}>
+                  <View style={s.excelTrHead}>{renderHeaderCols([colFija])}</View>
+                  {excelVisibles.map((item, idx) => renderExcelRow(item, idx, [colFija]))}
                 </View>
-              </ScrollView>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ width: scrollTableWidth }}>
+                    <View style={s.excelTrHead}>{renderHeaderCols(colsScroll)}</View>
+                    {excelVisibles.map((item, idx) => renderExcelRow(item, idx, colsScroll))}
+                  </View>
+                </ScrollView>
+              </View>
+              {faltanExcel > 0 && (
+                <Text style={s.excelFaltan}>Cargando {faltanExcel} más…</Text>
+              )}
+              <View style={{ height: 100 }} />
             </ScrollView>
           )
         })() : (
@@ -2750,6 +2764,15 @@ const s = StyleSheet.create({
     elevation: 4,
   },
   excelTable: { flex: 1 },
+  excelColFija: {
+    borderRightWidth: 2,
+    zIndex: 2,
+    elevation: 3,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
   excelTrHead: {
     flexDirection: 'row',
     backgroundColor: '#1a3547',
