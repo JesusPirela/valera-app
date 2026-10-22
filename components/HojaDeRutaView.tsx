@@ -90,7 +90,7 @@ function Campo({ etiqueta, valor, alCambiar, placeholder, multi }: {
 const PARADA_VACIA = (): Parada => ({
   clave: Math.random().toString(36).slice(2),
   hora: '', titulo: '', ubicacion: '', precio: '', caracteristicas: '',
-  mapaUrl: '', idEb: '', asesorNombre: '', asesorTel: '', fotoUrl: '', fotoBase64: '',
+  mapaUrl: '', linkPropiedad: '', asesorNombre: '', asesorTel: '', fotoUrl: '', fotoBase64: '',
 })
 
 export default function HojaDeRutaView() {
@@ -113,6 +113,7 @@ export default function HojaDeRutaView() {
   const [propsEncontradas, setPropsEncontradas] = useState<any[]>([])
   const [link, setLink] = useState('')
   const [importando, setImportando] = useState(false)
+  const [avisoImport, setAvisoImport] = useState('')
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null)
   const temporizadorProp = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -231,7 +232,7 @@ export default function HojaDeRutaView() {
   async function traerPropiedad(id: string): Promise<Parada | null> {
     const { data } = await supabase.from('propiedades')
       .select(`id, titulo, direccion, precio, operacion, recamaras, banos, medios_banos, m2, m2_terreno,
-               lat, lng, easybroker_id, codigo,
+               lat, lng, codigo, url_origen,
                asesores ( nombre, inmobiliaria, telefono ),
                propiedad_imagenes ( url, orden )`)
       .eq('id', id).single()
@@ -257,7 +258,11 @@ export default function HojaDeRutaView() {
       mapaUrl: p.lat && p.lng
         ? `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`
         : p.direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.direccion)}` : '',
-      idEb: p.easybroker_id ?? '',
+      // El link de la ficha es el que de verdad sirve: se abre y se ve la
+      // propiedad. Si no tiene código, queda el anuncio de donde se importó.
+      linkPropiedad: p.codigo
+        ? `https://valeraapp.valerarealestate.com/ficha/${p.codigo}`
+        : (p.url_origen ?? ''),
       asesorNombre: ases?.nombre ? `${ases.nombre}${ases.inmobiliaria ? ' — ' + ases.inmobiliaria : ''}` : '',
       asesorTel: ases?.telefono ?? '',
       fotoUrl: fotos[0]?.url ?? '',
@@ -290,6 +295,7 @@ export default function HojaDeRutaView() {
   async function agregarPorLink() {
     const url = link.trim()
     if (!/^https?:\/\//i.test(url)) { avisar('Link inválido', 'Pega un link que empiece con https://'); return }
+    setAvisoImport('')
     setImportando(true)
     try {
       const { data, error } = await supabase.functions.invoke('importar-propiedad', { body: { url } })
@@ -303,16 +309,35 @@ export default function HojaDeRutaView() {
       if (d.m2) car.push(`${d.m2} m² construcción`)
       if (d.m2Terreno) car.push(`${d.m2Terreno} m² terreno`)
 
-      setParadas(prev => [...prev, {
+      const nueva: Parada = {
         ...PARADA_VACIA(),
         titulo: d.titulo ?? '',
         ubicacion: d.direccion ?? '',
         precio: d.precio ? `$${Number(d.precio).toLocaleString('es-MX')} MXN ${d.operacion === 'renta' ? 'Renta' : 'Venta'}` : '',
         caracteristicas: car.join(' · '),
         mapaUrl: d.direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.direccion)}` : '',
+        linkPropiedad: url,
         fotoUrl: d.imagenes?.[0] ?? '',
-      }])
+      }
+      setParadas(prev => [...prev, nueva])
       setLink('')
+
+      // Decir qué se trajo y qué no.
+      //
+      // Antes se agregaba la parada en silencio con lo que hubiera salido. Si
+      // el anuncio era de un sitio que el importador no entiende y sólo sacaba
+      // el título, quedaban cinco campos vacíos sin ninguna explicación y
+      // parecía que la pantalla estaba rota.
+      const trajo = [
+        nueva.titulo && 'título', nueva.ubicacion && 'ubicación', nueva.precio && 'precio',
+        nueva.caracteristicas && 'características', nueva.fotoUrl && 'foto',
+      ].filter(Boolean) as string[]
+      setAvisoImport(
+        trajo.length === 0
+          ? '⚠ De ese link no se pudo sacar nada. Llénala a mano aquí abajo, o prueba con otro anuncio de la misma propiedad.'
+          : trajo.length === 1
+            ? `⚠ De ese link sólo salió el ${trajo[0]}. Llena el resto a mano aquí abajo.`
+            : `✓ Se trajo: ${trajo.join(' · ')}.`)
     } catch (e: any) {
       avisar('No se pudo leer el link', e?.message ?? 'Intenta con otro, o agrégala a mano.')
     } finally {
@@ -474,7 +499,7 @@ export default function HojaDeRutaView() {
             <Campo etiqueta="Precio" valor={p.precio} alCambiar={v => editar(p.clave, 'precio', v)} placeholder="$1,860,000 MXN Venta" />
             <Campo etiqueta="Características" valor={p.caracteristicas} alCambiar={v => editar(p.clave, 'caracteristicas', v)} placeholder="2 recámaras · 2 baños" />
             <Campo etiqueta="Link del mapa" valor={p.mapaUrl} alCambiar={v => editar(p.clave, 'mapaUrl', v)} />
-            <Campo etiqueta="ID EasyBroker" valor={p.idEb} alCambiar={v => editar(p.clave, 'idEb', v)} />
+            <Campo etiqueta="Link de la propiedad" valor={p.linkPropiedad} alCambiar={v => editar(p.clave, 'linkPropiedad', v)} />
             <Campo etiqueta="Asesor a cargo" valor={p.asesorNombre} alCambiar={v => editar(p.clave, 'asesorNombre', v)} placeholder="Nombre — Inmobiliaria" />
             <Campo etiqueta="Teléfono del asesor" valor={p.asesorTel} alCambiar={v => editar(p.clave, 'asesorTel', v)} />
             <Campo etiqueta="Foto (link)" valor={p.fotoUrl} alCambiar={v => setParadas(prev => prev.map(x => x.clave === p.clave ? { ...x, fotoUrl: v, fotoBase64: '' } : x))} />
@@ -507,6 +532,12 @@ export default function HojaDeRutaView() {
             {importando ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.btnChicoTxt}>Traer</Text>}
           </TouchableOpacity>
         </View>
+
+        {!!avisoImport && (
+          <Text style={[s.avisoImport, { color: avisoImport.startsWith('⚠') ? '#b45309' : '#15803d' }]}>
+            {avisoImport}
+          </Text>
+        )}
 
         <TouchableOpacity style={[s.btnVacio, { borderColor: c.border }]} onPress={() => setParadas(prev => [...prev, PARADA_VACIA()])}>
           <Ionicons name="add" size={16} color={TEAL} />
@@ -555,6 +586,7 @@ const s = StyleSheet.create({
   linkRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 8 },
   btnChico: { backgroundColor: TEAL, borderRadius: 9, paddingHorizontal: 16, paddingVertical: 11 },
   btnChicoTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  avisoImport: { fontSize: 12, fontWeight: '700', marginBottom: 10, lineHeight: 17 },
   btnVacio: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 10, paddingVertical: 11, marginTop: 4,

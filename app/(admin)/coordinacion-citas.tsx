@@ -763,12 +763,24 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
               <>
                 <Text style={s.fieldLabel}>Cliente *</Text>
                 {clienteId ? (
+                  <>
                   <View style={s.clienteSeleccionado}>
                     <Text style={s.clienteSelNombre}>{clienteNombre}</Text>
                     <TouchableOpacity onPress={() => { setClienteId(''); setClienteNombre(''); setBusqueda('') }}>
                       <Ionicons name="close-circle" size={18} color="#94a3b8" />
                     </TouchableOpacity>
                   </View>
+                  {/* Sale de la ventana de agendar: la hoja se prepara antes de
+                      poner la hora, no después. */}
+                  <TouchableOpacity
+                    style={s.hojaRutaLink}
+                    onPress={() => { onClose(); router.push({ pathname: '/(admin)/hoja-de-ruta', params: { clienteId } }) }}
+                  >
+                    <Ionicons name="map-outline" size={14} color="#1e3a5f" />
+                    <Text style={s.hojaRutaLinkTxt}>Ver su hoja de ruta</Text>
+                    <Ionicons name="chevron-forward" size={13} color="#1e3a5f" />
+                  </TouchableOpacity>
+                  </>
                 ) : (
                   <>
                     {/* Sub-modo: buscar por nombre, o por prospecto (ver sus clientes) */}
@@ -1857,6 +1869,11 @@ export default function CoordinacionCitas() {
               {Platform.OS === 'web' && <Text style={{ color: '#1a6470', fontWeight: '700', fontSize: 12 }}>Asesores</Text>}
             </TouchableOpacity>
           )}
+          <TouchableOpacity style={[s.headerBtn, { backgroundColor: '#1e3a5f', borderColor: '#1e3a5f' }]}
+            onPress={() => router.push('/(admin)/hoja-de-ruta')}>
+            <Ionicons name="map-outline" size={17} color="#fff" />
+            {Platform.OS === 'web' && <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Hoja de ruta</Text>}
+          </TouchableOpacity>
           <TouchableOpacity style={[s.headerBtn, { backgroundColor: '#059669', borderColor: '#059669' }]}
             onPress={() => setModalNueva(true)}>
             <Ionicons name="add" size={18} color="#fff" />
@@ -2411,6 +2428,12 @@ const s = StyleSheet.create({
   modoBtnTxt:  { fontSize: 13, color: '#64748b' },
   clienteSeleccionado: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#e0f4f5', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 4 },
   clienteSelNombre:    { fontSize: 14, fontWeight: '700', color: '#1a6470' },
+  hojaRutaLink: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+    borderWidth: 1.5, borderColor: '#1e3a5f55', borderRadius: 9,
+    paddingHorizontal: 11, paddingVertical: 8, marginTop: 8, marginBottom: 12,
+  },
+  hojaRutaLinkTxt: { fontSize: 12.5, fontWeight: '800', color: '#1e3a5f' },
   clienteRow:          { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   clienteRowNombre:    { fontSize: 14, fontWeight: '600', color: '#0f172a' },
   clienteRowProsp:     { fontSize: 11, color: '#94a3b8', marginTop: 1 },
