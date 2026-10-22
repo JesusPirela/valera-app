@@ -14,7 +14,7 @@ import { registrarAccion , registrarSeguimiento, registrarContacto } from '../..
 import { programarRecordatorios } from '../../lib/notificaciones-locales'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { Ionicons } from '@expo/vector-icons'
-import { puedeEnviarClienteAChatbot } from '../../lib/permisos'
+import { puedeEnviarClienteAChatbot, esStaffSupervision } from '../../lib/permisos'
 import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueRecordatorioUpdate } from '../../lib/offline-queue'
 import { conTimeout } from '../../lib/redIntentos'
@@ -710,6 +710,22 @@ export default function DetalleCliente() {
         )}
       </View>
 
+      {/* Hoja de ruta del recorrido. Va aquí arriba, junto a las acciones del
+          cliente, porque desde el tablero de citas no se alcanza: la pestaña de
+          Citas de un gerente abre su agenda, no el tablero de coordinación.
+          De asesor para arriba; la pantalla se vuelve a bloquear sola. */}
+      {esStaffSupervision(userRole) && (
+        <TouchableOpacity
+          style={styles.hojaRutaBtn}
+          onPress={() => router.push({ pathname: '/(prospectador)/hoja-de-ruta', params: { clienteId: cliente.id } })}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="map-outline" size={17} color="#fff" />
+          <Text style={styles.hojaRutaTxt}>Hoja de ruta del recorrido</Text>
+          <Ionicons name="chevron-forward" size={15} color="rgba(255,255,255,0.8)" />
+        </TouchableOpacity>
+      )}
+
       {/* ── Información ─────────────────────────────────── */}
       <View style={styles.section}>
         <View style={{ marginBottom: 12 }}>
@@ -1299,6 +1315,12 @@ const styles = StyleSheet.create({
   heroStatSep: { width: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginVertical: 6 },
 
   // Action buttons
+  hojaRutaBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#1e3a5f', borderRadius: 12, paddingVertical: 13,
+    marginHorizontal: 16, marginBottom: 16,
+  },
+  hojaRutaTxt: { color: '#fff', fontSize: 14, fontWeight: '800' },
   actionBar: {
     flexDirection: 'row', gap: 10,
     marginHorizontal: 16, marginTop: 16, marginBottom: 4,
