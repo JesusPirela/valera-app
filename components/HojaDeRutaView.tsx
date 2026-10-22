@@ -19,7 +19,7 @@ import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
 import { esStaffSupervision } from '../lib/permisos'
 import {
-  generarPdfHojaDeRuta, imagenABase64, type ParadaHoja, type PerfilHoja,
+  generarPdfHojaDeRuta, imagenABase64, bajarComoBase64, type ParadaHoja, type PerfilHoja,
 } from '../lib/hoja-de-ruta'
 
 const TEAL = '#1a6470'
@@ -298,10 +298,19 @@ export default function HojaDeRutaView() {
     setAvisoImport('')
     setImportando(true)
     try {
-      const { data, error } = await supabase.functions.invoke('importar-propiedad', { body: { url } })
-      if (error) throw error
-      const d: any = data
-      if (d?.error) throw new Error(d.error)
+      // Hasta dos intentos. Medido contra el mismo anuncio de EasyBroker: una
+      // de cada seis veces la página no se alcanza y vuelve la ficha vacía,
+      // aunque el anuncio esté bien. Reintentar la rescata sin que nadie tenga
+      // que volver a pegar el link.
+      let d: any = null
+      for (let intento = 0; intento < 2; intento++) {
+        const { data, error } = await supabase.functions.invoke('importar-propiedad', { body: { url } })
+        if (error) throw error
+        d = data
+        if (d?.error) throw new Error(d.error)
+        if (d?.titulo || d?.precio || d?.direccion) break
+        if (intento === 0) setAvisoImport('Ese anuncio no respondió a la primera. Reintentando…')
+      }
 
       const car: string[] = []
       if (d.recamaras) car.push(`${d.recamaras} recámaras`)
@@ -386,7 +395,9 @@ export default function HojaDeRutaView() {
       const mod = require('../assets/logo-recortado.png')
       if (Platform.OS === 'web') {
         const uri = typeof mod === 'string' ? mod : (mod?.uri ?? '')
-        return uri ? await imagenABase64(uri) : ''
+        // bajarComoBase64 y NO imagenABase64: esa pasa por el proxy, que
+        // entrega JPG, y el logo —dorado sobre transparente— desaparecía.
+        return uri ? await bajarComoBase64(uri) : ''
       }
       const { Asset } = await import('expo-asset')
       const asset = Asset.fromModule(mod)
