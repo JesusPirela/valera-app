@@ -475,6 +475,7 @@ export default function RootLayout() {
     if (pathnameRef.current.startsWith('/ficha')) return  // ruta pública, sin auth
     if (pathnameRef.current.startsWith('/coleccion')) return  // colección pública, sin auth
     if (pathnameRef.current.startsWith('/formulario')) return  // formulario público, sin auth
+    if (pathnameRef.current.startsWith('/ruta')) return  // hoja de ruta por link, sin auth
     if (!session) {
       if (accountSwitch.pending) return  // cambio de cuenta en progreso — no ir al login
       router.replace('/(auth)/login')

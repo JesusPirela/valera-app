@@ -15,6 +15,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
+import * as Clipboard from 'expo-clipboard'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
 import { esStaffSupervision } from '../lib/permisos'
@@ -91,6 +92,7 @@ const PARADA_VACIA = (): Parada => ({
   clave: Math.random().toString(36).slice(2),
   hora: '', titulo: '', ubicacion: '', precio: '', caracteristicas: '',
   mapaUrl: '', linkPropiedad: '', asesorNombre: '', asesorTel: '', fotoUrl: '', fotoBase64: '',
+  confirmada: false,
 })
 
 export default function HojaDeRutaView() {
@@ -109,6 +111,12 @@ export default function HojaDeRutaView() {
   const [dias, setDias] = useState<{ dia: string; etiqueta: string; n: number }[]>([])
   const [cargando, setCargando] = useState(false)
   const [generando, setGenerando] = useState(false)
+  const [creandoLink, setCreandoLink] = useState(false)
+  // El token se guarda para que al volver a crear el link se SOBRESCRIBA la
+  // misma hoja: así el que ya se mandó por WhatsApp sigue sirviendo y muestra
+  // la versión corregida, en vez de dejar links viejos con datos viejos.
+  const [token, setToken] = useState('')
+  const [linkCopiado, setLinkCopiado] = useState(false)
   const [buscaProp, setBuscaProp] = useState('')
   const [propsEncontradas, setPropsEncontradas] = useState<any[]>([])
   const [link, setLink] = useState('')
@@ -205,21 +213,26 @@ export default function HojaDeRutaView() {
     const desde = new Date(a, m - 1, d, 0, 0, 0).toISOString()
     const hasta = new Date(a, m - 1, d + 1, 0, 0, 0).toISOString()
     const { data } = await supabase.from('citas_coordinacion')
-      .select('fecha_cita, propiedad_id, propiedad_externa')
+      .select('fecha_cita, propiedad_id, propiedad_externa, estado, confirmada_at')
       .eq('cliente_id', cliente.id)
       .gte('fecha_cita', desde).lt('fecha_cita', hasta)
       .order('fecha_cita')
 
     const nuevas: Parada[] = []
     for (const cita of (data ?? []) as any[]) {
+      // Confirmada = alguien la confirmó explícitamente, o la cita ya está en
+      // estado "coordinada". Se trae el dato en vez de dejarlo en blanco para
+      // que la hoja salga ya con la verdad del CRM; igual se puede cambiar.
+      const confirmada = !!cita.confirmada_at || cita.estado === 'coordinada'
       if (cita.propiedad_id) {
         const p = await traerPropiedad(cita.propiedad_id)
-        if (p) { nuevas.push({ ...p, hora: horaCorta(cita.fecha_cita) }); continue }
+        if (p) { nuevas.push({ ...p, hora: horaCorta(cita.fecha_cita), confirmada }); continue }
       }
       nuevas.push({
         ...PARADA_VACIA(),
         hora: horaCorta(cita.fecha_cita),
         titulo: cita.propiedad_externa ?? '',
+        confirmada,
       })
     }
     setFecha(fechaLarga(new Date(a, m - 1, d)))
@@ -390,6 +403,36 @@ export default function HojaDeRutaView() {
     }
   }
 
+  async function crearLink() {
+    if (!perfil.nombre.trim()) { avisar('Falta el cliente', 'Escribe al menos el nombre del cliente.'); return }
+    if (paradas.length === 0) { avisar('Sin propiedades', 'Agrega al menos una propiedad al recorrido.'); return }
+    setCreandoLink(true)
+    try {
+      // Se guarda el documento tal cual quedó, con lo editado a mano. No se
+      // reconstruye leyendo las citas al abrir el link: eso perdería las
+      // correcciones.
+      const { data, error } = await supabase.rpc('guardar_hoja_de_ruta', {
+        p_cliente_id: cliente?.id ?? null,
+        p_fecha: fecha,
+        p_perfil: perfil,
+        p_paradas: paradas.map(({ clave, fotoBase64, ...resto }) => resto),
+        p_token: token || null,
+      })
+      if (error) throw error
+      const d: any = data
+      if (!d?.ok) throw new Error(d?.error ?? 'No se pudo guardar.')
+      setToken(d.token)
+      const url = `https://valeraapp.valerarealestate.com/ruta/${d.token}`
+      try { await Clipboard.setStringAsync(url) } catch { /* se muestra igual */ }
+      setLinkCopiado(true)
+      setTimeout(() => setLinkCopiado(false), 4000)
+    } catch (e: any) {
+      avisar('No se pudo crear el link', e?.message ?? 'Intenta de nuevo.')
+    } finally {
+      setCreandoLink(false)
+    }
+  }
+
   async function cargarLogo(): Promise<string> {
     try {
       const mod = require('../assets/logo-recortado.png')
@@ -504,6 +547,22 @@ export default function HojaDeRutaView() {
                 <Ionicons name="trash-outline" size={15} color="#dc2626" />
               </TouchableOpacity>
             </View>
+            {/* Lo primero de cada parada: a cuáles se puede llegar derecho. */}
+            <TouchableOpacity
+              style={[s.confirmaFila, p.confirmada ? s.confirmaOk : s.confirmaPend]}
+              onPress={() => setParadas(prev => prev.map(x => x.clave === p.clave ? { ...x, confirmada: !x.confirmada } : x))}
+              activeOpacity={0.75}
+            >
+              <Ionicons
+                name={p.confirmada ? 'checkmark-circle' : 'ellipse-outline'}
+                size={19}
+                color={p.confirmada ? '#15803d' : '#a16207'}
+              />
+              <Text style={[s.confirmaTxt, { color: p.confirmada ? '#15803d' : '#a16207' }]}>
+                {p.confirmada ? 'Cita confirmada' : 'Por confirmar'}
+              </Text>
+              <Text style={s.confirmaHint}>toca para cambiar</Text>
+            </TouchableOpacity>
             <Campo etiqueta="Hora de la cita" valor={p.hora} alCambiar={v => editar(p.clave, 'hora', v)} placeholder="11:00 AM" />
             <Campo etiqueta="Propiedad" valor={p.titulo} alCambiar={v => editar(p.clave, 'titulo', v)} />
             <Campo etiqueta="Ubicación" valor={p.ubicacion} alCambiar={v => editar(p.clave, 'ubicacion', v)} multi />
@@ -560,8 +619,34 @@ export default function HojaDeRutaView() {
         {generando
           ? <ActivityIndicator color="#fff" />
           : <><Ionicons name="document-text-outline" size={17} color="#fff" />
-              <Text style={s.btnPdfTxt}>Generar la hoja de ruta</Text></>}
+              <Text style={s.btnPdfTxt}>Descargar en PDF</Text></>}
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[s.btnLink, { borderColor: TEAL }, creandoLink && { opacity: 0.6 }]}
+        onPress={crearLink}
+        disabled={creandoLink}
+      >
+        {creandoLink
+          ? <ActivityIndicator color={TEAL} />
+          : <><Ionicons name={token ? 'refresh-outline' : 'link-outline'} size={17} color={TEAL} />
+              <Text style={[s.btnLinkTxt, { color: TEAL }]}>
+                {token ? 'Actualizar el link' : 'Crear un link para compartir'}
+              </Text></>}
+      </TouchableOpacity>
+
+      {!!token && (
+        <View style={[s.linkCaja, { borderColor: c.border, backgroundColor: c.card }]}>
+          <Text style={[s.linkUrl, { color: c.textSub }]} numberOfLines={2} selectable>
+            valeraapp.valerarealestate.com/ruta/{token}
+          </Text>
+          <Text style={s.linkAviso}>
+            {linkCopiado
+              ? '✓ Copiado. Pégalo en WhatsApp.'
+              : 'Cualquiera con el link la ve, sin entrar a la app. Mándalo sólo al equipo.'}
+          </Text>
+        </View>
+      )}
 
       {cargando && <ActivityIndicator color={TEAL} style={{ marginTop: 10 }} />}
       <View style={{ height: 60 }} />
@@ -591,6 +676,14 @@ const s = StyleSheet.create({
   chip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
   chipTxt: { fontSize: 12, fontWeight: '700' },
   parada: { borderWidth: 1, borderRadius: 11, padding: 12, marginBottom: 12 },
+  confirmaFila: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9, marginBottom: 10,
+  },
+  confirmaOk:   { backgroundColor: '#dcfce7', borderColor: '#86efac' },
+  confirmaPend: { backgroundColor: '#fef3c7', borderColor: '#fcd34d' },
+  confirmaTxt:  { fontSize: 13.5, fontWeight: '800', flex: 1 },
+  confirmaHint: { fontSize: 10.5, color: '#94a3b8', fontWeight: '600' },
   paradaCab: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
   paradaNum: { fontSize: 13, fontWeight: '800' },
   iconoBtn: { padding: 6 },
@@ -608,4 +701,12 @@ const s = StyleSheet.create({
     backgroundColor: AZUL, borderRadius: 12, paddingVertical: 15,
   },
   btnPdfTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  btnLink: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 2, borderRadius: 12, paddingVertical: 13, marginTop: 10,
+  },
+  btnLinkTxt: { fontSize: 14.5, fontWeight: '800' },
+  linkCaja: { borderWidth: 1, borderRadius: 11, padding: 12, marginTop: 10 },
+  linkUrl: { fontSize: 12, fontWeight: '700' },
+  linkAviso: { fontSize: 11, color: '#94a3b8', marginTop: 5, lineHeight: 15 },
 })

@@ -53,6 +53,10 @@ export type ParadaHoja = {
   asesorTel: string
   /** Ya convertida a data: — las URLs sueltas no se ven en el PDF nativo. */
   fotoBase64: string
+  /** Si la cita de esta parada ya está confirmada con quien abre la casa.
+   *  Es lo primero que el asesor necesita saber del recorrido: a cuáles puede
+   *  llegar derecho y en cuáles hay que llamar antes. */
+  confirmada: boolean
 }
 
 export type DatosHoja = {
@@ -276,6 +280,13 @@ function mapaDelRecorrido(paradas: ParadaHoja[]): string {
         <path d="M ${x} ${pinY} c -13 -9 -19 -18 -19 -27 a 19 19 0 1 1 38 0 c 0 9 -6 18 -19 27 z" fill="${AZUL}"/>
         <circle cx="${x}" cy="${pinY - 27}" r="11.5" fill="#fff"/>
         <text x="${x}" y="${pinY - 22.5}" text-anchor="middle" font-size="15" font-weight="700" fill="${AZUL}" font-family="Helvetica, Arial, sans-serif">${i + 1}</text>
+        <!-- Palomita verde si la cita está confirmada; punto ámbar si no. Es
+             para saber de un vistazo a cuáles se puede llegar derecho. -->
+        ${paradas[i].confirmada
+          ? `<circle cx="${x + 13}" cy="${pinY - 36}" r="7.5" fill="#15803d" stroke="#fff" stroke-width="2"/>
+             <path d="M ${x + 9.6} ${pinY - 36.2} l 2.3 2.4 l 4.4 -4.8" stroke="#fff" stroke-width="2.1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`
+          : `<circle cx="${x + 13}" cy="${pinY - 36}" r="7.5" fill="#d97706" stroke="#fff" stroke-width="2"/>
+             <circle cx="${x + 13}" cy="${pinY - 36}" r="2.4" fill="#fff"/>`}
         ${etiqueta}
       </g>`
   }).join('')
@@ -369,6 +380,7 @@ export function construirHtmlHoja(d: DatosHoja): string {
           <span class="rl-n">${i + 1}</span>
           <span class="rl-hora">${hay(p.hora) ? esc(p.hora) : '—'}</span>
           <span class="rl-tit">${esc(p.titulo || 'Sin nombre')}</span>
+          <span class="rl-estado ${p.confirmada ? 'ok' : 'pend'}">${p.confirmada ? '✓ Confirmada' : 'Por confirmar'}</span>
         </li>`).join('')}
       </ol>
     </div>
@@ -387,7 +399,10 @@ export function construirHtmlHoja(d: DatosHoja): string {
       </div>
       <div class="cab-der"><div class="cab-lbl">${i + 1} DE ${total}</div></div>
     </div>
-    <div class="barra">${hay(p.hora) ? 'CITA — ' + esc(p.hora) : 'PROPIEDAD ' + (i + 1)}</div>
+    <div class="barra">
+      <span>${hay(p.hora) ? 'CITA — ' + esc(p.hora) : 'PROPIEDAD ' + (i + 1)}</span>
+      <span class="${p.confirmada ? 'sello-ok' : 'sello-pend'}">${p.confirmada ? '✓ CONFIRMADA' : '• POR CONFIRMAR'}</span>
+    </div>
 
     <!-- La foto va de fondo y no en un <img>: html2canvas ignora object-fit y
          estiraba las fotos para rellenar el recuadro. -->
@@ -466,7 +481,10 @@ export function construirHtmlHoja(d: DatosHoja): string {
   .cab-val { font-size: 15.5px; font-weight: 800; color: ${ORO_VIVO}; margin-top: 4px; }
 
   .barra { background: ${AZUL_MED}; color: #fff; font-size: 13.5px; font-weight: 800; letter-spacing: 1.5px;
-           padding: 11px 46px; border-left: 6px solid ${ORO}; }
+           padding: 11px 46px; border-left: 6px solid ${ORO};
+           display: flex; justify-content: space-between; align-items: center; }
+  .sello-ok   { font-size: 11.5px; letter-spacing: 1px; color: #7ae0a8; }
+  .sello-pend { font-size: 11.5px; letter-spacing: 1px; color: #ffcf7a; }
 
   .caja { background: #fff; border-radius: 12px; margin: 20px 46px 0; padding: 6px 20px;
           box-shadow: 0 1px 3px rgba(10,42,94,0.08); }
@@ -488,7 +506,10 @@ export function construirHtmlHoja(d: DatosHoja): string {
   .rl-n { width: 24px; height: 24px; border-radius: 12px; background: ${AZUL}; color: #fff; font-size: 12.5px;
           font-weight: 800; text-align: center; line-height: 24px; flex-shrink: 0; }
   .rl-hora { font-size: 13.5px; font-weight: 800; color: ${AZUL_CLARO}; width: 76px; flex-shrink: 0; }
-  .rl-tit { font-size: 13.5px; color: #243b53; overflow: hidden; }
+  .rl-tit { font-size: 13.5px; color: #243b53; overflow: hidden; flex: 1; }
+  .rl-estado { font-size: 11px; font-weight: 800; border-radius: 6px; padding: 4px 9px; flex-shrink: 0; letter-spacing: 0.3px; }
+  .rl-estado.ok   { background: #dcfce7; color: #15803d; }
+  .rl-estado.pend { background: #fef3c7; color: #a16207; }
 
   /* ── Hoja de propiedad ───────────────────────────────────────────── */
   .hero { position: relative; margin: 0; }
