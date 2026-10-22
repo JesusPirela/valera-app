@@ -14,6 +14,7 @@
 
 import { Platform } from 'react-native'
 import { thumb } from './img'
+import { normalizarTelefono } from './telefono'
 
 /** A4 a 96 dpi, que es la rejilla en la que miden los navegadores. */
 const ANCHO_PX = 794
@@ -72,6 +73,20 @@ function fila(etiqueta: string, valor: string, destacado = false): string {
   return `<tr><th>${esc(etiqueta)}</th><td${destacado ? ' class="fuerte"' : ''}>${esc(valor).replace(/\n/g, '<br>')}</td></tr>`
 }
 
+/**
+ * El teléfono del asesor, tocable para abrir su WhatsApp.
+ *
+ * El día del recorrido lo que se hace con ese número es escribirle —"ya vamos
+ * llegando", "¿abres tú?"— y teclearlo a mano desde un PDF es justo lo que
+ * nadie hace. Si el número no se puede normalizar (una extensión, un fijo
+ * raro), se deja como texto: más vale un dato suelto que un enlace muerto.
+ */
+function enlaceWhatsApp(tel: string): string {
+  const n = normalizarTelefono(tel)
+  if (n.length !== 12) return esc(tel)
+  return `<a href="https://wa.me/${n}">${esc(tel)}</a>`
+}
+
 function dato(etiqueta: string, valor: string): string {
   if (!hay(valor)) return ''
   return `<div class="dato"><div class="dl">${esc(etiqueta)}</div>` +
@@ -86,131 +101,210 @@ function dato(etiqueta: string, valor: string): string {
 // Va en SVG y no como imagen para que no dependa de ningún archivo ni de
 // internet: se dibuja dentro del PDF.
 
-/** Tres fachadas distintas, para que el plano no se vea fotocopiado. */
+// ── Las siete composiciones ──────────────────────────────────────────────────
+// Una por cada cantidad de paradas, de 1 a 7, con las casas colocadas a mano.
+// La rejilla automática de antes repartía las casas por celdas y salía un
+// esquema; estas están puestas a ojo para que la calle serpentee y el recorrido
+// se lea como un paseo.
+//
+// Cada punto es el SUELO de la casa: el dibujo se levanta desde ahí.
+const COMPOSICIONES: Record<number, [number, number][]> = {
+  1: [[350, 268]],
+  2: [[196, 316], [496, 214]],
+  3: [[160, 330], [352, 206], [556, 318]],
+  4: [[142, 332], [306, 200], [470, 332], [634, 200]],
+  // Con cinco o más, las dos bandas se acercan: con la separación de antes el
+  // recorrido salía en picos de sierra en vez de serpentear.
+  5: [[126, 328], [256, 222], [388, 328], [520, 222], [650, 328]],
+  6: [[116, 326], [224, 228], [332, 326], [440, 228], [548, 326], [656, 228]],
+  7: [[108, 324], [200, 232], [292, 324], [384, 232], [476, 324], [568, 232], [660, 324]],
+}
+
+const ANCHO_MAPA = 700
+const ALTO_MAPA = 430
+
+/** Cinco fachadas distintas, para que el plano no se vea fotocopiado. */
 const FACHADAS = [
-  { muro: '#ffffff', techo: AZUL, puerta: ORO },
-  { muro: '#f4ead9', techo: '#9c4221', puerta: '#7b341e' },
-  { muro: '#e8eef4', techo: '#2c5282', puerta: '#1a365d' },
+  { muro: '#ffffff', techo: '#1a365d', puerta: '#c9a84c', marco: '#e2e8f0' },
+  { muro: '#f6ead6', techo: '#9c4221', puerta: '#7b341e', marco: '#ead9bd' },
+  { muro: '#e9eff5', techo: '#2c5282', puerta: '#1a365d', marco: '#d6e0ea' },
+  { muro: '#fdf6ec', techo: '#4a5568', puerta: '#2d3748', marco: '#efe4d4' },
+  { muro: '#eef2ec', techo: '#2f6b4f', puerta: '#1f4733', marco: '#dde6da' },
 ]
 
-function casita(x: number, y: number, k: number, esc: number): string {
-  const c = FACHADAS[k % FACHADAS.length]
-  const a = 30 * esc, b = 26 * esc, t = 18 * esc
+/**
+ * Una casa con algo de cuerpo: zócalo, tejado con alero, puerta con escalón,
+ * ventanas con crucero y un arbusto al lado. Nada de fotorrealismo — lo que se
+ * busca es que parezca dibujada y no un diagrama.
+ */
+function casa(x: number, suelo: number, variante: number, k: number): string {
+  const c = FACHADAS[variante % FACHADAS.length]
+  const a = 40 * k            // media anchura del cuerpo
+  const h = 40 * k            // alto del cuerpo
+  const t = 26 * k            // alto del tejado
+  const y0 = suelo - h        // arranque del cuerpo
+  const ventanas = [-1, 1].map(s => {
+    const vx = x + s * (a - 13 * k) - 6.5 * k
+    const vy = y0 + 9 * k
+    const w = 13 * k, hv = 11 * k
+    return `<g>
+      <rect x="${vx}" y="${vy}" width="${w}" height="${hv}" rx="1" fill="#cfe2f1" stroke="${c.marco}" stroke-width="${1.4 * k}"/>
+      <line x1="${vx + w / 2}" y1="${vy}" x2="${vx + w / 2}" y2="${vy + hv}" stroke="${c.marco}" stroke-width="${1 * k}"/>
+      <line x1="${vx}" y1="${vy + hv / 2}" x2="${vx + w}" y2="${vy + hv / 2}" stroke="${c.marco}" stroke-width="${1 * k}"/>
+    </g>`
+  }).join('')
   return `
-    <g transform="translate(${x}, ${y - 88 * esc})">
-      <ellipse cx="0" cy="${b + 3}" rx="${a + 2}" ry="${4 * esc}" fill="rgba(10,42,94,0.13)"/>
-      <rect x="${-a}" y="0" width="${a * 2}" height="${b}" rx="2" fill="${c.muro}" stroke="rgba(10,42,94,0.18)"/>
-      <path d="M ${-a - 5} 0 L 0 ${-t} L ${a + 5} 0 z" fill="${c.techo}"/>
-      <rect x="${-6 * esc}" y="${b - 14 * esc}" width="${12 * esc}" height="${14 * esc}" rx="1" fill="${c.puerta}"/>
-      <rect x="${-a + 6 * esc}" y="${7 * esc}" width="${9 * esc}" height="${8 * esc}" rx="1" fill="#cfe0ef" stroke="rgba(10,42,94,0.18)" stroke-width="0.6"/>
-      <rect x="${a - 15 * esc}" y="${7 * esc}" width="${9 * esc}" height="${8 * esc}" rx="1" fill="#cfe0ef" stroke="rgba(10,42,94,0.18)" stroke-width="0.6"/>
+    <g>
+      <ellipse cx="${x}" cy="${suelo + 2}" rx="${a + 8 * k}" ry="${5 * k}" fill="rgba(10,42,94,0.14)"/>
+      <rect x="${x - a}" y="${y0}" width="${a * 2}" height="${h}" rx="${2 * k}" fill="${c.muro}" stroke="rgba(10,42,94,0.16)" stroke-width="${0.9 * k}"/>
+      <rect x="${x - a}" y="${suelo - 5 * k}" width="${a * 2}" height="${5 * k}" fill="rgba(10,42,94,0.07)"/>
+      <path d="M ${x - a - 8 * k} ${y0 + 1} L ${x} ${y0 - t} L ${x + a + 8 * k} ${y0 + 1} z" fill="${c.techo}"/>
+      <path d="M ${x - a - 8 * k} ${y0 + 1} L ${x} ${y0 - t} L ${x} ${y0 + 1} z" fill="rgba(255,255,255,0.10)"/>
+      <rect x="${x - 7 * k}" y="${suelo - 18 * k}" width="${14 * k}" height="${18 * k}" rx="${1.5 * k}" fill="${c.puerta}"/>
+      <circle cx="${x + 4 * k}" cy="${suelo - 9 * k}" r="${1.3 * k}" fill="rgba(255,255,255,0.75)"/>
+      <rect x="${x - 10 * k}" y="${suelo - 2.5 * k}" width="${20 * k}" height="${2.5 * k}" rx="1" fill="rgba(10,42,94,0.12)"/>
+      ${ventanas}
+      <circle cx="${x + a + 7 * k}" cy="${suelo - 5 * k}" r="${7 * k}" fill="#9fc08a"/>
+      <circle cx="${x + a + 2 * k}" cy="${suelo - 2 * k}" r="${5 * k}" fill="#b2cf9e"/>
     </g>`
 }
 
 function arbol(x: number, y: number, r: number): string {
-  return `<g><rect x="${x - 1.6}" y="${y - 2}" width="3.2" height="9" fill="#8a6a44"/>` +
-    `<circle cx="${x}" cy="${y - 5}" r="${r}" fill="#9fc08a"/>` +
-    `<circle cx="${x - r * 0.5}" cy="${y - 2}" r="${r * 0.62}" fill="#b2cf9e"/>` +
-    `<circle cx="${x + r * 0.5}" cy="${y - 2.5}" r="${r * 0.58}" fill="#8fb67a"/></g>`
+  return `<g>
+    <ellipse cx="${x}" cy="${y + 7}" rx="${r * 0.8}" ry="3" fill="rgba(10,42,94,0.10)"/>
+    <rect x="${x - 1.8}" y="${y - 2}" width="3.6" height="10" rx="1.4" fill="#8a6a44"/>
+    <circle cx="${x}" cy="${y - 6}" r="${r}" fill="#8fb67a"/>
+    <circle cx="${x - r * 0.48}" cy="${y - 2}" r="${r * 0.62}" fill="#a9c995"/>
+    <circle cx="${x + r * 0.5}" cy="${y - 3}" r="${r * 0.56}" fill="#7ea76a"/>
+  </g>`
+}
+
+/** Curva suave que pasa por todos los puntos (Catmull-Rom convertido a bézier). */
+function curvaSuave(pts: [number, number][]): string {
+  if (pts.length === 1) return `M ${pts[0][0] - 150} ${pts[0][1] + 40} Q ${pts[0][0] - 70} ${pts[0][1] + 30}, ${pts[0][0]} ${pts[0][1]}`
+  const p = [pts[0], ...pts, pts[pts.length - 1]]
+  let d = `M ${pts[0][0]} ${pts[0][1]}`
+  for (let i = 1; i < p.length - 2; i++) {
+    const [x0, y0] = p[i - 1], [x1, y1] = p[i], [x2, y2] = p[i + 1], [x3, y3] = p[i + 2]
+    d += ` C ${x1 + (x2 - x0) / 10} ${y1 + (y2 - y0) / 10}, ${x2 - (x3 - x1) / 10} ${y2 - (y3 - y1) / 10}, ${x2} ${y2}`
+  }
+  return d
 }
 
 function mapaDelRecorrido(paradas: ParadaHoja[]): string {
   const n = paradas.length
   if (n === 0) return ''
 
-  const W = 700, H = 400
-  const cols = n <= 2 ? n : n <= 4 ? 2 : n <= 9 ? 3 : 4
-  const filas = Math.ceil(n / cols)
-  const anchoCelda = (W - 90) / cols
-  const altoCelda = (H - 120) / filas
-  const k = filas >= 3 || cols >= 4 ? 0.8 : 1
-
-  // Serpentina: la primera fila de izquierda a derecha, la siguiente de vuelta.
-  // Así la línea punteada se lee como un recorrido y no como un zigzag suelto.
-  // Las filas se centran en el alto: con una sola parada el dibujo quedaba
-  // pegado arriba y con medio plano vacío debajo.
-  const margenY = (H - filas * altoCelda) / 2
-  const puntos = paradas.map((_, i) => {
-    const f = Math.floor(i / cols)
-    let col = i % cols
-    if (f % 2 === 1) col = cols - 1 - col
-    return { x: 70 + col * anchoCelda + anchoCelda * 0.2, y: margenY + f * altoCelda + altoCelda * 0.68 }
+  const W = ANCHO_MAPA, H = ALTO_MAPA
+  // Más de siete paradas en un día es rarísimo; si pasa, se reparten en una
+  // serpentina y se achica todo, pero el recorrido sigue saliendo completo.
+  const comp: [number, number][] = COMPOSICIONES[n] ?? Array.from({ length: n }, (_, i) => {
+    const cols = Math.ceil(n / 2)
+    return [86 + (i % cols) * ((W - 180) / Math.max(1, cols - 1)), i % 2 === 0 ? 340 : 200] as [number, number]
   })
+  const k = n <= 3 ? 1 : n <= 5 ? 0.82 : 0.68
+  // Con pocas paradas cabe la tarjeta al lado; con muchas, sólo la hora debajo.
+  const tarjetaAmplia = n <= 4
 
-  const camino = puntos.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ')
+  // La calle pasa POR DELANTE de las casas, no por encima: se baja el trazo
+  // respecto al suelo de cada casa y se arranca desde la esquina de abajo a la
+  // izquierda, que es donde esperan la camioneta y el letrero de INICIO.
+  const SALIDA: [number, number] = [26, H - 44]
+  const camino = curvaSuave([SALIDA, ...comp.map(([x, y]) => [x, y + 30] as [number, number])])
 
-  // Manzanas de pasto entre las calles, para que no sea una rejilla pelada.
-  const manzanas: string[] = []
-  for (let fx = 0; fx < 6; fx++) {
-    for (let fy = 0; fy < 4; fy++) {
-      manzanas.push(`<rect x="${26 + fx * 114}" y="${22 + fy * 98}" width="96" height="80" rx="9" fill="#e6efe0"/>`)
+  // ── Escenario ───────────────────────────────────────────────────────────
+  // Se siembran árboles en una retícula y se quitan los que caigan encima de
+  // una casa. Así el paisaje cambia con la composición sin tener que colocarlo
+  // a mano siete veces.
+  const lejos = (x: number, y: number, d: number) =>
+    comp.every(([cx, cy]) => Math.hypot(cx - x, cy - y) > d)
+  // Un desorden a propósito: en retícula limpia salían en fila militar.
+  const arboles: string[] = []
+  let semilla = 7
+  const az = () => (semilla = (semilla * 1103515245 + 12345) % 2147483648) / 2147483648
+  for (let gx = 40; gx < W - 24; gx += 62) {
+    for (const gy of [58, 128, 392]) {
+      const x = gx + (az() - 0.5) * 46
+      const y = gy + (az() - 0.5) * 34
+      if (az() < 0.3) continue
+      if (x > 20 && x < W - 20 && lejos(x, y, 86 * k + 34) && arboles.length < 15) {
+        arboles.push(arbol(x, y, 8.5 + az() * 5))
+      }
     }
   }
-  const calles =
-    Array.from({ length: 5 }, (_, i) => `<line x1="14" y1="${12 + i * 98}" x2="${W - 14}" y2="${12 + i * 98}" stroke="#fbf9f3" stroke-width="18" stroke-linecap="round"/>`).join('') +
-    Array.from({ length: 7 }, (_, i) => `<line x1="${16 + i * 114}" y1="12" x2="${16 + i * 114}" y2="${H - 12}" stroke="#fbf9f3" stroke-width="18" stroke-linecap="round"/>`).join('')
+  const lago = lejos(360, 118, 118)
+    ? `<g><ellipse cx="360" cy="118" rx="54" ry="27" fill="#b4d5e8"/><ellipse cx="360" cy="113" rx="44" ry="20" fill="#a0c9e0"/>
+       <path d="M 332 112 q 12 -5 24 0 q 12 5 24 0" stroke="#ffffff" stroke-width="2" fill="none" opacity="0.55"/></g>`
+    : ''
 
-  const arboles = [
-    arbol(60, 86, 11), arbol(640, 120, 12), arbol(96, 330, 10),
-    arbol(610, 348, 11), arbol(352, 60, 10), arbol(300, 352, 11),
-  ].join('')
-
-  const lago = `<g><ellipse cx="358" cy="208" rx="46" ry="26" fill="#bcd9ea"/><ellipse cx="358" cy="204" rx="38" ry="20" fill="#a8cde3"/></g>`
-
-  const marcas = puntos.map((p, i) => {
+  // ── Marcas de cada parada ───────────────────────────────────────────────
+  const marcas = comp.map(([x, y], i) => {
     const hora = (paradas[i].hora ?? '').trim()
-    const anchoEtq = (hora ? 108 : 92) * k
-    const altoEtq = (hora ? 42 : 27) * k
-    // La etiqueta salta al otro lado si no cabe por la derecha.
-    const dx = p.x + 22 * k + anchoEtq > W - 12 ? -(anchoEtq + 20 * k) : 22 * k
-    const ex = p.x + dx
-    const ey = p.y - altoEtq / 2 - 9 * k
+    const pinY = y - 72 * k            // el pin flota sobre el tejado
+    let etiqueta: string
+    if (tarjetaAmplia) {
+      const an = hora ? 126 : 108, al = hora ? 48 : 31
+      const dx = x + 26 + an > W - 10 ? -(an + 26) : 26
+      const ex = x + dx, ey = pinY - al / 2 - 10
+      const reloj = hora ? `
+          <circle cx="${ex + 19}" cy="${ey + 16}" r="7" fill="none" stroke="${AZUL_CLARO}" stroke-width="1.7"/>
+          <line x1="${ex + 19}" y1="${ey + 16}" x2="${ex + 19}" y2="${ey + 11.6}" stroke="${AZUL_CLARO}" stroke-width="1.7" stroke-linecap="round"/>
+          <line x1="${ex + 19}" y1="${ey + 16}" x2="${ex + 22.8}" y2="${ey + 17.6}" stroke="${AZUL_CLARO}" stroke-width="1.7" stroke-linecap="round"/>
+          <text x="${ex + 32}" y="${ey + 20.5}" font-size="15" font-weight="700" fill="${AZUL_CLARO}" font-family="Helvetica, Arial, sans-serif">${esc(hora)}</text>
+          <text x="${ex + 15}" y="${ey + 37}" font-size="11.5" font-weight="700" fill="${AZUL}" font-family="Helvetica, Arial, sans-serif">Propiedad ${i + 1}</text>`
+        : `<text x="${ex + 15}" y="${ey + 19}" font-size="12.5" font-weight="700" fill="${AZUL}" font-family="Helvetica, Arial, sans-serif">Propiedad ${i + 1}</text>`
+      etiqueta = `
+        <rect x="${ex + 1.5}" y="${ey + 2.5}" width="${an}" height="${al}" rx="9" fill="rgba(10,42,94,0.15)"/>
+        <rect x="${ex}" y="${ey}" width="${an}" height="${al}" rx="9" fill="#fff"/>
+        <rect x="${ex}" y="${ey}" width="4.5" height="${al}" rx="2" fill="${ORO}"/>
+        ${reloj}`
+    } else {
+      // Compacta: sólo la hora, centrada bajo la casa. El número ya va en el pin.
+      const txt = hora || `Prop. ${i + 1}`
+      const an = Math.max(58, txt.length * 7.4 + 18), al = 23
+      const ex = Math.min(Math.max(x - an / 2, 6), W - an - 6), ey = y + 46
+      etiqueta = `
+        <rect x="${ex + 1}" y="${ey + 1.5}" width="${an}" height="${al}" rx="6" fill="rgba(10,42,94,0.15)"/>
+        <rect x="${ex}" y="${ey}" width="${an}" height="${al}" rx="6" fill="#fff"/>
+        <rect x="${ex}" y="${ey}" width="3.5" height="${al}" rx="1.8" fill="${ORO}"/>
+        <text x="${ex + an / 2 + 2}" y="${ey + 16}" text-anchor="middle" font-size="12" font-weight="700" fill="${AZUL_CLARO}" font-family="Helvetica, Arial, sans-serif">${esc(txt)}</text>`
+    }
     return `
       <g>
-        ${casita(p.x, p.y, i, k)}
-        <ellipse cx="${p.x}" cy="${p.y + 2}" rx="9" ry="3" fill="rgba(10,42,94,0.2)"/>
-        <path d="M ${p.x} ${p.y} c -13 -9 -19 -18 -19 -27 a 19 19 0 1 1 38 0 c 0 9 -6 18 -19 27 z" fill="${AZUL}"/>
-        <circle cx="${p.x}" cy="${p.y - 27}" r="11.5" fill="#fff"/>
-        <text x="${p.x}" y="${p.y - 22.5}" text-anchor="middle" font-size="14" font-weight="700" fill="${AZUL}" font-family="Helvetica, Arial, sans-serif">${i + 1}</text>
-        <rect x="${ex + 1.5}" y="${ey + 2.5}" width="${anchoEtq}" height="${altoEtq}" rx="8" fill="rgba(10,42,94,0.13)"/>
-        <rect x="${ex}" y="${ey}" width="${anchoEtq}" height="${altoEtq}" rx="8" fill="#fff"/>
-        <rect x="${ex}" y="${ey}" width="${4 * k}" height="${altoEtq}" rx="2" fill="${ORO}"/>
-        ${hora ? `
-          <circle cx="${ex + 18 * k}" cy="${ey + 15 * k}" r="${6.5 * k}" fill="none" stroke="${AZUL_CLARO}" stroke-width="1.6"/>
-          <line x1="${ex + 18 * k}" y1="${ey + 15 * k}" x2="${ex + 18 * k}" y2="${ey + 11 * k}" stroke="${AZUL_CLARO}" stroke-width="1.6" stroke-linecap="round"/>
-          <line x1="${ex + 18 * k}" y1="${ey + 15 * k}" x2="${ex + 21.5 * k}" y2="${ey + 16.5 * k}" stroke="${AZUL_CLARO}" stroke-width="1.6" stroke-linecap="round"/>
-          <text x="${ex + 30 * k}" y="${ey + 19 * k}" font-size="${13 * k}" font-weight="700" fill="${AZUL_CLARO}" font-family="Helvetica, Arial, sans-serif">${esc(hora)}</text>
-          <text x="${ex + 14 * k}" y="${ey + 34 * k}" font-size="${10.5 * k}" font-weight="700" fill="${AZUL}" font-family="Helvetica, Arial, sans-serif">Propiedad ${i + 1}</text>
-        ` : `
-          <text x="${ex + 14 * k}" y="${ey + 18 * k}" font-size="${11 * k}" font-weight="700" fill="${AZUL}" font-family="Helvetica, Arial, sans-serif">Propiedad ${i + 1}</text>
-        `}
+        ${casa(x, y, i, k)}
+        <ellipse cx="${x}" cy="${pinY + 2}" rx="8" ry="2.8" fill="rgba(10,42,94,0.22)"/>
+        <path d="M ${x} ${pinY} c -13 -9 -19 -18 -19 -27 a 19 19 0 1 1 38 0 c 0 9 -6 18 -19 27 z" fill="${AZUL}"/>
+        <circle cx="${x}" cy="${pinY - 27}" r="11.5" fill="#fff"/>
+        <text x="${x}" y="${pinY - 22.5}" text-anchor="middle" font-size="15" font-weight="700" fill="${AZUL}" font-family="Helvetica, Arial, sans-serif">${i + 1}</text>
+        ${etiqueta}
       </g>`
   }).join('')
 
-  const p0 = puntos[0]
-  const vanX = Math.max(14, p0.x - 122)
+  // La salida va fija en la esquina, no pegada a la primera casa: ahí la
+  // camioneta tapaba su etiqueta de la hora.
+  const [sx, sy] = SALIDA
   return `
   <svg class="mapa" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"
        preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
-    <rect x="0" y="0" width="${W}" height="${H}" rx="14" fill="#f3f7ee"/>
-    ${manzanas.join('')}
-    ${calles}
+    <rect x="0" y="0" width="${W}" height="${H}" rx="16" fill="#eef4e8"/>
+    <circle cx="${W - 70}" cy="54" r="34" fill="#f6f1dd"/>
     ${lago}
-    ${arboles}
-    <path d="${camino}" fill="none" stroke="rgba(10,42,94,0.18)" stroke-width="6" stroke-linecap="round"/>
-    <path d="${camino}" fill="none" stroke="${AZUL}" stroke-width="3.2" stroke-dasharray="10 9" stroke-linecap="round"/>
+    ${arboles.join('')}
+    <path d="${camino}" fill="none" stroke="#e3dcc8" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${camino}" fill="none" stroke="#fbf8ef" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${camino}" fill="none" stroke="${AZUL}" stroke-width="3.2" stroke-dasharray="11 9" stroke-linecap="round"/>
     <g>
-      <rect x="${p0.x - 56}" y="${p0.y + 14}" width="48" height="21" rx="4" fill="${ORO}"/>
-      <text x="${p0.x - 32}" y="${p0.y + 28.5}" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff" font-family="Helvetica, Arial, sans-serif">INICIO</text>
-      <line x1="${p0.x - 56}" y1="${p0.y + 14}" x2="${p0.x - 56}" y2="${p0.y + 44}" stroke="#9a7c22" stroke-width="2.5"/>
+      <rect x="${sx + 68}" y="${sy - 34}" width="50" height="21" rx="4" fill="${ORO}"/>
+      <text x="${sx + 93}" y="${sy - 19.5}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff" font-family="Helvetica, Arial, sans-serif">INICIO</text>
+      <line x1="${sx + 68}" y1="${sy - 34}" x2="${sx + 68}" y2="${sy - 2}" stroke="#9a7c22" stroke-width="2.5"/>
     </g>
-    <g transform="translate(${vanX}, ${p0.y + 14})">
-      <ellipse cx="28" cy="29" rx="28" ry="4" fill="rgba(10,42,94,0.16)"/>
-      <rect x="0" y="0" width="56" height="24" rx="6" fill="${AZUL}"/>
-      <rect x="39" y="4" width="13" height="10" rx="2" fill="#9fb6c9"/>
-      <circle cx="14" cy="25" r="5.5" fill="#2d3748"/><circle cx="14" cy="25" r="2" fill="#718096"/>
-      <circle cx="44" cy="25" r="5.5" fill="#2d3748"/><circle cx="44" cy="25" r="2" fill="#718096"/>
-      <text x="6" y="16" font-size="7.5" font-weight="700" fill="${ORO_VIVO}" font-family="Helvetica, Arial, sans-serif">VALERA</text>
+    <g transform="translate(${sx - 16}, ${sy - 30})">
+      <ellipse cx="30" cy="31" rx="30" ry="4" fill="rgba(10,42,94,0.18)"/>
+      <rect x="0" y="0" width="60" height="26" rx="7" fill="${AZUL}"/>
+      <rect x="42" y="4" width="14" height="11" rx="2" fill="#9fb6c9"/>
+      <circle cx="15" cy="27" r="6" fill="#2d3748"/><circle cx="15" cy="27" r="2.2" fill="#718096"/>
+      <circle cx="47" cy="27" r="6" fill="#2d3748"/><circle cx="47" cy="27" r="2.2" fill="#718096"/>
+      <text x="6" y="17" font-size="8" font-weight="700" fill="${ORO_VIVO}" font-family="Helvetica, Arial, sans-serif">VALERA</text>
     </g>
     ${marcas}
   </svg>`
@@ -321,7 +415,7 @@ export function construirHtmlHoja(d: DatosHoja): string {
     ${hay(p.asesorNombre) || hay(p.asesorTel) ? `<div class="asesor">
       <div class="as-lbl">ASESOR A CARGO</div>
       ${hay(p.asesorNombre) ? `<div class="as-nom">${esc(p.asesorNombre)}</div>` : ''}
-      ${hay(p.asesorTel) ? `<div class="as-tel">${esc(p.asesorTel)}</div>` : ''}
+      ${hay(p.asesorTel) ? `<div class="as-tel">${enlaceWhatsApp(p.asesorTel)}</div>` : ''}
     </div>` : ''}
 
     <div class="pie">Valera Real Estate · Documento interno de uso exclusivo del equipo</div>
@@ -346,32 +440,32 @@ export function construirHtmlHoja(d: DatosHoja): string {
   .portada { text-align: center; background: ${FONDO}; }
   .pcab { background: ${AZUL}; padding: 40px 52px 30px; }
   .pcab .logo { width: 142px; margin: 0 auto 16px; display: block; }
-  .sello { font-size: 10.5px; letter-spacing: 2.4px; font-weight: 700; color: rgba(255,255,255,0.72); margin-bottom: 14px; }
+  .sello { font-size: 11.5px; letter-spacing: 2.4px; font-weight: 700; color: rgba(255,255,255,0.72); margin-bottom: 14px; }
   .portada h1 { font-size: 30px; line-height: 1.24; color: #fff; margin: 0 0 16px; font-weight: 800; }
   .raya { width: 120px; height: 4px; margin: 0 auto;
           background: linear-gradient(to right, ${ORO_VIVO} 0, ${ORO_VIVO} 60px, rgba(255,255,255,0.45) 60px); border-radius: 2px; }
-  .intro { font-size: 12.5px; line-height: 1.7; color: ${GRIS}; max-width: 540px; margin: 22px auto 18px; }
+  .intro { font-size: 13.5px; line-height: 1.7; color: ${GRIS}; max-width: 540px; margin: 22px auto 18px; }
   /* El ancho lo pone el contenedor con su padding: el SVG suelto con
      width fijo se descuadraba al renderizarlo y se salia por la derecha. */
   .mapa-wrap { padding: 0 52px; margin-bottom: 20px; }
   .mapa { width: 100%; height: auto; display: block; }
   .portada-datos { border: 2px solid ${AZUL}; border-radius: 12px; padding: 20px 28px; max-width: 460px; margin: 0 auto; background: #fff; }
-  .pd-cliente { font-size: 23px; font-weight: 800; color: ${AZUL}; }
-  .pd-fecha { font-size: 14px; color: ${AZUL_CLARO}; margin-top: 5px; font-weight: 700; }
-  .pd-n { font-size: 12.5px; color: ${GRIS_SUAVE}; margin-top: 8px; }
-  .uso { position: absolute; left: 0; right: 0; bottom: 88px; font-size: 11.5px; letter-spacing: 2.4px; font-weight: 700; color: ${AZUL_CLARO}; }
-  .uso-sub { position: absolute; left: 0; right: 0; bottom: 62px; font-size: 11.5px; color: ${GRIS_SUAVE}; }
+  .pd-cliente { font-size: 25px; font-weight: 800; color: ${AZUL}; }
+  .pd-fecha { font-size: 15px; color: ${AZUL_CLARO}; margin-top: 5px; font-weight: 700; }
+  .pd-n { font-size: 13.5px; color: ${GRIS_SUAVE}; margin-top: 8px; }
+  .uso { position: absolute; left: 0; right: 0; bottom: 88px; font-size: 12.5px; letter-spacing: 2.4px; font-weight: 700; color: ${AZUL_CLARO}; }
+  .uso-sub { position: absolute; left: 0; right: 0; bottom: 62px; font-size: 12.5px; color: ${GRIS_SUAVE}; }
 
   /* ── Cabecera de las hojas interiores ────────────────────────────── */
   .cab { background: ${AZUL}; padding: 26px 46px 22px; display: flex; justify-content: space-between; align-items: flex-start; gap: 22px; }
-  .sello2 { font-size: 9.5px; letter-spacing: 1.6px; font-weight: 700; color: rgba(255,255,255,0.65); margin-bottom: 6px; }
-  .cab h2 { font-size: 25px; color: #fff; margin: 0; font-weight: 800; line-height: 1.2; }
-  .sub { font-size: 12px; color: rgba(255,255,255,0.72); font-style: italic; margin-top: 6px; }
+  .sello2 { font-size: 10.5px; letter-spacing: 1.6px; font-weight: 700; color: rgba(255,255,255,0.65); margin-bottom: 6px; }
+  .cab h2 { font-size: 27px; color: #fff; margin: 0; font-weight: 800; line-height: 1.2; }
+  .sub { font-size: 13px; color: rgba(255,255,255,0.72); font-style: italic; margin-top: 6px; }
   .cab-der { text-align: right; flex-shrink: 0; padding-top: 2px; }
-  .cab-lbl { font-size: 10px; letter-spacing: 1.4px; color: rgba(255,255,255,0.6); font-weight: 700; }
-  .cab-val { font-size: 14px; font-weight: 800; color: ${ORO_VIVO}; margin-top: 4px; }
+  .cab-lbl { font-size: 11px; letter-spacing: 1.4px; color: rgba(255,255,255,0.6); font-weight: 700; }
+  .cab-val { font-size: 15.5px; font-weight: 800; color: ${ORO_VIVO}; margin-top: 4px; }
 
-  .barra { background: ${AZUL_MED}; color: #fff; font-size: 12.5px; font-weight: 800; letter-spacing: 1.5px;
+  .barra { background: ${AZUL_MED}; color: #fff; font-size: 13.5px; font-weight: 800; letter-spacing: 1.5px;
            padding: 11px 46px; border-left: 6px solid ${ORO}; }
 
   .caja { background: #fff; border-radius: 12px; margin: 20px 46px 0; padding: 6px 20px;
@@ -379,22 +473,22 @@ export function construirHtmlHoja(d: DatosHoja): string {
 
   /* ── Tabla del perfil ────────────────────────────────────────────── */
   table.perfil { width: 100%; border-collapse: collapse; }
-  table.perfil th, table.perfil td { text-align: left; padding: 13px 10px; border-bottom: 1px solid #eaf0f6; font-size: 13.5px; vertical-align: top; }
+  table.perfil th, table.perfil td { text-align: left; padding: 13px 10px; border-bottom: 1px solid #eaf0f6; font-size: 15px; vertical-align: top; }
   table.perfil tr:last-child th, table.perfil tr:last-child td { border-bottom: none; }
-  table.perfil th { width: 172px; font-weight: 700; color: ${GRIS_SUAVE}; font-size: 11.5px; letter-spacing: 0.4px; text-transform: uppercase; }
+  table.perfil th { width: 178px; font-weight: 700; color: ${GRIS_SUAVE}; font-size: 12.5px; letter-spacing: 0.4px; text-transform: uppercase; }
   table.perfil td { color: #243b53; }
-  table.perfil td.fuerte { font-weight: 800; color: ${AZUL}; font-size: 15px; }
+  table.perfil td.fuerte { font-weight: 800; color: ${AZUL}; font-size: 16.5px; }
 
   /* ── Resumen del recorrido en la hoja de perfil ──────────────────── */
   .resumen { margin: 22px 46px 0; }
-  .resumen-tit { font-size: 11.5px; font-weight: 800; letter-spacing: 1.5px; color: ${AZUL}; margin-bottom: 10px; }
+  .resumen-tit { font-size: 12.5px; font-weight: 800; letter-spacing: 1.5px; color: ${AZUL}; margin-bottom: 10px; }
   .resumen-lista { list-style: none; margin: 0; padding: 0; }
   .resumen-lista li { display: flex; align-items: center; gap: 12px; background: #fff; border-left: 4px solid ${ORO};
                       border-radius: 9px; padding: 11px 14px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(10,42,94,0.06); }
-  .rl-n { width: 22px; height: 22px; border-radius: 11px; background: ${AZUL}; color: #fff; font-size: 11.5px;
-          font-weight: 800; text-align: center; line-height: 22px; flex-shrink: 0; }
-  .rl-hora { font-size: 12.5px; font-weight: 800; color: ${AZUL_CLARO}; width: 76px; flex-shrink: 0; }
-  .rl-tit { font-size: 12.5px; color: #243b53; overflow: hidden; }
+  .rl-n { width: 24px; height: 24px; border-radius: 12px; background: ${AZUL}; color: #fff; font-size: 12.5px;
+          font-weight: 800; text-align: center; line-height: 24px; flex-shrink: 0; }
+  .rl-hora { font-size: 13.5px; font-weight: 800; color: ${AZUL_CLARO}; width: 76px; flex-shrink: 0; }
+  .rl-tit { font-size: 13.5px; color: #243b53; overflow: hidden; }
 
   /* ── Hoja de propiedad ───────────────────────────────────────────── */
   .hero { position: relative; margin: 0; }
@@ -402,27 +496,28 @@ export function construirHtmlHoja(d: DatosHoja): string {
   .hero-foto.sin { display: flex; align-items: center; justify-content: center; color: ${GRIS_SUAVE}; font-size: 13px; }
   .hero-pie { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 46px 16px;
               background-image: linear-gradient(to top, rgba(0,0,0,0.80) 0%, rgba(0,0,0,0.35) 58%, rgba(0,0,0,0) 100%); }
-  .hero-precio { font-size: 30px; font-weight: 800; color: ${ORO_VIVO}; letter-spacing: 0.4px; }
+  .hero-precio { font-size: 33px; font-weight: 800; color: ${ORO_VIVO}; letter-spacing: 0.4px; }
 
   .cars { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 46px 0; }
   .car { background: #fff; border-radius: 10px; border-left: 4px solid ${AZUL}; padding: 11px 14px;
-         font-size: 12.5px; font-weight: 700; color: ${AZUL}; box-shadow: 0 1px 3px rgba(10,42,94,0.08); }
+         font-size: 13.5px; font-weight: 700; color: ${AZUL}; box-shadow: 0 1px 3px rgba(10,42,94,0.08); }
 
   .datos { padding: 16px 20px; }
   .dato { margin-bottom: 14px; }
   .dato:last-child { margin-bottom: 0; }
-  .dl { font-size: 10.5px; color: ${GRIS_SUAVE}; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 4px; }
-  .dv { font-size: 14px; color: #243b53; line-height: 1.5; }
-  .dv.fuerte { font-weight: 800; color: ${AZUL}; font-size: 15.5px; }
-  .dv.gris { color: ${GRIS}; font-size: 13px; }
+  .dl { font-size: 11.5px; color: ${GRIS_SUAVE}; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 4px; }
+  .dv { font-size: 15.5px; color: #243b53; line-height: 1.5; }
+  .dv.fuerte { font-weight: 800; color: ${AZUL}; font-size: 17px; }
+  .dv.gris { color: ${GRIS}; font-size: 14px; }
   .dv a { color: #2563eb; text-decoration: none; }
 
   .asesor { margin: 18px 46px 0; background: ${AZUL}; border-radius: 12px; padding: 16px 20px; }
-  .as-lbl { font-size: 10px; letter-spacing: 1.5px; font-weight: 700; color: rgba(255,255,255,0.6); margin-bottom: 6px; }
-  .as-nom { font-size: 15px; font-weight: 800; color: #fff; }
-  .as-tel { font-size: 13.5px; color: ${ORO_VIVO}; margin-top: 3px; font-weight: 700; }
+  .as-lbl { font-size: 11px; letter-spacing: 1.5px; font-weight: 700; color: rgba(255,255,255,0.6); margin-bottom: 6px; }
+  .as-nom { font-size: 16.5px; font-weight: 800; color: #fff; }
+  .as-tel { font-size: 15px; color: ${ORO_VIVO}; margin-top: 3px; font-weight: 700; }
+  .as-tel a { color: ${ORO_VIVO}; text-decoration: none; }
 
-  .pie { position: absolute; left: 0; right: 0; bottom: 26px; text-align: center; font-size: 10.5px; color: ${GRIS_SUAVE}; }
+  .pie { position: absolute; left: 0; right: 0; bottom: 26px; text-align: center; font-size: 11.5px; color: ${GRIS_SUAVE}; }
 </style></head><body>${portada}${hojaPerfil}${hojasParadas}</body></html>`
 }
 
