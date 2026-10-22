@@ -202,7 +202,7 @@ function explicarBloqueo(data: any): { titulo: string; mensaje: string } {
     return {
       titulo: '🚦 Esta propiedad está saturada',
       mensaje:
-        `Entre todo el equipo ya se publicó ${veces} veces esta semana${quienes}.\n\n` +
+        `Entre todo el equipo ya se publicó ${veces} veces este mes${quienes}.\n\n` +
         'Cuando la misma casa aparece tantas veces, Facebook los toma por anuncios ' +
         'repetidos: los baja y puede restringir las cuentas de quienes los subieron. ' +
         'Por eso se frena aquí.' + cuando + '\n\n' +
@@ -223,12 +223,12 @@ function explicarBloqueo(data: any): { titulo: string; mensaje: string } {
       }
     }
     return {
-      titulo: '🚦 Ya publicaste esta casa esta semana',
+      titulo: '🚦 Ya publicaste esta casa este mes',
       mensaje:
-        'Ahora es una publicación por propiedad cada 7 días.\n\n' +
+        'Ahora es una publicación por propiedad cada 30 días.\n\n' +
         'Subir la misma casa varias veces desde tu cuenta es lo que Facebook lee como ' +
-        'anuncio duplicado: te la baja y puede restringirte. Dejándola una semana ' +
-        'completa, tu anuncio dura arriba y lo ve más gente.' + cuando + '\n\n' +
+        'anuncio duplicado: te la baja y puede restringirte. Dejándola el mes ' +
+        'completo, tu anuncio dura arriba y lo ve más gente.' + cuando + '\n\n' +
         'Hoy publica otra: cuenta igual para tus números.',
     }
   }

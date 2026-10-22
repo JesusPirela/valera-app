@@ -168,7 +168,7 @@ const PropiedadCard = memo(function PropiedadCard({
   totalPublicadores: number
   isNuevaParaTi: boolean
   isUnlocked: boolean
-  /** Si la propiedad topó el tope de la semana, con el detalle para explicarlo. */
+  /** Si la propiedad topó el tope del mes, con el detalle para explicarlo. */
   saturada?: { veces: number; personas: number; libre_desde: string } | null
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
@@ -312,7 +312,7 @@ const PropiedadCard = memo(function PropiedadCard({
         {saturada && (
           <View style={styles.saturadaAviso}>
             <Text style={styles.saturadaAvisoText}>
-              ⏸ Ya la publicaron {saturada.personas} personas esta semana ({saturada.veces} veces).
+              ⏸ Ya la publicaron {saturada.personas} personas este mes ({saturada.veces} veces).
               Si varios subimos la misma, Facebook rechaza los anuncios de todos. Toca para ver cuándo se libera.
             </Text>
           </View>
@@ -355,14 +355,14 @@ const PropiedadCard = memo(function PropiedadCard({
             ]}
             onPress={(e) => {
               e.stopPropagation()
-              // Esta propiedad ya la publicó mucha gente esta semana. No se
+              // Esta propiedad ya la publicó mucha gente este mes. No se
               // bloquea en silencio: se explica POR QUÉ, porque desde fuera
               // parece que el botón está roto.
               if (saturada) {
                 const dia = new Date(saturada.libre_desde).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
                 const msg =
-                  `Esta propiedad ya se publicó ${saturada.veces} veces esta semana, por ${saturada.personas} personas distintas.\n\n` +
-                  'Cuando varios publicamos la misma propiedad en pocos días, Facebook lo toma como spam y empieza a rechazar los anuncios de TODOS, no solo el de esa propiedad.\n\n' +
+                  `Esta propiedad ya se publicó ${saturada.veces} veces este mes, por ${saturada.personas} personas distintas.\n\n` +
+                  'Cuando varios publicamos la misma propiedad en el mismo mes, Facebook lo toma como spam y empieza a rechazar los anuncios de TODOS, no solo el de esa propiedad.\n\n' +
                   `Se vuelve a habilitar el ${dia}. Mientras tanto, mejor escoge otra: hay muchas que casi nadie ha publicado.`
                 if (Platform.OS === 'web') window.alert(msg)
                 else Alert.alert('Mejor no publiques esta', msg, [{ text: 'Entendido' }])
@@ -571,7 +571,7 @@ export default function ProspectadorPropiedades() {
   // (a) nunca se persiste al disco (no puede quedar un update optimista "pegado"
   // entre sesiones tras un crash), y (b) siempre se trae fresco del servidor
   // al montar el componente o al regresar a esta pantalla.
-  // Propiedades que ya toparon el tope de la semana (10 publicaciones entre
+  // Propiedades que ya toparon el tope del mes (10 publicaciones entre
   // todos). Son un puñado — hoy 4 de 832 —, así que la consulta es chica y se
   // refresca sola cada 5 min: el tope es móvil y una propiedad se libera sola
   // al pasar los 7 días.
@@ -849,7 +849,7 @@ export default function ProspectadorPropiedades() {
         setVeces(data.veces_publicada ?? 10)
         avisar('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
       } else if ((data as any)?.error === 'saturada') {
-        // El servidor rechazó porque la propiedad topó el tope de la semana.
+        // El servidor rechazó porque la propiedad topó el tope del mes.
         // Puede pasar aunque el botón se vea bien: la lista de saturadas se
         // refresca cada 5 min y alguien más pudo topar el contador en medio.
         const d = data as any
@@ -859,8 +859,8 @@ export default function ProspectadorPropiedades() {
         setVeces(vecesActual)
         queryClient.invalidateQueries({ queryKey: ['propiedades-saturadas'] })
         avisar('Mejor no publiques esta',
-          `Ya se publicó ${d.veces_semana} veces esta semana, por ${d.personas} personas distintas. ` +
-          'Cuando varios publicamos la misma en pocos días, Facebook lo toma como spam y rechaza los anuncios de todos. ' +
+          `Ya se publicó ${d.veces_semana} veces este mes, por ${d.personas} personas distintas. ` +
+          'Cuando varios publicamos la misma en el mismo mes, Facebook lo toma como spam y rechaza los anuncios de todos. ' +
           `Se vuelve a habilitar el ${dia}.`)
       } else if (ok && data && data.ok === false) {
         // Error de negocio del servidor distinto de límite: reintentar no ayuda.
