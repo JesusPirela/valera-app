@@ -784,14 +784,20 @@ export default function CitasVenta() {
   function irAHoy() {
     const hoy = new Date().toISOString().slice(0, 10)
     let idx = -1
-    for (let i = visibles.length - 1; i >= 0; i--) {
-      // Misma fecha efectiva que el resto, para que "Ir a hoy" no caiga en
-      // otro renglón del que muestra el orden.
+    // El escaneo hacia atrás solo funcionaba con orden ascendente por fecha:
+    // en el orden natural (manual, por "orden") o en descendente las fechas
+    // no vienen de mayor a menor, así que el barrido caía en cualquier fila.
+    // Se busca sin asumir ningún orden: match exacto de hoy, o si no hay, la
+    // fecha pasada más cercana.
+    let idxAntes = -1
+    let fechaAntes = ''
+    for (let i = 0; i < visibles.length; i++) {
       const fc = fechaEfectiva(visibles[i])?.slice(0, 10)
       if (!fc) continue
       if (fc === hoy) { idx = i; break }
-      if (fc < hoy && idx === -1) { idx = i; break }
+      if (fc < hoy && fc > fechaAntes) { idxAntes = i; fechaAntes = fc }
     }
+    if (idx < 0) idx = idxAntes
     if (idx < 0) return
     listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 })
     vbarRef.current?.scrollTo({ y: idx * ROW_H, animated: true })
