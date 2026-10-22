@@ -416,6 +416,12 @@ export default function ProspectadorLayout() {
         name="tareas"
         options={{ href: null }}
       />
+      {/* Se entra desde Citas, no desde la barra de abajo. Sin esto Expo Router
+          le pone pestaña propia a cualquier archivo nuevo de la carpeta. */}
+      <Tabs.Screen
+        name="hoja-de-ruta"
+        options={{ href: null, title: 'Hoja de ruta' }}
+      />
       <Tabs.Screen
         name="notificaciones"
         options={{
