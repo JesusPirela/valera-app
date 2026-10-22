@@ -572,7 +572,16 @@ export async function generarPdfHojaDeRuta(datos: DatosHoja, nombreArchivo: stri
         for (const a of Array.from(hoja.querySelectorAll('a[href]')) as HTMLAnchorElement[]) {
           const r = a.getBoundingClientRect()
           if (!r.width || !r.height) continue
-          doc.link((r.left - caja.left) * kx, (r.top - caja.top) * ky, r.width * kx, r.height * ky, { url: a.href })
+          // Un poco de holgura alrededor: el teléfono del asesor mide 13
+          // puntos de alto y en el teléfono es un blanco muy chico para el dedo.
+          const hx = 3, hy = 5
+          doc.link(
+            (r.left - caja.left) * kx - hx,
+            (r.top - caja.top) * ky - hy,
+            r.width * kx + hx * 2,
+            r.height * ky + hy * 2,
+            { url: a.href },
+          )
         }
       }
       doc.save(nombreArchivo)
