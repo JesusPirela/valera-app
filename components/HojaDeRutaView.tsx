@@ -32,6 +32,20 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
 function fechaLarga(d: Date): string {
   return `${d.getDate()} de ${MESES[d.getMonth()]}, ${d.getFullYear()}`
 }
+/** "hace 10 min", "ayer", "14 oct" — para la lista de hojas ya hechas. */
+function cuandoFue(iso: string): string {
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (min < 1) return 'hace un momento'
+  if (min < 60) return `hace ${min} min`
+  const hrs = Math.floor(min / 60)
+  if (hrs < 24) return `hace ${hrs} h`
+  const dias = Math.floor(hrs / 24)
+  if (dias === 1) return 'ayer'
+  if (dias < 30) return `hace ${dias} días`
+  const d = new Date(iso)
+  return `${d.getDate()} ${MESES[d.getMonth()].slice(0, 3)}`
+}
+
 function horaCorta(iso: string | null): string {
   if (!iso) return ''
   return new Date(iso).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase()
@@ -57,6 +71,10 @@ const bonito = (v: string) => {
 const legible = (v: string | null) => (v ?? '').replace(/_a_/g, ' a ').replace(/_/g, ' ').trim()
 
 type ClienteLite = { id: string; nombre: string; telefono: string | null }
+type HojaGuardada = {
+  token: string; fecha: string; cliente: string; paradas: number
+  actualizada: string; clienteId: string | null
+}
 /** Una parada, más lo que la pantalla necesita para gestionarla. */
 type Parada = ParadaHoja & { clave: string; fotoUrl: string }
 
@@ -97,7 +115,7 @@ const PARADA_VACIA = (): Parada => ({
 
 export default function HojaDeRutaView() {
   const c = useColors()
-  const { clienteId } = useLocalSearchParams<{ clienteId?: string }>()
+  const { clienteId, token: tokenUrl } = useLocalSearchParams<{ clienteId?: string; token?: string }>()
 
   const [permitido, setPermitido] = useState<boolean | null>(null)
   const [cliente, setCliente] = useState<ClienteLite | null>(null)
@@ -122,6 +140,9 @@ export default function HojaDeRutaView() {
   const [link, setLink] = useState('')
   const [importando, setImportando] = useState(false)
   const [avisoImport, setAvisoImport] = useState('')
+  const [guardadas, setGuardadas] = useState<HojaGuardada[]>([])
+  const [verGuardadas, setVerGuardadas] = useState(false)
+  const [clienteIdHoja, setClienteIdHoja] = useState<string | null>(null)
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null)
   const temporizadorProp = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -146,7 +167,62 @@ export default function HojaDeRutaView() {
     return () => { vivo = false }
   }, []))
 
-  useEffect(() => { if (clienteId) cargarCliente(String(clienteId)) }, [clienteId])
+  useEffect(() => {
+    if (tokenUrl) abrirGuardada(String(tokenUrl))
+    else if (clienteId) cargarCliente(String(clienteId))
+  }, [clienteId, tokenUrl])
+
+  useEffect(() => { listarGuardadas() }, [])
+
+  /** Las hojas que ya hizo, para volver a abrirlas. */
+  async function listarGuardadas() {
+    const { data } = await supabase.from('hojas_de_ruta')
+      .select('token, fecha, perfil, paradas, updated_at, cliente_id')
+      .order('updated_at', { ascending: false })
+      .limit(20)
+    setGuardadas(((data ?? []) as any[]).map(h => ({
+      token: h.token,
+      fecha: h.fecha,
+      cliente: h.perfil?.nombre ?? 'Sin nombre',
+      paradas: Array.isArray(h.paradas) ? h.paradas.length : 0,
+      actualizada: h.updated_at,
+      clienteId: h.cliente_id ?? null,
+    })))
+  }
+
+  /**
+   * Vuelve a abrir una hoja ya hecha para corregirla.
+   *
+   * Al guardarla se le quitan `clave` (sólo sirve dentro de la pantalla) y
+   * `fotoBase64` (pesa de más y se vuelve a calcular), así que hay que
+   * devolvérselos o la lista de paradas no se puede editar.
+   */
+  async function abrirGuardada(tk: string) {
+    setCargando(true)
+    try {
+      const { data, error } = await supabase.rpc('hoja_de_ruta_publica', { p_token: tk })
+      if (error || !data) { avisar('No se encontró', 'Esa hoja de ruta ya no existe.'); return }
+      const h: any = data
+      setToken(tk)
+      setFecha(h.fecha ?? '')
+      setPerfil({ nombre: '', telefono: '', correo: '', origen: '', formaPago: '', presupuesto: '', busca: '', ...(h.perfil ?? {}) })
+      setParadas((h.paradas ?? []).map((p: any) => ({
+        ...PARADA_VACIA(), ...p,
+        clave: Math.random().toString(36).slice(2),
+        fotoBase64: '',
+      })))
+      const guardada = guardadas.find(g => g.token === tk)
+      setClienteIdHoja(guardada?.clienteId ?? null)
+      setCliente(h.perfil?.nombre
+        ? { id: guardada?.clienteId ?? '', nombre: h.perfil.nombre, telefono: h.perfil.telefono ?? null }
+        : null)
+      setDias([])
+    } catch {
+      avisar('No se pudo abrir', 'Intenta de nuevo.')
+    } finally {
+      setCargando(false)
+    }
+  }
 
   // ── Cliente ──────────────────────────────────────────────────────────────
   async function cargarCliente(id: string) {
@@ -167,7 +243,7 @@ export default function HojaDeRutaView() {
         // registrada como punto de partida y el asesor lo completa.
         busca: data.zona_busqueda ?? '',
       })
-      setResultados([]); setBusca('')
+      setResultados([]); setBusca(''); setClienteIdHoja(id)
       await cargarDias(id)
     }
     setCargando(false)
@@ -403,6 +479,14 @@ export default function HojaDeRutaView() {
     }
   }
 
+  /** Suelta la hoja abierta para armar otra desde cero sin pisar el link. */
+  function empezarDeCero() {
+    setToken(''); setParadas([]); setCliente(null); setDias([]); setClienteIdHoja(null)
+    setPerfil({ nombre: '', telefono: '', correo: '', origen: '', formaPago: '', presupuesto: '', busca: '' })
+    setFecha(fechaLarga(new Date()))
+    setAvisoImport('')
+  }
+
   async function crearLink() {
     if (!perfil.nombre.trim()) { avisar('Falta el cliente', 'Escribe al menos el nombre del cliente.'); return }
     if (paradas.length === 0) { avisar('Sin propiedades', 'Agrega al menos una propiedad al recorrido.'); return }
@@ -412,7 +496,9 @@ export default function HojaDeRutaView() {
       // reconstruye leyendo las citas al abrir el link: eso perdería las
       // correcciones.
       const { data, error } = await supabase.rpc('guardar_hoja_de_ruta', {
-        p_cliente_id: cliente?.id ?? null,
+        // Un id vacío no es un uuid: va null. Al reabrir una hoja se conserva
+        // el cliente con el que se creó.
+        p_cliente_id: clienteIdHoja || cliente?.id || null,
         p_fecha: fecha,
         p_perfil: perfil,
         p_paradas: paradas.map(({ clave, fotoBase64, ...resto }) => resto),
@@ -420,12 +506,21 @@ export default function HojaDeRutaView() {
       })
       if (error) throw error
       const d: any = data
+      // Si la hoja la creo otra persona no se puede sobrescribir; se ofrece
+      // guardarla como una nueva en vez de dejar al usuario atorado.
+      if (d?.error === 'ajena') {
+        avisar('Esa hoja es de otra persona', (d.mensaje ?? '') + ' Se va a crear una copia tuya.')
+        setToken('')
+        setCreandoLink(false)
+        return crearLink()
+      }
       if (!d?.ok) throw new Error(d?.error ?? 'No se pudo guardar.')
       setToken(d.token)
       const url = `https://valeraapp.valerarealestate.com/ruta/${d.token}`
       try { await Clipboard.setStringAsync(url) } catch { /* se muestra igual */ }
       setLinkCopiado(true)
       setTimeout(() => setLinkCopiado(false), 4000)
+      listarGuardadas()
     } catch (e: any) {
       avisar('No se pudo crear el link', e?.message ?? 'Intenta de nuevo.')
     } finally {
@@ -472,6 +567,50 @@ export default function HojaDeRutaView() {
         Se arma con lo que ya está registrado y puedes cambiar cualquier campo.
         Lo que edites aquí vale sólo para este documento.
       </Text>
+
+      {/* Volver a abrir una hoja ya hecha. Sin esto, el link quedaba
+          congelado: se creaba, se mandaba, y no había forma de corregirlo. */}
+      {guardadas.length > 0 && (
+        <View style={[s.tarjeta, { backgroundColor: c.card, borderColor: c.border }]}>
+          <TouchableOpacity style={s.guardadasCab} onPress={() => setVerGuardadas(v => !v)} activeOpacity={0.7}>
+            <Ionicons name="time-outline" size={17} color={TEAL} />
+            <Text style={[s.guardadasTit, { color: c.text }]}>
+              Hojas de ruta recientes ({guardadas.length})
+            </Text>
+            <Ionicons name={verGuardadas ? 'chevron-up' : 'chevron-down'} size={17} color={c.textMute} />
+          </TouchableOpacity>
+
+          {verGuardadas && guardadas.map(h => (
+            <TouchableOpacity
+              key={h.token}
+              style={[s.guardadaFila, { borderColor: c.border }, h.token === token && s.guardadaAbierta]}
+              onPress={() => abrirGuardada(h.token)}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[s.guardadaNom, { color: c.text }]} numberOfLines={1}>{h.cliente}</Text>
+                <Text style={[s.guardadaSub, { color: c.textMute }]} numberOfLines={1}>
+                  {h.fecha} · {h.paradas} {h.paradas === 1 ? 'propiedad' : 'propiedades'} · editada {cuandoFue(h.actualizada)}
+                </Text>
+              </View>
+              {h.token === token
+                ? <Text style={s.guardadaAqui}>abierta</Text>
+                : <Ionicons name="create-outline" size={16} color={TEAL} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {!!token && (
+        <View style={s.editandoAviso}>
+          <Ionicons name="pencil" size={14} color="#1d4ed8" />
+          <Text style={s.editandoTxt}>
+            Estás editando una hoja ya creada. Al guardar se actualiza el mismo link.
+          </Text>
+          <TouchableOpacity onPress={empezarDeCero}>
+            <Text style={s.editandoNueva}>Nueva</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Cliente ─────────────────────────────────────────────────────── */}
       <View style={[s.tarjeta, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -661,6 +800,23 @@ const s = StyleSheet.create({
   titulo: { fontSize: 23, fontWeight: '800' },
   sub: { fontSize: 12.5, marginTop: 5, marginBottom: 16, lineHeight: 18 },
   tarjeta: { borderWidth: 1, borderRadius: 14, padding: 15, marginBottom: 14 },
+  guardadasCab: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  guardadasTit: { flex: 1, fontSize: 14, fontWeight: '800' },
+  guardadaFila: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1, borderRadius: 10, padding: 11, marginTop: 9,
+  },
+  guardadaAbierta: { borderColor: TEAL, borderWidth: 1.5 },
+  guardadaNom: { fontSize: 13.5, fontWeight: '800' },
+  guardadaSub: { fontSize: 11.5, marginTop: 2 },
+  guardadaAqui: { fontSize: 11, fontWeight: '800', color: TEAL },
+  editandoAviso: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#dbeafe', borderWidth: 1, borderColor: '#93c5fd',
+    borderRadius: 11, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14,
+  },
+  editandoTxt: { flex: 1, fontSize: 12, fontWeight: '700', color: '#1d4ed8', lineHeight: 16 },
+  editandoNueva: { fontSize: 12, fontWeight: '800', color: '#1d4ed8', textDecorationLine: 'underline' },
   seccion: { fontSize: 13.5, fontWeight: '800', letterSpacing: 0.4, marginBottom: 12 },
   campo: { marginBottom: 10 },
   lbl: { fontSize: 11.5, fontWeight: '700', marginBottom: 5 },
