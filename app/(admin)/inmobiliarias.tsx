@@ -36,6 +36,7 @@ export default function AdminInmobiliarias() {
   const c = useColors()
   const { id: idResaltado } = useLocalSearchParams<{ id?: string }>()
   const [lista, setLista] = useState<Inmobiliaria[]>([])
+  const [conteos, setConteos] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<Inmobiliaria | null>(null)
@@ -72,11 +73,17 @@ export default function AdminInmobiliarias() {
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
     yaCargoRef.current = true
-    const { data } = await supabase
-      .from('inmobiliarias')
-      .select('*')
-      .order('nombre')
+    const [{ data }, { data: props }] = await Promise.all([
+      supabase.from('inmobiliarias').select('*').order('nombre'),
+      supabase.from('propiedades').select('inmobiliaria_id').not('inmobiliaria_id', 'is', null),
+    ])
     setLista(data ?? [])
+    const mapa: Record<string, number> = {}
+    for (const p of props ?? []) {
+      if (!p.inmobiliaria_id) continue
+      mapa[p.inmobiliaria_id] = (mapa[p.inmobiliaria_id] ?? 0) + 1
+    }
+    setConteos(mapa)
     setLoading(false)
   }
 
@@ -178,6 +185,7 @@ export default function AdminInmobiliarias() {
                   {inm.exclusiva && (
                     <Text style={s.exclusivaBadge}>Exclusiva Plus</Text>
                   )}
+                  <Text style={s.propiedadesBadge}>🏠 {conteos[inm.id] ?? 0}</Text>
                 </View>
                 {inm.asesor_referencia && <Text style={[s.cardMeta, { color: c.textMute }]}>👤 {inm.asesor_referencia}</Text>}
                 {inm.telefono && <Text style={[s.cardMeta, { color: c.textMute }]}>📞 {inm.telefono}</Text>}
@@ -324,6 +332,10 @@ const s = StyleSheet.create({
   exclusivaBadge: {
     fontSize: 10, fontWeight: '700', color: '#c0392b',
     backgroundColor: '#fdecea', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
+  },
+  propiedadesBadge: {
+    fontSize: 10, fontWeight: '700', color: '#1a6470',
+    backgroundColor: '#f0f8fa', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
   },
   exclusivaRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,

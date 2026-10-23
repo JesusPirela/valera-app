@@ -241,7 +241,7 @@ export default function TiendaCompras() {
       <View style={[s.filtroWrap, { backgroundColor: c.card, borderBottomColor: c.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtroScroll} contentContainerStyle={s.filtroRow}>
           {([
-            ['todas',     'Todas'],
+            ['todas',     'Todas (tienda)'],
             ['pendiente', `⏳ Pendientes${pendientes > 0 ? ` (${pendientes})` : ''}`],
             ['entregado', '✅ Entregadas'],
             ['rechazado', '❌ Rechazadas'],

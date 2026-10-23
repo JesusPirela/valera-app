@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, createElement } from 'react'
+import { useState, useCallback, useRef, useEffect, createElement } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Platform, Alert,
@@ -437,6 +438,26 @@ export default function Reportes() {
   const [schedEmails, setSchedEmails]   = useState('valerarealestateqro@gmail.com')
   const [schedPeriodo, setSchedPeriodo] = useState<Periodo>('7dias')
 
+  // Destinatarios usados antes — para no tener que reescribir el correo cada
+  // vez que se manda o se programa un reporte.
+  const DESTINATARIOS_KEY = 'reportes_destinatarios_recientes'
+  const [recientes, setRecientes] = useState<string[]>([])
+  useEffect(() => {
+    AsyncStorage.getItem(DESTINATARIOS_KEY)
+      .then(v => { if (v) setRecientes(JSON.parse(v)) })
+      .catch(() => {})
+  }, [])
+  async function recordarDestinatarios(lista: string[]) {
+    const combinados = [...lista, ...recientes].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 8)
+    setRecientes(combinados)
+    try { await AsyncStorage.setItem(DESTINATARIOS_KEY, JSON.stringify(combinados)) } catch {}
+  }
+  function agregarDestinatario(email: string, actual: string, setActual: (v: string) => void) {
+    const yaEsta = actual.split(/[,;\n]/).map(e => e.trim()).includes(email)
+    if (yaEsta) return
+    setActual(actual.trim() ? `${actual.trim()}, ${email}` : email)
+  }
+
   const yaCargoRef = useRef(false)
 
   useFocusEffect(useCallback(() => { setPeriodo('24h'); cargar('24h'); cargarProgramados() }, []))
@@ -500,6 +521,7 @@ export default function Reportes() {
       if (error) throw error
       if ((data as any)?.error) throw new Error((data as any).error)
       setModalEmail(false)
+      recordarDestinatarios(destinos)
       alerta(`✅ Reporte enviado a ${destinos.length} destinatario${destinos.length > 1 ? 's' : ''}`)
     } catch (err: any) {
       alerta('Error al enviar: ' + (err.message ?? 'Intenta de nuevo'))
@@ -531,6 +553,7 @@ export default function Reportes() {
     if (error) { alerta('Error al guardar: ' + error.message); return }
     await cargarProgramados()
     setModalSchedule(false)
+    recordarDestinatarios(destinos)
     alerta(`✅ Programación guardada · ${FREQ_LABELS[schedFreq]} a las ${hora} · Reporte ${PERIODO_LABELS[schedPeriodo]}`)
   }
 
@@ -766,6 +789,15 @@ export default function Reportes() {
                   autoCapitalize="none"
                   multiline
                 />
+                {recientes.length > 0 && (
+                  <View style={s.recientesRow}>
+                    {recientes.map(r => (
+                      <TouchableOpacity key={r} style={s.recienteChip} onPress={() => agregarDestinatario(r, emails, setEmails)}>
+                        <Text style={s.recienteChipTxt} numberOfLines={1}>{r}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
                 <Text style={[s.modalHint, { color: col.textMute }]}>
                   Período: {rangoLabel}
                 </Text>
@@ -875,6 +907,15 @@ export default function Reportes() {
               autoCapitalize="none"
               multiline
             />
+            {recientes.length > 0 && (
+              <View style={s.recientesRow}>
+                {recientes.map(r => (
+                  <TouchableOpacity key={r} style={s.recienteChip} onPress={() => agregarDestinatario(r, schedEmails, setSchedEmails)}>
+                    <Text style={s.recienteChipTxt} numberOfLines={1}>{r}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             <TouchableOpacity style={s.modalBtn} onPress={guardarProgramado}>
               <Text style={s.modalBtnTxt}>💾 Guardar programación</Text>
@@ -1003,6 +1044,9 @@ const s = StyleSheet.create({
   fieldLabel:   { fontSize: 12, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase' },
   modalInput:   { borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, minHeight: 48, textAlignVertical: 'top', marginBottom: 4 },
   modalHint:    { fontSize: 11, marginBottom: 14 },
+  recientesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  recienteChip: { backgroundColor: '#1a647022', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, maxWidth: 220 },
+  recienteChipTxt: { fontSize: 11, color: TEAL, fontWeight: '600' },
   modalBtn:     { backgroundColor: TEAL, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
   modalBtnTxt:  { color: '#fff', fontWeight: '800', fontSize: 15 },
   modalCancelar:{ alignItems: 'center', paddingVertical: 14 },

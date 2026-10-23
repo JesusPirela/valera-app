@@ -83,8 +83,19 @@ export default function LeadsPool() {
   // Eliminando
   const [eliminando, setEliminando] = useState<string | null>(null)
 
-  // Asignación retroactiva
+  // Asignación retroactiva — el botón solo se muestra si de verdad hay algo
+  // pendiente, para no dejarlo siempre visible sin que haga nada.
   const [asignandoRetro, setAsignandoRetro] = useState(false)
+  const [pendientesRetro, setPendientesRetro] = useState(0)
+
+  async function cargarPendientesRetro() {
+    const { count } = await supabase
+      .from('store_compras')
+      .select('id, store_items!inner(tipo)', { count: 'exact', head: true })
+      .eq('estado', 'pendiente')
+      .in('store_items.tipo', ['lead_premium', 'lead_meta'])
+    setPendientesRetro(count ?? 0)
+  }
 
   async function asignarPendientes() {
     setAsignandoRetro(true)
@@ -101,6 +112,7 @@ export default function LeadsPool() {
     }
     cargarPool()
     cargarHistorial()
+    cargarPendientesRetro()
   }
 
   async function cargarPool() {
@@ -120,8 +132,9 @@ export default function LeadsPool() {
   useFocusEffect(useCallback(() => {
     cargarPool()
     cargarHistorial()
+    cargarPendientesRetro()
   }, []))
-  const { refreshControl } = usePullRefresh(async () => { await Promise.all([cargarPool(), cargarHistorial()]) })
+  const { refreshControl } = usePullRefresh(async () => { await Promise.all([cargarPool(), cargarHistorial(), cargarPendientesRetro()]) })
 
   async function agregar() {
     if (!fTelefono.trim()) { alerta('El teléfono es obligatorio.'); return }
@@ -238,23 +251,25 @@ export default function LeadsPool() {
             </TouchableOpacity>
           </View>
 
-          {/* Asignar compras pendientes retroactivas */}
-          <View style={[s.card, { backgroundColor: '#fff3e0', borderColor: '#ffe0b2' }]}>
-            <Text style={[s.seccion, { color: '#e65100' }]}>Compras sin asignar (antes de auto-asignación)</Text>
-            <Text style={{ color: '#bf360c', fontSize: 13, lineHeight: 18 }}>
-              Si alguien compró Lead Premium o Lead Meta Ads antes de implementar la asignación automática,
-              su compra quedó pendiente. Toca el botón para asignarles un lead del pool ahora.
-            </Text>
-            <TouchableOpacity
-              style={[s.btnAgregar, { backgroundColor: '#e65100' }, asignandoRetro && { opacity: 0.6 }]}
-              onPress={asignarPendientes}
-              disabled={asignandoRetro}
-            >
-              {asignandoRetro
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={s.btnAgregarText}>🔄 Asignar compras pendientes</Text>}
-            </TouchableOpacity>
-          </View>
+          {/* Asignar compras pendientes retroactivas — solo si hay alguna */}
+          {pendientesRetro > 0 && (
+            <View style={[s.card, { backgroundColor: '#fff3e0', borderColor: '#ffe0b2' }]}>
+              <Text style={[s.seccion, { color: '#e65100' }]}>Compras sin asignar (antes de auto-asignación)</Text>
+              <Text style={{ color: '#bf360c', fontSize: 13, lineHeight: 18 }}>
+                Hay {pendientesRetro} compra(s) de Lead Premium o Lead Meta Ads de antes de la asignación automática,
+                sin lead asignado todavía. Toca el botón para asignarles uno del pool ahora.
+              </Text>
+              <TouchableOpacity
+                style={[s.btnAgregar, { backgroundColor: '#e65100' }, asignandoRetro && { opacity: 0.6 }]}
+                onPress={asignarPendientes}
+                disabled={asignandoRetro}
+              >
+                {asignandoRetro
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={s.btnAgregarText}>🔄 Asignar compras pendientes</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Lista pool */}
           <Text style={[s.seccion, { color: c.text, marginTop: 8, marginHorizontal: 16 }]}>

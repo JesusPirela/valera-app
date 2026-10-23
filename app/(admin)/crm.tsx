@@ -26,6 +26,7 @@ type ClienteAdmin = {
   estado: string
   tipo_operacion: string | null
   created_at: string
+  proximo_contacto: string | null
   responsable_id: string
   prospectador_nombre: string
   prospectador_email: string
@@ -46,6 +47,14 @@ const ESTADOS_LISTA = ORDEN_ESTADOS
 
 function estadoInfo(estado: string) {
   return ESTADOS[estado] ?? { label: estado, color: '#555', bg: '#eee' }
+}
+
+// Vencido = ya pasó la fecha de próximo contacto y el cliente sigue "vivo"
+// (no tiene caso avisar de uno ya cerrado o descartado).
+function esVencido(cl: { proximo_contacto: string | null; estado: string }) {
+  if (!cl.proximo_contacto) return false
+  if (cl.estado === 'descartado' || cl.estado === 'compro' || cl.estado === 'compro_externo') return false
+  return cl.proximo_contacto.slice(0, 10) < new Date().toISOString().slice(0, 10)
 }
 
 function tiempoRelativo(fechaISO: string) {
@@ -82,6 +91,7 @@ export default function AdminCRM() {
   const [visiblesPorSeccion, setVisiblesPorSeccion] = useState<Record<string, number>>({})
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [operacionFiltro, setOperacionFiltro] = useState<'venta' | 'renta' | null>(null)
+  const [vencidosFiltro, setVencidosFiltro] = useState(false)
   const [miId, setMiId] = useState<string | null>(null)
   const cargadoUnaVez = useRef(false)
   const colapsoInicialAplicado = useRef(false)
@@ -121,7 +131,7 @@ export default function AdminCRM() {
     for (let desde = 0; ; desde += PAGE) {
       const { data, error } = await supabase
         .from('clientes')
-        .select('id, nombre, telefono, email, empresa, estado, tipo_operacion, created_at, responsable_id')
+        .select('id, nombre, telefono, email, empresa, estado, tipo_operacion, created_at, proximo_contacto, responsable_id')
         .is('eliminado_at', null)
         .order('updated_at', { ascending: false })
         .range(desde, desde + PAGE - 1)
@@ -143,7 +153,7 @@ export default function AdminCRM() {
     const clientesNorm: ClienteAdmin[] = clientesData.map((c: any) => ({
       id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email,
       empresa: c.empresa, estado: c.estado, tipo_operacion: c.tipo_operacion ?? null,
-      created_at: c.created_at, responsable_id: c.responsable_id,
+      created_at: c.created_at, proximo_contacto: c.proximo_contacto ?? null, responsable_id: c.responsable_id,
       prospectador_nombre: mapaPerfiles.get(c.responsable_id) ?? 'Sin asignar',
       prospectador_email: '',
     }))
@@ -316,7 +326,7 @@ export default function AdminCRM() {
     cargarClientes()
   }
 
-  const { todosClientes, totalGlobal, totalPipeline, enProceso, comprados, conteosPorEstado } = useMemo(() => {
+  const { todosClientes, totalGlobal, totalPipeline, enProceso, comprados, totalVencidos, conteosPorEstado } = useMemo(() => {
     // .filter(Boolean): misma defensa que en el CRM del prospectador — un hueco
     // en los datos tumbaba la pantalla al filtrar por tipo_operacion.
     const todos = secciones.flatMap((s) => s.data).filter((c): c is ClienteAdmin => !!c)
@@ -328,6 +338,7 @@ export default function AdminCRM() {
       totalPipeline: pipeline.length,
       enProceso: pipeline.filter(c => c.estado === 'seguimiento_cierre' || c.estado === 'cita_agendada').length,
       comprados: pipeline.filter(c => c.estado === 'compro').length,
+      totalVencidos: pipeline.filter(esVencido).length,
       conteosPorEstado: ORDEN_ESTADOS.reduce<Record<string, number>>((acc, e) => {
         acc[e] = pipeline.filter((c) => c.estado === e).length
         return acc
@@ -348,10 +359,11 @@ export default function AdminCRM() {
       }
       if (estadoFiltro) clientes = clientes.filter((c) => c.estado === estadoFiltro)
       if (operacionFiltro) clientes = clientes.filter((c) => c.tipo_operacion === operacionFiltro)
+      if (vencidosFiltro) clientes = clientes.filter(esVencido)
       return { ...sec, data: clientes }
     })
     .filter((sec) => sec.data.length > 0),
-  [secciones, busqueda, estadoFiltro, operacionFiltro])
+  [secciones, busqueda, estadoFiltro, operacionFiltro, vencidosFiltro])
 
   // ── Importar CSV ─────────────────────────────────────────────
   const [importModal, setImportModal]   = useState(false)
@@ -443,6 +455,16 @@ export default function AdminCRM() {
             </TouchableOpacity>
           )
         })}
+        {totalVencidos > 0 && (
+          <TouchableOpacity
+            style={[styles.operacionTab, vencidosFiltro && { backgroundColor: '#fdecea' }]}
+            onPress={() => setVencidosFiltro(v => !v)}
+          >
+            <Text style={[styles.operacionTabText, { color: '#c0392b' }]}>
+              ⏰ Vencidos ({totalVencidos})
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Pipeline chips */}
@@ -635,6 +657,12 @@ export default function AdminCRM() {
                             <Ionicons name="time-outline" size={11} color="#b0bfc2" />
                             <Text style={styles.metaText}>{tiempoRelativo(item.created_at)}</Text>
                           </View>
+                          {esVencido(item) && (
+                            <View style={[styles.metaItem, { backgroundColor: '#fdecea', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }]}>
+                              <Ionicons name="alert-circle" size={11} color="#c0392b" />
+                              <Text style={[styles.metaText, { color: '#c0392b', fontWeight: '700' }]}>Seguimiento vencido</Text>
+                            </View>
+                          )}
                         </View>
 
                         <View style={styles.cardActions}>

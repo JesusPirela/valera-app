@@ -70,7 +70,6 @@ export default function TiendaItems() {
   const [editando, setEditando]   = useState<StoreItem | null>(null)
   const [form, setForm]           = useState<Omit<StoreItem, 'id'>>(ITEM_VACIO)
   const [guardando, setGuardando] = useState(false)
-  const [aplicando, setAplicando] = useState(false)
 
   // Configuración de ruleta
   const [ruletaCfg, setRuletaCfg]       = useState<RuletaCfg | null>(null)
@@ -204,56 +203,6 @@ export default function TiendaItems() {
     if (!error) setItems(prev => prev.map(x => x.id === item.id ? { ...x, disponible: !x.disponible } : x))
   }
 
-  async function aplicarConfigBase() {
-    confirmar(
-      '¿Aplicar configuración estándar de la tienda?\n\n• Ocultar: Boost, Sorteo, Merch\n• Actualizar: Comisión extra → 5%\n• Agregar: Campaña 7 días y Libro',
-      async () => {
-        setAplicando(true)
-        try {
-          // 1. Ocultar ítems que ya no se ofrecen
-          await supabase.from('store_items')
-            .update({ disponible: false })
-            .in('tipo', ['boost', 'sorteo', 'merch'])
-
-          // 2. Actualizar comisión extra
-          await supabase.from('store_items')
-            .update({
-              descripcion: 'Bono de comisión adicional del 5% sobre tu comisión en los próximos 14 días',
-              icono: '💸',
-            })
-            .eq('tipo', 'comision_extra')
-
-          // 3. Agregar campaña si no existe
-          const existeCampana = items.some(i => i.tipo === 'campana')
-          if (!existeCampana) {
-            await supabase.from('store_items').insert({
-              nombre: 'Campaña personalizada 7 días',
-              descripcion: 'Activa una campaña de marketing personalizada con tus clientes pagados durante 7 días',
-              costo_coins: 5000, tipo: 'campana', icono: '📣', orden: 8, disponible: true,
-            })
-          }
-
-          // 4. Agregar libro si no existe
-          const existeLibro = items.some(i => i.tipo === 'libro')
-          if (!existeLibro) {
-            await supabase.from('store_items').insert({
-              nombre: 'Libro a tu elección',
-              descripcion: 'Elige un libro de ventas, desarrollo personal o bienes raíces — nosotros te lo conseguimos',
-              costo_coins: 5000, tipo: 'libro', icono: '📖', orden: 9, disponible: true,
-            })
-          }
-
-          await cargar()
-          alerta('¡Configuración aplicada correctamente!')
-        } catch (e: any) {
-          alerta('Error: ' + e.message)
-        } finally {
-          setAplicando(false)
-        }
-      }
-    )
-  }
-
   async function eliminar(item: StoreItem) {
     confirmar(`¿Eliminar "${item.nombre}"? Esta acción no se puede deshacer.`, async () => {
       const { error } = await supabase.from('store_items').delete().eq('id', item.id)
@@ -276,16 +225,6 @@ export default function TiendaItems() {
           <Text style={s.headerSub}>{items.length} artículos · {items.filter(i => i.disponible).length} disponibles</Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity
-            style={[s.btnBase, aplicando && { opacity: 0.6 }]}
-            onPress={aplicarConfigBase}
-            disabled={aplicando}
-          >
-            {aplicando
-              ? <ActivityIndicator color="#1a6470" size="small" />
-              : <Text style={s.btnBaseTxt}>⚙️ Config</Text>
-            }
-          </TouchableOpacity>
           <TouchableOpacity style={s.btnRuleta} onPress={abrirRuletaModal}>
             <Text style={s.btnRuletaTxt}>🎰 Ruleta</Text>
           </TouchableOpacity>

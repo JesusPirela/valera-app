@@ -105,6 +105,23 @@ export default function UnoAUno() {
 
   const nombreDe = useCallback((id: string) => personas.find(p => p.id === id)?.nombre ?? 'Alguien', [personas])
 
+  // Fecha del último 1-a-1 guardado con cada persona (sin importar la pestaña
+  // en la que estés) — para priorizar en el selector a quien lleva más tiempo
+  // sin uno, en vez de tener que acordarte solo o revisar el historial.
+  const [ultimoPorPersona, setUltimoPorPersona] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (!miId) return
+    supabase.from('uno_a_uno_sesiones').select('prospectador_id, created_at')
+      .eq('owner_id', miId).order('created_at', { ascending: false })
+      .then(({ data }) => {
+        const mapa: Record<string, string> = {}
+        for (const row of (data ?? []) as { prospectador_id: string; created_at: string }[]) {
+          if (!mapa[row.prospectador_id]) mapa[row.prospectador_id] = row.created_at
+        }
+        setUltimoPorPersona(mapa)
+      })
+  }, [miId])
+
   useFocusEffect(useCallback(() => {
     getUsuarioActual().then(({ data: { user } }) => { if (user) setMiId(user.id) })
     supabase.from('profiles').select('id, nombre, role').eq('activo', true).order('nombre')
@@ -202,6 +219,7 @@ export default function UnoAUno() {
       return
     }
     setSeg(0); setCorriendo(false); setProblema(''); setCompromiso('')
+    setUltimoPorPersona(prev => ({ ...prev, [sel.id]: new Date().toISOString() }))
     const msg = `Charla con ${sel.nombre} guardada en el historial.`
     Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Guardado', msg)
   }
@@ -214,8 +232,25 @@ export default function UnoAUno() {
 
   const personasFiltradas = useMemo(() => {
     const q = busca.trim().toLowerCase()
-    return q ? personas.filter(p => p.nombre.toLowerCase().includes(q)) : personas
-  }, [busca, personas])
+    const base = q ? personas.filter(p => p.nombre.toLowerCase().includes(q)) : personas
+    // Primero quien nunca ha tenido 1-a-1, luego de más días a menos días desde
+    // el último — así se prioriza a quien más lo necesita en vez de scrollear
+    // la lista completa buscando a quién le toca.
+    return [...base].sort((a, b) => {
+      const fa = ultimoPorPersona[a.id], fb = ultimoPorPersona[b.id]
+      if (!fa && !fb) return a.nombre.localeCompare(b.nombre)
+      if (!fa) return -1
+      if (!fb) return 1
+      return new Date(fa).getTime() - new Date(fb).getTime()
+    })
+  }, [busca, personas, ultimoPorPersona])
+
+  function diasDesde(iso: string): string {
+    const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+    if (d <= 0) return 'Hoy'
+    if (d === 1) return 'Hace 1 día'
+    return `Hace ${d} días`
+  }
 
   const inp = [s.input, { color: c.text, borderColor: c.inputBorder, backgroundColor: c.input }]
 
@@ -448,12 +483,21 @@ export default function UnoAUno() {
             <Text style={[s.h2, { color: c.text, marginTop: 0 }]}>{modoCopiar ? 'Copiar los puntos a…' : '¿Con quién es el 1 a 1?'}</Text>
             <TextInput style={inp} value={busca} onChangeText={setBusca} placeholder="Buscar por nombre…" placeholderTextColor={c.placeholder} autoFocus />
             <ScrollView style={{ maxHeight: 340, marginTop: 8 }} keyboardShouldPersistTaps="handled">
-              {personasFiltradas.map(p => (
-                <TouchableOpacity key={p.id} style={s.personaItem} onPress={() => onElegirPersona(p)}>
-                  <Text style={{ color: c.text, fontSize: 14.5 }} numberOfLines={1}>{p.nombre}</Text>
-                  <Text style={{ color: c.textMute, fontSize: 11 }}>{p.role.replace('prospectador_plus', 'plus')}</Text>
-                </TouchableOpacity>
-              ))}
+              {personasFiltradas.map(p => {
+                const ultimo = ultimoPorPersona[p.id]
+                const diasSinVer = ultimo ? Math.floor((Date.now() - new Date(ultimo).getTime()) / 86400000) : null
+                return (
+                  <TouchableOpacity key={p.id} style={s.personaItem} onPress={() => onElegirPersona(p)}>
+                    <Text style={{ color: c.text, fontSize: 14.5, flex: 1 }} numberOfLines={1}>{p.nombre}</Text>
+                    {!modoCopiar && (
+                      <Text style={{ color: !ultimo || (diasSinVer ?? 0) >= 14 ? '#c0392b' : c.textMute, fontSize: 11, fontWeight: !ultimo || (diasSinVer ?? 0) >= 14 ? '800' : '400' }}>
+                        {ultimo ? diasDesde(ultimo) : 'Nunca'}
+                      </Text>
+                    )}
+                    <Text style={{ color: c.textMute, fontSize: 11 }}>{p.role.replace('prospectador_plus', 'plus')}</Text>
+                  </TouchableOpacity>
+                )
+              })}
               {personasFiltradas.length === 0 && <Text style={{ color: c.textMute, padding: 12 }}>Sin resultados.</Text>}
             </ScrollView>
           </TouchableOpacity>
