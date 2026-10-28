@@ -52,6 +52,9 @@ type Cita = {
   creada_por?: string | null
   created_at: string
   updated_at: string
+  /** Cuándo se repasó en el tablero. Pone a cero el aviso de "sin movimiento"
+   *  sin tocar updated_at, que es el historial de verdad. */
+  revisada_at?: string | null
   clientes: {
     nombre: string; telefono: string; tipo_operacion: string | null; estado: string
     // El resto del perfil, para poder copiarlo sin abrir la ficha.
@@ -1118,6 +1121,15 @@ function MensajeRapidoBtn({
   )
 }
 
+// Las citas que siguen vivas: las que pueden quedarse paradas y avisar de
+// ello. Vive aqui, fuera de la tarjeta, porque tambien la usa el boton de
+// repasar el tablero, y dos copias se separan en cuanto alguien toque una.
+const ESTADOS_ACTIVOS: EstadoCita[] = [
+  'por_contactar', 'primer_contacto', 'buscando_opciones',
+  'en_coordinacion', 'coordinada', 'reagendada', 'no_responde_asesor',
+  'recaudando_documentacion', 'aprobando_credito',
+]
+
 // ─── KanbanCard ───────────────────────────────────────────────────────────────
 
 function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging, onRetro }: {
@@ -1135,12 +1147,13 @@ function KanbanCard({ cita, onPress, onLongPress, onDragStart, isDragging, onRet
   const esUrgente = cita.estado === 'coordinada' && cita.fecha_cita &&
     new Date(cita.fecha_cita).getTime() - ahora < 48 * 3600 * 1000 &&
     new Date(cita.fecha_cita).getTime() > ahora
-  const ESTADOS_ACTIVOS: EstadoCita[] = [
-    'por_contactar', 'primer_contacto', 'buscando_opciones',
-    'en_coordinacion', 'coordinada', 'reagendada', 'no_responde_asesor',
-    'recaudando_documentacion', 'aprobando_credito',
-  ]
-  const diasSinCambios = Math.floor((ahora - new Date(cita.updated_at).getTime()) / 86400000)
+  // Se cuenta desde el último movimiento O desde el último repaso, lo que sea
+  // más reciente: repasar el tablero también cuenta como atenderlo.
+  const ultimoToque = Math.max(
+    new Date(cita.updated_at).getTime(),
+    cita.revisada_at ? new Date(cita.revisada_at).getTime() : 0,
+  )
+  const diasSinCambios = Math.floor((ahora - ultimoToque) / 86400000)
   const esInerte = ESTADOS_ACTIVOS.includes(cita.estado) && diasSinCambios >= 3
   const inerciaCritica = esInerte && diasSinCambios >= 7
   const dia    = formatDia(cita.fecha_cita)
@@ -1536,6 +1549,7 @@ export default function CoordinacionCitas() {
   const [citaEditando, setCitaEditando] = useState<Cita | null>(null)
   const [citaMoviendo, setCitaMoviendo] = useState<Cita | null>(null)
   const [modalNueva, setModalNueva]     = useState(false)
+  const [refrescando, setRefrescando]   = useState(false)
   const [busqueda, setBusqueda]             = useState('')
   const [filtroAdmin, setFiltroAdmin]       = useState<string | null>(null)
   const [filtroOperacion, setFiltroOperacion] = useState<'venta' | 'renta' | null>(null)
@@ -1572,7 +1586,7 @@ export default function CoordinacionCitas() {
       const [citasRes, retrosRes] = await Promise.all([
         supabase
           .from('citas_coordinacion')
-          .select(`
+          .select(`revisada_at,
             *,
             clientes (
               nombre, telefono, tipo_operacion, estado,
@@ -1600,6 +1614,43 @@ export default function CoordinacionCitas() {
       // Red caída / sesión: no dejar el spinner "Cargando pipeline" colgado.
     } finally {
       if (mountedRef.current) setLoading(false)
+    }
+  }
+
+  /**
+   * Pone a cero el aviso de "Nd sin movimiento" de todas las citas activas.
+   *
+   * No toca updated_at a propósito: ese campo alimenta el KPI de canceladas
+   * del mes, el "Actualizada hace X" de cada tarjeta y el orden del tablero.
+   * Resetearlo haría que las 50 canceladas parecieran de este mes.
+   */
+  async function repasarTablero() {
+    const cuantas = citas.filter(c => ESTADOS_ACTIVOS.includes(c.estado)).length
+    const msg = `Se va a marcar como repasadas las ${cuantas} citas activas.
+
+` +
+      'El aviso de "sin movimiento" vuelve a cero y empieza a contar desde hoy. ' +
+      'No se cambia ninguna cita ni su historial.'
+    const seguir = Platform.OS === 'web'
+      ? window.confirm(msg)
+      : await new Promise<boolean>(r => Alert.alert('Marcar como repasadas', msg, [
+          { text: 'Cancelar', style: 'cancel', onPress: () => r(false) },
+          { text: 'Repasar', onPress: () => r(true) },
+        ]))
+    if (!seguir) return
+
+    setRefrescando(true)
+    try {
+      const { data, error } = await supabase.rpc('refrescar_citas')
+      if (error) throw error
+      const d: any = data
+      if (!d?.ok) throw new Error(d?.error ?? 'No se pudo.')
+      await cargar()
+      alerta(`Listo: ${d.citas} citas marcadas como repasadas.`)
+    } catch (e: any) {
+      alerta(e?.message ?? 'No se pudo repasar el tablero.')
+    } finally {
+      setRefrescando(false)
     }
   }
 
@@ -1867,6 +1918,20 @@ export default function CoordinacionCitas() {
               onPress={() => router.push('/(prospectador)/citas-asesores')}>
               <Ionicons name="people-outline" size={17} color="#1a6470" />
               {Platform.OS === 'web' && <Text style={{ color: '#1a6470', fontWeight: '700', fontSize: 12 }}>Asesores</Text>}
+            </TouchableOpacity>
+          )}
+          {!vistaAsesor && (
+            <TouchableOpacity
+              style={[s.headerBtn, refrescando && { opacity: 0.6 }]}
+              onPress={repasarTablero}
+              disabled={refrescando}
+            >
+              {refrescando
+                ? <ActivityIndicator size="small" color="#1a6470" />
+                : <Ionicons name="refresh-outline" size={17} color="#1a6470" />}
+              {Platform.OS === 'web' && (
+                <Text style={{ color: '#1a6470', fontWeight: '700', fontSize: 12 }}>Repasadas</Text>
+              )}
             </TouchableOpacity>
           )}
           <TouchableOpacity style={[s.headerBtn, { backgroundColor: '#1e3a5f', borderColor: '#1e3a5f' }]}
