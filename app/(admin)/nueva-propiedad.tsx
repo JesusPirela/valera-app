@@ -460,7 +460,10 @@ export default function NuevaPropiedad() {
       // la validacion de arriba, asi que aqui podia llegar la pagina entera:
       // fue como dos propiedades acabaron con 56,000 y 82,000 caracteres de
       // HTML guardados donde va el link.
-      setUrlOrigen(/^https?:\/\//i.test(url) && url.length <= 500 ? url : '')
+      // Si se importó pegando el código, el campo del link va vacío; entonces
+      // se usa el que venga dentro del propio anuncio.
+      const linkEscrito = /^https?:\/\//i.test(url) && url.length <= 500 ? url : ''
+      setUrlOrigen(linkEscrito || (data as any)?.urlOriginal || '')
       const d = data as any
 
       // Vinte: múltiples modelos — mostrar picker, aplicar el primero por defecto

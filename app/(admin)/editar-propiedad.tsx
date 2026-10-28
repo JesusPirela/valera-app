@@ -538,7 +538,16 @@ export default function EditarPropiedad() {
       if ((data as any)?.error) throw new Error((data as any).error)
       setMostrarPegar(false)
 
-      setUrlOrigen(url)
+      // Dos cosas aquí:
+      //
+      //  · Sólo si es un link de VERDAD. Antes se guardaba el campo tal cual,
+      //    y por el flujo de "pegar el código" llegó a quedar la página entera
+      //    donde va el link (en nueva-propiedad pasó con dos propiedades, de
+      //    56,000 y 82,000 caracteres).
+      //  · Si se importó pegando el código, el campo del link va vacío;
+      //    entonces se usa el que venga dentro del propio anuncio.
+      const linkEscrito = /^https?:\/\//i.test(url) && url.length <= 500 ? url : ''
+      setUrlOrigen(linkEscrito || (data as any)?.urlOriginal || '')
       const d = data as any
 
       // Vinte: múltiples modelos — mostrar picker, aplicar el primero por defecto

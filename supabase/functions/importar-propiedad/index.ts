@@ -19,6 +19,34 @@ function getMeta(html: string, prop: string): string {
   return ''
 }
 
+/**
+ * El link del anuncio, sacado del propio HTML.
+ *
+ * Cuando se importa pegando el código en vez del link, no hay nada que
+ * guardar como origen: la propiedad queda sin saber de dónde salió, y meses
+ * después nadie puede volver al anuncio a comprobar el precio o si sigue
+ * disponible.
+ *
+ * Casi todos los portales escriben su propia dirección dentro de la página
+ * (og:url para compartir en redes, canonical para los buscadores). Se lee de
+ * ahí, en orden de fiabilidad.
+ */
+function urlDelAnuncio(html: string): string {
+  const candidatos = [
+    getMeta(html, 'og:url'),
+    html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1] ?? '',
+    html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i)?.[1] ?? '',
+    getMeta(html, 'twitter:url'),
+  ]
+  for (const c of candidatos) {
+    const u = decodeEntities(String(c || '')).trim()
+    // Se descartan los relativos y los larguísimos: hubo propiedades con
+    // páginas enteras guardadas donde iba el link.
+    if (/^https?:\/\//i.test(u) && u.length <= 500) return u
+  }
+  return ''
+}
+
 function parseNum(val: unknown): number | null {
   if (val == null) return null
   const s = String(val).trim().replace(/\s/g, '')
@@ -2659,6 +2687,9 @@ serve(async (req) => {
       titulo, descripcion, precio, direccion, zona, modelo,
       recamaras, banos, mediosBanos, estacionamientos,
       m2, m2Terreno, tipo, operacion, imagenes,
+      // Para que la propiedad recuerde de dónde salió aunque se haya
+      // importado pegando el código y no el link.
+      urlOriginal: urlDelAnuncio(html),
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   } catch (err) {
