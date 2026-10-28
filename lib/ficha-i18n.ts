@@ -16,6 +16,9 @@ type Dic = {
   enVenta: string
   consultarPrecio: string
   abrirMaps: string
+  compartir: string
+  copiarLink: string
+  linkCopiado: string
   noEncontrada: string
   noDisponible: string
   recamaras: string
@@ -46,6 +49,9 @@ const DIC: Record<IdiomaFicha, Dic> = {
     enVenta: 'en Venta',
     consultarPrecio: 'Consultar precio',
     abrirMaps: '🗺️ Abrir en Maps',
+    compartir: 'Compartir',
+    copiarLink: 'Copiar link',
+    linkCopiado: '✓ Copiado',
     noEncontrada: 'Propiedad no encontrada',
     noDisponible: 'Es posible que ya no esté disponible.',
     recamaras: 'Rec.',
@@ -73,6 +79,9 @@ const DIC: Record<IdiomaFicha, Dic> = {
     enVenta: 'for Sale',
     consultarPrecio: 'Price on request',
     abrirMaps: '🗺️ Open in Maps',
+    compartir: 'Share',
+    copiarLink: 'Copy link',
+    linkCopiado: '✓ Copied',
     noEncontrada: 'Property not found',
     noDisponible: 'It may no longer be available.',
     recamaras: 'Beds',

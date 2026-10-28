@@ -699,9 +699,11 @@ export default function AdminConstructoras() {
                                   <TouchableOpacity
                                     key={m.id}
                                     style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border, marginLeft: 8 }]}
-                                    onPress={() => m.codigo
-                                      ? router.push(`/ficha/${m.codigo}`)
-                                      : router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })}
+                                    // La ficha de la app, igual que en cualquier otro
+                                    // listado. Antes abría /ficha/<código>, que es la página
+                                    // PÚBLICA del link para compartir: desde dentro de la app
+                                    // es otra pantalla y sin las acciones del asesor.
+                                    onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })}
                                     activeOpacity={0.85}
                                   >
                                     {img?.url ? (
@@ -779,9 +781,7 @@ export default function AdminConstructoras() {
                               <TouchableOpacity
                                 key={m.id}
                                 style={[styles.modeloCard, { backgroundColor: c.card, borderColor: c.border, marginLeft: 8 }]}
-                                onPress={() => m.codigo
-                                  ? router.push(`/ficha/${m.codigo}`)
-                                  : router.push({ pathname: '/(admin)/editar-propiedad', params: { id: m.id } })}
+                                onPress={() => router.push({ pathname: '/(prospectador)/detalle-propiedad', params: { id: m.id } })}
                                 activeOpacity={0.85}
                               >
                                 {img?.url ? (

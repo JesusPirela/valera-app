@@ -6,6 +6,7 @@ import {
 } from 'react-native'
 import { Image } from 'expo-image'
 import { useLocalSearchParams, router } from 'expo-router'
+import * as Clipboard from 'expo-clipboard'
 import { supabase } from '../../lib/supabase'
 import PropMapa from '../../components/PropMapa'
 import { thumb } from '../../lib/img'
@@ -55,6 +56,8 @@ export default function FichaPublica() {
   const { width } = useWindowDimensions()
   const imgW = Math.min(width, 600)
   const scrollRef = useRef<ScrollView>(null)
+  const [compartiendo, setCompartiendo] = useState(false)
+  const [copiado, setCopiado] = useState(false)
 
   useEffect(() => { if (codigo) cargar() }, [codigo])
 
@@ -144,6 +147,21 @@ export default function FichaPublica() {
   if (propiedad.m2_terreno != null)   chips.push({ icon: '🌳', val: `${propiedad.m2_terreno} ${tf(idioma, 'm2terreno')}` })
   if (propiedad.estacionamientos != null) chips.push({ icon: '🚗', val: `${propiedad.estacionamientos} ${tf(idioma, 'estacionamientos')}` })
 
+  // El link canónico de esta ficha: se arma con el código y no con la
+  // dirección del navegador, así sale igual desde la app, desde el móvil y
+  // desde donde sea que se haya abierto.
+  const linkPublico = `https://valeraapp.valerarealestate.com/ficha/${propiedad.codigo}`
+  const textoCompartir = [
+    propiedad.titulo,
+    propiedad.precio != null ? formatPrecioLang(propiedad.precio, idioma) : '',
+    '',
+    linkPublico,
+  ].filter(Boolean).join('\n')
+  const abrirFuera = (url: string) => {
+    if (Platform.OS === 'web') window.open(url, '_blank')
+    else Linking.openURL(url).catch(() => {})
+  }
+
   return (
     <View style={s.root}>
       {/* Selector de idioma: el visitante cambia ES/EN cuando quiera */}
@@ -153,6 +171,17 @@ export default function FichaPublica() {
               <Text style={s.backTxt}>‹ Volver</Text>
             </TouchableOpacity>
           : <View />}
+        <TouchableOpacity
+          style={[s.compartirBtn, compartiendo && s.compartirBtnOn]}
+          onPress={() => setCompartiendo(v => !v)}
+          activeOpacity={0.8}
+          accessibilityLabel={tf(idioma, 'compartir')}
+        >
+          <Text style={[s.compartirBtnTxt, null]}>
+            🔗 {tf(idioma, 'compartir')}
+          </Text>
+        </TouchableOpacity>
+
         <View style={s.langToggle}>
           <TouchableOpacity
             style={[s.langBtn, idioma === 'es' && s.langBtnActive]}
@@ -170,6 +199,40 @@ export default function FichaPublica() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {compartiendo && (
+        <View style={s.compPanel}>
+          <TouchableOpacity
+            style={[s.compBtn, copiado && s.compBtnOk]}
+            activeOpacity={0.85}
+            onPress={async () => {
+              try { await Clipboard.setStringAsync(linkPublico) } catch { /* se avisa igual */ }
+              setCopiado(true)
+              setTimeout(() => setCopiado(false), 2500)
+            }}
+          >
+            <Text style={[s.compBtnTxt, copiado && { color: '#15803d' }]}>
+              {copiado ? tf(idioma, 'linkCopiado') : '🔗 ' + tf(idioma, 'copiarLink')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.compBtn, s.compWa]}
+            activeOpacity={0.85}
+            onPress={() => abrirFuera(`https://wa.me/?text=${encodeURIComponent(textoCompartir)}`)}
+          >
+            <Text style={[s.compBtnTxt, { color: '#fff' }]}>WhatsApp</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.compBtn, s.compFb]}
+            activeOpacity={0.85}
+            onPress={() => abrirFuera(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(linkPublico)}`)}
+          >
+            <Text style={[s.compBtnTxt, { color: '#fff' }]}>Facebook</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
 
@@ -399,6 +462,27 @@ const s = StyleSheet.create({
   descTitle: { fontSize: 13, fontWeight: '800', color: '#1e293b' },
   descTxt: { fontSize: 14, color: '#475569', lineHeight: 22 },
 
+  // El mismo boton que el 'Copiar ficha' del listado de propiedades, para que
+  // se reconozca sin pensarlo.
+  compartirBtn: {
+    minHeight: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 12, paddingVertical: 5, backgroundColor: 'rgba(26,100,112,0.12)',
+    marginLeft: 'auto', marginRight: 8, flexShrink: 0,
+  },
+  compartirBtnOn: { backgroundColor: 'rgba(26,100,112,0.28)' },
+  compartirBtnTxt: { fontSize: 12, fontWeight: '700', color: '#1a6470' },
+  compPanel: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+    paddingHorizontal: 14, paddingBottom: 12, backgroundColor: '#fff',
+  },
+  compBtn: {
+    flexGrow: 1, minWidth: 104, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: '#d7e2ea', borderRadius: 11, paddingVertical: 12, paddingHorizontal: 12,
+  },
+  compBtnOk: { borderColor: '#86efac', backgroundColor: '#dcfce7' },
+  compBtnTxt: { fontSize: 13.5, fontWeight: '800', color: '#0a2a5e' },
+  compWa: { backgroundColor: '#25d366', borderColor: '#25d366' },
+  compFb: { backgroundColor: '#1877f2', borderColor: '#1877f2' },
   mapBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
   mapWrapper: { position: 'relative', borderRadius: 12, overflow: 'hidden' },
   mapOverlayBtn: {
