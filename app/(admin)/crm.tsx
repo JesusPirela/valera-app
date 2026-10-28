@@ -86,6 +86,13 @@ export default function AdminCRM() {
   const [busqueda, setBusqueda] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null)
   const [seccionesColapsadas, setSeccionesColapsadas] = useState<Set<string>>(new Set())
+  // Mover la cartera de una persona a otra.
+  const [moviendoDe, setMoviendoDe] = useState<{ id: string; nombre: string } | null>(null)
+  const [conteoMover, setConteoMover] = useState<{ todos: number; vivos: number } | null>(null)
+  const [destinoMover, setDestinoMover] = useState('')
+  const [soloVivos, setSoloVivos] = useState(true)
+  const [buscaDestino, setBuscaDestino] = useState('')
+  const [trabajandoMover, setTrabajandoMover] = useState(false)
   // Cuántos clientes se pintan de cada sección (ver el botón "Ver más").
   const LOTE_SECCION = 40
   const [visiblesPorSeccion, setVisiblesPorSeccion] = useState<Record<string, number>>({})
@@ -197,6 +204,55 @@ export default function AdminCRM() {
 
   useFocusEffect(useCallback(() => { cargarClientes() }, []))
   const { refreshControl } = usePullRefresh(cargarClientes)
+
+  async function abrirMover(id: string, nombre: string) {
+    setMoviendoDe({ id, nombre })
+    setDestinoMover(''); setBuscaDestino(''); setSoloVivos(true); setConteoMover(null)
+    const [{ data: conteo }, { data: gente }] = await Promise.all([
+      supabase.rpc('contar_clientes_a_mover', { p_de: id }),
+      supabase.from('profiles').select('id, nombre').neq('id', id).order('nombre'),
+    ])
+    setConteoMover((conteo as any) ?? { todos: 0, vivos: 0 })
+    setUsuariosLista(((gente ?? []) as UsuarioSimple[]).filter(u => u.nombre?.trim()))
+  }
+
+  async function confirmarMover() {
+    if (!moviendoDe || !destinoMover) return
+    const cuantos = soloVivos ? (conteoMover?.vivos ?? 0) : (conteoMover?.todos ?? 0)
+    const haciaNombre = usuariosLista.find(u => u.id === destinoMover)?.nombre ?? 'esa persona'
+    const msg = `Se van a pasar ${cuantos} clientes de ${moviendoDe.nombre} a ${haciaNombre}.
+
+` +
+      (soloVivos
+        ? 'Los cerrados y descartados se quedan donde están.'
+        : 'Se mueven TODOS, incluidos los cerrados y descartados.')
+    const seguir = Platform.OS === 'web'
+      ? window.confirm(msg)
+      : await new Promise<boolean>(r => Alert.alert('Mover clientes', msg, [
+          { text: 'Cancelar', style: 'cancel', onPress: () => r(false) },
+          { text: 'Mover', onPress: () => r(true) },
+        ]))
+    if (!seguir) return
+
+    setTrabajandoMover(true)
+    try {
+      const { data, error } = await supabase.rpc('mover_clientes', {
+        p_de: moviendoDe.id, p_a: destinoMover, p_solo_vivos: soloVivos,
+      })
+      if (error) throw error
+      const d: any = data
+      if (!d?.ok) throw new Error(d?.error ?? 'No se pudo mover.')
+      setMoviendoDe(null)
+      await cargarClientes()
+      const ok = `Listo: ${d.movidos} clientes ahora son de ${haciaNombre}.`
+      if (Platform.OS === 'web') window.alert(ok); else Alert.alert('Movidos', ok)
+    } catch (e: any) {
+      const err = e?.message ?? 'No se pudo mover.'
+      if (Platform.OS === 'web') window.alert(err); else Alert.alert('Error', err)
+    } finally {
+      setTrabajandoMover(false)
+    }
+  }
 
   async function abrirModalNuevo() {
     setNuevoNombre(''); setNuevoTelefono(''); setNuevoEmail('')
@@ -603,6 +659,20 @@ export default function AdminCRM() {
                         <Text style={styles.verCrmBtnTxt}>Ver su CRM</Text>
                       </TouchableOpacity>
                     )}
+                    {/* Mover toda su cartera. Antes sólo se podía de uno en
+                        uno entrando al cliente, y con carteras de 599 eso no
+                        se hacía nunca: los clientes se quedaban colgados de
+                        una cuenta que ya nadie abre. */}
+                    {sec.responsableId !== 'sin_asignar' && (
+                      <TouchableOpacity
+                        style={styles.moverBtn}
+                        onPress={() => abrirMover(sec.responsableId, sec.title)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="swap-horizontal-outline" size={14} color="#7c3aed" />
+                        <Text style={styles.moverBtnTxt}>Mover</Text>
+                      </TouchableOpacity>
+                    )}
                     <Ionicons name={colapsada ? 'chevron-forward' : 'chevron-down'} size={16} color="#c0cdd0" />
                   </View>
                 </TouchableOpacity>
@@ -714,6 +784,74 @@ export default function AdminCRM() {
           })}
         </ScrollView>
       )}
+
+      {/* Mover la cartera de una persona a otra */}
+      <Modal visible={!!moviendoDe} animationType="slide" transparent onRequestClose={() => setMoviendoDe(null)}>
+        <View style={mv.fondo}>
+          <View style={[mv.caja, { backgroundColor: c.card }]}>
+            <Text style={[mv.titulo, { color: c.text }]}>Mover clientes de {moviendoDe?.nombre}</Text>
+            {conteoMover === null ? (
+              <ActivityIndicator color="#7c3aed" style={{ marginVertical: 24 }} />
+            ) : (
+              <>
+                <View style={mv.opciones}>
+                  {[
+                    { v: true,  n: conteoMover.vivos, t: 'Sólo los que siguen vivos', s: 'Sin cerrados ni descartados' },
+                    { v: false, n: conteoMover.todos, t: 'Todos sus clientes',        s: 'Incluye cerrados y descartados' },
+                  ].map(o => (
+                    <TouchableOpacity
+                      key={String(o.v)}
+                      style={[mv.opcion, soloVivos === o.v && mv.opcionOn]}
+                      onPress={() => setSoloVivos(o.v)}
+                    >
+                      <View style={[mv.radio, soloVivos === o.v && mv.radioOn]}>
+                        {soloVivos === o.v && <View style={mv.radioPunto} />}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[mv.opcionTit, { color: c.text }]}>{o.t} · {o.n}</Text>
+                        <Text style={mv.opcionSub}>{o.s}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={mv.etiqueta}>¿A quién se los pasas?</Text>
+                <TextInput
+                  style={[mv.busca, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                  placeholder="Busca por nombre…" placeholderTextColor={c.placeholder}
+                  value={buscaDestino} onChangeText={setBuscaDestino}
+                />
+                <ScrollView style={{ maxHeight: 220 }}>
+                  {usuariosLista
+                    .filter(u => !buscaDestino.trim() || (u.nombre ?? '').toLowerCase().includes(buscaDestino.toLowerCase()))
+                    .map(u => (
+                      <TouchableOpacity
+                        key={u.id}
+                        style={[mv.persona, destinoMover === u.id && mv.personaOn]}
+                        onPress={() => setDestinoMover(u.id)}
+                      >
+                        <Text style={[mv.personaTxt, { color: destinoMover === u.id ? '#fff' : c.text }]}>{u.nombre}</Text>
+                      </TouchableOpacity>
+                    ))}
+                </ScrollView>
+
+                <TouchableOpacity
+                  style={[mv.btn, (!destinoMover || trabajandoMover) && { opacity: 0.5 }]}
+                  onPress={confirmarMover}
+                  disabled={!destinoMover || trabajandoMover}
+                >
+                  {trabajandoMover
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={mv.btnTxt}>Mover</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setMoviendoDe(null)}>
+                  <Text style={mv.cancelar}>Cancelar</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal nuevo cliente */}
       <Modal visible={modalNuevo} animationType="slide" transparent onRequestClose={() => setModalNuevo(false)}>
@@ -863,6 +1001,31 @@ export default function AdminCRM() {
   )
 }
 
+const mv = StyleSheet.create({
+  fondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 20 },
+  caja: { borderRadius: 16, padding: 20, maxHeight: '88%' },
+  titulo: { fontSize: 17, fontWeight: '800', marginBottom: 14 },
+  opciones: { gap: 8, marginBottom: 16 },
+  opcion: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 11, padding: 12,
+  },
+  opcionOn: { borderColor: '#7c3aed', backgroundColor: '#f5f0ff' },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#cbd5e1', alignItems: 'center', justifyContent: 'center' },
+  radioOn: { borderColor: '#7c3aed' },
+  radioPunto: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#7c3aed' },
+  opcionTit: { fontSize: 14, fontWeight: '800' },
+  opcionSub: { fontSize: 11.5, color: '#8a94a6', marginTop: 2 },
+  etiqueta: { fontSize: 12, fontWeight: '800', color: '#8a94a6', letterSpacing: 0.4, marginBottom: 7, textTransform: 'uppercase' },
+  busca: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9, fontSize: 14, marginBottom: 8 },
+  persona: { borderRadius: 9, paddingHorizontal: 12, paddingVertical: 11, marginBottom: 5, backgroundColor: '#f1f5f9' },
+  personaOn: { backgroundColor: '#7c3aed' },
+  personaTxt: { fontSize: 14, fontWeight: '700' },
+  btn: { backgroundColor: '#7c3aed', borderRadius: 11, paddingVertical: 13, alignItems: 'center', marginTop: 14 },
+  btnTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  cancelar: { textAlign: 'center', color: '#8a94a6', fontSize: 13.5, fontWeight: '700', marginTop: 12 },
+})
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f2f5f8' },
 
@@ -939,6 +1102,12 @@ const styles = StyleSheet.create({
   },
   secHeaderPropia: { borderWidth: 1.5, borderColor: '#c9a84c' },
   verCrmBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#1a6470', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6 },
+  moverBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#f5f0ff', borderWidth: 1, borderColor: '#ddd0ff',
+    borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5,
+  },
+  moverBtnTxt: { fontSize: 11.5, fontWeight: '800', color: '#7c3aed' },
   verCrmBtnTxt: { color: '#1a6470', fontWeight: '800', fontSize: 12 },
   secPropiaBadge: { backgroundColor: '#c9a84c', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   secPropiaBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
