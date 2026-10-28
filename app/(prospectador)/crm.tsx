@@ -48,6 +48,8 @@ type Cliente = {
   enviado_crm?: boolean
   responsable_id?: string | null
   donado_por_nombre?: string | null
+  /** De quién venía, si llegó al mover una cartera completa. */
+  recibido_de_nombre?: string | null
   recordatorios: { id: string; titulo: string; fecha_hora: string; completado: boolean }[]
 }
 
@@ -386,6 +388,13 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
                   </Text>
                 </View>
               ) : null}
+              {item.recibido_de_nombre ? (
+                <View style={[s.fuenteTag, { backgroundColor: darkMode ? '#2a1e05' : '#fef6e7', borderWidth: 1, borderColor: darkMode ? '#6b5110' : '#f0d79a' }]}>
+                  <Text style={[s.fuenteTagTxt, { color: darkMode ? '#e0b354' : '#8a6410' }]} numberOfLines={1}>
+                    📥 Era de {item.recibido_de_nombre}
+                  </Text>
+                </View>
+              ) : null}
               {item.donado_por_nombre ? (
                 <View style={[s.fuenteTag, { backgroundColor: darkMode ? '#0d2018' : '#eefaf5', borderWidth: 1, borderColor: darkMode ? '#1e5c47' : '#b6e3d3' }]}>
                   <Text style={[s.fuenteTagTxt, { color: darkMode ? '#5cc79f' : '#0f6b52' }]} numberOfLines={1}>
@@ -651,7 +660,7 @@ export default function CRM() {
     queryFn: async () => {
       let q = supabase
         .from('clientes')
-        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, es_lead_campania, enviado_crm, responsable_id, donado_por_nombre, recordatorios(id, titulo, fecha_hora, completado)')
+        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, es_lead_campania, enviado_crm, responsable_id, donado_por_nombre, recibido_de_nombre, recordatorios(id, titulo, fecha_hora, completado)')
         .is('eliminado_at', null)
         .order('updated_at', { ascending: false })
       if (verUid) {

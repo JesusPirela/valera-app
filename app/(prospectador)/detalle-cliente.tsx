@@ -27,6 +27,8 @@ type Cliente = {
   zona_busqueda: string | null; notas: string | null; proximo_contacto: string | null
   created_at: string; responsable_id: string
   donado_por_nombre?: string | null
+  recibido_de_nombre?: string | null
+  recibido_at?: string | null
 }
 
 type Interaccion = { id: string; tipo: string; descripcion: string; created_at: string }
@@ -652,6 +654,11 @@ export default function DetalleCliente() {
           </View>
           <Text style={styles.heroNombre}>{cliente.nombre}</Text>
           {cliente.empresa ? <Text style={styles.heroEmpresa}>{cliente.empresa}</Text> : null}
+          {cliente.recibido_de_nombre ? (
+            <View style={styles.heroDonado}>
+              <Text style={styles.heroDonadoText}>📥 Era de {cliente.recibido_de_nombre}</Text>
+            </View>
+          ) : null}
           {cliente.donado_por_nombre ? (
             <View style={styles.heroDonado}>
               <Text style={styles.heroDonadoText}>🎁 Donado por {cliente.donado_por_nombre}</Text>
