@@ -710,22 +710,6 @@ export default function DetalleCliente() {
         )}
       </View>
 
-      {/* Hoja de ruta del recorrido. Va aquí arriba, junto a las acciones del
-          cliente, porque desde el tablero de citas no se alcanza: la pestaña de
-          Citas de un gerente abre su agenda, no el tablero de coordinación.
-          De asesor para arriba; la pantalla se vuelve a bloquear sola. */}
-      {esStaffSupervision(userRole) && (
-        <TouchableOpacity
-          style={styles.hojaRutaBtn}
-          onPress={() => router.push({ pathname: '/(prospectador)/hoja-de-ruta', params: { clienteId: cliente.id } })}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="map-outline" size={17} color="#fff" />
-          <Text style={styles.hojaRutaTxt}>Hoja de ruta del recorrido</Text>
-          <Ionicons name="chevron-forward" size={15} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
-      )}
-
       {/* ── Información ─────────────────────────────────── */}
       <View style={styles.section}>
         <View style={{ marginBottom: 12 }}>
@@ -949,14 +933,38 @@ export default function DetalleCliente() {
         />
       )}
 
-      {/* ── Armar colección para este cliente ─────────── */}
-      <TouchableOpacity
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1a6470', borderRadius: 12, paddingVertical: 13, marginHorizontal: 16, marginTop: 8 }}
-        onPress={() => cliente && router.push(`/(prospectador)/colecciones?nuevoCliente=${id}&nuevoClienteNombre=${encodeURIComponent(cliente.nombre)}`)}
-      >
-        <Ionicons name="albums-outline" size={17} color="#fff" />
-        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Armar colección de propiedades</Text>
-      </TouchableOpacity>
+      {/* ── Armar algo para este cliente ───────────────── */}
+      {/* Las dos salen de lo mismo —un puñado de propiedades elegidas para una
+          persona— y antes vivían en extremos opuestos de la pantalla: la
+          colección abajo y la hoja de ruta arriba del todo. Puestas juntas se
+          elige de una vez, y de paso se ve la diferencia: una se le manda al
+          cliente, la otra se la queda el asesor. */}
+      <Text style={styles.armarTitulo}>Armar para este cliente</Text>
+      <View style={styles.armarFila}>
+        <TouchableOpacity
+          style={[styles.armarTarjeta, { backgroundColor: '#1a6470' }]}
+          onPress={() => cliente && router.push(`/(prospectador)/colecciones?nuevoCliente=${id}&nuevoClienteNombre=${encodeURIComponent(cliente.nombre)}`)}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="albums-outline" size={21} color="#fff" />
+          <Text style={styles.armarTit}>Colección</Text>
+          <Text style={styles.armarSub}>Propiedades para mandárselas</Text>
+        </TouchableOpacity>
+
+        {/* De asesor para arriba: la hoja lleva el teléfono directo del asesor
+            externo de cada propiedad. La pantalla se vuelve a bloquear sola. */}
+        {esStaffSupervision(userRole) && (
+          <TouchableOpacity
+            style={[styles.armarTarjeta, { backgroundColor: '#1e3a5f' }]}
+            onPress={() => cliente && router.push({ pathname: '/(prospectador)/hoja-de-ruta', params: { clienteId: cliente.id } })}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="map-outline" size={21} color="#fff" />
+            <Text style={styles.armarTit}>Hoja de ruta</Text>
+            <Text style={styles.armarSub}>El recorrido del día, interna</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* ── Donar al pool ────────────────────────────── */}
       <TouchableOpacity style={styles.btnDonar} onPress={abrirDonar}>
@@ -1315,12 +1323,14 @@ const styles = StyleSheet.create({
   heroStatSep: { width: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginVertical: 6 },
 
   // Action buttons
-  hojaRutaBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#1e3a5f', borderRadius: 12, paddingVertical: 13,
-    marginHorizontal: 16, marginBottom: 16,
+  armarTitulo: {
+    fontSize: 12, fontWeight: '800', color: '#8a94a6', letterSpacing: 0.6,
+    textTransform: 'uppercase', marginHorizontal: 16, marginTop: 14, marginBottom: 8,
   },
-  hojaRutaTxt: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  armarFila: { flexDirection: 'row', gap: 10, marginHorizontal: 16 },
+  armarTarjeta: { flex: 1, borderRadius: 13, padding: 14, gap: 5, minHeight: 104 },
+  armarTit: { color: '#fff', fontSize: 15, fontWeight: '800', marginTop: 3 },
+  armarSub: { color: 'rgba(255,255,255,0.78)', fontSize: 11.5, lineHeight: 15 },
   actionBar: {
     flexDirection: 'row', gap: 10,
     marginHorizontal: 16, marginTop: 16, marginBottom: 4,
