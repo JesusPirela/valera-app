@@ -1181,14 +1181,6 @@ export default function DetallePropiedad() {
   async function generarFichaPDF(lang: IdiomaFicha = 'es') {
     if (!propiedad) return
 
-    // Primero el link de la ficha (en WhatsApp se arma solo la tarjeta con
-    // foto+título+precio, como hace EasyBroker) y después el PDF — un PDF por
-    // sí solo no puede traer esa tarjeta, es exclusivo de links con vista
-    // previa. Si no gusta el resultado, basta con quitar este bloque.
-    if (Platform.OS !== 'web') {
-      await compartirLinkFicha()
-    }
-
     setGenerandoPDF(true)
     try {
       // En inglés: traducir título y descripción (DeepL, con caché). Si por lo
@@ -1445,12 +1437,20 @@ export default function DetallePropiedad() {
         .header { background-color: ${colorFicha}; text-align: center; }
         /* Foto principal ARRIBA con el precio encima: es lo que se ve en la
            miniatura del PDF (WhatsApp/descargas) sin abrirlo. */
-        /* Sin altura fija ni object-fit (html2canvas NO respeta object-fit y
-           estiraba/aplastaba la foto). Alto AUTOMÁTICO = proporción natural. */
-        .hero-top { position: relative; width: 100%; overflow: hidden; background: #12304a; }
+        /* En WEB (export con html2canvas): sin altura fija ni object-fit,
+           porque html2canvas NO lo respeta y estiraba/aplastaba la foto —
+           alto automático = proporción natural, igual que siempre.
+           En NATIVO (expo-print, WebView real que SÍ respeta object-fit): la
+           foto va con un alto fijo y recortada (cover). Sin esto, con fotos
+           muy altas el precio dorado quedaba muy abajo en la página y la
+           miniatura que arma WhatsApp en el chat (que solo asoma la parte de
+           arriba de la portada) lo dejaba fuera — se veía nomás la foto, sin
+           precio ni título. Con la portada más baja, el precio queda dentro
+           de esa franja de arriba y sí se alcanza a ver en la miniatura. */
+        .hero-top { position: relative; width: 100%; overflow: hidden; background: #12304a; ${Platform.OS === 'web' ? '' : 'height: 260px;'} }
         /* Clase propia para la FOTO (no ".hero-top img", que también pegaba al logo
            y lo agrandaba al 100% por ser más específica → salía gigante). */
-        .hero-photo { width: 100%; height: auto; display: block; }
+        .hero-photo { width: 100%; height: ${Platform.OS === 'web' ? 'auto' : '100%'}; display: block; ${Platform.OS === 'web' ? '' : 'object-fit: cover;'} }
         /* Logo PEQUEÑO en la esquina superior derecha de la foto. */
         .hero-logo-corner { position: absolute; top: 14px; right: 14px; width: 56px; height: auto; border-radius: 9px; }
         .hero-price { position: absolute; left: 0; right: 0; bottom: 0; padding: 34px 30px 16px; text-align: left;
