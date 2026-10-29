@@ -16,7 +16,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
 import { ESTADOS_CITA } from './coordinacion-citas'
-import { ESTADOS as ESTADOS_ASESOR, ORDEN as ORDEN_ASESOR } from '../(prospectador)/asesor-citas'
+import { ESTADOS_CITA_VENTA } from '../../lib/estados-cita'
 // Las opciones del selector salen del TABLERO DEL ASESOR, no del de
 // coordinación: es el vocabulario con el que la gente ya trabaja, y ahí
 // 'Reagendada' y 'Cancelada' van separadas (en el de coordinación son un solo
@@ -31,21 +31,29 @@ const OPCIONES_PAGO = [
   { label: 'Otro',      emoji: '📄' },
 ]
 
-const OPCIONES_ESTADO = [
-  ...ORDEN_ASESOR.map(k => ESTADOS_ASESOR[k]),
-  // Dos que el tablero del asesor no tiene y esta tabla sí necesita:
-  // · "Realizada": ahí el estado realizada se llama "Esperando
-  //   retroalimentación", que es correcto mientras falte la retro. Pero aquí
-  //   hay 39 citas que YA la tienen escrita; decir que la esperan sería falso.
-  // · "No responde el cliente": existe en el tablero de coordinación y había
-  //   citas con "No contesta" que no tenían dónde caer.
-  { label: 'Realizada',              color: '#0d9488', emoji: '✅' },
-  // El equipo lo llama así: cuando una cita no se dio se reporta como
-  // cancelada o por reagendar, y se decide después. Va APARTE de
-  // 'Reagendada', que es cuando ya tiene fecha nueva.
-  { label: 'Cancelada/Reagenda',     color: '#64748b', emoji: '⚫' },
-  { label: 'No responde el cliente', color: '#dc2626', emoji: '🔴' },
-]
+// La lista vive en lib/estados-cita.ts, que es la misma que usa el asistente
+// de retro y la que la base deja guardar. Antes se armaba aquí sumándole
+// estados al tablero del asesor, y así acabaron conviviendo "Realizada",
+// "realizada" y "Esperando retroalimentación" como si fueran tres cosas.
+const OPCIONES_ESTADO = ESTADOS_CITA_VENTA
+
+// Una propiedad del catálogo, como la devuelve el buscador del asistente.
+type PropBuscada = {
+  id: string
+  codigo: string | null
+  titulo: string | null
+  direccion: string | null
+  precio: number | null
+  tipo: string | null
+  operacion: string | null
+}
+
+// Lo que queda escrito en la columna "Propiedad que vieron" al elegir una.
+// Lleva el código por delante para poder encontrarla después, y el título
+// para que se entienda sin tener que ir a buscar el código.
+function etiquetaPropiedad(p: PropBuscada): string {
+  return [p.codigo, p.titulo].filter(Boolean).join(' · ') || (p.direccion ?? 'Propiedad sin datos')
+}
 import GraficasCitas from '../../components/GraficasCitas'
 
 type Fila = CitaRetro & {
@@ -58,7 +66,7 @@ type Fila = CitaRetro & {
   origen: string | null
 }
 type ColKey = keyof Fila
-type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha' | 'estado' | 'zona' | 'pago'
+type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha' | 'estado' | 'zona' | 'pago' | 'propiedad'
 const VACIO = '(Vacías)'
 const ROW_H = 54  // altura fija de fila (necesaria para virtualizar con getItemLayout)
 
@@ -427,7 +435,7 @@ const PASOS_ADD: { key: string; label: string; icono: string; tipo: Tipo; kb?: '
   { key: 'cliente_nombre', label: '¿Quién es el cliente?', icono: '🧑', tipo: 'cliente' },
   { key: 'telefono', label: 'Teléfono', icono: '📞', tipo: 'texto', kb: 'phone-pad' },
   { key: 'detalles_pago', label: 'Forma de pago', icono: '💳', tipo: 'pago' },
-  { key: 'interesado_en', label: '¿Qué propiedad fueron a ver?', icono: '🏠', tipo: 'texto' },
+  { key: 'interesado_en', label: '¿Qué propiedad fueron a ver?', icono: '🏠', tipo: 'propiedad' },
   { key: 'zona_interesada', label: '¿De qué zona?', icono: '📍', tipo: 'zona' },
   { key: 'dia_cita', label: 'Día y hora de la cita', icono: '📅', tipo: 'fecha' },
   { key: 'prospecto', label: '¿Quién prospectó?', icono: '🌱', tipo: 'usuario' },
@@ -451,11 +459,45 @@ function AgregarCitaModal({ profiles, clientes, miId, onCrearCliente, onClose, o
   }, [])
   const [datos, setDatos] = useState<Record<string, any>>({})
   const [busca, setBusca] = useState('')
+  // Resultados del buscador de propiedades del paso "¿qué fueron a ver?".
+  const [props, setProps] = useState<PropBuscada[]>([])
+  const [buscandoProps, setBuscandoProps] = useState(false)
   const [txt, setTxt] = useState('')
   const [guardando, setGuardando] = useState(false)
   const anim = useRef(new Animated.Value(0)).current
   const op = useRef(new Animated.Value(1)).current
   const P = PASOS_ADD[paso]
+
+  // ── Buscador de propiedades ──
+  // Antes este paso era un campo de texto vacío y había que acordarse del
+  // código de memoria y escribirlo bien. Así quedaban "VR812", "vr 812" y
+  // "casa de zibata" apuntando a la misma propiedad, y después no había forma
+  // de saber cuál fue. Ahora se busca y se elige, y lo que queda escrito sale
+  // del catálogo.
+  //
+  // No se rellena la zona con la de la propiedad a propósito: en propiedades
+  // el campo `zona` es el ESTADO (Querétaro, Monterrey…), no la colonia, y el
+  // paso siguiente pide la colonia.
+  useEffect(() => {
+    if (P?.tipo !== 'propiedad') return
+    const q = busca.trim()
+    if (q.length < 2) { setProps([]); setBuscandoProps(false); return }
+    setBuscandoProps(true)
+    const t = setTimeout(async () => {
+      // Las comas y los paréntesis rompen el filtro `or` de PostgREST, que los
+      // usa como separadores.
+      const seguro = q.replace(/[,()]/g, ' ').trim()
+      const { data } = await supabase
+        .from('propiedades')
+        .select('id, codigo, titulo, direccion, precio, tipo, operacion')
+        .or(`codigo.ilike.%${seguro}%,titulo.ilike.%${seguro}%,direccion.ilike.%${seguro}%`)
+        .eq('es_inventario', false)
+        .limit(25)
+      setProps((data ?? []) as PropBuscada[])
+      setBuscandoProps(false)
+    }, 320)
+    return () => clearTimeout(t)
+  }, [busca, P?.tipo])
 
   function irA(nuevo: number, dir: 1 | -1, base: Record<string, any>) {
     Animated.parallel([
@@ -530,6 +572,47 @@ function AgregarCitaModal({ profiles, clientes, miId, onCrearCliente, onClose, o
                   <Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin forma de pago —</Text>
                 </TouchableOpacity>
               </View>
+            )}
+
+            {P.tipo === 'propiedad' && (
+              <>
+                <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
+                  value={busca} onChangeText={setBusca} autoFocus
+                  placeholder="Código, título o dirección…  (ej. VR-812)" placeholderTextColor={c.textMute} />
+                {busca.trim().length > 1 && (
+                  <TouchableOpacity style={st.otroBtn} onPress={() => avanzar({ interesado_en: busca.trim() })}>
+                    <Text style={st.otroBtnTxt}>✏️ Usar «{busca.trim()}»</Text>
+                  </TouchableOpacity>
+                )}
+                <ScrollView style={{ maxHeight: 280 }} keyboardShouldPersistTaps="handled">
+                  {buscandoProps ? (
+                    <Text style={{ color: c.textMute, fontSize: 13, padding: 12 }}>Buscando…</Text>
+                  ) : props.length === 0 ? (
+                    <Text style={{ color: c.textMute, fontSize: 13, padding: 12 }}>
+                      {busca.trim().length > 1 ? 'Ninguna propiedad con eso.' : 'Escribe para buscar en el catálogo.'}
+                    </Text>
+                  ) : props.map(p => (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[st.dropItem, { flexDirection: 'column', alignItems: 'stretch', gap: 0 }]}
+                      onPress={() => avanzar({ interesado_en: etiquetaPropiedad(p) })}
+                    >
+                      <Text style={{ fontSize: 13.5, color: c.text, fontWeight: '700' }} numberOfLines={1}>
+                        🏠 {p.codigo ?? 'Sin código'}  ·  {p.titulo ?? 'Sin título'}
+                      </Text>
+                      <Text style={{ fontSize: 11.5, color: c.textMute, marginTop: 2 }} numberOfLines={1}>
+                        {[
+                          p.direccion,
+                          p.precio != null ? `$${p.precio.toLocaleString('es-MX')}` : null,
+                        ].filter(Boolean).join('  ·  ')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity style={st.dropItem} onPress={() => avanzar({ interesado_en: null })}>
+                    <Text style={{ color: c.textMute, fontSize: 13.5 }}>— Sin propiedad —</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </>
             )}
 
             {P.tipo === 'zona' && (

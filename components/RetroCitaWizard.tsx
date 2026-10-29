@@ -9,7 +9,7 @@ import {
 } from 'react-native'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
-import { ESTADOS as ESTADOS_ASESOR, ORDEN as ORDEN_ASESOR } from '../app/(prospectador)/asesor-citas'
+import { ESTADOS_CITA_VENTA } from '../lib/estados-cita'
 
 export type CitaRetro = {
   id: string
@@ -35,19 +35,15 @@ const PASOS = [
   { key: 'estado', icono: '📌', titulo: '¿En qué quedó la cita?', hint: 'Esto es lo que se ve en la columna «Estado de seguimiento» de la tabla.' },
 ] as const
 
-// Los mismos estados que ofrece la tabla de Citas de venta, sacados del
-// tablero del asesor: es el vocabulario que la gente ya usa, y si aquí
-// hubiera otra lista acabarían conviviendo dos formas de decir lo mismo.
-const ESTADOS_RETRO = [
-  ...ORDEN_ASESOR.map(k => ESTADOS_ASESOR[k]),
-  { label: 'No responde el cliente', color: '#dc2626', emoji: '🔴' },
-]
+// La misma lista que ofrece la tabla de Citas de venta y que la base deja
+// guardar, para que no vuelvan a nacer dos formas de decir lo mismo.
+const ESTADOS_RETRO = ESTADOS_CITA_VENTA
 
-// Viene preseleccionada "Esperando retroalimentación" porque es lo que la base
-// ponía sola cuando las tres respuestas venían llenas. Así, quien solo quiere
-// guardar y salir obtiene lo mismo de siempre, y quien tuvo otro desenlace lo
-// corrige con un toque en vez de ir a buscar la columna en la tabla.
-const ESTADO_POR_OMISION = ESTADOS_ASESOR.realizada.label
+// Viene preseleccionada Realizada porque es lo que la base ponía sola cuando
+// las tres respuestas venían llenas. Así, quien solo quiere guardar y salir
+// obtiene lo mismo de siempre, y quien tuvo otro desenlace lo corrige con un
+// toque en vez de ir a buscar la columna en la tabla.
+const ESTADO_POR_OMISION = 'Realizada'
 
 const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 // El calendario da "2026-09-15T17:00"; se guarda legible en "Próximo seguimiento".

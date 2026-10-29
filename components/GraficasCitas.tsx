@@ -177,20 +177,24 @@ export default function GraficasCitas({
 
   // Los colores de cada resultado, en un solo lugar para que el pastel, las
   // barras y la leyenda nunca se contradigan.
+  // Cancelada y reagenda son UN solo estado, como lo decidió el equipo. Se
+  // suman en una sola rebanada: dejarlas separadas enseñaría una barra de
+  // "Reagendada" siempre en cero, porque ya no existe ese valor suelto. Se
+  // siguen sumando las dos cuentas por si queda alguna fila vieja.
+  const seCayeron = d.cuenta.reagendada + d.cuenta.cancelada
+
   const partes = [
-    { label: 'Apartó',       value: d.cuenta.aparto,     color: P.aparto },
-    { label: 'Realizada',    value: d.cuenta.realizada,  color: P.realizada },
-    { label: 'Reagendada',   value: d.cuenta.reagendada, color: P.reagendada },
-    { label: 'Cancelada',    value: d.cuenta.cancelada,  color: P.cancelada },
-    { label: 'Otro estado',  value: d.cuenta.otro,       color: P.otro },
-    { label: 'Sin estado',   value: d.cuenta.sin,        color: P.sinEstado },
+    { label: 'Apartó',             value: d.cuenta.aparto,    color: P.aparto },
+    { label: 'Realizada',          value: d.cuenta.realizada, color: P.realizada },
+    { label: 'Cancelada/Reagenda', value: seCayeron,          color: P.cancelada },
+    { label: 'Otro estado',        value: d.cuenta.otro,      color: P.otro },
+    { label: 'Sin estado',         value: d.cuenta.sin,       color: P.sinEstado },
   ].filter(p => p.value > 0)
 
   const tramosDe = (g: Grupo) => [
     { valor: g.aparto, color: P.aparto },
     { valor: g.realizada, color: P.realizada },
-    { valor: g.reagendada, color: P.reagendada },
-    { valor: g.cancelada, color: P.cancelada },
+    { valor: g.reagendada + g.cancelada, color: P.cancelada },
     { valor: g.otro, color: P.otro },
     { valor: g.sin, color: P.sinEstado },
   ]
@@ -277,12 +281,12 @@ export default function GraficasCitas({
         <>
           <View style={s.kpis}>
             {[
-              { n: d.total,              t: 'Citas',       c: C.text },
-              { n: d.cuenta.realizada,   t: 'Realizadas',  c: P.realizada },
-              { n: d.cuenta.aparto,      t: 'Apartaron',   c: P.aparto },
-              { n: d.cuenta.reagendada,  t: 'Reagendadas', c: P.reagendada },
-              { n: d.cuenta.cancelada,   t: 'Canceladas',  c: P.cancelada },
-              { n: d.cuenta.sin,         t: 'Sin estado',  c: '#9aa5ab' },
+              { n: d.total,              t: 'Citas',            c: C.text },
+              { n: d.cuenta.realizada,   t: 'Realizadas',       c: P.realizada },
+              { n: d.cuenta.aparto,      t: 'Apartaron',        c: P.aparto },
+              { n: seCayeron,            t: 'Cancel./Reagenda', c: P.cancelada },
+              { n: d.conRetro,           t: 'Con retro',        c: P.realizada },
+              { n: d.cuenta.sin,         t: 'Sin estado',       c: '#9aa5ab' },
             ].map((k, i) => (
               <View key={i} style={[s.kpi, { backgroundColor: C.card, borderColor: C.border }]}>
                 <Text style={[s.kpiNum, { color: k.c }]}>{k.n}</Text>
@@ -310,7 +314,7 @@ export default function GraficasCitas({
                 De las <Text style={{ fontWeight: '800', color: C.text }}>{d.conEstado}</Text> citas
                 con estado anotado, <Text style={{ fontWeight: '800', color: P.aparto }}>{d.cuenta.aparto} apartaron </Text>
                 ({Math.round((d.cuenta.aparto / d.conEstado) * 100)}%)
-                y <Text style={{ fontWeight: '800', color: P.reagendada }}>{d.cuenta.reagendada + d.cuenta.cancelada} se cayeron</Text>.
+                y <Text style={{ fontWeight: '800', color: P.cancelada }}>{seCayeron} se cayeron</Text>.
               </Text>
             ) : null}
           </Tarjeta>
