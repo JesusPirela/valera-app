@@ -19,6 +19,7 @@ import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueRecordatorioUpdate } from '../../lib/offline-queue'
 import { conTimeout } from '../../lib/redIntentos'
 import PropiedadesSugeridas from '../../components/PropiedadesSugeridas'
+import EmbudoEtapaVenta from '../../components/EmbudoEtapaVenta'
 
 type Cliente = {
   id: string; nombre: string; telefono: string; email: string | null
@@ -747,49 +748,12 @@ export default function DetalleCliente() {
         <View style={{ marginBottom: 12 }}>
           <SectionTitle icon="git-network-outline" label="Etapa de venta" accentColor={info.color} />
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.pipelineRow}>
-            {ETAPAS_CLIENTE.map((e, i) => {
-              const ei = ESTADOS[e] ?? { label: e, color: '#555', bg: '#eee' }
-              const activo = cliente.estado === e
-              const pasado = estadoIdx > i
-              return (
-                <View key={e} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  {/* Solo lectura: la etapa se cambia desde el botón Editar */}
-                  <View
-                    style={[
-                      styles.pipelineChip,
-                      activo && { backgroundColor: ei.color, borderColor: ei.color },
-                      !activo && pasado && { borderColor: ei.color },
-                    ]}
-                  >
-                    <View style={[
-                      styles.pipelineNumCircle,
-                      activo && { backgroundColor: 'rgba(255,255,255,0.3)' },
-                      !activo && pasado && { backgroundColor: ei.color + '25' },
-                    ]}>
-                      {pasado && !activo
-                        ? <Ionicons name="checkmark" size={10} color={ei.color} />
-                        : <Text style={[styles.pipelineNum, activo && { color: '#fff' }, !pasado && !activo && { color: '#ccc' }]}>{i + 1}</Text>
-                      }
-                    </View>
-                    <Text style={[
-                      styles.pipelineLabel,
-                      activo && { color: '#fff', fontWeight: '700' },
-                      !activo && pasado && { color: ei.color },
-                      !activo && !pasado && { color: '#aaa' },
-                    ]}>
-                      {ei.label}
-                    </Text>
-                  </View>
-                  {i < ETAPAS_CLIENTE.length - 1 && (
-                    <View style={[styles.pipelineConnector, pasado && { backgroundColor: ei.color }]} />
-                  )}
-                </View>
-              )
-            })}
-          </View>
-        </ScrollView>
+        {/* Solo lectura: la etapa se cambia desde el botón Editar */}
+        <EmbudoEtapaVenta
+          etapas={ETAPAS_CLIENTE}
+          estados={ESTADOS}
+          estadoActual={cliente.estado}
+        />
       </View>
 
       {/* ── Mensajes rápidos ─────────────────────────── */}
