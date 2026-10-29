@@ -1181,6 +1181,14 @@ export default function DetallePropiedad() {
   async function generarFichaPDF(lang: IdiomaFicha = 'es') {
     if (!propiedad) return
 
+    // Primero el link de la ficha (en WhatsApp se arma solo la tarjeta con
+    // foto+título+precio, como hace EasyBroker) y después el PDF — un PDF por
+    // sí solo no puede traer esa tarjeta, es exclusivo de links con vista
+    // previa. Si no gusta el resultado, basta con quitar este bloque.
+    if (Platform.OS !== 'web') {
+      await compartirLinkFicha()
+    }
+
     setGenerandoPDF(true)
     try {
       // En inglés: traducir título y descripción (DeepL, con caché). Si por lo
