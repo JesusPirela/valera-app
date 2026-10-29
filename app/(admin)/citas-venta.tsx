@@ -121,6 +121,9 @@ const MAPEO: Record<string, string> = {
   lydia: 'Lydia Rodríguez', marisol: 'Marisol', dax: 'Dax Alejandro', kevin: 'Kevin Ituriel',
   'wendy l': 'Wendoly Lefranc', wendy: 'Wendoly Lefranc', sofia: 'Sofia Camacho',
   oswaldo: 'Oswaldo Andrés Balderas', steve: 'Esteban Astor', 'jose fernando': 'Jose Fernando', kary: 'Kary Mama Beto',
+  // Salía partida en dos en las gráficas: "Gimar" con sus citas por un lado y
+  // "Gimar Salas" con las suyas por otro.
+  gimar: 'Gimar Salas',
 }
 // Se exportan para que la pantalla de cierres agrupe con el MISMO criterio:
 // si cada una normaliza a su manera, "Rayo" y "ruben" acaban separados en una
@@ -971,7 +974,7 @@ export default function CitasVenta() {
           onPress={() => setVerGraficas(v => !v)}
         >
           <Text style={[st.btnGraficasTxt, verGraficas && { color: '#fff' }]}>
-            {verGraficas ? '✕ Cerrar' : '📊 Accountability'}
+            {verGraficas ? '✕ Cerrar' : '📊 Estadísticas'}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={st.btnHoy} onPress={irAHoy}><Text style={st.btnHoyTxt}>📅 Ir a hoy</Text></TouchableOpacity>

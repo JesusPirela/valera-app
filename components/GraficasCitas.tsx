@@ -1,36 +1,45 @@
-// Tablero de accountability de las citas de venta, armado con el marco de
-// El Principio de Oz (Roger Connors, Tom Smith y Craig Hickman).
+// Estadísticas de la tabla de Citas de venta.
 //
-// El libro parte de una línea. Debajo está el ciclo de la víctima: ignorarlo,
-// "no es mi trabajo", culpar, confusión, cubrirse las espaldas y esperar a ver
-// qué pasa. Arriba están cuatro pasos: VERLO, ASUMIRLO, RESOLVERLO y HACERLO.
-// Esta pantalla mide esos cuatro pasos con los datos que la app ya guarda, y
-// enseña quién está arriba y quién abajo de la línea.
-//
-// Las cuentas no viven aquí: viven en lib/accountability-citas.ts, con la
-// explicación de cómo se traduce cada paso del libro a algo contable. Aquí
-// solo se dibuja.
+// Cuatro vistas: el resumen general, y el desglose por asesor, por
+// prospectador y por zona. Todo con números grandes, pasteles y barras,
+// porque esto lo lee gente que quiere ver resultados, no leer explicaciones.
 //
 // No hace consultas: la pantalla ya trae las 900+ filas en memoria, así que
-// todo se calcula sobre lo que ya está. Abrirlo y cerrarlo no cuesta red, y
-// las gráficas respetan los filtros de la tabla (fechas, columnas estilo
-// Excel), así que nunca dicen algo distinto de lo que se ve arriba.
+// todo se calcula sobre lo que ya está, y respeta los filtros de la tabla
+// (fechas, columnas). Lo que se ve arriba es lo que se grafica.
+//
+// ⚠️ Dos cosas de estos datos que cambian cómo se leen:
+//
+//  · "Atendió", "prospecto" y "coordinó" son TEXTO LIBRE y están sucios:
+//    "atienden alla", "MTY", "Gimar" aparte de "Gimar Salas". Por eso se
+//    agrupa por asesor_id cuando la cita lo trae (llave limpia) y por el
+//    texto con apodos mapeados cuando no. Lo que no tiene a nadie se enseña
+//    como "Sin asesor anotado" en vez de esconderse: el hueco también es dato.
+//
+//  · Muchas citas vienen del Excel viejo y no traen resultado. Esas NO se
+//    esconden: cuentan como "Sin estado", que es su propia barra y su propio
+//    pedazo del pastel. Así el total siempre cuadra con el de la tabla.
 import { useMemo, useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native'
 import { useColors } from '../lib/ThemeContext'
 import {
-  Leyenda, s,
-  Embudo, PuntosConLinea, CuatroPasosBarras, BarraMezcla,
-  usePaleta, usePaletaLinea, sOz,
+  Dona, BarraAsesor, BarrasPeriodo, Leyenda, s,
+  Embudo, usePaleta,
 } from './graficas-base'
-import {
-  clasificar, resumenOrganizacional, calificarPersonas, analizarReagendas,
-  cicloVictima, porZona, embudo,
-  CORTE_SOBRE_LA_LINEA, CORTE_EN_LA_LINEA, MINIMO_PARA_CALIFICAR,
-  type CitaParaGrafica, type Ayudas, type Persona,
-} from '../lib/accountability-citas'
 
-export type { CitaParaGrafica }
+// ─── Lo que necesita de cada cita ────────────────────────────────────────────
+export type CitaParaGrafica = {
+  fecha_cita: string | null
+  /** Si está apartada y tiene esta fecha, manda sobre la de la cita. */
+  fecha_apartado?: string | null
+  atendio: string | null
+  asesor_id?: string | null
+  prospecto: string | null
+  coordino: string | null
+  estado_seguimiento: string | null
+  retro_completada_at?: string | null
+  zona_interesada?: string | null
+}
 
 type Props = {
   filas: CitaParaGrafica[]
@@ -44,57 +53,147 @@ type Props = {
   esReagendada: (s: string | null | undefined) => boolean
 }
 
-type Seccion = 'resumen' | 'personas' | 'reagendas' | 'ciclo' | 'zonas'
-const SECCIONES: { k: Seccion; t: string }[] = [
-  { k: 'resumen',   t: 'La operación' },
-  { k: 'personas',  t: 'Calificar gente' },
-  { k: 'reagendas', t: 'Reagendas' },
-  { k: 'ciclo',     t: 'Ciclo de la víctima' },
-  { k: 'zonas',     t: 'Zonas' },
+const SIN_ASESOR = 'Sin asesor anotado'
+const SIN_ZONA = 'Sin zona anotada'
+// Las listas tienen 50+ nombres, muchos con una sola cita. Se enseñan los
+// primeros y el resto queda detrás de un botón.
+const TOPE_LISTA = 15
+
+const NOMBRE_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+type Vista = 'resumen' | 'asesores' | 'prospectadores' | 'zonas'
+const VISTAS: { k: Vista; t: string }[] = [
+  { k: 'resumen',        t: '📊 Resumen' },
+  { k: 'asesores',       t: '🤝 Asesores' },
+  { k: 'prospectadores', t: '🌱 Prospectadores' },
+  { k: 'zonas',          t: '📍 Zonas' },
 ]
 
-type Papel = 'dueno' | 'prospecto' | 'coordino'
-const PAPELES: { k: Papel; t: string; sub: string }[] = [
-  { k: 'dueno',     t: 'Quién atendió',  sub: 'Por asesor_id, o por el nombre cuando coincide con alguien del equipo.' },
-  { k: 'prospecto', t: 'Quién prospectó', sub: 'Del campo «prospecto», que es texto libre.' },
-  { k: 'coordino',  t: 'Quién coordinó',  sub: 'Del campo «coordinó», que es texto libre.' },
-]
-
-// La cola de nombres es larga y con muchos de una sola cita. Se enseñan los
-// primeros y el resto queda detrás de un botón, en vez de esconderlos.
-const TOPE_LISTA = 12
-
-// Referencia del sector para la recuperación de reagendas. Viene de guías de
-// venta inmobiliaria y de appointment setting, no de un estándar: sirve para
-// saber si un número es malo, no como meta oficial. Lo que dicen es que por
-// debajo de 60% el equipo está siendo pasivo cuando una cita se cae.
-const REF_RECUPERACION = 60
+type Clase = 'aparto' | 'realizada' | 'reagendada' | 'cancelada' | 'otro' | 'sin'
+type Grupo = {
+  nombre: string
+  total: number
+  aparto: number; realizada: number; reagendada: number; cancelada: number; otro: number; sin: number
+  /** Cuántas de sus citas ya tienen retro escrita. */
+  conRetro: number
+}
 
 export default function GraficasCitas({
   filas, nombrePorId = {}, normalizar, mapear, esApartado, esCancelada, esReagendada,
 }: Props) {
   const C = useColors()
   const P = usePaleta()
-  const PL = usePaletaLinea()
   const pista = C.divider
 
-  const [seccion, setSeccion] = useState<Seccion>('resumen')
-  const [papel, setPapel] = useState<Papel>('dueno')
+  const [vista, setVista] = useState<Vista>('resumen')
   const [verTodos, setVerTodos] = useState(false)
-  const [abierta, setAbierta] = useState<string | null>(null)
 
-  const ayudas: Ayudas = useMemo(
-    () => ({ normalizar, mapear, esApartado, esCancelada, esReagendada, nombrePorId }),
-    [normalizar, mapear, esApartado, esCancelada, esReagendada, nombrePorId],
-  )
+  const d = useMemo(() => {
+    const base = filas
 
-  const cs = useMemo(() => clasificar(filas, ayudas), [filas, ayudas])
-  const org = useMemo(() => resumenOrganizacional(cs), [cs])
-  const emb = useMemo(() => embudo(cs), [cs])
-  const grupo = useMemo(() => calificarPersonas(cs, papel, ayudas), [cs, papel, ayudas])
-  const reag = useMemo(() => analizarReagendas(cs, ayudas), [cs, ayudas])
-  const ciclo = useMemo(() => cicloVictima(cs), [cs])
-  const zonas = useMemo(() => porZona(cs), [cs])
+    // ── En qué acabó cada cita ──
+    // El orden importa: "CANCELADA/REAGENDA" cuenta como cancelada, igual que
+    // en los colores de la tabla, para que una cita no cuente en dos lados.
+    const clase = (f: CitaParaGrafica): Clase => {
+      const e = f.estado_seguimiento
+      if (!e || !e.trim()) return 'sin'
+      if (esApartado(e)) return 'aparto'
+      if (esCancelada(e)) return 'cancelada'
+      if (esReagendada(e)) return 'reagendada'
+      // "Esperando retroalimentación" es como el tablero del asesor llama al
+      // estado 'realizada': la cita SÍ ocurrió, solo falta la retro.
+      const n = normalizar(e)
+      if (n.includes('realizada') || n.includes('esperando retro')) return 'realizada'
+      return 'otro'
+    }
+
+    const cuenta: Record<Clase, number> = { aparto: 0, realizada: 0, reagendada: 0, cancelada: 0, otro: 0, sin: 0 }
+    let conRetro = 0
+    for (const f of base) {
+      cuenta[clase(f)]++
+      if (f.retro_completada_at) conRetro++
+    }
+
+    // ── Agrupar por quien sea ──
+    const agrupar = (llaveDe: (f: CitaParaGrafica) => { llave: string; nombre: string }): Grupo[] => {
+      const m = new Map<string, Grupo>()
+      for (const f of base) {
+        const { llave, nombre } = llaveDe(f)
+        if (!m.has(llave)) {
+          m.set(llave, { nombre, total: 0, aparto: 0, realizada: 0, reagendada: 0, cancelada: 0, otro: 0, sin: 0, conRetro: 0 })
+        }
+        const g = m.get(llave)!
+        g.total++
+        g[clase(f)]++
+        if (f.retro_completada_at) g.conRetro++
+      }
+      return [...m.values()].sort((a, b) => b.total - a.total)
+    }
+
+    const asesores = agrupar(f => {
+      const porId = f.asesor_id ? nombrePorId[f.asesor_id] : undefined
+      const texto = (f.atendio ?? '').trim()
+      const nombre = porId ?? (texto ? mapear(texto) : SIN_ASESOR)
+      const llave = porId ? `id:${f.asesor_id}` : (texto ? `tx:${normalizar(nombre)}` : 'sin')
+      return { llave, nombre }
+    })
+
+    const porCampo = (campo: 'prospecto' | 'coordino', vacio: string) => agrupar(f => {
+      const v = (f[campo] ?? '').trim()
+      if (!v) return { llave: 'sin', nombre: vacio }
+      const nombre = mapear(v)
+      return { llave: normalizar(nombre), nombre }
+    })
+
+    const prospectadores = porCampo('prospecto', 'Sin prospectador anotado')
+
+    const zonas = agrupar(f => {
+      const v = (f.zona_interesada ?? '').trim()
+      if (!v) return { llave: 'sin', nombre: SIN_ZONA }
+      return { llave: normalizar(v), nombre: v }
+    })
+
+    // ── Por mes ──
+    const fechaDe = (f: CitaParaGrafica) =>
+      (f.fecha_apartado && esApartado(f.estado_seguimiento)) ? f.fecha_apartado : f.fecha_cita
+    const meses = new Map<string, number>()
+    for (const f of base) {
+      const fe = fechaDe(f)
+      if (!fe) continue
+      const k = fe.slice(0, 7)
+      meses.set(k, (meses.get(k) ?? 0) + 1)
+    }
+    const porMes = [...meses.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-14)
+      .map(([k, v]) => ({ etiqueta: `${NOMBRE_MES[Number(k.slice(5, 7)) - 1]} ${k.slice(2, 4)}`, valor: v }))
+
+    return {
+      total: base.length, cuenta, conRetro,
+      conEstado: base.length - cuenta.sin,
+      asesores, prospectadores, zonas, porMes,
+    }
+  }, [filas, nombrePorId, normalizar, mapear, esApartado, esCancelada, esReagendada])
+
+  // Los colores de cada resultado, en un solo lugar para que el pastel, las
+  // barras y la leyenda nunca se contradigan.
+  const partes = [
+    { label: 'Apartó',       value: d.cuenta.aparto,     color: P.aparto },
+    { label: 'Realizada',    value: d.cuenta.realizada,  color: P.realizada },
+    { label: 'Reagendada',   value: d.cuenta.reagendada, color: P.reagendada },
+    { label: 'Cancelada',    value: d.cuenta.cancelada,  color: P.cancelada },
+    { label: 'Otro estado',  value: d.cuenta.otro,       color: P.otro },
+    { label: 'Sin estado',   value: d.cuenta.sin,        color: P.sinEstado },
+  ].filter(p => p.value > 0)
+
+  const tramosDe = (g: Grupo) => [
+    { valor: g.aparto, color: P.aparto },
+    { valor: g.realizada, color: P.realizada },
+    { valor: g.reagendada, color: P.reagendada },
+    { valor: g.cancelada, color: P.cancelada },
+    { valor: g.otro, color: P.otro },
+    { valor: g.sin, color: P.sinEstado },
+  ]
 
   const Tarjeta = ({ titulo, sub, children }: { titulo: string; sub?: string; children: any }) => (
     <View style={[s.tarjeta, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -104,556 +203,184 @@ export default function GraficasCitas({
     </View>
   )
 
-  const colorDonde = (d: Persona['donde']) =>
-    d === 'sobre' ? PL.sobre : d === 'en' ? PL.en : d === 'bajo' ? PL.bajo : PL.sin
-  const palabraDonde = (d: Persona['donde']) =>
-    d === 'sobre' ? 'Sobre la línea' : d === 'en' ? 'En la línea' : d === 'bajo' ? 'Bajo la línea' : 'Pocas citas'
-
-  // Los cuatro pasos, listos para dibujar. El color es de estado y siempre va
-  // con la palabra al lado: el color solo no es una etiqueta.
-  const pasosDe = (p: { verlo: number | null; verloExitos: number; verloBase: number
-                        asumirlo: number | null; asumirloExitos: number; asumirloBase: number
-                        resolverlo: number | null; resolverloExitos: number; resolverloBase: number
-                        hacerlo: number | null; hacerloExitos: number; hacerloBase: number }) => [
-    { nombre: '1 Verlo',      pct: p.verlo,      exitos: p.verloExitos,      base: p.verloBase,      color: P.aparto },
-    { nombre: '2 Asumirlo',   pct: p.asumirlo,   exitos: p.asumirloExitos,   base: p.asumirloBase,   color: P.aparto },
-    { nombre: '3 Resolverlo', pct: p.resolverlo, exitos: p.resolverloExitos, base: p.resolverloBase, color: P.aparto },
-    { nombre: '4 Hacerlo',    pct: p.hacerlo,    exitos: p.hacerloExitos,    base: p.hacerloBase,    color: P.aparto },
-  ]
-
-  // ─── Las pestañas ──────────────────────────────────────────────────────────
-  const Pestañas = (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={{ flexDirection: 'row', gap: 7, paddingVertical: 2 }}>
-        {SECCIONES.map(x => {
-          const on = seccion === x.k
-          return (
-            <TouchableOpacity
-              key={x.k}
-              onPress={() => setSeccion(x.k)}
-              style={{
-                paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
-                borderColor: on ? P.aparto : C.border,
-                backgroundColor: on ? P.aparto : 'transparent',
-              }}
-            >
-              <Text style={{ fontSize: 12.5, fontWeight: '700', color: on ? '#fff' : C.textSub }}>
-                {x.t}
-              </Text>
-            </TouchableOpacity>
-          )
-        })}
-      </View>
-    </ScrollView>
+  const LeyendaResultados = (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 11, marginTop: 11 }}>
+      {partes.map(p => (
+        <View key={p.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+          <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: p.color }} />
+          <Text style={{ fontSize: 11, color: C.textSub, fontWeight: '600' }}>{p.label}</Text>
+        </View>
+      ))}
+    </View>
   )
 
-  // ─── Aviso de qué quedó fuera ──────────────────────────────────────────────
-  // Va en todas las secciones: si no se dice, cualquier número de esta pantalla
-  // se lee como si cubriera las 963 citas, y no es así.
-  const Aviso = org.delExcel > 0 ? (
-    <View style={[s.tarjeta, { backgroundColor: C.card, borderColor: C.border, paddingVertical: 11 }]}>
-      <Text style={{ fontSize: 11.5, color: C.textSub, lineHeight: 16.5 }}>
-        Calificando <Text style={{ fontWeight: '800', color: C.text }}>{org.evaluables} citas</Text> hechas
-        en la app. Las <Text style={{ fontWeight: '800' }}>{org.delExcel}</Text> del Excel viejo quedan
-        fuera: solo el 9% trae resultado anotado, contra el 93% de las de la app, y calificar a alguien
-        por filas que nadie iba a llenar no sería justo.
-      </Text>
-    </View>
-  ) : null
+  // Una lista de barras, igual para asesores, prospectadores y zonas.
+  const ListaBarras = ({ grupos, vacio }: { grupos: Grupo[]; vacio: string }) => {
+    const max = Math.max(1, ...grupos.map(g => g.total))
+    const mostrar = verTodos ? grupos : grupos.slice(0, TOPE_LISTA)
+    if (grupos.length === 0) return <Text style={s.vacio}>{vacio}</Text>
+    return (
+      <>
+        {mostrar.map((g, i) => (
+          <BarraAsesor
+            key={g.nombre + i}
+            pos={i + 1}
+            nombre={g.nombre}
+            total={g.total}
+            max={max}
+            tramos={tramosDe(g)}
+            colorTexto={C.text}
+            colorPista={pista}
+            nota={`${g.aparto} apartaron · ${g.reagendada + g.cancelada} se cayeron · ${g.conRetro} con retro`}
+          />
+        ))}
+        {grupos.length > TOPE_LISTA ? (
+          <TouchableOpacity style={s.verMas} onPress={() => setVerTodos(v => !v)}>
+            <Text style={s.verMasTxt}>
+              {verTodos ? 'Ver menos' : `Ver los ${grupos.length - TOPE_LISTA} restantes`}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+        {LeyendaResultados}
+      </>
+    )
+  }
+
+  const pct = (n: number) => d.total > 0 ? Math.round((n / d.total) * 100) : 0
 
   return (
     <View style={{ gap: 12 }}>
-      {Pestañas}
-      {Aviso}
-
-      {/* ══════════════════ LA OPERACIÓN ══════════════════ */}
-      {seccion === 'resumen' && (
-        <>
-          <Tarjeta
-            titulo="Los cuatro pasos de la operación"
-            sub="El Principio de Oz: para pasar de la víctima al resultado hay que verlo, asumirlo, resolverlo y hacerlo. Así va el equipo completo en cada paso."
-          >
-            <View style={{ alignItems: 'center', marginBottom: 15 }}>
-              <Text style={{ fontSize: 44, fontWeight: '800', color: colorDonde(
-                org.calificacion === null ? 'sin_datos'
-                  : org.calificacion >= CORTE_SOBRE_LA_LINEA ? 'sobre'
-                  : org.calificacion >= CORTE_EN_LA_LINEA ? 'en' : 'bajo',
-              ) }}>
-                {org.calificacion === null ? '—' : Math.round(org.calificacion)}
-              </Text>
-              <Text style={{ fontSize: 12, color: C.textSub, fontWeight: '700' }}>
-                calificación de la operación, de 100
-              </Text>
-            </View>
-
-            <CuatroPasosBarras pasos={pasosDe(org.pasos)} colorTexto={C.text} colorPista={pista} />
-
-            <View style={{ marginTop: 14, gap: 7 }}>
-              {[
-                ['1 Verlo', 'Que quede anotado qué pasó en la cita. Una cita que ya pasó y sigue en blanco es ignorar el problema, el primer escalón del ciclo de la víctima.'],
-                ['2 Asumirlo', 'Que alguien escriba la retro: qué pasó y cuál fue su parte.'],
-                ['3 Resolverlo', 'De las citas que salieron mal, en cuántas quedó un siguiente paso. El libro lo resume en una pregunta: «¿qué más puedo hacer?».'],
-                ['4 Hacerlo', 'Que la cita de verdad ocurra y acabe en algo.'],
-              ].map(([t, x]) => (
-                <Text key={t} style={{ fontSize: 11, color: C.textSub, lineHeight: 15.5 }}>
-                  <Text style={{ fontWeight: '800', color: C.text }}>{t}. </Text>{x}
-                </Text>
-              ))}
-            </View>
-          </Tarjeta>
-
-          <Tarjeta
-            titulo="En qué se cae el embudo"
-            sub="De las citas cuya fecha ya pasó, cuántas llegan a cada paso. La caída entre un paso y otro es el dato que importa."
-          >
-            <Embudo pasos={emb} colorTexto={C.text} colorPista={pista} color={P.aparto} />
-          </Tarjeta>
-
-          <Tarjeta
-            titulo="«No es mi trabajo», en números"
-            sub="El segundo escalón del ciclo de la víctima: la cita que no es de nadie. Aquí se ve qué le pasa a una cita según si tiene dueño o no."
-          >
-            <View style={s.kpis}>
-              <View style={[s.kpi, { backgroundColor: C.bg2, borderColor: C.border }]}>
-                <Text style={[s.kpiNum, { color: PL.bajo }]}>{org.sinDueno}</Text>
-                <Text style={s.kpiTxt}>sin dueño</Text>
-              </View>
-              <View style={[s.kpi, { backgroundColor: C.bg2, borderColor: C.border }]}>
-                <Text style={[s.kpiNum, { color: PL.sobre }]}>{org.conDueno}</Text>
-                <Text style={s.kpiTxt}>con dueño</Text>
-              </View>
-            </View>
-
-            {org.reagendaSinDueno !== null && org.reagendaConDueno !== null ? (
-              <View style={{ marginTop: 14 }}>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: C.text, marginBottom: 9 }}>
-                  Cuántas se reagendan
-                </Text>
-                <PuntosConLinea
-                  filas={[
-                    { nombre: 'Sin dueño', valor: org.reagendaSinDueno, color: PL.bajo },
-                    { nombre: 'Con dueño', valor: org.reagendaConDueno, color: PL.sobre },
-                  ]}
-                  cortes={[]}
-                  colorTexto={C.text}
-                  colorPista={pista}
-                  colorLinea={C.textMute}
-                />
-                <Text style={{ fontSize: 11, color: C.textSub, lineHeight: 15.5, marginTop: 6 }}>
-                  Una cita sin dueño se reagenda {(org.reagendaSinDueno / Math.max(org.reagendaConDueno, 0.01)).toFixed(1)} veces
-                  más que una que sí lo tiene. Puede ser que asignar al asesor evite la caída, o que la
-                  cita se cayera antes de que alguien la tomara y por eso el campo quedó vacío: con
-                  estos datos no se puede saber cuál de las dos. Lo que sí se ve es que la cita sin
-                  dueño es la que se muere.
-                </Text>
-              </View>
-            ) : null}
-          </Tarjeta>
-        </>
-      )}
-
-      {/* ══════════════════ CALIFICAR GENTE ══════════════════ */}
-      {seccion === 'personas' && (
-        <>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={{ flexDirection: 'row', gap: 7 }}>
-              {PAPELES.map(x => {
-                const on = papel === x.k
-                return (
-                  <TouchableOpacity
-                    key={x.k}
-                    onPress={() => { setPapel(x.k); setAbierta(null); setVerTodos(false) }}
-                    style={{
-                      paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, borderWidth: 1,
-                      borderColor: on ? P.aparto : C.border,
-                      backgroundColor: on ? P.aparto : 'transparent',
-                    }}
-                  >
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: on ? '#fff' : C.textSub }}>
-                      {x.t}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          </ScrollView>
-
-          <Tarjeta
-            titulo="Dónde cae cada quien"
-            sub={`${PAPELES.find(p => p.k === papel)!.sub} La línea del libro está en ${CORTE_SOBRE_LA_LINEA}; por debajo de ${CORTE_EN_LA_LINEA} es el ciclo de la víctima.`}
-          >
-            {grupo.personas.filter(p => p.confiable).length === 0 ? (
-              <Text style={s.vacio}>
-                Nadie llega todavía a {MINIMO_PARA_CALIFICAR} citas en lo que está filtrado, que es el
-                mínimo para calificar a alguien sin inventar.
-              </Text>
-            ) : (
-              <>
-                <PuntosConLinea
-                  filas={grupo.personas.filter(p => p.confiable).map(p => ({
-                    nombre: p.nombre,
-                    valor: p.calificacion,
-                    color: colorDonde(p.donde),
-                  }))}
-                  cortes={[
-                    { en: CORTE_EN_LA_LINEA, nombre: 'ciclo' },
-                    { en: CORTE_SOBRE_LA_LINEA, nombre: 'la línea' },
-                  ]}
-                  colorTexto={C.text}
-                  colorPista={pista}
-                  colorLinea={C.text}
-                />
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 11, marginTop: 10 }}>
-                  {([['sobre', 'Sobre la línea'], ['en', 'En la línea'], ['bajo', 'Bajo la línea']] as const).map(([k, t]) => (
-                    <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                      <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: colorDonde(k) }} />
-                      <Text style={{ fontSize: 11, color: C.textSub, fontWeight: '600' }}>{t}</Text>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-          </Tarjeta>
-
-          {/* Cada persona, con sus cuatro pasos y las cuentas crudas */}
-          {(verTodos ? grupo.personas : grupo.personas.slice(0, TOPE_LISTA)).map(p => {
-            const abierto = abierta === p.llave
+      {/* Pestañas */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={{ flexDirection: 'row', gap: 7, paddingVertical: 2 }}>
+          {VISTAS.map(v => {
+            const on = vista === v.k
             return (
               <TouchableOpacity
-                key={p.llave}
-                activeOpacity={0.85}
-                onPress={() => setAbierta(abierto ? null : p.llave)}
-                style={[s.tarjeta, { backgroundColor: C.card, borderColor: C.border, paddingVertical: 13 }]}
+                key={v.k}
+                onPress={() => { setVista(v.k); setVerTodos(false) }}
+                style={{
+                  paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1,
+                  borderColor: on ? P.aparto : C.border,
+                  backgroundColor: on ? P.aparto : 'transparent',
+                }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={{
-                    width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
-                    backgroundColor: colorDonde(p.donde) + '22',
-                    borderWidth: 2, borderColor: colorDonde(p.donde),
-                  }}>
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: C.text }}>
-                      {p.calificacion === null || !p.confiable ? '—' : Math.round(p.calificacion)}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: C.text }} numberOfLines={1}>
-                      {p.nombre}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: colorDonde(p.donde), fontWeight: '700', marginTop: 1 }}>
-                      {palabraDonde(p.donde)}
-                      <Text style={{ color: C.textMute, fontWeight: '600' }}>
-                        {'  ·  '}{p.citas} {p.citas === 1 ? 'cita' : 'citas'}
-                      </Text>
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: 15, color: C.textMute }}>{abierto ? '▴' : '▾'}</Text>
-                </View>
-
-                {!p.confiable ? (
-                  <Text style={{ fontSize: 10.5, color: C.textSub, marginTop: 8, lineHeight: 14.5 }}>
-                    Con {p.citas} {p.citas === 1 ? 'cita' : 'citas'} no se puede calificar: hacen falta
-                    al menos {MINIMO_PARA_CALIFICAR}. Un porcentaje sobre dos citas no es un porcentaje.
-                  </Text>
-                ) : null}
-
-                {abierto ? (
-                  <View style={{ marginTop: 13, gap: 12 }}>
-                    <CuatroPasosBarras pasos={pasosDe(p.pasos)} colorTexto={C.text} colorPista={pista} />
-                    <View>
-                      <Text style={{ fontSize: 11.5, fontWeight: '700', color: C.text, marginBottom: 7 }}>
-                        En qué acabaron sus citas
-                      </Text>
-                      <BarraMezcla tramos={[
-                        { valor: p.aparto, color: P.aparto },
-                        { valor: p.realizadas, color: P.realizada },
-                        { valor: p.reagendadas, color: P.reagendada },
-                        { valor: p.canceladas, color: P.cancelada },
-                        { valor: p.sinResultado, color: P.sinEstado },
-                      ]} />
-                      <Leyenda
-                        partes={[
-                          { label: 'Apartó', value: p.aparto, color: P.aparto },
-                          { label: 'Realizada', value: p.realizadas, color: P.realizada },
-                          { label: 'Reagendada', value: p.reagendadas, color: P.reagendada },
-                          { label: 'Cancelada', value: p.canceladas, color: P.cancelada },
-                          { label: 'Sin resultado', value: p.sinResultado, color: P.sinEstado },
-                        ].filter(x => x.value > 0)}
-                        total={p.citas}
-                        colorTexto={C.text}
-                      />
-                    </View>
-                    <Text style={{ fontSize: 10.5, color: C.textMute, lineHeight: 14.5 }}>
-                      Los porcentajes están acercados al promedio del equipo según cuántas citas tenga
-                      esta persona: con pocas citas pesa más el promedio, con muchas pesa más lo suyo.
-                      Es lo que evita que quien tuvo dos citas buenas salga arriba de quien lleva veinte.
-                    </Text>
-                  </View>
-                ) : null}
+                <Text style={{ fontSize: 13, fontWeight: '700', color: on ? '#fff' : C.textSub }}>{v.t}</Text>
               </TouchableOpacity>
             )
           })}
+        </View>
+      </ScrollView>
 
-          {grupo.personas.length > TOPE_LISTA ? (
-            <TouchableOpacity style={s.verMas} onPress={() => setVerTodos(v => !v)}>
-              <Text style={s.verMasTxt}>
-                {verTodos ? 'Ver menos' : `Ver los ${grupo.personas.length - TOPE_LISTA} restantes`}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {grupo.sinDueno.length > 0 ? (
-            <Tarjeta
-              titulo="Citas que no entraron a ninguna calificación"
-              sub="Nadie reconocible anotado en este papel, así que no se le pueden cargar a nadie."
-            >
-              <Text style={{ fontSize: 24, fontWeight: '800', color: PL.bajo }}>
-                {grupo.sinDueno.length}
-              </Text>
-              <Text style={{ fontSize: 11.5, color: C.textSub, lineHeight: 16, marginTop: 4 }}>
-                {papel === 'dueno'
-                  ? 'Sin asesor asignado, o con un texto que no es una persona del equipo («atienden allá», «videollamada», «no se hizo»). Son el hueco más grande del tablero: mientras estén así, no hay a quién preguntarle qué pasó.'
-                  : 'El campo está vacío en estas citas.'}
-              </Text>
-            </Tarjeta>
-          ) : null}
-        </>
-      )}
-
-      {/* ══════════════════ REAGENDAS ══════════════════ */}
-      {seccion === 'reagendas' && (
+      {/* ═══════════ RESUMEN ═══════════ */}
+      {vista === 'resumen' && (
         <>
-          <Tarjeta
-            titulo="Qué pasa cuando una cita se cae"
-            sub="Una reagenda no es el problema: es una circunstancia. El libro mide el accountability en lo que pasa DESPUÉS. Aquí está lo que pasa después."
-          >
-            <View style={s.kpis}>
-              {/* Los dos de en medio van en color de texto normal, no en
-                  verde: son resultados deseables, pero 6 y 1 no son buenas
-                  noticias. Pintarlos de verde haría que el color dijera «bien»
-                  donde el número dice lo contrario, y el color de estado no
-                  está para adornar. */}
-              {[
-                { n: reag.total, t: 'reagendas', c: P.reagendada },
-                { n: reag.recuperadas, t: reag.recuperadas === 1 ? 'volvió a agendarse' : 'volvieron a agendarse', c: C.text },
-                { n: reag.recuperadasBien, t: reag.recuperadasBien === 1 ? 'acabó bien' : 'acabaron bien', c: C.text },
-                { n: reag.abandonadas, t: 'ahí quedaron', c: PL.bajo },
-              ].map((k, i) => (
-                <View key={i} style={[s.kpi, { backgroundColor: C.bg2, borderColor: C.border }]}>
-                  <Text style={[s.kpiNum, { color: k.c }]}>{k.n}</Text>
-                  <Text style={s.kpiTxt}>{k.t}</Text>
-                </View>
-              ))}
-            </View>
-
-            {reag.tasaRecuperacion !== null ? (
-              <View style={{ marginTop: 16 }}>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: C.text, marginBottom: 9 }}>
-                  Recuperación de reagendas
-                </Text>
-                <PuntosConLinea
-                  filas={[{
-                    nombre: 'Valera',
-                    valor: reag.tasaRecuperacion,
-                    color: reag.tasaRecuperacion >= REF_RECUPERACION ? PL.sobre : PL.bajo,
-                  }]}
-                  cortes={[{ en: REF_RECUPERACION, nombre: 'referencia' }]}
-                  colorTexto={C.text}
-                  colorPista={pista}
-                  colorLinea={C.text}
-                />
-                <Text style={{ fontSize: 11, color: C.textSub, lineHeight: 16, marginTop: 6 }}>
-                  De {reag.total} citas que se cayeron, {reag.recuperadas} volvieron a agendarse
-                  ({Math.round(reag.tasaRecuperacion)}%) y {reag.recuperadasBien} acabaron en algo.
-                  Las guías de venta inmobiliaria toman el {REF_RECUPERACION}% como la raya por debajo
-                  de la cual el equipo está siendo pasivo cuando una cita se cae. Son referencias de
-                  despachos y proveedores, no un estándar, así que sirven para saber si el número es
-                  malo, no como meta oficial.
-                </Text>
-                {reag.tambienCanceladas > 0 ? (
-                  <Text style={{ fontSize: 10.5, color: C.textMute, lineHeight: 14.5, marginTop: 7 }}>
-                    Incluye {reag.tambienCanceladas} que la tabla pinta como canceladas porque su
-                    estado dice «cancelada/reagenda». Ahí manda la cancelación para el color, pero
-                    para este conteo siguen siendo reagendas y dejarlas fuera esconde un tercio del
-                    problema.
-                  </Text>
-                ) : null}
+          <View style={s.kpis}>
+            {[
+              { n: d.total,              t: 'Citas',       c: C.text },
+              { n: d.cuenta.realizada,   t: 'Realizadas',  c: P.realizada },
+              { n: d.cuenta.aparto,      t: 'Apartaron',   c: P.aparto },
+              { n: d.cuenta.reagendada,  t: 'Reagendadas', c: P.reagendada },
+              { n: d.cuenta.cancelada,   t: 'Canceladas',  c: P.cancelada },
+              { n: d.cuenta.sin,         t: 'Sin estado',  c: '#9aa5ab' },
+            ].map((k, i) => (
+              <View key={i} style={[s.kpi, { backgroundColor: C.card, borderColor: C.border }]}>
+                <Text style={[s.kpiNum, { color: k.c }]}>{k.n}</Text>
+                <Text style={s.kpiTxt}>{k.t}</Text>
               </View>
+            ))}
+          </View>
+
+          <Tarjeta titulo="En qué acabaron las citas">
+            <View style={s.donaFila}>
+              <Dona
+                partes={partes}
+                centro={String(d.total)}
+                subcentro="citas"
+                colorTexto={C.text}
+              />
+              <Leyenda partes={partes} total={d.total} colorTexto={C.text} />
+            </View>
+            {/* El porcentaje que importa va sobre las que SÍ tienen estado.
+                Sacado sobre el total diría "2% apartaron", pero es que de 3 de
+                cada 4 citas nadie anotó en qué acabaron: no es que no hayan
+                apartado, es que no se sabe. */}
+            {d.conEstado > 0 ? (
+              <Text style={{ fontSize: 12, color: C.textSub, lineHeight: 17, marginTop: 11 }}>
+                De las <Text style={{ fontWeight: '800', color: C.text }}>{d.conEstado}</Text> citas
+                con estado anotado, <Text style={{ fontWeight: '800', color: P.aparto }}>{d.cuenta.aparto} apartaron </Text>
+                ({Math.round((d.cuenta.aparto / d.conEstado) * 100)}%)
+                y <Text style={{ fontWeight: '800', color: P.reagendada }}>{d.cuenta.reagendada + d.cuenta.cancelada} se cayeron</Text>.
+              </Text>
             ) : null}
           </Tarjeta>
 
-          {reag.rescatables.length > 0 ? (
-            <Tarjeta
-              titulo={`${reag.rescatables.length} se pueden rescatar hoy`}
-              sub="Se cayeron y no quedó nada: ni plan, ni próxima fecha, ni otra cita. Las más recientes primero, que son las que todavía se acuerdan de ustedes."
-            >
-              {reag.rescatables.slice(0, 15).map((c, i) => (
-                <View key={c.cita.id ?? i} style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 9,
-                  paddingVertical: 9,
-                  borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.divider,
-                }}>
-                  <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: PL.bajo }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 12.5, fontWeight: '700', color: C.text }} numberOfLines={1}>
-                      {c.cita.cliente_nombre?.trim() || 'Sin nombre'}
-                    </Text>
-                    <Text style={{ fontSize: 10.5, color: C.textSub, marginTop: 1 }} numberOfLines={1}>
-                      {[
-                        c.cita.fecha_cita ? new Date(c.cita.fecha_cita).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : null,
-                        c.duenoNombre ?? 'sin dueño',
-                        c.zona,
-                      ].filter(Boolean).join('  ·  ')}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-              {reag.rescatables.length > 15 ? (
-                <Text style={{ fontSize: 11, color: C.textMute, marginTop: 9 }}>
-                  Y {reag.rescatables.length - 15} más. La lista completa son las citas reagendadas o
-                  canceladas de la tabla de arriba, sin plan de acción.
-                </Text>
-              ) : null}
-            </Tarjeta>
-          ) : null}
-        </>
-      )}
-
-      {/* ══════════════════ CICLO DE LA VÍCTIMA ══════════════════ */}
-      {seccion === 'ciclo' && (
-        <>
-          <Tarjeta
-            titulo="El ciclo de la víctima, con rastro en los datos"
-            sub="Cada escalón del ciclo deja una huella distinta en la tabla. Aquí no se adivina la intención de nadie: se cuenta la huella y se dice exactamente qué se contó."
-          >
-            {ciclo.map((e, i) => {
-              const max = Math.max(1, ...ciclo.map(x => x.citas.length))
-              return (
-                <View key={e.clave} style={{
-                  paddingVertical: 12,
-                  borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.divider,
-                }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                    <Text style={{ fontSize: 22, fontWeight: '800', color: e.citas.length > 0 ? PL.bajo : PL.sobre, minWidth: 42 }}>
-                      {e.citas.length}
-                    </Text>
-                    <Text style={{ flex: 1, fontSize: 13.5, fontWeight: '800', color: C.text }}>
-                      {e.nombre}
-                    </Text>
-                  </View>
-                  {/* La pista va con alto propio y SIN flex: dentro de una
-                      columna, flex:1 pone flex-basis en 0 y le gana al alto,
-                      así que la barra se quedaba de 0px y no se veía nada. */}
-                  <View style={{
-                    height: 8, borderRadius: 4, overflow: 'hidden',
-                    backgroundColor: pista, marginTop: 8, marginBottom: 8,
-                  }}>
-                    <View style={{
-                      width: `${(e.citas.length / max) * 100}%`,
-                      height: '100%', backgroundColor: PL.bajo, borderRadius: 4,
-                    }} />
-                  </View>
-                  <Text style={{ fontSize: 11.5, color: C.textSub, lineHeight: 16 }}>{e.explica}</Text>
-                  <Text style={{ fontSize: 10.5, color: C.textMute, lineHeight: 14.5, marginTop: 4 }}>
-                    Se cuenta: {e.comoSeMide}
-                  </Text>
-                </View>
-              )
-            })}
-          </Tarjeta>
-
-          <Tarjeta titulo="Lo que este tablero NO puede medir" sub="Para que nadie lea un hueco como un cero.">
-            <Text style={{ fontSize: 11.5, color: C.textSub, lineHeight: 16.5 }}>
-              El escalón de <Text style={{ fontWeight: '800', color: C.text }}>culpar a otros</Text> es
-              el que falta. Haría falta leer cada retro y juzgar si echa la culpa, y eso no se puede
-              contar sin ponerle palabras en la boca a quien la escribió. Lo más cerca que se puede
-              llegar con estos datos es «cubrirse las espaldas»: la retro escrita sin ningún siguiente
-              paso. Describir sin resolver.
+          <Tarjeta titulo="Retroalimentación">
+            <View style={s.donaFila}>
+              <Dona
+                partes={[
+                  { label: 'Con retro', value: d.conRetro, color: P.realizada },
+                  { label: 'Sin retro', value: d.total - d.conRetro, color: P.sinEstado },
+                ]}
+                centro={`${pct(d.conRetro)}%`}
+                subcentro="con retro"
+                colorTexto={C.text}
+              />
+              <Leyenda
+                partes={[
+                  { label: 'Con retro', value: d.conRetro, color: P.realizada },
+                  { label: 'Sin retro', value: d.total - d.conRetro, color: P.sinEstado },
+                ]}
+                total={d.total}
+                colorTexto={C.text}
+              />
+            </View>
+            <Text style={{ fontSize: 12, color: C.textSub, lineHeight: 17, marginTop: 11 }}>
+              Faltan <Text style={{ fontWeight: '800', color: C.text }}>{d.total - d.conRetro}</Text> retros
+              por escribir.
             </Text>
           </Tarjeta>
+
+          <Tarjeta titulo="De la cita al apartado">
+            <Embudo
+              pasos={[
+                { nombre: 'Citas',               n: d.total,              nota: 'Todas las que se ven arriba' },
+                { nombre: 'Con estado anotado',  n: d.conEstado,          nota: 'Alguien escribió en qué acabó' },
+                { nombre: 'Se realizaron',       n: d.cuenta.realizada + d.cuenta.aparto, nota: 'La cita sí ocurrió' },
+                { nombre: 'Apartaron',           n: d.cuenta.aparto,      nota: 'Acabó en apartado' },
+              ]}
+              colorTexto={C.text}
+              colorPista={pista}
+              color={P.aparto}
+            />
+          </Tarjeta>
+
+          <Tarjeta titulo="Citas por mes">
+            {d.porMes.length === 0
+              ? <Text style={s.vacio}>Ninguna cita con fecha.</Text>
+              : <BarrasPeriodo datos={d.porMes} colorTexto={C.text} colorPista={pista} />}
+          </Tarjeta>
         </>
       )}
 
-      {/* ══════════════════ ZONAS ══════════════════ */}
-      {seccion === 'zonas' && (
-        <Tarjeta
-          titulo="Por zona"
-          sub="El volumen cuenta todas las citas, porque la zona sí viene capturada en el Excel viejo. Las tasas solo cuentan las de la app, donde el resultado está anotado. Son bases distintas a propósito."
-        >
-          {zonas.zonas.length === 0 ? (
-            <Text style={s.vacio}>Ninguna cita de lo filtrado trae zona.</Text>
-          ) : (
-            <>
-              {/* La barra se angosta según cuántas citas CON RESULTADO tenga la
-                  zona, no al 100% siempre. Si todas midieran lo mismo, una zona
-                  con una sola cita anotada se vería tan sólida como una con
-                  catorce, y un caso suelto se leería como un patrón. */}
-              {(() => {
-                const maxRes = Math.max(1, ...zonas.zonas.map(z => z.conResultado))
-                const MIN_PARA_PROPORCION = 3
-                return zonas.zonas.slice(0, verTodos ? 100 : TOPE_LISTA).map((z, i) => (
-                  <View key={z.nombre} style={{
-                    paddingVertical: 10,
-                    borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.divider,
-                  }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: C.text }} numberOfLines={1}>
-                        {z.nombre}
-                      </Text>
-                      <Text style={{ fontSize: 13, fontWeight: '800', color: C.text }}>{z.citasTotales}</Text>
-                    </View>
-                    {z.conResultado >= MIN_PARA_PROPORCION ? (
-                      <>
-                        <View style={{ marginTop: 7, width: `${(z.conResultado / maxRes) * 100}%` }}>
-                          <BarraMezcla tramos={[
-                            { valor: z.aparto, color: P.aparto },
-                            { valor: z.realizadas, color: P.realizada },
-                            { valor: z.reagendadas, color: P.reagendada },
-                            { valor: z.canceladas, color: P.cancelada },
-                          ]} alto={9} />
-                        </View>
-                        <Text style={{ fontSize: 10.5, color: C.textMute, marginTop: 5 }}>
-                          {z.conResultado} con resultado  ·  {z.aparto} apartaron  ·  {z.reagendadas} reagendadas
-                        </Text>
-                      </>
-                    ) : (
-                      <Text style={{ fontSize: 10.5, color: C.textMute, marginTop: 5 }}>
-                        {z.conResultado === 0
-                          ? 'Ninguna cita con resultado anotado, así que no hay nada que repartir.'
-                          : `Solo ${z.conResultado} con resultado anotado: muy pocas para sacar una proporción.`}
-                      </Text>
-                    )}
-                  </View>
-                ))
-              })()}
+      {/* ═══════════ ASESORES ═══════════ */}
+      {vista === 'asesores' && (
+        <Tarjeta titulo="Citas por asesor" sub="El largo de la barra son sus citas; los colores, en qué acabaron.">
+          <ListaBarras grupos={d.asesores} vacio="Ninguna cita con asesor." />
+        </Tarjeta>
+      )}
 
-              {zonas.zonas.length > TOPE_LISTA ? (
-                <TouchableOpacity style={s.verMas} onPress={() => setVerTodos(v => !v)}>
-                  <Text style={s.verMasTxt}>
-                    {verTodos ? 'Ver menos' : `Ver las ${zonas.zonas.length - TOPE_LISTA} restantes`}
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
+      {/* ═══════════ PROSPECTADORES ═══════════ */}
+      {vista === 'prospectadores' && (
+        <Tarjeta titulo="Citas por prospectador" sub="Quién trajo cada cita y en qué acabó.">
+          <ListaBarras grupos={d.prospectadores} vacio="Ninguna cita con prospectador." />
+        </Tarjeta>
+      )}
 
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 11, marginTop: 12 }}>
-                {[
-                  ['Apartó', P.aparto], ['Realizada', P.realizada],
-                  ['Reagendada', P.reagendada], ['Cancelada', P.cancelada],
-                ].map(([t, c]) => (
-                  <View key={t as string} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                    <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: c as string }} />
-                    <Text style={{ fontSize: 11, color: C.textSub, fontWeight: '600' }}>{t as string}</Text>
-                  </View>
-                ))}
-              </View>
-
-              {zonas.sinZona > 0 ? (
-                <Text style={{ fontSize: 11, color: C.textMute, marginTop: 11, lineHeight: 15.5 }}>
-                  {zonas.sinZona} citas de la app no traen zona, así que no salen en ninguna de estas
-                  barras. Es el primer hueco a cerrar si se quiere comparar zonas en serio.
-                </Text>
-              ) : null}
-            </>
-          )}
+      {/* ═══════════ ZONAS ═══════════ */}
+      {vista === 'zonas' && (
+        <Tarjeta titulo="Citas por zona" sub="Dónde se están dando las citas y cómo les va.">
+          <ListaBarras grupos={d.zonas} vacio="Ninguna cita con zona." />
         </Tarjeta>
       )}
     </View>
