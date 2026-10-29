@@ -9,6 +9,7 @@ import {
 } from 'react-native'
 import { supabase } from '../lib/supabase'
 import { useColors } from '../lib/ThemeContext'
+import { ESTADOS as ESTADOS_ASESOR, ORDEN as ORDEN_ASESOR } from '../app/(prospectador)/asesor-citas'
 
 export type CitaRetro = {
   id: string
@@ -23,6 +24,7 @@ export type CitaRetro = {
   retro_como_estuvo?: string | null
   retro_info_extra?: string | null
   retro_plan_accion?: string | null
+  estado_seguimiento?: string | null
 }
 
 const PASOS = [
@@ -30,7 +32,22 @@ const PASOS = [
   { key: 'info', icono: '🔎', titulo: '¿Qué información extra conseguimos?', hint: 'Datos nuevos del prospecto: presupuesto real, tiempos, situación de crédito, lo que sea útil.' },
   { key: 'plan', icono: '🎯', titulo: '¿Cuál es el plan de acción?', hint: 'El siguiente paso concreto: qué opciones mandarle, cuándo darle seguimiento, qué necesita para avanzar.' },
   { key: 'prox', icono: '📆', titulo: '¿Cuándo es el próximo seguimiento?', hint: 'Elige la fecha y hora del siguiente contacto. Se guarda solo en “Próximo seguimiento”. (Opcional)' },
+  { key: 'estado', icono: '📌', titulo: '¿En qué quedó la cita?', hint: 'Esto es lo que se ve en la columna «Estado de seguimiento» de la tabla.' },
 ] as const
+
+// Los mismos estados que ofrece la tabla de Citas de venta, sacados del
+// tablero del asesor: es el vocabulario que la gente ya usa, y si aquí
+// hubiera otra lista acabarían conviviendo dos formas de decir lo mismo.
+const ESTADOS_RETRO = [
+  ...ORDEN_ASESOR.map(k => ESTADOS_ASESOR[k]),
+  { label: 'No responde el cliente', color: '#dc2626', emoji: '🔴' },
+]
+
+// Viene preseleccionada "Esperando retroalimentación" porque es lo que la base
+// ponía sola cuando las tres respuestas venían llenas. Así, quien solo quiere
+// guardar y salir obtiene lo mismo de siempre, y quien tuvo otro desenlace lo
+// corrige con un toque en vez de ir a buscar la columna en la tabla.
+const ESTADO_POR_OMISION = ESTADOS_ASESOR.realizada.label
 
 const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 // El calendario da "2026-09-15T17:00"; se guarda legible en "Próximo seguimiento".
@@ -73,6 +90,11 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
     cita.retro_como_estuvo ?? '', cita.retro_info_extra ?? '', cita.retro_plan_accion ?? '',
   ])
   const [prox, setProx] = useState('')  // valor del calendario (datetime-local)
+  // Si la cita ya traía un estado puesto, se respeta: el asistente llega con
+  // ese seleccionado en vez de pisárselo con el de omisión.
+  const [estado, setEstado] = useState<string>(
+    (cita.estado_seguimiento ?? '').trim() || ESTADO_POR_OMISION,
+  )
 
   // Animación de transición entre pasos
   const anim = useRef(new Animated.Value(0)).current  // 0 = en su lugar
@@ -106,6 +128,7 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
         p_plan_accion: resp[2].trim() || null,
         p_prox_seguimiento: prox ? fmtProx(prox) : null,
         p_prox_seguimiento_ts: prox && !isNaN(new Date(prox).getTime()) ? new Date(prox).toISOString() : null,
+        p_estado: estado,
       })
       if (error) throw error
 
@@ -116,7 +139,13 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
       //
       // No es silencioso: se avisa al terminar. Un cambio de estado que nadie
       // ve es justo como se ensucian estas tablas.
-      if (mencionaReagenda(resp.join(' \n '))) {
+      // Solo cuando NO eligieron estado a mano. Antes esto corría siempre,
+      // pero ahora el asistente pregunta en qué quedó la cita, y pisar una
+      // respuesta explícita con una adivinanza sacada del texto sería peor
+      // que no adivinar nada: alguien que marcó "Apartó" y además contó que
+      // se había reagendado una visita anterior acabaría con la cita marcada
+      // como reagendada.
+      if (estado === ESTADO_POR_OMISION && mencionaReagenda(resp.join(' \n '))) {
         // 'Reagendada', no 'Cancelada': la retro dijo que se reagendó, que
         // ahora es un estado propio y distinto de cancelada.
         const { error: eReag } = await supabase.rpc('cancelar_cita_venta', { p_id: cita.id, p_estado: 'Reagendada' })
@@ -196,7 +225,27 @@ export default function RetroCitaWizard({ cita, onClose, onSaved }: {
             <Text style={s.icono}>{P.icono}</Text>
             <Text style={[s.pregunta, { color: c.text }]}>{P.titulo}</Text>
             <Text style={[s.hint, { color: c.textMute }]}>{P.hint}</Text>
-            {P.key === 'prox' ? (
+            {P.key === 'estado' ? (
+              <View style={s.estadosCaja}>
+                {ESTADOS_RETRO.map(e => {
+                  const on = estado === e.label
+                  return (
+                    <TouchableOpacity
+                      key={e.label}
+                      onPress={() => setEstado(e.label)}
+                      style={[s.estadoChip, {
+                        borderColor: on ? e.color : c.border,
+                        backgroundColor: on ? e.color : 'transparent',
+                      }]}
+                    >
+                      <Text style={[s.estadoTxt, { color: on ? '#fff' : c.textSub }]}>
+                        {e.emoji} {e.label}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+            ) : P.key === 'prox' ? (
               <View>
                 {Platform.OS === 'web' ? (
                   /* @ts-ignore – input nativo del navegador (calendario), igual que en el dashboard de citas */
@@ -267,6 +316,9 @@ const s = StyleSheet.create({
   contador: { fontSize: 11, fontWeight: '600', marginTop: 6, marginBottom: 14 },
   icono: { fontSize: 30, textAlign: 'center', marginBottom: 6 },
   pregunta: { fontSize: 19, fontWeight: '800', textAlign: 'center', marginBottom: 6 },
+  estadosCaja: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, justifyContent: 'center', paddingVertical: 4 },
+  estadoChip: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  estadoTxt: { fontSize: 12.5, fontWeight: '700' },
   hint: { fontSize: 12.5, textAlign: 'center', lineHeight: 18, marginBottom: 14, paddingHorizontal: 4 },
   input: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 15, minHeight: 120 },
   proxPreview: { fontSize: 13.5, fontWeight: '800', marginTop: 12, textAlign: 'center' },
