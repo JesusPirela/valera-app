@@ -4,14 +4,57 @@
 // dos.
 import { View, Text, ScrollView, StyleSheet } from 'react-native'
 import Svg, { Path, Text as SvgText } from 'react-native-svg'
+import { useTheme } from '../lib/ThemeContext'
 
+// ─── Los colores de estado ───────────────────────────────────────────────────
+// Estos seis no son colores decorativos: cada uno significa un resultado, y
+// salen pegados uno al lado del otro en las donas y en las barras apiladas. Si
+// dos no se distinguen, la gráfica miente.
+//
+// Se midieron con un validador de paletas en vez de a ojo, y salieron dos
+// problemas de verdad en los colores que había antes:
+//
+//  · reagendada (#e08e3c) contra cancelada (#d9534f) estaban a ΔE 14.2, por
+//    debajo del piso de 15: costaba distinguirlas INCLUSO con visión normal. Y
+//    son justo las dos que más importa separar.
+//  · cancelada (#d9534f) contra realizada (#2e9e5b) estaban a ΔE 3.0 para
+//    daltonismo deuteranope, que es el más común. Para esas personas el rojo y
+//    el verde eran el mismo color, o sea que la gráfica no decía nada.
+//
+// Con el rojo más oscuro y el ámbar más amarillo, todos los pares pasan: 8.1
+// el peor para daltonismo, 19.7 el peor con visión normal.
+//
+// Lo que NO se persiguió: que los seis tengan la misma luminosidad. Esa regla
+// es para paletas de identidad (una serie por cliente, por ejemplo), donde el
+// tono es lo único que distingue. Aquí la diferencia de luminosidad entre el
+// rojo y el verde es precisamente lo que salva al daltónico, así que igualarla
+// rompería lo que se acaba de arreglar.
 export const COL = {
   realizada:  '#2e9e5b',
   aparto:     '#1a6470',
-  cancelada:  '#d9534f',
-  reagendada: '#e08e3c',
+  cancelada:  '#c62828',
+  reagendada: '#e9a820',
   otro:       '#8d9db6',
   sinEstado:  '#c4cedb',
+}
+
+// El modo oscuro se ELIGE, no se voltea solo: los mismos colores sobre el
+// fondo #111f2e no llegan al contraste mínimo de 3:1 y el verde azulado se ve
+// casi negro. Estos son pasos propios, validados contra ese fondo, y mantienen
+// la misma separación entre rojo y verde (14.1 para daltonismo).
+export const COL_OSCURO: typeof COL = {
+  realizada:  '#8ff0b0',
+  aparto:     '#3aa8c4',
+  cancelada:  '#e04a44',
+  reagendada: '#e9a820',
+  otro:       '#93a3bb',
+  sinEstado:  '#4a5a6e',
+}
+
+/** Los colores de estado del tema que esté puesto. */
+export function usePaleta(): typeof COL {
+  const { darkMode } = useTheme()
+  return darkMode ? COL_OSCURO : COL
 }
 
 // ─── Dona ────────────────────────────────────────────────────────────────────
@@ -196,4 +239,223 @@ export const s = StyleSheet.create({
   barraColNum: { fontSize: 10.5, fontWeight: '700', marginBottom: 3, height: 14 },
   barraColPista: { width: 22, height: 90, borderRadius: 4, justifyContent: 'flex-end', overflow: 'hidden' },
   barraColEtiqueta: { fontSize: 9.5, color: '#9aa5ab', marginTop: 5 },
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Piezas para el tablero de accountability (El Principio de Oz)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Los colores de "dónde estás parado". Son colores de ESTADO, no de identidad:
+// no se reparten a series ni se reciclan para "la cuarta barra". Van siempre
+// con su palabra al lado, nunca solos, porque el color por sí mismo no es una
+// etiqueta accesible.
+export const COL_LINEA = {
+  sobre: COL.realizada,
+  en:    COL.reagendada,
+  bajo:  COL.cancelada,
+  sin:   COL.sinEstado,
+}
+export const COL_LINEA_OSCURO: typeof COL_LINEA = {
+  sobre: COL_OSCURO.realizada,
+  en:    COL_OSCURO.reagendada,
+  bajo:  COL_OSCURO.cancelada,
+  sin:   COL_OSCURO.sinEstado,
+}
+export function usePaletaLinea(): typeof COL_LINEA {
+  const { darkMode } = useTheme()
+  return darkMode ? COL_LINEA_OSCURO : COL_LINEA
+}
+
+// ─── Embudo ──────────────────────────────────────────────────────────────────
+// Barras que se van angostando, con la caída anotada entre una y otra. La
+// caída es el dato: un embudo sin ella es una lista de números en desorden.
+export function Embudo({ pasos, colorTexto, colorPista, color }: {
+  pasos: { nombre: string; n: number; nota: string }[]
+  colorTexto: string
+  colorPista: string
+  color: string
+}) {
+  const max = Math.max(1, ...pasos.map(p => p.n))
+  return (
+    <View>
+      {pasos.map((p, i) => {
+        const previo = i > 0 ? pasos[i - 1].n : null
+        const caida = previo && previo > 0 ? 100 - (p.n / previo) * 100 : null
+        return (
+          <View key={p.nombre}>
+            {caida !== null ? (
+              <View style={sOz.embudoCaidaFila}>
+                <Text style={sOz.embudoCaida}>
+                  {'↓'} se cayeron {Math.round(caida)}%  ({(previo ?? 0) - p.n} citas)
+                </Text>
+              </View>
+            ) : null}
+            <View style={sOz.embudoFila}>
+              <View style={{ flex: 1 }}>
+                <View style={s.barraCabeza}>
+                  <Text style={[sOz.embudoNombre, { color: colorTexto }]} numberOfLines={1}>{p.nombre}</Text>
+                  <Text style={[sOz.embudoNum, { color: colorTexto }]}>{p.n}</Text>
+                </View>
+                <View style={[sOz.embudoPista, { backgroundColor: colorPista }]}>
+                  <View style={{
+                    width: `${Math.max((p.n / max) * 100, p.n > 0 ? 2 : 0)}%`,
+                    height: '100%', backgroundColor: color, borderRadius: 6,
+                  }} />
+                </View>
+                <Text style={s.barraNota}>{p.nota}</Text>
+              </View>
+            </View>
+          </View>
+        )
+      })}
+    </View>
+  )
+}
+
+// ─── Puntos con la línea ─────────────────────────────────────────────────────
+// Cada persona, un punto sobre una escala de 0 a 100, con las líneas de corte
+// dibujadas de arriba abajo. Es la forma correcta para comparar a pocas
+// personas en una sola medida: los nombres nunca se enciman (van a la
+// izquierda, no sobre el punto) y la línea del libro se ve como lo que es, una
+// línea que se cruza o no se cruza.
+//
+// Se eligió esto en vez de barras porque una barra desde cero invita a leer
+// "el doble de largo = el doble de bueno", y una calificación de 70 no es el
+// doble de buena que una de 35. Un punto sobre una escala no sugiere eso.
+export function PuntosConLinea({ filas, cortes, colorTexto, colorPista, colorLinea }: {
+  filas: { nombre: string; valor: number | null; color: string; nota?: string }[]
+  /** Dónde van las rayas verticales, con su nombre. */
+  cortes: { en: number; nombre: string }[]
+  colorTexto: string
+  colorPista: string
+  colorLinea: string
+}) {
+  return (
+    <View>
+      {/* Los nombres de los cortes, arriba y alineados con su raya */}
+      <View style={sOz.ozCortesFila}>
+        <View style={{ width: 88 }} />
+        <View style={{ flex: 1, height: 13 }}>
+          {cortes.map(c => (
+            <Text key={c.nombre} style={[sOz.ozCorteTxt, { left: `${c.en}%` }]} numberOfLines={1}>
+              {c.nombre}
+            </Text>
+          ))}
+        </View>
+        <View style={{ width: 34 }} />
+      </View>
+
+      {filas.map((f, i) => (
+        <View key={f.nombre + i} style={sOz.ozFila}>
+          <Text style={[sOz.ozNombre, { color: colorTexto }]} numberOfLines={1}>{f.nombre}</Text>
+          <View style={sOz.ozPistaCaja}>
+            <View style={[sOz.ozPista, { backgroundColor: colorPista }]} />
+            {/* Las rayas de corte, detrás del punto */}
+            {cortes.map(c => (
+              <View key={c.nombre} style={[sOz.ozCorteRaya, { left: `${c.en}%`, backgroundColor: colorLinea }]} />
+            ))}
+            {f.valor !== null ? (
+              <View style={[sOz.ozPunto, {
+                left: `${Math.min(Math.max(f.valor, 0), 100)}%`,
+                backgroundColor: f.color,
+              }]} />
+            ) : null}
+          </View>
+          <Text style={[sOz.ozValor, { color: f.valor === null ? '#9aa5ab' : colorTexto }]}>
+            {f.valor === null ? '—' : Math.round(f.valor)}
+          </Text>
+        </View>
+      ))}
+
+      {filas.some(f => f.nota) ? (
+        <View style={{ marginTop: 8, gap: 3 }}>
+          {filas.filter(f => f.nota).map((f, i) => (
+            <Text key={i} style={sOz.ozNota} numberOfLines={2}>
+              <Text style={{ fontWeight: '700' }}>{f.nombre}</Text>{'  '}{f.nota}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
+// ─── Los cuatro pasos de una persona ─────────────────────────────────────────
+// Cuatro barras finas, una por paso, con la cuenta cruda al lado. El número
+// crudo va SIEMPRE: un 50% puede ser 1 de 2 o 95 de 190, y confundirlos es la
+// forma más fácil de ser injusto con alguien.
+export function CuatroPasosBarras({ pasos, colorTexto, colorPista }: {
+  pasos: { nombre: string; pct: number | null; exitos: number; base: number; color: string }[]
+  colorTexto: string
+  colorPista: string
+}) {
+  return (
+    <View style={{ gap: 7 }}>
+      {pasos.map(p => (
+        <View key={p.nombre} style={sOz.pasoFila}>
+          <Text style={[sOz.pasoNombre, { color: colorTexto }]}>{p.nombre}</Text>
+          <View style={[sOz.pasoPista, { backgroundColor: colorPista }]}>
+            {p.pct !== null ? (
+              <View style={{
+                width: `${Math.min(Math.max(p.pct, 0), 100)}%`,
+                height: '100%', backgroundColor: p.color, borderRadius: 4,
+              }} />
+            ) : null}
+          </View>
+          <Text style={[sOz.pasoPct, { color: p.pct === null ? '#9aa5ab' : colorTexto }]}>
+            {p.pct === null ? '—' : `${Math.round(p.pct)}%`}
+          </Text>
+          <Text style={sOz.pasoCrudo}>
+            {p.base === 0 ? 'sin casos' : `${p.exitos}/${p.base}`}
+          </Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
+// ─── Barra apilada al 100% ───────────────────────────────────────────────────
+// Para comparar la MEZCLA de resultados entre zonas, donde el volumen cambia
+// mucho. Lleva 2px de hueco entre tramos: sin eso, dos colores pegados se leen
+// como uno solo cuando el tramo es angosto.
+export function BarraMezcla({ tramos, alto = 11 }: {
+  tramos: { valor: number; color: string }[]
+  alto?: number
+}) {
+  const total = tramos.reduce((a, t) => a + t.valor, 0)
+  if (total <= 0) return <View style={{ height: alto }} />
+  const vivos = tramos.filter(t => t.valor > 0)
+  return (
+    <View style={{ flexDirection: 'row', height: alto, borderRadius: alto / 2, overflow: 'hidden', gap: 2 }}>
+      {vivos.map((t, i) => (
+        <View key={i} style={{ flex: t.valor, backgroundColor: t.color }} />
+      ))}
+    </View>
+  )
+}
+
+export const sOz = StyleSheet.create({
+  embudoFila: { flexDirection: 'row', alignItems: 'flex-start' },
+  embudoNombre: { flex: 1, fontSize: 13, fontWeight: '700' },
+  embudoNum: { fontSize: 15, fontWeight: '800', marginLeft: 8 },
+  embudoPista: { height: 12, borderRadius: 6, overflow: 'hidden' },
+  embudoCaidaFila: { paddingLeft: 10, paddingVertical: 5 },
+  embudoCaida: { fontSize: 10.5, color: '#9aa5ab', fontWeight: '700' },
+
+  ozCortesFila: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
+  ozCorteTxt: { position: 'absolute', fontSize: 9.5, color: '#9aa5ab', fontWeight: '700', marginLeft: -18, width: 76 },
+  ozFila: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 9 },
+  ozNombre: { width: 88, fontSize: 12.5, fontWeight: '600' },
+  ozPistaCaja: { flex: 1, height: 18, justifyContent: 'center' },
+  ozPista: { height: 4, borderRadius: 2 },
+  ozCorteRaya: { position: 'absolute', width: 1.5, height: 18, opacity: 0.45 },
+  ozPunto: { position: 'absolute', width: 13, height: 13, borderRadius: 7, marginLeft: -6.5 },
+  ozValor: { width: 26, fontSize: 13, fontWeight: '800', textAlign: 'right' },
+  ozNota: { fontSize: 10.5, color: '#9aa5ab', lineHeight: 14 },
+
+  pasoFila: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  pasoNombre: { width: 78, fontSize: 11.5, fontWeight: '700' },
+  pasoPista: { flex: 1, height: 8, borderRadius: 4, overflow: 'hidden' },
+  pasoPct: { width: 34, fontSize: 11.5, fontWeight: '800', textAlign: 'right' },
+  pasoCrudo: { width: 50, fontSize: 10, color: '#9aa5ab', textAlign: 'right' },
 })

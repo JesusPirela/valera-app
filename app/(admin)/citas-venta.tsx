@@ -55,6 +55,7 @@ type Fila = CitaRetro & {
   zona_interesada: string | null
   fecha_apartado: string | null; dia_apartado: string | null
   asesor_id: string | null
+  origen: string | null
 }
 type ColKey = keyof Fila
 type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha' | 'estado' | 'zona' | 'pago'
@@ -681,7 +682,10 @@ export default function CitasVenta() {
   }
 
   const cargar = useCallback(async () => {
-    const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, fecha_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at, asesor_id, zona_interesada, fecha_apartado, dia_apartado'
+    // `origen` lo necesita el tablero de accountability: las 758 filas del
+    // Excel viejo solo traen resultado en el 9% y no se pueden usar para
+    // calificar a nadie, así que hay que poder distinguirlas.
+    const cols = 'id, orden, cliente_nombre, telefono, detalles_pago, interesado_en, dia_cita, fecha_cita, prospecto, coordino, atendio, estado_seguimiento, fecha_prox_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion, retro_completada_at, asesor_id, zona_interesada, fecha_apartado, dia_apartado, origen'
     const todas: Fila[] = []; const paso = 1000
     try {
       for (let desde = 0; ; desde += paso) {
@@ -967,7 +971,7 @@ export default function CitasVenta() {
           onPress={() => setVerGraficas(v => !v)}
         >
           <Text style={[st.btnGraficasTxt, verGraficas && { color: '#fff' }]}>
-            {verGraficas ? '✕ Cerrar gráficas' : '📊 Gráficas'}
+            {verGraficas ? '✕ Cerrar' : '📊 Accountability'}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={st.btnHoy} onPress={irAHoy}><Text style={st.btnHoyTxt}>📅 Ir a hoy</Text></TouchableOpacity>
