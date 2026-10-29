@@ -934,8 +934,31 @@ export default function ProspectadorPropiedades() {
     setMensajeAyuda('')
   }
 
-  const precioMinNum = precioMin ? parseFloat(precioMin.replace(/,/g, '')) : null
-  const precioMaxNum = precioMax ? parseFloat(precioMax.replace(/,/g, '')) : null
+  // El rango de precio se aplica con un respiro después de dejar de teclear.
+  //
+  // Sin el respiro, escribir "1,500,000" en el máximo hace que la lista pase
+  // por "hasta $1", "hasta $15", "hasta $150"… y se quede VACÍA todo el rato
+  // hasta terminar de escribir. Desde afuera parece que la búsqueda se
+  // descompuso. Con el respiro la lista se mueve una sola vez, cuando el
+  // número ya está completo.
+  const [precioMinAplicado, setPrecioMinAplicado] = useState('')
+  const [precioMaxAplicado, setPrecioMaxAplicado] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPrecioMinAplicado(precioMin)
+      setPrecioMaxAplicado(precioMax)
+    }, 450)
+    return () => clearTimeout(t)
+  }, [precioMin, precioMax])
+
+  const precioMinNum = precioMinAplicado ? parseFloat(precioMinAplicado.replace(/,/g, '')) : null
+  const precioMaxRaw = precioMaxAplicado ? parseFloat(precioMaxAplicado.replace(/,/g, '')) : null
+  // Un máximo por debajo del mínimo no deja pasar ninguna propiedad, y eso
+  // pasa solo mientras se escribe (el mínimo ya completo, el máximo a medias).
+  // En vez de enseñar la lista vacía, se ignora el máximo hasta que tenga
+  // sentido.
+  const precioMaxNum = (precioMaxRaw != null && precioMinNum != null && precioMaxRaw < precioMinNum)
+    ? null : precioMaxRaw
 
   const filtrosActivos = [
     filtroOperacion,
@@ -1163,7 +1186,10 @@ export default function ProspectadorPropiedades() {
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
   useEffect(() => { setVisibleCount(PAGE_WEB) }, [
-    busqueda, filtroOperacion, filtroTipo, filtroRecamaras, ordenPrecio, precioMin, precioMax,
+    busqueda, filtroOperacion, filtroTipo, filtroRecamaras, ordenPrecio,
+    // Los aplicados, no los tecleados: si no, el listado se devuelve al
+    // principio con cada tecla del precio.
+    precioMinAplicado, precioMaxAplicado,
     filtroPublicadas, filtroNueva, filtroExclusiva, filtroFechaPreset,
     fechaDesdeCustom, fechaHastaCustom,
   ])

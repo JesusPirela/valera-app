@@ -52,7 +52,24 @@ export function parsearPrecioBusqueda(texto: string): PredicadoPrecio | null {
     const a = aNumero(rango[1])
     const b = aNumero(rango[2])
     if (a == null || b == null) return null
-    return entre(Math.min(a, b), Math.max(a, b))
+    if (b >= a) return entre(a, b)
+
+    // Aquí el de la derecha es MENOR que el de la izquierda, y eso casi
+    // siempre es que lo están escribiendo todavía.
+    //
+    // El problema que esto arregla: al teclear "1,000,000 - 2,000,000" se pasa
+    // por "1,000,000 - 2", "- 2,0", "- 2,00"… y en todos esos pasos el número
+    // de la derecha es chiquito. Dándole la vuelta al rango, la búsqueda se
+    // convertía en "de $2 a $1,000,000" y la lista se llenaba de rentas de
+    // $12,000 justo mientras la persona escribía. Parecía que la app se
+    // descomponía.
+    //
+    // Si el de la derecha trae MENOS dígitos, es que falta tecleo: se aplica
+    // nada más el mínimo, que es una respuesta razonable a medio escribir y
+    // se va cerrando sola al terminar. Si trae los mismos dígitos o más, sí
+    // es un rango escrito al revés y ahí se voltea.
+    const faltaTecleo = String(b).length < String(a).length
+    return faltaTecleo ? entre(a, null) : entre(b, a)
   }
 
   // Umbral: "> 2,000,000" o "< 2,000,000"
