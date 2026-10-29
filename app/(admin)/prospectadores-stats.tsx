@@ -12,6 +12,7 @@ import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
+import CaminoAlAscenso from '../../components/CaminoAlAscenso'
 
 type Metrica = 'propiedades_publicadas' | 'seguimientos' | 'clientes_nuevos' | 'citas'
 type Prospectador = {
@@ -47,6 +48,10 @@ export default function ProspectadoresStats() {
   const [loading, setLoading] = useState(true)
   const [rango, setRango] = useState<7 | 30 | 90>(30)
   const [metrica, setMetrica] = useState<Metrica>('propiedades_publicadas')
+  // Dos vistas sobre la misma gente: cuánto produjeron, y qué tan cerca están
+  // de subir de nivel. Son preguntas distintas y mezclarlas en una sola lista
+  // no dejaba ver ninguna de las dos.
+  const [vista, setVista] = useState<'desempeno' | 'ascenso'>('desempeno')
 
   const cargar = useCallback(async () => {
     const fin = new Date()
@@ -110,6 +115,28 @@ export default function ProspectadoresStats() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 40 }} refreshControl={refreshControl}>
+        {/* Qué vista */}
+        <View style={s.chipsRow}>
+          {([['desempeno', '📊 Desempeño'], ['ascenso', '🚀 Camino al ascenso']] as const).map(([v, lbl]) => (
+            <TouchableOpacity
+              key={v}
+              style={[s.chip, { borderColor: c.border }, vista === v && s.chipOn]}
+              onPress={() => setVista(v)}
+            >
+              <Text style={[s.chipTxt, { color: c.textSub }, vista === v && s.chipTxtOn]}>{lbl}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {vista === 'ascenso' ? (
+          <CaminoAlAscenso
+            onAbrirPersona={(id, nombre) => router.push({
+              pathname: '/(admin)/usuario-actividad',
+              params: { id, nombre },
+            })}
+          />
+        ) : (
+        <>
         {/* Rango */}
         <View style={s.chipsRow}>
           {([[7, '7 días'], [30, '30 días'], [90, '90 días']] as const).map(([v, lbl]) => (
@@ -189,6 +216,8 @@ export default function ProspectadoresStats() {
               Toca a un prospectador para ver su actividad día por día. El valor grande y el orden dependen de la métrica seleccionada arriba.
             </Text>
           </>
+        )}
+        </>
         )}
       </ScrollView>
     </View>
