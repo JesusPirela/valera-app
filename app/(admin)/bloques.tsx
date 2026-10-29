@@ -74,11 +74,10 @@ export default function Bloques() {
 
   async function cargar(p: Periodo, silencioso = false) {
     if (!silencioso) setLoading(true)
-    const [blqRes, resRes, perfilRes, notasRes] = await Promise.all([
+    const [blqRes, resRes, perfilRes] = await Promise.all([
       supabase.from('bloques').select('id, nombre, orden').order('orden'),
       supabase.rpc('get_bloques_resumen', { p_dias: p }),
       supabase.from('profiles').select('id, notas_bloque, contesto_fecha, contesto_ok, activo').neq('role', 'admin'),
-      supabase.from('bloque_notas').select('id, user_id, texto, tipo, fecha, created_at').order('created_at', { ascending: false }),
     ])
     // Si el usuario cambió de periodo mientras esta carga estaba en vuelo,
     // descartar la respuesta vieja (evita que una respuesta lenta pise a la nueva).
@@ -96,12 +95,6 @@ export default function Bloques() {
       activo: perfilMap[r.user_id]?.activo ?? true,
     }))
     setUsuarios(rows)
-    // Agrupar las notas por usuario (ya vienen ordenadas por fecha desc).
-    const notasMap: Record<string, NotaRow[]> = {}
-    for (const n of (notasRes.data ?? []) as NotaRow[]) {
-      ;(notasMap[n.user_id] ??= []).push(n)
-    }
-    setNotasPorUsuario(notasMap)
     yaCargoRef.current = true
     setLoading(false)
   }
@@ -313,7 +306,7 @@ export default function Bloques() {
                         const textoNuevo = (nuevaNota[u.user_id] ?? '').trim()
 
                         return (
-                          <View key={u.user_id} style={[s.userRow, { borderTopColor: c.border }]}>
+                          <View key={u.user_id} style={[s.userRow, { borderColor: c.border, backgroundColor: c.bg }]}>
                             {/* Nombre + métricas */}
                             <View style={s.userTop}>
                               <Text style={[s.userNombre, { color: c.text }]} numberOfLines={1}>{u.nombre ?? 'Sin nombre'}</Text>
@@ -322,86 +315,6 @@ export default function Bloques() {
                                 <View style={[s.metricChip, { backgroundColor: '#2e7d3218' }]}><Text style={[s.metricTxt, { color: '#2e7d32' }]}>👤 {u.clientes_nuevos}</Text></View>
                                 <View style={[s.metricChip, { backgroundColor: '#c8960c18' }]}><Text style={[s.metricTxt, { color: '#c8960c' }]}>✅ {u.seguimientos}</Text></View>
                               </View>
-                            </View>
-
-                            {/* Contacté hoy — botón claro (solo periodo Hoy) */}
-                            {periodo === 1 && (
-                              <View style={{ marginTop: 8 }}>
-                                <TouchableOpacity
-                                  activeOpacity={0.8}
-                                  disabled={cargandoContesto}
-                                  onPress={() => toggleContesto(u.user_id, contestoHoy)}
-                                  style={[s.contactoBtn, contestoHoy ? s.contactoBtnOn : { borderColor: c.border }]}
-                                >
-                                  {cargandoContesto
-                                    ? <ActivityIndicator size="small" color={contestoHoy ? '#fff' : '#2e7d32'} />
-                                    : <Text style={[s.contactoBtnTxt, { color: contestoHoy ? '#fff' : '#2e7d32' }]}>
-                                        {contestoHoy ? '✓ Lo contacté hoy' : '📞 Marcar que lo contacté hoy'}
-                                      </Text>}
-                                </TouchableOpacity>
-                                {!contestoHoy && u.contesto_fecha && (
-                                  <Text style={[s.ultimoContacto, { color: c.textMute }]}>Último contacto: {fmtFechaCorta(u.contesto_fecha)}</Text>
-                                )}
-                              </View>
-                            )}
-
-                            {/* Notas: permanentes (📌), de hoy, agregar (diaria/permanente) e historial */}
-                            <View style={s.notasSection}>
-                              {permanentes.map(n => (
-                                <View key={n.id} style={[s.notaItem, { backgroundColor: '#5e35b114', borderColor: '#5e35b133' }]}>
-                                  <Text style={s.notaPin}>📌</Text>
-                                  <Text style={[s.notaTxt, { color: c.text }]}>{n.texto}</Text>
-                                  <TouchableOpacity onPress={() => borrarNota(u.user_id, n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={s.notaDel}>✕</Text></TouchableOpacity>
-                                </View>
-                              ))}
-                              {diariasHoy.map(n => (
-                                <View key={n.id} style={[s.notaItem, { backgroundColor: c.bg, borderColor: c.border }]}>
-                                  <Text style={s.notaPin}>📝</Text>
-                                  <Text style={[s.notaTxt, { color: c.text }]}>{n.texto} <Text style={s.notaHoy}>· hoy</Text></Text>
-                                  <TouchableOpacity onPress={() => borrarNota(u.user_id, n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={s.notaDel}>✕</Text></TouchableOpacity>
-                                </View>
-                              ))}
-
-                              {/* Agregar nota */}
-                              <TextInput
-                                style={[s.notaInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
-                                placeholder="Escribe una nota…"
-                                placeholderTextColor={c.textMute}
-                                value={nuevaNota[u.user_id] ?? ''}
-                                onChangeText={v => setNuevaNota(prev => ({ ...prev, [u.user_id]: v }))}
-                                multiline
-                              />
-                              <View style={s.addNotaRow}>
-                                <View style={s.tipoToggle}>
-                                  {(['diaria', 'permanente'] as const).map(t => (
-                                    <TouchableOpacity key={t} onPress={() => setNuevaNotaTipo(prev => ({ ...prev, [u.user_id]: t }))}
-                                      style={[s.tipoOpt, tipoSel === t && s.tipoOptOn]}>
-                                      <Text style={[s.tipoOptTxt, tipoSel === t && { color: '#fff' }]}>{t === 'diaria' ? '📅 Diaria' : '📌 Permanente'}</Text>
-                                    </TouchableOpacity>
-                                  ))}
-                                </View>
-                                <TouchableOpacity style={[s.addNotaBtn, { opacity: textoNuevo && !cargandoNota ? 1 : 0.45 }]}
-                                  disabled={!textoNuevo || cargandoNota}
-                                  onPress={() => agregarNota(u.user_id)}>
-                                  {cargandoNota ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.addNotaTxt}>+ Agregar</Text>}
-                                </TouchableOpacity>
-                              </View>
-
-                              {/* Historial de notas diarias */}
-                              {historial.length > 0 && (
-                                <View style={{ marginTop: 8 }}>
-                                  <TouchableOpacity onPress={() => toggleHist(u.user_id)}>
-                                    <Text style={s.histToggle}>🕘 Historial de notas ({historial.length}) {histOpen ? '▲' : '▼'}</Text>
-                                  </TouchableOpacity>
-                                  {histOpen && historial.map(n => (
-                                    <View key={n.id} style={s.histItem}>
-                                      <Text style={[s.histFecha, { color: c.textMute }]}>{fmtFechaCorta(n.fecha)}</Text>
-                                      <Text style={[s.notaTxt, { color: c.textSub }]}>{n.texto}</Text>
-                                      <TouchableOpacity onPress={() => borrarNota(u.user_id, n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Text style={s.notaDel}>✕</Text></TouchableOpacity>
-                                    </View>
-                                  ))}
-                                </View>
-                              )}
                             </View>
 
                             {/* Chips de asignación */}
@@ -478,9 +391,12 @@ const s = StyleSheet.create({
 
   vacio: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic', paddingVertical: 10 },
 
-  userRow: { borderTopWidth: 1, paddingTop: 10, marginTop: 10 },
+  // Cada persona en su propia tarjeta. Antes era una línea separada por un
+  // filo de 1px, y con los botones debajo no se distinguía dónde terminaba
+  // una y empezaba la siguiente.
+  userRow: { borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 10 },
   userTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  userNombre: { fontSize: 14, fontWeight: '700', flex: 1 },
+  userNombre: { fontSize: 15.5, fontWeight: '800', flex: 1 },
   userStats: { flexDirection: 'row', gap: 10 },
   userStat: { fontSize: 13, fontWeight: '800' },
 
@@ -531,8 +447,11 @@ const s = StyleSheet.create({
   histItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 5, paddingLeft: 4 },
   histFecha: { fontSize: 11, fontWeight: '700', minWidth: 44 },
 
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 },
-  chipsLabel: { fontSize: 11, color: '#94a3b8', fontWeight: '700', marginRight: 2 },
+  chipsRow: {
+    flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6,
+    marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(148,163,184,0.25)',
+  },
+  chipsLabel: { fontSize: 11, color: '#94a3b8', fontWeight: '700', marginRight: 2, width: '100%', marginBottom: 2 },
   chip: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 5 },
   chipActive: { backgroundColor: PURPLE, borderColor: PURPLE },
   chipTxt: { fontSize: 12, color: '#64748b', fontWeight: '600' },
