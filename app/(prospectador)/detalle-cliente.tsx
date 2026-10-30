@@ -19,7 +19,7 @@ import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueRecordatorioUpdate } from '../../lib/offline-queue'
 import { conTimeout } from '../../lib/redIntentos'
 import PropiedadesSugeridas from '../../components/PropiedadesSugeridas'
-import EmbudoEtapaVenta from '../../components/EmbudoEtapaVenta'
+import SelectorEtapa from '../../components/SelectorEtapa'
 
 type Cliente = {
   id: string; nombre: string; telefono: string; email: string | null
@@ -398,6 +398,27 @@ export default function DetalleCliente() {
     queryClient.setQueryData<any[]>(['clientes', 'all',  'v3'], patch)
   }
 
+  // Cambiar la etapa desde el botón grande, sin entrar a Editar.
+  //
+  // Guarda primero y refresca después: si fallara, se avisa y la pantalla se
+  // vuelve a traer de la base, así que el botón nunca se queda enseñando una
+  // etapa que no se guardó.
+  async function cambiarEtapa(etapa: string) {
+    if (soloLectura) return
+    const { error } = await supabase
+      .from('clientes')
+      .update({ estado: etapa, updated_at: new Date().toISOString() })
+      .eq('id', id as string)
+    if (error) {
+      const msg = 'No se pudo cambiar la etapa: ' + error.message
+      if (Platform.OS === 'web') window.alert('⚠ ' + msg)
+      else Alert.alert('Error', msg)
+    }
+    // El CRM agrupa por etapa, así que también hay que refrescarlo.
+    queryClient.invalidateQueries({ queryKey: ['clientes'] })
+    await refetch()
+  }
+
   async function agregarInteraccion() {
     if (soloLectura) return
     if (!textoInteraccion.trim()) { Alert.alert('Requerido', 'Escribe una descripción.'); return }
@@ -747,15 +768,15 @@ export default function DetalleCliente() {
       </View>
 
       {/* ── Etapa de venta ───────────────────────────── */}
+      {/* Sin título de sección: el botón ya dice "ETAPA DE VENTA" dentro, y
+          repetirlo encima solo robaba espacio. */}
       <View style={styles.section}>
-        <View style={{ marginBottom: 12 }}>
-          <SectionTitle icon="git-network-outline" label="Etapa de venta" accentColor={info.color} />
-        </View>
-        {/* Solo lectura: la etapa se cambia desde el botón Editar */}
-        <EmbudoEtapaVenta
+        <SelectorEtapa
           etapas={ETAPAS_CLIENTE}
           estados={ESTADOS}
-          estadoActual={cliente.estado}
+          valor={cliente.estado}
+          deshabilitado={soloLectura}
+          onCambiar={cambiarEtapa}
         />
       </View>
 
