@@ -1437,15 +1437,13 @@ export default function DetallePropiedad() {
         .header { background-color: ${colorFicha}; text-align: center; }
         /* Foto principal ARRIBA con el precio encima: es lo que se ve en la
            miniatura del PDF (WhatsApp/descargas) sin abrirlo. */
-        /* Intento anterior: alto fijo + object-fit:cover en nativo. Resultado:
-           la miniatura de WhatsApp dejó de mostrar CUALQUIER foto (ni
-           recortada, ni completa) — el motor de impresión de Android/iOS no
-           la sostuvo bien. Se vuelve al ancho-100%-alto-auto de siempre (la
-           foto nunca se deforma) y el recorte se hace con overflow:hidden en
-           el contenedor, que es la técnica más básica y compatible: dibuja la
-           foto completa y sencillamente tapa lo que sobra por debajo del alto
-           fijo, sin depender de que el renderer soporte object-fit. */
-        .hero-top { position: relative; width: 100%; overflow: hidden; background: #12304a; ${Platform.OS === 'web' ? '' : 'height: 260px;'} }
+        /* Se intentó forzar un alto fijo (con y sin object-fit) para que el
+           precio quedara más arriba, pero en ambos casos la miniatura de
+           WhatsApp dejó de mostrar CUALQUIER foto — no solo no mejoró, se
+           rompió. Vuelta al original: sin altura fija ni object-fit, alto
+           AUTOMÁTICO = proporción natural (es lo único que ha mostrado foto
+           de verdad en las pruebas). */
+        .hero-top { position: relative; width: 100%; overflow: hidden; background: #12304a; }
         /* Clase propia para la FOTO (no ".hero-top img", que también pegaba al logo
            y lo agrandaba al 100% por ser más específica → salía gigante). */
         .hero-photo { width: 100%; height: auto; display: block; }
