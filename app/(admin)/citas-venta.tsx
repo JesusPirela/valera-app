@@ -757,6 +757,10 @@ export default function CitasVenta() {
   const [importando, setImportando] = useState(false)
   const [msg, setMsg] = useState('')
   const [listH, setListH] = useState(0)   // alto medido del cuerpo (para virtualizar la FlatList)
+  // El mismo alto, en una referencia viva. Los desplazamientos diferidos lo
+  // leen DESPUÉS de que la tabla se midió, y una variable capturada en el
+  // cierre se habría quedado con el valor de antes (0 recién montada).
+  const listHRef = useRef(0)
 
   const headerRef = useRef<ScrollView>(null); const bodyRef = useRef<ScrollView>(null); const barRef = useRef<ScrollView>(null)
   const listRef = useRef<FlatList>(null); const vbarRef = useRef<ScrollView>(null)
@@ -879,6 +883,26 @@ export default function CitasVenta() {
     vbarRef.current?.scrollTo({ y: 0, animated: false })
   }
 
+  /**
+   * Deja la fila `idx` a la vista, más o menos a media pantalla.
+   *
+   * Mueve UNA sola cosa: la lista. La barra de la derecha se acomoda sola
+   * por syncY. Esto importa porque antes se movían las dos a la vez y con
+   * destinos distintos (scrollToIndex con viewPosition centra la fila;
+   * vbar.scrollTo la pone hasta arriba), y syncY descarta el segundo
+   * desplazamiento del mismo fotograma con su guardia `syncingY`. Ganaba uno
+   * u otro según el momento, así que a veces caía en la cita y a veces no.
+   *
+   * También va sin animación: una animación larga sigue disparando onScroll
+   * mientras tanto, y cualquier otro desplazamiento que llegue en medio la
+   * desvía.
+   */
+  const llevarAFila = useCallback((idx: number) => {
+    const alto = listHRef.current || 0
+    const destino = Math.max(0, idx * ROW_H - Math.max(0, alto / 2 - ROW_H))
+    listRef.current?.scrollToOffset({ offset: destino, animated: false })
+  }, [])
+
   function irAHoy() {
     const hoy = new Date().toISOString().slice(0, 10)
     let idx = -1
@@ -897,9 +921,11 @@ export default function CitasVenta() {
     }
     if (idx < 0) idx = idxAntes
     if (idx < 0) return
-    listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 })
-    vbarRef.current?.scrollTo({ y: idx * ROW_H, animated: true })
+    // Un solo desplazamiento (ver llevarAFila): antes movía la lista y la
+    // barra a la vez, con destinos distintos, y caía donde ganara la carrera.
+    llevarAFila(idx)
   }
+
 
   // Desde las estadísticas: cerrar el panel y llevar la tabla hasta esa cita.
   // Si la cita quedó fuera de los filtros de arriba no se puede saltar a ella,
@@ -914,13 +940,13 @@ export default function CitasVenta() {
     }
     setVerGraficas(false)
     setCitaResaltada(id)
-    // Un respiro para que la tabla vuelva a montarse antes de desplazarla.
-    setTimeout(() => {
-      listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.4 })
-      vbarRef.current?.scrollTo({ y: idx * ROW_H, animated: true })
-    }, 140)
-    setTimeout(() => setCitaResaltada(null), 3200)
-  }, [visibles])
+    // Dos intentos: uno en cuanto la tabla vuelve a montarse y otro cuando ya
+    // está medida. Si el primero cae bien, el segundo no se nota; si la tabla
+    // todavía no tenía alto, el segundo lo arregla.
+    setTimeout(() => llevarAFila(idx), 70)
+    setTimeout(() => llevarAFila(idx), 450)
+    setTimeout(() => setCitaResaltada(null), 3600)
+  }, [visibles, llevarAFila])
 
   // Presets de rango (últimos N días, hasta hoy).
   const hoyISO = () => new Date().toISOString().slice(0, 10)
@@ -1228,7 +1254,7 @@ export default function CitasVenta() {
                 sin ella renderiza las 1000+ filas y come RAM. */}
             <ScrollView ref={bodyRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}
               onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'b')} style={{ flex: 1 }}
-              onLayout={e => setListH(e.nativeEvent.layout.height)}>
+              onLayout={e => { const h = e.nativeEvent.layout.height; listHRef.current = h; setListH(h) }}>
               <FlatList
                 ref={listRef}
                 style={{ width: totalW, height: listH }}
