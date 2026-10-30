@@ -157,12 +157,12 @@ function mezclar<T>(arr: T[]): T[] {
 // Tarjeta de propiedad memoizada: solo se re-renderiza si cambian SUS datos
 // (veces publicada, estado de toggle, etc.), no en cada tecla de búsqueda.
 const PropiedadCard = memo(function PropiedadCard({
-  item, width, veces, isToggling, destacada, esAdmin, primaryColor,
+  item, width, veces, isToggling, destacada, esAdmin, puedeVerBadgeDirecta, primaryColor,
   cardBg, cardBorder, isOnline, imgOpts, empresaMatriz, totalPublicadores,
   isNuevaParaTi, isUnlocked, saturada, onOpen, onShare, onPublish, onZoom,
 }: {
   item: Propiedad; width?: number; veces: number; isToggling: boolean
-  destacada: boolean; esAdmin: boolean; primaryColor: string
+  destacada: boolean; esAdmin: boolean; puedeVerBadgeDirecta: boolean; primaryColor: string
   cardBg: string; cardBorder: string; isOnline: boolean; imgOpts: ThumbOpts
   empresaMatriz?: string | null
   totalPublicadores: number
@@ -282,6 +282,9 @@ const PropiedadCard = memo(function PropiedadCard({
           {item.es_constructora && empresaMatriz ? (
             <Text style={styles.empresaMatrizBadge} numberOfLines={1}>🏢 {empresaMatriz}</Text>
           ) : null}
+          {item.directa && puedeVerBadgeDirecta && (
+            <Text style={styles.directaBadge}>🎯 Directa</Text>
+          )}
         </View>
         <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
         <View style={{ alignSelf: 'flex-start', marginBottom: 4 }}>
@@ -746,6 +749,10 @@ export default function ProspectadorPropiedades() {
   // ser esPlusOMejor). Es la única gate de "directa" que no pasaba por esa
   // función centralizada, así que se agrega aparte.
   const puedeVerDirectas = esAdmin || queryData?.rol === 'gerente'
+  // El badge "🎯 Directa" en la tarjeta: además de admin/gerente (que ven el
+  // filtro), también lo ve el asesor — a diferencia del filtro, aquí sí se
+  // pidió explícitamente.
+  const puedeVerBadgeDirecta = puedeVerDirectas || queryData?.rol === 'asesor'
 
   // ── Publicar (reescrito desde cero) ─────────────────────────────────────────
   // Diseño: la publicación NUNCA se pierde y el botón NUNCA queda colgado.
@@ -1278,6 +1285,7 @@ export default function ProspectadorPropiedades() {
       isToggling={toggling.has(item.id)}
       destacada={!!_estaDestacada(item)}
       esAdmin={esAdmin}
+      puedeVerBadgeDirecta={puedeVerBadgeDirecta}
       primaryColor={primaryColor}
       cardBg={c.card}
       cardBorder={c.border}
@@ -2249,6 +2257,16 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     overflow: 'hidden',
     maxWidth: 160,
+  },
+  directaBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+    backgroundColor: '#1a6470',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
   },
   cardTitulo: { fontSize: 16, fontWeight: '700', marginBottom: 3 },
   cardDireccion: { fontSize: 13, color: '#888', marginBottom: 6 },
