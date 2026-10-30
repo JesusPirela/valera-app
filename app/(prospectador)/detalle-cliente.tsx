@@ -528,8 +528,11 @@ export default function DetalleCliente() {
     if (soloLectura) return
     const volver = () => router.canGoBack() ? router.back() : router.replace('/(prospectador)/crm')
     const run = async () => {
-      // RPC SECURITY DEFINER: borra de verdad y devuelve cuántas filas eliminó.
-      // (Antes el DELETE directo lo bloqueaba RLS en silencio → "no se borraba".)
+      // RPC SECURITY DEFINER. Manda el cliente a la PAPELERA: deja de verse
+      // aquí y en el CRM, pero el registro NO se va de la base. Quién lo
+      // saca de verdad es gerencia, desde la papelera del CRM de admin.
+      // Devuelve 1 si lo logró, igual que cuando borraba de verdad.
+      // (El DELETE directo, antes de la RPC, lo bloqueaba RLS en silencio.)
       const { data, error } = await supabase.rpc('eliminar_cliente', { p_id: id })
       if (error || !data || data < 1) {
         const msg = (error?.message ?? '').includes('Access denied')
