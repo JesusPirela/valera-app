@@ -200,9 +200,10 @@ function confirmar(msg: string, onSi: () => void) {
 }
 
 // ── Fila (solo muestra; memoizada y de altura fija → virtualización sin lag) ──
-const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete }: {
+const FilaRow = memo(function FilaRow({ f, idx, resaltada, onTap, onRetro, onCopy, onDelete }: {
   f: Fila; idx: number
   onTap: (id: string, k: ColKey, t: Tipo, val: string) => void
+  resaltada?: boolean
   onRetro: (f: Fila) => void; onCopy: (f: Fila) => void; onDelete: (f: Fila) => void
 }) {
   const c = useColors()
@@ -222,7 +223,12 @@ const FilaRow = memo(function FilaRow({ f, idx, onTap, onRetro, onCopy, onDelete
     : null
 
   return (
-    <View style={[st.row, { height: ROW_H, borderColor: c.border, backgroundColor: idx % 2 ? c.bg : c.card }]}>
+    <View style={[st.row, {
+      height: ROW_H, borderColor: c.border,
+      // Al llegar desde las estadisticas, la fila se tiñe unos segundos para
+      // no perderla entre 900 renglones iguales.
+      backgroundColor: resaltada ? 'rgba(201,168,76,0.28)' : (idx % 2 ? c.bg : c.card),
+    }]}>
       {/* Contador de fila (como Excel); con el color del estado si lo tiene */}
       <View style={[st.cell, st.counterCell, { width: NUM_W, borderColor: c.border }]}>
         <Text style={[st.counterTxt, {
@@ -716,6 +722,8 @@ export default function CitasVenta() {
   const [loading, setLoading] = useState(true)
   const [profiles, setProfiles] = useState<{ id: string; nombre: string }[]>([])
   const [verGraficas, setVerGraficas] = useState(false)
+  // La cita a la que se acaba de saltar desde las estadísticas.
+  const [citaResaltada, setCitaResaltada] = useState<string | null>(null)
   // Zonas para el selector: los desarrollos que de verdad existen en el
   // inventario. Se cargan una vez; son ~227.
   const [zonas, setZonas] = useState<string[]>([])
@@ -892,6 +900,27 @@ export default function CitasVenta() {
     listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 })
     vbarRef.current?.scrollTo({ y: idx * ROW_H, animated: true })
   }
+
+  // Desde las estadísticas: cerrar el panel y llevar la tabla hasta esa cita.
+  // Si la cita quedó fuera de los filtros de arriba no se puede saltar a ella,
+  // y entonces se avisa en vez de no hacer nada y parecer que se trabó.
+  const irACita = useCallback((id: string) => {
+    const idx = visibles.findIndex(x => x.id === id)
+    if (idx < 0) {
+      const aviso = 'Esa cita no está en la lista con los filtros de arriba puestos. Quítalos para verla.'
+      if (Platform.OS === 'web') window.alert(aviso)
+      else Alert.alert('No la encuentro', aviso)
+      return
+    }
+    setVerGraficas(false)
+    setCitaResaltada(id)
+    // Un respiro para que la tabla vuelva a montarse antes de desplazarla.
+    setTimeout(() => {
+      listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.4 })
+      vbarRef.current?.scrollTo({ y: idx * ROW_H, animated: true })
+    }, 140)
+    setTimeout(() => setCitaResaltada(null), 3200)
+  }, [visibles])
 
   // Presets de rango (últimos N días, hasta hoy).
   const hoyISO = () => new Date().toISOString().slice(0, 10)
@@ -1149,6 +1178,7 @@ export default function CitasVenta() {
             esApartado={esApartado}
             esCancelada={esCancelada}
             esReagendada={esReagendada}
+            onIrACita={irACita}
           />
         </ScrollView>
       )}
@@ -1205,7 +1235,7 @@ export default function CitasVenta() {
                 data={visibles}
                 keyExtractor={f => f.id}
                 getItemLayout={(_, i) => ({ length: ROW_H, offset: ROW_H * i, index: i })}
-                renderItem={({ item, index }) => <FilaRow f={item} idx={index} onTap={onTap} onRetro={onRetro} onCopy={onCopy} onDelete={onDelete} />}
+                renderItem={({ item, index }) => <FilaRow f={item} idx={index} resaltada={item.id === citaResaltada} onTap={onTap} onRetro={onRetro} onCopy={onCopy} onDelete={onDelete} />}
                 initialNumToRender={25} maxToRenderPerBatch={25} windowSize={11} removeClippedSubviews
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}

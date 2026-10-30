@@ -55,6 +55,8 @@ type Props = {
   esApartado: (s: string | null | undefined) => boolean
   esCancelada: (s: string | null | undefined) => boolean
   esReagendada: (s: string | null | undefined) => boolean
+  /** Cierra las gráficas y lleva la tabla hasta esa cita, para editarla. */
+  onIrACita?: (id: string) => void
 }
 
 const SIN_ASESOR = 'Sin asesor anotado'
@@ -91,7 +93,7 @@ type Grupo = {
 }
 
 export default function GraficasCitas({
-  filas, nombrePorId = {}, normalizar, mapear, esApartado, esCancelada, esReagendada,
+  filas, nombrePorId = {}, normalizar, mapear, esApartado, esCancelada, esReagendada, onIrACita,
 }: Props) {
   const C = useColors()
   const P = usePaleta()
@@ -114,29 +116,71 @@ export default function GraficasCitas({
     return P.otro
   }
 
+  // El cajón de color al que va cada cita.
+  const cajonDe = (f: CitaParaGrafica): Cajon => {
+    const e = f.estado_seguimiento
+    if (!e || !e.trim()) return 'sin'
+    if (esApartado(e)) return 'aparto'
+    // Cancelada y reagenda son un solo estado, como lo decidió el equipo.
+    if (esCancelada(e) || esReagendada(e)) return 'cayo'
+    const n = normalizar(e)
+    if (n.includes('realizada') || n.includes('esperando retro')) return 'realizada'
+    return 'otro'
+  }
+
+  // El nombre del estado tal cual, ya normalizado por la base.
+  const estadoDe = (f: CitaParaGrafica): string => {
+    const e = (f.estado_seguimiento ?? '').trim()
+    if (!e) return SIN_ESTADO
+    return infoEstadoCita(e)?.label ?? e
+  }
+
+  const vacio = (): Record<Cajon, number> => ({ aparto: 0, realizada: 0, cayo: 0, otro: 0, sin: 0 })
+
+  /**
+   * ¿Esta cita debía tener retroalimentación?
+   *
+   * Solo las que se dieron. Una cancelada o reagendada no ocupa retro: nunca
+   * hubo nada que contar. Tampoco una que sigue "Por atender" o donde el
+   * cliente no respondió. Y si no tiene estado, no se sabe si ocurrió, así
+   * que se queda fuera en vez de darla por perdida.
+   */
+  const necesitaRetro = (f: CitaParaGrafica): boolean => {
+    const c = cajonDe(f)
+    if (c === 'sin' || c === 'cayo') return false
+    if (c === 'aparto' || c === 'realizada') return true
+    // El resto de estados (buscar más opciones, seguimiento de cierre, falta
+    // perfilar, compra a futuro) dan por hecho que la cita sí se dio.
+    const e = estadoDe(f)
+    return e !== 'Por atender' && e !== 'No responde el cliente'
+  }
+
+  // Arma un grupo a partir de CUALQUIER puñado de citas, para poder abrir
+  // también los números del resumen, las rebanadas del pastel, los escalones
+  // del embudo y los meses. Todo lo que enseña un número se puede abrir.
+  const construirGrupo = (nombre: string, citas: CitaParaGrafica[]): Grupo => {
+    const cajones = vacio()
+    const estados = new Map<string, number>()
+    let conRetro = 0
+    for (const f of citas) {
+      cajones[cajonDe(f)]++
+      if (f.retro_completada_at) conRetro++
+      const e = estadoDe(f)
+      estados.set(e, (estados.get(e) ?? 0) + 1)
+    }
+    return {
+      llave: 'sel', nombre, total: citas.length, cajones, conRetro, citas,
+      porEstado: [...estados.entries()]
+        .map(([estado, n]) => ({ estado, n, color: colorEstado(estado === SIN_ESTADO ? null : estado) }))
+        .sort((a, b) => b.n - a.n),
+    }
+  }
+  const abrir = (nombre: string, citas: CitaParaGrafica[]) => {
+    if (citas.length > 0) setAbierto(construirGrupo(nombre, citas))
+  }
+
   const d = useMemo(() => {
     const base = filas
-
-    // El cajón de color al que va cada cita.
-    const cajonDe = (f: CitaParaGrafica): Cajon => {
-      const e = f.estado_seguimiento
-      if (!e || !e.trim()) return 'sin'
-      if (esApartado(e)) return 'aparto'
-      // Cancelada y reagenda son un solo estado, como lo decidió el equipo.
-      if (esCancelada(e) || esReagendada(e)) return 'cayo'
-      const n = normalizar(e)
-      if (n.includes('realizada') || n.includes('esperando retro')) return 'realizada'
-      return 'otro'
-    }
-
-    // El nombre del estado tal cual, ya normalizado por la base.
-    const estadoDe = (f: CitaParaGrafica): string => {
-      const e = (f.estado_seguimiento ?? '').trim()
-      if (!e) return SIN_ESTADO
-      return infoEstadoCita(e)?.label ?? e
-    }
-
-    const vacio = (): Record<Cajon, number> => ({ aparto: 0, realizada: 0, cayo: 0, otro: 0, sin: 0 })
 
     const cuenta = vacio()
     let conRetro = 0
@@ -144,6 +188,14 @@ export default function GraficasCitas({
       cuenta[cajonDe(f)]++
       if (f.retro_completada_at) conRetro++
     }
+
+    // Las citas que SÍ debían tener retro. Una cancelada o reagendada nunca
+    // iba a tenerla, así que meterla en el denominador castiga de más: el
+    // porcentaje bajaba por citas que no se dieron, no por retros sin
+    // escribir. Las que no tienen estado tampoco cuentan: no se sabe si la
+    // cita ocurrió.
+    const pideRetro = base.filter(necesitaRetro)
+    const pideRetroHechas = pideRetro.filter(f => !!f.retro_completada_at)
 
     // Cada grupo se queda con SUS citas, no solo con la cuenta: es lo que deja
     // abrir "Martín · 10 citas" y ver las diez.
@@ -246,32 +298,61 @@ export default function GraficasCitas({
     // ── Por mes ──
     const fechaDe = (f: CitaParaGrafica) =>
       (f.fecha_apartado && esApartado(f.estado_seguimiento)) ? f.fecha_apartado : f.fecha_cita
-    const meses = new Map<string, number>()
+    // Cada mes se queda con SUS citas, para poder abrirlo igual que todo lo
+    // demás.
+    const meses = new Map<string, CitaParaGrafica[]>()
     for (const f of base) {
       const fe = fechaDe(f)
       if (!fe) continue
       const k = fe.slice(0, 7)
-      meses.set(k, (meses.get(k) ?? 0) + 1)
+      if (!meses.has(k)) meses.set(k, [])
+      meses.get(k)!.push(f)
     }
     const porMes = [...meses.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
       .slice(-14)
-      .map(([k, v]) => ({ etiqueta: `${NOMBRE_MES[Number(k.slice(5, 7)) - 1]} ${k.slice(2, 4)}`, valor: v }))
+      .map(([k, lista]) => ({
+        etiqueta: `${NOMBRE_MES[Number(k.slice(5, 7)) - 1]} ${k.slice(2, 4)}`,
+        valor: lista.length,
+        citas: lista,
+      }))
 
     return {
+      base,
       total: base.length, cuenta, conRetro,
+      pideRetro, pideRetroHechas,
       conEstado: base.length - cuenta.sin,
       asesoresEquipo, asesoresFuera, sinAsesor, prospectadores, zonas, porMes,
     }
   }, [filas, nombrePorId, normalizar, mapear, esApartado, esCancelada, esReagendada])
 
+  // Cada rebanada se lleva su cajón para poder abrirla y ver cuáles son.
   const partes = [
-    { label: 'Apartó',             value: d.cuenta.aparto,    color: P.aparto },
-    { label: 'Realizada',          value: d.cuenta.realizada, color: P.realizada },
-    { label: 'Cancelada/Reagenda', value: d.cuenta.cayo,      color: P.cancelada },
-    { label: 'Otros estados',      value: d.cuenta.otro,      color: P.otro },
-    { label: 'Sin estado',         value: d.cuenta.sin,       color: P.sinEstado },
+    { label: 'Apartó',             value: d.cuenta.aparto,    color: P.aparto,    cajon: 'aparto' as Cajon },
+    { label: 'Realizada',          value: d.cuenta.realizada, color: P.realizada, cajon: 'realizada' as Cajon },
+    { label: 'Cancelada/Reagenda', value: d.cuenta.cayo,      color: P.cancelada, cajon: 'cayo' as Cajon },
+    { label: 'Otros estados',      value: d.cuenta.otro,      color: P.otro,      cajon: 'otro' as Cajon },
+    { label: 'Sin estado',         value: d.cuenta.sin,       color: P.sinEstado, cajon: 'sin' as Cajon },
   ].filter(p => p.value > 0)
+
+  const delCajon = (c: Cajon) => d.base.filter(f => cajonDe(f) === c)
+  const abrirCajon = (i: number) => abrir(partes[i].label, delCajon(partes[i].cajon))
+
+  // Los escalones del embudo, cada uno con sus citas detrás.
+  const pasosEmbudo = [
+    { nombre: 'Citas',              nota: 'Todas las que se ven arriba',    citas: d.base },
+    { nombre: 'Con estado anotado', nota: 'Alguien escribió en qué acabó',  citas: d.base.filter(f => cajonDe(f) !== 'sin') },
+    { nombre: 'Se realizaron',      nota: 'La cita sí ocurrió',             citas: d.base.filter(f => ['realizada', 'aparto'].includes(cajonDe(f))) },
+    { nombre: 'Apartaron',          nota: 'Acabó en apartado',              citas: delCajon('aparto') },
+  ].map(p => ({ ...p, n: p.citas.length }))
+
+  const retroPartes = [
+    { label: 'Con retro', value: d.pideRetroHechas.length, color: P.realizada },
+    { label: 'Sin retro', value: d.pideRetro.length - d.pideRetroHechas.length, color: P.cancelada },
+  ]
+  const abrirRetro = (i: number) => i === 0
+    ? abrir('Con retro escrita', d.pideRetroHechas)
+    : abrir('Les falta la retro', d.pideRetro.filter(f => !f.retro_completada_at))
 
   const tramosDe = (g: Grupo) => [
     { valor: g.cajones.aparto, color: P.aparto },
@@ -381,26 +462,32 @@ export default function GraficasCitas({
       {/* ═══════════ RESUMEN ═══════════ */}
       {vista === 'resumen' && (
         <>
+          {/* Los seis números se tocan: cada uno abre las citas que cuenta. */}
           <View style={s.kpis}>
             {[
-              { n: d.total,              t: 'Citas',            c: C.text },
-              { n: d.cuenta.realizada,   t: 'Realizadas',       c: P.realizada },
-              { n: d.cuenta.aparto,      t: 'Apartaron',        c: P.aparto },
-              { n: d.cuenta.cayo,        t: 'Cancel./Reagenda', c: P.cancelada },
-              { n: d.conRetro,           t: 'Con retro',        c: P.realizada },
-              { n: d.cuenta.sin,         t: 'Sin estado',       c: '#9aa5ab' },
+              { t: 'Citas',            c: C.text,        citas: d.base },
+              { t: 'Realizadas',       c: P.realizada,   citas: delCajon('realizada') },
+              { t: 'Apartaron',        c: P.aparto,      citas: delCajon('aparto') },
+              { t: 'Cancel./Reagenda', c: P.cancelada,   citas: delCajon('cayo') },
+              { t: 'Con retro',        c: P.realizada,   citas: d.pideRetroHechas },
+              { t: 'Sin estado',       c: '#9aa5ab',     citas: delCajon('sin') },
             ].map((k, i) => (
-              <View key={i} style={[s.kpi, { backgroundColor: C.card, borderColor: C.border }]}>
-                <Text style={[s.kpiNum, { color: k.c }]}>{k.n}</Text>
+              <TouchableOpacity
+                key={i}
+                activeOpacity={0.7}
+                onPress={() => abrir(k.t, k.citas)}
+                style={[s.kpi, { backgroundColor: C.card, borderColor: C.border }]}
+              >
+                <Text style={[s.kpiNum, { color: k.c }]}>{k.citas.length}</Text>
                 <Text style={s.kpiTxt}>{k.t}</Text>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
 
-          <Tarjeta titulo="En qué acabaron las citas">
+          <Tarjeta titulo="En qué acabaron las citas" sub="Toca una rebanada o un renglón para ver cuáles son.">
             <View style={s.donaFila}>
-              <Dona partes={partes} centro={String(d.total)} subcentro="citas" colorTexto={C.text} />
-              <Leyenda partes={partes} total={d.total} colorTexto={C.text} />
+              <Dona partes={partes} centro={String(d.total)} subcentro="citas" colorTexto={C.text} onTocar={abrirCajon} />
+              <Leyenda partes={partes} total={d.total} colorTexto={C.text} onTocar={abrirCajon} />
             </View>
             {d.conEstado > 0 ? (
               <Text style={{ fontSize: 12, color: C.textSub, lineHeight: 17, marginTop: 11 }}>
@@ -412,50 +499,57 @@ export default function GraficasCitas({
             ) : null}
           </Tarjeta>
 
-          <Tarjeta titulo="Retroalimentación">
-            <View style={s.donaFila}>
-              <Dona
-                partes={[
-                  { label: 'Con retro', value: d.conRetro, color: P.realizada },
-                  { label: 'Sin retro', value: d.total - d.conRetro, color: P.sinEstado },
-                ]}
-                centro={`${pct(d.conRetro)}%`}
-                subcentro="con retro"
-                colorTexto={C.text}
-              />
-              <Leyenda
-                partes={[
-                  { label: 'Con retro', value: d.conRetro, color: P.realizada },
-                  { label: 'Sin retro', value: d.total - d.conRetro, color: P.sinEstado },
-                ]}
-                total={d.total}
-                colorTexto={C.text}
-              />
-            </View>
-            <Text style={{ fontSize: 12, color: C.textSub, lineHeight: 17, marginTop: 11 }}>
-              Faltan <Text style={{ fontWeight: '800', color: C.text }}>{d.total - d.conRetro}</Text> retros
-              por escribir.
-            </Text>
+          <Tarjeta
+            titulo="Retroalimentación"
+            sub="Solo de las citas que se dieron. Una cancelada o reagendada nunca ocupó retro."
+          >
+            {d.pideRetro.length === 0 ? (
+              <Text style={s.vacio}>Ninguna cita de las filtradas ocupaba retro.</Text>
+            ) : (
+              <>
+                <View style={s.donaFila}>
+                  <Dona
+                    partes={retroPartes}
+                    centro={`${Math.round((d.pideRetroHechas.length / d.pideRetro.length) * 100)}%`}
+                    subcentro="con retro"
+                    colorTexto={C.text}
+                    onTocar={abrirRetro}
+                  />
+                  <Leyenda
+                    partes={retroPartes}
+                    total={d.pideRetro.length}
+                    colorTexto={C.text}
+                    onTocar={abrirRetro}
+                  />
+                </View>
+                <Text style={{ fontSize: 12, color: C.textSub, lineHeight: 17, marginTop: 11 }}>
+                  De las <Text style={{ fontWeight: '800', color: C.text }}>{d.pideRetro.length}</Text> citas
+                  que se dieron, faltan <Text style={{ fontWeight: '800', color: P.cancelada }}>
+                  {d.pideRetro.length - d.pideRetroHechas.length}</Text> retros por escribir.
+                </Text>
+              </>
+            )}
           </Tarjeta>
 
-          <Tarjeta titulo="De la cita al apartado">
+          <Tarjeta titulo="De la cita al apartado" sub="Toca un escalón para ver sus citas.">
             <Embudo
-              pasos={[
-                { nombre: 'Citas',              n: d.total,     nota: 'Todas las que se ven arriba' },
-                { nombre: 'Con estado anotado', n: d.conEstado, nota: 'Alguien escribió en qué acabó' },
-                { nombre: 'Se realizaron',      n: d.cuenta.realizada + d.cuenta.aparto, nota: 'La cita sí ocurrió' },
-                { nombre: 'Apartaron',          n: d.cuenta.aparto, nota: 'Acabó en apartado' },
-              ]}
+              pasos={pasosEmbudo}
               colorTexto={C.text}
               colorPista={pista}
               color={P.aparto}
+              onTocar={i => abrir(pasosEmbudo[i].nombre, pasosEmbudo[i].citas)}
             />
           </Tarjeta>
 
-          <Tarjeta titulo="Citas por mes">
+          <Tarjeta titulo="Citas por mes" sub="Toca un mes para ver sus citas.">
             {d.porMes.length === 0
               ? <Text style={s.vacio}>Ninguna cita con fecha.</Text>
-              : <BarrasPeriodo datos={d.porMes} colorTexto={C.text} colorPista={pista} />}
+              : <BarrasPeriodo
+                  datos={d.porMes}
+                  colorTexto={C.text}
+                  colorPista={pista}
+                  onTocar={i => abrir(d.porMes[i].etiqueta, d.porMes[i].citas)}
+                />}
           </Tarjeta>
         </>
       )}
@@ -565,15 +659,30 @@ export default function GraficasCitas({
               </View>
             ) : null}
 
+            {onIrACita ? (
+              <Text style={{ fontSize: 10.5, color: C.textMute, marginTop: 4 }}>
+                Toca una cita para ir a su renglón en la tabla y editarla.
+              </Text>
+            ) : null}
+
             <ScrollView style={{ marginTop: 6 }}>
               {(abierto?.citas ?? []).map((f, i) => {
                 const est = (f.estado_seguimiento ?? '').trim()
                 const col = colorEstado(est || null)
+                const puedeIr = !!onIrACita && !!f.id
+                const Caja: any = puedeIr ? TouchableOpacity : View
                 return (
-                  <View key={f.id ?? i} style={{
-                    paddingVertical: 10,
-                    borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.divider,
-                  }}>
+                  <Caja
+                    key={f.id ?? i}
+                    {...(puedeIr ? {
+                      activeOpacity: 0.65,
+                      onPress: () => { setAbierto(null); onIrACita!(f.id!) },
+                    } : {})}
+                    style={{
+                      paddingVertical: 10,
+                      borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.divider,
+                    }}
+                  >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Text style={{ flex: 1, fontSize: 13.5, fontWeight: '700', color: C.text }} numberOfLines={1}>
                         {f.cliente_nombre?.trim() || 'Sin nombre'}
@@ -600,7 +709,7 @@ export default function GraficasCitas({
                         {[f.interesado_en?.trim(), f.zona_interesada?.trim()].filter(Boolean).join('  ·  ')}
                       </Text>
                     ) : null}
-                  </View>
+                  </Caja>
                 )
               })}
             </ScrollView>

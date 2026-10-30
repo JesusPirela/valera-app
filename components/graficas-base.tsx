@@ -2,7 +2,7 @@
 // Son las mismas que usa estadisticas.tsx (dona en SVG, barras con pista), aquí
 // juntas para que las dos pantallas se vean igual y un arreglo valga para las
 // dos.
-import { View, Text, ScrollView, StyleSheet } from 'react-native'
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native'
 import Svg, { Path, Text as SvgText } from 'react-native-svg'
 import { useTheme } from '../lib/ThemeContext'
 
@@ -79,12 +79,14 @@ function arco(cx: number, cy: number, rOut: number, rIn: number, desde: number, 
   ].join(' ')
 }
 
-export function Dona({ partes, size = 150, centro, subcentro, colorTexto }: {
+export function Dona({ partes, size = 150, centro, subcentro, colorTexto, onTocar }: {
   partes: { label: string; value: number; color: string }[]
   size?: number
   centro?: string
   subcentro?: string
   colorTexto: string
+  /** Si se pasa, cada rebanada se puede tocar para ver qué hay dentro. */
+  onTocar?: (indice: number) => void
 }) {
   const cx = size / 2, cy = size / 2
   const rOut = size / 2 - 4, rIn = rOut * 0.6
@@ -103,7 +105,16 @@ export function Dona({ partes, size = 150, centro, subcentro, colorTexto }: {
         const desde = (acum / total) * 360
         acum += p.value
         const d = arco(cx, cy, rOut, rIn, desde, (acum / total) * 360)
-        return d ? <Path key={i} d={d} fill={p.color} /> : null
+        return d ? (
+          <Path
+            key={i}
+            d={d}
+            fill={p.color}
+            // react-native-svg espera que onPress devuelva algo; por eso el
+            // envoltorio en vez de pasar la función pelada.
+            onPress={onTocar ? (() => { onTocar(i) }) as any : undefined}
+          />
+        ) : null
       })}
       {centro ? (
         <SvgText x={cx} y={subcentro ? cy - 2 : cy + 6} textAnchor="middle"
@@ -159,17 +170,24 @@ export function BarraAsesor({ pos, nombre, total, max, tramos, colorTexto, color
 }
 
 // ─── Barras verticales por periodo ───────────────────────────────────────────
-export function BarrasPeriodo({ datos, colorTexto, colorPista }: {
+export function BarrasPeriodo({ datos, colorTexto, colorPista, onTocar }: {
   datos: { etiqueta: string; valor: number }[]
   colorTexto: string
   colorPista: string
+  /** Si se pasa, cada mes se puede tocar para ver sus citas. */
+  onTocar?: (indice: number) => void
 }) {
   const max = Math.max(1, ...datos.map(d => d.valor))
+  const Col: any = onTocar ? TouchableOpacity : View
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
       <View style={s.barrasFila}>
         {datos.map((d, i) => (
-          <View key={i} style={s.barraCol}>
+          <Col
+            key={i}
+            style={s.barraCol}
+            {...(onTocar ? { onPress: () => onTocar(i), activeOpacity: 0.7 } : {})}
+          >
             <Text style={[s.barraColNum, { color: colorTexto }]}>{d.valor > 0 ? d.valor : ''}</Text>
             <View style={[s.barraColPista, { backgroundColor: colorPista }]}>
               <View style={{
@@ -178,28 +196,35 @@ export function BarrasPeriodo({ datos, colorTexto, colorPista }: {
               }} />
             </View>
             <Text style={s.barraColEtiqueta} numberOfLines={1}>{d.etiqueta}</Text>
-          </View>
+          </Col>
         ))}
       </View>
     </ScrollView>
   )
 }
 
-export function Leyenda({ partes, total, colorTexto }: {
+export function Leyenda({ partes, total, colorTexto, onTocar }: {
   partes: { label: string; value: number; color: string }[]
   total: number
   colorTexto: string
+  /** Si se pasa, cada renglón abre lo que hay dentro de esa rebanada. */
+  onTocar?: (indice: number) => void
 }) {
   return (
     <View style={{ flex: 1, gap: 5 }}>
-      {partes.map((p, i) => (
-        <View key={i} style={s.leyendaFila}>
-          <View style={[s.leyendaPunto, { backgroundColor: p.color }]} />
-          <Text style={[s.leyendaLabel, { color: colorTexto }]} numberOfLines={1}>{p.label}</Text>
-          <Text style={[s.leyendaVal, { color: colorTexto }]}>{p.value}</Text>
-          <Text style={s.leyendaPct}>{total > 0 ? `${Math.round((p.value / total) * 100)}%` : '0%'}</Text>
-        </View>
-      ))}
+      {partes.map((p, i) => {
+        const fila = (
+          <View style={s.leyendaFila}>
+            <View style={[s.leyendaPunto, { backgroundColor: p.color }]} />
+            <Text style={[s.leyendaLabel, { color: colorTexto }]} numberOfLines={1}>{p.label}</Text>
+            <Text style={[s.leyendaVal, { color: colorTexto }]}>{p.value}</Text>
+            <Text style={s.leyendaPct}>{total > 0 ? `${Math.round((p.value / total) * 100)}%` : '0%'}</Text>
+          </View>
+        )
+        return onTocar
+          ? <TouchableOpacity key={i} activeOpacity={0.6} onPress={() => onTocar(i)}>{fila}</TouchableOpacity>
+          : <View key={i}>{fila}</View>
+      })}
     </View>
   )
 }
@@ -245,13 +270,16 @@ export const s = StyleSheet.create({
 // ─── Embudo ──────────────────────────────────────────────────────────────────
 // Barras que se van angostando, con la caída anotada entre una y otra. La
 // caída es el dato: un embudo sin ella es una lista de números en desorden.
-export function Embudo({ pasos, colorTexto, colorPista, color }: {
+export function Embudo({ pasos, colorTexto, colorPista, color, onTocar }: {
   pasos: { nombre: string; n: number; nota: string }[]
   colorTexto: string
   colorPista: string
   color: string
+  /** Si se pasa, cada escalón se puede tocar para ver sus citas. */
+  onTocar?: (indice: number) => void
 }) {
   const max = Math.max(1, ...pasos.map(p => p.n))
+  const Caja: any = onTocar ? TouchableOpacity : View
   return (
     <View>
       {pasos.map((p, i) => {
@@ -266,7 +294,10 @@ export function Embudo({ pasos, colorTexto, colorPista, color }: {
                 </Text>
               </View>
             ) : null}
-            <View style={sOz.embudoFila}>
+            <Caja
+              style={sOz.embudoFila}
+              {...(onTocar ? { onPress: () => onTocar(i), activeOpacity: 0.7 } : {})}
+            >
               <View style={{ flex: 1 }}>
                 <View style={s.barraCabeza}>
                   <Text style={[sOz.embudoNombre, { color: colorTexto }]} numberOfLines={1}>{p.nombre}</Text>
@@ -280,7 +311,7 @@ export function Embudo({ pasos, colorTexto, colorPista, color }: {
                 </View>
                 <Text style={s.barraNota}>{p.nota}</Text>
               </View>
-            </View>
+            </Caja>
           </View>
         )
       })}
