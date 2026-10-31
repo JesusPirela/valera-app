@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
 import { registrarSeguimiento } from './gamification'
+import { captureError } from './monitor'
 
 const QUEUE_KEY = 'VALERA_OFFLINE_QUEUE_v1'
 
@@ -14,6 +15,25 @@ export type QueueOp = {
   idemKey?: string           // para publish_property: MISMO key en cada reintento → nunca duplica
   recordatorioId?: string    // para update_recordatorio
   payload: Record<string, any>
+  intentos?: number          // cuántas veces se ha reintentado sin éxito
+  ultimoError?: string       // qué dijo el servidor la última vez
+}
+
+// Cuántas veces se reintenta una operación que el SERVIDOR rechazó (no un
+// corte de red) antes de darla por imposible. Las caídas de red no cuentan:
+// esas se reintentan siempre, porque sí pueden funcionar luego.
+const MAX_INTENTOS = 6
+
+/** El servidor contestó (aunque sea para rechazar), no fue un corte de red. */
+function respondioElServidor(e: any): boolean {
+  return !!(e?.code || e?.status)
+}
+
+/** "Ya existe una fila con ese id." */
+function esDuplicado(e: any): boolean {
+  return e?.code === '23505'
+    || e?.status === 409
+    || /duplicate key|already exists/i.test(String(e?.message ?? ''))
 }
 
 // UUID v4 generado en cliente (compatible con el formato de Supabase)
@@ -171,9 +191,40 @@ export async function flushQueue(): Promise<{ success: number; failed: number; h
         }
       }
       success++
-    } catch {
+      continue
+    } catch (e: any) {
+      // Crear un cliente que YA existe no es un fallo: es que la primera vez
+      // sí llegó al servidor y la respuesta se perdió por el camino. El id lo
+      // genera el teléfono, así que el reintento manda el mismo y choca con
+      // la llave primaria. Reintentarlo mil veces nunca lo va a arreglar: el
+      // cliente ya está guardado. Se da por hecha y se quita de la cola.
+      //
+      // Esto es lo que tenía a Brith con "5 cambios no se pudieron enviar"
+      // desde hacía días, con el aviso rojo encima de toda la app.
+      if (op.type === 'create_client' && esDuplicado(e)) {
+        success++
+        continue
+      }
+
+      const intentos = (op.intentos ?? 0) + 1
+      const motivo = String(e?.message ?? e ?? 'error desconocido').slice(0, 300)
+
+      // Si el servidor CONTESTÓ rechazando, reintentar no cambia nada. Se le
+      // dan unas cuantas oportunidades por si fue algo pasajero y luego se
+      // saca de la cola, pero NO se tira: se deja registrada con todo y su
+      // contenido, para poder recuperarla a mano. Mejor eso que un aviso rojo
+      // permanente que nadie puede quitar.
+      if (respondioElServidor(e) && intentos >= MAX_INTENTOS) {
+        captureError(
+          new Error(`Operación offline descartada tras ${intentos} intentos: ${op.type} — ${motivo}`),
+          'offline-queue:' + JSON.stringify(op).slice(0, 500),
+        )
+        failed++
+        continue
+      }
+
       failed++
-      failedOps.push(op)
+      failedOps.push({ ...op, intentos, ultimoError: motivo })
     }
   }
 
