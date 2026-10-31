@@ -405,12 +405,18 @@ export default function DetalleCliente() {
   // etapa que no se guardó.
   async function cambiarEtapa(etapa: string) {
     if (soloLectura) return
-    const { error } = await supabase
+    // Se pide de vuelta la fila: un UPDATE que RLS rechaza NO devuelve error,
+    // devuelve cero filas. Sin esto, abrir el cliente de alguien más y tocar
+    // una etapa no hacía nada y tampoco avisaba de nada.
+    const { data: tocadas, error } = await supabase
       .from('clientes')
       .update({ estado: etapa, updated_at: new Date().toISOString() })
       .eq('id', id as string)
-    if (error) {
-      const msg = 'No se pudo cambiar la etapa: ' + error.message
+      .select('id')
+    if (error || !tocadas || tocadas.length === 0) {
+      const msg = error
+        ? 'No se pudo cambiar la etapa: ' + error.message
+        : 'No tienes permiso para cambiar la etapa de este cliente.'
       if (Platform.OS === 'web') window.alert('⚠ ' + msg)
       else Alert.alert('Error', msg)
     }

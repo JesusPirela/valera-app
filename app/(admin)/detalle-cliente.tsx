@@ -110,7 +110,7 @@ export default function AdminDetalleCliente() {
   const [guardandoReasignar, setGuardandoReasignar] = useState(false)
 
   const [modalEstado, setModalEstado] = useState(false)
-  const [estadoSeleccionado, setEstadoSeleccionado] = useState('')
+  const [estadoSel, setEstadoSeleccionado] = useState('')
   const [guardandoEstado, setGuardandoEstado] = useState(false)
 
   const [cierreNotas, setCierreNotas] = useState('')
@@ -226,17 +226,26 @@ export default function AdminDetalleCliente() {
     cargar()
   }
 
-  async function guardarEstado() {
+  // Recibe la etapa elegida en vez de leerla del estado: ahora se guarda en
+  // cuanto se toca la opción, y en ese mismo instante `estadoSeleccionado`
+  // todavía tiene el valor viejo.
+  async function guardarEstado(nuevoEstado?: string) {
+    const estadoSeleccionado = nuevoEstado ?? estadoSel
     if (!estadoSeleccionado || estadoSeleccionado === cliente?.estado) { setModalEstado(false); return }
     setGuardandoEstado(true)
     const { data: { session } } = await supabase.auth.getSession()
     const uid = session?.user?.id ?? null
     const estadoAnterior = cliente?.estado ?? ''
-    const { error } = await supabase.from('clientes').update({ estado: estadoSeleccionado }).eq('id', id)
+    // Se pide de vuelta la fila: un UPDATE que RLS rechaza NO devuelve error,
+    // devuelve cero filas. Sin esta comprobación el cambio se perdía en
+    // silencio y parecía que el botón no hacía nada.
+    const { data: tocadas, error } = await supabase
+      .from('clientes').update({ estado: estadoSeleccionado }).eq('id', id).select('id')
     setGuardandoEstado(false)
-    if (error) {
-      if (Platform.OS === 'web') window.alert(`Error: ${error.message}`)
-      else Alert.alert('Error', error.message)
+    if (error || !tocadas || tocadas.length === 0) {
+      const msg = error?.message ?? 'No tienes permiso para cambiar la etapa de este cliente.'
+      if (Platform.OS === 'web') window.alert(`Error: ${msg}`)
+      else Alert.alert('Error', msg)
       return
     }
     if (uid) {
@@ -532,12 +541,13 @@ export default function AdminDetalleCliente() {
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={{ gap: 6, marginBottom: 16 }}>
                 {Object.entries(ESTADOS).map(([key, est]) => {
-                  const activo = estadoSeleccionado === key
+                  const activo = (cliente.estado ?? '') === key
                   return (
                     <TouchableOpacity
                       key={key}
                       style={[styles.estadoOpcion, activo && { backgroundColor: est.bg, borderColor: est.color }]}
-                      onPress={() => setEstadoSeleccionado(key)}
+                      onPress={() => { setEstadoSeleccionado(key); guardarEstado(key) }}
+                      disabled={guardandoEstado}
                     >
                       <View style={[styles.estadoOpcionDot, { backgroundColor: est.color }]} />
                       <Text style={[styles.estadoOpcionText, { color: c.textSub }, activo && { color: est.color, fontWeight: '700' }]}>
@@ -548,16 +558,15 @@ export default function AdminDetalleCliente() {
                   )
                 })}
               </View>
-              <TouchableOpacity
-                style={[styles.guardarBtn, (guardandoEstado || estadoSeleccionado === cliente.estado) && { opacity: 0.6 }]}
-                onPress={guardarEstado}
-                disabled={guardandoEstado || estadoSeleccionado === cliente.estado}
-              >
-                {guardandoEstado
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={styles.guardarBtnTxt}>Guardar estado</Text>
-                }
-              </TouchableOpacity>
+              {/* Ya no hay botón de guardar: la etapa se guarda en cuanto se
+                  toca. Antes había que elegirla Y ADEMÁS darle a "Guardar
+                  estado", y quien cerraba el modal después de elegir se
+                  quedaba sin el cambio, sin que nada se lo dijera. */}
+              {guardandoEstado ? (
+                <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+                  <ActivityIndicator color={c.text} />
+                </View>
+              ) : null}
             </ScrollView>
           </View>
         </View>
