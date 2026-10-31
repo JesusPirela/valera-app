@@ -20,6 +20,7 @@ import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import { supabase } from '../../lib/supabase'
+import { mensajeDeEdge } from '../../lib/edge'
 import { thumb } from '../../lib/img'
 import { useColors } from '../../lib/ThemeContext'
 import PillSelector from '../../components/ui/PillSelector'
@@ -258,7 +259,11 @@ export default function EditarPropiedad() {
     setPublicandoEb(true); setEbMsg('')
     try {
       const { data, error } = await supabase.functions.invoke('easybroker-publicar', { body: { propiedad_id: id } })
-      if (error) { setEbMsg('⚠️ ' + (error.message ?? 'No se pudo publicar.')); return }
+      // El motivo de verdad viaja en el cuerpo de la respuesta, no en
+      // error.message. Sin leerlo, "falta la descripción", "la colonia no
+      // está en el catálogo" y "la llave de EasyBroker caducó" se veían todos
+      // como "Edge Function returned a non-2xx status code".
+      if (error) { setEbMsg('⚠️ ' + await mensajeDeEdge(error, 'No se pudo publicar.')); return }
       if (data?.ok === false) { setEbMsg('⚠️ ' + data.error); return }
       setEbMsg(data?.actualizado ? '✅ Actualizada en EasyBroker.' : '✅ Publicada en EasyBroker.')
     } catch (e: any) {

@@ -54,8 +54,20 @@ serve(async (req) => {
     if (faltan.length) return err(`Faltan datos para publicar: ${faltan.join(', ')}.`)
 
     // ── Resolver la ubicación contra el catálogo de EasyBroker ────
-    const nombreUbicacion = await resolverUbicacion(H, p.direccion ?? '', p.zona ?? '')
-    if (!nombreUbicacion) return err('No se encontró la colonia/ciudad en el catálogo de EasyBroker. Ajusta la dirección.')
+    const ubic = await resolverUbicacion(H, p.direccion ?? '', p.zona ?? '')
+    if (!ubic.nombre) return err('No se encontró la colonia ni la ciudad en el catálogo de EasyBroker. Revisa la dirección de la propiedad.')
+    // EasyBroker exige colonia. Si solo se pudo resolver la ciudad, más vale
+    // decirlo aquí con instrucciones que mandarlo y que conteste un
+    // 422 {"errors":{"neighborhood":["es requerida para publicar."]}} que
+    // nadie entiende.
+    if (!ubic.esColonia) {
+      return err(
+        `EasyBroker exige la COLONIA, y en la dirección de esta propiedad («${p.direccion ?? 'vacía'}») ` +
+        `no hay ninguna que esté en su catálogo. Edita la dirección poniendo la colonia, ` +
+        `por ejemplo: «Centro, ${(p.direccion ?? '').split(',')[0]?.trim() || 'Querétaro'}».`,
+      )
+    }
+    const nombreUbicacion = ubic.nombre
 
     // ── Armar el payload ──────────────────────────────────────────
     const property_type = TIPO_EB[norm(p.tipo)] ?? (p.tipo.charAt(0).toUpperCase() + p.tipo.slice(1))
@@ -117,9 +129,21 @@ const MUNICIPIOS: Record<string, string[]> = {
 // Resuelve el location.name (full_name del catálogo de EB). Estrategia: tomar el
 // fraccionamiento de la dirección, recorrer los municipios del estado y buscar
 // una localidad que coincida. Si no hay match, usar la ciudad principal.
-async function resolverUbicacion(H: Record<string, string>, direccion: string, zona: string): Promise<string | null> {
-  const fracc = norm((direccion.split(',')[0] ?? '').trim())
-  const fraccToks = new Set(fracc.split(/[^a-z0-9]+/).filter(w => w.length > 2))
+// Busca la ubicación de la propiedad en el catálogo de EasyBroker.
+//
+// Devuelve además SI lo que encontró es una colonia o solo la ciudad, porque
+// EasyBroker EXIGE colonia: mandando solo la ciudad responde
+// 422 {"errors":{"neighborhood":["es requerida para publicar."]}}, que es un
+// mensaje que el admin nunca llegaba a ver.
+//
+// Se prueban TODOS los trozos de la dirección, no solo el primero. Una
+// dirección como "Tequisquiapan, Querétaro, México" empieza por el municipio,
+// no por la colonia; y una como "Av. 5 de Mayo 12, Centro, Tequisquiapan"
+// lleva la colonia en medio.
+async function resolverUbicacion(
+  H: Record<string, string>, direccion: string, zona: string,
+): Promise<{ nombre: string | null; esColonia: boolean }> {
+  const trozos = direccion.split(',').map(t => norm(t.trim())).filter(t => t.length > 2)
   const munis = MUNICIPIOS[norm(zona)] ?? MUNICIPIOS.queretaro
 
   let mejor: { full: string; score: number } | null = null
@@ -134,16 +158,24 @@ async function resolverUbicacion(H: Record<string, string>, direccion: string, z
       if (!ciudadRespaldo && loc.full_name) ciudadRespaldo = loc.full_name
       for (const l of loc.localities ?? []) {
         const nm = norm(l.name)
+        // El mejor trozo de la dirección contra esta colonia.
         let score = 0
-        if (fracc && (nm.includes(fracc) || fracc.includes(nm))) score = 10
-        else {
-          const lt = nm.split(/[^a-z0-9]+/).filter(w => w.length > 2)
-          score = lt.reduce((n, t) => n + (fraccToks.has(t) ? 1 : 0), 0)
+        for (const trozo of trozos) {
+          const toks = new Set(trozo.split(/[^a-z0-9]+/).filter(w => w.length > 2))
+          let s = 0
+          if (nm.includes(trozo) || trozo.includes(nm)) s = 10
+          else {
+            const lt = nm.split(/[^a-z0-9]+/).filter(w => w.length > 2)
+            s = lt.reduce((n, t) => n + (toks.has(t) ? 1 : 0), 0)
+          }
+          if (s > score) score = s
         }
         if (score > 0 && (!mejor || score > mejor.score)) mejor = { full: l.full_name ?? l.name, score }
       }
     }
     if (mejor && mejor.score >= 10) break   // coincidencia exacta: no seguir buscando
   }
-  return mejor ? mejor.full : ciudadRespaldo
+
+  if (mejor) return { nombre: mejor.full, esColonia: true }
+  return { nombre: ciudadRespaldo, esColonia: false }
 }
