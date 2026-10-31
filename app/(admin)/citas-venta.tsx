@@ -13,6 +13,7 @@ import * as DocumentPicker from 'expo-document-picker'
 import * as Clipboard from 'expo-clipboard'
 import { useFocusEffect, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { normalizar as sinAcentos } from '../../lib/texto'
 import { useColors } from '../../lib/ThemeContext'
 import RetroCitaWizard, { CitaRetro } from '../../components/RetroCitaWizard'
 import { ESTADOS_CITA } from './coordinacion-citas'
@@ -493,10 +494,12 @@ function AgregarCitaModal({ profiles, clientes, miId, onCrearCliente, onClose, o
       // Las comas y los paréntesis rompen el filtro `or` de PostgREST, que los
       // usa como separadores.
       const seguro = q.replace(/[,()]/g, ' ').trim()
+      // Las columnas _busqueda vienen sin acentos: "zibata" encuentra "Zibatá".
+      const sinTildes = sinAcentos(seguro)
       const { data } = await supabase
         .from('propiedades')
         .select('id, codigo, titulo, direccion, precio, tipo, operacion')
-        .or(`codigo.ilike.%${seguro}%,titulo.ilike.%${seguro}%,direccion.ilike.%${seguro}%`)
+        .or(`codigo.ilike.%${seguro}%,titulo_busqueda.like.%${sinTildes}%,direccion_busqueda.like.%${sinTildes}%,descripcion_busqueda.like.%${sinTildes}%`)
         .eq('es_inventario', false)
         .limit(25)
       setProps((data ?? []) as PropBuscada[])

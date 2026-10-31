@@ -9,6 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { supabase } from '../lib/supabase'
+import { normalizar } from '../lib/texto'
 import { useColors } from '../lib/ThemeContext'
 
 type Res = { key: string; titulo: string; sub?: string; icon: string; ir: () => void }
@@ -115,12 +116,12 @@ export default function BusquedaGlobal({ modo = 'admin' }: { modo?: 'admin' | 'p
       try {
         const [cli, pr, usr] = await Promise.all([
           supabase.from('clientes').select('id, nombre, telefono')
-            .or(`nombre.ilike.%${term}%,telefono.ilike.%${term}%`).limit(6),
+            .or(`nombre_busqueda.like.%${normalizar(term)}%,telefono.ilike.%${term}%`).limit(6),
           supabase.from('propiedades').select('id, codigo, titulo')
-            .or(`codigo.ilike.%${term}%,titulo.ilike.%${term}%`).limit(6),
+            .or(`codigo.ilike.%${term}%,titulo_busqueda.like.%${normalizar(term)}%,descripcion_busqueda.like.%${normalizar(term)}%`).limit(6),
           // Usuarios: solo en modo admin (quien gestiona el equipo).
           esProsp ? Promise.resolve({ data: [] as any[] })
-            : supabase.from('profiles').select('id, nombre, role').ilike('nombre', `%${term}%`).limit(6),
+            : supabase.from('profiles').select('id, nombre, role').like('nombre_busqueda', `%${normalizar(term)}%`).limit(6),
         ])
         setClientes((cli.data ?? []).map((x: any) => ({
           key: 'c' + x.id, titulo: x.nombre ?? 'Cliente', sub: x.telefono ?? undefined, icon: 'person',

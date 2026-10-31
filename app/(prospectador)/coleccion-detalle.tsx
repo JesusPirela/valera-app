@@ -8,6 +8,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import * as Clipboard from 'expo-clipboard'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { normalizar } from '../../lib/texto'
 import { thumb } from '../../lib/img'
 import { useColors } from '../../lib/ThemeContext'
 import CompartirFormulario from '../../components/CompartirFormulario'
@@ -90,7 +91,10 @@ export default function ColeccionDetalle() {
         .eq('estado', 'disponible').eq('es_inventario', false)
       if (q.length >= 2) {
         const like = `%${q}%`
-        query = query.or(`codigo.ilike.${like},titulo.ilike.${like},direccion.ilike.${like}`)
+        // Las columnas _busqueda vienen sin acentos y en minúsculas, así que
+        // "zibata" encuentra "Zibatá" y "marques" encuentra "El Marqués".
+        const sinTildes = `%${normalizar(q)}%`
+        query = query.or(`codigo.ilike.${like},titulo_busqueda.like.${sinTildes},direccion_busqueda.like.${sinTildes},descripcion_busqueda.like.${sinTildes}`)
       }
       query = aplicarFiltrosPropiedad(query, filtros)
       // Tope alto: una zona (ej. Juriquilla) puede tener cientos de propiedades

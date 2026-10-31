@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import * as Clipboard from 'expo-clipboard'
 import { supabase } from '../lib/supabase'
+import { normalizar } from '../lib/texto'
 import { useColors } from '../lib/ThemeContext'
 import { esStaffSupervision } from '../lib/permisos'
 import {
@@ -257,7 +258,7 @@ export default function HojaDeRutaView() {
       const dig = txt.replace(/\D/g, '')
       const { data } = await supabase.from('clientes')
         .select('id, nombre, telefono')
-        .or(`nombre.ilike.%${txt.trim()}%${dig.length >= 4 ? `,telefono.ilike.%${dig}%` : ''}`)
+        .or(`nombre_busqueda.like.%${normalizar(txt)}%${dig.length >= 4 ? `,telefono.ilike.%${dig}%` : ''}`)
         .is('eliminado_at', null).limit(8)
       setResultados((data ?? []) as ClienteLite[])
     }, 300)
@@ -365,7 +366,7 @@ export default function HojaDeRutaView() {
     temporizadorProp.current = setTimeout(async () => {
       const { data } = await supabase.from('propiedades')
         .select('id, titulo, codigo, direccion')
-        .or(`titulo.ilike.%${txt.trim()}%,codigo.ilike.%${txt.trim()}%`)
+        .or(`titulo_busqueda.like.%${normalizar(txt)}%,codigo.ilike.%${txt.trim()}%,descripcion_busqueda.like.%${normalizar(txt)}%`)
         .limit(8)
       setPropsEncontradas(data ?? [])
     }, 300)

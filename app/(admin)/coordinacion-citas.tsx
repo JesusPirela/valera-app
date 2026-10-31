@@ -332,7 +332,7 @@ function SelectorPropiedad({ propiedadId, propiedadTitulo, externa, onSelectApp,
     deb.current = setTimeout(async () => {
       const { data } = await supabase.from('propiedades')
         .select('id, titulo, codigo')
-        .or(`titulo.ilike.%${txt}%,codigo.ilike.%${txt}%`)
+        .or(`titulo_busqueda.like.%${normalizar(txt)}%,codigo.ilike.%${txt}%,descripcion_busqueda.like.%${normalizar(txt)}%`)
         .limit(8)
       setResultados((data ?? []) as any)
     }, 300)
@@ -635,8 +635,8 @@ function ModalNuevaCita({ admins, asesores, vistaAsesor, onClose, onGuardar }: {
       let query = supabase.from('clientes')
         .select('id, nombre, telefono, tipo_operacion, responsable_id')
       query = digitos.length >= 4
-        ? query.or(`nombre.ilike.%${txt}%,telefono.ilike.%${digitos}%`)
-        : query.ilike('nombre', `%${txt}%`)
+        ? query.or(`nombre_busqueda.like.%${normalizar(txt)}%,telefono.ilike.%${digitos}%`)
+        : query.like('nombre_busqueda', `%${normalizar(txt)}%`)
       const { data } = await query.limit(8)
       // No hay FK en responsable_id → se traen los nombres de los prospectadores
       // en una segunda consulta y se mapean.

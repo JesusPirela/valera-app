@@ -958,6 +958,34 @@ export default function ProspectadorPropiedades() {
     return () => clearTimeout(t)
   }, [precioMin, precioMax])
 
+  // ── Buscar también dentro de la descripción ──
+  //
+  // La descripción NO se baja con el listado: son unos 988 caracteres por
+  // propiedad, 2.4 MB en total, y haría la carga inicial mucho más pesada en
+  // el teléfono para algo que solo se usa al buscar. La corta sí viene, pero
+  // no alcanza: "alberca" aparece en 18 descripciones cortas y en 823
+  // completas.
+  //
+  // Así que cuando se busca algo, se le piden al servidor solo los IDS cuya
+  // descripción coincide, y se cruzan con la lista que ya está en memoria. La
+  // respuesta son unos cuantos kilobytes.
+  const [idsPorDescripcion, setIdsPorDescripcion] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    const q = normalizar(busqueda.trim())
+    // Con menos de 3 letras saldría media base; no vale la pena la consulta.
+    if (q.length < 3) { setIdsPorDescripcion(new Set()); return }
+    let vivo = true
+    const t = setTimeout(async () => {
+      const { data } = await supabase
+        .from('propiedades')
+        .select('id')
+        .like('descripcion_busqueda', `%${q}%`)
+        .limit(600)
+      if (vivo) setIdsPorDescripcion(new Set((data ?? []).map((x: any) => x.id)))
+    }, 350)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [busqueda])
+
   const precioMinNum = precioMinAplicado ? parseFloat(precioMinAplicado.replace(/,/g, '')) : null
   const precioMaxRaw = precioMaxAplicado ? parseFloat(precioMaxAplicado.replace(/,/g, '')) : null
   // Un máximo por debajo del mínimo no deja pasar ninguna propiedad, y eso
@@ -1005,7 +1033,10 @@ export default function ProspectadorPropiedades() {
           normalizar(p.direccion).includes(q) ||
           normalizar(p.titulo).includes(q) ||
           // Por desarrollo/constructora: escribir "balkan" trae sus modelos.
-          normalizar(p.nombre_constructora).includes(q)
+          normalizar(p.nombre_constructora).includes(q) ||
+          // Y lo que solo está en la descripción: "alberca", "roof garden",
+          // "una planta". Los ids los trajo el servidor aparte.
+          idsPorDescripcion.has(p.id)
       })
     }
   }
@@ -1185,7 +1216,7 @@ export default function ProspectadorPropiedades() {
   return propiedadesFiltradas
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    propiedades, busqueda, filtroPublicadas, publicaciones, pubData, filtroNueva,
+    propiedades, busqueda, idsPorDescripcion, filtroPublicadas, publicaciones, pubData, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroDirecta, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin, puedeVerDirectas,
     viewsData, userId, filtroEstado, filtroOrden,
