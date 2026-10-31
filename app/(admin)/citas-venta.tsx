@@ -810,6 +810,45 @@ export default function CitasVenta() {
     }
   }, [])
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
+
+  // ── La tabla se actualiza sola ──
+  //
+  // Cuando otra persona cambia una cita, el renglón se refresca aquí sin
+  // recargar. Se parchea SOLO la fila que cambió y no se vuelve a bajar todo:
+  // son 970 filas y basta con que alguien toque un estado para que todos los
+  // demás se quedaran esperando la descarga completa.
+  //
+  // Lo que uno mismo cambia también llega de vuelta, pero con los mismos
+  // datos que ya se pintaron, así que no se nota. Y lo que se está
+  // escribiendo no se pisa: el texto a medio teclear vive en su propio
+  // estado, no en `filas`.
+  useEffect(() => {
+    const canal = supabase
+      .channel('citas-venta-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'citas_venta' }, (ev: any) => {
+        const nueva = ev.new as Fila | undefined
+        const vieja = ev.old as { id?: string } | undefined
+        setFilas(fs => {
+          if (ev.eventType === 'DELETE') {
+            return vieja?.id ? fs.filter(f => f.id !== vieja.id) : fs
+          }
+          if (!nueva?.id) return fs
+          const i = fs.findIndex(f => f.id === nueva.id)
+          if (i >= 0) {
+            const copia = [...fs]
+            // Se mezcla sobre lo que ya había: si el aviso llegara sin alguna
+            // columna, no se borra de la pantalla.
+            copia[i] = { ...copia[i], ...nueva }
+            return copia
+          }
+          // Cita nueva: entra al final, que es donde la pone el orden de la
+          // tabla (las del dashboard van después de las del Excel).
+          return [...fs, nueva]
+        })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(canal) }
+  }, [])
   // Candado: esta pantalla es SOLO para admins. Un supervisor u otro rol se saca.
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
