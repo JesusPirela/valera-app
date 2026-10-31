@@ -91,6 +91,16 @@ serve(async (req) => {
       lot_size: p.m2_terreno ?? undefined,
       internal_id: p.codigo ?? undefined,
       exclusive: p.exclusiva ?? undefined,
+      // Comisión compartida con otras agencias de la red de EasyBroker.
+      //
+      // Sin estos dos campos el anuncio sale como "sin comisión compartida",
+      // que es lo que hace que otras inmobiliarias no lo trabajen. No venían
+      // en el envío, así que EasyBroker los dejaba vacíos.
+      //
+      // El porcentaje NO es una elección: la documentación dice que "solo
+      // puede ser 50% o nulo". Así que o se comparte al 50 o no se comparte.
+      share_commission: true,
+      shared_commission_percentage: 50,
     }
     if (imgs.length) payload.images = imgs
 
