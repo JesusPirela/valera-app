@@ -22,7 +22,9 @@ const GERENCIA_ITEMS = [
   { label: 'Coordinación de citas', desc: 'Panel de coordinación de citas del equipo', icon: '📅', route: '/(admin)/coordinacion-citas', color: '#2E7D32' },
   { label: 'Citas de asesores', desc: 'Tablero de citas por asesor (todas las tablas)', icon: '👥', route: '/(prospectador)/citas-asesores', color: '#7B1FA2' },
   { label: 'Cierres', desc: 'Apartado de cierres del equipo', icon: '🤝', route: '/(admin)/cierres', color: '#00695C' },
-  { label: 'CRM de prospectadores', desc: 'CRM de TODO el equipo (todos los prospectadores)', icon: '📒', route: '/(prospectador)/crm', color: '#D84315' },
+  // El ?todos=1 es obligatorio: sin él la pantalla enseña el CRM PROPIO del
+  // gerente, que es lo que ve en su pestaña "Clientes".
+  { label: 'CRM de toda la empresa', desc: 'Los clientes de todos los prospectadores y asesores', icon: '📒', route: '/(prospectador)/crm?todos=1', color: '#D84315' },
   { label: 'Constructoras', desc: 'Catálogo, contactos y desarrollos pendientes de subir', icon: '🏗️', route: '/(admin)/constructoras', color: '#0D9488' },
   { label: 'Proyectos', desc: 'Desarrollos y proyectos', icon: '🏗️', route: '/(admin)/proyectos', color: '#455A64' },
   { label: 'Tabla de precios (inventario)', desc: 'Inventario por zona con precios en vivo', icon: '🏷️', route: '/(admin)/inventario-tabla', color: '#00838F' },

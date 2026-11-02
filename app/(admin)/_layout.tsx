@@ -81,7 +81,13 @@ export default function AdminLayout() {
             //  - crm → su CRM PROPIO (?mios=1); el CRM de TODO el equipo se ve
             //    desde el panel de Gerencia ("CRM de prospectadores").
             if (ruta === 'propiedades') router.replace('/(prospectador)/propiedades')
-            else if (ruta === 'crm') router.replace('/(prospectador)/crm?mios=1')
+            else if (ruta === 'crm') {
+              // Recargar /crm?todos=1 (el "CRM de toda la empresa" del panel de
+              // Gerencia) entraba aquí y se perdía el parámetro: el gerente
+              // acababa en su CRM propio sin entender por qué. Se respeta.
+              const quiereTodos = paramsUrl.todos === '1' && data.role === 'gerente'
+              router.replace(quiereTodos ? '/(prospectador)/crm?todos=1' : '/(prospectador)/crm?mios=1')
+            }
           } else {
             // asesor / prospectador / nuevo: no pintan nada en (admin).
             router.replace(destinoProspectador() as any)

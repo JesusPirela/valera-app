@@ -496,10 +496,18 @@ export default function CRM() {
   // ?verUid=<id> → ver el CRM de OTRO usuario en SOLO LECTURA (para quien puede
   // ver el CRM de los demás: admin/supervisor). Muestra tal cual lo ve esa
   // persona (incluida la pestaña de campaña) pero sin poder editar nada.
-  const { mios, verUid } = useLocalSearchParams<{ mios?: string; verUid?: string }>()
+  // ?todos=1 → "CRM de todo el equipo". Hay que pedirlo A PROPÓSITO, y la
+  // pantalla solo se lo concede a admin y gerente.
+  //
+  // El gerente entraba por la pestaña "Clientes" (sin parámetros) y le caían
+  // los 2,641 clientes de la empresa encima de sus 37 propios: su CRM era
+  // inservible. Ahora por omisión ve el suyo y el de todos vive en el panel
+  // de Gerencia, que es donde se va a buscar a propósito.
+  const { mios, verUid, todos } = useLocalSearchParams<{ mios?: string; verUid?: string; todos?: string }>()
   const soloMios = mios === '1'
+  const quiereTodos = todos === '1'
   const soloLectura = !!verUid
-  const claveCrm = verUid ? `ver:${verUid}` : (soloMios ? 'mios' : 'all')
+  const claveCrm = verUid ? `ver:${verUid}` : (soloMios ? 'mios' : (quiereTodos ? 'todos' : 'all'))
   const [nombreVer, setNombreVer] = useState('')
   const c = useColors()
   const { darkMode, primaryColor } = useTheme()
@@ -656,22 +664,57 @@ export default function CRM() {
     // (30/jun/2026) porque algunos usuarios quedaron con una lista VACÍA cacheada
     // que no se reemplazaba, viendo su CRM en blanco pese a tener sus clientes
     // intactos en el servidor. Cambiar la clave fuerza una recarga fresca.
-    queryKey: ['clientes', claveCrm, 'v5'],
+    //
+    // Subida a 'v6' (2/nov/2026): para el gerente la clave 'all' ya no significa
+    // lo mismo —ahora es SU CRM, no el de la empresa—, así que el caché viejo de
+    // su teléfono tenía que quedar inservible o seguiría enseñando los 2,641.
+    queryKey: ['clientes', claveCrm, 'v6'],
     queryFn: async () => {
-      let q = supabase
-        .from('clientes')
-        .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, es_lead_campania, enviado_crm, responsable_id, donado_por_nombre, recibido_de_nombre, recordatorios(id, titulo, fecha_hora, completado)')
-        .is('eliminado_at', null)
-        .order('updated_at', { ascending: false })
+      // A nombre de quién se filtra la lista. null = lo que la RLS deje ver.
+      let soloDe: string | null = null
       if (verUid) {
-        q = q.eq('responsable_id', verUid)   // CRM de otra persona (solo lectura)
-      } else if (soloMios) {
+        soloDe = verUid                      // CRM de otra persona (solo lectura)
+      } else {
         const { data: { user } } = await getUsuarioActual()
-        if (user) q = q.eq('responsable_id', user.id)
+        if (user) {
+          // El rol se consulta AQUÍ y no se toma del estado de la pantalla: la
+          // query arranca antes de que el efecto que carga el perfil termine, y
+          // con el rol todavía en null el gerente volvería a ver todo.
+          const { data: perfil } = await supabase
+            .from('profiles').select('role').eq('id', user.id).maybeSingle()
+          const rol = perfil?.role ?? ''
+          // Ver el CRM de TODOS es de admin y gerente. Para cualquier otro rol
+          // el parámetro no hace nada (y la RLS tampoco se lo permitiría).
+          const pidioTodo = quiereTodos && (rol === 'admin' || rol === 'gerente')
+          // El gerente ve SU CRM por omisión; el admin sigue entrando al de
+          // todos, que es su pantalla de siempre.
+          if (soloMios || (rol === 'gerente' && !pidioTodo)) soloDe = user.id
+        }
       }
-      const { data, error } = await q
-      if (error) throw error
-      return data ?? []
+
+      // Paginar: PostgREST corta en 1000 filas por petición. Sin esto, el CRM
+      // de toda la empresa enseñaba 1,000 de 2,641 clientes sin avisar de nada
+      // —ni la búsqueda ni los totales veían a los 1,641 restantes—.
+      const PAGE = 1000
+      const filas: Cliente[] = []
+      for (let desde = 0; ; desde += PAGE) {
+        let q = supabase
+          .from('clientes')
+          .select('id, nombre, telefono, email, empresa, fuente_lead, estado, tipo_operacion, proximo_contacto, created_at, updated_at, nivel_interes, notas, zona_busqueda, presupuesto, tipo_credito, es_lead_campania, enviado_crm, responsable_id, donado_por_nombre, recibido_de_nombre, recordatorios(id, titulo, fecha_hora, completado)')
+          .is('eliminado_at', null)
+          // El 'id' como desempate hace el orden TOTAL: sin él, dos clientes con
+          // el mismo updated_at pueden caer en dos páginas a la vez (duplicados
+          // en la lista) o en ninguna (clientes que desaparecen).
+          .order('updated_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(desde, desde + PAGE - 1)
+        if (soloDe) q = q.eq('responsable_id', soloDe)
+        const { data, error } = await q
+        if (error) throw error
+        filas.push(...((data ?? []) as Cliente[]))
+        if (!data || data.length < PAGE) break
+      }
+      return filas
     },
     networkMode: 'offlineFirst',
     staleTime: 1000 * 60 * 5,
@@ -699,7 +742,7 @@ export default function CRM() {
   // lento sin necesidad. Ahora la lista cacheada aparece al instante y solo se
   // vuelve a pedir si pasaron >5 min.
   useFocusEffect(useCallback(() => {
-    const st = queryClient.getQueryState(['clientes', claveCrm, 'v5'])
+    const st = queryClient.getQueryState(['clientes', claveCrm, 'v6'])
     // Refetch si pasaron >5 min O si detalle-cliente invalidó el caché
     // (ej. el usuario actualizó proximo_contacto y el banner debe quitarlo).
     const viejo = !st?.dataUpdatedAt || (Date.now() - st.dataUpdatedAt) > 1000 * 60 * 5
@@ -1027,7 +1070,7 @@ export default function CRM() {
     // Actualización optimista inmediata en la cache activa (v3).
     // Se incluye updated_at para que necesitaSeguimiento() lo saque del banner.
     const ahoraInline = new Date().toISOString()
-    queryClient.setQueryData<Cliente[]>(['clientes', claveCrm, 'v5'], (old) =>
+    queryClient.setQueryData<Cliente[]>(['clientes', claveCrm, 'v6'], (old) =>
       (old ?? []).map(cl => cl.id === id ? { ...cl, [campo]: value, updated_at: ahoraInline } as Cliente : cl)
     )
 
@@ -1274,7 +1317,7 @@ export default function CRM() {
         )
     if (!confirmar) return
     // Actualización optimista
-    queryClient.setQueryData<Cliente[]>(['clientes', claveCrm, 'v5'], (old) =>
+    queryClient.setQueryData<Cliente[]>(['clientes', claveCrm, 'v6'], (old) =>
       (old ?? []).filter(cl => cl.id !== item.id)
     )
     const { error } = await supabase
@@ -1307,7 +1350,7 @@ export default function CRM() {
   async function eliminarDuplicado(item: Cliente) {
     if (soloLectura) return
     // Actualización optimista — el grupo desaparece de inmediato en el modal
-    queryClient.setQueryData<Cliente[]>(['clientes', claveCrm, 'v5'], (old) =>
+    queryClient.setQueryData<Cliente[]>(['clientes', claveCrm, 'v6'], (old) =>
       (old ?? []).filter(cl => cl.id !== item.id)
     )
     const { error } = await supabase
@@ -1554,6 +1597,15 @@ export default function CRM() {
       {soloLectura && (
         <View style={s.roBanner}>
           <Text style={s.roBannerTxt}>👁 Viendo el CRM de {nombreVer || 'este usuario'} — solo lectura</Text>
+        </View>
+      )}
+
+      {/* ── Aviso: este NO es tu CRM, es el de toda la empresa ──
+          Sin esto no hay forma de distinguir una lista de 37 clientes de una
+          de 2,641 más que contándolas. */}
+      {!soloLectura && quiereTodos && (userRole === 'gerente' || userRole === 'admin') && (
+        <View style={s.todosBanner}>
+          <Text style={s.todosBannerTxt}>🏢 CRM de toda la empresa — no solo tus clientes</Text>
         </View>
       )}
 
@@ -2564,6 +2616,8 @@ const s = StyleSheet.create({
   badgeCampaniaTxt: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
   roBanner: { backgroundColor: '#1a6470', paddingVertical: 9, paddingHorizontal: 14, marginHorizontal: 12, marginTop: 8, borderRadius: 10, alignItems: 'center' },
   roBannerTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  todosBanner: { backgroundColor: '#5E35B1', paddingVertical: 9, paddingHorizontal: 14, marginHorizontal: 12, marginTop: 8, borderRadius: 10, alignItems: 'center' },
+  todosBannerTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   btnLeadsCamp: {
     marginHorizontal: 12, marginTop: 10, backgroundColor: '#7c3aed', borderRadius: 16,
     paddingVertical: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center',
