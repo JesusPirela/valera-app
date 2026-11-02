@@ -64,16 +64,43 @@ serve(async (req) => {
       .single()
 
     const rolUsuario = profile?.role ?? ''
-    if (!Object.keys(TOPE_POR_ROL).includes(rolUsuario)) {
-      return json({ error: 'Acceso denegado' }, 403)
-    }
-    const topeMensual = TOPE_POR_ROL[rolUsuario] ?? 5
 
     const body = await req.json()
     const nombre = String(body.nombre ?? '').trim()
     const tipoOperacion = String(body.tipoOperacion ?? '').trim().toLowerCase()
     const presupuesto = Number(body.presupuesto)
     const clienteId = body.clienteId ? String(body.clienteId) : null
+    const prospectadorIdBody = body.prospectadorId ? String(body.prospectadorId) : null
+
+    // Caso normal: cada quien manda a SU propio cupo/cuenta. Caso admin/gerente
+    // desde citas-venta: se asigna a OTRO prospectador (el dueño de la cita),
+    // así que el cupo mensual y la atribución del chat se calculan sobre esa
+    // persona, no sobre quien aprieta el botón.
+    let targetId = user.id
+    let targetRol = rolUsuario
+    let targetEmail = user.email
+
+    if (prospectadorIdBody && prospectadorIdBody !== user.id) {
+      if (rolUsuario !== 'admin' && rolUsuario !== 'gerente') {
+        return json({ error: 'No tienes permiso para asignar el chatbot a otro prospectador.' }, 403)
+      }
+      const { data: targetProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('role')
+        .eq('id', prospectadorIdBody)
+        .maybeSingle()
+      if (!targetProfile) return json({ error: 'El prospectador destino no existe.' }, 400)
+      const { data: targetUser } = await supabaseAdmin.auth.admin.getUserById(prospectadorIdBody)
+      if (!targetUser?.user?.email) return json({ error: 'No se pudo obtener el correo del prospectador destino.' }, 500)
+      targetId = prospectadorIdBody
+      targetRol = targetProfile.role ?? ''
+      targetEmail = targetUser.user.email
+    }
+
+    if (!Object.keys(TOPE_POR_ROL).includes(targetRol)) {
+      return json({ error: 'Acceso denegado' }, 403)
+    }
+    const topeMensual = TOPE_POR_ROL[targetRol] ?? 5
 
     if (!nombre) return json({ error: 'El nombre es requerido.' }, 400)
     if (tipoOperacion !== 'venta') {
@@ -95,7 +122,7 @@ serve(async (req) => {
     const { count } = await supabaseAdmin
       .from('chatbot_reactivaciones')
       .select('id', { count: 'exact', head: true })
-      .eq('prospectador_id', user.id)
+      .eq('prospectador_id', targetId)
       .gte('created_at', inicioMes.toISOString())
 
     if ((count ?? 0) >= topeMensual) {
@@ -127,7 +154,7 @@ serve(async (req) => {
       telefono,                  // B Teléfono
       estado: 'Pendiente',       // M Estado
       botActivo: 'SI',           // T Bot_Activo
-      prospectador: user.email,  // U Prospectador
+      prospectador: targetEmail, // U Prospectador
     }
 
     const webhookResp = await fetch(webhookUrl, {
@@ -144,12 +171,12 @@ serve(async (req) => {
     await supabaseAdmin
       .from('chatbot_leads')
       .upsert(
-        { telefono, nombre, prospectador_id: user.id, estado: 'contactado' },
+        { telefono, nombre, prospectador_id: targetId, estado: 'contactado' },
         { onConflict: 'telefono' }
       )
 
     await supabaseAdmin.from('chatbot_reactivaciones').insert({
-      prospectador_id: user.id,
+      prospectador_id: targetId,
       cliente_id: clienteId,
       nombre,
       telefono,

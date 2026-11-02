@@ -101,6 +101,7 @@ const COLS: { key: ColKey; label: string; w: number; tipo: Tipo }[] = [
 ]
 const NUM_W = 48    // contador de fila (izquierda)
 const RETRO_W = 100 // columna de retroalimentación
+const CHATBOT_W = 90 // columna de "enviar al chatbot"
 const COPY_W = 80   // columna de copiar datos (antes de borrar)
 const DEL_W = 80    // columna de borrar (aparte)
 
@@ -201,11 +202,12 @@ function confirmar(msg: string, onSi: () => void) {
 }
 
 // ── Fila (solo muestra; memoizada y de altura fija → virtualización sin lag) ──
-const FilaRow = memo(function FilaRow({ f, idx, resaltada, onTap, onRetro, onCopy, onDelete }: {
+const FilaRow = memo(function FilaRow({ f, idx, resaltada, onTap, onRetro, onCopy, onDelete, onChatbot }: {
   f: Fila; idx: number
   onTap: (id: string, k: ColKey, t: Tipo, val: string) => void
   resaltada?: boolean
   onRetro: (f: Fila) => void; onCopy: (f: Fila) => void; onDelete: (f: Fila) => void
+  onChatbot: (f: Fila) => void
 }) {
   const c = useColors()
   // Un solo sitio decide cómo se resalta la fila. Antes era una variable
@@ -299,6 +301,12 @@ const FilaRow = memo(function FilaRow({ f, idx, resaltada, onTap, onRetro, onCop
           </Fragment>
         )
       })}
+      {/* Enviar al chatbot (columna aparte, antes de copiar) */}
+      <View style={[st.cell, { width: CHATBOT_W, borderColor: c.border, alignItems: 'center' }]}>
+        <TouchableOpacity style={st.chatbotBtn} onPress={() => onChatbot(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+          <Text style={st.chatbotBtnTxt}>🤖 Bot</Text>
+        </TouchableOpacity>
+      </View>
       {/* Copiar datos (columna aparte, antes de borrar) */}
       <View style={[st.cell, { width: COPY_W, borderColor: c.border, alignItems: 'center' }]}>
         <TouchableOpacity style={st.copyBtn} onPress={() => onCopy(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
@@ -1046,6 +1054,8 @@ export default function CitasVenta() {
     else { setPickBusca(''); setPicker({ id, key: k, tipo: t }) }
   }, [])
   const onRetro = useCallback((f: Fila) => setWizard(f), [])
+  const [chatbotCita, setChatbotCita] = useState<Fila | null>(null)
+  const onChatbot = useCallback((f: Fila) => setChatbotCita(f), [])
   const onCopy = useCallback(async (f: Fila) => {
     try { await Clipboard.setStringAsync(textoCita(f)) } catch {}
     setCopiadoId(f.id)
@@ -1133,7 +1143,7 @@ export default function CitasVenta() {
     } catch (e: any) { setMsg('✗ Error al importar: ' + (e?.message ?? 'desconocido')) } finally { setImportando(false) }
   }
 
-  const totalW = NUM_W + COLS.reduce((s, col) => s + col.w, 0) + RETRO_W + COPY_W + DEL_W
+  const totalW = NUM_W + COLS.reduce((s, col) => s + col.w, 0) + RETRO_W + CHATBOT_W + COPY_W + DEL_W
   const dropValores = dropCol ? valoresColumna(dropCol).filter(v => !dropBusca.trim() || v.toLowerCase().includes(dropBusca.toLowerCase())) : []
   const pickLista = picker
     ? (picker.tipo === 'cliente'
@@ -1286,6 +1296,7 @@ export default function CitasVenta() {
                     </Fragment>
                   )
                 })}
+                <Text style={[st.headCell, st.headTxt, { width: CHATBOT_W, textAlign: 'center' }]}>Chatbot</Text>
                 <Text style={[st.headCell, st.headTxt, { width: COPY_W, textAlign: 'center' }]}>Copiar</Text>
                 <Text style={[st.headCell, st.headTxt, { width: DEL_W, textAlign: 'center' }]}>Borrar</Text>
               </View>
@@ -1303,7 +1314,7 @@ export default function CitasVenta() {
                 data={visibles}
                 keyExtractor={f => f.id}
                 getItemLayout={(_, i) => ({ length: ROW_H, offset: ROW_H * i, index: i })}
-                renderItem={({ item, index }) => <FilaRow f={item} idx={index} resaltada={item.id === citaResaltada} onTap={onTap} onRetro={onRetro} onCopy={onCopy} onDelete={onDelete} />}
+                renderItem={({ item, index }) => <FilaRow f={item} idx={index} resaltada={item.id === citaResaltada} onTap={onTap} onRetro={onRetro} onCopy={onCopy} onDelete={onDelete} onChatbot={onChatbot} />}
                 initialNumToRender={25} maxToRenderPerBatch={25} windowSize={11} removeClippedSubviews
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
@@ -1508,11 +1519,164 @@ export default function CitasVenta() {
 
       {wizard && <RetroCitaWizard cita={wizard} onClose={() => setWizard(null)} onSaved={cargar} />}
       {agregar && <AgregarCitaModal profiles={profiles} clientes={clientes} miId={miId} onCrearCliente={crearCliente} onClose={() => setAgregar(false)} onSaved={cargar} />}
+      {chatbotCita && (
+        <ChatbotCitaModal
+          cita={chatbotCita}
+          profiles={profiles}
+          clientes={clientes}
+          onClose={() => setChatbotCita(null)}
+          onSent={(cliente) => {
+            setClientes(prev => prev.some(x => x.id === cliente.id) ? prev : [...prev, cliente].sort((a, b) => (a.nombre ?? '').localeCompare(b.nombre ?? '', 'es')))
+            setMsg('✓ Cliente enviado al chatbot.'); setTimeout(() => setMsg(''), 3500)
+          }}
+        />
+      )}
 
       {copiadoId && (
         <View style={st.toast} pointerEvents="none"><Text style={st.toastTxt}>📋 Datos copiados al portapapeles</Text></View>
       )}
     </View>
+  )
+}
+
+// Enviar el cliente de una cita al chatbot. Como esta pantalla es exclusiva de
+// admin/gerente, nunca se manda "el cliente propio" — siempre se elige a qué
+// prospectador se le asigna (precargado con el asesor de la cita si lo tiene),
+// y ESA persona es quien recibe el cupo mensual y la conversación del bot
+// (lo valida agregar-cliente-chatbot vía prospectadorId).
+function ChatbotCitaModal({ cita, profiles, clientes, onClose, onSent }: {
+  cita: Fila
+  profiles: { id: string; nombre: string }[]
+  clientes: { id: string; nombre: string; telefono: string | null }[]
+  onClose: () => void
+  onSent: (cliente: { id: string; nombre: string; telefono: string | null }) => void
+}) {
+  const c = useColors()
+  const [paso, setPaso] = useState<0 | 1>(0)
+  const [prospectadorId, setProspectadorId] = useState<string | null>(cita.asesor_id)
+  const [buscaProspectador, setBuscaProspectador] = useState('')
+  const [telefono, setTelefono] = useState(cita.telefono ?? '')
+  const [presupuesto, setPresupuesto] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [enviando, setEnviando] = useState(false)
+
+  const prospectadorElegido = profiles.find(p => p.id === prospectadorId) ?? null
+  const listaProspectadores = profiles.filter(p => !buscaProspectador.trim() || p.nombre.toLowerCase().includes(buscaProspectador.toLowerCase()))
+
+  async function enviar() {
+    if (!prospectadorId) { setError('Elige a quién se le asigna el cliente.'); return }
+    const presupuestoNum = Number(presupuesto)
+    if (!Number.isFinite(presupuestoNum) || presupuestoNum <= 1_800_000) {
+      setError('El presupuesto debe ser mayor a $1,800,000.'); return
+    }
+    if (!telefono.trim()) { setError('El teléfono es requerido.'); return }
+    setError(null); setEnviando(true)
+    try {
+      // Resolver el cliente ya existente (por teléfono, luego por nombre) o
+      // crear uno nuevo — el chatbot necesita un clienteId real.
+      const telDigits = telefono.replace(/\D/g, '')
+      let cliente = telDigits.length >= 10
+        ? clientes.find(x => (x.telefono ?? '').replace(/\D/g, '').slice(-10) === telDigits.slice(-10))
+        : undefined
+      if (!cliente) {
+        cliente = clientes.find(x => (x.nombre ?? '').trim().toLowerCase() === (cita.cliente_nombre ?? '').trim().toLowerCase())
+      }
+      if (!cliente) {
+        const { data, error: errCliente } = await supabase.from('clientes')
+          .insert({
+            nombre: (cita.cliente_nombre ?? 'Cliente sin nombre').trim(),
+            telefono: telefono.trim(),
+            tipo_operacion: 'venta',
+            presupuesto,
+            responsable_id: prospectadorId,
+          })
+          .select('id, nombre, telefono').single()
+        if (errCliente || !data) { setError('No se pudo crear el cliente.'); setEnviando(false); return }
+        cliente = data
+      }
+
+      const { data: resp, error: errFn } = await supabase.functions.invoke('agregar-cliente-chatbot', {
+        body: {
+          clienteId: cliente.id,
+          nombre: cita.cliente_nombre ?? '',
+          telefono,
+          tipoOperacion: 'venta',
+          presupuesto: presupuestoNum,
+          prospectadorId,
+        },
+      })
+      if (errFn || resp?.error) {
+        let msg = resp?.error || 'No se pudo enviar al chatbot.'
+        if (!resp?.error && errFn) {
+          try {
+            const body = await (errFn as any).context?.json?.()
+            msg = body?.error || errFn.message || msg
+          } catch { msg = errFn.message || msg }
+        }
+        setError(msg); setEnviando(false); return
+      }
+      onSent(cliente)
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo enviar al chatbot.')
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={st.dropOverlay}>
+        <View style={[st.dropCard, { backgroundColor: c.card, maxWidth: 440 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#7c3aed' }}>ENVIAR AL CHATBOT</Text>
+            <TouchableOpacity onPress={onClose} disabled={enviando}><Text style={{ fontSize: 20, color: c.textMute }}>✕</Text></TouchableOpacity>
+          </View>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: c.text, marginBottom: 4 }}>{cita.cliente_nombre || 'Cliente sin nombre'}</Text>
+
+          {paso === 0 ? (
+            <>
+              <Text style={{ fontSize: 12.5, color: c.textMute, marginBottom: 10 }}>
+                ¿A quién se le asigna este cliente? El cupo mensual y la conversación del bot quedan a nombre de esa persona, no de quien lo manda.
+              </Text>
+              <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={buscaProspectador} onChangeText={setBuscaProspectador} placeholder="Buscar asesor…" placeholderTextColor={c.textMute} autoFocus />
+              <ScrollView style={{ maxHeight: 300, marginTop: 8 }} keyboardShouldPersistTaps="handled">
+                {listaProspectadores.map(p => (
+                  <TouchableOpacity key={p.id} style={[st.dropItem, p.id === prospectadorId && { backgroundColor: 'rgba(124,58,237,0.14)' }]} onPress={() => setProspectadorId(p.id)}>
+                    <Text style={[st.dropItemTxt, { color: c.text, fontWeight: p.id === prospectadorId ? '800' : '400' }]} numberOfLines={1}>
+                      {p.nombre}{p.id === cita.asesor_id ? '  ·  asesor de la cita' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                {listaProspectadores.length === 0 && <Text style={{ color: c.textMute, padding: 12, fontSize: 12.5 }}>Sin resultados.</Text>}
+              </ScrollView>
+              <TouchableOpacity
+                style={[st.chatbotEnviarBtn, !prospectadorId && { opacity: 0.5 }]}
+                disabled={!prospectadorId}
+                onPress={() => setPaso(1)}
+              >
+                <Text style={st.chatbotEnviarTxt}>Continuar{prospectadorElegido ? `: ${prospectadorElegido.nombre}` : ''}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[st.dropCancel, { marginTop: 10 }]} onPress={onClose}><Text style={[st.dropCancelTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={{ fontSize: 12.5, color: c.textMute, marginBottom: 10 }}>
+                Se asigna a <Text style={{ fontWeight: '800' }}>{prospectadorElegido?.nombre}</Text>. Solo clientes de venta con presupuesto mayor a $1,800,000.
+              </Text>
+              <Text style={st.chatbotFieldLabel}>Teléfono</Text>
+              <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={telefono} onChangeText={setTelefono} placeholder="10 dígitos" placeholderTextColor={c.textMute} keyboardType="phone-pad" />
+              <Text style={st.chatbotFieldLabel}>Presupuesto (MXN)</Text>
+              <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={presupuesto ? Number(presupuesto).toLocaleString('es-MX') : ''} onChangeText={(t) => setPresupuesto(t.replace(/\D/g, ''))} placeholder="Ej. 2500000" placeholderTextColor={c.textMute} keyboardType="number-pad" />
+              {error && <Text style={st.chatbotErrorTxt}>{error}</Text>}
+              <TouchableOpacity style={[st.chatbotEnviarBtn, enviando && { opacity: 0.6 }]} onPress={enviar} disabled={enviando}>
+                {enviando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={st.chatbotEnviarTxt}>Enviar al chatbot</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity style={[st.dropCancel, { marginTop: 10 }]} onPress={() => setPaso(0)} disabled={enviando}><Text style={[st.dropCancelTxt, { color: c.textSub }]}>← Cambiar asesor</Text></TouchableOpacity>
+            </>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   )
 }
 
@@ -1556,6 +1720,15 @@ const st = StyleSheet.create({
   copyBtn: { backgroundColor: '#1a685522', borderWidth: 1, borderColor: '#1a6855', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6 },
   copyBtnTxt: { fontSize: 11, fontWeight: '800', color: '#1a6855' },
   delTxt: { fontSize: 16 },
+  chatbotBtn: { backgroundColor: '#7c3aed22', borderWidth: 1, borderColor: '#7c3aed', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6 },
+  chatbotBtnTxt: { fontSize: 11, fontWeight: '800', color: '#7c3aed' },
+  chatbotFieldLabel: { fontSize: 12, fontWeight: '600', color: '#94a3b8', marginBottom: 4 },
+  chatbotErrorTxt: { color: '#dc2626', fontSize: 12, marginBottom: 8 },
+  chatbotEnviarBtn: {
+    backgroundColor: '#7c3aed', borderRadius: 10, paddingVertical: 11,
+    alignItems: 'center', marginTop: 12,
+  },
+  chatbotEnviarTxt: { color: '#fff', fontWeight: '700', fontSize: 14 },
   counterCell: { alignItems: 'center', backgroundColor: '#0f4c580d' },
   counterTxt: { fontSize: 11, fontWeight: '700' },
   vacio: { textAlign: 'center', padding: 30, fontSize: 13.5, lineHeight: 20, maxWidth: 420 },
