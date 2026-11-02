@@ -239,6 +239,13 @@ const FilaRow = memo(function FilaRow({ f, idx, resaltada, onTap, onRetro, onCop
           fontWeight: resaltado ? '800' : '400',
         }]}>{resaltado?.emoji ?? idx + 1}</Text>
       </View>
+      {/* Enviar al chatbot: hasta la izquierda, junto al contador — es la
+          acción que más se usa desde esta tabla. */}
+      <View style={[st.cell, { width: CHATBOT_W, borderColor: c.border, alignItems: 'center' }]}>
+        <TouchableOpacity style={st.chatbotBtn} onPress={() => onChatbot(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+          <Text style={st.chatbotBtnTxt}>🤖 Bot</Text>
+        </TouchableOpacity>
+      </View>
       {COLS.map(col => {
         const val = (f[col.key] as string) ?? ''
         // La fecha de la cita se muestra en español con día de la semana,
@@ -301,12 +308,6 @@ const FilaRow = memo(function FilaRow({ f, idx, resaltada, onTap, onRetro, onCop
           </Fragment>
         )
       })}
-      {/* Enviar al chatbot (columna aparte, antes de copiar) */}
-      <View style={[st.cell, { width: CHATBOT_W, borderColor: c.border, alignItems: 'center' }]}>
-        <TouchableOpacity style={st.chatbotBtn} onPress={() => onChatbot(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-          <Text style={st.chatbotBtnTxt}>🤖 Bot</Text>
-        </TouchableOpacity>
-      </View>
       {/* Copiar datos (columna aparte, antes de borrar) */}
       <View style={[st.cell, { width: COPY_W, borderColor: c.border, alignItems: 'center' }]}>
         <TouchableOpacity style={st.copyBtn} onPress={() => onCopy(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
@@ -1268,6 +1269,7 @@ export default function CitasVenta() {
             <ScrollView ref={headerRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={e => syncX(e.nativeEvent.contentOffset.x, 'h')} style={{ flexGrow: 0 }}>
               <View style={[st.headRow, { backgroundColor: '#0f4c58', width: totalW }]}>
                 <Text style={[st.headCell, st.headTxt, { width: NUM_W, textAlign: 'center' }]}>#</Text>
+                <Text style={[st.headCell, st.headTxt, { width: CHATBOT_W, textAlign: 'center' }]}>Chatbot</Text>
                 {COLS.map(col => {
                   const activo = !!filtrosSel[col.key]
                   // El botón de orden ordena por la fecha de la CITA, así que
@@ -1296,7 +1298,6 @@ export default function CitasVenta() {
                     </Fragment>
                   )
                 })}
-                <Text style={[st.headCell, st.headTxt, { width: CHATBOT_W, textAlign: 'center' }]}>Chatbot</Text>
                 <Text style={[st.headCell, st.headTxt, { width: COPY_W, textAlign: 'center' }]}>Copiar</Text>
                 <Text style={[st.headCell, st.headTxt, { width: DEL_W, textAlign: 'center' }]}>Borrar</Text>
               </View>
