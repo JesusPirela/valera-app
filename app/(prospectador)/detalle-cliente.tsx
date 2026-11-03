@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { puedeEnviarClienteAChatbot, esStaffSupervision } from '../../lib/permisos'
 import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueRecordatorioUpdate } from '../../lib/offline-queue'
+import { parchearListasClientes } from '../../lib/queryClient'
 import { conTimeout } from '../../lib/redIntentos'
 import PropiedadesSugeridas from '../../components/PropiedadesSugeridas'
 import SelectorEtapa from '../../components/SelectorEtapa'
@@ -403,10 +404,8 @@ export default function DetalleCliente() {
   function tocarCliente() {
     const ahora = new Date().toISOString()
     supabase.from('clientes').update({ updated_at: ahora }).eq('id', id as string).then()
-    const patch = (old: any[] | undefined) =>
-      (old ?? []).map(cl => cl.id !== id ? cl : { ...cl, updated_at: ahora })
-    queryClient.setQueryData<any[]>(['clientes', 'mios', 'v3'], patch)
-    queryClient.setQueryData<any[]>(['clientes', 'all',  'v3'], patch)
+    parchearListasClientes(lista =>
+      lista.map(cl => cl.id !== id ? cl : { ...cl, updated_at: ahora }))
   }
 
   // Cambiar la etapa desde el botón grande, sin entrar a Editar.

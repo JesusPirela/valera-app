@@ -82,3 +82,34 @@ if (Platform.OS !== 'web') {
     focusManager.setFocused(estado === 'active')
   })
 }
+
+// ── Parchear las listas del CRM sin adivinar la versión de la llave ─────────
+//
+// Cada pantalla que guarda un cliente actualiza la lista en cache al instante,
+// para que el cambio se vea sin esperar al servidor. El problema era que lo
+// hacían escribiendo la llave a mano: ['clientes', 'mios', 'v3']. La llave del
+// CRM subió a v5 (ver el CRM de otra persona) y luego a v6 (el gerente ya no
+// ve la empresa entera), y esas escrituras se quedaron cayendo en una llave
+// que ya nadie lee.
+//
+// Con red casi no se notaba, porque invalidateQueries(['clientes']) refresca
+// la lista de verdad desde el servidor. SIN red no hay refetch que rescate
+// nada: un cliente creado offline no aparecía en el CRM al volver atrás, y
+// parecía perdido aunque estaba a salvo en la cola.
+//
+// Esto parchea TODAS las listas de clientes que haya en cache, sea cual sea el
+// sufijo de versión. Se dejan fuera los CRM de otra persona en solo lectura
+// (llave 'ver:<uid>'): ahí no van los clientes propios.
+export function parchearListasClientes(actualizar: (lista: any[]) => any[]): void {
+  queryClient.setQueriesData<any[]>(
+    {
+      predicate: (q) => Array.isArray(q.queryKey)
+        && q.queryKey[0] === 'clientes'
+        && !String(q.queryKey[1] ?? '').startsWith('ver:'),
+    },
+    // Solo se toca lo que YA está en cache: si el CRM todavía no se ha abierto
+    // no se inventa una lista, porque una lista de un solo elemento se serviría
+    // como si fuera el CRM completo durante los 30 min de staleTime.
+    (old) => (Array.isArray(old) ? actualizar(old) : old),
+  )
+}

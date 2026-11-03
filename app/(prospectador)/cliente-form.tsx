@@ -10,6 +10,7 @@ import { ESTADOS, ETAPAS_CLIENTE } from './crm'
 import { registrarAccion, registrarSeguimiento } from '../../lib/gamification'
 import { useOfflineSync } from '../../hooks/useOfflineSync'
 import { enqueueClienteUpdate, enqueueClienteCreate, genUUID } from '../../lib/offline-queue'
+import { parchearListasClientes } from '../../lib/queryClient'
 import { useQueryClient } from '@tanstack/react-query'
 import { ZonasInteresField } from '../../components/ZonasInteresField'
 import { normalizarTelefono } from '../../lib/telefono'
@@ -453,17 +454,18 @@ export default function ClienteForm() {
         if (esEdicion) {
           await enqueueClienteUpdate(params.id!, payload)
           // Actualización optimista en cache
-          queryClient.setQueryData<any[]>(['clientes', 'mios', 'v3'], (old) =>
-            (old ?? []).map(cl => cl.id === params.id ? { ...cl, ...payload } : cl))
-          queryClient.setQueryData<any[]>(['clientes', 'all', 'v3'], (old) =>
-            (old ?? []).map(cl => cl.id === params.id ? { ...cl, ...payload } : cl))
+          parchearListasClientes(lista =>
+            lista.map(cl => cl.id === params.id ? { ...cl, ...payload } : cl))
         } else {
           const tempId = genUUID()
-          const fullPayload = { ...payload, responsable_id: idGuardado, id: tempId, created_at: new Date().toISOString() }
+          // updated_at va puesto porque el CRM ordena por él y lo usa para
+          // decidir si un cliente necesita seguimiento; sin él el cliente
+          // recién creado entraría al banner de "sin contactar" de inmediato.
+          const ahora = new Date().toISOString()
+          const fullPayload = { ...payload, responsable_id: idGuardado, id: tempId, created_at: ahora, updated_at: ahora }
           await enqueueClienteCreate(tempId, { ...payload, responsable_id: idGuardado })
           // Insertar optimistamente en cache con el UUID local
-          queryClient.setQueryData<any[]>(['clientes', 'mios', 'v3'], (old) => [fullPayload, ...(old ?? [])])
-          queryClient.setQueryData<any[]>(['clientes', 'all', 'v3'], (old) => [fullPayload, ...(old ?? [])])
+          parchearListasClientes(lista => [fullPayload, ...lista])
         }
         await refreshPending()
         irAtras()
@@ -491,10 +493,8 @@ export default function ClienteForm() {
         // Actualizar la lista del CRM al instante: updated_at = ahora hace que
         // necesitaSeguimiento() devuelva false y el cliente desaparece del banner.
         const ahora = new Date().toISOString()
-        const patchLista = (old: any[] | undefined) =>
-          (old ?? []).map(cl => cl.id === params.id ? { ...cl, ...payload, updated_at: ahora } : cl)
-        queryClient.setQueryData<any[]>(['clientes', 'mios', 'v3'], patchLista)
-        queryClient.setQueryData<any[]>(['clientes', 'all',  'v3'], patchLista)
+        parchearListasClientes(lista =>
+          lista.map(cl => cl.id === params.id ? { ...cl, ...payload, updated_at: ahora } : cl))
       } else {
         const { data, error } = await supabase
           .from('clientes')
