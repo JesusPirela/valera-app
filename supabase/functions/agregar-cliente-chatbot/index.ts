@@ -153,15 +153,40 @@ serve(async (req) => {
       return json({ error: 'Este cliente ya fue agregado al chatbot.' }, 400)
     }
 
-    // Solo lo estrictamente necesario para que el bot funcione (A, B, M, T, U).
-    // El resto de columnas del sheet (C–L, N–S, V) quedan vacías — son
-    // opcionales y las gestiona el propio bot o no se capturan en el form.
+    // Datos para personalizar los mensajes del bot — salen de `clientes` (no
+    // los manda el caller). No hay columna de tipo de propiedad en `clientes`
+    // todavía, así que tipoPropiedad siempre va vacío por ahora.
+    let zona = ''
+    let formaPago = ''
+    let presupuestoTexto = String(presupuesto)
+    if (clienteId) {
+      const { data: clienteRow } = await supabaseAdmin
+        .from('clientes')
+        .select('zona_busqueda, tipo_credito, presupuesto')
+        .eq('id', clienteId)
+        .maybeSingle()
+      if (clienteRow) {
+        zona = clienteRow.zona_busqueda ?? ''
+        formaPago = clienteRow.tipo_credito ?? ''
+        presupuestoTexto = clienteRow.presupuesto ?? presupuestoTexto
+      }
+    }
+
+    // Solo lo estrictamente necesario para que el bot funcione (A, B, M, T, U)
+    // más los campos de personalización. El resto de columnas del sheet
+    // quedan vacías — son opcionales y las gestiona el propio bot o no se
+    // capturan en el form.
     const fila = {
-      nombre,                    // A Nombre
-      telefono,                  // B Teléfono
-      estado: 'Pendiente',       // M Estado
-      botActivo: 'SI',           // T Bot_Activo
-      prospectador: targetEmail, // U Prospectador
+      nombre,                       // A Nombre
+      telefono,                     // B Teléfono
+      estado: 'Pendiente',          // M Estado
+      botActivo: 'SI',              // T Bot_Activo
+      prospectador: targetEmail,    // U Prospectador
+      zona,
+      tipo_operacion: tipoOperacion,
+      tipo_propiedad: '',
+      presupuesto: presupuestoTexto,
+      forma_pago: formaPago,
     }
 
     const webhookResp = await fetch(webhookUrl, {
