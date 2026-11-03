@@ -79,6 +79,10 @@ serve(async (req) => {
     let targetId = user.id
     let targetRol = rolUsuario
     let targetEmail = user.email
+    // Cuando admin/gerente asigna a OTRO prospectador (desde citas-venta), es
+    // una asignación curada a mano, no un autoenvío masivo — no tiene sentido
+    // que choque contra el tope mensual pensado para frenar spam individual.
+    let esAsignacionAdmin = false
 
     if (prospectadorIdBody && prospectadorIdBody !== user.id) {
       if (rolUsuario !== 'admin' && rolUsuario !== 'gerente') {
@@ -95,9 +99,10 @@ serve(async (req) => {
       targetId = prospectadorIdBody
       targetRol = targetProfile.role ?? ''
       targetEmail = targetUser.user.email
+      esAsignacionAdmin = true
     }
 
-    if (!Object.keys(TOPE_POR_ROL).includes(targetRol)) {
+    if (!esAsignacionAdmin && !Object.keys(TOPE_POR_ROL).includes(targetRol)) {
       return json({ error: 'Acceso denegado' }, 403)
     }
     const topeMensual = TOPE_POR_ROL[targetRol] ?? 5
@@ -115,18 +120,20 @@ serve(async (req) => {
       return json({ error: 'El teléfono no es válido. Debe tener 10 dígitos (o ya incluir el 52).' }, 400)
     }
 
-    // Tope mensual según rol.
-    const inicioMes = new Date()
-    inicioMes.setUTCDate(1)
-    inicioMes.setUTCHours(0, 0, 0, 0)
-    const { count } = await supabaseAdmin
-      .from('chatbot_reactivaciones')
-      .select('id', { count: 'exact', head: true })
-      .eq('prospectador_id', targetId)
-      .gte('created_at', inicioMes.toISOString())
+    // Tope mensual según rol — no aplica cuando admin/gerente asigna a otro.
+    if (!esAsignacionAdmin) {
+      const inicioMes = new Date()
+      inicioMes.setUTCDate(1)
+      inicioMes.setUTCHours(0, 0, 0, 0)
+      const { count } = await supabaseAdmin
+        .from('chatbot_reactivaciones')
+        .select('id', { count: 'exact', head: true })
+        .eq('prospectador_id', targetId)
+        .gte('created_at', inicioMes.toISOString())
 
-    if ((count ?? 0) >= topeMensual) {
-      return json({ error: `Ya alcanzaste el límite de ${topeMensual} clientes este mes.` }, 400)
+      if ((count ?? 0) >= topeMensual) {
+        return json({ error: `Ya alcanzaste el límite de ${topeMensual} clientes este mes.` }, 400)
+      }
     }
 
     const webhookUrl = Deno.env.get('MAKE_CHATBOT_WEBHOOK_URL')
