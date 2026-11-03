@@ -12,6 +12,7 @@ import { normalizar } from '../../lib/texto'
 import { registrarAccion , registrarSeguimiento, registrarContacto } from '../../lib/gamification'
 
 const VISTA_CRM_KEY = '@valera_crm_vista'
+const EMPTY_SET = new Set<string>()
 import { useColors, useTheme } from '../../lib/ThemeContext'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -333,13 +334,15 @@ const SORT_LABELS: Record<SortBy, string> = {
 }
 
 type ColoresCard = ReturnType<typeof import('../../lib/ThemeContext').useColors>
-const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onChatbot, soloLectura }: {
+const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onChatbot, soloLectura, enChatbot }: {
   item: Cliente
   c: ColoresCard
   darkMode: boolean
   userRole: string | null
   onChatbot: (item: Cliente) => void
   soloLectura?: boolean
+  /** Ya tiene un registro en chatbot_leads (se le mandó antes, de aquí o de otra pantalla). */
+  enChatbot?: boolean
 }) {
   const info    = estadoInfo(item.estado)
   const rec     = proximoRec(item.recordatorios ?? [])
@@ -476,13 +479,23 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
             <Text style={[s.actionEditTxt, darkMode && { color: '#fbbf24' }]}>Editar</Text>
           </TouchableOpacity>
           {puedeEnviarClienteAChatbot(userRole) && (
-            <TouchableOpacity
-              style={[s.actionChatbot, darkMode && { backgroundColor: '#241a33', borderColor: '#6a3fa0' }]}
-              onPress={() => onChatbot(item)}
-            >
-              <Ionicons name="chatbubbles-outline" size={14} color={darkMode ? '#c084fc' : '#7c3aed'} />
-              <Text style={[s.actionChatbotTxt, darkMode && { color: '#c084fc' }]}>Chatbot</Text>
-            </TouchableOpacity>
+            enChatbot ? (
+              // Ya se mandó: gris y sin acción, para no mandarlo dos veces por
+              // accidente (el backend lo rechazaría, pero mejor que se vea a
+              // simple vista desde la tarjeta).
+              <View style={[s.actionChatbot, s.actionChatbotDone, darkMode && { backgroundColor: '#1b2330', borderColor: '#3a4556' }]}>
+                <Ionicons name="checkmark-circle-outline" size={14} color={darkMode ? '#8291a3' : '#64748b'} />
+                <Text style={[s.actionChatbotTxt, s.actionChatbotDoneTxt, darkMode && { color: '#8291a3' }]}>Ya en el chatbot</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[s.actionChatbot, darkMode && { backgroundColor: '#241a33', borderColor: '#6a3fa0' }]}
+                onPress={() => onChatbot(item)}
+              >
+                <Ionicons name="chatbubbles-outline" size={14} color={darkMode ? '#c084fc' : '#7c3aed'} />
+                <Text style={[s.actionChatbotTxt, darkMode && { color: '#c084fc' }]}>Chatbot</Text>
+              </TouchableOpacity>
+            )
           )}
         </View>
       </View>
@@ -605,6 +618,7 @@ export default function CRM() {
         return
       }
       setClienteChatbot(null)
+      queryClient.invalidateQueries({ queryKey: ['chatbot_leads', 'telefonos'] })
       const msg = `${clienteChatbot.nombre} fue enviado al chatbot.`
       if (Platform.OS === 'web') window.alert(msg)
       else Alert.alert('Listo', msg)
@@ -718,6 +732,25 @@ export default function CRM() {
     },
     networkMode: 'offlineFirst',
     staleTime: 1000 * 60 * 5,
+  })
+
+  // Teléfonos ya registrados en chatbot_leads (RLS: cada quien ve los suyos;
+  // admin/supervisor/gerente los ve todos) — para pintar el botón "Chatbot"
+  // en gris cuando el cliente ya se mandó, en vez de dejar que se mande dos veces.
+  const { data: telefonosChatbot = EMPTY_SET } = useQuery<Set<string>>({
+    queryKey: ['chatbot_leads', 'telefonos'],
+    queryFn: async () => {
+      const set = new Set<string>()
+      const PAGE = 1000
+      for (let desde = 0; ; desde += PAGE) {
+        const { data, error } = await supabase.from('chatbot_leads').select('telefono').range(desde, desde + PAGE - 1)
+        if (error || !data) break
+        data.forEach(r => { const d = (r.telefono ?? '').replace(/\D/g, '').slice(-10); if (d) set.add(d) })
+        if (data.length < PAGE) break
+      }
+      return set
+    },
+    staleTime: 1000 * 60 * 2,
   })
 
   // El caché persistido en disco puede volver con huecos: si la escritura se
@@ -1400,8 +1433,11 @@ export default function CRM() {
   // during the previous render" → la pantalla se quedaba en blanco/negro. Un
   // hook debe llamarse siempre, al nivel del componente, sin condicionales.
   const renderCliente = useCallback(({ item }: { item: Cliente }) => (
-    <ClienteCard item={item} c={c} darkMode={darkMode} userRole={userRole} onChatbot={abrirModalChatbot} soloLectura={soloLectura} />
-  ), [c, darkMode, userRole, abrirModalChatbot, soloLectura])
+    <ClienteCard
+      item={item} c={c} darkMode={darkMode} userRole={userRole} onChatbot={abrirModalChatbot} soloLectura={soloLectura}
+      enChatbot={telefonosChatbot.has((item.telefono ?? '').replace(/\D/g, '').slice(-10))}
+    />
+  ), [c, darkMode, userRole, abrirModalChatbot, soloLectura, telefonosChatbot])
 
   // Header que se desplaza con el scroll en vista lista.
   // Se usa View en lugar de Fragment porque ListHeaderComponent necesita un único nodo raíz.
@@ -2768,6 +2804,8 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: '#ddd6fe',
   },
   actionChatbotTxt: { fontSize: 13, fontWeight: '600', color: '#7c3aed' },
+  actionChatbotDone: { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' },
+  actionChatbotDoneTxt: { color: '#64748b' },
 
   // ── Modal "Enviar al chatbot" ───────────────────────────────────
   chatbotModalBox: {

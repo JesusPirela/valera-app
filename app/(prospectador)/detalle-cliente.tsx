@@ -321,6 +321,7 @@ export default function DetalleCliente() {
   const [donarCargando, setDonarCargando] = useState(false)
 
   const [modalChatbot, setModalChatbot] = useState(false)
+  const [yaEnChatbot, setYaEnChatbot] = useState(false)
   const [chatbotTelefono, setChatbotTelefono] = useState('')
   const [chatbotPresupuesto, setChatbotPresupuesto] = useState('')
   const [chatbotError, setChatbotError] = useState<string | null>(null)
@@ -336,6 +337,15 @@ export default function DetalleCliente() {
       }
     })
   }, [])
+
+  // ¿Este cliente ya está en chatbot_leads? Para no dejar mandarlo dos veces
+  // por accidente (el backend lo rechazaría igual, pero así se ve a simple vista).
+  useEffect(() => {
+    const tel = (cliente?.telefono ?? '').replace(/\D/g, '').slice(-10)
+    if (!tel) { setYaEnChatbot(false); return }
+    supabase.from('chatbot_leads').select('id').ilike('telefono', `%${tel}`).maybeSingle()
+      .then(({ data }) => setYaEnChatbot(!!data))
+  }, [cliente?.telefono])
 
   function abrirModalChatbot() {
     if (!cliente) return
@@ -377,6 +387,7 @@ export default function DetalleCliente() {
         return
       }
       setModalChatbot(false)
+      setYaEnChatbot(true)
       const successMsg = `${cliente.nombre} fue enviado al chatbot.`
       if (Platform.OS === 'web') window.alert(successMsg)
       else Alert.alert('Listo', successMsg)
@@ -738,13 +749,20 @@ export default function DetalleCliente() {
           <Text style={styles.actionBtnTxt} numberOfLines={1}>WhatsApp</Text>
         </TouchableOpacity>
         {puedeEnviarClienteAChatbot(userRole) && (
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#7c3aed' }]}
-            onPress={abrirModalChatbot}
-          >
-            <Ionicons name="chatbubbles-outline" size={20} color="#fff" />
-            <Text style={styles.actionBtnTxt} numberOfLines={1}>Chatbot</Text>
-          </TouchableOpacity>
+          yaEnChatbot ? (
+            <View style={[styles.actionBtn, { backgroundColor: '#64748b' }]}>
+              <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+              <Text style={styles.actionBtnTxt} numberOfLines={1}>Ya enviado</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#7c3aed' }]}
+              onPress={abrirModalChatbot}
+            >
+              <Ionicons name="chatbubbles-outline" size={20} color="#fff" />
+              <Text style={styles.actionBtnTxt} numberOfLines={1}>Chatbot</Text>
+            </TouchableOpacity>
+          )
         )}
       </View>
 

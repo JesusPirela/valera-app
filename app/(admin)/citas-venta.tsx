@@ -202,12 +202,14 @@ function confirmar(msg: string, onSi: () => void) {
 }
 
 // ── Fila (solo muestra; memoizada y de altura fija → virtualización sin lag) ──
-const FilaRow = memo(function FilaRow({ f, idx, resaltada, onTap, onRetro, onCopy, onDelete, onChatbot }: {
+const FilaRow = memo(function FilaRow({ f, idx, resaltada, onTap, onRetro, onCopy, onDelete, onChatbot, enChatbot }: {
   f: Fila; idx: number
   onTap: (id: string, k: ColKey, t: Tipo, val: string) => void
   resaltada?: boolean
   onRetro: (f: Fila) => void; onCopy: (f: Fila) => void; onDelete: (f: Fila) => void
   onChatbot: (f: Fila) => void
+  /** Ya hay un registro en chatbot_leads con este teléfono. */
+  enChatbot?: boolean
 }) {
   const c = useColors()
   // Un solo sitio decide cómo se resalta la fila. Antes era una variable
@@ -240,11 +242,16 @@ const FilaRow = memo(function FilaRow({ f, idx, resaltada, onTap, onRetro, onCop
         }]}>{resaltado?.emoji ?? idx + 1}</Text>
       </View>
       {/* Enviar al chatbot: hasta la izquierda, junto al contador — es la
-          acción que más se usa desde esta tabla. */}
+          acción que más se usa desde esta tabla. Gris y sin acción si el
+          teléfono ya está en chatbot_leads (ya se mandó antes). */}
       <View style={[st.cell, { width: CHATBOT_W, borderColor: c.border, alignItems: 'center' }]}>
-        <TouchableOpacity style={st.chatbotBtn} onPress={() => onChatbot(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-          <Text style={st.chatbotBtnTxt}>🤖 Bot</Text>
-        </TouchableOpacity>
+        {enChatbot ? (
+          <View style={st.chatbotBtnDone}><Text style={st.chatbotBtnDoneTxt}>✓ Enviado</Text></View>
+        ) : (
+          <TouchableOpacity style={st.chatbotBtn} onPress={() => onChatbot(f)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <Text style={st.chatbotBtnTxt}>🤖 Bot</Text>
+          </TouchableOpacity>
+        )}
       </View>
       {COLS.map(col => {
         const val = (f[col.key] as string) ?? ''
@@ -320,7 +327,7 @@ const FilaRow = memo(function FilaRow({ f, idx, resaltada, onTap, onRetro, onCop
       </View>
     </View>
   )
-}, (a, b) => a.f === b.f && a.idx === b.idx)
+}, (a, b) => a.f === b.f && a.idx === b.idx && a.enChatbot === b.enChatbot)
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -749,6 +756,20 @@ export default function CitasVenta() {
     [profiles],
   )
   const [clientes, setClientes] = useState<{ id: string; nombre: string; telefono: string | null }[]>([])
+  // Teléfonos ya en chatbot_leads (normalizados a los últimos 10 dígitos),
+  // para pintar en gris el botón "Bot" de las citas que ya se mandaron.
+  const [telefonosChatbot, setTelefonosChatbot] = useState<Set<string>>(new Set())
+  const cargarTelefonosChatbot = useCallback(async () => {
+    const set = new Set<string>()
+    const PAGE = 1000
+    for (let d = 0; ; d += PAGE) {
+      const { data, error } = await supabase.from('chatbot_leads').select('telefono').range(d, d + PAGE - 1)
+      if (error || !data) break
+      data.forEach(r => { const dig = (r.telefono ?? '').replace(/\D/g, '').slice(-10); if (dig) set.add(dig) })
+      if (data.length < PAGE) break
+    }
+    setTelefonosChatbot(set)
+  }, [])
   const [filtrosSel, setFiltrosSel] = useState<Record<string, Set<string>>>({})
   const [sinAsignar, setSinAsignar] = useState<null | 'any' | 'prospecto' | 'coordino' | 'atendio'>(null)
   // Filtro de retroalimentación: ver solo las que YA la tienen escrita o solo
@@ -880,7 +901,8 @@ export default function CitasVenta() {
       }
       setClientes(todos)
     })()
-  }, [])
+    cargarTelefonosChatbot()
+  }, [cargarTelefonosChatbot])
 
   const valorDe = (f: Fila, key: ColKey) => String((f[key] as string) ?? '').trim() || VACIO
   // Todo lo filtrado MENOS el propio filtro de retro. De aquí salen los
@@ -1315,7 +1337,13 @@ export default function CitasVenta() {
                 data={visibles}
                 keyExtractor={f => f.id}
                 getItemLayout={(_, i) => ({ length: ROW_H, offset: ROW_H * i, index: i })}
-                renderItem={({ item, index }) => <FilaRow f={item} idx={index} resaltada={item.id === citaResaltada} onTap={onTap} onRetro={onRetro} onCopy={onCopy} onDelete={onDelete} onChatbot={onChatbot} />}
+                renderItem={({ item, index }) => (
+                  <FilaRow
+                    f={item} idx={index} resaltada={item.id === citaResaltada}
+                    onTap={onTap} onRetro={onRetro} onCopy={onCopy} onDelete={onDelete} onChatbot={onChatbot}
+                    enChatbot={telefonosChatbot.has((item.telefono ?? '').replace(/\D/g, '').slice(-10))}
+                  />
+                )}
                 initialNumToRender={25} maxToRenderPerBatch={25} windowSize={11} removeClippedSubviews
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
@@ -1528,6 +1556,7 @@ export default function CitasVenta() {
           onClose={() => setChatbotCita(null)}
           onSent={(cliente) => {
             setClientes(prev => prev.some(x => x.id === cliente.id) ? prev : [...prev, cliente].sort((a, b) => (a.nombre ?? '').localeCompare(b.nombre ?? '', 'es')))
+            cargarTelefonosChatbot()
             setMsg('✓ Cliente enviado al chatbot.'); setTimeout(() => setMsg(''), 3500)
           }}
         />
@@ -1723,6 +1752,8 @@ const st = StyleSheet.create({
   delTxt: { fontSize: 16 },
   chatbotBtn: { backgroundColor: '#7c3aed22', borderWidth: 1, borderColor: '#7c3aed', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6 },
   chatbotBtnTxt: { fontSize: 11, fontWeight: '800', color: '#7c3aed' },
+  chatbotBtnDone: { backgroundColor: '#f1f5f922', borderWidth: 1, borderColor: '#64748b55', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6 },
+  chatbotBtnDoneTxt: { fontSize: 11, fontWeight: '700', color: '#64748b' },
   chatbotFieldLabel: { fontSize: 12, fontWeight: '600', color: '#94a3b8', marginBottom: 4 },
   chatbotErrorTxt: { color: '#dc2626', fontSize: 12, marginBottom: 8 },
   chatbotEnviarBtn: {
