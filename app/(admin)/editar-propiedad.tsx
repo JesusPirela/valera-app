@@ -862,7 +862,28 @@ export default function EditarPropiedad() {
       // Si falla el thumb no bloqueamos el guardado — la imagen original funciona de fallback
     }
 
+    // La foto de portada (orden 0) también se sube como JPG a wa/<id>.jpg:
+    // es la que usa el carrusel de WhatsApp de la campaña mensual, que no
+    // acepta WebP. Si falla, no bloquea el guardado de la propiedad.
+    if (orden === 0) {
+      subirCopiaWa(uri, propiedadId).catch(() => {})
+    }
+
     return { url: pub.publicUrl, thumbUrl }
+  }
+
+  async function subirCopiaWa(uri: string, propiedadId: string): Promise<void> {
+    const manip = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1600 } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
+    )
+    const response = await fetch(manip.uri)
+    const blob = await response.blob()
+    const { error } = await supabase.storage
+      .from('propiedades')
+      .upload(`wa/${propiedadId}.jpg`, blob, { contentType: 'image/jpeg', upsert: true })
+    if (error) throw error
   }
 
   async function handleGuardar() {

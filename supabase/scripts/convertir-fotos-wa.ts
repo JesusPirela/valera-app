@@ -6,15 +6,31 @@
 //
 // Uso:
 //   deno run --allow-net --allow-env supabase/scripts/convertir-fotos-wa.ts
+//   deno run --allow-net --allow-env supabase/scripts/convertir-fotos-wa.ts --limit 20   (prueba con pocas)
 //
 // Variables de entorno requeridas (NO se piden como argumento, por seguridad):
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 //
 // Es idempotente: si wa/<id>.jpg ya existe se vuelve a subir con upsert, así
 // que se puede re-correr sin duplicar nada ni hacer daño.
+//
+// Usa @matmen/imagescript v3 (jsr) — SÍ decodifica WebP estático (confirmado
+// en su tabla de formatos soportados: PNG, JPEG, WebP, AVIF, JPEG XL, GIF,
+// APNG, BMP, QOI, TGA, Netpbm, TIFF, ICO/CUR, HDR). Para WebP/GIF ANIMADOS
+// Image.decode() no devuelve un frame único (eso es Animation.decode) — no es
+// el caso esperado para fotos de propiedades, así que si llegara a pasar
+// queda capturado como fallo normal del try/catch, no se cae el script.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { decode, Image } from 'https://deno.land/x/imagescript@1.2.17/mod.ts'
+import { Image } from 'jsr:@matmen/imagescript@^3.14.0'
+
+const LIMIT_FLAG = '--limit'
+const limitIdx = Deno.args.indexOf(LIMIT_FLAG)
+const limite = limitIdx !== -1 ? Number(Deno.args[limitIdx + 1]) : null
+if (limitIdx !== -1 && (!Number.isFinite(limite) || (limite as number) <= 0)) {
+  console.error(`Uso: --limit N (N entero positivo). Recibido: "${Deno.args[limitIdx + 1]}"`)
+  Deno.exit(1)
+}
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -38,13 +54,12 @@ async function propiedadesSinFotoValida(): Promise<{ id: string; url: string }[]
   return (data as { id: string; url: string }[] | null) ?? []
 }
 
-async function convertirYSubir(propiedadId: string, urlOriginal: string): Promise<void> {
+async function convertirYSubir(propiedadId: string, urlOriginal: string): Promise<number> {
   const resp = await fetch(urlOriginal)
   if (!resp.ok) throw new Error(`No se pudo descargar ${urlOriginal} (${resp.status})`)
   const bytes = new Uint8Array(await resp.arrayBuffer())
 
-  const img = await decode(bytes)
-  if (!(img instanceof Image)) throw new Error('Formato de imagen no soportado por imagescript')
+  const img = await Image.decode(bytes)
 
   if (img.width > MAX_ANCHO) {
     const alto = Math.round((img.height * MAX_ANCHO) / img.width)
@@ -60,28 +75,52 @@ async function convertirYSubir(propiedadId: string, urlOriginal: string): Promis
     .from('propiedades')
     .upload(`wa/${propiedadId}.jpg`, jpg, { contentType: 'image/jpeg', upsert: true })
   if (error) throw error
+
+  return jpg.byteLength
 }
 
 async function main() {
-  const pendientes = await propiedadesSinFotoValida()
-  console.log(`${pendientes.length} propiedades por convertir.`)
+  let pendientes = await propiedadesSinFotoValida()
+  const totalPendientes = pendientes.length
+  if (limite !== null) pendientes = pendientes.slice(0, limite)
+  console.log(
+    limite !== null
+      ? `${totalPendientes} propiedades por convertir en total — procesando ${pendientes.length} (--limit ${limite}).`
+      : `${pendientes.length} propiedades por convertir.`,
+  )
 
-  let ok = 0
-  let fallos = 0
+  const fallos: { id: string; error: string }[] = []
+  const pesos: number[] = []
+
   for (const p of pendientes) {
     try {
-      await convertirYSubir(p.id, p.url)
-      ok++
-      console.log(`✓ ${p.id}`)
+      const bytes = await convertirYSubir(p.id, p.url)
+      pesos.push(bytes)
+      console.log(`✓ ${p.id} (${(bytes / 1024).toFixed(0)} KB)`)
     } catch (e) {
-      fallos++
-      console.error(`✗ ${p.id}: ${e instanceof Error ? e.message : String(e)}`)
+      const msg = e instanceof Error ? e.message : String(e)
+      fallos.push({ id: p.id, error: msg })
+      console.error(`✗ ${p.id}: ${msg}`)
     }
     // Pausa corta para no saturar el storage ni la memoria del proceso.
     await new Promise((r) => setTimeout(r, 150))
   }
 
-  console.log(`Listo: ${ok} subidas, ${fallos} fallos.`)
+  console.log('\n── Resumen ──')
+  console.log(`Convertidas: ${pesos.length}`)
+  console.log(`Fallidas:    ${fallos.length}`)
+  if (fallos.length > 0) {
+    console.log('\nFallos (id · error):')
+    for (const f of fallos) console.log(`  ${f.id} · ${f.error}`)
+  }
+  if (pesos.length > 0) {
+    const kb = pesos.map((b) => b / 1024)
+    const prom = kb.reduce((a, b) => a + b, 0) / kb.length
+    console.log(
+      `\nPeso de las JPG resultantes: min ${Math.min(...kb).toFixed(0)} KB · ` +
+      `prom ${prom.toFixed(0)} KB · max ${Math.max(...kb).toFixed(0)} KB`,
+    )
+  }
 }
 
 await main()
