@@ -77,6 +77,7 @@ type Propiedad = {
   lat: number | null
   lng: number | null
   video_url: string | null
+  url_origen: string | null
   propiedad_imagenes: { url: string; orden: number }[]
 }
 
@@ -331,7 +332,7 @@ export default function DetallePropiedad() {
       }
       rol = vistaComo ?? rol  // rol efectivo (admin "viendo como")
 
-      const SELECT_PROPIEDAD = 'id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, video_url, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)'
+      const SELECT_PROPIEDAD = 'id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion, created_at, created_by, asesor_id, exclusiva, es_constructora, nombre_constructora, inmobiliaria_id, video_url, url_origen, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria, telefono), lat, lng, propiedad_imagenes(url, orden)'
 
       let { data, error } = await supabase.from('propiedades').select(SELECT_PROPIEDAD).eq('id', id).single()
 
@@ -538,6 +539,7 @@ export default function DetallePropiedad() {
   useEffect(() => { cargarDisenoTokens() }, [cargarDisenoTokens])
   const [generandoPDF, setGenerandoPDF] = useState(false)
   const [descripcionCopiada, setDescripcionCopiada] = useState(false)
+  const [origenCopiado, setOrigenCopiado] = useState(false)
   // La versión de la descripción que le toca a ESTA persona para ESTA propiedad.
   // Se trae al abrir la ficha, no al tocar "Copiar": en web el portapapeles solo
   // acepta escrituras dentro del gesto del usuario, y si el botón se pone a
@@ -1000,6 +1002,27 @@ export default function DetallePropiedad() {
       })
     return () => { vigente = false }
   }, [propiedad?.id])
+
+  // Abrir el anuncio original. En web se abre en pestaña nueva para no perder
+  // la ficha; en el teléfono lo manda al navegador.
+  function abrirUrlOrigen() {
+    const u = propiedad?.url_origen
+    if (!u) return
+    if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(u, '_blank')
+    else Linking.openURL(u).catch(() => {})
+  }
+
+  async function copiarUrlOrigen() {
+    const u = propiedad?.url_origen
+    if (!u) return
+    if (Platform.OS === 'web') {
+      try { await navigator.clipboard.writeText(u) } catch { /* ignorar */ }
+    } else {
+      await Clipboard.setStringAsync(u)
+    }
+    setOrigenCopiado(true)
+    setTimeout(() => setOrigenCopiado(false), 2000)
+  }
 
   async function copiarDescripcion() {
     if (!propiedad?.descripcion) return
@@ -2502,6 +2525,36 @@ export default function DetallePropiedad() {
           </View>
         ) : null}
 
+        {/* De dónde salió — el anuncio original del que se importó.
+            El dato ya se guardaba (url_origen) desde "Importar URL" y se veía
+            SOLO en la pantalla de editar, que es de admin. Aquí lo ve
+            cualquiera que pueda abrir la ficha, que es quien lo necesita:
+            para ir por más fotos, confirmar un dato o ver si sigue publicada. */}
+        {propiedad.url_origen ? (
+          <View style={styles.seccion}>
+            <View style={styles.seccionHeader}>
+              <Text style={styles.seccionTitulo}>De dónde salió</Text>
+              <TouchableOpacity
+                style={[styles.copiarBtn, origenCopiado && styles.copiarBtnActivo]}
+                onPress={copiarUrlOrigen}
+              >
+                <Text style={[styles.copiarBtnText, origenCopiado && styles.copiarBtnTextActivo]}>
+                  {origenCopiado ? '✓ Copiado' : '📋 Copiar'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.origenLinkBox}
+              onPress={abrirUrlOrigen}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.origenLinkIcono}>🔗</Text>
+              <Text style={styles.origenLinkTexto} numberOfLines={2}>{propiedad.url_origen}</Text>
+            </TouchableOpacity>
+            <Text style={styles.origenLinkHint}>Toca para abrir el anuncio original</Text>
+          </View>
+        ) : null}
+
         {/* IA: descripción lista para publicar (para TODOS). Cada clic genera
             una versión DISTINTA (misma info) para no duplicar en redes. Límite
             de 5 usos por día por usuario (lo controla la edge function). */}
@@ -3572,6 +3625,37 @@ const styles = StyleSheet.create({
     color: '#888',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  // El link de origen: una caja tocable, no un texto suelto. El dedo necesita
+  // area, y el link puede ser larguisimo (inmuebles24 mete medio parrafo en la
+  // ruta), asi que se corta a dos lineas en vez de empujar el ancho.
+  origenLinkBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#eef6f7',
+    borderWidth: 1,
+    borderColor: '#cfe3e6',
+  },
+  origenLinkIcono: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  origenLinkTexto: {
+    flex: 1,
+    color: '#1a6470',
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  origenLinkHint: {
+    marginTop: 6,
+    fontSize: 11,
+    color: '#999',
   },
   copiarBtn: {
     borderWidth: 1,
