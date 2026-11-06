@@ -21,7 +21,7 @@ import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import CompartirFormulario from '../../components/CompartirFormulario'
-import { esPlusOMejor, esStaffSupervision, puedeVerPublicaciones } from '../../lib/permisos'
+import { esPlusOMejor, esStaffSupervision, esAdmin, puedeVerPublicaciones } from '../../lib/permisos'
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb, proxyImagen, imagenParaGaleria } from '../../lib/img'
 import { rotarFotos, lotePublicacion, TOPE_LOTE } from '../../lib/orden-fotos'
@@ -2526,11 +2526,13 @@ export default function DetallePropiedad() {
         ) : null}
 
         {/* De dónde salió — el anuncio original del que se importó.
-            El dato ya se guardaba (url_origen) desde "Importar URL" y se veía
-            SOLO en la pantalla de editar, que es de admin. Aquí lo ve
-            cualquiera que pueda abrir la ficha, que es quien lo necesita:
-            para ir por más fotos, confirmar un dato o ver si sigue publicada. */}
-        {propiedad.url_origen ? (
+            SOLO para admin, igual que en la pantalla de editar: de dónde
+            sacamos una propiedad es información interna, y el resto del equipo
+            no tiene por qué ver el anuncio de la otra inmobiliaria.
+            Ojo: `rol` es el rol EFECTIVO, así que un admin en modo "ver como"
+            tampoco lo ve — que es justo lo que se quiere al revisar qué mira
+            cada quien. */}
+        {esAdmin(rol) && propiedad.url_origen ? (
           <View style={styles.seccion}>
             <View style={styles.seccionHeader}>
               <Text style={styles.seccionTitulo}>De dónde salió</Text>
