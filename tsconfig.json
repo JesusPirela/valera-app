@@ -6,7 +6,9 @@
     // tsc typechequea la variante .web; Metro sigue eligiendo por plataforma.
     "moduleSuffixes": [".web", ""]
   },
-  // Las edge functions corren en Deno (imports por URL, global Deno): tienen su
-  // propio runtime y se despliegan aparte — fuera del typecheck del app.
-  "exclude": ["node_modules", "supabase/functions"]
+  // Las edge functions y los scripts sueltos corren en Deno (imports por URL,
+  // global Deno): tienen su propio runtime y se despliegan aparte — fuera del
+  // typecheck del app. Sin excluir supabase/scripts, convertir-fotos-wa.ts
+  // tumbaba el typecheck de CI con 5 "Cannot find name 'Deno'".
+  "exclude": ["node_modules", "supabase/functions", "supabase/scripts"]
 }
