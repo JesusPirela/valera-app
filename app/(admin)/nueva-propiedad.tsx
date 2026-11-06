@@ -985,6 +985,16 @@ export default function NuevaPropiedad() {
     }
   }
 
+  // El link del anuncio es OBLIGATORIO para importar pegando el código: es lo
+  // único que deja rastro de dónde salió la propiedad. Antes era opcional y se
+  // confiaba en el og:url que trae el HTML del portal, pero casi nunca llega:
+  // de 71 propiedades importadas así, 71 quedaron sin origen. Como el flujo ya
+  // obliga a tener el anuncio abierto en el navegador, el link está a un
+  // Ctrl+C de distancia.
+  const linkOrigen = urlImport.trim()
+  const linkOrigenListo = /^https?:\/\//i.test(linkOrigen) && linkOrigen.length <= 500
+  const htmlListoParaImportar = htmlPegado.trim().length >= 500
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={[styles.container, { backgroundColor: c.bg }]} keyboardShouldPersistTaps="handled">
@@ -1058,7 +1068,12 @@ export default function NuevaPropiedad() {
                 Importar pegando el código (rápido y seguro, funciona con cualquier anuncio):
               </Text>
               <Text style={{ fontSize: 11.5, color: '#c9c9c9', lineHeight: 17, marginBottom: 8 }}>
-                1) Abre el anuncio en tu navegador.  2) Presiona <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+U</Text> (ver código fuente).  3) <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+A</Text> y <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+C</Text> (copiar todo).  4) Pégalo aquí:
+                1) Abre el anuncio en tu navegador.  2) Copia el link de la barra de direcciones y pégalo <Text style={{ fontWeight: '800', color: '#fff' }}>en el campo de arriba</Text>.  3) Presiona <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+U</Text> (ver código fuente).  4) <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+A</Text> y <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+C</Text> (copiar todo).  5) Pégalo aquí:
+              </Text>
+              <Text style={{ fontSize: 11.5, fontWeight: '700', lineHeight: 16, marginBottom: 8, color: linkOrigenListo ? '#6abf69' : '#e0a400' }}>
+                {linkOrigenListo
+                  ? '✓ Link del anuncio listo — se guardará en la propiedad'
+                  : '⚠ Falta el link del anuncio (el campo de arriba). Sin él la propiedad queda sin saber de dónde salió.'}
               </Text>
               <TextInput
                 style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText, minHeight: 70, textAlignVertical: 'top' }]}
@@ -1069,11 +1084,15 @@ export default function NuevaPropiedad() {
                 multiline
               />
               <TouchableOpacity
-                style={[styles.btnIA, { marginTop: 8, marginBottom: 0, opacity: (importando || htmlPegado.trim().length < 500) ? 0.5 : 1, backgroundColor: '#1a6470' }]}
+                style={[styles.btnIA, { marginTop: 8, marginBottom: 0, opacity: (importando || !htmlListoParaImportar || !linkOrigenListo) ? 0.5 : 1, backgroundColor: '#1a6470' }]}
                 onPress={() => importarDesdeUrl(htmlPegado)}
-                disabled={importando || htmlPegado.trim().length < 500}
+                disabled={importando || !htmlListoParaImportar || !linkOrigenListo}
               >
-                {importando ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnIAText}>Importar del código pegado</Text>}
+                {importando
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.btnIAText}>
+                      {!linkOrigenListo ? '↑ Pega arriba el link del anuncio' : 'Importar del código pegado'}
+                    </Text>}
               </TouchableOpacity>
             </View>
           )}
