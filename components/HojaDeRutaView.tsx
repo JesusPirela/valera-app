@@ -1,5 +1,12 @@
-// Armador de la hoja de ruta: el documento que el asesor lleva el día del
-// recorrido, con el perfil del cliente y las paradas en orden.
+// Armador del documento que el asesor lleva el día de las citas, con el perfil
+// del cliente y las paradas en orden.
+//
+// Se elige al principio qué se está armando:
+//   · Hoja de ruta — el recorrido completo del día, con varias propiedades.
+//   · Cita programada — una sola visita.
+// Es el mismo armador para los dos: comparten perfil, notas, hora, propiedad y
+// asesor a cargo. Lo que cambia es cómo se llama cada cosa y el encabezado del
+// documento. El tipo se guarda dentro de `perfil` (ver PerfilHoja).
 //
 // Se arma con lo que ya está registrado, pero TODO queda editable — hasta la
 // ubicación y el precio. Son datos que cambian entre que se capturan y el día
@@ -21,7 +28,8 @@ import { normalizar } from '../lib/texto'
 import { useColors } from '../lib/ThemeContext'
 import { esStaffSupervision } from '../lib/permisos'
 import {
-  generarPdfHojaDeRuta, imagenABase64, bajarComoBase64, type ParadaHoja, type PerfilHoja,
+  generarPdfHojaDeRuta, imagenABase64, bajarComoBase64,
+  type ParadaHoja, type PerfilHoja, type TipoHoja,
 } from '../lib/hoja-de-ruta'
 
 const TEAL = '#1a6470'
@@ -58,13 +66,6 @@ const CREDITO: Record<string, string> = {
   infonavit: 'Crédito hipotecario (Infonavit)', fovisste: 'Crédito hipotecario (Fovisste)',
   bancario: 'Crédito bancario', contado: 'De contado', otro: 'Otro',
 }
-const FUENTE: Record<string, string> = {
-  marketplace: 'Marketplace', tokko: 'Tokko Broker', campana_fb: 'Campaña Facebook',
-  cofre_lead_meta: 'Campaña Meta', grupo_fb: 'Grupo de Facebook',
-  ficha_compartida: 'Ficha compartida', coleccion_compartida: 'Colección compartida',
-  referido: 'Referido', redes_sociales: 'Redes sociales', sitio_web: 'Sitio web',
-  llamada_fria: 'Llamada fría', evento: 'Evento', otro: 'Otro',
-}
 const bonito = (v: string) => {
   const t = (v ?? '').replace(/_/g, ' ').trim()
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : ''
@@ -74,7 +75,40 @@ const legible = (v: string | null) => (v ?? '').replace(/_a_/g, ' a ').replace(/
 type ClienteLite = { id: string; nombre: string; telefono: string | null }
 type HojaGuardada = {
   token: string; fecha: string; cliente: string; paradas: number
-  actualizada: string; clienteId: string | null
+  actualizada: string; clienteId: string | null; tipo: TipoHoja
+}
+
+/**
+ * Cómo se llama cada cosa según el documento.
+ *
+ * Están juntos a propósito: cuando los textos vivían repartidos por la
+ * pantalla, un documento acababa diciendo "recorrido" en el título y "cita" en
+ * el botón.
+ */
+const TEXTOS: Record<TipoHoja, {
+  titulo: string; sub: string; chip: string; fecha: string
+  seccionProps: string; sinProps: string; archivo: string; recientes: string
+}> = {
+  ruta: {
+    titulo: 'Hoja de ruta',
+    sub: 'El recorrido completo del día, con las propiedades en orden. Se arma con lo que ya está registrado y puedes cambiar cualquier campo: lo que edites aquí vale sólo para este documento.',
+    chip: 'Hoja de ruta',
+    fecha: 'Fecha del recorrido',
+    seccionProps: '3 · Propiedades del recorrido',
+    sinProps: 'Agrega al menos una propiedad al recorrido.',
+    archivo: 'Hoja-de-ruta',
+    recientes: 'Documentos recientes',
+  },
+  cita: {
+    titulo: 'Cita programada',
+    sub: 'Una sola visita: la propiedad, la hora y a quién se le avisa. Se arma con lo que ya está registrado y puedes cambiar cualquier campo: lo que edites aquí vale sólo para este documento.',
+    chip: 'Cita',
+    fecha: 'Fecha de la cita',
+    seccionProps: '3 · La propiedad de la cita',
+    sinProps: 'Agrega la propiedad de la cita.',
+    archivo: 'Cita',
+    recientes: 'Documentos recientes',
+  },
 }
 /** Una parada, más lo que la pantalla necesita para gestionarla. */
 type Parada = ParadaHoja & { clave: string; fotoUrl: string }
@@ -107,6 +141,11 @@ function Campo({ etiqueta, valor, alCambiar, placeholder, multi }: {
   )
 }
 
+const PERFIL_VACIO = (tipo: TipoHoja = 'ruta'): PerfilHoja => ({
+  nombre: '', telefono: '', correo: '', formaPago: '', presupuesto: '', busca: '',
+  notas: '', tipoDocumento: tipo,
+})
+
 const PARADA_VACIA = (): Parada => ({
   clave: Math.random().toString(36).slice(2),
   hora: '', titulo: '', ubicacion: '', precio: '', caracteristicas: '',
@@ -123,9 +162,7 @@ export default function HojaDeRutaView() {
   const [busca, setBusca] = useState('')
   const [resultados, setResultados] = useState<ClienteLite[]>([])
   const [fecha, setFecha] = useState(fechaLarga(new Date()))
-  const [perfil, setPerfil] = useState<PerfilHoja>({
-    nombre: '', telefono: '', correo: '', origen: '', formaPago: '', presupuesto: '', busca: '',
-  })
+  const [perfil, setPerfil] = useState<PerfilHoja>(PERFIL_VACIO('ruta'))
   const [paradas, setParadas] = useState<Parada[]>([])
   const [dias, setDias] = useState<{ dia: string; etiqueta: string; n: number }[]>([])
   const [cargando, setCargando] = useState(false)
@@ -149,6 +186,13 @@ export default function HojaDeRutaView() {
 
   const avisar = (t: string, m: string) =>
     Platform.OS === 'web' ? window.alert(`${t}\n\n${m}`) : Alert.alert(t, m)
+
+  // Qué documento se está armando. Vive dentro de `perfil` para que se guarde
+  // y se recupere con él, sin tocar la tabla ni la RPC.
+  const tipoDoc: TipoHoja = perfil.tipoDocumento ?? 'ruta'
+  const esCita = tipoDoc === 'cita'
+  const txt = TEXTOS[tipoDoc]
+  const cambiarTipo = (t: TipoHoja) => setPerfil(p => ({ ...p, tipoDocumento: t }))
 
   // ── Quién puede entrar: de asesor para arriba ────────────────────────────
   // Un prospectador no coordina recorridos, y la hoja lleva el teléfono directo
@@ -188,6 +232,8 @@ export default function HojaDeRutaView() {
       paradas: Array.isArray(h.paradas) ? h.paradas.length : 0,
       actualizada: h.updated_at,
       clienteId: h.cliente_id ?? null,
+      // Las guardadas antes del selector no traen tipo: todas eran recorridos.
+      tipo: (h.perfil?.tipoDocumento === 'cita' ? 'cita' : 'ruta') as TipoHoja,
     })))
   }
 
@@ -206,7 +252,7 @@ export default function HojaDeRutaView() {
       const h: any = data
       setToken(tk)
       setFecha(h.fecha ?? '')
-      setPerfil({ nombre: '', telefono: '', correo: '', origen: '', formaPago: '', presupuesto: '', busca: '', ...(h.perfil ?? {}) })
+      setPerfil({ ...PERFIL_VACIO('ruta'), ...(h.perfil ?? {}) })
       setParadas((h.paradas ?? []).map((p: any) => ({
         ...PARADA_VACIA(), ...p,
         clave: Math.random().toString(36).slice(2),
@@ -233,17 +279,21 @@ export default function HojaDeRutaView() {
       .eq('id', id).single()
     if (data) {
       setCliente({ id: data.id, nombre: data.nombre, telefono: data.telefono })
-      setPerfil({
+      setPerfil(p => ({
+        // El tipo de documento NO se toca al elegir cliente: ya lo escogió.
+        tipoDocumento: p.tipoDocumento ?? 'ruta',
         nombre: data.nombre ?? '',
         telefono: data.telefono ?? '',
         correo: data.email ?? '',
-        origen: FUENTE[(data.fuente_lead ?? '').toLowerCase()] ?? bonito(data.fuente_lead ?? ''),
         formaPago: CREDITO[(data.tipo_credito ?? '').toLowerCase()] ?? bonito(data.tipo_credito ?? ''),
         presupuesto: legible(data.presupuesto),
         // "Busca 2 recámaras, 2 baños" no existe como campo: se deja la zona
         // registrada como punto de partida y el asesor lo completa.
         busca: data.zona_busqueda ?? '',
-      })
+        // Las notas del CRM como punto de partida. Editarlas aquí no reescribe
+        // la ficha del cliente, igual que el resto de los campos.
+        notas: data.notas ?? '',
+      }))
       setResultados([]); setBusca(''); setClienteIdHoja(id)
       await cargarDias(id)
     }
@@ -461,7 +511,7 @@ export default function HojaDeRutaView() {
   // ── Generar ──────────────────────────────────────────────────────────────
   async function generar() {
     if (!perfil.nombre.trim()) { avisar('Falta el cliente', 'Escribe al menos el nombre del cliente.'); return }
-    if (paradas.length === 0) { avisar('Sin propiedades', 'Agrega al menos una propiedad al recorrido.'); return }
+    if (paradas.length === 0) { avisar('Sin propiedades', txt.sinProps); return }
     setGenerando(true)
     try {
       const logoBase64 = await cargarLogo()
@@ -471,7 +521,7 @@ export default function HojaDeRutaView() {
       const limpio = perfil.nombre.trim().replace(/[^\w\sáéíóúñÁÉÍÓÚÑ-]/g, '').replace(/\s+/g, '-')
       await generarPdfHojaDeRuta(
         { fecha, perfil, paradas: conFoto, logoBase64 },
-        `Hoja-de-ruta-${limpio}.pdf`,
+        `${txt.archivo}-${limpio}.pdf`,
       )
     } catch (e: any) {
       avisar('No se pudo generar', e?.message ?? 'Intenta de nuevo.')
@@ -480,17 +530,19 @@ export default function HojaDeRutaView() {
     }
   }
 
-  /** Suelta la hoja abierta para armar otra desde cero sin pisar el link. */
+  /** Suelta el documento abierto para armar otro desde cero sin pisar el link. */
   function empezarDeCero() {
     setToken(''); setParadas([]); setCliente(null); setDias([]); setClienteIdHoja(null)
-    setPerfil({ nombre: '', telefono: '', correo: '', origen: '', formaPago: '', presupuesto: '', busca: '' })
+    // Se conserva el tipo elegido: si venías armando citas, la siguiente
+    // también es una cita hasta que lo cambies.
+    setPerfil(PERFIL_VACIO(tipoDoc))
     setFecha(fechaLarga(new Date()))
     setAvisoImport('')
   }
 
   async function crearLink() {
     if (!perfil.nombre.trim()) { avisar('Falta el cliente', 'Escribe al menos el nombre del cliente.'); return }
-    if (paradas.length === 0) { avisar('Sin propiedades', 'Agrega al menos una propiedad al recorrido.'); return }
+    if (paradas.length === 0) { avisar('Sin propiedades', txt.sinProps); return }
     setCreandoLink(true)
     try {
       // Se guarda el documento tal cual quedó, con lo editado a mano. No se
@@ -563,11 +615,31 @@ export default function HojaDeRutaView() {
 
   return (
     <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={s.cont} keyboardShouldPersistTaps="handled">
-      <Text style={[s.titulo, { color: c.text }]}>Hoja de ruta</Text>
-      <Text style={[s.sub, { color: c.textSub }]}>
-        Se arma con lo que ya está registrado y puedes cambiar cualquier campo.
-        Lo que edites aquí vale sólo para este documento.
-      </Text>
+      <Text style={[s.titulo, { color: c.text }]}>{txt.titulo}</Text>
+      <Text style={[s.sub, { color: c.textSub }]}>{txt.sub}</Text>
+
+      {/* Qué documento se está armando. Va arriba de todo porque cambia el
+          encabezado del PDF y cómo se nombra casi todo lo de abajo. */}
+      <View style={s.tipoFila}>
+        {([
+          ['ruta', 'map-outline', 'Hoja de ruta', 'Varias propiedades, en orden'],
+          ['cita', 'calendar-outline', 'Cita programada', 'Una sola visita'],
+        ] as const).map(([val, icono, lbl, pie]) => {
+          const on = tipoDoc === val
+          return (
+            <TouchableOpacity
+              key={val}
+              style={[s.tipoBtn, { borderColor: on ? TEAL : c.border, backgroundColor: on ? TEAL : c.card }]}
+              onPress={() => cambiarTipo(val)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name={icono} size={18} color={on ? '#fff' : TEAL} />
+              <Text style={[s.tipoLbl, { color: on ? '#fff' : c.text }]}>{lbl}</Text>
+              <Text style={[s.tipoPie, { color: on ? 'rgba(255,255,255,0.82)' : c.textMute }]}>{pie}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
 
       {/* Volver a abrir una hoja ya hecha. Sin esto, el link quedaba
           congelado: se creaba, se mandaba, y no había forma de corregirlo. */}
@@ -576,7 +648,7 @@ export default function HojaDeRutaView() {
           <TouchableOpacity style={s.guardadasCab} onPress={() => setVerGuardadas(v => !v)} activeOpacity={0.7}>
             <Ionicons name="time-outline" size={17} color={TEAL} />
             <Text style={[s.guardadasTit, { color: c.text }]}>
-              Hojas de ruta recientes ({guardadas.length})
+              {txt.recientes} ({guardadas.length})
             </Text>
             <Ionicons name={verGuardadas ? 'chevron-up' : 'chevron-down'} size={17} color={c.textMute} />
           </TouchableOpacity>
@@ -588,7 +660,16 @@ export default function HojaDeRutaView() {
               onPress={() => abrirGuardada(h.token)}
             >
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[s.guardadaNom, { color: c.text }]} numberOfLines={1}>{h.cliente}</Text>
+                <View style={s.guardadaLinea}>
+                  {/* Ahora la lista mezcla recorridos y citas: sin esta marca
+                      no se distinguen hasta abrirlos. */}
+                  <View style={[s.guardadaTipo, h.tipo === 'cita' && s.guardadaTipoCita]}>
+                    <Text style={[s.guardadaTipoTxt, h.tipo === 'cita' && s.guardadaTipoTxtCita]}>
+                      {TEXTOS[h.tipo].chip}
+                    </Text>
+                  </View>
+                  <Text style={[s.guardadaNom, { color: c.text }]} numberOfLines={1}>{h.cliente}</Text>
+                </View>
                 <Text style={[s.guardadaSub, { color: c.textMute }]} numberOfLines={1}>
                   {h.fecha} · {h.paradas} {h.paradas === 1 ? 'propiedad' : 'propiedades'} · editada {cuandoFue(h.actualizada)}
                 </Text>
@@ -605,7 +686,7 @@ export default function HojaDeRutaView() {
         <View style={s.editandoAviso}>
           <Ionicons name="pencil" size={14} color="#1d4ed8" />
           <Text style={s.editandoTxt}>
-            Estás editando una hoja ya creada. Al guardar se actualiza el mismo link.
+            Estás editando un documento ya creado. Al guardar se actualiza el mismo link.
           </Text>
           <TouchableOpacity onPress={empezarDeCero}>
             <Text style={s.editandoNueva}>Nueva</Text>
@@ -657,25 +738,31 @@ export default function HojaDeRutaView() {
       {/* ── Perfil ──────────────────────────────────────────────────────── */}
       <View style={[s.tarjeta, { backgroundColor: c.card, borderColor: c.border }]}>
         <Text style={[s.seccion, { color: AZUL }]}>2 · Perfil del cliente</Text>
-        <Campo etiqueta="Fecha del recorrido" valor={fecha} alCambiar={setFecha} />
+        <Campo etiqueta={txt.fecha} valor={fecha} alCambiar={setFecha} />
         <Campo etiqueta="Nombre"         valor={perfil.nombre}      alCambiar={v => setPerfil(p => ({ ...p, nombre: v }))} />
         <Campo etiqueta="Teléfono"       valor={perfil.telefono}    alCambiar={v => setPerfil(p => ({ ...p, telefono: v }))} />
         <Campo etiqueta="Correo"         valor={perfil.correo}      alCambiar={v => setPerfil(p => ({ ...p, correo: v }))} placeholder="Pendiente" />
-        <Campo etiqueta="Origen"         valor={perfil.origen}      alCambiar={v => setPerfil(p => ({ ...p, origen: v }))} />
         <Campo etiqueta="Forma de pago"  valor={perfil.formaPago}   alCambiar={v => setPerfil(p => ({ ...p, formaPago: v }))} />
         <Campo etiqueta="Presupuesto máximo" valor={perfil.presupuesto} alCambiar={v => setPerfil(p => ({ ...p, presupuesto: v }))} />
         <Campo etiqueta="Busca" valor={perfil.busca} alCambiar={v => setPerfil(p => ({ ...p, busca: v }))}
           placeholder="Ej. 2 recámaras, 2 baños" multi />
+        <Campo etiqueta="Notas" valor={perfil.notas} alCambiar={v => setPerfil(p => ({ ...p, notas: v }))}
+          placeholder="Lo que haya que tener presente ese día: con quién viene, a qué hora puede, qué le preocupa…" multi />
+        <Text style={[s.notaHint, { color: c.textMute }]}>
+          Se precargan con las notas del cliente en el CRM. Corregirlas aquí no cambia su ficha.
+        </Text>
       </View>
 
       {/* ── Paradas ─────────────────────────────────────────────────────── */}
       <View style={[s.tarjeta, { backgroundColor: c.card, borderColor: c.border }]}>
-        <Text style={[s.seccion, { color: AZUL }]}>3 · Propiedades del recorrido</Text>
+        <Text style={[s.seccion, { color: AZUL }]}>{txt.seccionProps}</Text>
 
         {paradas.map((p, i) => (
           <View key={p.clave} style={[s.parada, { borderColor: c.border }]}>
             <View style={s.paradaCab}>
-              <Text style={[s.paradaNum, { color: TEAL }]}>Propiedad {i + 1}</Text>
+              <Text style={[s.paradaNum, { color: TEAL }]}>
+                {esCita && paradas.length === 1 ? 'La propiedad' : `Propiedad ${i + 1}`}
+              </Text>
               <View style={{ flex: 1 }} />
               <TouchableOpacity onPress={() => mover(i, -1)} disabled={i === 0} style={s.iconoBtn}>
                 <Ionicons name="arrow-up" size={15} color={i === 0 ? c.textMute : TEAL} />
@@ -803,12 +890,22 @@ const s = StyleSheet.create({
   tarjeta: { borderWidth: 1, borderRadius: 14, padding: 15, marginBottom: 14 },
   guardadasCab: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   guardadasTit: { flex: 1, fontSize: 14, fontWeight: '800' },
+  tipoFila: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  tipoBtn: { flex: 1, borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 12, alignItems: 'center', gap: 4 },
+  tipoLbl: { fontSize: 13.5, fontWeight: '800', textAlign: 'center' },
+  tipoPie: { fontSize: 10.5, fontWeight: '600', textAlign: 'center', lineHeight: 14 },
+  guardadaLinea: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  guardadaTipo: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: '#e0f2f4' },
+  guardadaTipoCita: { backgroundColor: '#e8e3f7' },
+  guardadaTipoTxt: { fontSize: 9.5, fontWeight: '800', color: TEAL, letterSpacing: 0.3 },
+  guardadaTipoTxtCita: { color: '#5b47a0' },
+  notaHint: { fontSize: 11, lineHeight: 15, marginTop: -2 },
   guardadaFila: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     borderWidth: 1, borderRadius: 10, padding: 11, marginTop: 9,
   },
   guardadaAbierta: { borderColor: TEAL, borderWidth: 1.5 },
-  guardadaNom: { fontSize: 13.5, fontWeight: '800' },
+  guardadaNom: { flex: 1, fontSize: 13.5, fontWeight: '800' },
   guardadaSub: { fontSize: 11.5, marginTop: 2 },
   guardadaAqui: { fontSize: 11, fontWeight: '800', color: TEAL },
   editandoAviso: {

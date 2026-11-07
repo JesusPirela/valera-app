@@ -30,8 +30,12 @@ type Parada = {
   asesorNombre: string; asesorTel: string; fotoUrl: string; confirmada: boolean
 }
 type Perfil = {
-  nombre: string; telefono: string; correo: string; origen: string
+  nombre: string; telefono: string; correo: string
   formaPago: string; presupuesto: string; busca: string
+  notas?: string
+  /** 'cita' o 'ruta'. Los documentos guardados antes del selector no lo
+   *  traen: se lee con `?? 'ruta'`, que es lo que eran todos. */
+  tipoDocumento?: 'ruta' | 'cita'
 }
 type Hoja = { fecha: string; perfil: Perfil; paradas: Parada[]; actualizada: string }
 
@@ -77,6 +81,7 @@ export default function HojaDeRutaPublica() {
 
   const { perfil, paradas = [] } = hoja
   const confirmadas = paradas.filter(p => p.confirmada).length
+  const esCita = (perfil?.tipoDocumento ?? 'ruta') === 'cita'
 
   const dato = (etiqueta: string, valor: string, fuerte = false) => hay(valor) ? (
     <View style={s.fila}>
@@ -91,7 +96,7 @@ export default function HojaDeRutaPublica() {
         {/* Cabecera */}
         <View style={s.cab}>
           <Text style={s.sello}>VALERA REAL ESTATE · DOCUMENTO INTERNO</Text>
-          <Text style={s.titulo}>Recorrido de propiedades</Text>
+          <Text style={s.titulo}>{esCita ? 'Cita programada' : 'Recorrido de propiedades'}</Text>
           <Text style={s.cliente}>{perfil?.nombre}</Text>
           <Text style={s.fecha}>{hoja.fecha}</Text>
           <View style={s.resumenChips}>
@@ -120,10 +125,17 @@ export default function HojaDeRutaPublica() {
             </TouchableOpacity>
           )}
           {dato('Correo', perfil?.correo)}
-          {dato('Origen', perfil?.origen)}
           {dato('Forma de pago', perfil?.formaPago)}
           {dato('Presupuesto máximo', perfil?.presupuesto, true)}
           {dato('Busca', perfil?.busca)}
+          {/* Las notas van en bloque y no como fila: en una fila la etiqueta se
+              come 112 px de ancho y un párrafo quedaba en una columna de hilo. */}
+          {hay(perfil?.notas) && (
+            <View style={s.notaBloque}>
+              <Text style={s.filaEtq}>Notas</Text>
+              <Text style={s.notaTxt}>{perfil.notas!.trim()}</Text>
+            </View>
+          )}
         </View>
 
         {/* Las paradas */}
@@ -231,6 +243,8 @@ const s = StyleSheet.create({
   filaVal: { fontSize: 14, color: '#243b53', flex: 1 },
   filaValFuerte: { fontWeight: '800', color: AZUL, fontSize: 15 },
   enlace: { color: '#2563eb', fontWeight: '700' },
+  notaBloque: { paddingTop: 11, paddingBottom: 13, gap: 5 },
+  notaTxt: { fontSize: 13.5, color: '#41566e', lineHeight: 20 },
 
   parada: { backgroundColor: '#fff', margin: 12, marginTop: 0, borderRadius: 14, overflow: 'hidden' },
   paradaCab: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 13, paddingVertical: 11 },

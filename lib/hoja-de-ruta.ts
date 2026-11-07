@@ -1,5 +1,11 @@
-// La hoja de ruta de un recorrido: el PDF que el asesor lleva el día de las
-// citas, con el perfil del cliente y las paradas en orden.
+// El PDF que el asesor lleva el día de las citas, con el perfil del cliente y
+// las paradas en orden.
+//
+// Sale en dos versiones, que se eligen con `perfil.tipoDocumento`:
+//   · 'ruta' — hoja de ruta: el recorrido completo del día, con varias paradas.
+//   · 'cita' — una cita programada: lo mismo para una sola visita.
+// Cambia el encabezado, la introducción y cómo se nombra cada cosa; el resto
+// del documento es idéntico, que para eso comparten armador.
 //
 // Sigue el mismo lenguaje visual que la ficha de propiedad —azul marino,
 // dorado, fondo gris azulado y tarjetas con filo de color— porque la primera
@@ -29,14 +35,32 @@ const FONDO = '#f5f8fc'
 const GRIS = '#6b7280'
 const GRIS_SUAVE = '#8a94a6'
 
+/** Qué documento es: el recorrido completo, o una sola cita programada. */
+export type TipoHoja = 'ruta' | 'cita'
+
 export type PerfilHoja = {
   nombre: string
   telefono: string
   correo: string
-  origen: string
   formaPago: string
   presupuesto: string
   busca: string
+  /** Notas del asesor. Se precargan con las del CRM y se pueden corregir;
+   *  como todo aquí, lo editado vale sólo para este documento. */
+  notas: string
+  /**
+   * 'ruta' (recorrido de varias propiedades) o 'cita' (una cita programada).
+   *
+   * No es un dato del cliente, pero viaja en este mismo objeto a propósito:
+   * `perfil` es un jsonb libre que la RPC guarda y devuelve tal cual, así que
+   * el tipo se conserva sin tocar la tabla ni la firma de
+   * `guardar_hoja_de_ruta`. Cambiar esa firma habría dejado dos sobrecargas
+   * vivas de la función mientras los teléfonos siguen con el bundle anterior.
+   *
+   * Los documentos guardados antes de esto no lo traen: se lee con `?? 'ruta'`,
+   * que es lo que eran todos.
+   */
+  tipoDocumento?: TipoHoja
 }
 
 export type ParadaHoja = {
@@ -72,9 +96,10 @@ const esc = (s: string) =>
 const hay = (s: string | null | undefined) => !!(s && s.trim())
 
 /** Una fila de la tabla del perfil. Si no hay dato, no se escribe la fila. */
-function fila(etiqueta: string, valor: string, destacado = false): string {
+function fila(etiqueta: string, valor: string, destacado = false, clase = ''): string {
   if (!hay(valor)) return ''
-  return `<tr><th>${esc(etiqueta)}</th><td${destacado ? ' class="fuerte"' : ''}>${esc(valor).replace(/\n/g, '<br>')}</td></tr>`
+  const clases = [destacado ? 'fuerte' : '', clase].filter(Boolean).join(' ')
+  return `<tr><th>${esc(etiqueta)}</th><td${clases ? ` class="${clases}"` : ''}>${esc(valor).replace(/\n/g, '<br>')}</td></tr>`
 }
 
 /**
@@ -324,25 +349,39 @@ function mapaDelRecorrido(paradas: ParadaHoja[]): string {
 export function construirHtmlHoja(d: DatosHoja): string {
   const { perfil, paradas } = d
   const total = paradas.length
+  const esCita = (perfil.tipoDocumento ?? 'ruta') === 'cita'
+  // Con una sola propiedad no tiene sentido numerarla ("Propiedad 1 de 1").
+  const unaSola = esCita && total === 1
+  const notas = (perfil.notas ?? '').trim()
+  // Una nota larga se lleva su propia hoja. Metida en la tabla del perfil
+  // empujaría el resumen del recorrido fuera de la página, y como cada hoja
+  // es un A4 de alto fijo con overflow:hidden, eso no se ve: se recorta.
+  const notaAparte = notas.length > 420
 
   const portada = `
   <section class="hoja portada">
     <div class="pcab">
       ${d.logoBase64 ? `<img class="logo" src="${d.logoBase64}">` : ''}
       <div class="sello">VALERA REAL ESTATE · DOCUMENTO INTERNO</div>
-      <h1>Recorrido de propiedades<br>Hoja de ruta</h1>
+      <h1>${esCita ? 'Cita programada' : 'Recorrido de propiedades<br>Hoja de ruta'}</h1>
       <div class="raya"></div>
     </div>
     <p class="intro">
-      Documento oficial de recorrido interno del asesor. Concentra el perfil del
-      cliente y el orden exacto de las citas del día: en qué secuencia se visitan,
-      a qué hora, cuál es cada propiedad y quién la atiende.
+      ${esCita
+        ? `Documento oficial de la cita programada del asesor. Concentra el perfil
+           del cliente y los datos de la visita: a qué hora es, qué propiedad se
+           ve, dónde está y quién la atiende.`
+        : `Documento oficial de recorrido interno del asesor. Concentra el perfil del
+           cliente y el orden exacto de las citas del día: en qué secuencia se visitan,
+           a qué hora, cuál es cada propiedad y quién la atiende.`}
     </p>
     <div class="mapa-wrap">${mapaDelRecorrido(paradas)}</div>
     <div class="portada-datos">
       <div class="pd-cliente">${esc(perfil.nombre)}</div>
       <div class="pd-fecha">${esc(d.fecha)}</div>
-      <div class="pd-n">${total} ${total === 1 ? 'propiedad' : 'propiedades'} por visitar</div>
+      <div class="pd-n">${esCita
+        ? `Cita en ${total === 1 ? 'una propiedad' : total + ' propiedades'}`
+        : `${total} ${total === 1 ? 'propiedad' : 'propiedades'} por visitar`}</div>
     </div>
     <div class="uso">USO INTERNO DEL EQUIPO</div>
     <div class="uso-sub">No se comparte con el cliente ni con asesores externos</div>
@@ -353,8 +392,10 @@ export function construirHtmlHoja(d: DatosHoja): string {
     <div class="cab">
       <div>
         <div class="sello2">VALERA REAL ESTATE · DOCUMENTO INTERNO</div>
-        <h2>Recorrido de propiedades</h2>
-        <div class="sub">Intereses del cliente y propiedades a visitar en el recorrido de hoy.</div>
+        <h2>${esCita ? 'Cita programada' : 'Recorrido de propiedades'}</h2>
+        <div class="sub">${esCita
+          ? 'Intereses del cliente y la propiedad de la cita.'
+          : 'Intereses del cliente y propiedades a visitar en el recorrido de hoy.'}</div>
       </div>
       <div class="cab-der">
         <div class="cab-lbl">INFORMACIÓN DE CITA</div>
@@ -367,14 +408,14 @@ export function construirHtmlHoja(d: DatosHoja): string {
         ${fila('Nombre', perfil.nombre, true)}
         ${fila('Teléfono', perfil.telefono)}
         ${fila('Correo', perfil.correo)}
-        ${fila('Origen', perfil.origen)}
         ${fila('Forma de pago', perfil.formaPago)}
         ${fila('Presupuesto máximo', perfil.presupuesto, true)}
         ${fila('Busca', perfil.busca)}
+        ${notaAparte ? '' : fila('Notas', notas, false, 'nota')}
       </table>
     </div>
     <div class="resumen">
-      <div class="resumen-tit">RECORRIDO DE HOY</div>
+      <div class="resumen-tit">${esCita ? (unaSola ? 'LA CITA' : 'LAS CITAS') : 'RECORRIDO DE HOY'}</div>
       <ol class="resumen-lista">
         ${paradas.map((p, i) => `<li>
           <span class="rl-n">${i + 1}</span>
@@ -387,6 +428,23 @@ export function construirHtmlHoja(d: DatosHoja): string {
     <div class="pie">Valera Real Estate · Documento interno de uso exclusivo del equipo</div>
   </section>`
 
+  // Hoja aparte sólo cuando la nota no cabe en la tabla del perfil.
+  const hojaNotas = notaAparte ? `
+  <section class="hoja interior">
+    <div class="cab">
+      <div>
+        <div class="sello2">VALERA REAL ESTATE · DOCUMENTO INTERNO</div>
+        <h2>Notas</h2>
+        <div class="sub">${esc(perfil.nombre)}${hay(d.fecha) ? ' · ' + esc(d.fecha) : ''}</div>
+      </div>
+    </div>
+    <div class="barra"><span>NOTAS DEL ASESOR</span></div>
+    <div class="caja">
+      <div class="nota-larga">${esc(notas).replace(/\n/g, '<br>')}</div>
+    </div>
+    <div class="pie">Valera Real Estate · Documento interno de uso exclusivo del equipo</div>
+  </section>` : ''
+
   const hojasParadas = paradas.map((p, i) => {
     const cars = (p.caracteristicas ?? '').split('·').map(x => x.trim()).filter(Boolean)
     return `
@@ -394,13 +452,13 @@ export function construirHtmlHoja(d: DatosHoja): string {
     <div class="cab">
       <div>
         <div class="sello2">VALERA REAL ESTATE · DOCUMENTO INTERNO</div>
-        <h2>Propiedad ${i + 1}</h2>
+        <h2>${unaSola ? 'La propiedad' : 'Propiedad ' + (i + 1)}</h2>
         <div class="sub">${esc(perfil.nombre)}${hay(d.fecha) ? ' · ' + esc(d.fecha) : ''}</div>
       </div>
-      <div class="cab-der"><div class="cab-lbl">${i + 1} DE ${total}</div></div>
+      ${unaSola ? '' : `<div class="cab-der"><div class="cab-lbl">${i + 1} DE ${total}</div></div>`}
     </div>
     <div class="barra">
-      <span>${hay(p.hora) ? 'CITA — ' + esc(p.hora) : 'PROPIEDAD ' + (i + 1)}</span>
+      <span>${hay(p.hora) ? 'CITA — ' + esc(p.hora) : (unaSola ? 'LA PROPIEDAD' : 'PROPIEDAD ' + (i + 1))}</span>
       <span class="${p.confirmada ? 'sello-ok' : 'sello-pend'}">${p.confirmada ? '✓ CONFIRMADA' : '• POR CONFIRMAR'}</span>
     </div>
 
@@ -438,7 +496,7 @@ export function construirHtmlHoja(d: DatosHoja): string {
   }).join('')
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>Hoja de ruta · ${esc(perfil.nombre)}</title>
+<title>${esCita ? 'Cita programada' : 'Hoja de ruta'} · ${esc(perfil.nombre)}</title>
 <style>
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -496,6 +554,9 @@ export function construirHtmlHoja(d: DatosHoja): string {
   table.perfil th { width: 178px; font-weight: 700; color: ${GRIS_SUAVE}; font-size: 12.5px; letter-spacing: 0.4px; text-transform: uppercase; }
   table.perfil td { color: #243b53; }
   table.perfil td.fuerte { font-weight: 800; color: ${AZUL}; font-size: 16.5px; }
+  /* Las notas vienen en párrafos: más chicas y con más aire que un dato suelto. */
+  table.perfil td.nota { font-size: 13.5px; line-height: 1.6; color: #41566e; }
+  .nota-larga { font-size: 14px; line-height: 1.8; color: #243b53; padding: 16px 6px; }
 
   /* ── Resumen del recorrido en la hoja de perfil ──────────────────── */
   .resumen { margin: 22px 46px 0; }
@@ -539,7 +600,7 @@ export function construirHtmlHoja(d: DatosHoja): string {
   .as-tel a { color: ${ORO_VIVO}; text-decoration: none; }
 
   .pie { position: absolute; left: 0; right: 0; bottom: 26px; text-align: center; font-size: 11.5px; color: ${GRIS_SUAVE}; }
-</style></head><body>${portada}${hojaPerfil}${hojasParadas}</body></html>`
+</style></head><body>${portada}${hojaPerfil}${hojaNotas}${hojasParadas}</body></html>`
 }
 
 /** Espera a que todas las imágenes del contenedor estén listas (o fallen). */
