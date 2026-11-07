@@ -745,14 +745,13 @@ export default function ProspectadorPropiedades() {
   const esAdmin = queryData?.rol === 'admin'
   const userId = queryData?.userId ?? null
   const esAsesorOMas = ['asesor', 'supervisor', 'admin'].includes(queryData?.rol ?? '')
-  // El gerente ve el filtro "Directas" igual que el admin (ya ve exclusivas por
-  // ser esPlusOMejor). Es la única gate de "directa" que no pasaba por esa
-  // función centralizada, así que se agrega aparte.
-  const puedeVerDirectas = esAdmin || queryData?.rol === 'gerente'
-  // El badge "🎯 Directa" en la tarjeta: además de admin/gerente (que ven el
-  // filtro), también lo ve el asesor — a diferencia del filtro, aquí sí se
-  // pidió explícitamente.
-  const puedeVerBadgeDirecta = puedeVerDirectas || queryData?.rol === 'asesor'
+  // Quién ve lo de "directa": admin, gerente y asesor. Es la única gate de
+  // "directa" que no pasa por lib/permisos, así que se arma aquí.
+  // El asesor ya veía el badge "🎯 Directa" en la tarjeta; ahora también ve el
+  // filtro, que es lo que hacía falta para poder buscar solo directas.
+  const puedeVerDirectas = esAdmin || ['gerente', 'asesor'].includes(queryData?.rol ?? '')
+  // Mismo criterio para el badge de la tarjeta: si puedes filtrarlas, lo ves.
+  const puedeVerBadgeDirecta = puedeVerDirectas
 
   // ── Publicar (reescrito desde cero) ─────────────────────────────────────────
   // Diseño: la publicación NUNCA se pierde y el botón NUNCA queda colgado.
