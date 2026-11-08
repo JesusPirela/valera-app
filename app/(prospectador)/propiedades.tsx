@@ -54,7 +54,7 @@ import { useVistaComo } from '../../lib/VistaComo'
 import { normalizar, parsearPrecioBusqueda } from '../../lib/texto'
 import MiniMapa from '../../components/MiniMapa'
 import { getDesbloqueadas } from '../../lib/publicarUnlock'
-import { fetchPublicacionesUsuario, type PublicacionesData } from '../../lib/publicaciones'
+import { fetchPublicacionesUsuario, explicarBloqueo, type PublicacionesData } from '../../lib/publicaciones'
 import { actualizarWidgetMiDia } from '../../lib/widgetUpdate'
 import { esCerrada, etiquetaEstado, colorEstado } from '../../lib/estado-propiedad'
 
@@ -97,7 +97,10 @@ type Propiedad = {
 type FiltroOperacion = 'venta' | 'renta' | null
 type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
-type FiltroPublicadas = 'publicadas' | 'sin_publicar' | null
+type FiltroPublicadas = 'publicadas' | 'sin_publicar' | 'puedo_hoy' | null
+
+/** El tope personal del servidor: una publicación por propiedad cada 30 días. */
+const MS_TOPE_PERSONAL = 30 * 86_400_000
 type FiltroNueva = 3 | 7 | 15 | 30 | null
 type FiltroOrden = 'normal' | 'mas_publicadas' | 'menos_publicadas' | 'mix'
 
@@ -159,7 +162,7 @@ function mezclar<T>(arr: T[]): T[] {
 const PropiedadCard = memo(function PropiedadCard({
   item, width, veces, isToggling, destacada, esAdmin, puedeVerBadgeDirecta, primaryColor,
   cardBg, cardBorder, isOnline, imgOpts, empresaMatriz, totalPublicadores,
-  isNuevaParaTi, isUnlocked, saturada, onOpen, onShare, onPublish, onZoom,
+  isNuevaParaTi, isUnlocked, saturada, miLibreDesde, onOpen, onShare, onPublish, onZoom,
 }: {
   item: Propiedad; width?: number; veces: number; isToggling: boolean
   destacada: boolean; esAdmin: boolean; puedeVerBadgeDirecta: boolean; primaryColor: string
@@ -170,6 +173,15 @@ const PropiedadCard = memo(function PropiedadCard({
   isUnlocked: boolean
   /** Si la propiedad topó el tope del mes, con el detalle para explicarlo. */
   saturada?: { veces: number; personas: number; libre_desde: string } | null
+  /**
+   * Si YO ya publiqué esta propiedad dentro de los últimos 30 días: la fecha
+   * (ISO) en que me vuelve a quedar libre. null = la puedo publicar hoy.
+   *
+   * El servidor ya lo frenaba, pero la tarjeta no lo sabía: el botón se veía
+   * igual de disponible y al tocarlo rebotaba. Con el catálogo ya trabajado,
+   * un tercio de los toques caían ahí y se leía como "no me registra nada".
+   */
+  miLibreDesde?: string | null
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
 }) {
@@ -320,6 +332,16 @@ const PropiedadCard = memo(function PropiedadCard({
             </Text>
           </View>
         )}
+        {/* El tope personal, también en la tarjeta. Mismo criterio que arriba:
+            si el motivo solo saliera al tocar, parecería que el botón falla. */}
+        {!saturada && miLibreDesde && (
+          <View style={styles.miLockAviso}>
+            <Text style={styles.miLockAvisoText}>
+              🔒 Ya la publicaste este mes. Se te libera el{' '}
+              {new Date(miLibreDesde).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}.
+            </Text>
+          </View>
+        )}
         {precioBajo && (
           <View style={styles.precioBajoBadge}>
             <Text style={styles.precioBajoText}>
@@ -355,6 +377,7 @@ const PropiedadCard = memo(function PropiedadCard({
               // botón SÍ responde (explica el motivo), así que tiene que
               // leerse bien. Con opacity 0.4 el texto casi no se veía.
               !!saturada && styles.publicadaBtnSaturada,
+              !saturada && !!miLibreDesde && styles.publicadaBtnMia,
             ]}
             onPress={(e) => {
               e.stopPropagation()
@@ -369,6 +392,15 @@ const PropiedadCard = memo(function PropiedadCard({
                   `Se vuelve a habilitar el ${dia}. Mientras tanto, mejor escoge otra: hay muchas que casi nadie ha publicado.`
                 if (Platform.OS === 'web') window.alert(msg)
                 else Alert.alert('Mejor no publiques esta', msg, [{ text: 'Entendido' }])
+                return
+              }
+              // Tope personal: se explica aquí mismo, sin ir al servidor a
+              // que lo rechace. El texto es el mismo que daría el servidor
+              // (explicarBloqueo), así nadie recibe dos versiones distintas.
+              if (miLibreDesde) {
+                const { titulo, mensaje } = explicarBloqueo({ error: 'una_por_semana', libre_mia: miLibreDesde })
+                if (Platform.OS === 'web') window.alert(`${titulo}\n\n${mensaje}`)
+                else Alert.alert(titulo, mensaje, [{ text: 'Entendido' }])
                 return
               }
               if (!isUnlocked) {
@@ -391,11 +423,17 @@ const PropiedadCard = memo(function PropiedadCard({
               <Text
                 // Sobre el ámbar va texto café oscuro, no el color del tema:
                 // el morado sobre amarillo claro no se leía.
-                style={[styles.publicadaBtnText, { color: saturada ? '#92400e' : veces > 0 ? '#fff' : primaryColor }]}
+                style={[styles.publicadaBtnText, {
+                  color: saturada ? '#92400e' : (miLibreDesde ? '#334155' : veces > 0 ? '#fff' : primaryColor),
+                }]}
                 maxFontSizeMultiplier={1.2}
                 numberOfLines={1}
               >
-                {saturada ? '⏸ Muy publicada' : veces >= 10 ? '10/10 ✅' : veces > 0 ? `${veces}/10` : 'Marcar como publicada'}
+                {saturada ? '⏸ Muy publicada'
+                  : veces >= 10 ? '10/10 ✅'
+                  : miLibreDesde ? `🔒 ${veces}/10 este mes`
+                  : veces > 0 ? `${veces}/10`
+                  : 'Marcar como publicada'}
               </Text>
             )}
           </TouchableOpacity>
@@ -742,6 +780,28 @@ export default function ProspectadorPropiedades() {
 
   const propiedades = queryData?.propiedades ?? []
   const publicaciones = pubData?.publicacionesMap ?? {}
+
+  /**
+   * Las que YO publiqué dentro de los últimos 30 días → cuándo se me liberan.
+   *
+   * Es el mismo tope que aplica el servidor (`una_por_semana`), calculado aquí
+   * con la fecha que ya venía en la consulta: ni una petición más. Comprobado
+   * contra la base antes de confiarse: de 23,379 publicaciones, la fecha
+   * coincide con el registro que mira el servidor en TODAS — ni una de más ni
+   * una de menos.
+   */
+  const bloqueosMios = useMemo(() => {
+    const ahora = Date.now()
+    const m: Record<string, string> = {}
+    for (const [id, f] of Object.entries(pubData?.publicacionFechasMap ?? {})) {
+      const t = new Date(f).getTime()
+      if (Number.isFinite(t) && ahora - t < MS_TOPE_PERSONAL) {
+        m[id] = new Date(t + MS_TOPE_PERSONAL).toISOString()
+      }
+    }
+    return m
+  }, [pubData?.publicacionFechasMap])
+
   const esAdmin = queryData?.rol === 'admin'
   const userId = queryData?.userId ?? null
   const esAsesorOMas = ['asesor', 'supervisor', 'admin'].includes(queryData?.rol ?? '')
@@ -851,27 +911,30 @@ export default function ProspectadorPropiedades() {
       // 5) Resolución final.
       if (ok && data?.ok) {
         exito(data.veces_publicada ?? vecesActual + 1)
-      } else if (data?.error === 'limite') {
-        setVeces(data.veces_publicada ?? 10)
-        avisar('Límite alcanzado', 'Esta propiedad alcanzó el límite de 10 publicaciones.')
-      } else if ((data as any)?.error === 'saturada') {
-        // El servidor rechazó porque la propiedad topó el tope del mes.
-        // Puede pasar aunque el botón se vea bien: la lista de saturadas se
-        // refresca cada 5 min y alguien más pudo topar el contador en medio.
+      } else if (data && data.ok === false) {
+        // TODOS los rechazos del servidor por el mismo camino y con el MISMO
+        // texto que el detalle (explicarBloqueo vive en lib/publicaciones).
+        //
+        // Antes aquí solo se entendían 'limite' y 'saturada'. El tope personal
+        // ('una_por_semana' — una publicación por propiedad cada 30 días) caía
+        // en el genérico y la pantalla soltaba el código crudo del servidor:
+        // "No se pudo publicar: una_por_semana". Quien publica desde el listado
+        // leía eso como que la app no le registraba nada.
+        //
+        // Reintentar no ayuda en ninguno: son decisiones de negocio.
         const d = data as any
-        const dia = d.libre_desde
-          ? new Date(d.libre_desde).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
-          : 'en unos días'
-        setVeces(vecesActual)
-        queryClient.invalidateQueries({ queryKey: ['propiedades-saturadas'] })
-        avisar('Mejor no publiques esta',
-          `Ya se publicó ${d.veces_semana} veces este mes, por ${d.personas} personas distintas. ` +
-          'Cuando varios publicamos la misma en el mismo mes, Facebook lo toma como spam y rechaza los anuncios de todos. ' +
-          `Se vuelve a habilitar el ${dia}.`)
-      } else if (ok && data && data.ok === false) {
-        // Error de negocio del servidor distinto de límite: reintentar no ayuda.
-        setVeces(vecesActual)
-        avisar('No se pudo publicar', String(data.error ?? 'Error del servidor'))
+        setVeces(d.error === 'limite' ? (d.veces_publicada ?? 10) : vecesActual)
+        if (d.error === 'saturada') {
+          // La lista de saturadas se refresca cada 5 min y alguien más pudo
+          // topar el contador en medio: se recarga para que el botón lo refleje.
+          queryClient.invalidateQueries({ queryKey: ['propiedades-saturadas'] })
+        }
+        if (d.error === 'una_por_semana') {
+          // Que la tarjeta lo muestre ya, sin esperar al refetch.
+          refetchPub()
+        }
+        const { titulo, mensaje } = explicarBloqueo(d)
+        avisar(titulo, mensaje)
       } else {
         // Red/timeout/error transitorio → ENCOLAR. Se mantiene el +1 optimista
         // y la cola lo hace real al reconectar (idempotente, sin duplicar).
@@ -1044,6 +1107,13 @@ export default function ProspectadorPropiedades() {
   // Si pubData es undefined (cargando o error de red), mostrar todo para evitar
   // falsos positivos donde propiedades publicadas aparecen como "sin publicar".
   if (filtroPublicadas === 'sin_publicar' && pubData != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0)
+  // "Puedo publicar hoy": las que el servidor SÍ me va a aceptar ahora mismo.
+  // Con el catálogo ya trabajado, buscarlas a ojo entre dos mil tarjetas es lo
+  // que hacía sentir que no se podía publicar nada.
+  if (filtroPublicadas === 'puedo_hoy' && pubData != null) {
+    propiedadesFiltradas = propiedadesFiltradas.filter(p =>
+      !bloqueosMios[p.id] && !saturadasMap?.[p.id] && (publicaciones[p.id] ?? 0) < 10)
+  }
   if (filtroNueva != null) {
     const haceDias = Date.now() - filtroNueva * 24 * 60 * 60 * 1000
     propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() > haceDias)
@@ -1218,7 +1288,7 @@ export default function ProspectadorPropiedades() {
     propiedades, busqueda, idsPorDescripcion, filtroPublicadas, publicaciones, pubData, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroDirecta, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin, puedeVerDirectas,
-    viewsData, userId, filtroEstado, filtroOrden,
+    viewsData, userId, filtroEstado, filtroOrden, bloqueosMios, saturadasMap,
   ])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
@@ -1326,6 +1396,7 @@ export default function ProspectadorPropiedades() {
       isNuevaParaTi={!esAdmin && !viewsData?.get(item.id)}
       isUnlocked={esAdmin || desbloqueadas.has(item.id) || (publicaciones[item.id] ?? 0) > 0}
       saturada={saturadasMap?.[item.id] ?? null}
+      miLibreDesde={bloqueosMios[item.id] ?? null}
       onOpen={onOpenCard}
       onShare={onShareCard}
       onPublish={onPublishCard}
@@ -1354,6 +1425,7 @@ export default function ProspectadorPropiedades() {
           // Acceso rápido a "Sin publicar" (antes solo estaba escondido en el
           // panel de filtros avanzados, bajo "Mis propiedades").
           { key: 'sin_publicar', label: 'Sin publicar', icon: 'cloud-upload-outline' as const, activo: filtroPublicadas === 'sin_publicar', onPress: () => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar') },
+          { key: 'puedo_hoy', label: 'Puedo hoy', icon: 'checkmark-done-outline' as const, activo: filtroPublicadas === 'puedo_hoy', onPress: () => setFiltroPublicadas(filtroPublicadas === 'puedo_hoy' ? null : 'puedo_hoy') },
           ...(puedeVerDirectas ? [
             { key: 'directas', label: 'Directas', icon: 'person-outline' as const, activo: filtroDirecta, onPress: () => setFiltroDirecta(v => !v) },
           ] : []),
@@ -1536,6 +1608,7 @@ export default function ProspectadorPropiedades() {
             <FiltroChip label="Todas" active={filtroPublicadas === null} onPress={() => setFiltroPublicadas(null)} color={primaryColor} />
             <FiltroChip label="Publicadas" active={filtroPublicadas === 'publicadas'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'publicadas' ? null : 'publicadas')} color={primaryColor} />
             <FiltroChip label="Sin publicar" active={filtroPublicadas === 'sin_publicar'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar')} color={primaryColor} />
+            <FiltroChip label="Puedo hoy" active={filtroPublicadas === 'puedo_hoy'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'puedo_hoy' ? null : 'puedo_hoy')} color={primaryColor} />
           </ScrollView>
           <Text style={styles.filtroLabel}>Orden del listado</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
@@ -1605,7 +1678,9 @@ export default function ProspectadorPropiedades() {
   // frescas por red — ver el comentario en el useQuery de pubData), NO hay
   // que mostrar la lista sin filtrar — eso era lo que hacía ver propiedades
   // ya publicadas bajo "Sin publicar" justo al abrir la app o con red lenta.
-  const esperandoPub = filtroPublicadas === 'sin_publicar' && pubData == null
+  // Los dos filtros que dependen de MIS publicaciones esperan a que carguen:
+  // sin el dato, "sin publicar" enseña todo y "puedo hoy" no enseña nada.
+  const esperandoPub = (filtroPublicadas === 'sin_publicar' || filtroPublicadas === 'puedo_hoy') && pubData == null
 
   return (
     <View style={{ flex: 1, backgroundColor: primaryColor }}>
@@ -2181,6 +2256,14 @@ const styles = StyleSheet.create({
   // Ámbar sólido: se lee igual en claro y en oscuro, y dice "ojo" sin
   // parecer un botón roto.
   publicadaBtnSaturada: { backgroundColor: '#fef3c7', borderColor: '#d97706' },
+  // Tope personal: gris pizarra, distinto del ámbar de "saturada". Son dos
+  // frenos distintos y confundirlos lleva a pedir luz verde para nada.
+  miLockAviso: {
+    backgroundColor: '#f1f5f9', borderLeftWidth: 3, borderLeftColor: '#64748b',
+    marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 4,
+  },
+  miLockAvisoText: { fontSize: 10.5, fontWeight: '600', color: '#334155', lineHeight: 14.5 },
+  publicadaBtnMia: { backgroundColor: '#e2e8f0', borderColor: '#94a3b8' },
   precioBajoBadge: {
     backgroundColor: '#f0fdf4', borderLeftWidth: 3, borderLeftColor: '#16a34a',
     marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,
