@@ -97,7 +97,7 @@ type Propiedad = {
 type FiltroOperacion = 'venta' | 'renta' | null
 type FiltroTipo = 'casa' | 'departamento' | 'local' | 'terreno' | null
 type OrdenPrecio = 'asc' | 'desc' | null
-type FiltroPublicadas = 'publicadas' | 'sin_publicar' | 'puedo_hoy' | null
+type FiltroPublicadas = 'publicadas' | 'sin_publicar' | null
 
 /** El tope personal del servidor: una publicación por propiedad cada 30 días. */
 const MS_TOPE_PERSONAL = 30 * 86_400_000
@@ -1073,8 +1073,25 @@ export default function ProspectadorPropiedades() {
   ].filter(Boolean).length
 
   const _ahora = Date.now()
+  /**
+   * Qué resalta en ROJO.
+   *
+   * "Destacada" pasó a ser la DIRECTA: es lo que conviene que se publique
+   * primero, así que es lo que salta a la vista. Antes había que marcarlas a
+   * mano una por una y se quedaban atrás; ahora una propiedad directa resalta
+   * sola desde que se marca como directa.
+   *
+   * La bandera `destacada` de la propiedad se conserva como EXCEPCIÓN: sirve
+   * para resaltar algo que no es directa.
+   *
+   * Si además es exclusiva, gana la exclusiva: el dorado es el distintivo de
+   * siempre y no se pisa.
+   */
   const _estaDestacada = (p: Propiedad) =>
-    p.destacada && !p.exclusiva && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > _ahora)
+    !p.exclusiva && (
+      p.directa === true ||
+      (p.destacada && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > _ahora))
+    )
 
   const propiedadesFiltradas = useMemo(() => {
   let propiedadesFiltradas = propiedades
@@ -1107,13 +1124,6 @@ export default function ProspectadorPropiedades() {
   // Si pubData es undefined (cargando o error de red), mostrar todo para evitar
   // falsos positivos donde propiedades publicadas aparecen como "sin publicar".
   if (filtroPublicadas === 'sin_publicar' && pubData != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) === 0)
-  // "Puedo publicar hoy": las que el servidor SÍ me va a aceptar ahora mismo.
-  // Con el catálogo ya trabajado, buscarlas a ojo entre dos mil tarjetas es lo
-  // que hacía sentir que no se podía publicar nada.
-  if (filtroPublicadas === 'puedo_hoy' && pubData != null) {
-    propiedadesFiltradas = propiedadesFiltradas.filter(p =>
-      !bloqueosMios[p.id] && !saturadasMap?.[p.id] && (publicaciones[p.id] ?? 0) < 10)
-  }
   if (filtroNueva != null) {
     const haceDias = Date.now() - filtroNueva * 24 * 60 * 60 * 1000
     propiedadesFiltradas = propiedadesFiltradas.filter(p => new Date(p.created_at).getTime() > haceDias)
@@ -1288,7 +1298,7 @@ export default function ProspectadorPropiedades() {
     propiedades, busqueda, idsPorDescripcion, filtroPublicadas, publicaciones, pubData, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroDirecta, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin, puedeVerDirectas,
-    viewsData, userId, filtroEstado, filtroOrden, bloqueosMios, saturadasMap,
+    viewsData, userId, filtroEstado, filtroOrden,
   ])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
@@ -1425,7 +1435,6 @@ export default function ProspectadorPropiedades() {
           // Acceso rápido a "Sin publicar" (antes solo estaba escondido en el
           // panel de filtros avanzados, bajo "Mis propiedades").
           { key: 'sin_publicar', label: 'Sin publicar', icon: 'cloud-upload-outline' as const, activo: filtroPublicadas === 'sin_publicar', onPress: () => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar') },
-          { key: 'puedo_hoy', label: 'Puedo hoy', icon: 'checkmark-done-outline' as const, activo: filtroPublicadas === 'puedo_hoy', onPress: () => setFiltroPublicadas(filtroPublicadas === 'puedo_hoy' ? null : 'puedo_hoy') },
           ...(puedeVerDirectas ? [
             { key: 'directas', label: 'Directas', icon: 'person-outline' as const, activo: filtroDirecta, onPress: () => setFiltroDirecta(v => !v) },
           ] : []),
@@ -1608,7 +1617,6 @@ export default function ProspectadorPropiedades() {
             <FiltroChip label="Todas" active={filtroPublicadas === null} onPress={() => setFiltroPublicadas(null)} color={primaryColor} />
             <FiltroChip label="Publicadas" active={filtroPublicadas === 'publicadas'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'publicadas' ? null : 'publicadas')} color={primaryColor} />
             <FiltroChip label="Sin publicar" active={filtroPublicadas === 'sin_publicar'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'sin_publicar' ? null : 'sin_publicar')} color={primaryColor} />
-            <FiltroChip label="Puedo hoy" active={filtroPublicadas === 'puedo_hoy'} onPress={() => setFiltroPublicadas(filtroPublicadas === 'puedo_hoy' ? null : 'puedo_hoy')} color={primaryColor} />
           </ScrollView>
           <Text style={styles.filtroLabel}>Orden del listado</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
@@ -1678,9 +1686,7 @@ export default function ProspectadorPropiedades() {
   // frescas por red — ver el comentario en el useQuery de pubData), NO hay
   // que mostrar la lista sin filtrar — eso era lo que hacía ver propiedades
   // ya publicadas bajo "Sin publicar" justo al abrir la app o con red lenta.
-  // Los dos filtros que dependen de MIS publicaciones esperan a que carguen:
-  // sin el dato, "sin publicar" enseña todo y "puedo hoy" no enseña nada.
-  const esperandoPub = (filtroPublicadas === 'sin_publicar' || filtroPublicadas === 'puedo_hoy') && pubData == null
+  const esperandoPub = filtroPublicadas === 'sin_publicar' && pubData == null
 
   return (
     <View style={{ flex: 1, backgroundColor: primaryColor }}>
@@ -2187,23 +2193,28 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  // Los dos distintivos de la tarjeta, y por qué cada color:
+  //   ROJO   = destacada (hoy, las directas). Llama la atención: es lo que
+  //            queremos que se publique primero.
+  //   DORADO = exclusiva. El distintivo de siempre, y se respeta: una
+  //            propiedad exclusiva no se pinta de rojo aunque sea directa.
   cardDestacada: {
-    borderColor: '#f5c518',
-    borderWidth: 2,
-  },
-  cardExclusiva: {
     borderColor: '#c0392b',
     borderWidth: 2,
   },
+  cardExclusiva: {
+    borderColor: '#c9a84c',
+    borderWidth: 2,
+  },
   destacadaBanner: {
-    backgroundColor: '#fff3c4',
+    backgroundColor: '#c0392b',
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
   destacadaBannerText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#7a5500',
+    color: '#fff',
   },
   // Badge "NADIE LO HA PUBLICADO" — sobre la imagen (esquina superior izquierda)
   nuncaPublicadaBadge: {
@@ -2285,19 +2296,20 @@ const styles = StyleSheet.create({
     color: '#92400e',
   },
   exclusivaBanner: {
-    backgroundColor: '#c0392b',
+    backgroundColor: '#c9a84c',
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
   exclusivaBannerText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#fff',
+    // Texto casi negro sobre el dorado: en blanco no se leía.
+    color: '#2b2000',
   },
   destacadaMensaje: {
     fontSize: 12,
-    color: '#7a5500',
-    backgroundColor: '#fffbe6',
+    color: '#8c2f22',
+    backgroundColor: '#fdecea',
     borderRadius: 6,
     padding: 8,
     marginBottom: 8,
