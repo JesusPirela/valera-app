@@ -828,17 +828,10 @@ export default function NuevaPropiedad() {
       Alert.alert('Error', 'El título y la dirección son obligatorios.')
       return
     }
-    // Importada pegando el código y sin link: no se guarda. Antes el link se
-    // pedía ANTES de importar, y por eso había que pegar dos veces; ahora se
-    // deduce del código y solo se reclama aquí, en el caso raro de que no
-    // aparezca. Recuperarlo después es imposible.
-    if (importadoPegando && !urlOrigenFinal) {
-      Alert.alert(
-        'Falta el link del anuncio',
-        'No venía dentro del código pegado. Copia el link del anuncio de la barra de direcciones y pégalo en "Importar desde URL".',
-      )
-      return
-    }
+    // Si se importó pegando el código y no se encontró el link, se avisa en
+    // pantalla pero NO se bloquea el guardado: pegar el código tiene que
+    // bastar. Antes el link se exigía antes de importar y había que pegar dos
+    // veces; eso es justo lo que se vino a quitar.
     const precioNum = precio ? parseFloat(precio) : null
     if (precio && isNaN(precioNum!)) {
       Alert.alert('Error', 'El precio debe ser un número válido.')
@@ -1055,16 +1048,16 @@ export default function NuevaPropiedad() {
           ) : null}
 
           {/* El código se pegó pero no traía la ruta del anuncio por ningún
-              lado. Es raro (en EasyBroker aparece 15 veces), pero si pasa hay
-              que pedir el link: sin él la propiedad queda huérfana. */}
+              lado. Es raro (en EasyBroker aparece 15 veces). Se avisa, pero no
+              se estorba: la propiedad se puede guardar igual. */}
           {faltaLinkDelAnuncio && (
             <View style={{ marginTop: 8, padding: 10, borderRadius: 8, backgroundColor: '#3a2a00', borderLeftWidth: 3, borderLeftColor: '#e0a400' }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: '#e0a400', marginBottom: 3 }}>
                 ⚠ No venía el link dentro del código
               </Text>
               <Text style={{ fontSize: 11.5, color: '#d9cbab', lineHeight: 16 }}>
-                Copia el link del anuncio de la barra de direcciones y pégalo aquí arriba.
-                Sin él no se puede guardar: es lo único que dice de dónde salió la propiedad.
+                Puedes guardar así. Pero si pegas el link aquí arriba, la propiedad
+                queda sabiendo de dónde salió y después se puede volver al anuncio.
               </Text>
             </View>
           )}
