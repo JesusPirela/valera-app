@@ -37,6 +37,7 @@ function urlDelAnuncio(html: string): string {
     html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1] ?? '',
     html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i)?.[1] ?? '',
     getMeta(html, 'twitter:url'),
+    urlAutoReferenciada(html),
   ]
   for (const c of candidatos) {
     const u = decodeEntities(String(c || '')).trim()
@@ -45,6 +46,46 @@ function urlDelAnuncio(html: string): string {
     if (/^https?:\/\//i.test(u) && u.length <= 500) return u
   }
   return ''
+}
+
+/**
+ * El link del anuncio deducido de las rutas que la propia página se escribe a
+ * sí misma.
+ *
+ * El panel de agente de EasyBroker —de donde se copia el código cuando el
+ * portal bloquea la lectura desde servidor— no trae og:url, ni canonical, ni
+ * twitter:url: de 71 propiedades importadas pegando el código, las 71
+ * quedaron sin saber de dónde salieron. Pero la página sí repite su propia
+ * ruta por todos lados: enlaces, formularios y atributos data-*.
+ *
+ * Medido contra fichas reales de EasyBroker (3 de 3): la ruta del anuncio
+ * aparece 15 veces y es la ÚNICA ruta de anuncio del documento. Por eso la más
+ * repetida es la suya, y por un margen enorme.
+ *
+ * Se limita a EasyBroker a propósito: en otros portales una ficha suele listar
+ * "propiedades similares", y ahí la ruta más repetida ya no sería la propia.
+ */
+function urlAutoReferenciada(html: string): string {
+  if (!/easybroker\.com/i.test(html)) return ''
+  const cuenta = new Map<string, number>()
+  const re = /(?:https?:\/\/([a-z0-9.-]*easybroker\.com))?(\/(?:agent\/mls_properties|agent\/properties|listings)\/([a-z0-9][a-z0-9-]{7,160}))/gi
+  let host = ''
+  for (const m of html.matchAll(re)) {
+    // Los slugs de EasyBroker salen del título del anuncio, así que siempre
+    // traen varias palabras. Pedir dos guiones descarta rutas fijas del sitio
+    // (/listings/search y parecidas) sin dejar fuera ningún anuncio real.
+    if ((m[3].match(/-/g) ?? []).length < 2) continue
+    if (m[1] && !host) host = m[1].toLowerCase()
+    const ruta = m[2].toLowerCase()
+    cuenta.set(ruta, (cuenta.get(ruta) ?? 0) + 1)
+  }
+  if (cuenta.size === 0) return ''
+  const orden = [...cuenta.entries()].sort((a, b) => b[1] - a[1])
+  // Si hay más de un candidato, el primero tiene que DOBLAR al segundo. Entre
+  // dos anuncios parejos no se adivina: vale más pedir el link que guardar uno
+  // equivocado.
+  if (orden.length > 1 && orden[0][1] < orden[1][1] * 2) return ''
+  return `https://${host || 'www.easybroker.com'}${orden[0][0]}`
 }
 
 function parseNum(val: unknown): number | null {
@@ -1772,6 +1813,9 @@ serve(async (req) => {
         operacion: 'venta',
         imagenes: primero.imagenes,
         _modelos: vinteModelos,
+        // Mismo motivo que en la respuesta general: si se importó pegando
+        // el código, el link solo puede salir del propio HTML.
+        urlOriginal: urlDelAnuncio(html),
         _desarrollo: primero.desarrollo,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
@@ -1797,6 +1841,9 @@ serve(async (req) => {
         operacion: 'venta',
         imagenes: primero.imagenes,
         _modelos: sadasiModelos,
+        // Mismo motivo que en la respuesta general: si se importó pegando
+        // el código, el link solo puede salir del propio HTML.
+        urlOriginal: urlDelAnuncio(html),
         _desarrollo: primero.desarrollo,
         _empresa_matriz: 'Sadasi',   // marca la constructora al importar
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
@@ -1827,6 +1874,9 @@ serve(async (req) => {
         operacion: 'venta',
         imagenes: primero.imagenes,
         _modelos: bpcModelos,
+        // Mismo motivo que en la respuesta general: si se importó pegando
+        // el código, el link solo puede salir del propio HTML.
+        urlOriginal: urlDelAnuncio(html),
         _desarrollo: primero.desarrollo,
         _empresa_matriz: 'BPC Casa',   // marca la constructora al importar
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
@@ -1854,6 +1904,9 @@ serve(async (req) => {
         operacion: 'venta',
         imagenes: primero.imagenes,
         _modelos: terrasolesModelos,
+        // Mismo motivo que en la respuesta general: si se importó pegando
+        // el código, el link solo puede salir del propio HTML.
+        urlOriginal: urlDelAnuncio(html),
         _desarrollo: primero.desarrollo,
         _empresa_matriz: 'Terrasoles',   // marca la constructora al importar
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })

@@ -219,6 +219,9 @@ export default function NuevaPropiedad() {
   const [mostrarPegar, setMostrarPegar] = useState(false)  // recuadro para pegar el código del anuncio
   const [htmlPegado, setHtmlPegado] = useState('')
   const [urlOrigen, setUrlOrigen] = useState('')  // link de donde se importó (se guarda en la propiedad)
+  // Se importó pegando el código. Solo entonces se exige el link antes de
+  // guardar: una propiedad escrita a mano no viene de ningún anuncio.
+  const [importadoPegando, setImportadoPegando] = useState(false)
   const [importando, setImportando] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   // Propiedades que YA usan este mismo link.
@@ -464,7 +467,13 @@ export default function NuevaPropiedad() {
       // Si se importó pegando el código, el campo del link va vacío; entonces
       // se usa el que venga dentro del propio anuncio.
       const linkEscrito = /^https?:\/\//i.test(url) && url.length <= 500 ? url : ''
-      setUrlOrigen(linkEscrito || (data as any)?.urlOriginal || '')
+      const linkDelCodigo = String((data as any)?.urlOriginal ?? '')
+      setUrlOrigen(linkEscrito || linkDelCodigo)
+      // Si el link salió del propio código pegado, se escribe en el campo de
+      // arriba: así se ve, se puede corregir a mano, y de paso dispara el
+      // aviso de "este link ya se usó en N propiedades".
+      if (!linkEscrito && linkDelCodigo) setUrlImport(linkDelCodigo)
+      if (pastedHtml) setImportadoPegando(true)
       const d = data as any
 
       // Vinte: múltiples modelos — mostrar picker, aplicar el primero por defecto
@@ -819,6 +828,17 @@ export default function NuevaPropiedad() {
       Alert.alert('Error', 'El título y la dirección son obligatorios.')
       return
     }
+    // Importada pegando el código y sin link: no se guarda. Antes el link se
+    // pedía ANTES de importar, y por eso había que pegar dos veces; ahora se
+    // deduce del código y solo se reclama aquí, en el caso raro de que no
+    // aparezca. Recuperarlo después es imposible.
+    if (importadoPegando && !urlOrigenFinal) {
+      Alert.alert(
+        'Falta el link del anuncio',
+        'No venía dentro del código pegado. Copia el link del anuncio de la barra de direcciones y pégalo en "Importar desde URL".',
+      )
+      return
+    }
     const precioNum = precio ? parseFloat(precio) : null
     if (precio && isNaN(precioNum!)) {
       Alert.alert('Error', 'El precio debe ser un número válido.')
@@ -905,7 +925,7 @@ export default function NuevaPropiedad() {
         created_by: user.id,
         lat: lat ?? null,
         lng: lng ?? null,
-        url_origen: urlOrigen.trim() || null,
+        url_origen: urlOrigenFinal || null,
         video_url: null as string | null,
       }
 
@@ -985,15 +1005,18 @@ export default function NuevaPropiedad() {
     }
   }
 
-  // El link del anuncio es OBLIGATORIO para importar pegando el código: es lo
-  // único que deja rastro de dónde salió la propiedad. Antes era opcional y se
-  // confiaba en el og:url que trae el HTML del portal, pero casi nunca llega:
-  // de 71 propiedades importadas así, 71 quedaron sin origen. Como el flujo ya
-  // obliga a tener el anuncio abierto en el navegador, el link está a un
-  // Ctrl+C de distancia.
+  // El link del anuncio sigue siendo obligatorio cuando se importa pegando el
+  // código —es lo único que deja rastro de dónde salió la propiedad—, pero ya
+  // no hay que teclearlo: la función lo deduce del propio código pegado (el
+  // panel de EasyBroker repite su ruta 15 veces en la página). Así se pega una
+  // sola vez. Solo si no aparece se pide a mano, y recién al guardar.
   const linkOrigen = urlImport.trim()
   const linkOrigenListo = /^https?:\/\//i.test(linkOrigen) && linkOrigen.length <= 500
   const htmlListoParaImportar = htmlPegado.trim().length >= 500
+  // Manda lo que haya en el campo de arriba (pudo corregirlo a mano); si no es
+  // un link válido, el que se dedujo al importar.
+  const urlOrigenFinal = linkOrigenListo ? linkOrigen : urlOrigen.trim()
+  const faltaLinkDelAnuncio = importadoPegando && !urlOrigenFinal
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -1030,6 +1053,21 @@ export default function NuevaPropiedad() {
               {importMsg}
             </Text>
           ) : null}
+
+          {/* El código se pegó pero no traía la ruta del anuncio por ningún
+              lado. Es raro (en EasyBroker aparece 15 veces), pero si pasa hay
+              que pedir el link: sin él la propiedad queda huérfana. */}
+          {faltaLinkDelAnuncio && (
+            <View style={{ marginTop: 8, padding: 10, borderRadius: 8, backgroundColor: '#3a2a00', borderLeftWidth: 3, borderLeftColor: '#e0a400' }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#e0a400', marginBottom: 3 }}>
+                ⚠ No venía el link dentro del código
+              </Text>
+              <Text style={{ fontSize: 11.5, color: '#d9cbab', lineHeight: 16 }}>
+                Copia el link del anuncio de la barra de direcciones y pégalo aquí arriba.
+                Sin él no se puede guardar: es lo único que dice de dónde salió la propiedad.
+              </Text>
+            </View>
+          )}
 
           {urlRepetida.length > 0 && (
             <View style={styles.urlRepetidaBox}>
@@ -1068,12 +1106,12 @@ export default function NuevaPropiedad() {
                 Importar pegando el código (rápido y seguro, funciona con cualquier anuncio):
               </Text>
               <Text style={{ fontSize: 11.5, color: '#c9c9c9', lineHeight: 17, marginBottom: 8 }}>
-                1) Abre el anuncio en tu navegador.  2) Copia el link de la barra de direcciones y pégalo <Text style={{ fontWeight: '800', color: '#fff' }}>en el campo de arriba</Text>.  3) Presiona <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+U</Text> (ver código fuente).  4) <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+A</Text> y <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+C</Text> (copiar todo).  5) Pégalo aquí:
+                1) Abre el anuncio en tu navegador.  2) Presiona <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+U</Text> (ver código fuente).  3) <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+A</Text> y <Text style={{ fontWeight: '800', color: '#fff' }}>Ctrl+C</Text> (copiar todo).  4) Pégalo aquí:
               </Text>
-              <Text style={{ fontSize: 11.5, fontWeight: '700', lineHeight: 16, marginBottom: 8, color: linkOrigenListo ? '#6abf69' : '#e0a400' }}>
+              <Text style={{ fontSize: 11.5, fontWeight: '700', lineHeight: 16, marginBottom: 8, color: linkOrigenListo ? '#6abf69' : '#8a8a8a' }}>
                 {linkOrigenListo
                   ? '✓ Link del anuncio listo — se guardará en la propiedad'
-                  : '⚠ Falta el link del anuncio (el campo de arriba). Sin él la propiedad queda sin saber de dónde salió.'}
+                  : 'El link del anuncio sale solo del código pegado. No hace falta copiarlo aparte.'}
               </Text>
               <TextInput
                 style={[styles.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText, minHeight: 70, textAlignVertical: 'top' }]}
@@ -1084,14 +1122,14 @@ export default function NuevaPropiedad() {
                 multiline
               />
               <TouchableOpacity
-                style={[styles.btnIA, { marginTop: 8, marginBottom: 0, opacity: (importando || !htmlListoParaImportar || !linkOrigenListo) ? 0.5 : 1, backgroundColor: '#1a6470' }]}
+                style={[styles.btnIA, { marginTop: 8, marginBottom: 0, opacity: (importando || !htmlListoParaImportar) ? 0.5 : 1, backgroundColor: '#1a6470' }]}
                 onPress={() => importarDesdeUrl(htmlPegado)}
-                disabled={importando || !htmlListoParaImportar || !linkOrigenListo}
+                disabled={importando || !htmlListoParaImportar}
               >
                 {importando
                   ? <ActivityIndicator size="small" color="#fff" />
                   : <Text style={styles.btnIAText}>
-                      {!linkOrigenListo ? '↑ Pega arriba el link del anuncio' : 'Importar del código pegado'}
+                      {!htmlListoParaImportar ? '↑ Pega aquí el código del anuncio' : 'Importar del código pegado'}
                     </Text>}
               </TouchableOpacity>
             </View>
