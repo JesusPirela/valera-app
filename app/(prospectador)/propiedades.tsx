@@ -192,6 +192,22 @@ const PropiedadCard = memo(function PropiedadCard({
     && item.precio_actualizado_at != null
     && Date.now() - new Date(item.precio_actualizado_at).getTime() < 30 * 86400000
 
+  // La misma explicación para el sello, el aviso y el botón. Si cada uno
+  // dijera lo suyo, parecerían tres frenos distintos en vez de uno.
+  const fechaLibreSaturada = saturada
+    ? new Date(saturada.libre_desde).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+    : ''
+  const explicarSaturada = () => {
+    if (!saturada) return
+    const msg =
+      `Esta propiedad ya se publicó ${saturada.veces} veces este mes, por ${saturada.personas} personas distintas.\n\n` +
+      'Cuando varios publicamos la misma propiedad en el mismo mes, Facebook lo toma como spam y empieza a rechazar los anuncios de TODOS, no solo el de esa propiedad.\n\n' +
+      `Se vuelve a habilitar el ${fechaLibreSaturada}.\n\n` +
+      'Mientras tanto sí puedes entrar a verla, copiar la ficha y descargar las fotos. Lo único que no se puede todavía es publicarla.'
+    if (Platform.OS === 'web') window.alert(msg)
+    else Alert.alert('Mejor no publiques esta todavía', msg, [{ text: 'Entendido' }])
+  }
+
   return (
     <TouchableOpacity
       style={[
@@ -241,12 +257,29 @@ const PropiedadCard = memo(function PropiedadCard({
               dato más de la ficha y se seguía ofreciendo lo ya vendido. Encima
               de la foto y con la foto apagada no hay forma de pasarlo por alto. */}
           {esCerrada(item.estado) && (
-            <View style={styles.selloCapa}>
+            // pointerEvents none: el sello es un letrero, no una tapa. Sin
+            // esto se comía el toque de la lupita y el de la propia tarjeta.
+            <View style={styles.selloCapa} pointerEvents="none">
               <View style={[styles.selloCaja, { borderColor: colorEstado(item.estado) }]}>
                 <Text style={[styles.selloTxt, { color: colorEstado(item.estado) }]}>
                   {etiquetaEstado(item.estado).toUpperCase()}
                 </Text>
                 <Text style={styles.selloSub}>YA NO ESTÁ DISPONIBLE</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Pausada por saturación: mismo peso visual que el sello de
+              "vendida", porque el freno también hay que verlo de lejos. Pero
+              dice lo CONTRARIO: esta propiedad sí se trabaja, solo no se
+              puede publicar todavía. Por eso la foto no se apaga como en las
+              cerradas, el velo es mucho más tenue y el sello lo dice con
+              todas sus letras: se puede entrar y bajar las fotos. */}
+          {!esCerrada(item.estado) && saturada && (
+            <View style={styles.selloCapaPausa} pointerEvents="none">
+              <View style={[styles.selloCaja, { borderColor: '#d97706' }]}>
+                <Text style={[styles.selloTxt, { color: '#b45309' }]}>EN PAUSA</Text>
+                <Text style={styles.selloSub}>PUEDES VERLA Y BAJAR FOTOS</Text>
               </View>
             </View>
           )}
@@ -325,12 +358,23 @@ const PropiedadCard = memo(function PropiedadCard({
             tocar el botón. Si solo saliera al tocarlo, parecería que la app
             está fallando. */}
         {saturada && (
-          <View style={styles.saturadaAviso}>
+          // Antes decía "toca para ver cuándo se libera" y el aviso no era
+          // tocable: el toque se iba a la tarjeta y parecía que no pasaba
+          // nada. Ahora la fecha se lee sin tocar nada, y el aviso sí
+          // responde si quieres la explicación completa.
+          <TouchableOpacity
+            style={styles.saturadaAviso}
+            activeOpacity={0.7}
+            onPress={(e) => { e.stopPropagation(); explicarSaturada() }}
+          >
             <Text style={styles.saturadaAvisoText}>
               ⏸ Ya la publicaron {saturada.personas} personas este mes ({saturada.veces} veces).
-              Si varios subimos la misma, Facebook rechaza los anuncios de todos. Toca para ver cuándo se libera.
+              Si varios subimos la misma, Facebook rechaza los anuncios de todos.
             </Text>
-          </View>
+            <Text style={styles.saturadaAvisoLibre}>
+              Se libera el {fechaLibreSaturada}. Mientras tanto puedes entrar, copiar la ficha y bajar las fotos.
+            </Text>
+          </TouchableOpacity>
         )}
         {/* El tope personal, también en la tarjeta. Mismo criterio que arriba:
             si el motivo solo saliera al tocar, parecería que el botón falla. */}
@@ -339,6 +383,7 @@ const PropiedadCard = memo(function PropiedadCard({
             <Text style={styles.miLockAvisoText}>
               🔒 Ya la publicaste este mes. Se te libera el{' '}
               {new Date(miLibreDesde).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}.
+              {' '}Puedes entrar y bajar las fotos cuando quieras.
             </Text>
           </View>
         )}
@@ -384,16 +429,7 @@ const PropiedadCard = memo(function PropiedadCard({
               // Esta propiedad ya la publicó mucha gente este mes. No se
               // bloquea en silencio: se explica POR QUÉ, porque desde fuera
               // parece que el botón está roto.
-              if (saturada) {
-                const dia = new Date(saturada.libre_desde).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
-                const msg =
-                  `Esta propiedad ya se publicó ${saturada.veces} veces este mes, por ${saturada.personas} personas distintas.\n\n` +
-                  'Cuando varios publicamos la misma propiedad en el mismo mes, Facebook lo toma como spam y empieza a rechazar los anuncios de TODOS, no solo el de esa propiedad.\n\n' +
-                  `Se vuelve a habilitar el ${dia}. Mientras tanto, mejor escoge otra: hay muchas que casi nadie ha publicado.`
-                if (Platform.OS === 'web') window.alert(msg)
-                else Alert.alert('Mejor no publiques esta', msg, [{ text: 'Entendido' }])
-                return
-              }
+              if (saturada) { explicarSaturada(); return }
               // Tope personal: se explica aquí mismo, sin ir al servidor a
               // que lo rechace. El texto es el mismo que daría el servidor
               // (explicarBloqueo), así nadie recibe dos versiones distintas.
@@ -2247,6 +2283,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(17,24,39,0.34)',
   },
+  // El velo de "en pausa" es la mitad de oscuro que el de las cerradas (0.14
+  // contra 0.34) y la foto NO se apaga: ahí el mensaje es "entra y úsala",
+  // no "ya ni la veas".
+  selloCapaPausa: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(17,24,39,0.14)',
+  },
   selloCaja: {
     borderWidth: 3, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 8,
     backgroundColor: 'rgba(255,255,255,0.94)', alignItems: 'center',
@@ -2264,6 +2308,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 4,
   },
   saturadaAvisoText: { fontSize: 10.5, fontWeight: '600', color: '#9a3412', lineHeight: 14.5 },
+  // La fecha, en negritas y aparte: es el dato que la gente busca en ese
+  // recuadro, y antes había que tocar para verlo.
+  saturadaAvisoLibre: { fontSize: 10.5, fontWeight: '800', color: '#7c2d12', lineHeight: 14.5, marginTop: 3 },
   // Ámbar sólido: se lee igual en claro y en oscuro, y dice "ojo" sin
   // parecer un botón roto.
   publicadaBtnSaturada: { backgroundColor: '#fef3c7', borderColor: '#d97706' },
