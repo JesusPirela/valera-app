@@ -23,6 +23,7 @@ import * as Clipboard from 'expo-clipboard'
 import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { legibleSobre, mezclar as mezclarColor } from '../../lib/color'
 import { esPlusOMejor } from '../../lib/permisos'
 import { listarCuentas } from '../../lib/cuentas'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -157,15 +158,37 @@ function mezclar<T>(arr: T[]): T[] {
 }
 
 
+/**
+ * Una propiedad es exclusiva por DOS caminos: marcada ella misma, o venir de
+ * una inmobiliaria exclusiva (hoy 54 propiedades están en ese segundo caso).
+ *
+ * El filtro "Exclusivas", el bloqueo por rol, constructoras y la pantalla de
+ * detalle ya miraban los dos. Solo la TARJETA miraba `exclusiva` a secas: esas
+ * 54 salían en el filtro "Exclusivas" sin borde dorado y sin el cartel, como
+ * si estuvieran ahí por error. Un único sitio donde se decide, para que no
+ * vuelva a separarse.
+ */
+const esExclusiva = (p: {
+  exclusiva?: boolean | null
+  inmobiliarias?: { exclusiva?: boolean | null } | null
+}) => p.exclusiva === true || p.inmobiliarias?.exclusiva === true
+
 // Tarjeta de propiedad memoizada: solo se re-renderiza si cambian SUS datos
 // (veces publicada, estado de toggle, etc.), no en cada tecla de búsqueda.
 const PropiedadCard = memo(function PropiedadCard({
-  item, width, veces, isToggling, destacada, esAdmin, puedeVerBadgeDirecta, primaryColor,
+  item, width, veces, isToggling, destacada, esAdmin, puedeVerBadgeDirecta, primaryColor, acento,
   cardBg, cardBorder, isOnline, imgOpts, empresaMatriz, totalPublicadores,
   isNuevaParaTi, isUnlocked, saturada, miLibreDesde, onOpen, onShare, onPublish, onZoom,
 }: {
   item: Propiedad; width?: number; veces: number; isToggling: boolean
   destacada: boolean; esAdmin: boolean; puedeVerBadgeDirecta: boolean; primaryColor: string
+  /**
+   * El mismo acento, pero aclarado lo justo para LEERSE sobre el fondo de la
+   * tarjeta. `primaryColor` sigue siendo el color de relleno (píldora del
+   * código, botón ya publicado), que lleva texto blanco encima y por eso tiene
+   * que quedarse oscuro. Ver lib/color.ts.
+   */
+  acento: string
   cardBg: string; cardBorder: string; isOnline: boolean; imgOpts: ThumbOpts
   empresaMatriz?: string | null
   totalPublicadores: number
@@ -213,7 +236,7 @@ const PropiedadCard = memo(function PropiedadCard({
       style={[
         styles.card,
         { backgroundColor: cardBg, borderColor: cardBorder },
-        item.exclusiva && styles.cardExclusiva,
+        esExclusiva(item) && styles.cardExclusiva,
         destacada && styles.cardDestacada,
         width != null && { width },
       ]}
@@ -285,7 +308,7 @@ const PropiedadCard = memo(function PropiedadCard({
           )}
         </View>
       )}
-      {item.exclusiva && (
+      {esExclusiva(item) && (
         <View style={styles.exclusivaBanner}>
           <Text style={styles.exclusivaBannerText}>★ Propiedad exclusiva</Text>
         </View>
@@ -331,7 +354,7 @@ const PropiedadCard = memo(function PropiedadCard({
             <Text style={styles.directaBadge}>🎯 Directa</Text>
           )}
         </View>
-        <Text style={[styles.cardTitulo, { color: primaryColor }]}>{item.titulo}</Text>
+        <Text style={[styles.cardTitulo, { color: acento }]}>{item.titulo}</Text>
         <View style={{ alignSelf: 'flex-start', marginBottom: 4 }}>
           <BadgeUbicacion estado_mx={item.estado_mx} direccion={item.direccion} titulo={item.titulo} size="sm" />
         </View>
@@ -404,7 +427,7 @@ const PropiedadCard = memo(function PropiedadCard({
           </View>
         )}
         <View style={styles.cardFooter}>
-          <Text style={[styles.precio, { color: primaryColor }]} maxFontSizeMultiplier={1.2}>{formatPrecio(item.precio)}</Text>
+          <Text style={[styles.precio, { color: acento }]} maxFontSizeMultiplier={1.2}>{formatPrecio(item.precio)}</Text>
           <TouchableOpacity
             style={styles.shareBtn}
             onPress={(e) => { e.stopPropagation(); onShare(item.codigo) }}
@@ -415,7 +438,7 @@ const PropiedadCard = memo(function PropiedadCard({
           <TouchableOpacity
             style={[
               styles.publicadaBtn,
-              { borderColor: primaryColor },
+              { borderColor: acento },
               veces > 0 && { backgroundColor: primaryColor, borderColor: primaryColor },
               (isToggling || veces >= 10) && styles.publicadaBtnDisabled,
               // Estilo propio en vez de la opacidad de "deshabilitado": ese
@@ -454,13 +477,13 @@ const PropiedadCard = memo(function PropiedadCard({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             {isToggling ? (
-              <ActivityIndicator size="small" color={veces > 0 ? '#fff' : primaryColor} />
+              <ActivityIndicator size="small" color={veces > 0 ? '#fff' : acento} />
             ) : (
               <Text
                 // Sobre el ámbar va texto café oscuro, no el color del tema:
                 // el morado sobre amarillo claro no se leía.
                 style={[styles.publicadaBtnText, {
-                  color: saturada ? '#92400e' : (miLibreDesde ? '#334155' : veces > 0 ? '#fff' : primaryColor),
+                  color: saturada ? '#92400e' : (miLibreDesde ? '#334155' : veces > 0 ? '#fff' : acento),
                 }]}
                 maxFontSizeMultiplier={1.2}
                 numberOfLines={1}
@@ -484,6 +507,21 @@ export default function ProspectadorPropiedades() {
   const isOnline = useNetworkStatus()
   const { primaryColor, acentoId, figuraAcento, darkMode } = useTheme()
   const c = useColors()
+  // El acento del usuario, ajustado para que se LEA sobre el fondo que toque.
+  //
+  // El acento se elige libremente y varios de los patrones son oscuros. Medido
+  // sobre el fondo del modo oscuro: galaxy daba 1.17:1, aurora 1.70:1 y el
+  // color de fábrica 2.04:1 — por debajo hasta del 3:1 que pide la norma para
+  // un icono. Por eso la fila de filtros "ni se veía". Se usa para TEXTO,
+  // ICONOS y BORDES; los rellenos (chip activo, píldora del código) siguen con
+  // `primaryColor`, porque encima llevan letra blanca y deben quedar oscuros.
+  // Se mide contra la superficie más CLARA sobre la que se pinta el acento —el
+  // chip de filtro, que lleva un velo blanco al 7% encima del fondo de la fila,
+  // y la tarjeta blanca en modo claro—, porque ese es el peor caso: ahí es
+  // donde menos contraste queda. El mismo color sobra en las superficies más
+  // oscuras, así que uno solo sirve para toda la pantalla.
+  const fondoPeor = darkMode ? mezclarColor('#ffffff', '#0f1e2d', 0.07) : '#ffffff'
+  const acento = useMemo(() => legibleSobre(primaryColor, fondoPeor, 4.5), [primaryColor, fondoPeor])
   const { ahorroActivo } = useCargaDatos()
   const imgOpts = opcionesImagenTarjeta(ahorroActivo)
   const statusBarHeight = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 28) : 44
@@ -577,7 +615,7 @@ export default function ProspectadorPropiedades() {
           inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
         })) as unknown as Propiedad[]
         if (!esPlusOMejor(rol)) {
-          propiedades = propiedades.filter(p => !p.exclusiva && !p.inmobiliarias?.exclusiva)
+          propiedades = propiedades.filter(p => !esExclusiva(p))
         }
         propiedades = mezclar(propiedades)
         return {
@@ -1124,7 +1162,7 @@ export default function ProspectadorPropiedades() {
    * siempre y no se pisa.
    */
   const _estaDestacada = (p: Propiedad) =>
-    !p.exclusiva && (
+    !esExclusiva(p) && (
       p.directa === true ||
       (p.destacada && (!p.destacada_hasta || new Date(p.destacada_hasta).getTime() > _ahora))
     )
@@ -1168,7 +1206,7 @@ export default function ProspectadorPropiedades() {
     propiedadesFiltradas = propiedadesFiltradas.filter(p => _estaDestacada(p))
   }
   if (filtroExclusiva) {
-    propiedadesFiltradas = propiedadesFiltradas.filter(p => p.exclusiva || p.inmobiliarias?.exclusiva)
+    propiedadesFiltradas = propiedadesFiltradas.filter(p => esExclusiva(p))
   }
   if (puedeVerDirectas && filtroDirecta) {
     propiedadesFiltradas = propiedadesFiltradas.filter(p => p.directa === true)
@@ -1433,6 +1471,7 @@ export default function ProspectadorPropiedades() {
       esAdmin={esAdmin}
       puedeVerBadgeDirecta={puedeVerBadgeDirecta}
       primaryColor={primaryColor}
+      acento={acento}
       cardBg={c.card}
       cardBorder={c.border}
       isOnline={isOnline}
@@ -1479,13 +1518,13 @@ export default function ProspectadorPropiedades() {
             key={btn.key}
             style={[
               styles.quickFilterBtn,
-              { borderColor: primaryColor, backgroundColor: btn.activo ? primaryColor : (darkMode ? 'rgba(255,255,255,0.07)' : '#fff') },
+              { borderColor: acento, backgroundColor: btn.activo ? primaryColor : (darkMode ? 'rgba(255,255,255,0.07)' : '#fff') },
             ]}
             onPress={btn.onPress}
           >
-            <Ionicons name={btn.icon} size={14} color={btn.activo ? '#fff' : primaryColor} />
+            <Ionicons name={btn.icon} size={14} color={btn.activo ? '#fff' : acento} />
             <Text
-              style={[styles.quickFilterText, { color: btn.activo ? '#fff' : primaryColor }]}
+              style={[styles.quickFilterText, { color: btn.activo ? '#fff' : acento }]}
               numberOfLines={1}
               maxFontSizeMultiplier={1.2}
             >
@@ -1519,18 +1558,18 @@ export default function ProspectadorPropiedades() {
 
       <View style={styles.controlsRow}>
         <TouchableOpacity style={styles.filtrosToggle} onPress={() => setMostrarFiltros((v) => !v)}>
-          <Text style={[styles.filtrosToggleText, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+          <Text style={[styles.filtrosToggleText, { color: acento }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
             {filtrosActivos > 0 ? `Filtros (${filtrosActivos})` : 'Filtros'} {mostrarFiltros ? '▲' : '▼'}
           </Text>
         </TouchableOpacity>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 4 }} style={{ flexShrink: 1 }}>
           <TouchableOpacity
-            style={[styles.constructorasBtn, { borderColor: primaryColor }]}
+            style={[styles.constructorasBtn, { borderColor: acento }]}
             onPress={() => router.push('/(prospectador)/constructoras?scope=queretaro')}
             activeOpacity={0.85}
           >
             <Text style={styles.constructorasIcon}>🏗️</Text>
-            <Text style={[styles.constructorasTxt, { color: primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Constructoras QRO</Text>
+            <Text style={[styles.constructorasTxt, { color: acento }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Constructoras QRO</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.constructorasBtn, { borderColor: '#0f4c81' }]}
@@ -1541,11 +1580,11 @@ export default function ProspectadorPropiedades() {
             <Text style={[styles.constructorasTxt, { color: '#0f4c81' }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>Nacionales</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.zonasToggle, { borderColor: primaryColor }, vistaZonas && { backgroundColor: primaryColor }]}
+            style={[styles.zonasToggle, { borderColor: acento }, vistaZonas && { backgroundColor: primaryColor }]}
             onPress={() => setVistaZonas(v => !v)}
           >
-            <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : primaryColor} />
-            <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : primaryColor }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+            <Ionicons name="map-outline" size={14} color={vistaZonas ? '#fff' : acento} />
+            <Text style={[styles.zonasToggleText, { color: vistaZonas ? '#fff' : acento }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
               Mapa
             </Text>
           </TouchableOpacity>
@@ -1625,7 +1664,7 @@ export default function ProspectadorPropiedades() {
             <View style={styles.precioRangoInput}>
               <Text style={styles.precioRangoLabel}>Mínimo</Text>
               <TextInput
-                style={[styles.precioInput, { borderColor: primaryColor + '44' }]}
+                style={[styles.precioInput, { borderColor: acento + '44' }]}
                 placeholder="Ej. 500,000"
                 placeholderTextColor="#bbb"
                 value={precioMin}
@@ -1638,7 +1677,7 @@ export default function ProspectadorPropiedades() {
             <View style={styles.precioRangoInput}>
               <Text style={styles.precioRangoLabel}>Máximo</Text>
               <TextInput
-                style={[styles.precioInput, { borderColor: primaryColor + '44' }]}
+                style={[styles.precioInput, { borderColor: acento + '44' }]}
                 placeholder="Ej. 3,000,000"
                 placeholderTextColor="#bbb"
                 value={precioMax}
@@ -1857,7 +1896,7 @@ export default function ProspectadorPropiedades() {
             </View>
             {visibleCount < propiedadesFiltradas.length && (
               <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                <ActivityIndicator size="small" color={primaryColor} />
+                <ActivityIndicator size="small" color={acento} />
                 <Text style={{ color: c.textMute, fontSize: 12, marginTop: 6 }}>
                   Mostrando {visibleCount} de {propiedadesFiltradas.length}
                 </Text>
@@ -1883,8 +1922,8 @@ export default function ProspectadorPropiedades() {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onPull}
-                tintColor={primaryColor}
-                colors={[primaryColor]}
+                tintColor={acento}
+                colors={[acento]}
               />
             }
           />
