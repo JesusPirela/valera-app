@@ -162,6 +162,16 @@ export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null)
   const sessionRef = useRef<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  /**
+   * ¿Ya SABEMOS si hay sesión o no?
+   *
+   * No es lo mismo que `!loading`. Durante el arranque hay un rato en el que
+   * `session` vale null simplemente porque todavía no se ha resuelto, y mandar
+   * al login en ese momento echa fuera a gente que SÍ tiene su sesión guardada.
+   * Eso fue justo el reporte de "me saca de mi sesión": ver el comentario del
+   * temporizador de respaldo, más abajo.
+   */
+  const [sesionResuelta, setSesionResuelta] = useState(false)
   const [updateRequerido, setUpdateRequerido] = useState(false)
   const [fontsLoaded] = useFonts(Platform.OS === 'web' ? {} : Ionicons.font)
   const pathname = usePathname()
@@ -397,20 +407,40 @@ export default function RootLayout() {
     // guarda hasta recargar".
     const refrescoBackstop = setInterval(asegurarSesionFresca, 4 * 60 * 1000)
 
-    const fallbackTimer = setTimeout(() => {
-      setLoading((prev) => {
-        if (prev) {
-          supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null)).catch(() => {})
-          return false
-        }
-        return prev
-      })
+    // Red de seguridad por si INITIAL_SESSION tarda demasiado: teléfono lento,
+    // arranque en frío, o el lock de auth de Supabase ocupado por otra cosa
+    // (ya pasó antes, ver el comentario del lock en lib/supabase.ts).
+    //
+    // ⚠️ CUIDADO CON EL ORDEN. Antes esto apagaba `loading` ANTES de preguntar
+    // si había sesión: lanzaba getSession() sin esperarla y devolvía false de
+    // inmediato. Como `session` seguía en null, el efecto de más abajo hacía
+    // router.replace('/(auth)/login') — y el usuario, con su sesión intacta,
+    // aparecía en la pantalla de entrar teniendo que escribir su contraseña.
+    // Ese es el "me sacó de mi sesión" que se reportó: no se perdía la sesión,
+    // se la mandaba al login por no haber preguntado.
+    //
+    // Ahora se PREGUNTA primero y se apaga `loading` después:
+    //  · getSession() lee del almacenamiento local, no de la red.
+    //  · Si no hay nada en memoria puede ser solo que venció el access_token;
+    //    el refresh_token sigue guardado, así que se intenta refrescar.
+    //  · Solo si ambas cosas fallan se da por resuelto que no hay sesión.
+    const fallbackTimer = setTimeout(async () => {
+      let s: Session | null = null
+      try { s = (await supabase.auth.getSession()).data.session ?? null } catch { /* reintenta abajo */ }
+      if (!s) {
+        try { s = (await supabase.auth.refreshSession()).data.session ?? null } catch { /* sin red */ }
+      }
+      // Si INITIAL_SESSION llegó mientras tanto, gana lo que ya había.
+      setSession(prev => prev ?? s)
+      setSesionResuelta(true)
+      setLoading(false)
     }, 5000)
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') {
         clearTimeout(fallbackTimer)
         setSession(session)
+        setSesionResuelta(true)
         setLoading(false)
         if (session) {
           iniciarSesion(session.user.id)
@@ -419,6 +449,7 @@ export default function RootLayout() {
         }
       } else if (event === 'SIGNED_IN') {
         setSession(session)
+        setSesionResuelta(true)
         track('login')
         if (session) {
           // Guardar tokens INMEDIATAMENTE del evento (sin llamar a getSession).
@@ -446,6 +477,7 @@ export default function RootLayout() {
           // navegarSeguro: este callback puede dispararse durante el arranque,
           // antes de que monte el layout raíz, y ahí router.replace lanza.
           setSession(null)
+          setSesionResuelta(true)
           queryClient.clear()
           navegarSeguro('/(auth)/login')
         } else {
@@ -478,6 +510,10 @@ export default function RootLayout() {
     if (pathnameRef.current.startsWith('/ruta')) return  // hoja de ruta por link, sin auth
     if (!session) {
       if (accountSwitch.pending) return  // cambio de cuenta en progreso — no ir al login
+      // `session` en null NO significa "no tiene sesión": también es el estado
+      // de "todavía no se sabe". Sin esta guarda, cualquier arranque lento
+      // mandaba al login a alguien con la sesión guardada y válida.
+      if (!sesionResuelta) return
       router.replace('/(auth)/login')
       return
     }
@@ -486,7 +522,11 @@ export default function RootLayout() {
     // router.replace(home) SIEMPRE al cargar, así que al RECARGAR en cualquier
     // pantalla (detalle, CRM, mapa…) te rebotaba al inicio. Ahora te quedas donde
     // estabas; solo se maneja el caso de sesión perdida (arriba).
-  }, [loading])
+    //
+    // `sesionResuelta` va en las dependencias para que, cuando el arranque
+    // lento termine de resolver, se vuelva a decidir: si de verdad no había
+    // sesión, ahí sí se va al login.
+  }, [loading, sesionResuelta])
 
   if (loading || !fontsLoaded) {
     return (
