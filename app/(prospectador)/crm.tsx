@@ -344,6 +344,9 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
   /** Ya tiene un registro en chatbot_leads (se le mandó antes, de aquí o de otra pantalla). */
   enChatbot?: boolean
 }) {
+  // Una nota de más de ~3 renglones se corta: solo entonces se ofrece abrirla.
+  const [notaAbierta, setNotaAbierta] = useState(false)
+  const notaLarga = (item.notas ?? '').length > 110 || (item.notas ?? '').split(/\r?\n/).length > 3
   const info    = estadoInfo(item.estado)
   const rec     = proximoRec(item.recordatorios ?? [])
   const recVenc = rec && new Date(rec.fecha_hora) < new Date()
@@ -447,6 +450,29 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
             </Text>
           </View>
         )}
+        {/* La NOTA, visible sin tocar nada.
+            Era la queja principal: "ni siquiera se pueden leer las notas a
+            menos que le piques editar". La nota es lo que te recuerda de qué
+            iba este cliente, así que es lo último que debería estar escondido.
+            Tres renglones de entrada y "Ver más" si hay más, sin salir de la
+            lista ni abrir el editor. */}
+        {item.notas ? (
+          <TouchableOpacity
+            style={[s.notaCard, { backgroundColor: darkMode ? '#0d1b2a' : '#f8fafc', borderLeftColor: darkMode ? '#2a4257' : '#cbd5e1' }]}
+            activeOpacity={0.75}
+            onPress={() => setNotaAbierta(v => !v)}
+          >
+            <Text
+              style={[s.notaCardTxt, { color: c.textSub }]}
+              numberOfLines={notaAbierta ? undefined : 3}
+            >
+              {item.notas}
+            </Text>
+            {notaLarga && (
+              <Text style={s.notaCardMas}>{notaAbierta ? 'Ver menos' : 'Ver más'}</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
         <View style={s.actions}>
           <TouchableOpacity
             style={[s.actionWa, darkMode && { backgroundColor: '#0b2016', borderColor: '#1a6b38' }]}
@@ -672,6 +698,20 @@ export default function CRM() {
   const uidCampania = verUid ?? miUid
   const { width: screenWidth } = useWindowDimensions()
   const isWeb = Platform.OS === 'web'
+  /**
+   * ¿Hay que dibujar la versión de pantalla ANGOSTA?
+   *
+   * La pregunta correcta es el ANCHO, no la plataforma. Varias personas abren
+   * la app desde el navegador del celular (es la misma dirección), y ahí
+   * `Platform.OS` dice 'web': con la condición vieja se llevaban la tabla de
+   * escritorio apretada en 390px. El umbral de 820 deja intacta cualquier
+   * pantalla de laptop y recoge tanto el celular nativo como el navegador del
+   * celular y la mitad de una pantalla partida.
+   *
+   * Ojo: NO sustituye a `isWeb` donde la pregunta sí es la plataforma, como el
+   * <textarea> de verdad que se usa para editar notas en el navegador.
+   */
+  const anchoAmplio = isWeb && screenWidth >= 820
 
   const { data: clientesRaw = [], isLoading, refetch } = useQuery<Cliente[]>({
     // Sufijo de versión: invalida el caché persistido en disco. Se subió a 'v3'
@@ -1399,7 +1439,7 @@ export default function CRM() {
 
   // ── Excel table columns ───────────────────────────────────────
   type TCol = { id: string; label: string; flex: number; mw: number; sortable?: boolean; filterable?: boolean }
-  const TABLE_COLS: TCol[] = isWeb ? [
+  const TABLE_COLS: TCol[] = anchoAmplio ? [
     { id: 'nombre',       label: 'Nombre',         flex: 2.2, mw: 0, sortable: true },
     { id: 'telefono',    label: 'Teléfono',       flex: 1.2, mw: 0 },
     { id: 'estado',      label: 'Estado',         flex: 1.3, mw: 0, sortable: true, filterable: true },
@@ -1412,20 +1452,53 @@ export default function CRM() {
     { id: 'acciones',    label: '',               flex: 0.3, mw: 0 },
   ] : [
     { id: 'nombre',       label: 'Nombre',        flex: 0, mw: 130 },
-    { id: 'telefono',    label: 'Teléfono',       flex: 0, mw: 100 },
-    { id: 'estado',      label: 'Estado',         flex: 0, mw: 105, sortable: true, filterable: true },
-    { id: 'operacion',   label: 'Op.',            flex: 0, mw: 60,  filterable: true },
-    { id: 'tipo_credito', label: 'Método pago',   flex: 0, mw: 80, filterable: true },
+    { id: 'telefono',    label: 'Teléfono',       flex: 0, mw: 124 },
+    { id: 'estado',      label: 'Estado',         flex: 0, mw: 142, sortable: true, filterable: true },
+    { id: 'operacion',   label: 'Op.',            flex: 0, mw: 84,  filterable: true },
+    { id: 'tipo_credito', label: 'Método pago',   flex: 0, mw: 104, filterable: true },
     { id: 'zona',        label: 'Zona',           flex: 0, mw: 110, filterable: true },
     { id: 'presupuesto', label: 'Presupuesto',    flex: 0, mw: 105, filterable: true },
     { id: 'fecha',       label: 'Prox. seguim.',  flex: 0, mw: 105, sortable: true },
-    { id: 'notas',       label: 'Notas',          flex: 0, mw: 180 },
+    { id: 'notas',       label: 'Notas',          flex: 0, mw: 230 },
     { id: 'acciones',    label: '',               flex: 0, mw: 44 },
   ]
 
   function cStyle(col: TCol) {
-    return isWeb ? { flex: col.flex } : { minWidth: col.mw }
+    // ANCHO EXACTO, no mínimo.
+    //
+    // Con `minWidth` cada celda crecía con su contenido: medido en la app, la
+    // celda de notas de una fila ocupaba 1521px donde la cabecera decía 230, y
+    // "Método pago" iba de 80 a 131 según la fila. Resultado: cada fila ponía
+    // sus columnas en un sitio distinto y la tabla se leía como un amontonado
+    // —ningún dato quedaba debajo de su título—. `numberOfLines` solo recorta
+    // lo que se PINTA; no impide que la celda se ensanche.
+    //
+    // Con width fijo y sin crecer ni encoger, la columna N empieza en el mismo
+    // punto en todas las filas, que es lo único que hace que una tabla se lea.
+    // `overflow: hidden` es el seguro: aunque un dato crezca más de lo previsto
+    // (una etiqueta de estado nueva, un nombre larguísimo), se recorta en su
+    // columna en vez de meterse en la de al lado.
+    return anchoAmplio
+      ? { flex: col.flex }
+      : { width: col.mw, flexGrow: 0, flexShrink: 0, overflow: 'hidden' as const }
   }
+
+  // ⚠️ ESTO ES LO QUE MANTIENE LAS FILAS ALINEADAS EN CELULAR.
+  //
+  // La tabla de celular son DOS tablas pegadas: la columna "Nombre" fija a la
+  // izquierda y el resto en un carrusel horizontal. Cada mitad se dibuja por
+  // su cuenta, así que cada una se mide por su cuenta. Con `minHeight: 44` una
+  // fila cuyas notas ocupan dos renglones crecía SOLO del lado que hace scroll
+  // y las dos mitades se despegaban: el nombre dejaba de corresponder con su
+  // fila, y el desfase se acumulaba hacia abajo (por eso "se ve todo
+  // sobrepuesto" empeoraba conforme bajabas).
+  //
+  // Con una altura EXACTA e idéntica en ambas mitades, el desfase no puede
+  // existir: no depende del contenido. Los 62px dan dos renglones de nota
+  // (17px de interlínea + 16 de respiro), que es lo que se puede leer sin
+  // abrir nada.
+  const FILA_H = 62
+  const CABEZA_H = 44
 
   // renderItem HOISTEADO. Antes estaba como `renderItem={useCallback(...)}`
   // DENTRO del <FlatList>, que solo se renderiza en la vista LISTA. Al alternar
@@ -1668,74 +1741,125 @@ export default function CRM() {
         </TouchableOpacity>
       )}
 
-      {/* ── Search + sort + nuevo ── */}
-      <View style={s.searchRow}>
-        <View style={[s.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
-          <Ionicons name="search-outline" size={15} color={c.textMute} style={{ marginRight: 8 }} />
-          <TextInput
-            style={[s.searchInput, { color: c.text }]}
-            placeholder="Buscar nombre, teléfono, empresa..."
-            placeholderTextColor={c.textMute}
-            value={busqueda}
-            onChangeText={setBusqueda}
-            autoCapitalize="none"
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-            returnKeyType="search"
-            onSubmitEditing={() => Keyboard.dismiss()}
-          />
-        </View>
-        <Tooltip label="Ordenar clientes">
-          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setShowSort(true)}>
-            <Ionicons name="funnel-outline" size={15} color="#1a6470" />
-            {sortBy !== 'reciente' && <View style={s.sortDot} />}
-          </TouchableOpacity>
-        </Tooltip>
-        <Tooltip label={vistaExcel ? 'Ver como lista' : 'Ver como tabla'}>
-          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={toggleVista}>
-            <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
-          </TouchableOpacity>
-        </Tooltip>
-        {!soloLectura && (
-        <Tooltip label="Importar clientes (CSV)">
-          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
-            <Ionicons name="cloud-upload-outline" size={15} color="#1a6470" />
-          </TouchableOpacity>
-        </Tooltip>
-        )}
-        <Tooltip label="Exportar clientes (CSV)">
-          <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={exportarCSV} disabled={exportando}>
-            {exportando
-              ? <ActivityIndicator size="small" color="#1a6470" />
-              : <Ionicons name="download-outline" size={15} color="#1a6470" />
-            }
-          </TouchableOpacity>
-        </Tooltip>
-        {!soloLectura && (
-        <Tooltip label="Nuevo cliente">
-          <TouchableOpacity style={s.addBtn} onPress={() => router.push('/(prospectador)/cliente-form')}>
-            <Ionicons name="add" size={20} color="#fff" />
-          </TouchableOpacity>
-        </Tooltip>
-        )}
-      </View>
+      {/* ── Buscador, herramientas y pestañas ──
+          En CELULAR van en tres renglones y no en uno. Antes el buscador
+          compartía renglón con cinco botones y quedaba de unos 90 px: se leía
+          "iela" en vez del nombre que estabas escribiendo. Ahora la lupa tiene
+          su renglón entero, las herramientas el suyo, y las pestañas el suyo. */}
+      {(() => {
+        const buscador = (
+          <View style={[s.searchWrap, { backgroundColor: c.card, borderColor: c.border }]}>
+            <Ionicons name="search-outline" size={15} color={c.textMute} style={{ marginRight: 8 }} />
+            <TextInput
+              style={[s.searchInput, { color: c.text }]}
+              placeholder="Buscar nombre, teléfono, empresa..."
+              placeholderTextColor={c.textMute}
+              value={busqueda}
+              onChangeText={setBusqueda}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+              onSubmitEditing={() => Keyboard.dismiss()}
+            />
+            {/* En celular no hay clearButtonMode de iOS en todos lados: una X
+                propia para vaciar la búsqueda sin borrar letra por letra. */}
+            {!anchoAmplio && busqueda.length > 0 && (
+              <TouchableOpacity onPress={() => setBusqueda('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close-circle" size={17} color={c.textMute} />
+              </TouchableOpacity>
+            )}
+          </View>
+        )
+        const herramientas = (
+          <>
+            <Tooltip label="Ordenar clientes">
+              <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setShowSort(true)}>
+                <Ionicons name="funnel-outline" size={15} color="#1a6470" />
+                {sortBy !== 'reciente' && <View style={s.sortDot} />}
+              </TouchableOpacity>
+            </Tooltip>
+            <Tooltip label={vistaExcel ? 'Ver como lista' : 'Ver como tabla'}>
+              <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={toggleVista}>
+                <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
+              </TouchableOpacity>
+            </Tooltip>
+            {!soloLectura && (
+            <Tooltip label="Importar clientes (CSV)">
+              <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
+                <Ionicons name="cloud-upload-outline" size={15} color="#1a6470" />
+              </TouchableOpacity>
+            </Tooltip>
+            )}
+            <Tooltip label="Exportar clientes (CSV)">
+              <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={exportarCSV} disabled={exportando}>
+                {exportando
+                  ? <ActivityIndicator size="small" color="#1a6470" />
+                  : <Ionicons name="download-outline" size={15} color="#1a6470" />
+                }
+              </TouchableOpacity>
+            </Tooltip>
+            {!soloLectura && (
+            <Tooltip label="Nuevo cliente">
+              {/* Estilo COMPLETO, no mezclado: `addBtn` fija width/height a 42
+                  y al fusionarlo con el de celular el texto se salía de la
+                  caja (el "+" quedaba fuera, encima del botón de al lado). */}
+              <TouchableOpacity style={anchoAmplio ? s.addBtn : s.addBtnMovil} onPress={() => router.push('/(prospectador)/cliente-form')}>
+                <Ionicons name="add" size={20} color="#fff" />
+                {!anchoAmplio && <Text style={s.addBtnMovilTxt}>Nuevo</Text>}
+              </TouchableOpacity>
+            </Tooltip>
+            )}
+          </>
+        )
+        return anchoAmplio ? (
+          <View style={s.searchRow}>{buscador}{herramientas}</View>
+        ) : (
+          <>
+            <View style={s.searchRow}>{buscador}</View>
+            <View style={s.toolRow}>{herramientas}</View>
+          </>
+        )
+      })()}
 
-      {/* ── Operacion tabs ── */}
-      <View style={[s.opRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>
-        {([null, 'venta', 'renta', 'captacion'] as const).map(op => {
+      {/* ── Pestañas de operación ──
+          En celular van en un carrusel horizontal y cada una mide lo que mide
+          su texto. Antes tenían flex:1 — a 4 pestañas en una pantalla de 360px
+          les tocaban ~90px cada una y "🔍 Captación" con su contador necesita
+          ~120: el texto se salía y se encimaba con el de al lado. */}
+      {(() => {
+        const pestanas = ([null, 'venta', 'renta', 'captacion'] as const).map(op => {
           const label = op === null ? 'Todos' : op === 'venta' ? '🏠 Venta' : op === 'renta' ? '🔑 Renta' : '🔍 Captación'
           const cnt   = op === null ? clientes.length : clientes.filter(c => c.tipo_operacion === op).length
           const activo = opFiltro === op
           return (
-            <TouchableOpacity key={String(op)} style={[s.opTab, activo && s.opTabActivo]} onPress={() => setOpFiltro(op)}>
-              <Text style={[s.opTabTxt, { color: c.textMute }, activo && s.opTabTxtActivo]}>{label}</Text>
+            <TouchableOpacity
+              key={String(op)}
+              style={[anchoAmplio ? s.opTab : s.opTabMovil, activo && s.opTabActivo]}
+              onPress={() => setOpFiltro(op)}
+            >
+              <Text style={[s.opTabTxt, { color: c.textMute }, activo && s.opTabTxtActivo]} numberOfLines={1}>{label}</Text>
               <View style={[s.opTabBadge, { backgroundColor: c.border }, activo && s.opTabBadgeActivo]}>
                 <Text style={[s.opTabBadgeTxt, { color: c.textMute }, activo && { color: '#1a6470' }]}>{cnt}</Text>
               </View>
             </TouchableOpacity>
           )
-        })}
-      </View>
+        })
+        return anchoAmplio ? (
+          <View style={[s.opRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>{pestanas}</View>
+        ) : (
+          <View style={[s.opRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.opRowMovilContenido}
+              keyboardShouldPersistTaps="handled"
+            >
+              {pestanas}
+            </ScrollView>
+          </View>
+        )
+      })()}
 
       {/* ── Sort label ── */}
       {sortBy !== 'reciente' && (
@@ -1832,6 +1956,11 @@ export default function CRM() {
                 style={[
                   s.excelTr,
                   { borderBottomColor: c.border },
+                  // Las dos mitades calculan esta altura con los MISMOS datos
+                  // (el id de la fila que se está editando), así que siempre
+                  // coinciden. Al escribir una nota la fila crece para que
+                  // quepa el editor, y crece a los dos lados a la vez.
+                  !anchoAmplio && { height: editCell?.id === item.id && editCell?.col === 'notas' ? 132 : FILA_H },
                   interesRowBg
                     ? { backgroundColor: interesRowBg }
                     : (idx % 2 !== 0 && { backgroundColor: darkMode ? '#0a1827' : '#f8fafc' }),
@@ -1885,7 +2014,7 @@ export default function CRM() {
                           keyboardType={col.id === 'telefono' ? 'phone-pad' : 'default'}
                           multiline={col.id === 'notas'}
                           numberOfLines={col.id === 'notas' ? 4 : 1}
-                          style={[s.cellInput, { color: c.text, borderColor: '#1a9aaa', backgroundColor: c.bg }, col.id === 'notas' && { minHeight: 80, textAlignVertical: 'top' }]}
+                          style={[s.cellInput, { color: c.text, borderColor: '#1a9aaa', backgroundColor: c.bg }, col.id === 'notas' && { minHeight: 80, maxHeight: 108, textAlignVertical: 'top' }]}
                         />
                       </View>
                     )
@@ -1936,7 +2065,7 @@ export default function CRM() {
                                   : item.tipo_operacion === 'renta'
                                   ? { backgroundColor: darkMode ? 'rgba(124,58,237,0.22)' : '#f3e8ff' }
                                   : { backgroundColor: darkMode ? 'rgba(234,179,8,0.18)' : '#fefce8' }]}>
-                                <Text style={[s.excelOpTxt, {
+                                <Text numberOfLines={1} style={[s.excelOpTxt, {
                                   color: item.tipo_operacion === 'venta' ? '#1a9aaa'
                                     : item.tipo_operacion === 'renta' ? '#a78bfa'
                                     : '#a16207'
@@ -1996,7 +2125,7 @@ export default function CRM() {
                       return (
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs, { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 8 }]} onPress={() => abrirEdicion(item, 'notas')} activeOpacity={0.6}>
                           {item.notas
-                            ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub, fontSize: 12, lineHeight: 17 }]} numberOfLines={3}>{item.notas}</Text>
+                            ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub, fontSize: 12, lineHeight: 17 }]} numberOfLines={anchoAmplio ? 3 : 2}>{item.notas}</Text>
                             : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ agregar</Text>
                           }
                         </TouchableOpacity>
@@ -2020,7 +2149,7 @@ export default function CRM() {
             )
           }
 
-          if (isWeb) {
+          if (anchoAmplio) {
             const table = (
               <View style={[s.excelTable, { minWidth: screenWidth - 32 }]}>
                 {tableHeader}
@@ -2052,12 +2181,12 @@ export default function CRM() {
               {crmListHeader}
               <View style={[s.excelTableWrap, { backgroundColor: c.card, flexDirection: 'row' }]}>
                 <View style={[s.excelColFija, { width: colFija.mw, borderRightColor: c.border }]}>
-                  <View style={s.excelTrHead}>{renderHeaderCols([colFija])}</View>
+                  <View style={[s.excelTrHead, { height: CABEZA_H }]}>{renderHeaderCols([colFija])}</View>
                   {excelVisibles.map((item, idx) => renderExcelRow(item, idx, [colFija]))}
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={{ width: scrollTableWidth }}>
-                    <View style={s.excelTrHead}>{renderHeaderCols(colsScroll)}</View>
+                    <View style={[s.excelTrHead, { height: CABEZA_H }]}>{renderHeaderCols(colsScroll)}</View>
                     {excelVisibles.map((item, idx) => renderExcelRow(item, idx, colsScroll))}
                   </View>
                 </ScrollView>
@@ -2570,6 +2699,15 @@ const s = StyleSheet.create({
     width: 42, height: 42, backgroundColor: '#1a6470',
     borderRadius: 12, alignItems: 'center', justifyContent: 'center',
   },
+  // En celular el botón de alta se gana la palabra: era el único con color en
+  // una fila de iconos grises y aun así nadie sabía que ahí se daba de alta.
+  // Ocupa el espacio que sobra del renglón, que ya no lo pelea el buscador.
+  addBtnMovil: {
+    flex: 1, height: 42, backgroundColor: '#1a6470', borderRadius: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingHorizontal: 12,
+  },
+  addBtnMovilTxt: { color: '#fff', fontSize: 14, fontWeight: '800' },
 
   // ── KPI strip ───────────────────────────────────────────────────
   kpiStrip: {
@@ -2714,6 +2852,19 @@ const s = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent',
   },
+  // La de celular NO lleva flex: mide lo que mide su texto y el carrusel se
+  // encarga del resto. Así "🔍 Captación" nunca se encima con la de al lado.
+  opTabMovil: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 10, paddingHorizontal: 14,
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  opRowMovilContenido: { paddingHorizontal: 4, alignItems: 'center' },
+  // Renglón propio para las herramientas, debajo del buscador.
+  toolRow: {
+    flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingBottom: 8,
+    alignItems: 'center',
+  },
   opTabActivo:   { borderBottomColor: '#1a6470' },
   opTabTxt:      { fontSize: 13, fontWeight: '600', color: '#94a3b8' },
   opTabTxtActivo:{ color: '#1a6470' },
@@ -2746,6 +2897,14 @@ const s = StyleSheet.create({
     shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
   },
   cardBar:  { width: 4 },
+  // La nota dentro de la tarjeta: un bloque citado, para que se distinga de
+  // los datos duros del cliente y se lea como lo que es, algo escrito a mano.
+  notaCard: {
+    marginTop: 8, paddingVertical: 7, paddingHorizontal: 10,
+    borderRadius: 8, borderLeftWidth: 3,
+  },
+  notaCardTxt: { fontSize: 12.5, lineHeight: 18 },
+  notaCardMas: { fontSize: 11.5, fontWeight: '800', color: '#1a9aaa', marginTop: 4 },
   cardBody: { flex: 1, padding: 14 },
 
   cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
