@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { normalizar } from '../../lib/texto'
+import { legibleSobre, mezclar } from '../../lib/color'
 import { registrarAccion , registrarSeguimiento, registrarContacto } from '../../lib/gamification'
 
 const VISTA_CRM_KEY = '@valera_crm_vista'
@@ -114,6 +115,52 @@ export const ETAPAS_CLIENTE = ORDEN_ESTADOS
 
 function estadoInfo(e: string) {
   return ESTADOS[e] ?? { label: e, color: '#64748b', bg: '#f1f5f9' }
+}
+
+// -- Contraste ---------------------------------------------------------------
+// Los colores de ESTADOS (arriba) se eligieron para fondo blanco. En modo
+// oscuro se usaban tal cual como TEXTO sobre un fondo casi negro: medido, las
+// 11 pildoras quedaban entre 1.76:1 y 2.91:1, donde WCAG AA pide 4.5:1 para
+// texto ("Seg. de cierre" era la peor, 1.76:1). Lo mismo pasaba con los
+// numeros de los KPIs y con el teal de la marca usado como icono o texto
+// sobre la tarjeta (2.46:1).
+// Lo que sigue conserva el TONO -el color significa una etapa de venta, no es
+// decoracion- y solo le sube el brillo lo justo. En modo claro casi nada
+// cambia: 5 de 11 pildoras, un 2-4% mas oscuras.
+// Se cachea porque se llama una vez por fila y la aritmetica en HSL puede
+// recorrer hasta 100 pasos.
+const TEAL = '#1a6470'
+const _cacheTinta = new Map<string, string>()
+/** `color`, aclarado u oscurecido lo justo para leerse sobre `fondo`. */
+function tinta(color: string, fondo: string) {
+  const k = color + '|' + fondo
+  let v = _cacheTinta.get(k)
+  if (v === undefined) { v = legibleSobre(color, fondo, 4.5); _cacheTinta.set(k, v) }
+  return v
+}
+const _cacheTenue = new Map<string, { fondo: string; tinta: string }>()
+/** Fondo tenue del propio color + una tinta que se lea encima. Sirve en los dos modos. */
+function tenue(color: string, sobre: string, alfa: number) {
+  const k = color + '|' + sobre + '|' + alfa
+  let v = _cacheTenue.get(k)
+  if (!v) {
+    const fondo = mezclar(color, sobre, alfa)
+    v = { fondo, tinta: tinta(color, fondo) }
+    _cacheTenue.set(k, v)
+  }
+  return v
+}
+const _cacheIcono = new Map<string, string>()
+/** Igual que `tinta`, pero con el 3:1 que WCAG pide a iconos y bordes (no a texto). */
+function tintaIcono(color: string, fondo: string) {
+  const k = color + '|' + fondo
+  let v = _cacheIcono.get(k)
+  if (v === undefined) { v = legibleSobre(color, fondo, 3); _cacheIcono.set(k, v) }
+  return v
+}
+/** La pildora de estado: en claro usa el `bg` disenado; en oscuro, el color atenuado. */
+function pildora(info: { color: string; bg: string }, card: string, oscuro: boolean, alfa: number) {
+  return oscuro ? tenue(info.color, card, alfa) : { fondo: info.bg, tinta: tinta(info.color, info.bg) }
 }
 
 function tiempoRelativo(iso: string) {
@@ -227,12 +274,13 @@ function iniciales(nombre: string) {
 function FechaSpin({ label, value, onUp, onDown, c }: {
   label: string; value: string | number; onUp: () => void; onDown: () => void; c: ColoresCard
 }) {
+  const teal = tinta(TEAL, c.card)
   return (
     <View style={{ alignItems: 'center', minWidth: 60 }}>
       <Text style={{ fontSize: 10, color: c.textMute, marginBottom: 4, fontWeight: '600' }}>{label}</Text>
-      <TouchableOpacity onPress={onUp} style={{ padding: 8 }}><Text style={{ fontSize: 16, color: '#1a6470' }}>▲</Text></TouchableOpacity>
+      <TouchableOpacity onPress={onUp} style={{ padding: 8 }}><Text style={{ fontSize: 16, color: teal }}>▲</Text></TouchableOpacity>
       <Text style={{ fontSize: 20, fontWeight: '700', color: c.text, marginVertical: 2 }}>{value}</Text>
-      <TouchableOpacity onPress={onDown} style={{ padding: 8 }}><Text style={{ fontSize: 16, color: '#1a6470' }}>▼</Text></TouchableOpacity>
+      <TouchableOpacity onPress={onDown} style={{ padding: 8 }}><Text style={{ fontSize: 16, color: teal }}>▼</Text></TouchableOpacity>
     </View>
   )
 }
@@ -253,17 +301,18 @@ function MiniCalendario({ value, min, onSelect, c }: {
   const minDia = new Date(min.getFullYear(), min.getMonth(), min.getDate())
   const selY = value.getFullYear(), selM = value.getMonth(), selD = value.getDate()
   const puedeRetroceder = year > minDia.getFullYear() || (year === minDia.getFullYear() && month > minDia.getMonth())
+  const teal = tinta(TEAL, c.card)
   return (
     <View>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <TouchableOpacity disabled={!puedeRetroceder} onPress={() => setVista(new Date(year, month - 1, 1))} style={{ padding: 6, opacity: puedeRetroceder ? 1 : 0.3 }}>
-          <Text style={{ fontSize: 22, color: '#1a6470' }}>‹</Text>
+          <Text style={{ fontSize: 22, color: teal }}>‹</Text>
         </TouchableOpacity>
         <Text style={{ fontSize: 14, fontWeight: '800', color: c.text, textTransform: 'capitalize' }}>
           {vista.toLocaleString('es-MX', { month: 'long' })} {year}
         </Text>
         <TouchableOpacity onPress={() => setVista(new Date(year, month + 1, 1))} style={{ padding: 6 }}>
-          <Text style={{ fontSize: 22, color: '#1a6470' }}>›</Text>
+          <Text style={{ fontSize: 22, color: teal }}>›</Text>
         </TouchableOpacity>
       </View>
       <View style={{ flexDirection: 'row', marginBottom: 4 }}>
@@ -352,6 +401,26 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
   const recVenc = rec && new Date(rec.fecha_hora) < new Date()
   const recHoy  = rec && !recVenc && new Date(rec.fecha_hora).toDateString() === new Date().toDateString()
   const inits   = iniciales(item.nombre)
+  // Pildora de estado y avatar, legibles en los dos modos (ver `pildora`).
+  const pill    = pildora(info, c.card, darkMode, 0.25)
+  const av      = tenue(info.color, c.card, 0.1333)
+  // El recordatorio ya tenia fondo oscuro propio, pero el texto seguia siendo
+  // el de modo claro. La tinta se mide contra el fondo que de verdad usa.
+  const recFondo = recVenc ? (darkMode ? '#2a0e0e' : '#fef2f2')
+    : recHoy ? (darkMode ? '#27190a' : '#fffbeb')
+    : (darkMode ? '#091e20' : '#f0fdfa')
+  const recTinta = tinta(recVenc ? '#ef4444' : recHoy ? '#92400e' : TEAL, recFondo)
+  // Nivel de interes: el fondo ya tenia variante oscura; la tinta se mide
+  // contra ese fondo ("Alto" daba 4.29:1 y "Medio" 4.14:1 en modo claro).
+  const interesFondo = item.nivel_interes === 'alto' ? (darkMode ? '#2d1208' : '#fdeee6')
+    : item.nivel_interes === 'medio' ? (darkMode ? '#27200a' : '#fdf6e3')
+    : (darkMode ? '#0d1e18' : '#eaf4ef')
+  const interes = {
+    fondo: interesFondo,
+    tinta: tinta(item.nivel_interes === 'alto' ? (darkMode ? '#f4956a' : '#bf4e1a')
+      : item.nivel_interes === 'medio' ? (darkMode ? '#e8c84a' : '#9a7018')
+      : (darkMode ? '#6dbf9a' : '#2d7a56'), interesFondo),
+  }
   return (
     <TouchableOpacity
       style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}
@@ -361,8 +430,8 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
       <View style={[s.cardBar, { backgroundColor: info.color }]} />
       <View style={s.cardBody}>
         <View style={s.cardHead}>
-          <View style={[s.avatar, { backgroundColor: info.color + '22' }]}>
-            <Text style={[s.avatarTxt, { color: info.color }]}>{inits}</Text>
+          <View style={[s.avatar, { backgroundColor: av.fondo }]}>
+            <Text style={[s.avatarTxt, { color: av.tinta }]}>{inits}</Text>
           </View>
           <View style={s.cardHeadInfo}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
@@ -371,20 +440,10 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
             </View>
             <View style={s.cardSubRow}>
               {item.nivel_interes ? (
-                <View style={[s.fuenteTag, {
-                  backgroundColor: item.nivel_interes === 'alto'
-                    ? (darkMode ? '#2d1208' : '#fdeee6')
-                    : item.nivel_interes === 'medio'
-                    ? (darkMode ? '#27200a' : '#fdf6e3')
-                    : (darkMode ? '#0d1e18' : '#eaf4ef'),
-                }]}>
-                  <Text style={[s.fuenteTagTxt, {
-                    color: item.nivel_interes === 'alto'
-                      ? (darkMode ? '#f4956a' : '#bf4e1a')
-                      : item.nivel_interes === 'medio'
-                      ? (darkMode ? '#e8c84a' : '#9a7018')
-                      : (darkMode ? '#6dbf9a' : '#2d7a56'),
-                  }]}>{NIVEL_INTERES_LABEL[item.nivel_interes]}</Text>
+                <View style={[s.fuenteTag, { backgroundColor: interes.fondo }]}>
+                  <Text style={[s.fuenteTagTxt, { color: interes.tinta }]}>
+                    {NIVEL_INTERES_LABEL[item.nivel_interes]}
+                  </Text>
                 </View>
               ) : null}
               {item.fuente_lead ? (
@@ -410,39 +469,35 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
               ) : null}
             </View>
           </View>
-          <View style={[s.estadoBadge, { backgroundColor: darkMode ? info.color + '40' : info.bg }]}>
-            <View style={[s.estadoDot, { backgroundColor: info.color }]} />
-            <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
+          <View style={[s.estadoBadge, { backgroundColor: pill.fondo }]}>
+            <View style={[s.estadoDot, { backgroundColor: pill.tinta }]} />
+            <Text style={[s.estadoTxt, { color: pill.tinta }]} numberOfLines={1}>{info.label}</Text>
           </View>
         </View>
         <View style={s.metaRow}>
           <View style={s.metaItem}>
-            <Ionicons name="call-outline" size={11} color={c.textMute} />
+            <Ionicons name="call-outline" size={11} color={tintaIcono(c.textMute, c.card)} />
             <Text style={[s.metaTxt, { color: c.textSub }]}>{item.telefono}</Text>
           </View>
           {item.tipo_operacion && (
             <View style={s.metaItem}>
-              <Ionicons name="home-outline" size={11} color={c.textMute} />
+              <Ionicons name="home-outline" size={11} color={tintaIcono(c.textMute, c.card)} />
               <Text style={[s.metaTxt, { color: c.textSub, textTransform: 'capitalize' }]}>{item.tipo_operacion}</Text>
             </View>
           )}
           <View style={s.metaTime}>
-            <Ionicons name="time-outline" size={11} color={c.textMute} />
+            <Ionicons name="time-outline" size={11} color={tintaIcono(c.textMute, c.card)} />
             <Text style={[s.metaTxt, { color: c.textMute }]}>{tiempoRelativo(item.created_at)}</Text>
           </View>
         </View>
         {rec && (
-          <View style={[s.recRow,
-            recVenc ? { backgroundColor: darkMode ? '#2a0e0e' : '#fef2f2' }
-            : recHoy ? { backgroundColor: darkMode ? '#27190a' : '#fffbeb' }
-            : { backgroundColor: darkMode ? '#091e20' : '#f0fdfa' },
-          ]}>
+          <View style={[s.recRow, { backgroundColor: recFondo }]}>
             <Ionicons
               name={recVenc ? 'warning-outline' : recHoy ? 'alarm-outline' : 'calendar-outline'}
               size={12}
-              color={recVenc ? '#ef4444' : recHoy ? '#d97706' : '#1a6470'}
+              color={recTinta}
             />
-            <Text style={[s.recTxt, { color: recVenc ? '#ef4444' : recHoy ? '#92400e' : '#1a6470' }]} numberOfLines={1}>
+            <Text style={[s.recTxt, { color: recTinta }]} numberOfLines={1}>
               {recVenc ? '⚠ Vencido · ' : recHoy ? 'Hoy · ' : ''}
               {new Date(rec.fecha_hora).toLocaleDateString('es-MX', {
                 day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
@@ -550,6 +605,10 @@ export default function CRM() {
   const [nombreVer, setNombreVer] = useState('')
   const c = useColors()
   const { darkMode, primaryColor } = useTheme()
+  // El teal de la marca sobre la tarjeta: 2.46:1 en oscuro. Solo se usa en los
+  // sitios cuyo fondo ES la tarjeta; donde el fondo es claro fijo se deja el
+  // original (ver nota en el parche).
+  const teal = tinta(TEAL, c.card)
   const queryClient = useQueryClient()
   const { isOnline, refreshPending, syncNow, pendingCount, isSyncing } = useOfflineSync()
   const [userRole, setUserRole]           = useState<string | null>(null)
@@ -1528,8 +1587,8 @@ export default function CRM() {
           }}
           activeOpacity={0.8}
         >
-          <Text style={[s.vencidosPillNum, vencidos > 0 && { color: '#ef4444' }]}>{vencidos}</Text>
-          <Text style={[s.vencidosPillLbl, vencidos > 0 && { color: '#ef4444' }]}>⚠ SEGUIMIENTOS VENCIDOS</Text>
+          <Text style={[s.vencidosPillNum, vencidos > 0 && { color: tinta('#ef4444', '#fff5f5') }]}>{vencidos}</Text>
+          <Text style={[s.vencidosPillLbl, vencidos > 0 && { color: tinta('#ef4444', '#fff5f5') }]}>⚠ SEGUIMIENTOS VENCIDOS</Text>
         </TouchableOpacity>
         {presupuestoConteo > 0 && (
           <View style={s.presuPill}>
@@ -1548,32 +1607,32 @@ export default function CRM() {
           style={[s.kpiItem, estadoFiltro === 'cita_por_agendar' && s.kpiActivo]}
           onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_por_agendar' ? null : 'cita_por_agendar') }}
         >
-          <Text style={[s.kpiNum, { color: '#bf4e1a' }]}>{conteos['cita_por_agendar'] ?? 0}</Text>
-          <Text style={[s.kpiLbl, { color: c.textMute }]}>X AGENDAR</Text>
+          <Text style={[s.kpiNum, { color: tinta('#bf4e1a', c.card) }]}>{conteos['cita_por_agendar'] ?? 0}</Text>
+          <Text style={[s.kpiLbl, { color: c.textSub }]}>X AGENDAR</Text>
         </TouchableOpacity>
         <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
         <TouchableOpacity
           style={[s.kpiItem, estadoFiltro === 'cita_agendada' && s.kpiActivo]}
           onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_agendada' ? null : 'cita_agendada') }}
         >
-          <Text style={[s.kpiNum, { color: '#1a6855' }]}>{conteos['cita_agendada'] ?? 0}</Text>
-          <Text style={[s.kpiLbl, { color: c.textMute }]}>AGENDADA</Text>
+          <Text style={[s.kpiNum, { color: tinta('#1a6855', c.card) }]}>{conteos['cita_agendada'] ?? 0}</Text>
+          <Text style={[s.kpiLbl, { color: c.textSub }]}>AGENDADA</Text>
         </TouchableOpacity>
         <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
         <TouchableOpacity
           style={[s.kpiItem, estadoFiltro === 'seguimiento_cierre' && s.kpiActivo]}
           onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'seguimiento_cierre' ? null : 'seguimiento_cierre') }}
         >
-          <Text style={[s.kpiNum, { color: '#8b2252' }]}>{conteos['seguimiento_cierre'] ?? 0}</Text>
-          <Text style={[s.kpiLbl, { color: c.textMute }]}>SEG. CIERRE</Text>
+          <Text style={[s.kpiNum, { color: tinta('#8b2252', c.card) }]}>{conteos['seguimiento_cierre'] ?? 0}</Text>
+          <Text style={[s.kpiLbl, { color: c.textSub }]}>SEG. CIERRE</Text>
         </TouchableOpacity>
         <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
         <TouchableOpacity
           style={[s.kpiItem, estadoFiltro === '__cerrados__' && s.kpiActivo]}
           onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === '__cerrados__' ? null : '__cerrados__') }}
         >
-          <Text style={[s.kpiNum, { color: '#10b981' }]}>{cerrados}</Text>
-          <Text style={[s.kpiLbl, { color: c.textMute }]}>CERRADOS</Text>
+          <Text style={[s.kpiNum, { color: tinta('#10b981', c.card) }]}>{cerrados}</Text>
+          <Text style={[s.kpiLbl, { color: c.textSub }]}>CERRADOS</Text>
         </TouchableOpacity>
       </View>
 
@@ -1608,12 +1667,12 @@ export default function CRM() {
               return (
                 <TouchableOpacity
                   key={e}
-                  style={[s.legendItem, activo && { backgroundColor: info.color + '22', borderRadius: 12, paddingHorizontal: 6 }]}
+                  style={[s.legendItem, activo && { backgroundColor: tenue(info.color, c.card, 0.1333).fondo, borderRadius: 12, paddingHorizontal: 6 }]}
                   onPress={() => { setFiltroVencidos(false); setEstadoFiltro(activo ? null : e) }}
                   activeOpacity={0.7}
                 >
                   <View style={[s.legendDot, { backgroundColor: info.color }]} />
-                  <Text style={[s.legendTxt, { color: activo ? info.color : c.textSub }, activo && { fontWeight: '700' }]}>{info.label} ({conteos[e]})</Text>
+                  <Text style={[s.legendTxt, { color: activo ? tenue(info.color, c.card, 0.1333).tinta : c.textSub }, activo && { fontWeight: '700' }]}>{info.label} ({conteos[e]})</Text>
                 </TouchableOpacity>
               )
             })}
@@ -1775,27 +1834,27 @@ export default function CRM() {
           <>
             <Tooltip label="Ordenar clientes">
               <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => setShowSort(true)}>
-                <Ionicons name="funnel-outline" size={15} color="#1a6470" />
+                <Ionicons name="funnel-outline" size={15} color={teal} />
                 {sortBy !== 'reciente' && <View style={s.sortDot} />}
               </TouchableOpacity>
             </Tooltip>
             <Tooltip label={vistaExcel ? 'Ver como lista' : 'Ver como tabla'}>
               <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={toggleVista}>
-                <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color="#1a6470" />
+                <Ionicons name={vistaExcel ? 'grid-outline' : 'list-outline'} size={15} color={teal} />
               </TouchableOpacity>
             </Tooltip>
             {!soloLectura && (
             <Tooltip label="Importar clientes (CSV)">
               <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={abrirImport}>
-                <Ionicons name="cloud-upload-outline" size={15} color="#1a6470" />
+                <Ionicons name="cloud-upload-outline" size={15} color={teal} />
               </TouchableOpacity>
             </Tooltip>
             )}
             <Tooltip label="Exportar clientes (CSV)">
               <TouchableOpacity style={[s.sortBtn, { backgroundColor: c.card, borderColor: c.border }]} onPress={exportarCSV} disabled={exportando}>
                 {exportando
-                  ? <ActivityIndicator size="small" color="#1a6470" />
-                  : <Ionicons name="download-outline" size={15} color="#1a6470" />
+                  ? <ActivityIndicator size="small" color={teal} />
+                  : <Ionicons name="download-outline" size={15} color={teal} />
                 }
               </TouchableOpacity>
             </Tooltip>
@@ -1835,12 +1894,12 @@ export default function CRM() {
           return (
             <TouchableOpacity
               key={String(op)}
-              style={[anchoAmplio ? s.opTab : s.opTabMovil, activo && s.opTabActivo]}
+              style={[anchoAmplio ? s.opTab : s.opTabMovil, activo && s.opTabActivo, activo && { borderBottomColor: teal }]}
               onPress={() => setOpFiltro(op)}
             >
-              <Text style={[s.opTabTxt, { color: c.textMute }, activo && s.opTabTxtActivo]} numberOfLines={1}>{label}</Text>
+              <Text style={[s.opTabTxt, { color: c.textMute }, activo && s.opTabTxtActivo, activo && { color: teal }]} numberOfLines={1}>{label}</Text>
               <View style={[s.opTabBadge, { backgroundColor: c.border }, activo && s.opTabBadgeActivo]}>
-                <Text style={[s.opTabBadgeTxt, { color: c.textMute }, activo && { color: '#1a6470' }]}>{cnt}</Text>
+                <Text style={[s.opTabBadgeTxt, { color: tinta(c.textMute, c.border) }, activo && { color: '#1a6470' }]}>{cnt}</Text>
               </View>
             </TouchableOpacity>
           )
@@ -1950,6 +2009,18 @@ export default function CRM() {
               : item.nivel_interes === 'bajo'
               ? (darkMode ? '#0d1e18' : '#eaf4ef')
               : null
+            // El fondo que de verdad tiene esta fila: el tinte por nivel de
+            // interes, la banda alterna, o la tarjeta. Las tintas se miden
+            // contra EL, no contra la tarjeta: midiendolas contra la tarjeta
+            // las filas con tinte quedaban en 4.0-4.42:1 en vez de 4.5:1.
+            const fondoFila = interesRowBg ?? (idx % 2 !== 0 ? (darkMode ? '#0a1827' : '#f8fafc') : c.card)
+            const pillTabla = pildora(info, fondoFila, darkMode, 0.28)
+            // La etiqueta de operacion: fondo tenue + tinta legible, calculados
+            // del mismo color base en los dos modos.
+            const opTag = tenue(
+              item.tipo_operacion === 'venta' ? '#1a9aaa' : item.tipo_operacion === 'renta' ? '#7c3aed' : '#a16207',
+              fondoFila, darkMode ? 0.22 : 0.12,
+            )
             return (
               <View
                 key={item.id}
@@ -2049,9 +2120,9 @@ export default function CRM() {
                     case 'estado':
                       return (
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'estado')} activeOpacity={0.6}>
-                          <View style={[s.excelEstadoPill, { backgroundColor: darkMode ? info.color + '28' : info.bg }]}>
-                            <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: info.color }} />
-                            <Text style={{ fontSize: 11, color: info.color, fontWeight: '700' }} numberOfLines={1}>{info.label}</Text>
+                          <View style={[s.excelEstadoPill, { backgroundColor: pillTabla.fondo }]}>
+                            <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: pillTabla.tinta }} />
+                            <Text style={{ fontSize: 11, color: pillTabla.tinta, fontWeight: '700' }} numberOfLines={1}>{info.label}</Text>
                           </View>
                         </TouchableOpacity>
                       )
@@ -2059,21 +2130,12 @@ export default function CRM() {
                       return (
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'operacion')} activeOpacity={0.6}>
                           {item.tipo_operacion
-                            ? <View style={[s.excelOpTag,
-                                item.tipo_operacion === 'venta'
-                                  ? { backgroundColor: darkMode ? 'rgba(26,100,112,0.22)' : '#e0f4f5' }
-                                  : item.tipo_operacion === 'renta'
-                                  ? { backgroundColor: darkMode ? 'rgba(124,58,237,0.22)' : '#f3e8ff' }
-                                  : { backgroundColor: darkMode ? 'rgba(234,179,8,0.18)' : '#fefce8' }]}>
-                                <Text numberOfLines={1} style={[s.excelOpTxt, {
-                                  color: item.tipo_operacion === 'venta' ? '#1a9aaa'
-                                    : item.tipo_operacion === 'renta' ? '#a78bfa'
-                                    : '#a16207'
-                                }]}>
+                            ? <View style={[s.excelOpTag, { backgroundColor: opTag.fondo }]}>
+                                <Text numberOfLines={1} style={[s.excelOpTxt, { color: opTag.tinta }]}>
                                   {item.tipo_operacion === 'venta' ? '🏠 Venta' : item.tipo_operacion === 'renta' ? '🔑 Renta' : '🔍 Captación'}
                                 </Text>
                               </View>
-                            : <Text style={[s.excelNull, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>—</Text>
+                            : <Text style={[s.excelNull, { color: tinta(darkMode ? '#6b7280' : '#9ca3af', fondoFila) }]}>—</Text>
                           }
                         </TouchableOpacity>
                       )
@@ -2084,7 +2146,7 @@ export default function CRM() {
                             ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub }]} numberOfLines={1}>
                                 {TIPO_CREDITO_LABEL[item.tipo_credito] ?? item.tipo_credito}
                               </Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ pago</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: tinta(darkMode ? '#6b7280' : '#9ca3af', fondoFila) }]}>+ pago</Text>
                           }
                         </TouchableOpacity>
                       )
@@ -2095,10 +2157,10 @@ export default function CRM() {
                       return (
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'fecha')} activeOpacity={0.6}>
                           {ts
-                            ? <Text style={[s.excelTd, s.excelTdDate, s.cellTxtNoPad, { color: vencido ? '#ef4444' : hoy ? '#d97706' : c.textSub }]} numberOfLines={1}>
+                            ? <Text style={[s.excelTd, s.excelTdDate, s.cellTxtNoPad, { color: vencido ? tinta('#ef4444', fondoFila) : hoy ? tinta('#d97706', fondoFila) : c.textSub }]} numberOfLines={1}>
                                 {vencido ? '⚠ ' : hoy ? '📌 ' : ''}{ts.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} {ts.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                               </Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ agregar</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: tinta(darkMode ? '#6b7280' : '#9ca3af', fondoFila) }]}>+ agregar</Text>
                           }
                         </TouchableOpacity>
                       )
@@ -2108,7 +2170,7 @@ export default function CRM() {
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'zona')} activeOpacity={0.6}>
                           {item.zona_busqueda
                             ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub }]} numberOfLines={1}>{item.zona_busqueda}</Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ zona</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: tinta(darkMode ? '#6b7280' : '#9ca3af', fondoFila) }]}>+ zona</Text>
                           }
                         </TouchableOpacity>
                       )
@@ -2116,8 +2178,8 @@ export default function CRM() {
                       return (
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs]} onPress={() => abrirEdicion(item, 'presupuesto')} activeOpacity={0.6}>
                           {item.presupuesto
-                            ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: '#2e7d32', fontWeight: '700' }]} numberOfLines={1}>{item.presupuesto}</Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ presup.</Text>
+                            ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: tinta('#2e7d32', fondoFila), fontWeight: '700' }]} numberOfLines={1}>{item.presupuesto}</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: tinta(darkMode ? '#6b7280' : '#9ca3af', fondoFila) }]}>+ presup.</Text>
                           }
                         </TouchableOpacity>
                       )
@@ -2126,7 +2188,7 @@ export default function CRM() {
                         <TouchableOpacity key={col.id} style={[s.excelTdCell, cs, { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 8 }]} onPress={() => abrirEdicion(item, 'notas')} activeOpacity={0.6}>
                           {item.notas
                             ? <Text style={[s.excelTd, s.cellTxtNoPad, { color: c.textSub, fontSize: 12, lineHeight: 17 }]} numberOfLines={anchoAmplio ? 3 : 2}>{item.notas}</Text>
-                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: darkMode ? '#6b7280' : '#9ca3af' }]}>+ agregar</Text>
+                            : <Text style={[s.excelNull, s.cellTxtNoPad, { color: tinta(darkMode ? '#6b7280' : '#9ca3af', fondoFila) }]}>+ agregar</Text>
                           }
                         </TouchableOpacity>
                       )
@@ -2206,7 +2268,7 @@ export default function CRM() {
             showsVerticalScrollIndicator={false}
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor="#1a6470" colors={['#1a6470']} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={teal} colors={[teal]} />}
             removeClippedSubviews
             maxToRenderPerBatch={10}
             windowSize={7}
@@ -2215,7 +2277,7 @@ export default function CRM() {
             ListHeaderComponent={crmListHeader}
             ListEmptyComponent={
               isLoading
-                ? <ActivityIndicator size="large" color="#1a6470" style={{ marginTop: 48 }} />
+                ? <ActivityIndicator size="large" color={teal} style={{ marginTop: 48 }} />
                 : (
                   <View style={s.empty}>
                     <View style={s.emptyIcon}>
@@ -2314,13 +2376,13 @@ export default function CRM() {
                   <Ionicons
                     name={opt === 'reciente' ? 'time-outline' : opt === 'nombre' ? 'text-outline' : 'calendar-outline'}
                     size={16}
-                    color={sortBy === opt ? '#1a6470' : c.textMute}
+                    color={sortBy === opt ? teal : c.textMute}
                   />
                   <Text style={[s.sortOptTxt, { color: c.textSub }, sortBy === opt && { color: '#1a9aaa', fontWeight: '700' }]}>
                     {SORT_LABELS[opt]}
                   </Text>
                 </View>
-                {sortBy === opt && <Ionicons name="checkmark-circle" size={18} color="#1a6470" />}
+                {sortBy === opt && <Ionicons name="checkmark-circle" size={18} color={teal} />}
               </TouchableOpacity>
             ))}
           </View>
@@ -2362,7 +2424,7 @@ export default function CRM() {
                     {opt.color && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: opt.color }} />}
                     <Text style={[s.sortOptTxt, { color: c.textSub }, active && { color: '#1a9aaa', fontWeight: '700' }]}>{opt.label}</Text>
                   </View>
-                  {active && <Ionicons name="checkmark-circle" size={18} color="#1a6470" />}
+                  {active && <Ionicons name="checkmark-circle" size={18} color={teal} />}
                 </TouchableOpacity>
               )
             })}
@@ -2418,7 +2480,7 @@ export default function CRM() {
                       {opt.color && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: opt.color }} />}
                       <Text style={[s.sortOptTxt, { color: c.textSub }, active && { color: '#1a9aaa', fontWeight: '700' }]}>{opt.label}</Text>
                     </View>
-                    {active && <Ionicons name="checkmark-circle" size={18} color="#1a6470" />}
+                    {active && <Ionicons name="checkmark-circle" size={18} color={teal} />}
                   </TouchableOpacity>
                 )
               })}
@@ -2725,8 +2787,9 @@ const s = StyleSheet.create({
     paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f8fafc',
   },
   vencidosPillActivo: { borderColor: '#fca5a5', backgroundColor: '#fff5f5' },
-  vencidosPillNum: { fontSize: 22, fontWeight: '900', color: '#94a3b8' },
-  vencidosPillLbl: { fontSize: 11, fontWeight: '700', color: '#94a3b8' },
+  // #94a3b8 daba 2.45:1 sobre el #f8fafc de la pildora. Medido, no a ojo.
+  vencidosPillNum: { fontSize: 22, fontWeight: '900', color: '#607490' },
+  vencidosPillLbl: { fontSize: 11, fontWeight: '700', color: '#607490' },
   presuPill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0',
@@ -2781,7 +2844,7 @@ const s = StyleSheet.create({
   // ── Botón chats ─────────────────────────────────────────────────
   btnCampana: {
     marginHorizontal: 12, marginTop: 8,
-    backgroundColor: '#25D366', borderRadius: 10,
+    backgroundColor: '#188741', borderRadius: 10,   // #25D366 dejaba el texto blanco en 1.98:1
     paddingVertical: 11, alignItems: 'center',
     flexShrink: 0,
   },
@@ -2817,7 +2880,7 @@ const s = StyleSheet.create({
   },
   opClienteNombre: { flex: 1, fontSize: 13, fontWeight: '600', color: '#7f1d1d' },
   opDiasBadge: { backgroundColor: '#fee2e2', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  opDiasBadgeAlta: { backgroundColor: '#ef4444' },
+  opDiasBadgeAlta: { backgroundColor: '#d73d3d' },   // #ef4444 dejaba el texto blanco en 3.76:1
   opDiasTxt: { fontSize: 12, fontWeight: '700', color: '#b91c1c' },
   opDiasTxtAlta: { color: '#fff' },
   opMas: { fontSize: 12, color: '#9a4b4b', textAlign: 'center', paddingVertical: 8 },
@@ -2944,7 +3007,7 @@ const s = StyleSheet.create({
     backgroundColor: '#f0fdf4', borderRadius: 10, paddingVertical: 8,
     borderWidth: 1, borderColor: '#bbf7d0',
   },
-  actionWaTxt:  { fontSize: 13, fontWeight: '600', color: '#16a34a' },
+  actionWaTxt:  { fontSize: 13, fontWeight: '600', color: '#12843c' },   // #16a34a daba 3.15:1 sobre el #f0fdf4 del boton
   actionCall: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
     backgroundColor: '#f0f9ff', borderRadius: 10, paddingVertical: 8,
