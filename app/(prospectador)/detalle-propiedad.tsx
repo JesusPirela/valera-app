@@ -19,6 +19,7 @@ import { Image } from 'expo-image'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { supabase } from '../../lib/supabase'
+import { VALERA_PHONE, VALERA_WA, TIPOS_CREDITO_LABEL, construirInfoCliente } from '../../lib/cita'
 import { getUsuarioActual } from '../../lib/sesion'
 import CompartirFormulario from '../../components/CompartirFormulario'
 import { esPlusOMejor, esStaffSupervision, esAdmin, puedeVerPublicaciones } from '../../lib/permisos'
@@ -108,43 +109,12 @@ type ClienteCRM = {
   problemas_poliza?: boolean | null
 }
 
-const TIPOS_CREDITO_LABEL: Record<string, string> = {
-  infonavit: 'Infonavit',
-  fovisste: 'Fovisste',
-  bancario: 'Bancario',
-  contado: 'Contado',
-  otro: 'Otro',
-}
-
-function construirInfoCliente(cliente: ClienteCRM): string {
-  const datos: string[] = []
-  if (cliente.nivel_interes) {
-    const label = { alto: '🔥 Alto', medio: '🌡️ Medio', bajo: '❄️ Bajo' }[cliente.nivel_interes]
-    datos.push(`• Nivel de interés: ${label}`)
-  }
-  if (cliente.tipo_operacion === 'venta') {
-    if (cliente.email) datos.push(`• Email: ${cliente.email}`)
-    if (cliente.tipo_credito) datos.push(`• Tipo de crédito: ${TIPOS_CREDITO_LABEL[cliente.tipo_credito] ?? cliente.tipo_credito}`)
-    if (cliente.presupuesto) datos.push(`• Presupuesto: ${cliente.presupuesto}`)
-    if (cliente.zona_busqueda) datos.push(`• Zona de búsqueda: ${cliente.zona_busqueda}`)
-  } else if (cliente.tipo_operacion === 'renta') {
-    if (cliente.num_personas) datos.push(`• Personas: ${cliente.num_personas}`)
-    if (cliente.tiene_mascotas != null) {
-      datos.push(`• Mascotas: ${cliente.tiene_mascotas ? `Sí${cliente.detalle_mascotas ? ` (${cliente.detalle_mascotas})` : ''}` : 'No'}`)
-    }
-    if (cliente.fecha_mudanza) datos.push(`• Mudanza: ${cliente.fecha_mudanza}`)
-    if (cliente.presupuesto) datos.push(`• Presupuesto: ${cliente.presupuesto}`)
-    if (cliente.zona_busqueda) datos.push(`• Zonas de interés: ${cliente.zona_busqueda}`)
-    if (cliente.problemas_poliza != null) datos.push(`• Problemas con póliza: ${cliente.problemas_poliza ? 'Sí' : 'No'}`)
-  }
-  return datos.length > 0 ? `\n${datos.join('\n')}` : ''
-}
+// TIPOS_CREDITO_LABEL, construirInfoCliente, VALERA_PHONE y VALERA_WA ahora
+// viven en lib/cita.ts: desde que tambien se puede agendar desde la ficha del
+// cliente, dos copias del mismo mensaje se habrian separado.
 
 const GMAPS_KEY = 'AIzaSyCPML-wonbnHif1HswVfTk-ypInP1u94sE'
 
-// Número centralizado de contacto Valera (WhatsApp + llamadas)
-const VALERA_PHONE = '4428679083'
-const VALERA_WA    = `52${VALERA_PHONE}` // formato internacional sin +
 
 const ESTADOS_LABEL: Record<string, string> = {
   por_perfilar: 'Por perfilar',

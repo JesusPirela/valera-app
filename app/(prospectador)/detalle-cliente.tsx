@@ -21,6 +21,38 @@ import { parchearListasClientes } from '../../lib/queryClient'
 import { conTimeout } from '../../lib/redIntentos'
 import PropiedadesSugeridas from '../../components/PropiedadesSugeridas'
 import SelectorEtapa from '../../components/SelectorEtapa'
+import { mensajeCoordinacion, enlaceWhatsAppValera, fechaCitaLegible } from '../../lib/cita'
+
+/** Una cita todavía viva de este cliente (ver la consulta más abajo). */
+type CitaPendiente = {
+  id: string
+  fecha_cita: string | null
+  estado: string
+  propiedad_id: string | null
+  propiedad_externa: string | null
+  // PostgREST devuelve el embebido como OBJETO cuando la relacion es
+  // muchos-a-uno, pero los tipos generados lo dan como arreglo. Se acepta
+  // cualquiera de las dos formas y se normaliza con propDeCita().
+  propiedades: unknown
+}
+
+/** Lo mínimo de una propiedad para poder elegirla y nombrarla en el mensaje. */
+type PropLite = {
+  id: string
+  codigo: string | null
+  titulo: string | null
+  direccion: string | null
+  precio: number | null
+  operacion: string | null
+  nombre_constructora: string | null
+}
+
+/** El codigo/constructora de la propiedad de una cita, venga como objeto o como arreglo. */
+function propDeCita(cita: CitaPendiente | null): { codigo: string | null; nombre_constructora: string | null } | null {
+  const p: any = cita?.propiedades
+  if (!p) return null
+  return Array.isArray(p) ? (p[0] ?? null) : p
+}
 
 type Cliente = {
   id: string; nombre: string; telefono: string; email: string | null
@@ -277,13 +309,27 @@ export default function DetalleCliente() {
     // disco de antes de restringir la RLS de clientes a supervisor/asesor.
     queryKey: ['detalle-cliente', id, 'v2'],
     queryFn: async () => {
-      const [{ data: c }, { data: i }, { data: r }] = await Promise.all([
+      const [{ data: c }, { data: i }, { data: r }, { data: ct }] = await Promise.all([
         supabase.from('clientes').select('*').eq('id', id).single(),
         supabase.from('interacciones').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
         supabase.from('recordatorios').select('*').eq('cliente_id', id).order('fecha_hora', { ascending: true }),
+        // La cita que sigue viva: ni realizada ni cancelada, y todavía sin
+        // confirmar. Es la que se puede mover de fecha.
+        supabase.from('citas_coordinacion')
+          .select('id, fecha_cita, estado, propiedad_id, propiedad_externa, propiedades(codigo, nombre_constructora)')
+          .eq('cliente_id', id)
+          .in('estado', ['coordinada', 'reagendada', 'en_coordinacion', 'buscando_opciones'])
+          .is('confirmada_at', null)
+          .order('fecha_cita', { ascending: false })
+          .limit(1),
       ])
       if (!c) throw new Error('Cliente no encontrado')
-      return { cliente: c as Cliente, interacciones: (i ?? []) as Interaccion[], recordatorios: (r ?? []) as Recordatorio[] }
+      return {
+        cliente: c as Cliente,
+        interacciones: (i ?? []) as Interaccion[],
+        recordatorios: (r ?? []) as Recordatorio[],
+        cita: ((ct ?? [])[0] ?? null) as CitaPendiente | null,
+      }
     },
     enabled: !!id,
     networkMode: 'offlineFirst',
@@ -296,6 +342,7 @@ export default function DetalleCliente() {
   const cliente = data?.cliente ?? null
   const interacciones = data?.interacciones ?? []
   const recordatorios = data?.recordatorios ?? []
+  const citaPendiente = data?.cita ?? null
 
   const [modalInteraccion, setModalInteraccion] = useState(false)
   const [tipoInteraccion, setTipoInteraccion] = useState('nota')
@@ -320,6 +367,24 @@ export default function DetalleCliente() {
   const [buscaDonar, setBuscaDonar] = useState('')
   const [donando, setDonando] = useState(false)
   const [donarCargando, setDonarCargando] = useState(false)
+
+  // ── Agendar cita desde aquí ───────────────────────────────────────────────
+  // Lo mismo que ya existía en la ficha de la propiedad, pero al revés: ahí se
+  // parte de la casa y se busca al cliente; aquí se parte del cliente y se
+  // busca la casa. Acaba igual: cita coordinada + recordatorio + el mensaje de
+  // WhatsApp listo para mandárnoslo.
+  const [modalCita, setModalCita] = useState(false)
+  const [pasoCita, setPasoCita] = useState<'propiedad' | 'fecha'>('propiedad')
+  const [busquedaProp, setBusquedaProp] = useState('')
+  const [propsCita, setPropsCita] = useState<PropLite[]>([])
+  const [buscandoProps, setBuscandoProps] = useState(false)
+  const [propElegida, setPropElegida] = useState<PropLite | null>(null)
+  const [fechaCita, setFechaCita] = useState<Date | null>(null)
+  const [guardandoCita, setGuardandoCita] = useState(false)
+  // Mover de fecha una cita que ya existe.
+  const [modalReagendar, setModalReagendar] = useState(false)
+  const [fechaReagenda, setFechaReagenda] = useState<Date | null>(null)
+  const [reagendando, setReagendando] = useState(false)
 
   const [modalChatbot, setModalChatbot] = useState(false)
   const [yaEnChatbot, setYaEnChatbot] = useState(false)
@@ -448,6 +513,151 @@ export default function DetalleCliente() {
     registrarAccion(user!.id, 'agregar_interaccion').catch(() => {})
     setTextoInteraccion(''); setTipoInteraccion('nota'); setModalInteraccion(false)
     refetch()
+  }
+
+  function abrirAgendar() {
+    if (soloLectura) return
+    setPropElegida(null)
+    setBusquedaProp('')
+    setPropsCita([])
+    setFechaCita(null)
+    setPasoCita('propiedad')
+    setModalCita(true)
+  }
+
+  /**
+   * Busca propiedades por código, título o dirección.
+   *
+   * Se busca en el SERVIDOR y no se baja el catálogo: son 2,533 propiedades y
+   * esta pantalla no necesita tenerlas en memoria para elegir una.
+   */
+  useEffect(() => {
+    if (!modalCita || pasoCita !== 'propiedad') return
+    const q = busquedaProp.trim()
+    let vivo = true
+    setBuscandoProps(true)
+    const t = setTimeout(async () => {
+      let consulta = supabase
+        .from('propiedades')
+        .select('id, codigo, titulo, direccion, precio, operacion, nombre_constructora')
+        .eq('estado', 'disponible')
+        .eq('es_inventario', false)
+        .limit(25)
+      // Sin texto se enseñan las más recientes, para que la lista nunca esté
+      // vacía y se pueda elegir sin teclear.
+      consulta = q.length >= 2
+        ? consulta.or(`codigo.ilike.%${q}%,titulo.ilike.%${q}%,direccion.ilike.%${q}%`)
+        : consulta.order('created_at', { ascending: false })
+      const { data: res } = await consulta
+      if (!vivo) return
+      setPropsCita((res ?? []) as PropLite[])
+      setBuscandoProps(false)
+    }, 320)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [modalCita, pasoCita, busquedaProp])
+
+  function elegirPropiedad(p: PropLite) {
+    setPropElegida(p)
+    // Mañana a las 10:00 como punto de partida, igual que en la ficha de la
+    // propiedad: casi ninguna cita se agenda para dentro de un rato.
+    const manana = new Date()
+    manana.setDate(manana.getDate() + 1)
+    manana.setHours(10, 0, 0, 0)
+    setFechaCita(manana)
+    setPasoCita('fecha')
+  }
+
+  async function confirmarCita() {
+    if (!cliente || !propElegida || !fechaCita) return
+    setGuardandoCita(true)
+    try {
+      const { data: { user } } = await getUsuarioActual()
+      if (!user) { Alert.alert('Error', 'No se pudo verificar tu sesión.'); return }
+      const ahora = new Date().toISOString()
+
+      await supabase.from('clientes').update({
+        estado: 'cita_agendada',
+        proximo_contacto: fechaCita.toISOString(),
+        updated_at: ahora,
+      }).eq('id', cliente.id)
+
+      // Recordatorio una hora antes para confirmarla.
+      const horaStr = fechaCita.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+      await supabase.from('recordatorios').insert({
+        cliente_id: cliente.id,
+        user_id: user.id,
+        titulo: `Confirmar cita con ${cliente.nombre}`,
+        descripcion: `Cita para ${propElegida.codigo} a las ${horaStr}. ¿Ya la confirmaste?`,
+        fecha_hora: new Date(fechaCita.getTime() - 60 * 60 * 1000).toISOString(),
+      })
+
+      const { error } = await supabase.from('citas_coordinacion').insert({
+        cliente_id: cliente.id,
+        prospectador_id: user.id,
+        propiedad_id: propElegida.id,
+        estado: 'coordinada',
+        fecha_cita: fechaCita.toISOString(),
+      })
+      if (error) { Alert.alert('Error', `No se pudo registrar la cita: ${error.message}`); return }
+
+      registrarAccion(user.id, 'agendar_cita').catch(() => {})
+      setModalCita(false)
+      await refetch()
+      parchearListasClientes(lista => lista.map(cl => cl.id !== cliente.id ? cl
+        : { ...cl, estado: 'cita_agendada', proximo_contacto: fechaCita.toISOString(), updated_at: ahora }))
+
+      Linking.openURL(enlaceWhatsAppValera(mensajeCoordinacion({
+        cliente,
+        propiedad: propElegida.codigo ?? 'sin código',
+        constructora: propElegida.nombre_constructora,
+        fecha: fechaCita,
+      })))
+    } finally {
+      setGuardandoCita(false)
+    }
+  }
+
+  function abrirReagendar() {
+    if (soloLectura || !citaPendiente) return
+    const base = citaPendiente.fecha_cita ? new Date(citaPendiente.fecha_cita) : new Date()
+    setFechaReagenda(base)
+    setModalReagendar(true)
+  }
+
+  async function confirmarReagenda() {
+    if (!cliente || !citaPendiente || !fechaReagenda) return
+    setReagendando(true)
+    try {
+      // Se usa la MISMA función del servidor que usa Notificaciones para
+      // reagendar: ahí viven las reglas (que la cita sea tuya, que no esté ya
+      // confirmada, limpiar los avisos previos). No se reimplementan aquí.
+      const { data: res, error } = await supabase.rpc('confirmar_cita', {
+        p_cita_id: citaPendiente.id,
+        p_desenlace: 'reagendada',
+        p_nueva_fecha: fechaReagenda.toISOString(),
+        p_proximo_seguimiento: fechaReagenda.toISOString(),
+      })
+      if (error || (res && (res as any).ok === false)) {
+        const msg = error?.message ?? (res as any)?.error ?? 'No se pudo reagendar.'
+        Alert.alert('Error', msg)
+        return
+      }
+      setModalReagendar(false)
+      await refetch()
+      parchearListasClientes(lista => lista.map(cl => cl.id !== cliente.id ? cl
+        : { ...cl, proximo_contacto: fechaReagenda.toISOString(), updated_at: new Date().toISOString() }))
+
+      const codigo = propDeCita(citaPendiente)?.codigo ?? citaPendiente.propiedad_externa ?? 'la propiedad'
+      Linking.openURL(enlaceWhatsAppValera(mensajeCoordinacion({
+        cliente,
+        propiedad: codigo,
+        constructora: propDeCita(citaPendiente)?.nombre_constructora,
+        fecha: fechaReagenda,
+        reagenda: true,
+      })))
+    } finally {
+      setReagendando(false)
+    }
   }
 
   async function agregarRecordatorio() {
@@ -747,6 +957,17 @@ export default function DetalleCliente() {
           <Ionicons name="logo-whatsapp" size={20} color="#fff" />
           <Text style={styles.actionBtnTxt} numberOfLines={1}>WhatsApp</Text>
         </TouchableOpacity>
+        {!soloLectura && (
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#1a6470' }]}
+            onPress={citaPendiente ? abrirReagendar : abrirAgendar}
+          >
+            <Ionicons name={citaPendiente ? 'calendar' : 'calendar-outline'} size={20} color="#fff" />
+            <Text style={styles.actionBtnTxt} numberOfLines={1}>
+              {citaPendiente ? 'Reagendar' : 'Agendar cita'}
+            </Text>
+          </TouchableOpacity>
+        )}
         {puedeEnviarClienteAChatbot(userRole) && (
           yaEnChatbot ? (
             <View style={[styles.actionBtn, { backgroundColor: '#64748b' }]}>
@@ -764,6 +985,29 @@ export default function DetalleCliente() {
           )
         )}
       </View>
+
+      {/* ── La cita que sigue viva ──────────────────────── */}
+      {citaPendiente?.fecha_cita && (
+        <View style={styles.section}>
+          <View style={[styles.citaCard, { backgroundColor: c.card, borderLeftColor: '#1a6470' }]}>
+            <Ionicons name="calendar" size={18} color="#1a6470" />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.citaTitulo, { color: c.text }]} numberOfLines={2}>
+                {fechaCitaLegible(new Date(citaPendiente.fecha_cita))}
+              </Text>
+              <Text style={[styles.citaSub, { color: c.textMute }]} numberOfLines={1}>
+                {propDeCita(citaPendiente)?.codigo ?? citaPendiente.propiedad_externa ?? 'Sin propiedad'}
+                {citaPendiente.estado === 'reagendada' ? ' · ya se movió una vez' : ''}
+              </Text>
+            </View>
+            {!soloLectura && (
+              <TouchableOpacity style={styles.citaBtn} onPress={abrirReagendar}>
+                <Text style={styles.citaBtnTxt}>Mover</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* ── Información ─────────────────────────────────── */}
       <View style={styles.section}>
@@ -1107,6 +1351,114 @@ export default function DetalleCliente() {
         </View>
       </Modal>
 
+      {/* ── Modal: Agendar cita (paso 1 propiedad, paso 2 fecha) ── */}
+      <Modal visible={modalCita} transparent animationType="slide" onRequestClose={() => setModalCita(false)}>
+        <View style={modal.overlay}>
+          <ScrollView style={modal.sheetScroll} contentContainerStyle={modal.sheetContent} keyboardShouldPersistTaps="handled">
+            {pasoCita === 'propiedad' ? (
+              <>
+                <Text style={modal.title}>¿Qué propiedad va a ver?</Text>
+                <TextInput
+                  style={modal.input}
+                  value={busquedaProp}
+                  onChangeText={setBusquedaProp}
+                  placeholder="Código, título o dirección (ej. VR-1701)"
+                  autoFocus
+                />
+                {buscandoProps ? (
+                  <ActivityIndicator color="#1a6470" style={{ marginVertical: 20 }} />
+                ) : propsCita.length === 0 ? (
+                  <Text style={[modal.fieldLabel, { marginTop: 14 }]}>
+                    No se encontró ninguna propiedad disponible con eso.
+                  </Text>
+                ) : (
+                  <View style={{ marginTop: 6 }}>
+                    {propsCita.map(p => (
+                      <TouchableOpacity key={p.id} style={styles.propOpcion} onPress={() => elegirPropiedad(p)}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.propOpcionCodigo} numberOfLines={1}>
+                            {p.codigo}{p.nombre_constructora ? ` · ${p.nombre_constructora}` : ''}
+                          </Text>
+                          <Text style={styles.propOpcionTitulo} numberOfLines={1}>{p.titulo ?? p.direccion ?? ''}</Text>
+                          {p.precio != null && (
+                            <Text style={styles.propOpcionPrecio}>${p.precio.toLocaleString('es-MX')}</Text>
+                          )}
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color="#1a6470" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                <View style={modal.actions}>
+                  <TouchableOpacity style={modal.btnCancel} onPress={() => setModalCita(false)}>
+                    <Text style={modal.btnCancelText}>Cancelar</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={modal.title}>¿Cuándo?</Text>
+                <Text style={[modal.fieldLabel, { marginBottom: 14 }]}>
+                  {propElegida?.codigo} · {cliente?.nombre}
+                </Text>
+                <DateTimePicker label="Fecha y hora *" value={fechaCita} onChange={setFechaCita} />
+                <Text style={[modal.fieldLabel, { marginTop: 14 }]}>
+                  Al guardar se agenda la cita, te queda un recordatorio una hora antes y se abre
+                  WhatsApp con el mensaje listo para mandárnoslo.
+                </Text>
+                <View style={modal.actions}>
+                  <TouchableOpacity style={modal.btnCancel} onPress={() => setPasoCita('propiedad')}>
+                    <Text style={modal.btnCancelText}>Atrás</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[modal.btnConfirm, (guardandoCita || !fechaCita) && { opacity: 0.6 }]}
+                    onPress={confirmarCita}
+                    disabled={guardandoCita || !fechaCita}
+                  >
+                    {guardandoCita
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={modal.btnConfirmText}>Agendar y avisar</Text>}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Modal: mover la cita a otra fecha ── */}
+      <Modal visible={modalReagendar} transparent animationType="slide" onRequestClose={() => setModalReagendar(false)}>
+        <View style={modal.overlay}>
+          <ScrollView style={modal.sheetScroll} contentContainerStyle={modal.sheetContent} keyboardShouldPersistTaps="handled">
+            <Text style={modal.title}>Mover la cita</Text>
+            {citaPendiente?.fecha_cita && (
+              <Text style={[modal.fieldLabel, { marginBottom: 14 }]}>
+                Estaba para el {fechaCitaLegible(new Date(citaPendiente.fecha_cita))}
+                {propDeCita(citaPendiente)?.codigo ? ` · ${propDeCita(citaPendiente)?.codigo}` : ''}
+              </Text>
+            )}
+            <DateTimePicker label="Nueva fecha y hora *" value={fechaReagenda} onChange={setFechaReagenda} />
+            <Text style={[modal.fieldLabel, { marginTop: 14 }]}>
+              Se mueve la cita, se actualiza tu próximo seguimiento y se abre WhatsApp con el aviso.
+            </Text>
+            <View style={modal.actions}>
+              <TouchableOpacity style={modal.btnCancel} onPress={() => setModalReagendar(false)}>
+                <Text style={modal.btnCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[modal.btnConfirm, (reagendando || !fechaReagenda) && { opacity: 0.6 }]}
+                onPress={confirmarReagenda}
+                disabled={reagendando || !fechaReagenda}
+              >
+                {reagendando
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={modal.btnConfirmText}>Mover y avisar</Text>}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
       {/* ── Modal: Agregar recordatorio ────────────────── */}
       <Modal visible={modalRecordatorio} transparent animationType="slide">
         <View style={modal.overlay}>
@@ -1363,6 +1715,25 @@ const styles = StyleSheet.create({
   // (Llamar, WhatsApp, Chatbot) el de en medio no cabía y las etiquetas se
   // montaban unas sobre otras en pantallas de móvil.
   actionBtnTxt: { color: '#fff', fontSize: 13.5, fontWeight: '700', flexShrink: 1 },
+  citaCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderLeftWidth: 4, borderRadius: 12, padding: 12,
+  },
+  citaTitulo: { fontSize: 14, fontWeight: '700', textTransform: 'capitalize' },
+  citaSub: { fontSize: 12, marginTop: 2 },
+  citaBtn: {
+    borderWidth: 1.5, borderColor: '#1a6470', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 6,
+  },
+  citaBtnTxt: { color: '#1a6470', fontWeight: '800', fontSize: 12 },
+  propOpcion: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8,
+  },
+  propOpcionCodigo: { fontSize: 13, fontWeight: '800', color: '#1a6470' },
+  propOpcionTitulo: { fontSize: 12, color: '#64748b', marginTop: 1 },
+  propOpcionPrecio: { fontSize: 12, fontWeight: '700', color: '#2e7d32', marginTop: 2 },
 
   // Sections
   section: { marginHorizontal: 16, marginTop: 24 },
