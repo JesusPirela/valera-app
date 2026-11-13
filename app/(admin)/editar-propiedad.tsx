@@ -160,6 +160,8 @@ export default function EditarPropiedad() {
   const [direccion, setDireccion] = useState('')
   const [modeloDesarrollo, setModeloDesarrollo] = useState('')  // modelo detectado al importar (ej. "Lisboa VI")
   const [operacion, setOperacion] = useState<'venta' | 'renta'>('venta')
+  // Solo aplica a renta; NULL en la base = no se ha capturado (ver el alta).
+  const [amueblada, setAmueblada] = useState<'si' | 'no' | null>(null)
   const [tipo, setTipo] = useState<'casa' | 'departamento' | 'local' | 'terreno'>('casa')
   const [estado, setEstado] = useState<EstadoPropiedad>('disponible')
   const [recamaras, setRecamaras] = useState<number | null>(null)
@@ -282,7 +284,7 @@ export default function EditarPropiedad() {
     const [{ data, error }, { data: constrData }] = await Promise.all([
       supabase
         .from('propiedades')
-        .select('titulo, descripcion, precio, direccion, operacion, tipo, estado, zona, lat, lng, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, directa, lona_contactada, es_constructora, nombre_constructora, es_inventario, inventario_seccion, video_url, url_origen, propiedad_imagenes(id, url, orden)')
+        .select('titulo, descripcion, precio, direccion, operacion, amueblada, tipo, estado, zona, lat, lng, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, asesor_id, inmobiliaria_id, exclusiva, directa, lona_contactada, es_constructora, nombre_constructora, es_inventario, inventario_seccion, video_url, url_origen, propiedad_imagenes(id, url, orden)')
         .eq('id', id)
         .single(),
       supabase
@@ -312,6 +314,7 @@ export default function EditarPropiedad() {
     setLat((data as any).lat ?? null)
     setLng((data as any).lng ?? null)
     setOperacion((data.operacion as 'venta' | 'renta') ?? 'venta')
+    setAmueblada(data.amueblada === true ? 'si' : data.amueblada === false ? 'no' : null)
     setTipo((data.tipo as 'casa' | 'departamento' | 'local' | 'terreno') ?? 'casa')
     setEstado((data.estado as EstadoPropiedad) ?? 'disponible')
     setZona((data.zona as 'queretaro' | 'monterrey' | 'puebla') ?? null)
@@ -917,6 +920,7 @@ export default function EditarPropiedad() {
           precio: precioNum,
           direccion: direccion.trim(),
           operacion,
+          amueblada: operacion === 'renta' && amueblada != null ? amueblada === 'si' : null,
           tipo,
           estado,
           zona: zona ?? null,
@@ -1374,6 +1378,17 @@ export default function EditarPropiedad() {
           value={operacion}
           onChange={setOperacion}
         />
+
+        {operacion === 'renta' && (
+          <>
+            <Text style={styles.label}>¿Amueblada?</Text>
+            <PillSelector
+              options={[{ value: 'si', label: '🛋️ Amueblada' }, { value: 'no', label: 'Sin amueblar' }]}
+              value={amueblada}
+              onChange={setAmueblada}
+            />
+          </>
+        )}
 
         <Text style={styles.label}>Tipo</Text>
         <PillSelector

@@ -171,6 +171,10 @@ export default function NuevaPropiedad() {
   const [direccion, setDireccion] = useState('')
   const [modeloDesarrollo, setModeloDesarrollo] = useState('')  // modelo detectado al importar (ej. "Lisboa VI")
   const [operacion, setOperacion] = useState<'venta' | 'renta'>('venta')
+  // Solo aplica a renta. Arranca SIN respuesta a proposito: si se dejara en
+  // "sin amueblar" por defecto, se estaria afirmando algo que nadie capturo.
+  // En la base, NULL = no se sabe.
+  const [amueblada, setAmueblada] = useState<'si' | 'no' | null>(null)
   const [tipo, setTipo] = useState<'casa' | 'departamento' | 'local' | 'terreno'>('casa')
   const [estado, setEstado] = useState<EstadoPropiedad>('disponible')
   const [recamaras, setRecamaras] = useState<number | null>(null)
@@ -899,6 +903,8 @@ export default function NuevaPropiedad() {
         precio: precioNum,
         direccion: direccion.trim(),
         operacion,
+        // Si es venta no se guarda nada: el dato solo significa algo en renta.
+        amueblada: operacion === 'renta' && amueblada != null ? amueblada === 'si' : null,
         tipo,
         estado,
         zona: zona ?? null,
@@ -1338,6 +1344,17 @@ export default function NuevaPropiedad() {
           value={operacion}
           onChange={setOperacion}
         />
+
+        {operacion === 'renta' && (
+          <>
+            <Text style={styles.label}>¿Amueblada?</Text>
+            <PillSelector
+              options={[{ value: 'si', label: '🛋️ Amueblada' }, { value: 'no', label: 'Sin amueblar' }]}
+              value={amueblada}
+              onChange={setAmueblada}
+            />
+          </>
+        )}
 
         <Text style={styles.label}>Tipo</Text>
         <PillSelector

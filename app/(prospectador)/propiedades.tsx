@@ -88,6 +88,7 @@ type Propiedad = {
   descripcion: string | null
   created_at: string
   precio_anterior: number | null
+  amueblada: boolean | null
   precio_actualizado_at: string | null
   inmobiliaria_id: string | null
   inmobiliarias: { nombre: string; logo_url: string | null; exclusiva: boolean } | null
@@ -535,6 +536,10 @@ export default function ProspectadorPropiedades() {
   const [filtroOperacion, setFiltroOperacion] = useState<FiltroOperacion>(null)
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(null)
   const [filtroRecamaras, setFiltroRecamaras] = useState<number | null>(null)  // mínimo de recámaras
+  // Amueblada: solo tiene sentido en renta, así que al elegirlo se fuerza la
+  // operación a renta (si no, filtraría ventas que nunca tienen el dato y la
+  // lista saldría vacía sin explicación).
+  const [filtroAmueblada, setFiltroAmueblada] = useState<boolean | null>(null)
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
   const [precioMin, setPrecioMin] = useState('')
   const [precioMax, setPrecioMax] = useState('')
@@ -648,7 +653,7 @@ export default function ProspectadorPropiedades() {
         const size = i === 0 ? PRIMERA : PAGE
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, tipo, estado, estado_mx, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, directa, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, total_publicadores, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
+          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, amueblada, tipo, estado, estado_mx, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, directa, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, total_publicadores, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
           .in('estado', ['disponible', 'vendida', 'rentada'])
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -1138,6 +1143,7 @@ export default function ProspectadorPropiedades() {
     filtroOperacion,
     filtroTipo,
     filtroRecamaras != null ? 'recamaras' : null,
+    filtroAmueblada != null ? 'amueblada' : null,
     ordenPrecio,
     (precioMinNum != null || precioMaxNum != null) ? 'precio' : null,
     filtroPublicadas,
@@ -1229,6 +1235,10 @@ export default function ProspectadorPropiedades() {
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroTipo) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.tipo === filtroTipo)
   if (filtroRecamaras != null) propiedadesFiltradas = propiedadesFiltradas.filter((p) => (p.recamaras ?? 0) >= filtroRecamaras)
+  // Las que nadie ha capturado (NULL) NO entran en ninguno de los dos lados:
+  // decir que una renta está "sin amueblar" porque falta el dato sería
+  // inventarlo. Hoy son 240 de 290 rentas; se van llenando al editarlas.
+  if (filtroAmueblada != null) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.amueblada === filtroAmueblada)
   if (precioMinNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio >= precioMinNum)
   if (precioMaxNum != null) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.precio != null && p.precio <= precioMaxNum)
   if (filtroFechaPreset) {
@@ -1377,7 +1387,7 @@ export default function ProspectadorPropiedades() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     propiedades, busqueda, idsPorDescripcion, filtroPublicadas, publicaciones, pubData, filtroNueva,
-    filtroExclusiva, filtroDestacada, filtroDirecta, filtroOperacion, filtroTipo, filtroRecamaras, precioMinNum, precioMaxNum,
+    filtroExclusiva, filtroDestacada, filtroDirecta, filtroOperacion, filtroTipo, filtroRecamaras, filtroAmueblada, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin, puedeVerDirectas,
     viewsData, userId, filtroEstado, filtroOrden,
   ])
@@ -1419,6 +1429,7 @@ export default function ProspectadorPropiedades() {
     setFiltroOperacion(null)
     setFiltroTipo(null)
     setFiltroRecamaras(null)
+    setFiltroAmueblada(null)
     setOrdenPrecio(null)
     setFiltroPublicadas(null)
     setFiltroNueva(null)
@@ -1659,6 +1670,30 @@ export default function ProspectadorPropiedades() {
             {[1, 2, 3, 4].map(n => (
               <FiltroChip key={n} label={`${n}+`} active={filtroRecamaras === n} onPress={() => setFiltroRecamaras(filtroRecamaras === n ? null : n)} color={primaryColor} />
             ))}
+          </ScrollView>
+          <Text style={styles.filtroLabel}>Amueblada (solo renta)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            <FiltroChip label="Todas" active={filtroAmueblada === null} onPress={() => setFiltroAmueblada(null)} color={primaryColor} />
+            <FiltroChip
+              label="🛋️ Amueblada"
+              active={filtroAmueblada === true}
+              onPress={() => {
+                const nuevo = filtroAmueblada === true ? null : true
+                setFiltroAmueblada(nuevo)
+                if (nuevo != null) setFiltroOperacion('renta')
+              }}
+              color={primaryColor}
+            />
+            <FiltroChip
+              label="Sin amueblar"
+              active={filtroAmueblada === false}
+              onPress={() => {
+                const nuevo = filtroAmueblada === false ? null : false
+                setFiltroAmueblada(nuevo)
+                if (nuevo != null) setFiltroOperacion('renta')
+              }}
+              color={primaryColor}
+            />
           </ScrollView>
           <Text style={styles.filtroLabel}>Precio — ordenar</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
