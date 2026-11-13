@@ -1116,7 +1116,10 @@ export default function ProspectadorPropiedades() {
         .from('propiedades')
         .select('id')
         .like('descripcion_busqueda', `%${q}%`)
-        .limit(600)
+        // 600 truncaba las palabras comunes: "alberca" sale en 857 descripciones
+        // y se perdian 257 propiedades sin aviso. Son solo ids (36 bytes),
+        // asi que caben de sobra.
+        .limit(3000)
       if (vivo) setIdsPorDescripcion(new Set((data ?? []).map((x: any) => x.id)))
     }, 350)
     return () => { vivo = false; clearTimeout(t) }
@@ -1171,27 +1174,31 @@ export default function ProspectadorPropiedades() {
   let propiedadesFiltradas = propiedades
 
   if (busqueda.trim()) {
-    // Con coma ("2,5", "2,500,000") se busca por precio; sin coma, como siempre.
+    // El buscador SUMA precio y texto en vez de elegir uno.
+    //
+    // Antes era o lo uno o lo otro, y como el precio solo se reconocía con
+    // comas, teclear "2500000" caía en la rama de texto y no coincidía con
+    // ningún código ni título: 0 resultados (medido). Sumándolos, un monto
+    // encuentra precios y un código sigue encontrando su propiedad, aunque
+    // los dígitos también sirvan de prefijo de precio.
     const matchPrecio = parsearPrecioBusqueda(busqueda)
-    if (matchPrecio) {
-      propiedadesFiltradas = propiedadesFiltradas.filter(p => matchPrecio(p.precio))
-    } else {
-      const q = normalizar(busqueda.trim())
-      const qDigits = q.replace(/\D/g, '')
-      propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
-        const cod = normalizar(p.codigo)
-        // Código tolerante a ceros: "4", "004" y "vr-004" encuentran VR-004
-        const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
-        return codMatch ||
-          normalizar(p.direccion).includes(q) ||
-          normalizar(p.titulo).includes(q) ||
-          // Por desarrollo/constructora: escribir "balkan" trae sus modelos.
-          normalizar(p.nombre_constructora).includes(q) ||
-          // Y lo que solo está en la descripción: "alberca", "roof garden",
-          // "una planta". Los ids los trajo el servidor aparte.
-          idsPorDescripcion.has(p.id)
-      })
-    }
+    const q = normalizar(busqueda.trim())
+    const qDigits = q.replace(/\D/g, '')
+    propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
+      if (matchPrecio && matchPrecio(p.precio)) return true
+      const cod = normalizar(p.codigo)
+      // Código tolerante a ceros: "4", "004" y "vr-004" encuentran VR-004
+      const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
+      return codMatch ||
+        normalizar(p.direccion).includes(q) ||
+        normalizar(p.titulo).includes(q) ||
+        // Por desarrollo/constructora: escribir "balkan" trae sus modelos.
+        normalizar(p.nombre_constructora).includes(q) ||
+        // Y lo que solo está en la descripción: "alberca", "roof garden",
+        // "una planta", "inversión", "amueblada". Los ids los trajo el
+        // servidor aparte.
+        idsPorDescripcion.has(p.id)
+    })
   }
   if (filtroPublicadas === 'publicadas') propiedadesFiltradas = propiedadesFiltradas.filter(p => (publicaciones[p.id] ?? 0) > 0)
   // Solo filtrar cuando el query de publicaciones ya cargó correctamente.

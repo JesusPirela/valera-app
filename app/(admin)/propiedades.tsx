@@ -343,23 +343,21 @@ export default function AdminPropiedades() {
   const { propiedadesFiltradas, propiedadesParaSugerenciasContacto } = useMemo(() => {
   let propiedadesFiltradas = propiedades.filter((p) => !p.es_inventario)
   if (busqueda.trim()) {
-    // Con coma ("2,5", "2,500,000") se busca por precio; sin coma, como siempre.
+    // Suma precio y texto en vez de elegir uno (ver la nota en la pantalla del
+    // prospectador): un monto sin comas daba 0 resultados.
     const matchPrecio = parsearPrecioBusqueda(busqueda)
-    if (matchPrecio) {
-      propiedadesFiltradas = propiedadesFiltradas.filter((p) => matchPrecio(p.precio))
-    } else {
-      const q = normalizar(busqueda.trim())
-      const qDigits = q.replace(/\D/g, '')
-      propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
-        const cod = normalizar(p.codigo)
-        const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
-        return codMatch ||
-          normalizar(p.direccion).includes(q) ||
-          normalizar(p.titulo).includes(q) ||
-          // Por desarrollo/constructora: escribir "balkan" trae sus modelos.
-          normalizar(p.nombre_constructora).includes(q)
-      })
-    }
+    const q = normalizar(busqueda.trim())
+    const qDigits = q.replace(/\D/g, '')
+    propiedadesFiltradas = propiedadesFiltradas.filter((p) => {
+      if (matchPrecio && matchPrecio(p.precio)) return true
+      const cod = normalizar(p.codigo)
+      const codMatch = cod.includes(q) || (qDigits !== '' && cod.replace(/\D/g, '').includes(qDigits))
+      return codMatch ||
+        normalizar(p.direccion).includes(q) ||
+        normalizar(p.titulo).includes(q) ||
+        // Por desarrollo/constructora: escribir "balkan" trae sus modelos.
+        normalizar(p.nombre_constructora).includes(q)
+    })
   }
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.operacion === filtroOperacion)
   if (filtroEstado) propiedadesFiltradas = propiedadesFiltradas.filter((p) => p.estado === filtroEstado)
