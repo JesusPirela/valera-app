@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback, useEffect, useMemo, createElement, memo } from 'react'
+﻿import React, { useState, useCallback, useEffect, useMemo, memo } from 'react'
 import {
   View, Text, StyleSheet, TextInput, Platform, Linking, Alert,
   ActivityIndicator, TouchableOpacity, ScrollView, FlatList, Modal, useWindowDimensions, RefreshControl, Keyboard,
@@ -383,12 +383,14 @@ const SORT_LABELS: Record<SortBy, string> = {
 }
 
 type ColoresCard = ReturnType<typeof import('../../lib/ThemeContext').useColors>
-const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onChatbot, soloLectura, enChatbot }: {
+const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onChatbot, onEditar, soloLectura, enChatbot }: {
   item: Cliente
   c: ColoresCard
   darkMode: boolean
   userRole: string | null
   onChatbot: (item: Cliente) => void
+  /** Abre el popup del campo indicado sin salir del CRM. */
+  onEditar: (item: Cliente, col: string) => void
   soloLectura?: boolean
   /** Ya tiene un registro en chatbot_leads (se le mandó antes, de aquí o de otra pantalla). */
   enChatbot?: boolean
@@ -469,10 +471,18 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
               ) : null}
             </View>
           </View>
-          <View style={[s.estadoBadge, { backgroundColor: pill.fondo }]}>
+          {/* La etapa es lo que más se cambia: tocarla abre el selector aquí
+              mismo, sin entrar al cliente. */}
+          <TouchableOpacity
+            style={[s.estadoBadge, { backgroundColor: pill.fondo }]}
+            disabled={soloLectura}
+            onPress={() => onEditar(item, 'estado')}
+            activeOpacity={0.7}
+          >
             <View style={[s.estadoDot, { backgroundColor: pill.tinta }]} />
             <Text style={[s.estadoTxt, { color: pill.tinta }]} numberOfLines={1}>{info.label}</Text>
-          </View>
+            {!soloLectura && <Ionicons name="chevron-down" size={11} color={pill.tinta} />}
+          </TouchableOpacity>
         </View>
         <View style={s.metaRow}>
           <View style={s.metaItem}>
@@ -517,6 +527,21 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
             activeOpacity={0.75}
             onPress={() => setNotaAbierta(v => !v)}
           >
+            {!soloLectura && (
+              <View style={s.notaCardCabeza}>
+                <View style={{ flex: 1 }} />
+                {/* Tocar la nota la despliega; este botón la edita. Son dos
+                    cosas distintas y por eso son dos zonas distintas. */}
+                <TouchableOpacity
+                  onPress={() => onEditar(item, 'notas')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}
+                >
+                  <Ionicons name="create-outline" size={12} color="#1a9aaa" />
+                  <Text style={s.notaCardEditar}>Editar</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <Text
               style={[s.notaCardTxt, { color: c.textSub }]}
               numberOfLines={notaAbierta ? undefined : 3}
@@ -526,6 +551,14 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
             {notaLarga && (
               <Text style={s.notaCardMas}>{notaAbierta ? 'Ver menos' : 'Ver más'}</Text>
             )}
+          </TouchableOpacity>
+        ) : !soloLectura ? (
+          <TouchableOpacity
+            style={[s.notaCardVacia, { borderColor: c.border }]}
+            onPress={() => onEditar(item, 'notas')}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.notaCardVaciaTxt, { color: c.textMute }]}>+ Agregar nota</Text>
           </TouchableOpacity>
         ) : null}
         <View style={s.actions}>
@@ -726,7 +759,13 @@ export default function CRM() {
     options?: { value: string | null; label: string; color?: string }[]
   } | null>(null)
   // Edición inline en la tabla Excel
-  const [editCell, setEditCell] = useState<{ id: string; col: string } | null>(null)
+  // Editor de texto en POPUP (nombre, teléfono, presupuesto, nota).
+  //
+  // Antes se editaba DENTRO de la celda. En el celular la celda de notas mide
+  // 230px: escribir ahí era pelear con un renglón diminuto, no se veía lo que
+  // ya había escrito, y para LEER una nota completa había que entrar a
+  // editarla. Ahora se abre un cuadro grande con su botón de guardar.
+  const [textoModal, setTextoModal] = useState<{ id: string; col: string; nombre: string } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [savingCell, setSavingCell] = useState(false)
   // Confirmación visible tras guardar una celda: 'ok' (guardado) o 'pendiente'
@@ -1213,7 +1252,7 @@ export default function CRM() {
 
     if (!isOnline) {
       await encolar()
-      setSavingCell(false); setEditCell(null)
+      setSavingCell(false)
       mostrarGuardado('pendiente')
       return
     }
@@ -1267,10 +1306,12 @@ export default function CRM() {
       await encolar()
       mostrarGuardado('pendiente')
     }
-    setSavingCell(false); setEditCell(null)
+    setSavingCell(false)
   }
 
-  function abrirEdicion(item: Cliente, col: string) {
+  // useCallback para poder pasarla a ClienteCard sin romper su memo: solo
+  // llama setters, que son estables, así que no necesita dependencias.
+  const abrirEdicion = useCallback(function abrirEdicion(item: Cliente, col: string) {
     // Columnas de enumeración → selector; texto/fecha → input inline
     if (col === 'estado') {
       setCellPicker({
@@ -1330,13 +1371,15 @@ export default function CRM() {
         : col === 'notas' ? (item.notas ?? '')
         : col === 'presupuesto' ? (item.presupuesto ?? '') : ''
       setEditValue(inicial)
-      setEditCell({ id: item.id, col })
+      setTextoModal({ id: item.id, col, nombre: item.nombre })
     }
-  }
+  }, [])
 
   function guardarTexto() {
-    if (!editCell) return
-    guardarCelda(editCell.id, editCell.col, editValue.trim() || null)
+    if (!textoModal) return
+    const { id, col } = textoModal
+    setTextoModal(null)
+    guardarCelda(id, col, editValue.trim() || null)
   }
 
   // Spinner del selector de fecha (Día/Mes/Año/Hora/Min) — mismo criterio que
@@ -1567,9 +1610,10 @@ export default function CRM() {
   const renderCliente = useCallback(({ item }: { item: Cliente }) => (
     <ClienteCard
       item={item} c={c} darkMode={darkMode} userRole={userRole} onChatbot={abrirModalChatbot} soloLectura={soloLectura}
+      onEditar={abrirEdicion}
       enChatbot={telefonosChatbot.has((item.telefono ?? '').replace(/\D/g, '').slice(-10))}
     />
-  ), [c, darkMode, userRole, abrirModalChatbot, soloLectura, telefonosChatbot])
+  ), [c, darkMode, userRole, abrirModalChatbot, abrirEdicion, soloLectura, telefonosChatbot])
 
   // Header que se desplaza con el scroll en vista lista.
   // Se usa View en lugar de Fragment porque ListHeaderComponent necesita un único nodo raíz.
@@ -2027,11 +2071,11 @@ export default function CRM() {
                 style={[
                   s.excelTr,
                   { borderBottomColor: c.border },
-                  // Las dos mitades calculan esta altura con los MISMOS datos
-                  // (el id de la fila que se está editando), así que siempre
-                  // coinciden. Al escribir una nota la fila crece para que
-                  // quepa el editor, y crece a los dos lados a la vez.
-                  !anchoAmplio && { height: editCell?.id === item.id && editCell?.col === 'notas' ? 132 : FILA_H },
+                  // Las dos mitades usan la MISMA altura exacta, así que la
+                  // columna fija del nombre nunca se despega de su fila. Ya no
+                  // hay un caso especial por edición: el editor es un popup y
+                  // no crece dentro de la celda.
+                  !anchoAmplio && { height: FILA_H },
                   interesRowBg
                     ? { backgroundColor: interesRowBg }
                     : (idx % 2 !== 0 && { backgroundColor: darkMode ? '#0a1827' : '#f8fafc' }),
@@ -2039,59 +2083,7 @@ export default function CRM() {
               >
                 {cols.map(col => {
                   const cs = cStyle(col)
-                  const editando = editCell?.id === item.id && editCell?.col === col.id
-                  // Editor de texto inline (nombre, teléfono, notas, zona, presupuesto). "fecha" usa
-                  // su propio modal (fechaModal, más abajo) en vez de este editor de celda.
-                  if (editando && (col.id === 'nombre' || col.id === 'telefono' || col.id === 'notas' || col.id === 'zona' || col.id === 'presupuesto')) {
-                    if (col.id === 'notas' && isWeb) {
-                      return (
-                        <View key={col.id} style={[s.excelTdCell, cs, { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 6 }]}>
-                          {createElement('textarea', {
-                            autoFocus: true,
-                            // NO controlado: sin value/onChange no re-renderiza toda la
-                            // lista en cada tecla (por eso "no se ponía rápido el texto").
-                            defaultValue: editValue,
-                            onBlur: (e: any) => { const v = (e.target.value ?? '').trim() || null; setEditCell(null); guardarCelda(item.id, 'notas', v) },
-                            // Enter guarda y cierra; Shift+Enter hace salto de línea.
-                            onKeyDown: (e: any) => {
-                              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur() }
-                              else if (e.key === 'Escape') { e.currentTarget.blur() }
-                            },
-                            placeholder: 'Escribe una nota... (Enter guarda, Shift+Enter salta de línea)',
-                            rows: 4,
-                            style: {
-                              width: '100%', minHeight: 80, resize: 'vertical',
-                              padding: '6px 8px', borderRadius: 6,
-                              border: '1.5px solid #1a9aaa', fontSize: 12,
-                              fontFamily: 'inherit', lineHeight: '1.45',
-                              color: darkMode ? '#fff' : '#111',
-                              background: darkMode ? '#0a1827' : '#fff',
-                              outline: 'none',
-                            },
-                          })}
-                        </View>
-                      )
-                    }
-                    return (
-                      <View key={col.id} style={[s.excelTdCell, cs, col.id === 'notas' && { alignSelf: 'stretch', justifyContent: 'flex-start', paddingTop: 6 }]}>
-                        <TextInput
-                          autoFocus
-                          value={editValue}
-                          onChangeText={setEditValue}
-                          onBlur={guardarTexto}
-                          onSubmitEditing={col.id !== 'notas' ? guardarTexto : undefined}
-                          placeholder={col.id === 'notas' ? 'Escribe una nota...' : ''}
-                          placeholderTextColor={c.textMute}
-                          keyboardType={col.id === 'telefono' ? 'phone-pad' : 'default'}
-                          multiline={col.id === 'notas'}
-                          numberOfLines={col.id === 'notas' ? 4 : 1}
-                          style={[s.cellInput, { color: c.text, borderColor: '#1a9aaa', backgroundColor: c.bg }, col.id === 'notas' && { minHeight: 80, maxHeight: 108, textAlignVertical: 'top' }]}
-                        />
-                      </View>
-                    )
-                  }
-
-                  // Celdas (click → editar)
+                  // Celdas (click → editar; el editor es un popup, más abajo)
                   switch (col.id) {
                     case 'nombre': {
                       const sem = semaforoCrm(item)
@@ -2512,6 +2504,48 @@ export default function CRM() {
                 <Text style={[s.dpBtnCancelText, { color: c.textSub }]}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.dpBtnConfirm} onPress={guardarFechaModal}>
+                <Text style={s.dpBtnConfirmText}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Popup: editar un campo de texto ── */}
+      <Modal visible={textoModal !== null} transparent animationType="fade" onRequestClose={() => setTextoModal(null)}>
+        <View style={s.dpOverlay}>
+          <View style={[s.dpModal, { backgroundColor: c.card }]}>
+            <Text style={[s.dpTitle, { color: c.text }]}>
+              {textoModal?.col === 'nombre' ? 'Nombre'
+                : textoModal?.col === 'telefono' ? 'Teléfono'
+                : textoModal?.col === 'presupuesto' ? 'Presupuesto'
+                : 'Nota'}
+            </Text>
+            {textoModal?.col !== 'nombre' && (
+              <Text style={[s.dpSecLabel, { color: c.textMute }]} numberOfLines={1}>{textoModal?.nombre}</Text>
+            )}
+            <TextInput
+              autoFocus
+              value={editValue}
+              onChangeText={setEditValue}
+              multiline={textoModal?.col === 'notas'}
+              numberOfLines={textoModal?.col === 'notas' ? 7 : 1}
+              keyboardType={textoModal?.col === 'telefono' ? 'phone-pad' : 'default'}
+              placeholder={textoModal?.col === 'notas' ? 'De qué habló, qué busca, qué quedó pendiente…' : ''}
+              placeholderTextColor={c.textMute}
+              onSubmitEditing={textoModal?.col !== 'notas' ? guardarTexto : undefined}
+              style={[
+                s.textoModalInput,
+                { color: c.text, backgroundColor: c.bg, borderColor: c.border },
+                textoModal?.col === 'notas' && { minHeight: 150, textAlignVertical: 'top' },
+              ]}
+            />
+            <View style={s.dpActions}>
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity style={s.dpBtnCancel} onPress={() => setTextoModal(null)}>
+                <Text style={[s.dpBtnCancelText, { color: c.textSub }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.dpBtnConfirm} onPress={guardarTexto}>
                 <Text style={s.dpBtnConfirmText}>Guardar</Text>
               </TouchableOpacity>
             </View>
@@ -2968,6 +3002,18 @@ const s = StyleSheet.create({
   },
   notaCardTxt: { fontSize: 12.5, lineHeight: 18 },
   notaCardMas: { fontSize: 11.5, fontWeight: '800', color: '#1a9aaa', marginTop: 4 },
+  textoModalInput: {
+    borderWidth: 1.5, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 15, lineHeight: 21, marginTop: 10,
+  },
+  notaCardCabeza: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  notaCardEditar: { fontSize: 11, fontWeight: '800', color: '#1a9aaa' },
+  notaCardVacia: {
+    marginTop: 8, borderWidth: 1, borderStyle: 'dashed', borderRadius: 8,
+    paddingVertical: 7, paddingHorizontal: 10, alignItems: 'center',
+  },
+  notaCardVaciaTxt: { fontSize: 11.5, fontWeight: '700' },
   cardBody: { flex: 1, padding: 14 },
 
   cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
@@ -3155,7 +3201,7 @@ const s = StyleSheet.create({
   excelOpTxt: { fontSize: 12, fontWeight: '600' },
   excelNull: { fontSize: 13, color: '#cbd5e1', paddingHorizontal: 12, paddingVertical: 10 },
   cellTxtNoPad: { paddingHorizontal: 0, paddingVertical: 0 },
-  cellInput: {
+  _cellInputRetirado: {
     width: '100%',
     borderWidth: 1.5,
     borderRadius: 6,
