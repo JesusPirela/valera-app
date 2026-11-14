@@ -70,6 +70,13 @@ export type ParadaHoja = {
   precio: string
   caracteristicas: string
   mapaUrl: string
+  /** Indicaciones para llegar, escritas a mano: "entrar por la caseta 2",
+   *  "la casa de la reja negra", "hay que avisar al vigilante".
+   *
+   *  El link del mapa deja al asesor en la calle; lo que falta siempre es el
+   *  último tramo, y eso nadie lo sabe más que quien ya fue. Por eso sale
+   *  RESALTADA junto al mapa y no perdida entre los demás datos. */
+  nota: string
   /** El link de la ficha. Sustituye al ID de EasyBroker, que casi ninguna
    *  propiedad tiene y que de todas formas no lleva a ningún lado. */
   linkPropiedad: string
@@ -481,6 +488,8 @@ export function construirHtmlHoja(d: DatosHoja): string {
       </div>` : ''}
       ${cars.length < 2 ? dato('Características', p.caracteristicas) : ''}
       ${hay(p.mapaUrl) ? `<div class="dato"><div class="dl">Ubicación</div><div class="dv"><a href="${esc(p.mapaUrl)}">Ver en Google Maps</a></div></div>` : ''}
+      ${hay(p.nota) ? `<div class="indic"><div class="indic-lbl">📍 Cómo llegar — importante</div>` +
+        `<div class="indic-txt">${esc(p.nota).replace(/\n/g, '<br>')}</div></div>` : ''}
       ${hay(p.linkPropiedad) ? `<div class="dato"><div class="dl">Link de la propiedad</div>` +
         `<div class="dv"><a href="${esc(p.linkPropiedad)}">${esc(p.linkPropiedad.replace(/^https?:\/\//i, ''))}</a></div></div>` : ''}
     </div>
@@ -592,6 +601,14 @@ export function construirHtmlHoja(d: DatosHoja): string {
   .dv.fuerte { font-weight: 800; color: ${AZUL}; font-size: 17px; }
   .dv.gris { color: ${GRIS}; font-size: 14px; }
   .dv a { color: #2563eb; text-decoration: none; }
+
+  /* Las indicaciones van en ámbar y con barra lateral: tienen que saltar a la
+     vista entre los datos, que son todos azules y grises. */
+  .indic { margin: 14px 0; background: #fff8e6; border-left: 5px solid ${ORO};
+           border-radius: 8px; padding: 11px 14px; }
+  .indic-lbl { font-size: 11px; font-weight: 800; letter-spacing: 0.8px;
+               text-transform: uppercase; color: #8a6410; margin-bottom: 4px; }
+  .indic-txt { font-size: 15px; line-height: 1.5; color: #4a3a12; font-weight: 600; }
 
   .asesor { margin: 18px 46px 0; background: ${AZUL}; border-radius: 12px; padding: 16px 20px; }
   .as-lbl { font-size: 11px; letter-spacing: 1.5px; font-weight: 700; color: rgba(255,255,255,0.6); margin-bottom: 6px; }

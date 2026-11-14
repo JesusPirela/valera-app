@@ -149,7 +149,7 @@ const PERFIL_VACIO = (tipo: TipoHoja = 'ruta'): PerfilHoja => ({
 const PARADA_VACIA = (): Parada => ({
   clave: Math.random().toString(36).slice(2),
   hora: '', titulo: '', ubicacion: '', precio: '', caracteristicas: '',
-  mapaUrl: '', linkPropiedad: '', asesorNombre: '', asesorTel: '', fotoUrl: '', fotoBase64: '',
+  mapaUrl: '', nota: '', linkPropiedad: '', asesorNombre: '', asesorTel: '', fotoUrl: '', fotoBase64: '',
   confirmada: false,
 })
 
@@ -796,6 +796,15 @@ export default function HojaDeRutaView() {
             <Campo etiqueta="Precio" valor={p.precio} alCambiar={v => editar(p.clave, 'precio', v)} placeholder="$1,860,000 MXN Venta" />
             <Campo etiqueta="Características" valor={p.caracteristicas} alCambiar={v => editar(p.clave, 'caracteristicas', v)} placeholder="2 recámaras · 2 baños" />
             <Campo etiqueta="Link del mapa" valor={p.mapaUrl} alCambiar={v => editar(p.clave, 'mapaUrl', v)} />
+            {/* El mapa deja al asesor en la calle; lo que falta siempre es el
+                último tramo. Esto sale resaltado en la hoja, junto al mapa. */}
+            <Campo
+              etiqueta="Cómo llegar (indicaciones)"
+              valor={p.nota}
+              alCambiar={v => editar(p.clave, 'nota', v)}
+              multi
+              placeholder="Entrar por la caseta 2, la casa de la reja negra, avisar al vigilante…"
+            />
             <Campo etiqueta="Link de la propiedad" valor={p.linkPropiedad} alCambiar={v => editar(p.clave, 'linkPropiedad', v)} />
             <Campo etiqueta="Asesor a cargo" valor={p.asesorNombre} alCambiar={v => editar(p.clave, 'asesorNombre', v)} placeholder="Nombre — Inmobiliaria" />
             <Campo etiqueta="Teléfono del asesor" valor={p.asesorTel} alCambiar={v => editar(p.clave, 'asesorTel', v)} />
