@@ -2966,8 +2966,12 @@ const s = StyleSheet.create({
   cardBar:  { width: 4 },
   // La nota dentro de la tarjeta: un bloque citado, para que se distinga de
   // los datos duros del cliente y se lea como lo que es, algo escrito a mano.
+  // El margen de ABAJO no sobra: en esta tarjeta cada bloque se separa del
+  // siguiente con su propio marginBottom (metaRow 6, recRow 8). La nota no lo
+  // tenia y quedaba pegada a los botones de WhatsApp/Llamar/Editar, como si
+  // los estuviera tapando.
   notaCard: {
-    marginTop: 8, paddingVertical: 7, paddingHorizontal: 10,
+    marginTop: 8, marginBottom: 10, paddingVertical: 7, paddingHorizontal: 10,
     borderRadius: 8, borderLeftWidth: 3,
   },
   notaCardTxt: { fontSize: 12.5, lineHeight: 18 },
@@ -2980,7 +2984,7 @@ const s = StyleSheet.create({
   notaCardFila: { flexDirection: 'row', alignItems: 'flex-start' },
   tagVacio: { borderWidth: 1, borderStyle: 'dashed', backgroundColor: 'transparent' },
   notaCardVacia: {
-    marginTop: 8, borderWidth: 1, borderStyle: 'dashed', borderRadius: 8,
+    marginTop: 8, marginBottom: 10, borderWidth: 1, borderStyle: 'dashed', borderRadius: 8,
     paddingVertical: 7, paddingHorizontal: 10, alignItems: 'center',
   },
   notaCardVaciaTxt: { fontSize: 11.5, fontWeight: '700' },
