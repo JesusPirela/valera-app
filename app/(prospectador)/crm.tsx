@@ -183,22 +183,7 @@ function proximoRec(recs: Cliente['recordatorios']) {
     .sort((a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime())[0] ?? null
 }
 
-// Cuántos días lleva vencido un cliente (días desde su proximo_contacto o
-// recordatorio más antiguo sin completar que ya pasó).
-function diasVencido(c: Cliente): number {
-  const now = Date.now()
-  let vencioEn = now
-  if (c.proximo_contacto) {
-    // Parsear la fecha en hora local añadiendo T00:00 para evitar interpretación UTC
-    const t = new Date(c.proximo_contacto.slice(0, 10) + 'T00:00:00').getTime()
-    if (t < now) vencioEn = Math.min(vencioEn, t)
-  }
-  const recMin = (c.recordatorios ?? [])
-    .filter(r => !r.completado && new Date(r.fecha_hora).getTime() < now)
-    .reduce((min, r) => Math.min(min, new Date(r.fecha_hora).getTime()), Infinity)
-  if (Number.isFinite(recMin)) vencioEn = Math.min(vencioEn, recMin)
-  return Math.max(0, Math.floor((now - vencioEn) / 86400000))
-}
+// (diasVencido se retiro con el aviso de "en riesgo": era lo unico que lo usaba)
 
 // Normaliza un teléfono para comparar duplicados (quita no-dígitos y el prefijo MX).
 function normalizarTel(tel: string): string {
@@ -509,7 +494,8 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
               color={recTinta}
             />
             <Text style={[s.recTxt, { color: recTinta }]} numberOfLines={1}>
-              {recVenc ? '⚠ Vencido · ' : recHoy ? 'Hoy · ' : ''}
+              {/* El icono de al lado ya es un ⚠: ponerlo tambien en el texto daba "⚠ ⚠ Vencido". */}
+              {recVenc ? 'Vencido · ' : recHoy ? 'Hoy · ' : ''}
               {new Date(rec.fecha_hora).toLocaleDateString('es-MX', {
                 day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
               })} — {rec.titulo}
@@ -528,27 +514,26 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
             activeOpacity={0.75}
             onPress={() => setNotaAbierta(v => !v)}
           >
-            {!soloLectura && (
-              <View style={s.notaCardCabeza}>
-                <View style={{ flex: 1 }} />
-                {/* Tocar la nota la despliega; este botón la edita. Son dos
-                    cosas distintas y por eso son dos zonas distintas. */}
+            {/* El lápiz va AL LADO del texto, no en un renglón propio: así una
+                nota de dos letras ocupa un renglón y no una caja alta medio
+                vacía. Tocar la nota la despliega; el lápiz la edita. */}
+            <View style={s.notaCardFila}>
+              <Text
+                style={[s.notaCardTxt, { color: c.textSub, flex: 1 }]}
+                numberOfLines={notaAbierta ? undefined : 3}
+              >
+                {item.notas}
+              </Text>
+              {!soloLectura && (
                 <TouchableOpacity
                   onPress={() => onEditar(item, 'notas')}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={{ paddingLeft: 6 }}
                 >
-                  <Ionicons name="create-outline" size={12} color="#1a9aaa" />
-                  <Text style={s.notaCardEditar}>Editar</Text>
+                  <Ionicons name="create-outline" size={15} color="#1a9aaa" />
                 </TouchableOpacity>
-              </View>
-            )}
-            <Text
-              style={[s.notaCardTxt, { color: c.textSub }]}
-              numberOfLines={notaAbierta ? undefined : 3}
-            >
-              {item.notas}
-            </Text>
+              )}
+            </View>
             {notaLarga && (
               <Text style={s.notaCardMas}>{notaAbierta ? 'Ver menos' : 'Ver más'}</Text>
             )}
@@ -651,7 +636,6 @@ export default function CRM() {
   const [busqueda, setBusqueda]           = useState('')
   const [estadoFiltro, setEstadoFiltro]   = useState<string | null>(null)
   const [filtroVencidos, setFiltroVencidos] = useState(false)
-  const [bannerCerrado, setBannerCerrado]       = useState(false)
   const [bannerDupCerrado, setBannerDupCerrado] = useState(false)
   const [showDuplicadosModal, setShowDuplicadosModal] = useState(false)
   const [opFiltro, setOpFiltro]           = useState<'venta' | 'renta' | 'captacion' | null>(null)
@@ -997,14 +981,6 @@ export default function CRM() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientesBase, tick])
 
-  // Clientes vencidos ordenados por urgencia (más días sin contacto primero).
-  // Alimenta el banner de Oportunidades en riesgo.
-  const clientesEnRiesgo = useMemo(
-    () => clientesCrm.filter(necesitaSeguimiento).sort((a, b) => diasVencido(b) - diasVencido(a)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clientesCrm, tick]
-  )
-
   // Grupos de clientes con el mismo teléfono (duplicados). Cada grupo ≥ 2 clientes.
   // El primero de cada grupo es el más reciente (sugerido para conservar).
   const gruposDuplicados = useMemo(() => {
@@ -1023,13 +999,6 @@ export default function CRM() {
     }
     return grupos
   }, [clientesCrm])
-
-  // Reabre el banner si aparece un cliente nuevo en riesgo después de cerrarlo
-  const prevRiesgoLen = React.useRef(0)
-  React.useEffect(() => {
-    if (clientesEnRiesgo.length > prevRiesgoLen.current) setBannerCerrado(false)
-    prevRiesgoLen.current = clientesEnRiesgo.length
-  }, [clientesEnRiesgo.length])
 
   // ── Filtros ───────────────────────────────────────────────────
   const filtrados = useMemo(() => {
@@ -1732,41 +1701,13 @@ export default function CRM() {
         )}
       </View>
 
-      {/* ── Oportunidades en riesgo ── */}
-      {clientesEnRiesgo.length > 0 && !filtroVencidos && !bannerCerrado && (
-        <View style={s.opBanner}>
-          <View style={s.opHeader}>
-            <TouchableOpacity
-              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-              onPress={() => {
-                setEstadoFiltro(null); setOpFiltro(null); setFiltroVencidos(true)
-                setBusqueda(''); setInteresFilter(null); setZonaFilter(null)
-                setFuenteFilter(null); setCreditoFilter(null); setPresMin(''); setPresMax('')
-              }}
-              activeOpacity={0.85}
-            >
-              <Text style={s.opEmoji}>⚠️</Text>
-              {/* Un renglón, no dos: "3 oportunidades en riesgo" + el subtítulo
-                  largo se partían en cuatro renglones y el aviso medía más que
-                  una tarjeta de cliente. */}
-              <View style={{ flex: 1 }}>
-                <Text style={s.opTitulo} numberOfLines={1}>
-                  {clientesEnRiesgo.length} en riesgo de enfriarse
-                </Text>
-              </View>
-              <Text style={s.opCta} numberOfLines={1}>Ver todos →</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setBannerCerrado(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingLeft: 8 }}>
-              <Ionicons name="close" size={18} color="#ef4444" />
-            </TouchableOpacity>
-          </View>
-          {/* Antes aquí se listaban los 3 primeros clientes en riesgo. Eran
-              ~140px repitiendo tarjetas que YA están en la lista de abajo, y
-              por culpa de eso el primer cliente quedaba fuera de la pantalla.
-              "Ver todos →" filtra la lista exactamente a estos, así que no se
-              perdió nada: se llega al mismo lado con el mismo toque. */}
-        </View>
-      )}
+      {/* El aviso de "en riesgo de enfriarse" se retiró: era LO MISMO que la
+          pastilla de "SEGUIMIENTOS VENCIDOS" de arriba. Las dos salían del
+          mismo filtro —necesitaSeguimiento()— y las dos encendían el mismo
+          filtro al tocarlas; el mismo cliente se contaba dos veces en la misma
+          pantalla. Se quedó la pastilla porque además respeta la pestaña de
+          operación (Venta/Renta/Captación) y el aviso no: con "Venta" puesto,
+          el aviso seguía contando los de renta. */}
 
       {/* ── Clientes duplicados ── */}
       {gruposDuplicados.length > 0 && !bannerDupCerrado && (
@@ -1813,7 +1754,7 @@ export default function CRM() {
             style={[s.acceso, { backgroundColor: '#7c3aed' }]}
             onPress={() => router.push(`/(prospectador)/leads-campania${verUid ? `?verUid=${verUid}` : ''}`)}
           >
-            <Text style={s.accesoTxt} numberOfLines={1}>📣 Leads de campaña</Text>
+            <Text style={s.accesoTxt} numberOfLines={1}>📣 Leads</Text>
             {/* La insignia solo cuando hay algo que atender: un "0" parece un
                 problema, y no lo es — es haber terminado. */}
             {leadsCampania.length > 0 && (
@@ -2909,15 +2850,6 @@ const s = StyleSheet.create({
   btnLeadsCampSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12.5, fontWeight: '600', marginTop: 1 },
   badgeCampaniaBig: { backgroundColor: '#fff', minWidth: 26, height: 26, borderRadius: 13, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center' },
   badgeCampaniaBigTxt: { fontSize: 15, fontWeight: '900', color: '#7c3aed' },
-  opBanner: {
-    marginHorizontal: 12, marginTop: 10, borderRadius: 12,
-    borderWidth: 1.5, borderColor: '#fecaca', backgroundColor: '#fef2f2', overflow: 'hidden',
-  },
-  opHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10 },
-  opEmoji: { fontSize: 19 },
-  opTitulo: { fontSize: 14, fontWeight: '800', color: '#b91c1c' },
-  opSub: { fontSize: 12, color: '#9a4b4b', marginTop: 1 },
-  opCta: { fontSize: 12, fontWeight: '800', color: '#b91c1c' },
   // (opCliente/opDias*/opMas se retiraron con las filas de clientes del aviso)
 
   // ── Search ──────────────────────────────────────────────────────
@@ -3008,8 +2940,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 10,
     fontSize: 15, lineHeight: 21, marginTop: 10,
   },
-  notaCardCabeza: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
-  notaCardEditar: { fontSize: 11, fontWeight: '800', color: '#1a9aaa' },
+  notaCardFila: { flexDirection: 'row', alignItems: 'flex-start' },
   notaCardVacia: {
     marginTop: 8, borderWidth: 1, borderStyle: 'dashed', borderRadius: 8,
     paddingVertical: 7, paddingHorizontal: 10, alignItems: 'center',
