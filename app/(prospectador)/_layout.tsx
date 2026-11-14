@@ -7,6 +7,7 @@ import * as Notifications from 'expo-notifications'
 import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useTheme } from '../../lib/ThemeContext'
+import { legibleSobre } from '../../lib/color'
 import { AccentBackground } from '../../lib/patrones'
 import { trackLoginDiario } from '../../lib/gamification'
 import { programarRecordatorios, solicitarPermisoWeb, notificarWeb } from '../../lib/notificaciones-locales'
@@ -19,6 +20,7 @@ import AscensoRolModal from '../../components/AscensoRolModal'
 import PopupLeadsCampania from '../../components/PopupLeadsCampania'
 import RetroPendientesPopup from '../../components/RetroPendientesPopup'
 import AnunciosPopup from '../../components/AnunciosPopup'
+import PopupTrasLlamada from '../../components/PopupTrasLlamada'
 import { actualizarWidgetMiDia } from '../../lib/widgetUpdate'
 
 const LOGO = require('../../assets/logo-recortado.png')
@@ -55,6 +57,9 @@ export default function ProspectadorLayout() {
   const [ascensoRol, setAscensoRol] = useState<'prospectador' | 'prospectador_plus' | null>(null)
   const { vistaComo } = useVistaComo()
   const { primaryColor: colorAcento, acentoId, figuraAcento, darkMode } = useTheme()
+  // El fondo real de la barra de abajo: es contra ESTE color que hay que medir
+  // si los iconos se leen, no contra el fondo de la pantalla.
+  const fondoTabBar = darkMode ? '#1b3045' : '#ffffff'
   const pathname = usePathname()
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(false)
@@ -285,6 +290,7 @@ export default function ProspectadorLayout() {
     <PopupLeadsCampania />
     <RetroPendientesPopup enabled />
     <AnunciosPopup />
+    <PopupTrasLlamada />
     <Tabs
       // "atrás" vuelve a la pantalla ANTERIOR de verdad, no al inicio.
       //
@@ -296,8 +302,17 @@ export default function ProspectadorLayout() {
       // de volver al CRM. Con "history" se respeta el recorrido real.
       backBehavior="history"
       screenOptions={{
-        tabBarActiveTintColor: colorAcento,
-        tabBarInactiveTintColor: darkMode ? '#556a7a' : '#9eafb2',
+        // El color de acento lo elige cada quien, y sobre la barra oscura
+        // (#1b3045) NINGUNO de los nueve se leia: medido, de 1.14:1 (Galaxia)
+        // a 3.85:1 (Artico), donde hace falta 4.5:1. Con Galaxia o Pizarra el
+        // icono de la pestana activa era practicamente invisible: no se sabia
+        // en que pantalla estabas. Se le sube el brillo lo justo conservando
+        // el tono, con el mismo helper que ya se usa en propiedades y el CRM.
+        tabBarActiveTintColor: legibleSobre(colorAcento, fondoTabBar, 4.5),
+        // El inactivo tambien fallaba (2.40:1 en oscuro, 2.28:1 en claro). Se
+        // le pide 3:1 y no 4.5: es una pestana que NO es la actual, y dejarla
+        // mas tenue es lo que marca en cual estas.
+        tabBarInactiveTintColor: legibleSobre(darkMode ? '#556a7a' : '#9eafb2', fondoTabBar, 3),
         tabBarStyle: ocultarTabBar ? { display: 'none' } : {
           backgroundColor: darkMode ? '#1b3045' : '#fff',
           borderTopColor: darkMode ? '#2a4560' : '#e8eef0',

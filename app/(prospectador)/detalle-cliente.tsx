@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, Platform, Linking,
@@ -22,6 +22,7 @@ import { conTimeout } from '../../lib/redIntentos'
 import PropiedadesSugeridas from '../../components/PropiedadesSugeridas'
 import SelectorEtapa from '../../components/SelectorEtapa'
 import { mensajeCoordinacion, enlaceWhatsAppValera, fechaCitaLegible } from '../../lib/cita'
+import { registrarLlamada } from '../../lib/llamada-pendiente'
 
 /** Una cita todavía viva de este cliente (ver la consulta más abajo). */
 type CitaPendiente = {
@@ -299,7 +300,7 @@ const irStyles = StyleSheet.create({
 // ── Pantalla principal ───────────────────────────────────
 export default function DetalleCliente() {
   const c = useColors()
-  const { id, ro } = useLocalSearchParams<{ id: string; ro?: string }>()
+  const { id, ro, agendar } = useLocalSearchParams<{ id: string; ro?: string; agendar?: string }>()
   const soloLectura = ro === '1'  // viendo el cliente de otra persona: no se edita
   const queryClient = useQueryClient()
   const { refreshPending } = useOfflineSync()
@@ -514,6 +515,17 @@ export default function DetalleCliente() {
     setTextoInteraccion(''); setTipoInteraccion('nota'); setModalInteraccion(false)
     refetch()
   }
+
+  // Entrar con ?agendar=1 abre el flujo de agendar sin un toque de más. Lo usa
+  // el aviso de después de la llamada: de colgar a cita puesta, dos toques.
+  const yaAbrioAgendar = useRef(false)
+  useEffect(() => {
+    if (agendar !== '1' || soloLectura || yaAbrioAgendar.current) return
+    if (!cliente) return   // esperar a que cargue
+    yaAbrioAgendar.current = true
+    abrirAgendar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agendar, cliente, soloLectura])
 
   function abrirAgendar() {
     if (soloLectura) return
@@ -945,6 +957,8 @@ export default function DetalleCliente() {
           onPress={() => {
             Linking.openURL(`tel:${cliente.telefono}`)
             getUsuarioActual().then(({ data: { user } }) => { if (user) registrarContacto(user.id, cliente.id, 'llamada').catch(() => {}) })
+            // Al volver de la llamada se pregunta cómo fue (PopupTrasLlamada).
+            registrarLlamada(cliente.id, cliente.nombre, cliente.telefono)
           }}
         >
           <Ionicons name="call" size={20} color="#fff" />
