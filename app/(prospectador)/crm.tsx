@@ -424,15 +424,37 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
           <View style={s.cardHeadInfo}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
               {semaforoCrm(item) ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: semaforoCrm(item)! }} /> : null}
-              <Text style={[s.cardNombre, { color: c.text, flex: 1 }]} numberOfLines={1}>{item.nombre}</Text>
+              {/* Tocar el NOMBRE lo corrige aqui mismo. Tocar el resto de la
+                  tarjeta sigue abriendo el perfil, que es lo que se espera. */}
+              <TouchableOpacity
+                style={{ flex: 1 }}
+                disabled={soloLectura}
+                onPress={() => onEditar(item, 'nombre')}
+                activeOpacity={0.6}
+              >
+                <Text style={[s.cardNombre, { color: c.text }]} numberOfLines={1}>{item.nombre}</Text>
+              </TouchableOpacity>
             </View>
             <View style={s.cardSubRow}>
               {item.nivel_interes ? (
-                <View style={[s.fuenteTag, { backgroundColor: interes.fondo }]}>
+                <TouchableOpacity
+                  style={[s.fuenteTag, { backgroundColor: interes.fondo }]}
+                  disabled={soloLectura}
+                  onPress={() => onEditar(item, 'interes')}
+                  activeOpacity={0.7}
+                >
                   <Text style={[s.fuenteTagTxt, { color: interes.tinta }]}>
                     {NIVEL_INTERES_LABEL[item.nivel_interes]}
                   </Text>
-                </View>
+                </TouchableOpacity>
+              ) : !soloLectura ? (
+                <TouchableOpacity
+                  style={[s.fuenteTag, s.tagVacio, { borderColor: c.border }]}
+                  onPress={() => onEditar(item, 'interes')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.fuenteTagTxt, { color: c.textMute }]}>+ interés</Text>
+                </TouchableOpacity>
               ) : null}
               {item.fuente_lead ? (
                 <View style={[s.fuenteTag, { backgroundColor: darkMode ? c.bg : '#f1f5f9' }]}>
@@ -471,16 +493,31 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
           </TouchableOpacity>
         </View>
         <View style={s.metaRow}>
-          <View style={s.metaItem}>
+          <TouchableOpacity
+            style={s.metaItem}
+            disabled={soloLectura}
+            onPress={() => onEditar(item, 'telefono')}
+            activeOpacity={0.6}
+          >
             <Ionicons name="call-outline" size={11} color={tintaIcono(c.textMute, c.card)} />
             <Text style={[s.metaTxt, { color: c.textSub }]}>{item.telefono}</Text>
-          </View>
-          {item.tipo_operacion && (
-            <View style={s.metaItem}>
+          </TouchableOpacity>
+          {item.tipo_operacion ? (
+            <TouchableOpacity
+              style={s.metaItem}
+              disabled={soloLectura}
+              onPress={() => onEditar(item, 'operacion')}
+              activeOpacity={0.6}
+            >
               <Ionicons name="home-outline" size={11} color={tintaIcono(c.textMute, c.card)} />
               <Text style={[s.metaTxt, { color: c.textSub, textTransform: 'capitalize' }]}>{item.tipo_operacion}</Text>
-            </View>
-          )}
+            </TouchableOpacity>
+          ) : !soloLectura ? (
+            <TouchableOpacity style={s.metaItem} onPress={() => onEditar(item, 'operacion')} activeOpacity={0.6}>
+              <Ionicons name="home-outline" size={11} color={tintaIcono(c.textMute, c.card)} />
+              <Text style={[s.metaTxt, { color: c.textMute }]}>+ operación</Text>
+            </TouchableOpacity>
+          ) : null}
           <View style={s.metaTime}>
             <Ionicons name="time-outline" size={11} color={tintaIcono(c.textMute, c.card)} />
             <Text style={[s.metaTxt, { color: c.textMute }]}>{tiempoRelativo(item.created_at)}</Text>
@@ -2941,6 +2978,7 @@ const s = StyleSheet.create({
     fontSize: 15, lineHeight: 21, marginTop: 10,
   },
   notaCardFila: { flexDirection: 'row', alignItems: 'flex-start' },
+  tagVacio: { borderWidth: 1, borderStyle: 'dashed', backgroundColor: 'transparent' },
   notaCardVacia: {
     marginTop: 8, borderWidth: 1, borderStyle: 'dashed', borderRadius: 8,
     paddingVertical: 7, paddingHorizontal: 10, alignItems: 'center',
