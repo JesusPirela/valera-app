@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { normalizar } from '../../lib/texto'
 import { legibleSobre, mezclar } from '../../lib/color'
 import { registrarAccion , registrarSeguimiento, registrarContacto } from '../../lib/gamification'
+import { registrarLlamada } from '../../lib/llamada-pendiente'
 
 const VISTA_CRM_KEY = '@valera_crm_vista'
 const EMPTY_SET = new Set<string>()
@@ -577,6 +578,8 @@ const ClienteCard = memo(function ClienteCard({ item, c, darkMode, userRole, onC
             onPress={() => {
               llamar(item.telefono)
               getUsuarioActual().then(({ data: { user } }) => { if (user) registrarContacto(user.id, item.id, 'llamada').catch(() => {}) })
+              // Al volver de la llamada se pregunta cómo fue (PopupTrasLlamada).
+              registrarLlamada(item.id, item.nombre, item.telefono)
             }}
           >
             <Ionicons name="call-outline" size={14} color={darkMode ? '#38bdf8' : '#0369a1'} />
@@ -1704,7 +1707,12 @@ export default function CRM() {
         {total === 0 && !isLoading ? (
           <Text style={s.funnelEmpty}>Agrega tu primer lead para ver el embudo de ventas</Text>
         ) : (
-          <View style={s.funnelLegend}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.funnelLegend}
+            keyboardShouldPersistTaps="handled"
+          >
             {ORDEN_ESTADOS.filter(e => e !== 'compro' && e !== 'compro_externo' && conteos[e] > 0).map(e => {
               const info = estadoInfo(e)
               const activo = estadoFiltro === e
@@ -1720,7 +1728,7 @@ export default function CRM() {
                 </TouchableOpacity>
               )
             })}
-          </View>
+          </ScrollView>
         )}
       </View>
 
@@ -1738,37 +1746,25 @@ export default function CRM() {
               activeOpacity={0.85}
             >
               <Text style={s.opEmoji}>⚠️</Text>
+              {/* Un renglón, no dos: "3 oportunidades en riesgo" + el subtítulo
+                  largo se partían en cuatro renglones y el aviso medía más que
+                  una tarjeta de cliente. */}
               <View style={{ flex: 1 }}>
-                <Text style={s.opTitulo}>
-                  {clientesEnRiesgo.length} oportunidad{clientesEnRiesgo.length === 1 ? '' : 'es'} en riesgo
+                <Text style={s.opTitulo} numberOfLines={1}>
+                  {clientesEnRiesgo.length} en riesgo de enfriarse
                 </Text>
-                <Text style={s.opSub}>Contáctalos antes de que se enfríen</Text>
               </View>
-              <Text style={s.opCta}>Ver todos →</Text>
+              <Text style={s.opCta} numberOfLines={1}>Ver todos →</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setBannerCerrado(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingLeft: 8 }}>
               <Ionicons name="close" size={18} color="#ef4444" />
             </TouchableOpacity>
           </View>
-          {!vistaExcel && clientesEnRiesgo.slice(0, 3).map(cl => {
-            const dias = diasVencido(cl)
-            return (
-              <TouchableOpacity
-                key={cl.id}
-                style={s.opCliente}
-                onPress={() => router.push(`/(prospectador)/detalle-cliente?id=${cl.id}` as any)}
-                activeOpacity={0.8}
-              >
-                <Text style={s.opClienteNombre} numberOfLines={1}>{cl.nombre}</Text>
-                <View style={[s.opDiasBadge, dias >= 7 && s.opDiasBadgeAlta]}>
-                  <Text style={[s.opDiasTxt, dias >= 7 && s.opDiasTxtAlta]}>{dias}d</Text>
-                </View>
-              </TouchableOpacity>
-            )
-          })}
-          {!vistaExcel && clientesEnRiesgo.length > 3 && (
-            <Text style={s.opMas}>+{clientesEnRiesgo.length - 3} más — toca "Ver todos" para verlos</Text>
-          )}
+          {/* Antes aquí se listaban los 3 primeros clientes en riesgo. Eran
+              ~140px repitiendo tarjetas que YA están en la lista de abajo, y
+              por culpa de eso el primer cliente quedaba fuera de la pantalla.
+              "Ver todos →" filtra la lista exactamente a estos, así que no se
+              perdió nada: se llega al mismo lado con el mismo toque. */}
         </View>
       )}
 
@@ -1795,15 +1791,37 @@ export default function CRM() {
         </View>
       )}
 
-      {/* ── Botones: chats de WhatsApp + Colecciones ── */}
-      <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 12, marginTop: 8 }}>
-        <TouchableOpacity style={[s.btnCampana, { flex: 1, marginHorizontal: 0, marginTop: 0 }]} onPress={() => router.push('/(prospectador)/chats')}>
-          <Text style={s.btnCampanaTxt}>💬 Chats de WhatsApp</Text>
+      {/* ── Accesos: chats, colecciones y leads de campaña ──
+          Antes eran tres bloques apilados —dos botones de ancho completo y el
+          bloque morado de leads—: 126px de botones antes de ver al primer
+          cliente. Ahora son un renglón de pastillas que se desliza; se llega a
+          lo mismo con el mismo toque. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.accesosRow}
+        keyboardShouldPersistTaps="handled"
+      >
+        <TouchableOpacity style={[s.acceso, { backgroundColor: '#188741' }]} onPress={() => router.push('/(prospectador)/chats')}>
+          <Text style={s.accesoTxt} numberOfLines={1}>💬 Chats</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[s.btnCampana, { flex: 1, marginHorizontal: 0, marginTop: 0, backgroundColor: '#1a6470' }]} onPress={() => router.push('/(prospectador)/colecciones')}>
-          <Text style={s.btnCampanaTxt}>📁 Colecciones</Text>
+        <TouchableOpacity style={[s.acceso, { backgroundColor: '#1a6470' }]} onPress={() => router.push('/(prospectador)/colecciones')}>
+          <Text style={s.accesoTxt} numberOfLines={1}>📁 Colecciones</Text>
         </TouchableOpacity>
-      </View>
+        {totalCampania > 0 && (
+          <TouchableOpacity
+            style={[s.acceso, { backgroundColor: '#7c3aed' }]}
+            onPress={() => router.push(`/(prospectador)/leads-campania${verUid ? `?verUid=${verUid}` : ''}`)}
+          >
+            <Text style={s.accesoTxt} numberOfLines={1}>📣 Leads de campaña</Text>
+            {/* La insignia solo cuando hay algo que atender: un "0" parece un
+                problema, y no lo es — es haber terminado. */}
+            {leadsCampania.length > 0 && (
+              <View style={s.accesoBadge}><Text style={s.accesoBadgeTxt}>{leadsCampania.length}</Text></View>
+            )}
+          </TouchableOpacity>
+        )}
+      </ScrollView>
 
       {/* ── Banner de solo lectura (viendo el CRM de otra persona) ── */}
       {soloLectura && (
@@ -1821,28 +1839,7 @@ export default function CRM() {
         </View>
       )}
 
-      {/* ── Botón: Leads de campaña ── */}
-      {totalCampania > 0 && (
-        <TouchableOpacity style={s.btnLeadsCamp} onPress={() => router.push(`/(prospectador)/leads-campania${verUid ? `?verUid=${verUid}` : ''}`)} activeOpacity={0.88}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-            <Text style={{ fontSize: 28 }}>📣</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.btnLeadsCampTit}>Leads de campaña</Text>
-              <Text style={s.btnLeadsCampSub}>
-                {leadsCampania.length > 0
-                  ? `${leadsCampania.length} por atender · ${totalCampania} en total`
-                  : `${totalCampania} ${totalCampania === 1 ? 'lead' : 'leads'} · todos en tu CRM`}
-              </Text>
-            </View>
-          </View>
-          {/* La insignia solo cuando hay algo que atender: un "0" en rojo
-              parece un problema, y no lo es — es haber terminado. */}
-          {leadsCampania.length > 0 && (
-            <View style={s.badgeCampaniaBig}><Text style={s.badgeCampaniaBigTxt}>{leadsCampania.length}</Text></View>
-          )}
-          <Ionicons name="chevron-forward" size={22} color="rgba(255,255,255,0.9)" style={{ marginLeft: 6 }} />
-        </TouchableOpacity>
-      )}
+      {/* El acceso a Leads de campaña se movió al renglón de accesos, arriba. */}
 
       {/* ── Buscador, herramientas y pestañas ──
           En CELULAR van en tres renglones y no en uno. Antes el buscador
@@ -2808,7 +2805,7 @@ const s = StyleSheet.create({
   // ── KPI strip ───────────────────────────────────────────────────
   kpiStrip: {
     flexDirection: 'row', backgroundColor: '#fff',
-    paddingVertical: 14,
+    paddingVertical: 9,
     borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
   },
   topInfoRow: {
@@ -2818,11 +2815,11 @@ const s = StyleSheet.create({
   vencidosPill: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     borderRadius: 12, borderWidth: 1.5, borderColor: '#e2e8f0',
-    paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f8fafc',
+    paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#f8fafc',
   },
   vencidosPillActivo: { borderColor: '#fca5a5', backgroundColor: '#fff5f5' },
   // #94a3b8 daba 2.45:1 sobre el #f8fafc de la pildora. Medido, no a ojo.
-  vencidosPillNum: { fontSize: 22, fontWeight: '900', color: '#607490' },
+  vencidosPillNum: { fontSize: 19, fontWeight: '900', color: '#607490' },
   vencidosPillLbl: { fontSize: 11, fontWeight: '700', color: '#607490' },
   presuPill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -2843,19 +2840,21 @@ const s = StyleSheet.create({
   presuBannerSub: { color: 'rgba(255,255,255,0.9)', fontSize: 12.5, fontWeight: '700', textAlign: 'right', maxWidth: 90 },
   kpiItem: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 4, borderRadius: 10 },
   kpiActivo: { backgroundColor: 'rgba(26,100,112,0.12)' },
-  kpiNum:  { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  kpiNum:  { fontSize: 21, fontWeight: '800', letterSpacing: -0.5 },
   kpiLbl:  { fontSize: 9, color: '#94a3b8', fontWeight: '700', letterSpacing: 0.6 },
   kpiDiv:  { width: 1, backgroundColor: '#e2e8f0', marginVertical: 6 },
 
   // ── Funnel ──────────────────────────────────────────────────────
-  funnelWrap: { backgroundColor: '#fff', paddingHorizontal: 16, paddingBottom: 10 },
+  funnelWrap: { backgroundColor: '#fff', paddingHorizontal: 16, paddingBottom: 8 },
   funnelBar: {
     height: 6, flexDirection: 'row', borderRadius: 6, overflow: 'hidden',
     backgroundColor: '#e2e8f0',
   },
   funnelSeg: { height: '100%' },
+  // Un solo renglón que se desliza: con 9 etapas, envolver costaba dos y tres
+  // renglones de alto y empujaba a los clientes fuera de la pantalla.
   funnelLegend: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 7, paddingRight: 14,
   },
   legendItem:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot:    { width: 7, height: 7, borderRadius: 4 },
@@ -2877,9 +2876,9 @@ const s = StyleSheet.create({
 
   // ── Botón chats ─────────────────────────────────────────────────
   btnCampana: {
-    marginHorizontal: 12, marginTop: 8,
+    marginHorizontal: 12, marginTop: 7,
     backgroundColor: '#188741', borderRadius: 10,   // #25D366 dejaba el texto blanco en 1.98:1
-    paddingVertical: 11, alignItems: 'center',
+    paddingVertical: 8, alignItems: 'center',
     flexShrink: 0,
   },
   btnCampanaTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
@@ -2889,35 +2888,37 @@ const s = StyleSheet.create({
   roBannerTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   todosBanner: { backgroundColor: '#5E35B1', paddingVertical: 9, paddingHorizontal: 14, marginHorizontal: 12, marginTop: 8, borderRadius: 10, alignItems: 'center' },
   todosBannerTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  accesosRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingTop: 8 },
+  acceso: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: 10, paddingHorizontal: 13, paddingVertical: 8,
+  },
+  accesoTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  accesoBadge: {
+    backgroundColor: '#fff', minWidth: 20, height: 20, borderRadius: 10,
+    paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center',
+  },
+  accesoBadgeTxt: { fontSize: 11.5, fontWeight: '900', color: '#7c3aed' },
+
   btnLeadsCamp: {
-    marginHorizontal: 12, marginTop: 10, backgroundColor: '#7c3aed', borderRadius: 16,
-    paddingVertical: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 12, marginTop: 8, backgroundColor: '#7c3aed', borderRadius: 14,
+    paddingVertical: 10, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center',
     ...Platform.select({ web: { boxShadow: '0 4px 14px rgba(124,58,237,0.35)' } as any, default: { elevation: 4 } }),
   },
-  btnLeadsCampTit: { color: '#fff', fontSize: 17, fontWeight: '900' },
+  btnLeadsCampTit: { color: '#fff', fontSize: 15, fontWeight: '900' },
   btnLeadsCampSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12.5, fontWeight: '600', marginTop: 1 },
-  badgeCampaniaBig: { backgroundColor: '#fff', minWidth: 30, height: 30, borderRadius: 15, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
+  badgeCampaniaBig: { backgroundColor: '#fff', minWidth: 26, height: 26, borderRadius: 13, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center' },
   badgeCampaniaBigTxt: { fontSize: 15, fontWeight: '900', color: '#7c3aed' },
   opBanner: {
     marginHorizontal: 12, marginTop: 10, borderRadius: 12,
     borderWidth: 1.5, borderColor: '#fecaca', backgroundColor: '#fef2f2', overflow: 'hidden',
   },
-  opHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, paddingBottom: 8 },
-  opEmoji: { fontSize: 22 },
+  opHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10 },
+  opEmoji: { fontSize: 19 },
   opTitulo: { fontSize: 14, fontWeight: '800', color: '#b91c1c' },
   opSub: { fontSize: 12, color: '#9a4b4b', marginTop: 1 },
   opCta: { fontSize: 12, fontWeight: '800', color: '#b91c1c' },
-  opCliente: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderTopWidth: 1, borderTopColor: '#fecaca',
-  },
-  opClienteNombre: { flex: 1, fontSize: 13, fontWeight: '600', color: '#7f1d1d' },
-  opDiasBadge: { backgroundColor: '#fee2e2', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  opDiasBadgeAlta: { backgroundColor: '#d73d3d' },   // #ef4444 dejaba el texto blanco en 3.76:1
-  opDiasTxt: { fontSize: 12, fontWeight: '700', color: '#b91c1c' },
-  opDiasTxtAlta: { color: '#fff' },
-  opMas: { fontSize: 12, color: '#9a4b4b', textAlign: 'center', paddingVertical: 8 },
+  // (opCliente/opDias*/opMas se retiraron con las filas de clientes del aviso)
 
   // ── Search ──────────────────────────────────────────────────────
   searchRow: {
