@@ -547,7 +547,38 @@ function AgregarCitaModal({ profiles, clientes, miId, onCrearCliente, onClose, o
       if (_clienteNuevo && limpio.cliente_nombre) {
         await onCrearCliente(limpio.cliente_nombre, limpio.telefono ?? null, prospecto_id ?? null)
       }
-      await supabase.from('citas_venta').insert({ ...limpio, origen: 'manual' }); onSaved(); onClose()
+      const { data: creada } = await supabase
+        .from('citas_venta').insert({ ...limpio, origen: 'manual' }).select('id').single()
+
+      // Subirla al dashboard.
+      //
+      // El dashboard y coordinacion no leen esta tabla: leen citas_coordinacion.
+      // Hasta ahora lo capturado aqui no llegaba a ningun lado.
+      //
+      // Si no se puede enlazar, la cita NO se pierde: se queda guardada en la
+      // tabla como siempre y se explica por que no va a aparecer. Vale mas una
+      // cita registrada a medias que una cita perdida.
+      if (creada?.id) {
+        try {
+          const { data: res } = await supabase
+            .rpc('enlazar_cita_venta_al_dashboard', { p_cita_venta_id: creada.id })
+          const r = res as any
+          if (r && r.ok === false) {
+            const porque =
+              r.motivo === 'coordinador_no_reconocido'
+                ? `"${r.coordino}" no esta en la lista de coordinadores que el sistema reconoce`
+                : r.motivo === 'sin_coordinador' ? 'no se puso quien coordino'
+                : r.motivo === 'sin_fecha' ? 'no tiene fecha y hora de la cita'
+                : 'el sistema no la acepto'
+            const aviso = `La cita SI se guardo en la tabla, pero no va a aparecer en el dashboard porque ${porque}.`
+            if (Platform.OS === 'web') window.alert(aviso)
+            else Alert.alert('Guardada, pero no sube al dashboard', aviso)
+          }
+        } catch {
+          // La cita ya quedo guardada. El enlace se puede hacer despues.
+        }
+      }
+      onSaved(); onClose()
     } catch { setGuardando(false) }
   }
   function avanzar(patch?: Record<string, any>) {
