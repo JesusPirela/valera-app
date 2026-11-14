@@ -778,6 +778,7 @@ export default function CitasVenta() {
   const [miId, setMiId] = useState<string | null>(null)
   const [copiadoId, setCopiadoId] = useState<string | null>(null)
   const [rango, setRango] = useState<{ desde: string; hasta: string } | null>(null)  // YYYY-MM-DD
+  const [busquedaTabla, setBusquedaTabla] = useState('')
   const [ordenFecha, setOrdenFecha] = useState<'desc' | 'asc' | null>(null)  // orden por fecha de la cita (clic en la columna)
   const [dropCol, setDropCol] = useState<ColKey | null>(null)
   const [dropSel, setDropSel] = useState<Set<string>>(new Set())
@@ -905,6 +906,18 @@ export default function CitasVenta() {
   }, [cargarTelefonosChatbot])
 
   const valorDe = (f: Fila, key: ColKey) => String((f[key] as string) ?? '').trim() || VACIO
+
+  // Buscar por nombre, telefono, propiedad o por quien la atendio.
+  // Sin acentos y sin importar mayusculas: "dominica" encuentra "Doménica".
+  const sinAcentos = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const coincideBusqueda = (f: Fila, q: string) => {
+    if (!q) return true
+    const campos = [f.cliente_nombre, f.telefono, f.interesado_en, f.zona_interesada,
+      f.prospecto, f.coordino, f.atendio, f.dia_cita]
+    const heno = sinAcentos(campos.map(v => String(v ?? '')).join(' | '))
+    // Cada palabra por separado: "italia villela" encuentra aunque esten lejos.
+    return sinAcentos(q).split(/\s+/).filter(Boolean).every(p => heno.includes(p))
+  }
   // Todo lo filtrado MENOS el propio filtro de retro. De aquí salen los
   // contadores de "Con retro / Falta retro": así respetan el rango de fechas y
   // los demás filtros (si filtras septiembre, dicen cuántas retros faltaron en
@@ -912,6 +925,7 @@ export default function CitasVenta() {
   const sinFiltroRetro = useMemo(() => {
     const vacio = (f: Fila, k: ColKey) => String((f[k] as string) ?? '').trim() === ''
     return filas.filter(f => {
+      if (!coincideBusqueda(f, busquedaTabla.trim())) return false
       if (!Object.entries(filtrosSel).every(([k, set]) => set.has(valorDe(f, k as ColKey)))) return false
       if (sinAsignar) {
         if (sinAsignar === 'any') { if (!(vacio(f, 'prospecto') || vacio(f, 'coordino') || vacio(f, 'atendio'))) return false }
@@ -928,7 +942,8 @@ export default function CitasVenta() {
       }
       return true
     })
-  }, [filas, filtrosSel, sinAsignar, rango])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filas, filtrosSel, sinAsignar, rango, busquedaTabla])
 
   const visibles = useMemo(() => {
     const arr = !filtroRetro
@@ -1022,9 +1037,22 @@ export default function CitasVenta() {
   }, [visibles, llevarAFila])
 
   // Presets de rango (últimos N días, hasta hoy).
-  const hoyISO = () => new Date().toISOString().slice(0, 10)
-  const haceDias = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10) }
-  const preset = (dias: number) => setRango({ desde: haceDias(dias), hasta: hoyISO() })
+  // OJO con toISOString(): devuelve la fecha en UTC, y en Mexico (UTC-6) despues
+  // de las 6 de la tarde ya es el dia siguiente. Por eso se arma a mano con la
+  // fecha LOCAL: si no, el rango se corria un dia cada tarde.
+  const aISOLocal = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const hoyISO = () => aISOLocal(new Date())
+  const haceDias = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return aISOLocal(d) }
+  const enDias = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return aISOLocal(d) }
+  // Los presets abarcan hacia ATRAS Y HACIA ADELANTE.
+  //
+  // Antes era "de hace N dias hasta HOY", y eso dejaba fuera TODAS las citas
+  // que todavia no pasan, que en una tabla de citas de venta son justo las que
+  // mas importan. Medido el 13/nov/2026: 9 citas futuras invisibles con
+  // cualquier preset, 4 de ellas dentro de los siguientes 30 dias. Se reporto
+  // asi: "pongo 1 mes y no aparecen, y si estan en este mes".
+  const preset = (dias: number) => setRango({ desde: haceDias(dias), hasta: enDias(dias) })
 
   function exportarCSV() {
     const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s }
@@ -1199,11 +1227,29 @@ export default function CitasVenta() {
       </View>
       {msg ? <Text style={[st.msg, { color: msg.startsWith('✓') ? '#1a6855' : msg.startsWith('✗') ? '#c0392b' : c.textMute }]}>{msg}</Text> : null}
 
+      {/* Buscador de la tabla. Con mas de mil citas, sin esto la unica forma
+          de encontrar a alguien era bajar fila por fila. */}
+      <View style={st.fechaBar}>
+        <Text style={[st.fechaLabel, { color: c.textSub }]}>🔎 Buscar:</Text>
+        <TextInput
+          style={[st.buscaTabla, { borderColor: c.border, color: c.text, backgroundColor: c.bg }]}
+          value={busquedaTabla}
+          onChangeText={setBusquedaTabla}
+          placeholder="Nombre, teléfono, propiedad, quién la atendió…"
+          placeholderTextColor={c.textMute}
+        />
+        {busquedaTabla.length > 0 && (
+          <TouchableOpacity onPress={() => setBusquedaTabla('')}>
+            <Text style={st.fechaLimpiar}>✕ Limpiar</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Filtro por fecha de la cita: presets + rango exacto */}
       <View style={st.fechaBar}>
         <Text style={[st.fechaLabel, { color: c.textSub }]}>📅 Fecha de cita:</Text>
         {[{ d: 7, l: '1 semana' }, { d: 14, l: '2 semanas' }, { d: 30, l: '1 mes' }].map(p => {
-          const on = !!rango && rango.desde === haceDias(p.d) && rango.hasta === hoyISO()
+          const on = !!rango && rango.desde === haceDias(p.d) && rango.hasta === enDias(p.d)
           return (
             <TouchableOpacity key={p.d} style={[st.fechaChip, { borderColor: c.border }, on && st.fechaChipOn]} onPress={() => preset(p.d)}>
               <Text style={[st.fechaChipTxt, { color: on ? '#fff' : c.textSub }]}>{p.l}</Text>
@@ -1731,6 +1777,11 @@ const st = StyleSheet.create({
   fechaChipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   sinAsignarOn: { backgroundColor: '#c0392b', borderColor: '#c0392b' },
   fechaChipTxt: { fontSize: 12.5, fontWeight: '700' },
+  buscaTabla: {
+    flex: 1, minWidth: 180, maxWidth: 420,
+    borderWidth: 1, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 6, fontSize: 13,
+  },
   fechaLimpiar: { color: '#c0392b', fontWeight: '800', fontSize: 12.5 },
   msg: { fontSize: 12.5, fontWeight: '600', marginTop: 4 },
   headRow: { flexDirection: 'row', borderTopLeftRadius: 8, borderTopRightRadius: 8 },
