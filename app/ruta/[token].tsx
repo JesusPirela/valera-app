@@ -28,6 +28,9 @@ type Parada = {
   hora: string; titulo: string; ubicacion: string; precio: string
   caracteristicas: string; mapaUrl: string; linkPropiedad: string
   asesorNombre: string; asesorTel: string; fotoUrl: string; confirmada: boolean
+  /** Indicaciones para llegar, escritas a mano. Opcional: las hojas guardadas
+   *  antes de que existiera el campo no la traen. */
+  nota?: string
 }
 type Perfil = {
   nombre: string; telefono: string; correo: string
@@ -190,6 +193,18 @@ export default function HojaDeRutaPublica() {
                   )}
                 </View>
 
+                {/* Las indicaciones para llegar, pegadas al boton "Como llegar".
+                    El mapa deja al asesor en la calle; lo que falta siempre es
+                    el ultimo tramo -por cual caseta entrar, cual reja es, a
+                    quien avisarle- y eso no lo sabe mas que quien ya fue.
+                    En ambar, que es el unico color calido de la pagina. */}
+                {hay(p.nota) && (
+                  <View style={s.indic}>
+                    <Text style={s.indicLbl}>📍 CÓMO LLEGAR — IMPORTANTE</Text>
+                    <Text style={s.indicTxt}>{p.nota}</Text>
+                  </View>
+                )}
+
                 {(hay(p.asesorNombre) || hay(p.asesorTel)) && (
                   <View style={s.asesor}>
                     <Text style={s.asesorLbl}>ASESOR A CARGO</Text>
@@ -270,6 +285,11 @@ const s = StyleSheet.create({
   acciones: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   accion: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: '#cbd5e1', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8 },
   accionTxt: { fontSize: 12.5, fontWeight: '800', color: AZUL },
+
+  indic: { backgroundColor: '#fff8e6', borderLeftWidth: 5, borderLeftColor: ORO,
+           borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, marginTop: 12 },
+  indicLbl: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: '#8a6410' },
+  indicTxt: { fontSize: 13.5, lineHeight: 20, fontWeight: '600', color: '#4a3a12', marginTop: 3 },
 
   asesor: { backgroundColor: AZUL, borderRadius: 11, padding: 13, marginTop: 12 },
   asesorLbl: { fontSize: 9.5, letterSpacing: 1.3, fontWeight: '700', color: 'rgba(255,255,255,0.6)' },
