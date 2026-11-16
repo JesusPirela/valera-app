@@ -90,6 +90,7 @@ const NAV_ITEMS = [
   { label: 'Citas', desc: 'Coordinación de citas', ion: 'calendar', color: '#2563EB', route: '/(admin)/coordinacion-citas', grupo: 'Ventas' },
   { label: 'Citas asesores', desc: 'Tablero de citas por asesor', ion: 'people', color: '#9333EA', route: '/(prospectador)/citas-asesores', grupo: 'Ventas' },
   { label: 'Citas de venta', desc: 'Registro y retro', ion: 'document-text', color: '#0D9488', route: '/(admin)/citas-venta', grupo: 'Ventas' },
+  { label: 'Accountability', desc: 'En qué quedó cada cita', ion: 'clipboard', color: '#B45309', route: '/(admin)/accountability-citas', grupo: 'Ventas' },
   { label: 'Cierres', desc: 'Ventas y rentas cerradas', ion: 'ribbon', color: '#16A34A', route: '/(admin)/cierres', grupo: 'Ventas' },
   { label: 'Calendario', desc: 'Tu agenda y citas', ion: 'calendar-number', color: '#7C3AED', route: '/(admin)/calendario', grupo: 'Ventas' },
   { label: 'Leads campañas', desc: 'Leads de Facebook Ads', ion: 'funnel', color: '#0284C7', route: '/(admin)/leads-campanias', grupo: 'Ventas' },
@@ -321,6 +322,7 @@ export default function AdminPropiedades() {
   const navItems = esSupervisor
     ? NAV_ITEMS.filter((item) => ![
         '/(admin)/citas-venta',
+        '/(admin)/accountability-citas',
         '/(admin)/cierres',
         '/(admin)/anuncios',
         '/(admin)/uno-a-uno',

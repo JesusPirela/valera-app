@@ -1654,40 +1654,11 @@ export default function CRM() {
         )}
       </View>
 
-      {/* ── KPI strip ── */}
-      <View style={[s.kpiStrip, { backgroundColor: c.card, borderBottomColor: c.border }]}>
-        <TouchableOpacity
-          style={[s.kpiItem, estadoFiltro === 'cita_por_agendar' && s.kpiActivo]}
-          onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_por_agendar' ? null : 'cita_por_agendar') }}
-        >
-          <Text style={[s.kpiNum, { color: tinta('#bf4e1a', c.card) }]}>{conteos['cita_por_agendar'] ?? 0}</Text>
-          <Text style={[s.kpiLbl, { color: c.textSub }]}>X AGENDAR</Text>
-        </TouchableOpacity>
-        <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
-        <TouchableOpacity
-          style={[s.kpiItem, estadoFiltro === 'cita_agendada' && s.kpiActivo]}
-          onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'cita_agendada' ? null : 'cita_agendada') }}
-        >
-          <Text style={[s.kpiNum, { color: tinta('#1a6855', c.card) }]}>{conteos['cita_agendada'] ?? 0}</Text>
-          <Text style={[s.kpiLbl, { color: c.textSub }]}>AGENDADA</Text>
-        </TouchableOpacity>
-        <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
-        <TouchableOpacity
-          style={[s.kpiItem, estadoFiltro === 'seguimiento_cierre' && s.kpiActivo]}
-          onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === 'seguimiento_cierre' ? null : 'seguimiento_cierre') }}
-        >
-          <Text style={[s.kpiNum, { color: tinta('#8b2252', c.card) }]}>{conteos['seguimiento_cierre'] ?? 0}</Text>
-          <Text style={[s.kpiLbl, { color: c.textSub }]}>SEG. CIERRE</Text>
-        </TouchableOpacity>
-        <View style={[s.kpiDiv, { backgroundColor: c.border }]} />
-        <TouchableOpacity
-          style={[s.kpiItem, estadoFiltro === '__cerrados__' && s.kpiActivo]}
-          onPress={() => { setFiltroVencidos(false); setEstadoFiltro(estadoFiltro === '__cerrados__' ? null : '__cerrados__') }}
-        >
-          <Text style={[s.kpiNum, { color: tinta('#10b981', c.card) }]}>{cerrados}</Text>
-          <Text style={[s.kpiLbl, { color: c.textSub }]}>CERRADOS</Text>
-        </TouchableOpacity>
-      </View>
+      {/* La tira de KPIs se retiro: decia LO MISMO que la leyenda del embudo
+          -conteos por etapa, y las dos filtraban al tocarlas-, solo que con
+          4 etapas en vez de 9. Entre las dos se comian ~165px antes del
+          primer cliente. "Cerrados", que era lo unico que la leyenda no
+          cubria, se agrego como un chip mas, al final. */}
 
       {/* ── Funnel bar ── */}
       <View style={[s.funnelWrap, { backgroundColor: c.card }]}>
@@ -1734,6 +1705,24 @@ export default function CRM() {
                 </TouchableOpacity>
               )
             })}
+            {/* Los cerrados no van en la barra del embudo -son el resultado,
+                no una etapa del recorrido- pero si hacen falta de un vistazo. */}
+            {cerrados > 0 && (() => {
+              const cerr = tenue('#1a5e32', c.card, 0.1333)
+              const activo = estadoFiltro === '__cerrados__'
+              return (
+                <TouchableOpacity
+                  style={[s.legendItem, activo && { backgroundColor: cerr.fondo, borderRadius: 12, paddingHorizontal: 6 }]}
+                  onPress={() => { setFiltroVencidos(false); setEstadoFiltro(activo ? null : '__cerrados__') }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[s.legendDot, { backgroundColor: '#1a5e32' }]} />
+                  <Text style={[s.legendTxt, { color: activo ? cerr.tinta : c.textSub }, activo && { fontWeight: '700' }]}>
+                    Cerrados ({cerrados})
+                  </Text>
+                </TouchableOpacity>
+              )
+            })()}
           </ScrollView>
         )}
       </View>
@@ -2781,11 +2770,8 @@ const s = StyleSheet.create({
   addBtnMovilTxt: { color: '#fff', fontSize: 14, fontWeight: '800' },
 
   // ── KPI strip ───────────────────────────────────────────────────
-  kpiStrip: {
-    flexDirection: 'row', backgroundColor: '#fff',
-    paddingVertical: 9,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
-  },
+  // (kpiStrip y sus hijos se retiraron con la tira de KPIs)
+
   topInfoRow: {
     flexDirection: 'row', alignItems: 'stretch', gap: 8,
     marginHorizontal: 12, marginTop: 10, marginBottom: 2,
@@ -2816,11 +2802,6 @@ const s = StyleSheet.create({
   presuBannerLbl: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '700' },
   presuBannerNum: { color: '#fff', fontSize: 24, fontWeight: '900', marginTop: 1 },
   presuBannerSub: { color: 'rgba(255,255,255,0.9)', fontSize: 12.5, fontWeight: '700', textAlign: 'right', maxWidth: 90 },
-  kpiItem: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 4, borderRadius: 10 },
-  kpiActivo: { backgroundColor: 'rgba(26,100,112,0.12)' },
-  kpiNum:  { fontSize: 21, fontWeight: '800', letterSpacing: -0.5 },
-  kpiLbl:  { fontSize: 9, color: '#94a3b8', fontWeight: '700', letterSpacing: 0.6 },
-  kpiDiv:  { width: 1, backgroundColor: '#e2e8f0', marginVertical: 6 },
 
   // ── Funnel ──────────────────────────────────────────────────────
   funnelWrap: { backgroundColor: '#fff', paddingHorizontal: 16, paddingBottom: 8 },
