@@ -27,8 +27,7 @@ import {
   fechaEfectivaCita, mesDe, mesLegible, colorEstadoCita, PREGUNTAS_RETRO,
   mensajeAccountability, ESTADOS_CITA_VENTA, infoEstadoCita, type EstadoSeguimiento,
 } from '../../lib/accountability-citas'
-import { Linking } from 'react-native'
-import { normalizarTelefono } from '../../lib/telefono'
+import * as Clipboard from 'expo-clipboard'
 
 const TEAL = '#1a6470'
 /** Etiqueta de las citas a las que nadie les puso estado. */
@@ -119,9 +118,8 @@ export default function AccountabilityCitas() {
   // Los filtros arrancan PLEGADOS. Son seis grupos y con 32 asesores y 42
   // prospectadores llenaban la pantalla entera antes de la primera cita.
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
-  // Telefono de cada quien, para poder escribirle. Se busca por nombre porque
-  // la tabla de citas guarda nombres, no ids.
-  const [telPorNombre, setTelPorNombre] = useState<Record<string, string>>({})
+  // Qué botón acaba de copiar, para confirmarlo ahí mismo: "idDeLaCita|quien".
+  const [copiado, setCopiado] = useState<string | null>(null)
   const limpiar = () => {
     setBusqueda(''); setFEstado(new Set()); setFEstadoCita(new Set()); setFGrupo(new Set())
     setFAsesor(new Set()); setFProspecto(new Set()); setFMes(new Set())
@@ -149,20 +147,18 @@ export default function AccountabilityCitas() {
   useFocusEffect(useCallback(() => {
     montado.current = true
     cargar()
-    supabase.from('profiles').select('nombre, telefono').not('telefono', 'is', null)
-      .then(({ data }) => {
-        if (!montado.current) return
-        const m: Record<string, string> = {}
-        for (const p of data ?? []) if (p.nombre) m[p.nombre.trim().toLowerCase()] = p.telefono
-        setTelPorNombre(m)
-      })
     return () => { montado.current = false }
   }, [cargar]))
 
-  /** Abre WhatsApp con el mensaje armado para quien atendio o prospecto. */
-  function escribirA(f: Fila, quien: 'asesor' | 'prospectador') {
+  /**
+   * COPIA el mensaje armado para quien atendió o prospectó.
+   *
+   * No abre WhatsApp a propósito: así se pega donde se quiera —el chat del
+   * equipo, un grupo, un correo— y deja de depender de que esa persona tenga
+   * su teléfono capturado en el perfil, que es la mitad de la gente.
+   */
+  async function escribirA(f: Fila, quien: 'asesor' | 'prospectador') {
     const nombre = (quien === 'asesor' ? f.atendio : f.prospecto) ?? ''
-    const tel = telPorNombre[nombre.trim().toLowerCase()]
     const mensaje = mensajeAccountability({
       paraQuien: nombre,
       cliente: f.cliente_nombre ?? 'el cliente',
@@ -170,14 +166,17 @@ export default function AccountabilityCitas() {
       propiedad: f.interesado_en, zona: f.zona_interesada,
       estadoCita: f.estado_seguimiento,
     })
-    if (!tel) {
-      // Sin telefono no se puede abrir el chat, pero el mensaje ya esta hecho:
-      // se copia para que no haya que escribirlo a mano.
-      const aviso = `${nombre} no tiene telefono guardado en su perfil.\n\nEste es el mensaje, listo para copiar:\n\n${mensaje}`
-      Platform.OS === 'web' ? window.alert(aviso) : Alert.alert('Sin telefono', aviso)
-      return
+    try {
+      await Clipboard.setStringAsync(mensaje)
+      // La confirmación va en el propio botón: un cuadro de diálogo por cada
+      // mensaje estorbaría al ir cita por cita.
+      const clave = `${f.id}|${quien}`
+      setCopiado(clave)
+      setTimeout(() => setCopiado(c2 => (c2 === clave ? null : c2)), 2200)
+    } catch {
+      // Si el navegador no deja copiar, al menos se enseña para copiarlo a mano.
+      Platform.OS === 'web' ? window.alert(mensaje) : Alert.alert('Mensaje', mensaje)
     }
-    Linking.openURL(`https://wa.me/${normalizarTelefono(tel)}?text=${encodeURIComponent(mensaje)}`)
   }
 
   // ── Guardar el estado de una cita ─────────────────────────────────────────
@@ -385,6 +384,7 @@ export default function AccountabilityCitas() {
               setBorrador={(t: string) => setBorrador(b => ({ ...b, [item.id]: t }))}
               fondoPildora={fondoPildora} tintaPildora={tintaPildora}
               onEscribir={escribirA}
+              copiado={copiado}
             />
           )}
         />
@@ -548,7 +548,7 @@ function Filtros(p: any) {
 // ── Una cita ────────────────────────────────────────────────────────────────
 // Cerrada enseña lo mínimo para reconocerla; abierta, todo lo demás y el
 // editor. Así caben muchas en pantalla sin perder el detalle.
-function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, borrador, setBorrador, fondoPildora, tintaPildora, onEscribir }: any) {
+function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, borrador, setBorrador, fondoPildora, tintaPildora, onEscribir, copiado }: any) {
   const seg = seguimientoDe(f)
   const est = estadoDe(f)
   const info = infoSeguimiento(est)
@@ -624,16 +624,21 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
               if (!nombre) return null
               return (
                 <TouchableOpacity key={q} style={s.btnEscribir} onPress={() => onEscribir(f, q)}>
-                  <Ionicons name="logo-whatsapp" size={14} color="#188741" />
+                  <Ionicons
+                    name={copiado === `${f.id}|${q}` ? 'checkmark-circle' : 'copy-outline'}
+                    size={14} color="#188741"
+                  />
                   <Text style={s.btnEscribirTxt} numberOfLines={1}>
-                    {q === 'asesor' ? 'Asesor' : 'Prospectó'}: {String(nombre).split(' ')[0]}
+                    {copiado === `${f.id}|${q}`
+                      ? '¡Copiado!'
+                      : `Copiar para ${q === 'asesor' ? 'el asesor' : 'quien prospectó'}: ${String(nombre).split(' ')[0]}`}
                   </Text>
                 </TouchableOpacity>
               )
             })}
             {!f.atendio && !f.prospecto && (
               <Text style={{ fontSize: 11.5, color: c.textMute, fontStyle: 'italic' }}>
-                Esta cita no tiene asesor ni prospectador capturado, no hay a quién escribirle.
+                Esta cita no tiene asesor ni prospectador capturado, no hay para quién armar el mensaje.
               </Text>
             )}
           </View>

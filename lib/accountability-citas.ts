@@ -108,6 +108,26 @@ export const PREGUNTAS_RETRO = [
  * cliente, la fecha y la propiedad tendría que adivinar de cuál le hablan, y
  * eso es exactamente lo que hace que nadie conteste.
  */
+/**
+ * La propiedad, como se lee en un mensaje.
+ *
+ * El campo trae a veces un enlace entero de un portal. Pegado en WhatsApp
+ * ocupa cuatro renglones y tapa el resto del mensaje, así que de un enlace se
+ * saca el texto que de verdad dice algo (el final de la dirección).
+ */
+function legibleLaPropiedad(txt: string): string {
+  if (!/^https?:\/\//i.test(txt.trim())) return txt
+  try {
+    const partes = new URL(txt.trim()).pathname.split('/').filter(Boolean)
+    const ultima = partes[partes.length - 1] ?? ''
+    const limpio = decodeURIComponent(ultima).replace(/[-_]+/g, ' ').trim()
+    if (!limpio) return txt
+    return limpio.charAt(0).toUpperCase() + limpio.slice(1)
+  } catch {
+    return txt
+  }
+}
+
 export function mensajeAccountability(args: {
   paraQuien: string
   cliente: string
@@ -122,7 +142,7 @@ export function mensajeAccountability(args: {
   l.push('')
   l.push(`• Cliente: *${args.cliente}*${args.telefono ? ` (${args.telefono})` : ''}`)
   if (args.dia) l.push(`• Cita: ${args.dia}`)
-  if (args.propiedad) l.push(`• Propiedad: ${args.propiedad}`)
+  if (args.propiedad) l.push(`• Propiedad: ${legibleLaPropiedad(args.propiedad)}`)
   if (args.zona) l.push(`• Zona: ${args.zona}`)
   if (args.estadoCita) l.push(`• Quedó como: ${args.estadoCita}`)
   l.push('')
