@@ -144,8 +144,11 @@ export function mensajeAccountability(args: {
   if (args.dia) l.push(`• Cita: ${args.dia}`)
   if (args.propiedad) l.push(`• Propiedad: ${legibleLaPropiedad(args.propiedad)}`)
   if (args.zona) l.push(`• Zona: ${args.zona}`)
-  if (args.estadoCita) l.push(`• Quedó como: ${args.estadoCita}`)
+  // "Estado de la cita" y no "quedó como": la pregunta de abajo es sobre el
+  // CLIENTE, y decir las dos cosas con la misma palabra hacía que pareciera
+  // que ya estábamos contestando lo que preguntamos.
+  if (args.estadoCita) l.push(`• Estado de la cita: ${args.estadoCita}`)
   l.push('')
-  l.push('¿En qué quedó este cliente? ¿Sigue interesado, hay que mandarle más opciones, o ya se descartó?')
+  l.push('¿Qué pasó con el cliente después? ¿Sigue interesado, hay que mandarle más opciones, o ya se descartó?')
   return l.join(String.fromCharCode(10))
 }
