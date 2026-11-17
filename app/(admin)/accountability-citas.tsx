@@ -25,12 +25,21 @@ import { legibleSobre, mezclar } from '../../lib/color'
 import {
   ESTADOS_SEGUIMIENTO, ORDEN_SEGUIMIENTO, infoSeguimiento, GRUPOS, DESDE,
   fechaEfectivaCita, mesDe, mesLegible, colorEstadoCita, PREGUNTAS_RETRO,
-  mensajeAccountability, type EstadoSeguimiento,
+  mensajeAccountability, ESTADOS_CITA_VENTA, infoEstadoCita, type EstadoSeguimiento,
 } from '../../lib/accountability-citas'
 import { Linking } from 'react-native'
 import { normalizarTelefono } from '../../lib/telefono'
 
 const TEAL = '#1a6470'
+/** Etiqueta de las citas a las que nadie les puso estado. */
+const SIN_ESTADO = 'Sin estado'
+
+/** Agrega o quita un valor del conjunto, devolviendo uno nuevo (React lo exige). */
+function alternar(set: Set<string>, v: string): Set<string> {
+  const n = new Set(set)
+  if (n.has(v)) n.delete(v); else n.add(v)
+  return n
+}
 
 type Fila = {
   id: string
@@ -63,6 +72,24 @@ function seguimientoDe(f: Fila): Seg | null {
   return Array.isArray(s) ? (s[0] ?? null) : s
 }
 
+/**
+ * El estado de accountability de una cita.
+ *
+ * Si alguien lo capturó, manda lo capturado. Si no, y la cita ya quedó como
+ * "Apartó" en la tabla de citas de venta, se da por cerrada sola: no hay nada
+ * que preguntarle al asesor de un cliente que ya apartó.
+ *
+ * Se DERIVA en vez de escribirse: así una cita que aparte la semana que entra
+ * se refleja sin que nadie la toque, y si alguien lo cambia a mano, lo suyo
+ * gana sobre esta regla.
+ */
+function estadoDe(f: Fila): EstadoSeguimiento {
+  const guardado = seguimientoDe(f)?.estado
+  if (guardado) return guardado as EstadoSeguimiento
+  if (infoEstadoCita(f.estado_seguimiento)?.label === 'Apartó') return 'aparto_compro'
+  return 'sin_contactar'
+}
+
 export default function AccountabilityCitas() {
   const c = useColors()
   const { darkMode } = useTheme()
@@ -75,13 +102,20 @@ export default function AccountabilityCitas() {
 
   // ── Filtros ───────────────────────────────────────────────────────────────
   const [busqueda, setBusqueda] = useState('')
-  const [fEstado, setFEstado] = useState<EstadoSeguimiento | null>(null)
-  const [fGrupo, setFGrupo] = useState<string | null>(null)
-  const [fAsesor, setFAsesor] = useState<string | null>(null)
-  const [fProspecto, setFProspecto] = useState<string | null>(null)
-  const [fMes, setFMes] = useState<string | null>(null)
+  // Todos los filtros son CONJUNTOS: se acumulan. Tocar "Realizada" y
+  // "Cancelada/Reagenda" enseña las dos, en vez de que la segunda reemplace a
+  // la primera. Un conjunto vacio significa "todas".
+  const [fEstado, setFEstado] = useState<Set<string>>(new Set())
+  const [fEstadoCita, setFEstadoCita] = useState<Set<string>>(new Set())
+  const [fGrupo, setFGrupo] = useState<Set<string>>(new Set())
+  const [fAsesor, setFAsesor] = useState<Set<string>>(new Set())
+  const [fProspecto, setFProspecto] = useState<Set<string>>(new Set())
+  const [fMes, setFMes] = useState<Set<string>>(new Set())
+  const [fCoordino, setFCoordino] = useState<Set<string>>(new Set())
   const [fRetro, setFRetro] = useState<'con' | 'sin' | null>(null)
-  const [fCoordino, setFCoordino] = useState<string | null>(null)
+  // Arranca de la MAS VIEJA a la mas nueva: la revision empieza por la primera
+  // cita de septiembre y se avanza hacia hoy, que es como se va a trabajar.
+  const [orden, setOrden] = useState<'asc' | 'desc'>('asc')
   // Los filtros arrancan PLEGADOS. Son seis grupos y con 32 asesores y 42
   // prospectadores llenaban la pantalla entera antes de la primera cita.
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
@@ -89,10 +123,12 @@ export default function AccountabilityCitas() {
   // la tabla de citas guarda nombres, no ids.
   const [telPorNombre, setTelPorNombre] = useState<Record<string, string>>({})
   const limpiar = () => {
-    setBusqueda(''); setFEstado(null); setFGrupo(null)
-    setFAsesor(null); setFProspecto(null); setFMes(null); setFRetro(null); setFCoordino(null)
+    setBusqueda(''); setFEstado(new Set()); setFEstadoCita(new Set()); setFGrupo(new Set())
+    setFAsesor(new Set()); setFProspecto(new Set()); setFMes(new Set())
+    setFCoordino(new Set()); setFRetro(null)
   }
-  const hayFiltros = !!(busqueda.trim() || fEstado || fGrupo || fAsesor || fProspecto || fMes || fRetro || fCoordino)
+  const hayFiltros = !!(busqueda.trim() || fRetro) ||
+    [fEstado, fEstadoCita, fGrupo, fAsesor, fProspecto, fMes, fCoordino].some(s => s.size > 0)
 
   const montado = useRef(true)
   const cargar = useCallback(async () => {
@@ -124,8 +160,8 @@ export default function AccountabilityCitas() {
   }, [cargar]))
 
   /** Abre WhatsApp con el mensaje armado para quien atendio o prospecto. */
-  function escribirA(f: Fila, quien: 'asesor' | 'prospectador' | 'coordinador') {
-    const nombre = (quien === 'asesor' ? f.atendio : quien === 'prospectador' ? f.prospecto : f.coordino) ?? ''
+  function escribirA(f: Fila, quien: 'asesor' | 'prospectador') {
+    const nombre = (quien === 'asesor' ? f.atendio : f.prospecto) ?? ''
     const tel = telPorNombre[nombre.trim().toLowerCase()]
     const mensaje = mensajeAccountability({
       paraQuien: nombre,
@@ -180,7 +216,7 @@ export default function AccountabilityCitas() {
   }
 
   // ── Listas para los filtros, con su conteo ────────────────────────────────
-  const { asesores, prospectadores, meses, coordinadores } = useMemo(() => {
+  const { asesores, prospectadores, meses, coordinadores, estadosCita } = useMemo(() => {
     const cuenta = (sel: (f: Fila) => string | null) => {
       const m = new Map<string, number>()
       for (const f of filas) {
@@ -193,6 +229,9 @@ export default function AccountabilityCitas() {
       asesores: cuenta(f => f.atendio),
       prospectadores: cuenta(f => f.prospecto),
       coordinadores: cuenta(f => f.coordino),
+      // El estado con el que quedo la cita: realizada, reagenda, aparto...
+      // Faltaba y es justo por el que se busca ("¿donde estan las realizadas?").
+      estadosCita: cuenta(f => f.estado_seguimiento ?? SIN_ESTADO),
       meses: cuenta(f => mesDe(fechaEfectivaCita(f))).sort((a, b) => b[0].localeCompare(a[0])),
     }
   }, [filas])
@@ -201,13 +240,15 @@ export default function AccountabilityCitas() {
     const q = normalizar(busqueda.trim())
     return filas.filter(f => {
       const seg = seguimientoDe(f)
-      const est = (seg?.estado ?? 'sin_contactar') as EstadoSeguimiento
-      if (fEstado && est !== fEstado) return false
-      if (fGrupo && infoSeguimiento(est).grupo !== fGrupo) return false
-      if (fAsesor && (f.atendio ?? '').trim() !== fAsesor) return false
-      if (fProspecto && (f.prospecto ?? '').trim() !== fProspecto) return false
-      if (fCoordino && (f.coordino ?? '').trim() !== fCoordino) return false
-      if (fMes && mesDe(fechaEfectivaCita(f)) !== fMes) return false
+      const est = estadoDe(f)
+      // Un conjunto vacio no filtra nada; con elementos, basta con pertenecer.
+      if (fEstado.size && !fEstado.has(est)) return false
+      if (fEstadoCita.size && !fEstadoCita.has((f.estado_seguimiento ?? SIN_ESTADO).trim())) return false
+      if (fGrupo.size && !fGrupo.has(infoSeguimiento(est).grupo)) return false
+      if (fAsesor.size && !fAsesor.has((f.atendio ?? '').trim())) return false
+      if (fProspecto.size && !fProspecto.has((f.prospecto ?? '').trim())) return false
+      if (fCoordino.size && !fCoordino.has((f.coordino ?? '').trim())) return false
+      if (fMes.size && !fMes.has(mesDe(fechaEfectivaCita(f)) ?? '')) return false
       if (fRetro === 'con' && !f.retro_completada_at) return false
       if (fRetro === 'sin' && f.retro_completada_at) return false
       if (q) {
@@ -217,23 +258,32 @@ export default function AccountabilityCitas() {
       }
       return true
     })
-  }, [filas, busqueda, fEstado, fGrupo, fAsesor, fProspecto, fCoordino, fMes, fRetro])
+    // Por fecha de la cita. Las que no tienen fecha van al final: no se pueden
+    // ordenar y mezclarlas entre las fechadas solo confunde.
+    .sort((a, b) => {
+      const fa = fechaEfectivaCita(a), fb = fechaEfectivaCita(b)
+      if (!fa && !fb) return 0
+      if (!fa) return 1
+      if (!fb) return -1
+      return orden === 'asc' ? fa.localeCompare(fb) : fb.localeCompare(fa)
+    })
+  }, [filas, busqueda, fEstado, fEstadoCita, fGrupo, fAsesor, fProspecto, fCoordino, fMes, fRetro, orden])
 
   // Los conteos de los chips de estado se calculan sobre lo filtrado por TODO
   // lo demas: asi el numero que ves es el que vas a obtener al tocarlo.
   const conteoEstados = useMemo(() => {
     const base = filas.filter(f => {
-      if (fAsesor && (f.atendio ?? '').trim() !== fAsesor) return false
-      if (fProspecto && (f.prospecto ?? '').trim() !== fProspecto) return false
-      if (fCoordino && (f.coordino ?? '').trim() !== fCoordino) return false
-      if (fMes && mesDe(fechaEfectivaCita(f)) !== fMes) return false
+      if (fAsesor.size && !fAsesor.has((f.atendio ?? '').trim())) return false
+      if (fProspecto.size && !fProspecto.has((f.prospecto ?? '').trim())) return false
+      if (fCoordino.size && !fCoordino.has((f.coordino ?? '').trim())) return false
+      if (fMes.size && !fMes.has(mesDe(fechaEfectivaCita(f)) ?? '')) return false
       if (fRetro === 'con' && !f.retro_completada_at) return false
       if (fRetro === 'sin' && f.retro_completada_at) return false
       return true
     })
     const m = new Map<string, number>()
     for (const f of base) {
-      const e = seguimientoDe(f)?.estado ?? 'sin_contactar'
+      const e = estadoDe(f)
       m.set(e, (m.get(e) ?? 0) + 1)
     }
     return m
@@ -275,6 +325,18 @@ export default function AccountabilityCitas() {
               </Text>
             </TouchableOpacity>
           ))}
+          <View style={{ flex: 1 }} />
+          {/* Orden por fecha de la cita. Va aqui arriba y no dentro de los
+              filtros porque se cambia a cada rato al revisar. */}
+          <TouchableOpacity
+            style={[s.tab, { borderColor: c.border }]}
+            onPress={() => setOrden(o => (o === 'asc' ? 'desc' : 'asc'))}
+          >
+            <Ionicons name={orden === 'asc' ? 'arrow-up' : 'arrow-down'} size={14} color={c.textSub} />
+            <Text style={[s.tabTxt, { color: c.textSub }]}>
+              {orden === 'asc' ? 'Más viejas' : 'Más nuevas'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -297,6 +359,8 @@ export default function AccountabilityCitas() {
               fMes={fMes} setFMes={setFMes}
               fRetro={fRetro} setFRetro={setFRetro}
               fCoordino={fCoordino} setFCoordino={setFCoordino}
+              fEstadoCita={fEstadoCita} setFEstadoCita={setFEstadoCita}
+              estadosCita={estadosCita}
               abiertos={filtrosAbiertos} setAbiertos={setFiltrosAbiertos}
               asesores={asesores} prospectadores={prospectadores} meses={meses}
               coordinadores={coordinadores}
@@ -315,7 +379,7 @@ export default function AccountabilityCitas() {
               f={item} c={c} abierta={abierta === item.id}
               onAbrir={() => setAbierta(a => a === item.id ? null : item.id)}
               onEstado={(e: EstadoSeguimiento) => guardar(item.id, e)}
-              onNotas={(t: string | null) => guardar(item.id, (seguimientoDe(item)?.estado ?? 'sin_contactar') as EstadoSeguimiento, t ?? undefined)}
+              onNotas={(t: string | null) => guardar(item.id, estadoDe(item), t ?? undefined)}
               guardando={guardando === item.id}
               borrador={borrador[item.id] ?? seguimientoDe(item)?.notas ?? ''}
               setBorrador={(t: string) => setBorrador(b => ({ ...b, [item.id]: t }))}
@@ -343,28 +407,30 @@ function Filtros(p: any) {
       activeOpacity={0.7}
     >
       <Text style={[s.chipTxt, { color: activo ? tintaPildora(color ?? TEAL) : c.textSub }]}>
-        {label}{n != null ? ` (${n})` : ''}
+        {activo ? '✓ ' : ''}{label}{n != null ? ` (${n})` : ''}
       </Text>
     </TouchableOpacity>
   )
   // Los chips ENVUELVEN en vez de deslizarse de lado. Antes se salían por la
   // derecha y no había forma de alcanzarlos: en la computadora la rueda del
-  // ratón no mueve una fila horizontal, y quedaban escondidos para siempre.
-  const Grupo = ({ titulo, children }: any) => (
+  // ratón no mueve una fila horizontal.
+  const Grupo = ({ titulo, nota, children }: any) => (
     <>
       <Text style={[s.fLbl, { color: c.textMute }]}>{titulo}</Text>
+      {nota ? <Text style={[s.fNota, { color: c.textMute }]}>{nota}</Text> : null}
       <View style={s.chipFila}>{children}</View>
     </>
   )
 
-  // Qué filtros hay puestos, para poder leerlo con el panel cerrado.
+  // Qué hay puesto, para poder leerlo con el panel cerrado.
   const puestos: string[] = []
-  if (p.fGrupo) puestos.push(GRUPOS[p.fGrupo as keyof typeof GRUPOS].label)
-  if (p.fEstado) puestos.push(ESTADOS_SEGUIMIENTO[p.fEstado as EstadoSeguimiento].label)
-  if (p.fMes) puestos.push(mesLegible(p.fMes))
-  if (p.fAsesor) puestos.push(`Atendió: ${p.fAsesor}`)
-  if (p.fCoordino) puestos.push(`Coordinó: ${p.fCoordino}`)
-  if (p.fProspecto) puestos.push(`Prospectó: ${p.fProspecto}`)
+  for (const g of p.fGrupo) puestos.push(GRUPOS[g as keyof typeof GRUPOS].label)
+  for (const e of p.fEstado) puestos.push(ESTADOS_SEGUIMIENTO[e as EstadoSeguimiento].label)
+  for (const e of p.fEstadoCita) puestos.push(e)
+  for (const m of p.fMes) puestos.push(mesLegible(m))
+  for (const a of p.fCoordino) puestos.push(`Coordinó ${a}`)
+  for (const a of p.fAsesor) puestos.push(`Atendió ${a}`)
+  for (const a of p.fProspecto) puestos.push(`Prospectó ${a}`)
   if (p.fRetro) puestos.push(p.fRetro === 'con' ? 'Con retro' : 'Sin retro')
 
   return (
@@ -384,8 +450,6 @@ function Filtros(p: any) {
         )}
       </View>
 
-      {/* La cabecera del panel: cerrado dice qué filtros hay puestos, para no
-          tener que abrirlo solo para acordarse. */}
       <TouchableOpacity
         style={[s.filtrosCabeza, { borderColor: c.border }]}
         onPress={() => p.setAbiertos(!p.abiertos)}
@@ -400,49 +464,72 @@ function Filtros(p: any) {
 
       {p.abiertos && (
         <>
-          <Grupo titulo="EN QUÉ QUEDÓ">
-            <Chip activo={!p.fEstado && !p.fGrupo} label="Todas" onPress={() => { p.setFEstado(null); p.setFGrupo(null) }} />
+          {/* El estado con el que quedó la cita. Faltaba, y es por el que más
+              se busca: "¿dónde están las realizadas?". */}
+          <Grupo titulo="EN QUÉ QUEDÓ LA CITA" nota="Se pueden marcar varios a la vez">
+            <Chip activo={p.fEstadoCita.size === 0} label="Todas" onPress={() => p.setFEstadoCita(new Set())} />
+            {ESTADOS_CITA_VENTA.map(e => (
+              <Chip
+                key={e.label}
+                activo={p.fEstadoCita.has(e.label)}
+                label={`${e.emoji} ${e.label}`}
+                n={p.estadosCita.find(([k]: any) => k === e.label)?.[1] ?? 0}
+                color={e.color}
+                onPress={() => p.setFEstadoCita(alternar(p.fEstadoCita, e.label))}
+              />
+            ))}
+            <Chip
+              activo={p.fEstadoCita.has(SIN_ESTADO)}
+              label={SIN_ESTADO}
+              n={p.estadosCita.find(([k]: any) => k === SIN_ESTADO)?.[1] ?? 0}
+              onPress={() => p.setFEstadoCita(alternar(p.fEstadoCita, SIN_ESTADO))}
+            />
+          </Grupo>
+
+          <Grupo titulo="EN QUÉ QUEDÓ EL CLIENTE" nota="Lo que contestó el asesor cuando le preguntamos">
+            <Chip activo={p.fEstado.size === 0 && p.fGrupo.size === 0} label="Todas"
+                  onPress={() => { p.setFEstado(new Set()); p.setFGrupo(new Set()) }} />
             {Object.entries(GRUPOS).map(([k, g]: any) => (
-              <Chip key={k} activo={p.fGrupo === k} label={g.label} color={g.color}
-                    onPress={() => { p.setFEstado(null); p.setFGrupo(p.fGrupo === k ? null : k) }} />
+              <Chip key={k} activo={p.fGrupo.has(k)} label={g.label} color={g.color}
+                    onPress={() => p.setFGrupo(alternar(p.fGrupo, k))} />
             ))}
             {ORDEN_SEGUIMIENTO.map(e => (
-              <Chip key={e} activo={p.fEstado === e} label={ESTADOS_SEGUIMIENTO[e].label}
+              <Chip key={e} activo={p.fEstado.has(e)} label={ESTADOS_SEGUIMIENTO[e].label}
                     n={conteoEstados.get(e) ?? 0} color={ESTADOS_SEGUIMIENTO[e].color}
-                    onPress={() => { p.setFGrupo(null); p.setFEstado(p.fEstado === e ? null : e) }} />
+                    onPress={() => p.setFEstado(alternar(p.fEstado, e))} />
             ))}
           </Grupo>
 
           <Grupo titulo="MES DE LA CITA">
-            <Chip activo={!p.fMes} label="Todos" onPress={() => p.setFMes(null)} />
+            <Chip activo={p.fMes.size === 0} label="Todos" onPress={() => p.setFMes(new Set())} />
             {p.meses.map(([m, n]: any) => (
-              <Chip key={m} activo={p.fMes === m} label={mesLegible(m)} n={n}
-                    onPress={() => p.setFMes(p.fMes === m ? null : m)} />
+              <Chip key={m} activo={p.fMes.has(m)} label={mesLegible(m)} n={n}
+                    onPress={() => p.setFMes(alternar(p.fMes, m))} />
             ))}
           </Grupo>
 
           {/* Coordinó va primero: es el dato que más se usa para pedir cuentas. */}
           <Grupo titulo="QUIÉN COORDINÓ">
-            <Chip activo={!p.fCoordino} label="Todos" onPress={() => p.setFCoordino(null)} />
+            <Chip activo={p.fCoordino.size === 0} label="Todos" onPress={() => p.setFCoordino(new Set())} />
             {p.coordinadores.map(([a, n]: any) => (
-              <Chip key={a} activo={p.fCoordino === a} label={a} n={n}
-                    onPress={() => p.setFCoordino(p.fCoordino === a ? null : a)} />
+              <Chip key={a} activo={p.fCoordino.has(a)} label={a} n={n}
+                    onPress={() => p.setFCoordino(alternar(p.fCoordino, a))} />
             ))}
           </Grupo>
 
           <Grupo titulo="ASESOR QUE ATENDIÓ">
-            <Chip activo={!p.fAsesor} label="Todos" onPress={() => p.setFAsesor(null)} />
+            <Chip activo={p.fAsesor.size === 0} label="Todos" onPress={() => p.setFAsesor(new Set())} />
             {p.asesores.map(([a, n]: any) => (
-              <Chip key={a} activo={p.fAsesor === a} label={a} n={n}
-                    onPress={() => p.setFAsesor(p.fAsesor === a ? null : a)} />
+              <Chip key={a} activo={p.fAsesor.has(a)} label={a} n={n}
+                    onPress={() => p.setFAsesor(alternar(p.fAsesor, a))} />
             ))}
           </Grupo>
 
           <Grupo titulo="QUIÉN PROSPECTÓ">
-            <Chip activo={!p.fProspecto} label="Todos" onPress={() => p.setFProspecto(null)} />
+            <Chip activo={p.fProspecto.size === 0} label="Todos" onPress={() => p.setFProspecto(new Set())} />
             {p.prospectadores.map(([a, n]: any) => (
-              <Chip key={a} activo={p.fProspecto === a} label={a} n={n}
-                    onPress={() => p.setFProspecto(p.fProspecto === a ? null : a)} />
+              <Chip key={a} activo={p.fProspecto.has(a)} label={a} n={n}
+                    onPress={() => p.setFProspecto(alternar(p.fProspecto, a))} />
             ))}
           </Grupo>
 
@@ -463,7 +550,7 @@ function Filtros(p: any) {
 // editor. Así caben muchas en pantalla sin perder el detalle.
 function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, borrador, setBorrador, fondoPildora, tintaPildora, onEscribir }: any) {
   const seg = seguimientoDe(f)
-  const est = (seg?.estado ?? 'sin_contactar') as EstadoSeguimiento
+  const est = estadoDe(f)
   const info = infoSeguimiento(est)
   // El color de la tarjeta.
   //
@@ -475,6 +562,12 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
   const colorBarra = sinCapturar ? colorEstadoCita(f.estado_seguimiento) : info.color
   const fondo = fondoPildora(info.color)
   const tinta = tintaPildora(info.color)
+  // Toda la tarjeta se tiñe del color, no solo la franja: con 226 citas el
+  // estado tiene que leerse de un vistazo mientras se baja. La mezcla es
+  // suave a propósito -el texto encima sigue siendo el de siempre y tiene que
+  // seguir leyéndose-, y la franja de la izquierda va a todo color para que
+  // el tono se distinga aunque el fondo sea tenue.
+  const fondoTarjeta = mezclar(colorBarra, c.card, 0.13)
 
   const Dato = ({ lbl, val }: { lbl: string; val: any }) =>
     val ? (
@@ -485,7 +578,7 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
     ) : null
 
   return (
-    <View style={[s.tarjeta, { backgroundColor: c.card, borderColor: c.border }]}>
+    <View style={[s.tarjeta, { backgroundColor: fondoTarjeta, borderColor: mezclar(colorBarra, c.border, 0.4) }]}>
       {/* La franja de color, para leer el estado sin abrir nada. */}
       <View style={[s.franja, { backgroundColor: colorBarra }]} />
       <View style={{ flex: 1 }}>
@@ -516,22 +609,33 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
       </TouchableOpacity>
 
       {abierta && (
-        <View style={[s.detalle, { borderTopColor: c.border }]}>
-          {/* Escribirle a quien sepa qué pasó. Va arriba porque es la acción
-              por la que se abre esta cita. */}
+        // Al abrir, el detalle va sobre el fondo normal: son párrafos largos y
+        // leerlos sobre un tinte de color cansa.
+        <View style={[s.detalle, { borderTopColor: c.border, backgroundColor: c.card }]}>
+          {/* Escribirle a quien sepa qué pasó con el cliente: el asesor que lo
+              atendió o quien lo prospectó. Al coordinador NO: él armó la cita,
+              no estuvo en ella. Va arriba porque es la acción por la que se
+              abre esta cita.
+              Cada botón trae el nombre para no mandarle el mensaje a quien no
+              era: en muchas citas el asesor y el prospectador son distintos. */}
           <View style={s.escribirFila}>
-            {['coordinador', 'asesor', 'prospectador'].map(q => {
-              const nombre = q === 'asesor' ? f.atendio : q === 'prospectador' ? f.prospecto : f.coordino
+            {(['asesor', 'prospectador'] as const).map(q => {
+              const nombre = q === 'asesor' ? f.atendio : f.prospecto
               if (!nombre) return null
               return (
                 <TouchableOpacity key={q} style={s.btnEscribir} onPress={() => onEscribir(f, q)}>
                   <Ionicons name="logo-whatsapp" size={14} color="#188741" />
                   <Text style={s.btnEscribirTxt} numberOfLines={1}>
-                    {q === 'asesor' ? 'Asesor' : q === 'prospectador' ? 'Prospectador' : 'Coordinó'}
+                    {q === 'asesor' ? 'Asesor' : 'Prospectó'}: {String(nombre).split(' ')[0]}
                   </Text>
                 </TouchableOpacity>
               )
             })}
+            {!f.atendio && !f.prospecto && (
+              <Text style={{ fontSize: 11.5, color: c.textMute, fontStyle: 'italic' }}>
+                Esta cita no tiene asesor ni prospectador capturado, no hay a quién escribirle.
+              </Text>
+            )}
           </View>
 
           <Dato lbl="Coordinó la cita" val={f.coordino} />
@@ -621,7 +725,7 @@ function Graficas({ filas, c, fondoPildora, tintaPildora }: any) {
   const porEstado = useMemo(() => {
     const m = new Map<string, number>()
     for (const f of filas) {
-      const e = seguimientoDe(f)?.estado ?? 'sin_contactar'
+      const e = estadoDe(f)
       m.set(e, (m.get(e) ?? 0) + 1)
     }
     return ORDEN_SEGUIMIENTO.map(e => ({ e, n: m.get(e) ?? 0, info: ESTADOS_SEGUIMIENTO[e] }))
@@ -630,7 +734,7 @@ function Graficas({ filas, c, fondoPildora, tintaPildora }: any) {
   const porGrupo = useMemo(() => {
     const m = new Map<string, number>()
     for (const f of filas) {
-      const g = infoSeguimiento(seguimientoDe(f)?.estado).grupo
+      const g = infoSeguimiento(estadoDe(f)).grupo
       m.set(g, (m.get(g) ?? 0) + 1)
     }
     return Object.entries(GRUPOS).map(([k, g]: any) => ({ k, g, n: m.get(k) ?? 0 }))
@@ -641,7 +745,7 @@ function Graficas({ filas, c, fondoPildora, tintaPildora }: any) {
     for (const f of filas) {
       const a = (f.atendio ?? '').trim()
       if (!a) continue
-      const g = infoSeguimiento(seguimientoDe(f)?.estado).grupo
+      const g = infoSeguimiento(estadoDe(f)).grupo
       const r = m.get(a) ?? { total: 0, perdidas: 0, cerradas: 0 }
       r.total++
       if (g === 'perdida') r.perdidas++
@@ -732,6 +836,7 @@ const s = StyleSheet.create({
   buscaFila: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingTop: 10 },
   busca: { flex: 1, fontSize: 14, paddingVertical: 6 },
   fLbl: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.9, paddingHorizontal: 14, marginTop: 10 },
+  fNota: { fontSize: 10.5, paddingHorizontal: 14, marginTop: 2, fontStyle: 'italic' },
   chipFila: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, paddingHorizontal: 14, paddingTop: 6 },
   chip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
   chipTxt: { fontSize: 12, fontWeight: '700' },
@@ -744,7 +849,7 @@ const s = StyleSheet.create({
   filtrosCabezaTxt: { flex: 1, fontSize: 12.5, fontWeight: '700' },
 
   tarjeta: { marginHorizontal: 12, marginTop: 10, borderWidth: 1, borderRadius: 12, overflow: 'hidden', flexDirection: 'row' },
-  franja: { width: 5 },
+  franja: { width: 7 },
   estadoCita: { fontSize: 11.5, fontWeight: '800', marginTop: 3 },
   escribirFila: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 12 },
   btnEscribir: {

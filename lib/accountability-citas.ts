@@ -8,6 +8,8 @@
 // descartada o en apartado, y mezclarlos en una sola columna borraría justo lo
 // que se quiere medir.
 
+import { infoEstadoCita as infoEstadoCitaLocal } from './estados-cita'
+
 export type EstadoSeguimiento =
   | 'sin_contactar'
   | 'sin_respuesta'
@@ -78,26 +80,18 @@ export function mesLegible(mes: string): string {
 }
 
 // ── El estado VIEJO de la cita (citas_venta.estado_seguimiento) ────────────
-// Hace falta su color aquí: mientras nadie haya puesto el estado nuevo, la
-// tarjeta se pinta con el viejo. Así se distinguen de un vistazo las
-// reagendadas de las realizadas sin tener que abrir nada, y en cuanto se
-// captura el nuevo estado la tarjeta cambia de color sola.
-const COLOR_ESTADO_CITA: Record<string, string> = {
-  'Apartó':                       '#1a5e32',
-  'Cancelada/Reagenda':           '#bf4e1a',
-  'Realizada':                    '#1a6855',
-  'No responde el cliente':       '#6b7280',
-  'Seguim. cierre · alto interés':'#8b2252',
-  'Seguim. cierre · bajo interés':'#7a5230',
-  'Falta perfilar / crédito':     '#a07020',
-  'Compra a futuro':              '#8b5e2a',
-  'Buscar más opciones':          '#1a6470',
-  'Por atender':                  '#9a7018',
-}
+// La lista, con sus colores y emojis, ya vive en lib/estados-cita.ts y es la
+// misma que usa la tabla de citas de venta. Se reusa en vez de copiarla: dos
+// listas de lo mismo acaban diciendo cosas distintas.
+//
+// Hace falta aquí porque mientras nadie haya puesto el estado nuevo, la
+// tarjeta se pinta con el viejo: así se distinguen de un vistazo las
+// reagendadas de las realizadas sin abrir nada.
+export { ESTADOS_CITA_VENTA, infoEstadoCita } from './estados-cita'
 
 /** El color del estado con el que quedó la cita. Gris si nadie lo capturó. */
 export const colorEstadoCita = (e: string | null | undefined): string =>
-  (e && COLOR_ESTADO_CITA[e.trim()]) || '#8a94a6'
+  infoEstadoCitaLocal(e)?.color ?? '#8a94a6'
 
 /** Las 3 preguntas de la retro, con el texto exacto que se le hizo al asesor. */
 export const PREGUNTAS_RETRO = [
