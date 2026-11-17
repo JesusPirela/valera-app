@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
+import { Ionicons } from '@expo/vector-icons'
 import {
   View,
   Text,
@@ -98,6 +99,23 @@ function esNavegable(n: Notificacion): boolean {
   return false
 }
 
+/**
+ * ¿Este aviso habla de una cita que se puede mover?
+ *
+ * Se reporto asi: "la del Sr Hector me sale que es para hoy pero la tuve
+ * ayer... como estoy desde mi celular no se como moverle la fecha". El aviso
+ * no ofrecia nada: llevaba al perfil del cliente y ahi habia que ir a buscar
+ * el boton. Ahora lo trae encima.
+ *
+ * Hace falta el cliente para poder abrir su ficha. Los avisos de tipo 'cita'
+ * y los recordatorios que dicen "Confirmar cita con..." son los que aplican.
+ */
+function esDeCita(n: Notificacion): boolean {
+  if (!n.cliente_id) return false
+  if (n.tipo === 'cita') return true
+  return n.tipo === 'recordatorio' && /cita/i.test(`${n.titulo} ${n.mensaje}`)
+}
+
 function hintTexto(n: Notificacion): string {
   if (!n.leida && esNavegable(n)) return 'Toca para ver →'
   if (!n.leida) return 'Toca para marcar como leída'
@@ -109,9 +127,10 @@ type NotifItemProps = {
   item: Notificacion
   onPress: (item: Notificacion) => void
   onDelete: (id: string) => void
+  onMoverFecha: (item: Notificacion) => void
 }
 
-function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
+function NotifItem({ item, onPress, onDelete, onMoverFecha }: NotifItemProps) {
   const c = useColors()
   const { darkMode } = useTheme()
   const swipeX = useRef(new Animated.Value(0)).current
@@ -248,6 +267,20 @@ function NotifItem({ item, onPress, onDelete }: NotifItemProps) {
               {hint}
             </Text>
           )}
+
+          {/* Si el aviso habla de una cita, se puede mover la fecha desde aqui
+              mismo. Es la razon de ser de este boton: una cita que ya se movio
+              de palabra y el sistema sigue avisando de la fecha vieja. */}
+          {esDeCita(item) && (
+            <TouchableOpacity
+              style={styles.btnMover}
+              onPress={() => onMoverFecha(item)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="calendar-outline" size={14} color="#1a6470" />
+              <Text style={styles.btnMoverTxt}>Mover fecha de la cita</Text>
+            </TouchableOpacity>
+          )}
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -362,6 +395,19 @@ export default function Notificaciones() {
       .eq('leida', true)
     if (!error) setNotis((prev) => prev.filter((n) => !n.leida))
     setEliminandoTodas(false)
+  }
+
+  /**
+   * Abre la ficha del cliente con el cambio de fecha ya desplegado.
+   *
+   * No se resuelve aqui cual cita mover: la ficha ya sabe cual es la que sigue
+   * viva de ese cliente, y duplicar esa logica haria que un dia las dos
+   * pantallas no coincidieran.
+   */
+  function moverFecha(item: Notificacion) {
+    if (!item.cliente_id) return
+    if (!item.leida) marcarLeida(item.id)
+    router.push(`/(prospectador)/detalle-cliente?id=${item.cliente_id}&reagendar=1` as any)
   }
 
   async function handlePress(item: Notificacion) {
@@ -483,6 +529,7 @@ export default function Notificaciones() {
               item={item}
               onPress={handlePress}
               onDelete={eliminarNotificacion}
+              onMoverFecha={moverFecha}
             />
           )}
           ItemSeparatorComponent={ListSeparator10}
@@ -594,6 +641,12 @@ const styles = StyleSheet.create({
   deleteBtnText: { fontSize: 13, color: '#bbb', fontWeight: '700' },
   cardMensaje: { fontSize: 14, color: '#888', lineHeight: 20 },
   cardMensajeNoLeido: { color: '#333' },
+  btnMover: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+    marginTop: 9, borderWidth: 1.5, borderColor: '#1a6470', borderRadius: 9,
+    paddingHorizontal: 11, paddingVertical: 7,
+  },
+  btnMoverTxt: { fontSize: 12.5, fontWeight: '800', color: '#1a6470' },
   tapHint: { fontSize: 11, color: '#7a9ee8', marginTop: 6 },
 
   // Recordatorio — naranja/ámbar

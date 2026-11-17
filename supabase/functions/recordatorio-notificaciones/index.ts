@@ -58,7 +58,7 @@ serve(async (_req) => {
 
   const { data: recs24, error: err24 } = await supabase
     .from('recordatorios')
-    .select('id, user_id, titulo, descripcion, fecha_hora')
+    .select('id, user_id, titulo, descripcion, fecha_hora, cliente_id')
     .eq('completado', false)
     .eq('notificado_24h', false)
     .gte('fecha_hora', desde24)
@@ -77,6 +77,7 @@ serve(async (_req) => {
       mensaje: `Tienes "${rec.titulo}" agendado para mañana a las ${hora}.${descripcion}`,
       tipo: 'recordatorio',
       leida: false,
+      cliente_id: rec.cliente_id,
     })
     await supabase.from('recordatorios').update({ notificado_24h: true }).eq('id', rec.id)
   }
@@ -88,7 +89,11 @@ serve(async (_req) => {
 
   const { data: recs2, error: err2 } = await supabase
     .from('recordatorios')
-    .select('id, user_id, titulo, descripcion, fecha_hora')
+    // cliente_id no sobra: sin el, el aviso no lleva a ningun lado. Se reporto
+    // asi: "me sale que la cita es hoy pero la tuve ayer... desde mi celular
+    // no se como moverle la fecha". Con el cliente, el aviso trae su boton de
+    // "Mover fecha de la cita".
+    .select('id, user_id, titulo, descripcion, fecha_hora, cliente_id')
     .eq('completado', false)
     .eq('notificado_2h', false)
     .gte('fecha_hora', desde2)
@@ -107,6 +112,7 @@ serve(async (_req) => {
       mensaje: `Tu cita "${rec.titulo}" empieza en aproximadamente 2 horas, a las ${hora}.${descripcion}`,
       tipo: 'recordatorio',
       leida: false,
+      cliente_id: rec.cliente_id,
     })
     await supabase.from('recordatorios').update({ notificado_2h: true }).eq('id', rec.id)
   }

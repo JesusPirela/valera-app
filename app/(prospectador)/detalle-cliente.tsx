@@ -300,7 +300,7 @@ const irStyles = StyleSheet.create({
 // ── Pantalla principal ───────────────────────────────────
 export default function DetalleCliente() {
   const c = useColors()
-  const { id, ro, agendar } = useLocalSearchParams<{ id: string; ro?: string; agendar?: string }>()
+  const { id, ro, agendar, reagendar } = useLocalSearchParams<{ id: string; ro?: string; agendar?: string; reagendar?: string }>()
   const soloLectura = ro === '1'  // viendo el cliente de otra persona: no se edita
   const queryClient = useQueryClient()
   const { refreshPending } = useOfflineSync()
@@ -526,6 +526,19 @@ export default function DetalleCliente() {
     abrirAgendar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agendar, cliente, soloLectura])
+
+  // Y con ?reagendar=1 abre directo el "Mover la cita". Lo usan los avisos de
+  // citas: se reportó que desde el celular no habia forma de cambiarle la
+  // fecha a una cita que ya se habia movido de palabra.
+  const yaAbrioReagendar = useRef(false)
+  useEffect(() => {
+    if (reagendar !== '1' || soloLectura || yaAbrioReagendar.current) return
+    if (!cliente) return
+    if (!citaPendiente) return   // esperar a que cargue la cita
+    yaAbrioReagendar.current = true
+    abrirReagendar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reagendar, cliente, citaPendiente, soloLectura])
 
   function abrirAgendar() {
     if (soloLectura) return
