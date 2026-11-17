@@ -24,8 +24,11 @@ import { normalizar } from '../../lib/texto'
 import { legibleSobre, mezclar } from '../../lib/color'
 import {
   ESTADOS_SEGUIMIENTO, ORDEN_SEGUIMIENTO, infoSeguimiento, GRUPOS, DESDE,
-  fechaEfectivaCita, mesDe, mesLegible, type EstadoSeguimiento,
+  fechaEfectivaCita, mesDe, mesLegible, colorEstadoCita, PREGUNTAS_RETRO,
+  mensajeAccountability, type EstadoSeguimiento,
 } from '../../lib/accountability-citas'
+import { Linking } from 'react-native'
+import { normalizarTelefono } from '../../lib/telefono'
 
 const TEAL = '#1a6470'
 
@@ -78,11 +81,18 @@ export default function AccountabilityCitas() {
   const [fProspecto, setFProspecto] = useState<string | null>(null)
   const [fMes, setFMes] = useState<string | null>(null)
   const [fRetro, setFRetro] = useState<'con' | 'sin' | null>(null)
+  const [fCoordino, setFCoordino] = useState<string | null>(null)
+  // Los filtros arrancan PLEGADOS. Son seis grupos y con 32 asesores y 42
+  // prospectadores llenaban la pantalla entera antes de la primera cita.
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
+  // Telefono de cada quien, para poder escribirle. Se busca por nombre porque
+  // la tabla de citas guarda nombres, no ids.
+  const [telPorNombre, setTelPorNombre] = useState<Record<string, string>>({})
   const limpiar = () => {
     setBusqueda(''); setFEstado(null); setFGrupo(null)
-    setFAsesor(null); setFProspecto(null); setFMes(null); setFRetro(null)
+    setFAsesor(null); setFProspecto(null); setFMes(null); setFRetro(null); setFCoordino(null)
   }
-  const hayFiltros = !!(busqueda.trim() || fEstado || fGrupo || fAsesor || fProspecto || fMes || fRetro)
+  const hayFiltros = !!(busqueda.trim() || fEstado || fGrupo || fAsesor || fProspecto || fMes || fRetro || fCoordino)
 
   const montado = useRef(true)
   const cargar = useCallback(async () => {
@@ -103,8 +113,36 @@ export default function AccountabilityCitas() {
   useFocusEffect(useCallback(() => {
     montado.current = true
     cargar()
+    supabase.from('profiles').select('nombre, telefono').not('telefono', 'is', null)
+      .then(({ data }) => {
+        if (!montado.current) return
+        const m: Record<string, string> = {}
+        for (const p of data ?? []) if (p.nombre) m[p.nombre.trim().toLowerCase()] = p.telefono
+        setTelPorNombre(m)
+      })
     return () => { montado.current = false }
   }, [cargar]))
+
+  /** Abre WhatsApp con el mensaje armado para quien atendio o prospecto. */
+  function escribirA(f: Fila, quien: 'asesor' | 'prospectador' | 'coordinador') {
+    const nombre = (quien === 'asesor' ? f.atendio : quien === 'prospectador' ? f.prospecto : f.coordino) ?? ''
+    const tel = telPorNombre[nombre.trim().toLowerCase()]
+    const mensaje = mensajeAccountability({
+      paraQuien: nombre,
+      cliente: f.cliente_nombre ?? 'el cliente',
+      telefono: f.telefono, dia: f.dia_cita,
+      propiedad: f.interesado_en, zona: f.zona_interesada,
+      estadoCita: f.estado_seguimiento,
+    })
+    if (!tel) {
+      // Sin telefono no se puede abrir el chat, pero el mensaje ya esta hecho:
+      // se copia para que no haya que escribirlo a mano.
+      const aviso = `${nombre} no tiene telefono guardado en su perfil.\n\nEste es el mensaje, listo para copiar:\n\n${mensaje}`
+      Platform.OS === 'web' ? window.alert(aviso) : Alert.alert('Sin telefono', aviso)
+      return
+    }
+    Linking.openURL(`https://wa.me/${normalizarTelefono(tel)}?text=${encodeURIComponent(mensaje)}`)
+  }
 
   // ── Guardar el estado de una cita ─────────────────────────────────────────
   async function guardar(id: string, estado: EstadoSeguimiento, notas?: string, quien?: string) {
@@ -142,7 +180,7 @@ export default function AccountabilityCitas() {
   }
 
   // ── Listas para los filtros, con su conteo ────────────────────────────────
-  const { asesores, prospectadores, meses } = useMemo(() => {
+  const { asesores, prospectadores, meses, coordinadores } = useMemo(() => {
     const cuenta = (sel: (f: Fila) => string | null) => {
       const m = new Map<string, number>()
       for (const f of filas) {
@@ -154,6 +192,7 @@ export default function AccountabilityCitas() {
     return {
       asesores: cuenta(f => f.atendio),
       prospectadores: cuenta(f => f.prospecto),
+      coordinadores: cuenta(f => f.coordino),
       meses: cuenta(f => mesDe(fechaEfectivaCita(f))).sort((a, b) => b[0].localeCompare(a[0])),
     }
   }, [filas])
@@ -167,6 +206,7 @@ export default function AccountabilityCitas() {
       if (fGrupo && infoSeguimiento(est).grupo !== fGrupo) return false
       if (fAsesor && (f.atendio ?? '').trim() !== fAsesor) return false
       if (fProspecto && (f.prospecto ?? '').trim() !== fProspecto) return false
+      if (fCoordino && (f.coordino ?? '').trim() !== fCoordino) return false
       if (fMes && mesDe(fechaEfectivaCita(f)) !== fMes) return false
       if (fRetro === 'con' && !f.retro_completada_at) return false
       if (fRetro === 'sin' && f.retro_completada_at) return false
@@ -177,7 +217,7 @@ export default function AccountabilityCitas() {
       }
       return true
     })
-  }, [filas, busqueda, fEstado, fGrupo, fAsesor, fProspecto, fMes, fRetro])
+  }, [filas, busqueda, fEstado, fGrupo, fAsesor, fProspecto, fCoordino, fMes, fRetro])
 
   // Los conteos de los chips de estado se calculan sobre lo filtrado por TODO
   // lo demas: asi el numero que ves es el que vas a obtener al tocarlo.
@@ -185,6 +225,7 @@ export default function AccountabilityCitas() {
     const base = filas.filter(f => {
       if (fAsesor && (f.atendio ?? '').trim() !== fAsesor) return false
       if (fProspecto && (f.prospecto ?? '').trim() !== fProspecto) return false
+      if (fCoordino && (f.coordino ?? '').trim() !== fCoordino) return false
       if (fMes && mesDe(fechaEfectivaCita(f)) !== fMes) return false
       if (fRetro === 'con' && !f.retro_completada_at) return false
       if (fRetro === 'sin' && f.retro_completada_at) return false
@@ -196,7 +237,7 @@ export default function AccountabilityCitas() {
       m.set(e, (m.get(e) ?? 0) + 1)
     }
     return m
-  }, [filas, fAsesor, fProspecto, fMes, fRetro])
+  }, [filas, fAsesor, fProspecto, fCoordino, fMes, fRetro])
 
   const fondoPildora = (color: string) => mezclar(color, c.card, darkMode ? 0.22 : 0.12)
   const tintaPildora = (color: string) => legibleSobre(color, fondoPildora(color), 4.5)
@@ -255,7 +296,10 @@ export default function AccountabilityCitas() {
               fProspecto={fProspecto} setFProspecto={setFProspecto}
               fMes={fMes} setFMes={setFMes}
               fRetro={fRetro} setFRetro={setFRetro}
+              fCoordino={fCoordino} setFCoordino={setFCoordino}
+              abiertos={filtrosAbiertos} setAbiertos={setFiltrosAbiertos}
               asesores={asesores} prospectadores={prospectadores} meses={meses}
+              coordinadores={coordinadores}
               conteoEstados={conteoEstados} hayFiltros={hayFiltros} limpiar={limpiar}
               fondoPildora={fondoPildora} tintaPildora={tintaPildora}
             />
@@ -276,6 +320,7 @@ export default function AccountabilityCitas() {
               borrador={borrador[item.id] ?? seguimientoDe(item)?.notas ?? ''}
               setBorrador={(t: string) => setBorrador(b => ({ ...b, [item.id]: t }))}
               fondoPildora={fondoPildora} tintaPildora={tintaPildora}
+              onEscribir={escribirA}
             />
           )}
         />
@@ -297,11 +342,31 @@ function Filtros(p: any) {
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Text style={[s.chipTxt, { color: activo ? tintaPildora(color ?? TEAL) : c.textSub }]} numberOfLines={1}>
+      <Text style={[s.chipTxt, { color: activo ? tintaPildora(color ?? TEAL) : c.textSub }]}>
         {label}{n != null ? ` (${n})` : ''}
       </Text>
     </TouchableOpacity>
   )
+  // Los chips ENVUELVEN en vez de deslizarse de lado. Antes se salían por la
+  // derecha y no había forma de alcanzarlos: en la computadora la rueda del
+  // ratón no mueve una fila horizontal, y quedaban escondidos para siempre.
+  const Grupo = ({ titulo, children }: any) => (
+    <>
+      <Text style={[s.fLbl, { color: c.textMute }]}>{titulo}</Text>
+      <View style={s.chipFila}>{children}</View>
+    </>
+  )
+
+  // Qué filtros hay puestos, para poder leerlo con el panel cerrado.
+  const puestos: string[] = []
+  if (p.fGrupo) puestos.push(GRUPOS[p.fGrupo as keyof typeof GRUPOS].label)
+  if (p.fEstado) puestos.push(ESTADOS_SEGUIMIENTO[p.fEstado as EstadoSeguimiento].label)
+  if (p.fMes) puestos.push(mesLegible(p.fMes))
+  if (p.fAsesor) puestos.push(`Atendió: ${p.fAsesor}`)
+  if (p.fCoordino) puestos.push(`Coordinó: ${p.fCoordino}`)
+  if (p.fProspecto) puestos.push(`Prospectó: ${p.fProspecto}`)
+  if (p.fRetro) puestos.push(p.fRetro === 'con' ? 'Con retro' : 'Sin retro')
+
   return (
     <View style={[s.filtros, { backgroundColor: c.card, borderBottomColor: c.border }]}>
       <View style={s.buscaFila}>
@@ -319,55 +384,76 @@ function Filtros(p: any) {
         )}
       </View>
 
-      <Text style={[s.fLbl, { color: c.textMute }]}>EN QUÉ QUEDÓ</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipFila}>
-        <Chip activo={!p.fEstado && !p.fGrupo} label="Todas" onPress={() => { p.setFEstado(null); p.setFGrupo(null) }} />
-        {Object.entries(GRUPOS).map(([k, g]: any) => (
-          <Chip key={k} activo={p.fGrupo === k} label={g.label} color={g.color}
-                onPress={() => { p.setFEstado(null); p.setFGrupo(p.fGrupo === k ? null : k) }} />
-        ))}
-      </ScrollView>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipFila}>
-        {ORDEN_SEGUIMIENTO.map(e => (
-          <Chip key={e} activo={p.fEstado === e} label={ESTADOS_SEGUIMIENTO[e].label}
-                n={conteoEstados.get(e) ?? 0} color={ESTADOS_SEGUIMIENTO[e].color}
-                onPress={() => { p.setFGrupo(null); p.setFEstado(p.fEstado === e ? null : e) }} />
-        ))}
-      </ScrollView>
+      {/* La cabecera del panel: cerrado dice qué filtros hay puestos, para no
+          tener que abrirlo solo para acordarse. */}
+      <TouchableOpacity
+        style={[s.filtrosCabeza, { borderColor: c.border }]}
+        onPress={() => p.setAbiertos(!p.abiertos)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="options-outline" size={16} color={TEAL} />
+        <Text style={[s.filtrosCabezaTxt, { color: c.text }]} numberOfLines={1}>
+          {puestos.length === 0 ? 'Filtros' : puestos.join(' · ')}
+        </Text>
+        <Ionicons name={p.abiertos ? 'chevron-up' : 'chevron-down'} size={16} color={c.textMute} />
+      </TouchableOpacity>
 
-      <Text style={[s.fLbl, { color: c.textMute }]}>MES DE LA CITA</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipFila}>
-        <Chip activo={!p.fMes} label="Todos" onPress={() => p.setFMes(null)} />
-        {p.meses.map(([m, n]: any) => (
-          <Chip key={m} activo={p.fMes === m} label={mesLegible(m)} n={n}
-                onPress={() => p.setFMes(p.fMes === m ? null : m)} />
-        ))}
-      </ScrollView>
+      {p.abiertos && (
+        <>
+          <Grupo titulo="EN QUÉ QUEDÓ">
+            <Chip activo={!p.fEstado && !p.fGrupo} label="Todas" onPress={() => { p.setFEstado(null); p.setFGrupo(null) }} />
+            {Object.entries(GRUPOS).map(([k, g]: any) => (
+              <Chip key={k} activo={p.fGrupo === k} label={g.label} color={g.color}
+                    onPress={() => { p.setFEstado(null); p.setFGrupo(p.fGrupo === k ? null : k) }} />
+            ))}
+            {ORDEN_SEGUIMIENTO.map(e => (
+              <Chip key={e} activo={p.fEstado === e} label={ESTADOS_SEGUIMIENTO[e].label}
+                    n={conteoEstados.get(e) ?? 0} color={ESTADOS_SEGUIMIENTO[e].color}
+                    onPress={() => { p.setFGrupo(null); p.setFEstado(p.fEstado === e ? null : e) }} />
+            ))}
+          </Grupo>
 
-      <Text style={[s.fLbl, { color: c.textMute }]}>ASESOR QUE ATENDIÓ</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipFila}>
-        <Chip activo={!p.fAsesor} label="Todos" onPress={() => p.setFAsesor(null)} />
-        {p.asesores.map(([a, n]: any) => (
-          <Chip key={a} activo={p.fAsesor === a} label={a} n={n}
-                onPress={() => p.setFAsesor(p.fAsesor === a ? null : a)} />
-        ))}
-      </ScrollView>
+          <Grupo titulo="MES DE LA CITA">
+            <Chip activo={!p.fMes} label="Todos" onPress={() => p.setFMes(null)} />
+            {p.meses.map(([m, n]: any) => (
+              <Chip key={m} activo={p.fMes === m} label={mesLegible(m)} n={n}
+                    onPress={() => p.setFMes(p.fMes === m ? null : m)} />
+            ))}
+          </Grupo>
 
-      <Text style={[s.fLbl, { color: c.textMute }]}>QUIÉN PROSPECTÓ</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipFila}>
-        <Chip activo={!p.fProspecto} label="Todos" onPress={() => p.setFProspecto(null)} />
-        {p.prospectadores.map(([a, n]: any) => (
-          <Chip key={a} activo={p.fProspecto === a} label={a} n={n}
-                onPress={() => p.setFProspecto(p.fProspecto === a ? null : a)} />
-        ))}
-      </ScrollView>
+          {/* Coordinó va primero: es el dato que más se usa para pedir cuentas. */}
+          <Grupo titulo="QUIÉN COORDINÓ">
+            <Chip activo={!p.fCoordino} label="Todos" onPress={() => p.setFCoordino(null)} />
+            {p.coordinadores.map(([a, n]: any) => (
+              <Chip key={a} activo={p.fCoordino === a} label={a} n={n}
+                    onPress={() => p.setFCoordino(p.fCoordino === a ? null : a)} />
+            ))}
+          </Grupo>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[s.chipFila, { paddingTop: 4 }]}>
-        <Chip activo={p.fRetro === 'con'} label="Con retro escrita"
-              onPress={() => p.setFRetro(p.fRetro === 'con' ? null : 'con')} />
-        <Chip activo={p.fRetro === 'sin'} label="Sin retro"
-              onPress={() => p.setFRetro(p.fRetro === 'sin' ? null : 'sin')} />
-      </ScrollView>
+          <Grupo titulo="ASESOR QUE ATENDIÓ">
+            <Chip activo={!p.fAsesor} label="Todos" onPress={() => p.setFAsesor(null)} />
+            {p.asesores.map(([a, n]: any) => (
+              <Chip key={a} activo={p.fAsesor === a} label={a} n={n}
+                    onPress={() => p.setFAsesor(p.fAsesor === a ? null : a)} />
+            ))}
+          </Grupo>
+
+          <Grupo titulo="QUIÉN PROSPECTÓ">
+            <Chip activo={!p.fProspecto} label="Todos" onPress={() => p.setFProspecto(null)} />
+            {p.prospectadores.map(([a, n]: any) => (
+              <Chip key={a} activo={p.fProspecto === a} label={a} n={n}
+                    onPress={() => p.setFProspecto(p.fProspecto === a ? null : a)} />
+            ))}
+          </Grupo>
+
+          <Grupo titulo="RETRO">
+            <Chip activo={p.fRetro === 'con'} label="Con retro escrita"
+                  onPress={() => p.setFRetro(p.fRetro === 'con' ? null : 'con')} />
+            <Chip activo={p.fRetro === 'sin'} label="Sin retro"
+                  onPress={() => p.setFRetro(p.fRetro === 'sin' ? null : 'sin')} />
+          </Grupo>
+        </>
+      )}
     </View>
   )
 }
@@ -375,12 +461,21 @@ function Filtros(p: any) {
 // ── Una cita ────────────────────────────────────────────────────────────────
 // Cerrada enseña lo mínimo para reconocerla; abierta, todo lo demás y el
 // editor. Así caben muchas en pantalla sin perder el detalle.
-function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, borrador, setBorrador, fondoPildora, tintaPildora }: any) {
+function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, borrador, setBorrador, fondoPildora, tintaPildora, onEscribir }: any) {
   const seg = seguimientoDe(f)
   const est = (seg?.estado ?? 'sin_contactar') as EstadoSeguimiento
   const info = infoSeguimiento(est)
+  // El color de la tarjeta.
+  //
+  // Mientras nadie haya puesto el estado nuevo, manda el estado con el que
+  // quedó la cita: así se distinguen de un golpe las reagendadas de las
+  // realizadas sin abrir nada. En cuanto se captura el estado nuevo, la
+  // tarjeta cambia al color de ese.
+  const sinCapturar = est === 'sin_contactar'
+  const colorBarra = sinCapturar ? colorEstadoCita(f.estado_seguimiento) : info.color
   const fondo = fondoPildora(info.color)
   const tinta = tintaPildora(info.color)
+
   const Dato = ({ lbl, val }: { lbl: string; val: any }) =>
     val ? (
       <View style={s.dato}>
@@ -391,56 +486,99 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
 
   return (
     <View style={[s.tarjeta, { backgroundColor: c.card, borderColor: c.border }]}>
+      {/* La franja de color, para leer el estado sin abrir nada. */}
+      <View style={[s.franja, { backgroundColor: colorBarra }]} />
+      <View style={{ flex: 1 }}>
       <TouchableOpacity style={s.filaCerrada} onPress={onAbrir} activeOpacity={0.7}>
         <View style={{ flex: 1 }}>
           <Text style={[s.nombre, { color: c.text }]} numberOfLines={1}>{f.cliente_nombre ?? 'Sin nombre'}</Text>
           <Text style={[s.sublinea, { color: c.textMute }]} numberOfLines={1}>
-            {f.dia_cita ?? '—'}{f.atendio ? ` · ${f.atendio}` : ''}
+            {f.dia_cita ?? '—'}
           </Text>
+          <Text style={[s.sublinea, { color: c.textSub }]} numberOfLines={1}>
+            {f.coordino ? `Coordinó ${f.coordino}` : 'Sin coordinador'}
+            {f.atendio ? ` · Atendió ${f.atendio}` : ''}
+          </Text>
+          {/* El estado con el que quedó la cita, en su color. Es lo que
+              pidieron para ver cuáles son reagendas. */}
+          {f.estado_seguimiento ? (
+            <Text style={[s.estadoCita, { color: colorEstadoCita(f.estado_seguimiento) }]} numberOfLines={1}>
+              {f.estado_seguimiento}
+            </Text>
+          ) : null}
         </View>
-        <View style={[s.pildora, { backgroundColor: fondo }]}>
-          <Text style={[s.pildoraTxt, { color: tinta }]} numberOfLines={1}>{info.label}</Text>
+        <View style={{ alignItems: 'flex-end', gap: 5 }}>
+          <View style={[s.pildora, { backgroundColor: fondo }]}>
+            <Text style={[s.pildoraTxt, { color: tinta }]} numberOfLines={1}>{info.label}</Text>
+          </View>
+          <Ionicons name={abierta ? 'chevron-up' : 'chevron-down'} size={17} color={c.textMute} />
         </View>
-        <Ionicons name={abierta ? 'chevron-up' : 'chevron-down'} size={17} color={c.textMute} />
       </TouchableOpacity>
 
       {abierta && (
         <View style={[s.detalle, { borderTopColor: c.border }]}>
-          <Dato lbl="Teléfono" val={f.telefono} />
+          {/* Escribirle a quien sepa qué pasó. Va arriba porque es la acción
+              por la que se abre esta cita. */}
+          <View style={s.escribirFila}>
+            {['coordinador', 'asesor', 'prospectador'].map(q => {
+              const nombre = q === 'asesor' ? f.atendio : q === 'prospectador' ? f.prospecto : f.coordino
+              if (!nombre) return null
+              return (
+                <TouchableOpacity key={q} style={s.btnEscribir} onPress={() => onEscribir(f, q)}>
+                  <Ionicons name="logo-whatsapp" size={14} color="#188741" />
+                  <Text style={s.btnEscribirTxt} numberOfLines={1}>
+                    {q === 'asesor' ? 'Asesor' : q === 'prospectador' ? 'Prospectador' : 'Coordinó'}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+
+          <Dato lbl="Coordinó la cita" val={f.coordino} />
+          <Dato lbl="Atendió" val={f.atendio} />
+          <Dato lbl="Prospectó" val={f.prospecto} />
+          <Dato lbl="Teléfono del cliente" val={f.telefono} />
           <Dato lbl="Propiedad" val={f.interesado_en} />
           <Dato lbl="Zona" val={f.zona_interesada} />
           <Dato lbl="Forma de pago" val={f.detalles_pago} />
-          <Dato lbl="Prospectó" val={f.prospecto} />
-          <Dato lbl="Coordinó" val={f.coordino} />
-          <Dato lbl="Atendió" val={f.atendio} />
-          <Dato lbl="Estado de la cita" val={f.estado_seguimiento} />
+          {f.estado_seguimiento ? (
+            <View style={s.dato}>
+              <Text style={[s.datoLbl, { color: c.textMute }]}>EN QUÉ QUEDÓ LA CITA</Text>
+              <View style={[s.pildora, { backgroundColor: fondoPildora(colorEstadoCita(f.estado_seguimiento)), alignSelf: 'flex-start', marginTop: 3 }]}>
+                <Text style={[s.pildoraTxt, { color: tintaPildora(colorEstadoCita(f.estado_seguimiento)) }]}>
+                  {f.estado_seguimiento}
+                </Text>
+              </View>
+            </View>
+          ) : null}
 
-          {(f.retro_como_estuvo || f.retro_info_extra || f.retro_plan_accion) ? (
+          {/* La retro, con las 3 preguntas tal cual se le hicieron al asesor. */}
+          {PREGUNTAS_RETRO.some(q => f[q.campo]) ? (
             <View style={[s.retro, { backgroundColor: c.bg, borderLeftColor: '#c9a84c' }]}>
               <Text style={[s.retroLbl, { color: '#8a6410' }]}>RETRO DE LA CITA</Text>
-              <Dato lbl="Cómo estuvo" val={f.retro_como_estuvo} />
-              <Dato lbl="Información extra" val={f.retro_info_extra} />
-              <Dato lbl="Plan de acción" val={f.retro_plan_accion} />
+              {PREGUNTAS_RETRO.map(q => (
+                <Dato key={q.campo} lbl={q.titulo} val={f[q.campo]} />
+              ))}
             </View>
           ) : (
             <Text style={[s.sinRetro, { color: c.textMute }]}>Esta cita no tiene retro escrita.</Text>
           )}
 
-          <Text style={[s.fLbl, { color: c.textMute, marginTop: 14 }]}>¿EN QUÉ QUEDÓ?</Text>
+          <Text style={[s.fLbl, { color: c.textMute, marginTop: 14 }]}>¿EN QUÉ QUEDÓ EL CLIENTE?</Text>
           <View style={s.opciones}>
             {ORDEN_SEGUIMIENTO.map(e => {
-              const i = ESTADOS_SEGUIMIENTO[e]
+              const i2 = ESTADOS_SEGUIMIENTO[e]
               const on = est === e
               return (
                 <TouchableOpacity
                   key={e}
                   style={[s.opcion, { borderColor: c.border },
-                    on && { backgroundColor: fondoPildora(i.color), borderColor: i.color }]}
+                    on && { backgroundColor: fondoPildora(i2.color), borderColor: i2.color }]}
                   onPress={() => onEstado(e)}
                   disabled={guardando}
                   activeOpacity={0.7}
                 >
-                  <Text style={[s.opcionTxt, { color: on ? tintaPildora(i.color) : c.textSub }]}>{i.label}</Text>
+                  <Text style={[s.opcionTxt, { color: on ? tintaPildora(i2.color) : c.textSub }]}>{i2.label}</Text>
                 </TouchableOpacity>
               )
             })}
@@ -453,7 +591,7 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
             value={borrador}
             onChangeText={setBorrador}
             multiline
-            placeholder="Qué dijo el asesor, qué quedó pendiente…"
+            placeholder="Qué dijo, qué quedó pendiente…"
             placeholderTextColor={c.textMute}
           />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
@@ -469,6 +607,7 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
           </View>
         </View>
       )}
+      </View>
     </View>
   )
 }
@@ -593,11 +732,27 @@ const s = StyleSheet.create({
   buscaFila: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingTop: 10 },
   busca: { flex: 1, fontSize: 14, paddingVertical: 6 },
   fLbl: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.9, paddingHorizontal: 14, marginTop: 10 },
-  chipFila: { flexDirection: 'row', gap: 7, paddingHorizontal: 14, paddingTop: 6 },
+  chipFila: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, paddingHorizontal: 14, paddingTop: 6 },
   chip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
   chipTxt: { fontSize: 12, fontWeight: '700' },
 
-  tarjeta: { marginHorizontal: 12, marginTop: 10, borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
+  filtrosCabeza: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 14, marginTop: 9, borderWidth: 1.5, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 9,
+  },
+  filtrosCabezaTxt: { flex: 1, fontSize: 12.5, fontWeight: '700' },
+
+  tarjeta: { marginHorizontal: 12, marginTop: 10, borderWidth: 1, borderRadius: 12, overflow: 'hidden', flexDirection: 'row' },
+  franja: { width: 5 },
+  estadoCita: { fontSize: 11.5, fontWeight: '800', marginTop: 3 },
+  escribirFila: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 12 },
+  btnEscribir: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderWidth: 1.5, borderColor: '#188741', borderRadius: 9,
+    paddingHorizontal: 10, paddingVertical: 7,
+  },
+  btnEscribirTxt: { fontSize: 12, fontWeight: '800', color: '#188741' },
   filaCerrada: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
   nombre: { fontSize: 14.5, fontWeight: '800' },
   sublinea: { fontSize: 11.5, marginTop: 2 },

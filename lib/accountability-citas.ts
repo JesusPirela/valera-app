@@ -76,3 +76,62 @@ export function mesLegible(mes: string): string {
   const [a, m] = mes.split('-')
   return `${MESES[Number(m) - 1] ?? m} ${a}`
 }
+
+// ── El estado VIEJO de la cita (citas_venta.estado_seguimiento) ────────────
+// Hace falta su color aquí: mientras nadie haya puesto el estado nuevo, la
+// tarjeta se pinta con el viejo. Así se distinguen de un vistazo las
+// reagendadas de las realizadas sin tener que abrir nada, y en cuanto se
+// captura el nuevo estado la tarjeta cambia de color sola.
+const COLOR_ESTADO_CITA: Record<string, string> = {
+  'Apartó':                       '#1a5e32',
+  'Cancelada/Reagenda':           '#bf4e1a',
+  'Realizada':                    '#1a6855',
+  'No responde el cliente':       '#6b7280',
+  'Seguim. cierre · alto interés':'#8b2252',
+  'Seguim. cierre · bajo interés':'#7a5230',
+  'Falta perfilar / crédito':     '#a07020',
+  'Compra a futuro':              '#8b5e2a',
+  'Buscar más opciones':          '#1a6470',
+  'Por atender':                  '#9a7018',
+}
+
+/** El color del estado con el que quedó la cita. Gris si nadie lo capturó. */
+export const colorEstadoCita = (e: string | null | undefined): string =>
+  (e && COLOR_ESTADO_CITA[e.trim()]) || '#8a94a6'
+
+/** Las 3 preguntas de la retro, con el texto exacto que se le hizo al asesor. */
+export const PREGUNTAS_RETRO = [
+  { campo: 'retro_como_estuvo', titulo: '¿Cómo estuvo la cita?' },
+  { campo: 'retro_info_extra',  titulo: '¿Qué información extra conseguimos?' },
+  { campo: 'retro_plan_accion', titulo: '¿Cuál es el plan de acción?' },
+] as const
+
+/**
+ * El mensaje que se le manda al asesor o al prospectador para preguntarle en
+ * qué quedó el cliente.
+ *
+ * Lleva los datos de la cita porque quien lo recibe atendió decenas: sin el
+ * cliente, la fecha y la propiedad tendría que adivinar de cuál le hablan, y
+ * eso es exactamente lo que hace que nadie conteste.
+ */
+export function mensajeAccountability(args: {
+  paraQuien: string
+  cliente: string
+  telefono?: string | null
+  dia?: string | null
+  propiedad?: string | null
+  zona?: string | null
+  estadoCita?: string | null
+}): string {
+  const l: string[] = []
+  l.push(`Hola ${args.paraQuien.split(' ')[0]}, te escribo por una cita para ponernos al día:`)
+  l.push('')
+  l.push(`• Cliente: *${args.cliente}*${args.telefono ? ` (${args.telefono})` : ''}`)
+  if (args.dia) l.push(`• Cita: ${args.dia}`)
+  if (args.propiedad) l.push(`• Propiedad: ${args.propiedad}`)
+  if (args.zona) l.push(`• Zona: ${args.zona}`)
+  if (args.estadoCita) l.push(`• Quedó como: ${args.estadoCita}`)
+  l.push('')
+  l.push('¿En qué quedó este cliente? ¿Sigue interesado, hay que mandarle más opciones, o ya se descartó?')
+  return l.join(String.fromCharCode(10))
+}
