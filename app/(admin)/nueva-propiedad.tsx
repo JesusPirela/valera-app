@@ -222,6 +222,9 @@ export default function NuevaPropiedad() {
   const [urlImport, setUrlImport] = useState('')
   const [mostrarPegar, setMostrarPegar] = useState(false)  // recuadro para pegar el código del anuncio
   const [htmlPegado, setHtmlPegado] = useState('')
+  // Por qué la importación no trajo fotos. Va aparte del mensaje corto
+  // porque es una frase larga y hay que leerla entera.
+  const [avisoFotos, setAvisoFotos] = useState('')
   const [urlOrigen, setUrlOrigen] = useState('')  // link de donde se importó (se guarda en la propiedad)
   // Se importó pegando el código. Solo entonces se exige el link antes de
   // guardar: una propiedad escrita a mano no viene de ningún anuncio.
@@ -452,6 +455,7 @@ export default function NuevaPropiedad() {
       return
     }
     setImportando(true)
+    setAvisoFotos('')
     setImportMsg(pastedHtml ? 'Procesando el código pegado…' : 'Descargando información…')
     setModelosVinte(null)
     setModeloVinteSeleccionado(null)
@@ -497,10 +501,14 @@ export default function NuevaPropiedad() {
       if (d.recamaras) partes.push(`${d.recamaras} rec.`)
       if (d.banos)     partes.push(`${d.banos} baños`)
       if (d.m2)        partes.push(`${d.m2} m²`)
-      if (d.imagenes?.length) partes.push(`${d.imagenes.length} fotos`)
+      // Las fotos se dicen SIEMPRE, haya o no. Antes solo se mencionaban
+      // cuando venían, así que una importación sin una sola foto contestaba
+      // "título · precio · 3 rec." y parecía que todo había salido bien.
+      partes.push(d.imagenes?.length ? `${d.imagenes.length} fotos` : '⚠ SIN FOTOS')
       setImportMsg(partes.length > 0
         ? `✓ ${partes.join(' · ')}`
         : '⚠ No se detectaron campos. Verifica que el URL sea de una propiedad.')
+      setAvisoFotos(d.imagenes?.length ? '' : String(d.avisoFotos ?? ''))
 
       if (d.descripcion) {
         setImportMsg(prev => `${prev} · Mejorando con IA…`)
@@ -1051,6 +1059,22 @@ export default function NuevaPropiedad() {
             <Text style={[styles.fichaMsg, { color: importMsg.startsWith('✓') ? '#c9a84c' : importMsg.startsWith('✗') ? '#e53935' : '#aaa' }]}>
               {importMsg}
             </Text>
+          ) : null}
+
+          {/* Por qué no vino ni una foto. Va en su propio recuadro y no en el
+              mensaje de una línea porque dice qué hacer, y eso hay que leerlo
+              entero. La importación NO se bloquea: los demás datos sirven y
+              las fotos se pueden subir a mano. */}
+          {avisoFotos ? (
+            <View style={{
+              marginTop: 8, padding: 10, borderRadius: 9,
+              borderWidth: 1, borderColor: '#e5a50a55', backgroundColor: '#3a2d0033',
+            }}>
+              <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#e5a50a', marginBottom: 3 }}>
+                ⚠ No se importó ninguna foto
+              </Text>
+              <Text style={{ fontSize: 11.5, lineHeight: 17, color: '#ddc9a0' }}>{avisoFotos}</Text>
+            </View>
           ) : null}
 
           {/* El código se pegó pero no traía la ruta del anuncio por ningún

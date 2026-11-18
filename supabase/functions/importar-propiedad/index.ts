@@ -205,6 +205,45 @@ function limpiarUrlImg(u: string): string {
   }
 }
 
+/**
+ * Por qué no salió ninguna foto, en una frase que se pueda leer en pantalla.
+ *
+ * Sirve para no tener que adivinar la próxima vez: dice si el código traía
+ * direcciones de fotos y no se pudieron usar, o si directamente no traía
+ * ninguna (que es lo que pasa cuando se copia la página en vez del código, o
+ * cuando la galería la pinta el JavaScript y el código fuente no la incluye).
+ */
+function diagnosticoFotos(html: string, pegado: boolean): string {
+  const menciones = (re: RegExp) => (html.match(re) ?? []).length
+  const assets = menciones(/assets\.easybroker\.com/gi)
+  const carpetas = menciones(/property_images/gi)
+  const etiquetas = menciones(/<img\b/gi)
+  const kb = Math.round(html.length / 1024)
+  // El portal contesto una pantalla de "demuestra que no eres un robot" en vez
+  // del anuncio. Medido con Lamudi: devuelve 12 KB de verificacion, de ahi se
+  // sacaba un titulo ("Security verification") y cero fotos, y parecia que el
+  // anuncio no tenia.
+  if (/security verification|just a moment|cf-chl|checking your browser|captcha|unusual traffic/i.test(html)) {
+    return 'El portal no dejo leer el anuncio desde el servidor: contesto una pantalla ' +
+      'de verificacion ("no soy un robot"). Importa pegando el codigo: abre el anuncio ' +
+      'en tu navegador, Ctrl+U, Ctrl+A, Ctrl+C y pegalo aqui.'
+  }
+  if (assets || carpetas) {
+    return `No se pudo usar ninguna foto, aunque el código sí menciona fotos ` +
+      `(${assets} de assets.easybroker.com, ${carpetas} rutas de fotos en ${kb} KB). ` +
+      `Avísale a soporte con el link: es un formato nuevo.`
+  }
+  if (etiquetas === 0) {
+    return pegado
+      ? `El código pegado (${kb} KB) no trae ni una etiqueta de imagen. Suele pasar ` +
+        `cuando se copia la página tal como se ve en vez del código (Ctrl+U).`
+      : `La página descargada (${kb} KB) no trae ni una etiqueta de imagen.`
+  }
+  return `El código trae ${etiquetas} imágenes pero ninguna es del anuncio ` +
+    `(suelen ser logos e íconos). Las fotos quizá las pinta el JavaScript, que no ` +
+    `aparece en el código fuente: en ese caso hay que subirlas a mano.`
+}
+
 // Decodifica las entidades HTML más comunes en portales en español.
 // Necesario para que las expresiones de etiquetas (Recámaras, Construcción, m²…)
 // hagan match aunque el portal las codifique (&aacute;, &ntilde;, &sup2;…).
@@ -1649,6 +1688,17 @@ serve(async (req) => {
     // con AWS WAF), el usuario abre el anuncio en SU navegador (IP residencial que
     // sí pasa), copia el código y lo pega. Aquí se parsea directo, sin fetch.
     const htmlPegado: string | null = (typeof body?.html === 'string' && body.html.length > 500) ? body.html : null
+    // Lo pegado tiene que ser el CODIGO de la pagina, no la pagina.
+    // Seleccionar el anuncio con Ctrl+A y copiarlo da el texto visible: el
+    // titulo, el precio y las recamaras se leen igual, asi que la importacion
+    // parecia funcionar... y llegaba sin una sola foto, porque las direcciones
+    // de las fotos solo existen en el codigo.
+    if (htmlPegado && !/<\s*(?:html|head|body|div|img|script|meta|section)\b/i.test(htmlPegado)) {
+      throw new Error(
+        'Eso parece el texto del anuncio, no su codigo. En el navegador: Ctrl+U ' +
+        '(se abre una pestana con el codigo), ahi Ctrl+A y Ctrl+C, y pega eso. ' +
+        'Si copias la pagina tal como se ve, no vienen las fotos.')
+    }
 
     if (!htmlPegado && (!url || !/^https?:\/\//.test(url))) throw new Error('URL inválida')
 
@@ -2420,9 +2470,23 @@ serve(async (req) => {
       // obligatorio para cargar. &amp; incluido porque la URL viene HTML-escapada.
       /https?:\/\/firebasestorage\.googleapis\.com\/[^\s"'<>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^\s"'<>]*)?/gi,
     ]
+    // Las fotos no siempre viven en etiquetas <img>. Muchos portales las
+    // llevan dentro de un <script> con datos JSON, y ahi las barras van
+    // escapadas:  https:\/\/assets.easybroker.com\/property_images\/...
+    // Contra ese texto las expresiones de arriba no casan NADA y la propiedad
+    // se importa sin una sola foto, aunque la pagina las tenga todas. Se
+    // busca sobre una copia con los escapes deshechos (de JSON y de HTML),
+    // ademas de sobre el original.
+    const htmlFotos = html
+      .replace(/\\\//g, '/')
+      .replace(/\\u002[fF]/g, '/')
+      .replace(/&#0?47;/g, '/')
     const rawImgs: string[] = []
     for (const pat of imgPatterns) {
       for (const m of html.matchAll(pat)) rawImgs.push(limpiarUrlImg(m[0]))
+      if (htmlFotos !== html) {
+        for (const m of htmlFotos.matchAll(pat)) rawImgs.push(limpiarUrlImg(m[0]))
+      }
     }
     // Descarta logos, íconos, avatares y recortes (no son fotos de la propiedad).
     const junk = /(logo|icon|favicon|avatar|sprite|placeholder|cropped-|whatsapp-image-2021|-32x32|-150x150|-180x180|-192x192|-270x270)/i
@@ -2740,6 +2804,11 @@ serve(async (req) => {
       titulo, descripcion, precio, direccion, zona, modelo,
       recamaras, banos, mediosBanos, estacionamientos,
       m2, m2Terreno, tipo, operacion, imagenes,
+      // Cuando no sale ni una foto, el aviso dice que se vio dentro del
+      // codigo. Antes la importacion contestaba "titulo, precio, 3 rec." y
+      // se quedaba callada sobre las fotos: quien importaba no se enteraba
+      // hasta guardar la propiedad vacia.
+      avisoFotos: imagenes.length === 0 ? diagnosticoFotos(html, htmlPegado != null) : null,
       // Para que la propiedad recuerde de dónde salió aunque se haya
       // importado pegando el código y no el link.
       urlOriginal: urlDelAnuncio(html),
