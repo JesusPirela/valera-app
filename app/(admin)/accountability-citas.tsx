@@ -64,7 +64,11 @@ type Fila = {
   seguimiento_citas: unknown
 }
 
-type Seg = { estado: string; notas: string | null; quien_respondio: string | null; actualizado_at: string }
+type Seg = {
+  estado: string; notas: string | null; quien_respondio: string | null; actualizado_at: string
+  /** Marca NUESTRA: ya se le escribió a alguien por esta cita. */
+  contactado?: boolean | null; contactado_at?: string | null
+}
 
 function seguimientoDe(f: Fila): Seg | null {
   const s: any = f.seguimiento_citas
@@ -113,6 +117,9 @@ export default function AccountabilityCitas() {
   const [fMes, setFMes] = useState<Set<string>>(new Set())
   const [fCoordino, setFCoordino] = useState<Set<string>>(new Set())
   const [fRetro, setFRetro] = useState<'con' | 'sin' | null>(null)
+  // ¿Ya le escribimos por esta cita? Sirve para repartirse el trabajo sin
+  // perseguir dos veces a la misma persona.
+  const [fContacto, setFContacto] = useState<'si' | 'no' | null>(null)
   // Arranca de la MAS VIEJA a la mas nueva: la revision empieza por la primera
   // cita de septiembre y se avanza hacia hoy, que es como se va a trabajar.
   const [orden, setOrden] = useState<'asc' | 'desc'>('asc')
@@ -124,9 +131,9 @@ export default function AccountabilityCitas() {
   const limpiar = () => {
     setBusqueda(''); setFEstado(new Set()); setFEstadoCita(new Set()); setFGrupo(new Set())
     setFAsesor(new Set()); setFProspecto(new Set()); setFMes(new Set())
-    setFCoordino(new Set()); setFRetro(null)
+    setFCoordino(new Set()); setFRetro(null); setFContacto(null)
   }
-  const hayFiltros = !!(busqueda.trim() || fRetro) ||
+  const hayFiltros = !!(busqueda.trim() || fRetro || fContacto) ||
     [fEstado, fEstadoCita, fGrupo, fAsesor, fProspecto, fMes, fCoordino].some(s => s.size > 0)
 
   const montado = useRef(true)
@@ -136,7 +143,7 @@ export default function AccountabilityCitas() {
       .select(`id, cliente_nombre, telefono, detalles_pago, interesado_en, zona_interesada,
                dia_cita, fecha_cita, fecha_apartado, prospecto, coordino, atendio,
                estado_seguimiento, retro_como_estuvo, retro_info_extra, retro_plan_accion,
-               retro_completada_at, seguimiento_citas(estado, notas, quien_respondio, actualizado_at)`)
+               retro_completada_at, seguimiento_citas(estado, notas, quien_respondio, actualizado_at, contactado, contactado_at)`)
       .or(`fecha_cita.gte.${DESDE},fecha_apartado.gte.${DESDE}`)
       .order('fecha_cita', { ascending: false, nullsFirst: false })
       .limit(2000)
@@ -180,30 +187,43 @@ export default function AccountabilityCitas() {
     }
   }
 
-  // ── Guardar el estado de una cita ─────────────────────────────────────────
-  async function guardar(id: string, estado: EstadoSeguimiento, notas?: string, quien?: string) {
+  // ── Guardar lo capturado de una cita ──────────────────────────────────────
+  // Recibe SOLO lo que cambia y conserva el resto. Antes pedía estado, notas y
+  // quién en cada llamada, y marcar el check habría obligado a reenviar las
+  // notas: si alguien las estaba escribiendo en ese momento, se pisaban.
+  type Parche = { estado?: EstadoSeguimiento; notas?: string | null; quien?: string | null; contactado?: boolean }
+  async function guardar(id: string, cambios: Parche) {
     setGuardando(id)
     const previo = filas
+    const ahora = new Date().toISOString()
+    const armar = (f: Fila) => {
+      const a = seguimientoDe(f)
+      const contactado = cambios.contactado ?? a?.contactado ?? false
+      return {
+        estado: cambios.estado ?? (a?.estado as EstadoSeguimiento | undefined) ?? estadoDe(f),
+        notas: cambios.notas !== undefined ? cambios.notas : (a?.notas ?? null),
+        quien_respondio: cambios.quien !== undefined ? cambios.quien : (a?.quien_respondio ?? null),
+        contactado,
+        // La fecha solo se escribe cuando se marca; al desmarcar se borra, para
+        // que no quede una fecha de algo que ya decimos que no pasó.
+        contactado_at: cambios.contactado === undefined ? (a?.contactado_at ?? null)
+                     : cambios.contactado ? ahora : null,
+      }
+    }
     // Optimista: la pildora cambia al instante y la lista no parpadea.
     setFilas(fs => fs.map(f => f.id !== id ? f : {
-      ...f,
-      seguimiento_citas: {
-        estado,
-        notas: notas ?? seguimientoDe(f)?.notas ?? null,
-        quien_respondio: quien ?? seguimientoDe(f)?.quien_respondio ?? null,
-        actualizado_at: new Date().toISOString(),
-      },
+      ...f, seguimiento_citas: { ...armar(f), actualizado_at: ahora },
     }))
     try {
       const { data: { user } } = await getUsuarioActual()
-      const fila = previo.find(f => f.id === id)
+      const fila = previo.find(f => f.id === id)!
+      const fin = armar(fila)
       const { error } = await supabase.from('seguimiento_citas').upsert({
         cita_venta_id: id,
-        estado,
-        notas: notas ?? seguimientoDe(fila!)?.notas ?? null,
-        quien_respondio: quien ?? seguimientoDe(fila!)?.quien_respondio ?? null,
+        ...fin,
+        contactado_por: fin.contactado ? (user?.id ?? null) : null,
         actualizado_por: user?.id ?? null,
-        actualizado_at: new Date().toISOString(),
+        actualizado_at: ahora,
       }, { onConflict: 'cita_venta_id' })
       if (error) {
         setFilas(previo)   // revertir: que no se vea guardado algo que no se guardo
@@ -251,6 +271,8 @@ export default function AccountabilityCitas() {
       if (fMes.size && !fMes.has(mesDe(fechaEfectivaCita(f)) ?? '')) return false
       if (fRetro === 'con' && !f.retro_completada_at) return false
       if (fRetro === 'sin' && f.retro_completada_at) return false
+      if (fContacto === 'si' && !seguimientoDe(f)?.contactado) return false
+      if (fContacto === 'no' && seguimientoDe(f)?.contactado) return false
       if (q) {
         const heno = normalizar([f.cliente_nombre, f.telefono, f.interesado_en, f.zona_interesada,
           f.prospecto, f.coordino, f.atendio, seg?.notas].filter(Boolean).join(' | '))
@@ -267,7 +289,7 @@ export default function AccountabilityCitas() {
       if (!fb) return -1
       return orden === 'asc' ? fa.localeCompare(fb) : fb.localeCompare(fa)
     })
-  }, [filas, busqueda, fEstado, fEstadoCita, fGrupo, fAsesor, fProspecto, fCoordino, fMes, fRetro, orden])
+  }, [filas, busqueda, fEstado, fEstadoCita, fGrupo, fAsesor, fProspecto, fCoordino, fMes, fRetro, fContacto, orden])
 
   // Los conteos de los chips de estado se calculan sobre lo filtrado por TODO
   // lo demas: asi el numero que ves es el que vas a obtener al tocarlo.
@@ -279,6 +301,8 @@ export default function AccountabilityCitas() {
       if (fMes.size && !fMes.has(mesDe(fechaEfectivaCita(f)) ?? '')) return false
       if (fRetro === 'con' && !f.retro_completada_at) return false
       if (fRetro === 'sin' && f.retro_completada_at) return false
+      if (fContacto === 'si' && !seguimientoDe(f)?.contactado) return false
+      if (fContacto === 'no' && seguimientoDe(f)?.contactado) return false
       return true
     })
     const m = new Map<string, number>()
@@ -287,7 +311,7 @@ export default function AccountabilityCitas() {
       m.set(e, (m.get(e) ?? 0) + 1)
     }
     return m
-  }, [filas, fAsesor, fProspecto, fCoordino, fMes, fRetro])
+  }, [filas, fAsesor, fProspecto, fCoordino, fMes, fRetro, fContacto])
 
   const fondoPildora = (color: string) => mezclar(color, c.card, darkMode ? 0.22 : 0.12)
   const tintaPildora = (color: string) => legibleSobre(color, fondoPildora(color), 4.5)
@@ -362,6 +386,7 @@ export default function AccountabilityCitas() {
               fProspecto={fProspecto} setFProspecto={setFProspecto}
               fMes={fMes} setFMes={setFMes}
               fRetro={fRetro} setFRetro={setFRetro}
+              fContacto={fContacto} setFContacto={setFContacto}
               fCoordino={fCoordino} setFCoordino={setFCoordino}
               fEstadoCita={fEstadoCita} setFEstadoCita={setFEstadoCita}
               estadosCita={estadosCita}
@@ -382,8 +407,9 @@ export default function AccountabilityCitas() {
             <TarjetaCita
               f={item} c={c} abierta={abierta === item.id}
               onAbrir={() => setAbierta(a => a === item.id ? null : item.id)}
-              onEstado={(e: EstadoSeguimiento) => guardar(item.id, e)}
-              onNotas={(t: string | null) => guardar(item.id, estadoDe(item), t ?? undefined)}
+              onEstado={(e: EstadoSeguimiento) => guardar(item.id, { estado: e })}
+              onNotas={(t: string | null) => guardar(item.id, { notas: t })}
+              onContactado={(v: boolean) => guardar(item.id, { contactado: v })}
               guardando={guardando === item.id}
               borrador={borrador[item.id] ?? seguimientoDe(item)?.notas ?? ''}
               setBorrador={(t: string) => setBorrador(b => ({ ...b, [item.id]: t }))}
@@ -437,6 +463,7 @@ function Filtros(p: any) {
   for (const a of p.fAsesor) puestos.push(`Atendió ${a}`)
   for (const a of p.fProspecto) puestos.push(`Prospectó ${a}`)
   if (p.fRetro) puestos.push(p.fRetro === 'con' ? 'Con retro' : 'Sin retro')
+  if (p.fContacto) puestos.push(p.fContacto === 'si' ? 'Ya contactadas' : 'Falta contactar')
 
   return (
     <View style={[s.filtros, { backgroundColor: c.card, borderBottomColor: c.border }]}>
@@ -538,6 +565,13 @@ function Filtros(p: any) {
             ))}
           </Grupo>
 
+          <Grupo titulo="¿YA LE ESCRIBIMOS?" nota="Nuestra gestión, no lo que contestó el asesor.">
+            <Chip activo={p.fContacto === 'si'} label="Ya le escribimos" color="#188741"
+                  onPress={() => p.setFContacto(p.fContacto === 'si' ? null : 'si')} />
+            <Chip activo={p.fContacto === 'no'} label="Falta escribirle" color="#9a7018"
+                  onPress={() => p.setFContacto(p.fContacto === 'no' ? null : 'no')} />
+          </Grupo>
+
           <Grupo titulo="RETRO">
             <Chip activo={p.fRetro === 'con'} label="Con retro escrita"
                   onPress={() => p.setFRetro(p.fRetro === 'con' ? null : 'con')} />
@@ -553,7 +587,7 @@ function Filtros(p: any) {
 // ── Una cita ────────────────────────────────────────────────────────────────
 // Cerrada enseña lo mínimo para reconocerla; abierta, todo lo demás y el
 // editor. Así caben muchas en pantalla sin perder el detalle.
-function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, borrador, setBorrador, fondoPildora, tintaPildora, onEscribir, copiado }: any) {
+function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, onContactado, guardando, borrador, setBorrador, fondoPildora, tintaPildora, onEscribir, copiado }: any) {
   const seg = seguimientoDe(f)
   const est = estadoDe(f)
   const info = infoSeguimiento(est)
@@ -656,6 +690,14 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
           <View style={[s.pildora, { backgroundColor: fondo }]}>
             <Text style={[s.pildoraTxt, { color: tinta }]} numberOfLines={1}>{info.label}</Text>
           </View>
+          {/* La marca de "ya le escribimos", visible SIN abrir: es lo que se
+              mira al repartirse a quién perseguir hoy. */}
+          {seg?.contactado ? (
+            <View style={s.yaFila}>
+              <Ionicons name="checkmark-circle" size={13} color={enAmbos('#188741', 3)} />
+              <Text style={[s.yaTxt, { color: enAmbos('#188741') }]}>Ya le escribimos</Text>
+            </View>
+          ) : null}
           <Ionicons name={abierta ? 'chevron-up' : 'chevron-down'} size={17} color={enAmbos(c.textMute, 3)} />
         </View>
       </TouchableOpacity>
@@ -694,6 +736,35 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
               </Text>
             )}
           </View>
+
+          {/* El check de gestión. Va junto a los botones de copiar porque es el
+              paso siguiente: copié el mensaje, lo mandé, lo marco.
+              Es distinto del estado de abajo: ese es lo que CONTESTÓ la otra
+              persona y puede tardar días; esto es lo que hicimos nosotros. */}
+          {(() => {
+            const ok = !!seg?.contactado
+            const verde = '#188741'
+            const fondoCk = ok ? fondoPildora(verde) : 'transparent'
+            const cuando = seg?.contactado_at
+              ? new Date(seg.contactado_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+              : null
+            return (
+              <TouchableOpacity
+                style={[s.check, { borderColor: ok ? verde : c.border, backgroundColor: fondoCk }]}
+                onPress={() => onContactado(!ok)}
+                disabled={guardando}
+                activeOpacity={0.7}
+              >
+                <Ionicons name={ok ? 'checkbox' : 'square-outline'} size={19}
+                          color={ok ? tintaPildora(verde) : c.textMute} />
+                <Text style={[s.checkTxt, { color: ok ? tintaPildora(verde) : c.textSub }]}>
+                  {ok
+                    ? `Ya le escribimos por esta cita${cuando ? ` · ${cuando}` : ''}`
+                    : 'Marcar que ya le escribimos por esta cita'}
+                </Text>
+              </TouchableOpacity>
+            )
+          })()}
 
           <Dato lbl="Coordinó la cita" val={f.coordino} />
           <Dato lbl="Atendió" val={f.atendio} />
@@ -913,6 +984,14 @@ const s = StyleSheet.create({
   franja: { width: 7 },
   estadoCita: { fontSize: 11.5, fontWeight: '800', marginTop: 3 },
   escribirFila: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 12 },
+  check: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1.5, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9,
+    marginBottom: 13, alignSelf: 'flex-start',
+  },
+  checkTxt: { fontSize: 12.5, fontWeight: '700' },
+  yaFila: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  yaTxt: { fontSize: 10.5, fontWeight: '800' },
   btnEscribir: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     borderWidth: 1.5, borderColor: '#188741', borderRadius: 9,
