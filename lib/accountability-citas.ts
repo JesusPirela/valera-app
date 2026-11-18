@@ -32,15 +32,36 @@ type Info = {
 }
 
 /** El orden es el del recorrido: de "no hemos preguntado" a "ya se resolvió". */
+// Los colores de ESTA lista están repartidos para que ninguno se parezca a
+// los de la lista de la cita (lib/estados-cita.ts): la tarjeta pinta los dos
+// a la vez, uno a cada lado, y si se parecen se ve de un solo color y no dice
+// nada. Pasó con 'Realizada' (#0d9488) y 'Hay que mandar opciones'
+// (#1a6470): dos verdes azulados a distancia 11, indistinguibles en pantalla.
+//
+// El reparto se eligió midiendo, no a ojo: se barrió la rueda de color entera
+// buscando el reparto que deja el par MÁS PARECIDO lo más lejos posible, con
+// la condición de que cada color se vea en los dos temas (>=3:1 contra la
+// tarjeta blanca y contra la oscura). El par más parecido pasó de 11 a 36.
+//
+// Quedan fijos a propósito: el gris de 'sin_contactar' (es el único que NO
+// debe llamar la atención), el rojo de 'descartado' y el oro de
+// 'aparto_compro'. Por eso los demás se movieron a donde quedaba hueco:
+// rosa, morado, lima, oliva y palo de rosa. Antes de cambiar uno, vale la
+// pena volver a medir.
+//
+// El oro de 'aparto_compro' es EL MISMO que el de 'Apartó' en estados-cita.ts,
+// a propósito: son la misma noticia contada dos veces (la cita acabó en
+// apartado / el cliente apartó) y pintarlas de dos colores hacía creer que
+// eran cosas distintas. Si se cambia uno hay que cambiar el otro.
 export const ESTADOS_SEGUIMIENTO: Record<EstadoSeguimiento, Info> = {
   sin_contactar:   { label: 'Sin contactar',            ayuda: 'Todavía no le preguntamos al asesor',            color: '#64748b', bg: '#f1f5f9', grupo: 'pendiente' },
-  sin_respuesta:   { label: 'Le escribimos, no contesta', ayuda: 'Ya se le preguntó y no ha respondido',          color: '#9a7018', bg: '#fdf8e6', grupo: 'pendiente' },
-  mandar_opciones: { label: 'Hay que mandar opciones',  ayuda: 'Le interesó pero necesita ver más propiedades',   color: '#1a6470', bg: '#e0f4f5', grupo: 'viva' },
-  se_contactaran:  { label: 'Se pondrán en contacto',   ayuda: 'El asesor lo va a buscar él mismo',               color: '#7a5230', bg: '#f8ede0', grupo: 'viva' },
-  compra_futuro:   { label: 'Compra a futuro',          ayuda: 'Quiere, pero más adelante',                       color: '#8b5e2a', bg: '#fef6ec', grupo: 'viva' },
-  falta_credito:   { label: 'Falta crédito / perfilar', ayuda: 'Depende de resolver su crédito',                  color: '#8b2252', bg: '#fdf0f7', grupo: 'viva' },
+  sin_respuesta:   { label: 'Le escribimos, no contesta', ayuda: 'Ya se le preguntó y no ha respondido',          color: '#746e39', bg: '#eeeee7', grupo: 'pendiente' },
+  mandar_opciones: { label: 'Hay que mandar opciones',  ayuda: 'Le interesó pero necesita ver más propiedades',   color: '#dd409f', bg: '#fbe8f3', grupo: 'viva' },
+  se_contactaran:  { label: 'Se pondrán en contacto',   ayuda: 'El asesor lo va a buscar él mismo',               color: '#9262b2', bg: '#f2ecf6', grupo: 'viva' },
+  compra_futuro:   { label: 'Compra a futuro',          ayuda: 'Quiere, pero más adelante',                       color: '#829c1c', bg: '#f0f3e4', grupo: 'viva' },
+  falta_credito:   { label: 'Falta crédito / perfilar', ayuda: 'Depende de resolver su crédito',                  color: '#b5697c', bg: '#f6edef', grupo: 'viva' },
   descartado:      { label: 'Descartado',               ayuda: 'Ya no va a comprar',                              color: '#9b2020', bg: '#fff1f2', grupo: 'perdida' },
-  aparto_compro:   { label: 'Apartó o compró',          ayuda: 'Se cerró',                                        color: '#1a5e32', bg: '#e5f5ea', grupo: 'cerrada' },
+  aparto_compro:   { label: 'Apartó o compró',          ayuda: 'Se cerró',                                        color: '#c87f0a', bg: '#fdf2e0', grupo: 'cerrada' },
 }
 
 export const ORDEN_SEGUIMIENTO = Object.keys(ESTADOS_SEGUIMIENTO) as EstadoSeguimiento[]
@@ -51,7 +72,7 @@ export const infoSeguimiento = (e: string | null | undefined): Info =>
 export const GRUPOS: Record<Info['grupo'], { label: string; color: string }> = {
   pendiente: { label: 'Falta preguntar', color: '#9a7018' },
   viva:      { label: 'Sigue viva',      color: '#1a6470' },
-  cerrada:   { label: 'Cerrada',         color: '#1a5e32' },
+  cerrada:   { label: 'Cerrada',         color: '#c87f0a' },
   perdida:   { label: 'Perdida',         color: '#9b2020' },
 }
 

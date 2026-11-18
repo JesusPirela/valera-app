@@ -577,8 +577,13 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
   const colorCita = f.estado_seguimiento ? colorEstadoCita(f.estado_seguimiento) : null
   const sinCapturar = est === 'sin_contactar'
   const colorNuevo = sinCapturar ? null : info.color
-  const colorIzq = colorCita ?? colorNuevo ?? '#8a94a6'
-  const colorDer = colorNuevo ?? colorCita ?? '#8a94a6'
+  // Aclarado lo justo para que se vea sobre la tarjeta: el rojo de
+  // 'Descartado' (#9b2020) quedaba en 2.08:1 contra el fondo oscuro y la
+  // franja prácticamente desaparecía. Sube la luminosidad, no cambia el tono:
+  // sigue siendo rojo. En tema claro ninguno lo necesita y no se toca nada.
+  const visible = (col: string) => legibleSobre(col, c.card, 3)
+  const colorIzq = visible(colorCita ?? colorNuevo ?? '#8a94a6')
+  const colorDer = visible(colorNuevo ?? colorCita ?? '#8a94a6')
   const partida = !!colorCita && !!colorNuevo && colorCita !== colorNuevo
   // La mezcla es suave a propósito: el texto va encima y tiene que seguir
   // leyéndose. Las franjas de las orillas van a todo color para que el tono se
@@ -586,7 +591,11 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
   // En oscuro la mezcla tiene que ser más fuerte: sobre un fondo casi negro
   // un 13% de color no se distingue, y entonces la partición —que es justo lo
   // que hay que ver de un vistazo— se pierde.
-  const alfa = luminancia(c.card) < 0.18 ? 0.2 : 0.13
+  //
+  // Y las cerradas van más cargadas todavía: el oro es el color más apagado
+  // de la lista y una venta cerrada es la única tarjeta que tiene que gritar
+  // mientras uno baja. El tono no cambia, solo cuánto se carga.
+  const alfa = (luminancia(c.card) < 0.18 ? 0.2 : 0.13) * (info.grupo === 'cerrada' ? 1.6 : 1)
   const tinteIzq = mezclar(colorIzq, c.card, alfa)
   const tinteDer = mezclar(colorDer, c.card, alfa)
   // El texto cruza las dos mitades, así que tiene que leerse sobre las dos: se
