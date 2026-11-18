@@ -21,13 +21,14 @@ import { supabase } from '../../lib/supabase'
 import { getUsuarioActual } from '../../lib/sesion'
 import { useColors, useTheme } from '../../lib/ThemeContext'
 import { normalizar } from '../../lib/texto'
-import { legibleSobre, mezclar } from '../../lib/color'
+import { legibleSobre, luminancia, mezclar } from '../../lib/color'
 import {
   ESTADOS_SEGUIMIENTO, ORDEN_SEGUIMIENTO, infoSeguimiento, GRUPOS, DESDE,
   fechaEfectivaCita, mesDe, mesLegible, colorEstadoCita, PREGUNTAS_RETRO,
   mensajeAccountability, ESTADOS_CITA_VENTA, infoEstadoCita, type EstadoSeguimiento,
 } from '../../lib/accountability-citas'
 import * as Clipboard from 'expo-clipboard'
+import { LinearGradient } from 'expo-linear-gradient'
 
 const TEAL = '#1a6470'
 /** Etiqueta de las citas a las que nadie les puso estado. */
@@ -308,6 +309,10 @@ export default function AccountabilityCitas() {
         <Text style={[s.sub, { color: c.textMute }]}>
           {filas.length} citas desde septiembre · {visibles.length} en pantalla
         </Text>
+        {/* Sin esto nadie adivina que la tarjeta trae dos colores. */}
+        <Text style={[s.leyenda, { color: c.textSub }]}>
+          Cada tarjeta va partida: a la izquierda, cómo quedó la cita · a la derecha, en qué quedó el cliente
+        </Text>
         <View style={s.tabs}>
           {(['lista', 'graficas'] as const).map(v => (
             <TouchableOpacity
@@ -552,22 +557,45 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
   const seg = seguimientoDe(f)
   const est = estadoDe(f)
   const info = infoSeguimiento(est)
-  // El color de la tarjeta.
-  //
-  // Mientras nadie haya puesto el estado nuevo, manda el estado con el que
-  // quedó la cita: así se distinguen de un golpe las reagendadas de las
-  // realizadas sin abrir nada. En cuanto se captura el estado nuevo, la
-  // tarjeta cambia al color de ese.
-  const sinCapturar = est === 'sin_contactar'
-  const colorBarra = sinCapturar ? colorEstadoCita(f.estado_seguimiento) : info.color
   const fondo = fondoPildora(info.color)
   const tinta = tintaPildora(info.color)
-  // Toda la tarjeta se tiñe del color, no solo la franja: con 226 citas el
-  // estado tiene que leerse de un vistazo mientras se baja. La mezcla es
-  // suave a propósito -el texto encima sigue siendo el de siempre y tiene que
-  // seguir leyéndose-, y la franja de la izquierda va a todo color para que
-  // el tono se distinga aunque el fondo sea tenue.
-  const fondoTarjeta = mezclar(colorBarra, c.card, 0.13)
+
+  // Los DOS colores de la tarjeta, partida.
+  //
+  // Una cita tiene dos estados y los dos importan: con el que QUEDÓ LA CITA
+  // (reagenda, realizada, apartó…) y en qué QUEDÓ EL CLIENTE después
+  // (descartado, hay que mandarle opciones…). Antes la tarjeta pintaba uno
+  // solo: mientras nadie capturara el nuevo mandaba el de la cita, y en cuanto
+  // alguien lo capturaba el de la cita desaparecía — una reagenda ya marcada
+  // como descartada se veía igual que una realizada descartada.
+  //
+  // Así que el cuadro va partido en el ancho: el tercio izquierdo lleva el
+  // color de la cita y el resto el del cliente, con una franja a todo color en
+  // cada orilla. Izquierda = antes, derecha = ahora, como se lee. Cuando falta
+  // uno de los dos, el que hay pinta la tarjeta completa y no hay partición:
+  // media tarjeta gris no diría nada.
+  const colorCita = f.estado_seguimiento ? colorEstadoCita(f.estado_seguimiento) : null
+  const sinCapturar = est === 'sin_contactar'
+  const colorNuevo = sinCapturar ? null : info.color
+  const colorIzq = colorCita ?? colorNuevo ?? '#8a94a6'
+  const colorDer = colorNuevo ?? colorCita ?? '#8a94a6'
+  const partida = !!colorCita && !!colorNuevo && colorCita !== colorNuevo
+  // La mezcla es suave a propósito: el texto va encima y tiene que seguir
+  // leyéndose. Las franjas de las orillas van a todo color para que el tono se
+  // distinga aunque el fondo sea tenue.
+  // En oscuro la mezcla tiene que ser más fuerte: sobre un fondo casi negro
+  // un 13% de color no se distingue, y entonces la partición —que es justo lo
+  // que hay que ver de un vistazo— se pierde.
+  const alfa = luminancia(c.card) < 0.18 ? 0.2 : 0.13
+  const tinteIzq = mezclar(colorIzq, c.card, alfa)
+  const tinteDer = mezclar(colorDer, c.card, alfa)
+  // El texto cruza las dos mitades, así que tiene que leerse sobre las dos: se
+  // ajusta contra una y luego contra la otra. Los dos tintes son mezclas sobre
+  // la MISMA tarjeta, así que los dos ajustes van para el mismo lado (los dos
+  // oscurecen en claro, los dos aclaran en oscuro) y la segunda pasada no
+  // deshace la primera.
+  const enAmbos = (col: string, minimo = 4.5) =>
+    legibleSobre(legibleSobre(col, tinteIzq, minimo), tinteDer, minimo)
 
   const Dato = ({ lbl, val }: { lbl: string; val: any }) =>
     val ? (
@@ -578,24 +606,39 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
     ) : null
 
   return (
-    <View style={[s.tarjeta, { backgroundColor: fondoTarjeta, borderColor: mezclar(colorBarra, c.border, 0.4) }]}>
-      {/* La franja de color, para leer el estado sin abrir nada. */}
-      <View style={[s.franja, { backgroundColor: colorBarra }]} />
+    <View style={[s.tarjeta, { backgroundColor: tinteDer, borderColor: mezclar(colorDer, c.border, 0.4) }]}>
+      {/* El degradado: un tercio del color de la cita, el resto del color del
+          cliente, con una banda corta en medio para que el corte no se vea
+          como una raya. Va detrás de todo (no recibe toques) y el detalle,
+          cuando se abre, lo tapa con fondo liso: son párrafos largos y leerlos
+          sobre color cansa. */}
+      {partida && (
+        <LinearGradient
+          colors={[tinteIzq, tinteIzq, tinteDer, tinteDer]}
+          locations={[0, 0.26, 0.44, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      )}
+      {/* Las franjas de color, para leer los dos estados sin abrir nada. */}
+      <View style={[s.franja, { backgroundColor: colorIzq }]} />
       <View style={{ flex: 1 }}>
       <TouchableOpacity style={s.filaCerrada} onPress={onAbrir} activeOpacity={0.7}>
         <View style={{ flex: 1 }}>
-          <Text style={[s.nombre, { color: c.text }]} numberOfLines={1}>{f.cliente_nombre ?? 'Sin nombre'}</Text>
-          <Text style={[s.sublinea, { color: c.textMute }]} numberOfLines={1}>
+          <Text style={[s.nombre, { color: enAmbos(c.text) }]} numberOfLines={1}>{f.cliente_nombre ?? 'Sin nombre'}</Text>
+          <Text style={[s.sublinea, { color: enAmbos(c.textMute) }]} numberOfLines={1}>
             {f.dia_cita ?? '—'}
           </Text>
-          <Text style={[s.sublinea, { color: c.textSub }]} numberOfLines={1}>
+          <Text style={[s.sublinea, { color: enAmbos(c.textSub) }]} numberOfLines={1}>
             {f.coordino ? `Coordinó ${f.coordino}` : 'Sin coordinador'}
             {f.atendio ? ` · Atendió ${f.atendio}` : ''}
           </Text>
           {/* El estado con el que quedó la cita, en su color. Es lo que
               pidieron para ver cuáles son reagendas. */}
           {f.estado_seguimiento ? (
-            <Text style={[s.estadoCita, { color: colorEstadoCita(f.estado_seguimiento) }]} numberOfLines={1}>
+            <Text style={[s.estadoCita, { color: enAmbos(colorEstadoCita(f.estado_seguimiento)) }]} numberOfLines={1}>
               {f.estado_seguimiento}
             </Text>
           ) : null}
@@ -604,7 +647,7 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
           <View style={[s.pildora, { backgroundColor: fondo }]}>
             <Text style={[s.pildoraTxt, { color: tinta }]} numberOfLines={1}>{info.label}</Text>
           </View>
-          <Ionicons name={abierta ? 'chevron-up' : 'chevron-down'} size={17} color={c.textMute} />
+          <Ionicons name={abierta ? 'chevron-up' : 'chevron-down'} size={17} color={enAmbos(c.textMute, 3)} />
         </View>
       </TouchableOpacity>
 
@@ -717,6 +760,9 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, guardando, bor
         </View>
       )}
       </View>
+      {/* La orilla derecha, del color de ahora. Solo cuando los dos estados
+          existen y son distintos: si no, la tarjeta ya es de ese color. */}
+      {partida && <View style={[s.franja, { backgroundColor: colorDer }]} />}
     </View>
   )
 }
@@ -833,6 +879,7 @@ const s = StyleSheet.create({
   cabeza: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1 },
   titulo: { fontSize: 19, fontWeight: '900' },
   sub: { fontSize: 12, marginTop: 2 },
+  leyenda: { fontSize: 10.5, marginTop: 3, lineHeight: 14 },
   tabs: { flexDirection: 'row', gap: 8, marginTop: 10 },
   tab: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 7 },
   tabTxt: { fontSize: 13, fontWeight: '800' },
