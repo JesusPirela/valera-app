@@ -1074,16 +1074,45 @@ export default function CitasVenta() {
   const aISOLocal = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   const hoyISO = () => aISOLocal(new Date())
-  const haceDias = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return aISOLocal(d) }
   const enDias = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return aISOLocal(d) }
-  // Los presets abarcan hacia ATRAS Y HACIA ADELANTE.
+
+  // Los atajos son PERIODOS DE CALENDARIO, no "N días para atrás y para
+  // adelante".
   //
-  // Antes era "de hace N dias hasta HOY", y eso dejaba fuera TODAS las citas
-  // que todavia no pasan, que en una tabla de citas de venta son justo las que
-  // mas importan. Medido el 13/nov/2026: 9 citas futuras invisibles con
-  // cualquier preset, 4 de ellas dentro de los siguientes 30 dias. Se reporto
-  // asi: "pongo 1 mes y no aparecen, y si estan en este mes".
-  const preset = (dias: number) => setRango({ desde: haceDias(dias), hasta: enDias(dias) })
+  // Antes "1 mes" era de hace 30 días a dentro de 30 días, así que en noviembre
+  // enseñaba de octubre a diciembre. Se reportó así: "si le doy 1 mes me
+  // aparece desde octubre hasta diciembre, lo que quiero es ver todo el mes
+  // actual". Y tenía razón: nadie piensa su mes en ventanas móviles, lo piensa
+  // del 1 al 30.
+  //
+  // Eso sí, el periodo llega hasta el FINAL del mes o de la semana, no hasta
+  // hoy: en una tabla de citas de venta las que todavía no pasan son justo las
+  // que importan, y una vez quedaron todas invisibles por cortar en hoy.
+  const primeroDelMes = (desplazamiento: number) => {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + desplazamiento); return d
+  }
+  const mesCalendario = (desplazamiento: number) => {
+    const ini = primeroDelMes(desplazamiento)
+    const fin = new Date(ini.getFullYear(), ini.getMonth() + 1, 0)  // día 0 del siguiente = último de este
+    return { desde: aISOLocal(ini), hasta: aISOLocal(fin) }
+  }
+  const semanaActual = () => {
+    const hoy = new Date()
+    // Semana de lunes a domingo (getDay(): 0 = domingo).
+    const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7))
+    const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6)
+    return { desde: aISOLocal(lunes), hasta: aISOLocal(domingo) }
+  }
+  // "Próximas": de hoy en adelante. Es la vista de trabajo del día a día y la
+  // única que cruza el cambio de mes sin pensar.
+  const deHoyEnAdelante = () => ({ desde: hoyISO(), hasta: enDias(365) })
+
+  const ATAJOS_FECHA = [
+    { id: 'semana',  label: 'Esta semana', rango: semanaActual },
+    { id: 'mes',     label: 'Este mes',    rango: () => mesCalendario(0) },
+    { id: 'pasado',  label: 'Mes pasado',  rango: () => mesCalendario(-1) },
+    { id: 'proxima', label: 'Próximas',    rango: deHoyEnAdelante },
+  ]
 
   function exportarCSV() {
     const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s }
@@ -1279,11 +1308,12 @@ export default function CitasVenta() {
       {/* Filtro por fecha de la cita: presets + rango exacto */}
       <View style={st.fechaBar}>
         <Text style={[st.fechaLabel, { color: c.textSub }]}>📅 Fecha de cita:</Text>
-        {[{ d: 7, l: '1 semana' }, { d: 14, l: '2 semanas' }, { d: 30, l: '1 mes' }].map(p => {
-          const on = !!rango && rango.desde === haceDias(p.d) && rango.hasta === enDias(p.d)
+        {ATAJOS_FECHA.map(a => {
+          const r = a.rango()
+          const on = !!rango && rango.desde === r.desde && rango.hasta === r.hasta
           return (
-            <TouchableOpacity key={p.d} style={[st.fechaChip, { borderColor: c.border }, on && st.fechaChipOn]} onPress={() => preset(p.d)}>
-              <Text style={[st.fechaChipTxt, { color: on ? '#fff' : c.textSub }]}>{p.l}</Text>
+            <TouchableOpacity key={a.id} style={[st.fechaChip, { borderColor: c.border }, on && st.fechaChipOn]} onPress={() => setRango(r)}>
+              <Text style={[st.fechaChipTxt, { color: on ? '#fff' : c.textSub }]}>{a.label}</Text>
             </TouchableOpacity>
           )
         })}
