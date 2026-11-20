@@ -235,7 +235,27 @@ function detectarAmueblada(titulo: string, descripcion: string, operacion: strin
   if (con && sin) return null   // dice las dos cosas
   if (con) return true
   if (sin) return false
-  return null
+  // El anuncio no habla de muebles. En renta eso significa SIN amueblar, y no
+  // es una suposición: de las 48 rentas que el equipo marcó como amuebladas,
+  // las 48 lo dicen en el título o la descripción. Ninguna se lo calló —
+  // amueblar es lo que justifica cobrar más, nadie lo omite. Al revés sí pasa:
+  // 6 de las 9 marcadas "sin amueblar" no lo mencionan, porque no hay nada que
+  // presumir.
+  //
+  // Sin esto el campo quedaba vacío en 231 de 306 rentas y el filtro "Sin
+  // amueblar" solo encontraba 9: inservible.
+  //
+  // El importador PROPONE, no decide: el campo se ve en el formulario antes de
+  // guardar y se puede cambiar de un toque.
+  //
+  // Con una excepción: si no se pudo leer la descripción, el silencio no
+  // significa nada y no se concluye. Se mide sobre la descripción y no sobre
+  // el título, porque un título largo no describe la propiedad.
+  // De las 307 rentas de la base, ninguna tiene la descripción vacía y solo 3
+  // bajan de 40 caracteres: el corte deja fuera lo que de verdad llegó roto,
+  // sin estorbar en lo demás.
+  if ((descripcion ?? '').replace(/\s+/g, ' ').trim().length < 40) return null
+  return false
 }
 
 /**
