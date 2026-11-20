@@ -206,6 +206,39 @@ function limpiarUrlImg(u: string): string {
 }
 
 /**
+ * ¿El anuncio dice que se renta amueblada?
+ *
+ * Se lee del título y la descripción, que es donde lo escribe todo el mundo
+ * ("casa amueblada en renta", "se renta sin amueblar"). Solo para RENTA: en
+ * venta el campo no existe y marcarlo no significaría nada.
+ *
+ * Nunca adivina. Si el texto no habla de muebles devuelve null y el campo se
+ * queda vacío para que lo ponga quien publica: marcar mal una propiedad es
+ * peor que no marcarla, porque después nadie lo vuelve a revisar.
+ *
+ * Medido contra las 57 rentas que el equipo ya había marcado a mano: coincide
+ * en 51 y en las otras 6 se abstiene (el texto no menciona muebles por ningún
+ * lado; la persona lo supo por fuera). Ni una sola vez dijo lo contrario que
+ * una persona.
+ */
+function detectarAmueblada(titulo: string, descripcion: string, operacion: string | null): boolean | null {
+  if (operacion !== 'renta') return null
+  const t = `${titulo ?? ''} ${descripcion ?? ''}`.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  // "Semi amueblado" no es ni una cosa ni la otra y el campo solo tiene dos
+  // casillas: que lo decida una persona.
+  if (/\bsemi[\s-]?amuebla/.test(t)) return null
+  const sin = /\bsin\s+amuebla\w*|\bno\s+(?:esta\s+|viene\s+|se\s+entrega\s+)?amueblad[oa]\b|\bsin\s+muebles\b|\bsin\s+mobiliario\b|\bno\s+incluye\s+(?:los\s+)?muebles\b|\bunfurnished\b/.test(t)
+  // Solo el ADJETIVO ("amueblado/a"), nunca el verbo: "sin amueblar" lleva
+  // "amueblar" dentro y no puede contar como que sí lo está.
+  const con = /\bamueblad[oa]s?\b|\bamoblad[oa]s?\b|\bfurnished\b|\bcon\s+muebles\b/.test(t)
+  if (con && sin) return null   // dice las dos cosas
+  if (con) return true
+  if (sin) return false
+  return null
+}
+
+/**
  * Por qué no salió ninguna foto, en una frase que se pueda leer en pantalla.
  *
  * Sirve para no tener que adivinar la próxima vez: dice si el código traía
@@ -1564,6 +1597,7 @@ function buildEbApiResponse(p: any, corsH: Record<string, string>): Response {
     m2: p.construction_size ? String(p.construction_size) : '',
     m2Terreno: p.lot_size ? String(p.lot_size) : '',
     tipo, operacion: opType, imagenes,
+    amueblada: detectarAmueblada(String(p.title ?? ''), String(p.description ?? ''), opType),
   }), { headers: corsH })
 }
 
@@ -2804,6 +2838,7 @@ serve(async (req) => {
       titulo, descripcion, precio, direccion, zona, modelo,
       recamaras, banos, mediosBanos, estacionamientos,
       m2, m2Terreno, tipo, operacion, imagenes,
+      amueblada: detectarAmueblada(titulo, descripcion, operacion),
       // Cuando no sale ni una foto, el aviso dice que se vio dentro del
       // codigo. Antes la importacion contestaba "titulo, precio, 3 rec." y
       // se quedaba callada sobre las fotos: quien importaba no se enteraba

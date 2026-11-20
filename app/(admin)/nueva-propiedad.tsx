@@ -400,6 +400,10 @@ export default function NuevaPropiedad() {
     if (d.m2Terreno) setM2Terreno(d.m2Terreno)
     if (d.tipo)      setTipo(d.tipo)
     if (d.operacion) setOperacion(d.operacion)
+    // Amueblada: solo si el anuncio lo dice con todas sus letras. Cuando no
+    // habla de muebles llega null y el campo se queda como estaba, para que
+    // lo ponga quien publica en vez de heredar un "no" inventado.
+    if (d.amueblada != null) setAmueblada(d.amueblada ? 'si' : 'no')
     if (d.zona)      setZona(d.zona)
     if (d.modelo)    setModeloDesarrollo(d.modelo)
     if (d.imagenes?.length > 0) setImagenes(d.imagenes)
