@@ -1,0 +1,80 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@matmen/imagescript@^3.14.0": "3.14.0"
+  },
+  "jsr": {
+    "@matmen/imagescript@3.14.0": {
+      "integrity": "f0b1b8805fdca45fd86ff069656d8db5da8a1bd4b27b4e459ca43c2a3a9c8c86"
+    }
+  },
+  "redirects": {
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.119.0",
+    "https://esm.sh/iceberg-js@^0.8.1?target=denonext": "https://esm.sh/iceberg-js@0.8.1?target=denonext"
+  },
+  "remote": {
+    "https://esm.sh/@supabase/auth-js@2.119.0/denonext/auth-js.mjs": "9057ec271ee31e1c3f7cc9c2e2fa473e27472492f94135b586733f30c5add0f9",
+    "https://esm.sh/@supabase/functions-js@2.119.0/denonext/functions-js.mjs": "62fa26126c240e865b245d92b69bbf76d6aeeb5da8b85183d5e16f378f97761a",
+    "https://esm.sh/@supabase/phoenix@0.4.5/denonext/phoenix.mjs": "40bd2a70829cd847848baac58e635bacd83fd62188f6624b44e2c295341004eb",
+    "https://esm.sh/@supabase/postgrest-js@2.119.0/denonext/postgrest-js.mjs": "bc79c762a9eeaaaf54e7d7421164e2601e8729786a146f2c5cfaf8a815ebbd92",
+    "https://esm.sh/@supabase/realtime-js@2.119.0/denonext/realtime-js.mjs": "6832cbfaa2b49a6c4b90789a454947963a203b437b5f373f10de099c3984aa29",
+    "https://esm.sh/@supabase/storage-js@2.119.0/denonext/storage-js.mjs": "6b4428d0d34d8332409f57e9de7199c8c13c0fc21692c196b898841db8e4f712",
+    "https://esm.sh/@supabase/supabase-js@2.119.0": "5b053344a262b305cfd47fdd75b3d244e47983d70fd7f7e68dc4dbbb98bc90bc",
+    "https://esm.sh/@supabase/supabase-js@2.119.0/denonext/dist/tracingRegistry.mjs": "7d6d9375806d7d3e084de6be03e96e4c161b95892fb94739c0f6da7457cdd1d2",
+    "https://esm.sh/@supabase/supabase-js@2.119.0/denonext/supabase-js.mjs": "4c025ab1a9493e3126cda8954e881c330445964fa17e7f12d54b3219853d4fc1",
+    "https://esm.sh/iceberg-js@0.8.1/denonext/iceberg-js.mjs": "d839d81a2e3966500ca2cdd0c1cb458e9608bacfc91f7bb67a69b2e878dcdb4f",
+    "https://esm.sh/iceberg-js@0.8.1?target=denonext": "58c849d7fe2bf4eca4a84eb501e83c161a7d8c34ca1bec15a962b3bec3062633",
+    "https://esm.sh/tslib@2.8.1/denonext/tslib.mjs": "ebce3cd5facb654623020337f867b426ba95f71596ba87acc9e6c6f4e55905ca"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@expo/metro-runtime@~5.0.5",
+        "npm:@react-native-async-storage/async-storage@2.1.2",
+        "npm:@react-native-community/netinfo@11.4.1",
+        "npm:@supabase/supabase-js@^2.100.1",
+        "npm:@tanstack/query-async-storage-persister@^5.99.2",
+        "npm:@tanstack/react-query-persist-client@^5.99.2",
+        "npm:@tanstack/react-query@^5.99.2",
+        "npm:@types/react@18.3",
+        "npm:eslint-plugin-react-hooks@^7.1.1",
+        "npm:eslint@^9.39.5",
+        "npm:expo-blur@~14.1.5",
+        "npm:expo-build-properties@~0.14.8",
+        "npm:expo-clipboard@~7.1.5",
+        "npm:expo-constants@~17.1.8",
+        "npm:expo-document-picker@~13.1.6",
+        "npm:expo-file-system@~18.1.11",
+        "npm:expo-image-manipulator@~13.1.7",
+        "npm:expo-image-picker@~16.1.4",
+        "npm:expo-image@~2.4.1",
+        "npm:expo-linear-gradient@~14.1.5",
+        "npm:expo-linking@~7.1.7",
+        "npm:expo-media-library@~17.1.7",
+        "npm:expo-notifications@~0.31.5",
+        "npm:expo-print@~14.1.4",
+        "npm:expo-router@~5.1.11",
+        "npm:expo-sharing@~13.1.5",
+        "npm:expo-status-bar@~2.2.3",
+        "npm:expo-task-manager@~13.1.6",
+        "npm:expo-updates@~0.28.18",
+        "npm:expo@~53.0.27",
+        "npm:html2canvas@^1.4.1",
+        "npm:jspdf@^4.2.1",
+        "npm:react-dom@19.0.0",
+        "npm:react-native-android-widget@~0.22.1",
+        "npm:react-native-maps@1.20.1",
+        "npm:react-native-safe-area-context@5.4.0",
+        "npm:react-native-screens@~4.11.1",
+        "npm:react-native-svg@15.11.2",
+        "npm:react-native-url-polyfill@3",
+        "npm:react-native-web@0.20",
+        "npm:react-native-webview@13.13.5",
+        "npm:react-native@0.79.6",
+        "npm:react@19.0.0",
+        "npm:typescript-eslint@^8.64.0",
+        "npm:typescript@~5.9.2"
+      ]
+    }
+  }
+}
