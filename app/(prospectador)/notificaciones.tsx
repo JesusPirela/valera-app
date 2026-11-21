@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { Ionicons } from '@expo/vector-icons'
 import {
+  Modal,
   View,
   Text,
   StyleSheet,
@@ -18,6 +19,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useColors, useTheme } from '../../lib/ThemeContext'
 import ConfirmarCitaModal, { type CitaPorConfirmar } from '../../components/ConfirmarCitaModal'
+import SelectorFechaHora from '../../components/SelectorFechaHora'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const SWIPE_THRESHOLD = -80
@@ -116,6 +118,24 @@ function esDeCita(n: Notificacion): boolean {
   return n.tipo === 'recordatorio' && /cita/i.test(`${n.titulo} ${n.mensaje}`)
 }
 
+/**
+ * ¿Este aviso es un seguimiento cuya fecha se puede mover?
+ *
+ * Los recordatorios que hablan de una cita ya tienen su propio botón, que
+ * abre la ficha y mueve la CITA. Este es el otro caso: "contactar a Juan el
+ * martes". Cuando ese día no se pudo, el aviso seguía apareciendo con la
+ * fecha vieja y no había forma de correrlo desde el teléfono.
+ */
+function esDeSeguimiento(n: Notificacion): boolean {
+  return n.tipo === 'recordatorio' && !!n.cliente_id && !esDeCita(n)
+}
+
+/** La marca que queda en el aviso cuando se movió. */
+const MARCA_MOVIDO = '✓ Movido a '
+function fechaLegible(d: Date): string {
+  return d.toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+}
+
 function hintTexto(n: Notificacion): string {
   if (!n.leida && esNavegable(n)) return 'Toca para ver →'
   if (!n.leida) return 'Toca para marcar como leída'
@@ -128,9 +148,10 @@ type NotifItemProps = {
   onPress: (item: Notificacion) => void
   onDelete: (id: string) => void
   onMoverFecha: (item: Notificacion) => void
+  onMoverSeguimiento: (item: Notificacion) => void
 }
 
-function NotifItem({ item, onPress, onDelete, onMoverFecha }: NotifItemProps) {
+function NotifItem({ item, onPress, onDelete, onMoverFecha, onMoverSeguimiento }: NotifItemProps) {
   const c = useColors()
   const { darkMode } = useTheme()
   const swipeX = useRef(new Animated.Value(0)).current
@@ -281,6 +302,19 @@ function NotifItem({ item, onPress, onDelete, onMoverFecha }: NotifItemProps) {
               <Text style={styles.btnMoverTxt}>Mover fecha de la cita</Text>
             </TouchableOpacity>
           )}
+
+          {/* Lo mismo para un seguimiento que no es una cita: se corre la
+              fecha sin salir de aquí. */}
+          {esDeSeguimiento(item) && (
+            <TouchableOpacity
+              style={styles.btnMover}
+              onPress={() => onMoverSeguimiento(item)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="calendar-outline" size={14} color="#1a6470" />
+              <Text style={styles.btnMoverTxt}>Cambiar fecha del seguimiento</Text>
+            </TouchableOpacity>
+          )}
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -291,6 +325,10 @@ export default function Notificaciones() {
   const c = useColors()
   const queryClient = useQueryClient()
   const [marcandoTodas, setMarcandoTodas] = useState(false)
+  // El seguimiento cuya fecha se está cambiando, y la fecha elegida.
+  const [moviendo, setMoviendo] = useState<Notificacion | null>(null)
+  const [fechaNueva, setFechaNueva] = useState<Date | null>(null)
+  const [guardandoFecha, setGuardandoFecha] = useState(false)
   const [eliminandoTodas, setEliminandoTodas] = useState(false)
 
   // React Query: la lista cacheada aparece al instante al volver; solo se
@@ -404,6 +442,78 @@ export default function Notificaciones() {
    * viva de ese cliente, y duplicar esa logica haria que un dia las dos
    * pantallas no coincidieran.
    */
+  /**
+   * Mueve la fecha de un seguimiento desde su aviso.
+   *
+   * Se mueve el RECORDATORIO, no el aviso: el aviso es solo el papelito que
+   * salió de él. Al cambiarlo, el disparador de la base corrige también el
+   * próximo contacto del cliente, que es lo que ordena el CRM.
+   *
+   * Qué recordatorio: el pendiente de ese cliente más cercano al momento en
+   * que se emitió el aviso. De 88 clientes con pendientes, 76 tienen uno
+   * solo, así que casi siempre no hay nada que elegir.
+   */
+  async function guardarNuevaFecha(nueva: Date) {
+    const item = moviendo
+    if (!item?.cliente_id) return
+    setGuardandoFecha(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: pendientes } = await supabase
+        .from('recordatorios')
+        .select('id, fecha_hora')
+        .eq('cliente_id', item.cliente_id)
+        .eq('completado', false)
+      const emitido = new Date(item.created_at).getTime()
+      const elegido = (pendientes ?? []).slice().sort((a: any, b: any) =>
+        Math.abs(new Date(a.fecha_hora).getTime() - emitido) -
+        Math.abs(new Date(b.fecha_hora).getTime() - emitido))[0]
+
+      if (elegido) {
+        // Los avisos se vuelven a emitir para la fecha nueva: si no se
+        // reinician, el recordatorio se mueve y nunca vuelve a sonar.
+        const { error } = await supabase.from('recordatorios').update({
+          fecha_hora: nueva.toISOString(),
+          notificado: false, notificado_24h: false, notificado_2h: false,
+        }).eq('id', elegido.id)
+        if (error) throw error
+      } else {
+        // Ya no quedaba ninguno vivo (se completó o se borró). Se crea uno
+        // nuevo en vez de no hacer nada: lo que el usuario pidió es que ese
+        // cliente se vuelva a ver en la fecha que eligió.
+        const { error } = await supabase.from('recordatorios').insert({
+          cliente_id: item.cliente_id,
+          user_id: user?.id ?? null,
+          titulo: item.titulo?.replace(/^.*?:\s*/, '') || 'Seguimiento',
+          fecha_hora: nueva.toISOString(),
+        })
+        if (error) throw error
+      }
+
+      // Y el aviso queda marcado, para que se vea que ya se atendió y a qué
+      // fecha se fue. Sin esto el aviso se queda idéntico y al rato alguien
+      // lo vuelve a mover.
+      // Si ya se había movido antes, se reemplaza la marca anterior en vez de
+      // ir apilando una debajo de otra.
+      const sinMarca = String(item.mensaje ?? '').split(MARCA_MOVIDO)[0].trimEnd()
+      const mensajeNuevo = `${sinMarca}\n\n${MARCA_MOVIDO}${fechaLegible(nueva)}`
+      await supabase.from('notificaciones')
+        .update({ mensaje: mensajeNuevo, leida: true })
+        .eq('id', item.id)
+
+      queryClient.setQueryData(['notificaciones'], (prev: any) =>
+        (prev ?? []).map((n: Notificacion) =>
+          n.id === item.id ? { ...n, mensaje: mensajeNuevo, leida: true } : n))
+      setMoviendo(null)
+      setFechaNueva(null)
+    } catch (e: any) {
+      const m = 'No se pudo cambiar la fecha: ' + (e?.message ?? '')
+      Platform.OS === 'web' ? window.alert(m) : alert(m)
+    } finally {
+      setGuardandoFecha(false)
+    }
+  }
+
   function moverFecha(item: Notificacion) {
     if (!item.cliente_id) return
     if (!item.leida) marcarLeida(item.id)
@@ -530,17 +640,58 @@ export default function Notificaciones() {
               onPress={handlePress}
               onDelete={eliminarNotificacion}
               onMoverFecha={moverFecha}
+              onMoverSeguimiento={(n) => { setMoviendo(n); setFechaNueva(null) }}
             />
           )}
           ItemSeparatorComponent={ListSeparator10}
         />
       )}
+
+      {/* Cambiar la fecha de un seguimiento, con el mismo calendario que la
+          ficha del cliente. */}
+      <Modal visible={!!moviendo} transparent animationType="fade" onRequestClose={() => setMoviendo(null)}>
+        <View style={styles.movOverlay}>
+          <View style={styles.movModal}>
+            <Text style={styles.movTitulo}>Cambiar fecha del seguimiento</Text>
+            <Text style={styles.movSub} numberOfLines={2}>{moviendo?.titulo}</Text>
+            <SelectorFechaHora
+              label="Nueva fecha y hora"
+              value={fechaNueva}
+              onChange={setFechaNueva}
+            />
+            <View style={styles.movAcciones}>
+              <TouchableOpacity style={styles.movCancelar} onPress={() => setMoviendo(null)}>
+                <Text style={styles.movCancelarTxt}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.movGuardar, (!fechaNueva || guardandoFecha) && { opacity: 0.5 }]
+                }
+                disabled={!fechaNueva || guardandoFecha}
+                onPress={() => fechaNueva && guardarNuevaFecha(fechaNueva)}
+              >
+                {guardandoFecha
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.movGuardarTxt}>Cambiar fecha</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: '#f5f5f5' },
+  movOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  movModal: { backgroundColor: '#fff', borderRadius: 18, padding: 20, width: '100%', maxWidth: 420 },
+  movTitulo: { fontSize: 15.5, fontWeight: '800', color: '#1a6470', marginBottom: 4 },
+  movSub: { fontSize: 12.5, color: '#667', marginBottom: 14 },
+  movAcciones: { flexDirection: 'row', gap: 9, justifyContent: 'flex-end' },
+  movCancelar: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9, backgroundColor: '#f0f0f0' },
+  movCancelarTxt: { color: '#555', fontWeight: '700', fontSize: 13 },
+  movGuardar: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 9, backgroundColor: '#1a6470', minWidth: 128, alignItems: 'center' },
+  movGuardarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   citasBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: '#1a6470', borderRadius: 12,
