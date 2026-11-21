@@ -81,11 +81,42 @@ serve(async (req) => {
     const zona = body.zona ? String(body.zona).trim() : null
     const presupuesto = body.presupuesto != null ? Number(body.presupuesto) : null
     const tipoOperacion = body.tipo_operacion ? String(body.tipo_operacion).trim().toLowerCase() : null
+    const soloVideo = body.solo_video === true || String(body.solo_video).toLowerCase() === 'true'
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
+
+    // Modo "toque 2": una sola propiedad con video_wa_url, elegida por
+    // zona/presupuesto. No usa propiedades_campana_buscar (ese regresa 3
+    // propiedades con foto, no videos).
+    if (soloVideo) {
+      const { data: elegida, error: errorVideo } = await supabase.rpc('propiedades_campana_elegir_video', {
+        p_zona: zona,
+        p_presupuesto: Number.isFinite(presupuesto) ? presupuesto : null,
+      })
+
+      if (errorVideo) {
+        console.error('[propiedades-campana] solo_video query error:', errorVideo)
+        return json({ error: 'Error al consultar propiedades con video' }, 500)
+      }
+
+      if (!elegida || elegida.length === 0) {
+        return json({ ok: true, propiedades: [] })
+      }
+
+      const item = elegida[0] as { propiedad_id: string; nombre: string; zona: string; precio_formateado: string }
+      return json({
+        ok: true,
+        propiedad: {
+          propiedad_id: item.propiedad_id,
+          nombre: item.nombre,
+          zona: item.zona,
+          precio: item.precio_formateado,
+        },
+      })
+    }
 
     const { data: props, error } = await supabase.rpc('propiedades_campana_buscar', {
       p_zona: zona,
