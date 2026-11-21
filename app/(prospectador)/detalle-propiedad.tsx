@@ -434,8 +434,6 @@ export default function DetallePropiedad() {
   // callada. Null = la propiedad todavía no tiene versiones generadas → se copia
   // la descripción guardada, igual que antes.
   const [varianteDesc, setVarianteDesc] = useState<string | null>(null)
-  const [generandoDescIA, setGenerandoDescIA] = useState(false)
-  const [descIAMsg, setDescIAMsg] = useState<string | null>(null)
   const [togglingPublicacion, setTogglingPublicacion] = useState(false)
   const [uid, setUid] = useState<string | null>(null)
   // El botón de publicar de DENTRO usa exactamente la misma fuente que el de FUERA
@@ -932,41 +930,6 @@ export default function DetallePropiedad() {
       await Clipboard.setStringAsync(texto)
     }
   }
-  async function generarDescripcionIA() {
-    if (!propiedad || generandoDescIA) return
-    setGenerandoDescIA(true)
-    setDescIAMsg('Generando una versión nueva…')
-    try {
-      const { data, error } = await supabase.functions.invoke('descripcion-marketing', {
-        body: {
-          propiedadId: propiedad.id,
-          titulo: propiedad.titulo, direccion: propiedad.direccion, precio: propiedad.precio,
-          descripcion: propiedad.descripcion, tipo: propiedad.tipo, operacion: propiedad.operacion,
-          recamaras: propiedad.recamaras, banos: propiedad.banos, mediosBanos: propiedad.medios_banos,
-          m2: propiedad.m2, m2Terreno: propiedad.m2_terreno,
-          estacionamientos: propiedad.estacionamientos,
-        },
-      })
-      // El límite responde 429; supabase.functions.invoke mete el body en error.context.
-      if (error) {
-        let msg = 'No se pudo generar. Intenta de nuevo.'
-        try { const j = await (error as any).context?.json?.(); if (j?.mensaje) msg = j.mensaje } catch { /* */ }
-        setDescIAMsg('⚠️ ' + msg)
-        return
-      }
-      if (data?.error) { setDescIAMsg('⚠️ ' + (data.mensaje ?? data.error)); return }
-      if (data?.texto) {
-        await copiarTexto(data.texto)
-        const rest = typeof data.restantes === 'number' ? ` · te quedan ${data.restantes} hoy` : ''
-        setDescIAMsg(`✅ Copiado — pégalo donde quieras${rest}. Toca de nuevo para otra versión.`)
-      }
-    } catch (e: any) {
-      setDescIAMsg('⚠️ ' + (e?.message ?? 'Error inesperado'))
-    } finally {
-      setGenerandoDescIA(false)
-    }
-  }
-
   async function getLogoBase64(): Promise<string> {
     try {
       if (Platform.OS === 'web') {
@@ -2443,25 +2406,6 @@ export default function DetallePropiedad() {
             <Text style={styles.origenLinkHint}>Toca para abrir el anuncio original</Text>
           </View>
         ) : null}
-
-        {/* IA: descripción lista para publicar (para TODOS). Cada clic genera
-            una versión DISTINTA (misma info) para no duplicar en redes. Límite
-            de 5 usos por día por usuario (lo controla la edge function). */}
-        <View style={styles.seccion}>
-          <TouchableOpacity
-            style={[styles.btnDescIA, generandoDescIA && styles.btnDisabled]}
-            onPress={generarDescripcionIA}
-            disabled={generandoDescIA}
-            activeOpacity={0.85}
-          >
-            {generandoDescIA
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={styles.btnDescIAText}>✨ Copiar descripción para publicar (IA)</Text>}
-          </TouchableOpacity>
-          <Text style={styles.btnDescIAHint}>
-            {descIAMsg ?? 'Cada vez genera una versión distinta (misma info) para que no la detecten como duplicada. 5 usos al día.'}
-          </Text>
-        </View>
 
         {/* Ubicación — mapa interactivo (acercar/alejar/mover) + abrir en Google Maps */}
         {propiedad.lat != null && propiedad.lng != null && (
@@ -4077,12 +4021,6 @@ const styles = StyleSheet.create({
     color: '#888',
     marginBottom: 10,
   },
-  btnDescIA: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#6a3fa0', borderRadius: 12, paddingVertical: 13,
-  },
-  btnDescIAText: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  btnDescIAHint: { textAlign: 'center', fontSize: 12, color: '#7a6b8f', marginTop: 7 },
   pubRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   pubEstado: { fontSize: 15, fontWeight: '700', color: '#1a2e30' },
   pubFecha: { fontSize: 12, color: '#888', marginTop: 3 },
