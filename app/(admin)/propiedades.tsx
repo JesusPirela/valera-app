@@ -17,6 +17,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
+import * as Clipboard from 'expo-clipboard'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { ThumbImage } from '../../components/ThumbImage'
@@ -217,6 +218,7 @@ export default function AdminPropiedades() {
   const [ordenPrecio, setOrdenPrecio] = useState<OrdenPrecio>(null)
   const [ordenPublicaciones, setOrdenPublicaciones] = useState<OrdenPublicaciones>(null)
   const [filtroDirecta, setFiltroDirecta] = useState(false)
+  const [generandoLinkDirectas, setGenerandoLinkDirectas] = useState(false)
   const [publicacionesMap, setPublicacionesMap] = useState<Record<string, number>>({})
   const [comprasPendientes, setComprasPendientes] = useState(0)
   const [campanasPendientes, setCampanasPendientes] = useState(0)
@@ -417,6 +419,28 @@ export default function AdminPropiedades() {
     busqueda, filtroOperacion, filtroEstado, filtroTipo, ordenPrecio,
     ordenPublicaciones, busquedaContacto, filtroDirecta,
   ])
+
+  // Link evergreen con las propiedades directas para mandar a aliados externos.
+  // Siempre el MISMO token (el RPC reutiliza la colección si ya existe), y lo
+  // que se ve ahí se arma en vivo del lado del servidor — no hay que
+  // regenerarlo si luego cambian las directas.
+  async function generarLinkDirectas() {
+    setGenerandoLinkDirectas(true)
+    try {
+      const { data, error } = await supabase.rpc('obtener_coleccion_directas')
+      if (error || !data?.token) {
+        Alert.alert('Error', error?.message ?? 'No se pudo generar el link.')
+        return
+      }
+      const link = `https://valeraapp.valerarealestate.com/coleccion/${data.token}`
+      await Clipboard.setStringAsync(link)
+      const texto = `✓ Link copiado (${data.n_props} directa${data.n_props === 1 ? '' : 's'})\n${link}`
+      if (Platform.OS === 'web') window.alert(texto)
+      else Alert.alert('✓ Link copiado', texto)
+    } finally {
+      setGenerandoLinkDirectas(false)
+    }
+  }
 
   function ejecutarBorrado(id: string) {
     const run = async () => {
@@ -705,6 +729,19 @@ export default function AdminPropiedades() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <FiltroChip label="🎯 Directas" active={filtroDirecta} onPress={() => setFiltroDirecta(v => !v)} textSubColor={c.textSub}/>
           </ScrollView>
+          <TouchableOpacity
+            style={[styles.btnLinkDirectas, generandoLinkDirectas && { opacity: 0.6 }]}
+            onPress={generarLinkDirectas}
+            disabled={generandoLinkDirectas}
+            activeOpacity={0.85}
+          >
+            {generandoLinkDirectas
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <>
+                  <Ionicons name="link-outline" size={15} color="#fff" />
+                  <Text style={styles.btnLinkDirectasTxt}>Link de directas para aliados</Text>
+                </>}
+          </TouchableOpacity>
           {(() => {
             // Sugerencias: etiquetas únicas que coinciden con el texto escrito
             const qc = normalizar(busquedaContacto.trim())
@@ -1237,6 +1274,11 @@ const styles = StyleSheet.create({
   },
   filtroLabel: { fontSize: 11, fontWeight: '700', marginBottom: 6, marginTop: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   chipRow: { flexDirection: 'row', marginBottom: 2 },
+  btnLinkDirectas: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#1a6470', borderRadius: 10, paddingVertical: 10, marginTop: 10,
+  },
+  btnLinkDirectasTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
   chip: {
     borderWidth: 1,
     borderColor: '#ddd',
