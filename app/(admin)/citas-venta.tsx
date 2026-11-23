@@ -1151,12 +1151,20 @@ export default function CitasVenta() {
     descargarCSV(csvDeFilas(visibles), `citas-venta-${hoyISO()}.csv`)
   }
 
-  // Lotes: parte `visibles` (ya filtrado/ordenado) en grupos de `tamanoLote`,
-  // en el mismo orden en que se ven en la tabla.
+  // Lotes: parte `visibles` (ya filtrado por fecha/búsqueda/columnas) en grupos
+  // de `tamanoLote`, siempre de la cita más vieja a la más reciente —
+  // independiente del orden que tenga la tabla — para re-contactar primero a
+  // los clientes más atrasados. Las filas sin fecha de cita van al final.
   const lotes = useMemo(() => {
     if (!lotesAbierto || tamanoLote < 1) return []
+    const ordenadas = [...visibles].sort((a, b) => {
+      if (!a.fecha_cita && !b.fecha_cita) return 0
+      if (!a.fecha_cita) return 1
+      if (!b.fecha_cita) return -1
+      return a.fecha_cita.localeCompare(b.fecha_cita)
+    })
     const grupos: Fila[][] = []
-    for (let i = 0; i < visibles.length; i += tamanoLote) grupos.push(visibles.slice(i, i + tamanoLote))
+    for (let i = 0; i < ordenadas.length; i += tamanoLote) grupos.push(ordenadas.slice(i, i + tamanoLote))
     return grupos
   }, [visibles, lotesAbierto, tamanoLote])
 
@@ -1169,7 +1177,9 @@ export default function CitasVenta() {
       const partes = [f.cliente_nombre?.trim() || 'Sin nombre']
       if (f.telefono) partes.push(f.telefono)
       if (f.zona_interesada) partes.push(f.zona_interesada)
-      return `${i + 1}. ${partes.join(' · ')}`
+      if (f.detalles_pago) partes.push(f.detalles_pago)
+      const fecha = f.fecha_cita ? fmtFechaCitaEs(f.fecha_cita, '') : null
+      return `${i + 1}. ${partes.join(' · ')}${fecha ? `\n   📅 ${fecha}` : ''}`
     }).join('\n')
     try { await Clipboard.setStringAsync(texto) } catch { /* sin portapapeles */ }
     if (Platform.OS === 'web') window.alert(`✓ Lote ${numero} copiado (listo para pegar en WhatsApp)`)
@@ -1443,13 +1453,22 @@ export default function CitasVenta() {
             </Text>
           </View>
           <Text style={[st.lotesHint, { color: c.textMute }]}>
-            Ajusta los filtros de arriba (fecha, búsqueda, columnas) para elegir QUIÉNES entran a los lotes; esto solo los agrupa.
+            Ajusta los filtros de arriba (fecha, búsqueda, columnas) para elegir QUIÉNES entran a los lotes; esto solo los agrupa, de la cita más vieja a la más reciente.
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
-            {lotes.map((grupo, i) => (
+            {lotes.map((grupo, i) => {
+              const conFecha = grupo.filter(f => f.fecha_cita)
+              const masVieja = conFecha[0]?.fecha_cita
+              const masReciente = conFecha[conFecha.length - 1]?.fecha_cita
+              return (
               <View key={i} style={[st.loteCard, { borderColor: c.border, backgroundColor: c.bg }]}>
                 <Text style={[st.loteTitulo, { color: c.text }]}>Lote {i + 1}</Text>
                 <Text style={[st.loteSub, { color: c.textMute }]}>{grupo.length} cliente{grupo.length === 1 ? '' : 's'}</Text>
+                {masVieja && (
+                  <Text style={[st.loteRango, { color: c.textMute }]}>
+                    {fmtFechaCitaEs(masVieja, '')}{masReciente && masReciente !== masVieja ? `\n→ ${fmtFechaCitaEs(masReciente, '')}` : ''}
+                  </Text>
+                )}
                 <TouchableOpacity style={st.loteBtn} onPress={() => exportarLoteCSV(grupo, i + 1)}>
                   <Text style={st.loteBtnTxt}>⬇ Excel</Text>
                 </TouchableOpacity>
@@ -1457,7 +1476,8 @@ export default function CitasVenta() {
                   <Text style={[st.loteBtnTxt, st.loteBtnWaTxt]}>📋 WhatsApp</Text>
                 </TouchableOpacity>
               </View>
-            ))}
+              )
+            })}
           </ScrollView>
         </View>
       )}
@@ -1975,9 +1995,10 @@ const st = StyleSheet.create({
   graficasCaja: { paddingHorizontal: 2, paddingBottom: 18 },
   lotesCaja: { marginBottom: 6 },
   lotesHint: { fontSize: 11.5, marginBottom: 6 },
-  loteCard: { width: 140, borderWidth: 1, borderRadius: 12, padding: 10, gap: 6 },
+  loteCard: { width: 170, borderWidth: 1, borderRadius: 12, padding: 10, gap: 6 },
   loteTitulo: { fontSize: 14, fontWeight: '800' },
   loteSub: { fontSize: 12, marginBottom: 2 },
+  loteRango: { fontSize: 11, lineHeight: 15, marginBottom: 2 },
   loteBtn: { backgroundColor: '#1a6470', borderRadius: 8, paddingVertical: 7, alignItems: 'center' },
   loteBtnWa: { backgroundColor: '#e8f8ef' },
   loteBtnTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
