@@ -809,6 +809,12 @@ export default function CitasVenta() {
   const [miId, setMiId] = useState<string | null>(null)
   const [copiadoId, setCopiadoId] = useState<string | null>(null)
   const [rango, setRango] = useState<{ desde: string; hasta: string } | null>(null)  // YYYY-MM-DD
+  // Armar lotes: parte lo que esté visible (respeta filtros, fecha y orden de
+  // la tabla) en grupos de N para repartir clientes viejos — exportar cada
+  // grupo a Excel o copiar como mensaje de WhatsApp. No toca la base de datos,
+  // es solo un corte de lo que ya se está viendo.
+  const [lotesAbierto, setLotesAbierto] = useState(false)
+  const [tamanoLote, setTamanoLote] = useState(20)
   const [busquedaTabla, setBusquedaTabla] = useState('')
   const [ordenFecha, setOrdenFecha] = useState<'desc' | 'asc' | null>(null)  // orden por fecha de la cita (clic en la columna)
   const [dropCol, setDropCol] = useState<ColKey | null>(null)
@@ -1107,25 +1113,67 @@ export default function CitasVenta() {
   // única que cruza el cambio de mes sin pensar.
   const deHoyEnAdelante = () => ({ desde: hoyISO(), hasta: enDias(365) })
 
+  // Para armar lotes de clientes viejos a re-contactar: los últimos 6 meses
+  // TRANSCURRIDOS, sin salirse del año en curso (si hoy es marzo, da enero-marzo,
+  // no se mete a octubre del año pasado). Termina hoy, no a futuro: son citas
+  // que ya pasaron.
+  const ultimos6MesesDelAno = () => {
+    const hoy = new Date()
+    const inicioVentana = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1)
+    const inicioAno = new Date(hoy.getFullYear(), 0, 1)
+    const ini = inicioVentana > inicioAno ? inicioVentana : inicioAno
+    return { desde: aISOLocal(ini), hasta: hoyISO() }
+  }
+
   const ATAJOS_FECHA = [
-    { id: 'semana',  label: 'Esta semana', rango: semanaActual },
-    { id: 'mes',     label: 'Este mes',    rango: () => mesCalendario(0) },
-    { id: 'pasado',  label: 'Mes pasado',  rango: () => mesCalendario(-1) },
-    { id: 'proxima', label: 'Próximas',    rango: deHoyEnAdelante },
+    { id: 'semana',  label: 'Esta semana',       rango: semanaActual },
+    { id: 'mes',     label: 'Este mes',          rango: () => mesCalendario(0) },
+    { id: 'pasado',  label: 'Mes pasado',        rango: () => mesCalendario(-1) },
+    { id: '6meses',  label: 'Últimos 6 meses',   rango: ultimos6MesesDelAno },
+    { id: 'proxima', label: 'Próximas',          rango: deHoyEnAdelante },
   ]
 
-  function exportarCSV() {
+  function csvDeFilas(filasCsv: Fila[]): string {
     const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s }
     const encabezados = ['#', ...COLS.map(c => c.label)]
-    const filasCsv = visibles.map((f, i) => [i + 1, ...COLS.map(col => esc(f[col.key]))].join(','))
-    const csv = encabezados.map(esc).join(',') + '\n' + filasCsv.join('\n')
-    if (Platform.OS === 'web') {
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `citas-venta-${hoyISO()}.csv`
-      a.click()
-    }
+    const cuerpo = filasCsv.map((f, i) => [i + 1, ...COLS.map(col => esc(f[col.key]))].join(','))
+    return encabezados.map(esc).join(',') + '\n' + cuerpo.join('\n')
+  }
+  function descargarCSV(csv: string, nombreArchivo: string) {
+    if (Platform.OS !== 'web') return
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = nombreArchivo
+    a.click()
+  }
+  function exportarCSV() {
+    descargarCSV(csvDeFilas(visibles), `citas-venta-${hoyISO()}.csv`)
+  }
+
+  // Lotes: parte `visibles` (ya filtrado/ordenado) en grupos de `tamanoLote`,
+  // en el mismo orden en que se ven en la tabla.
+  const lotes = useMemo(() => {
+    if (!lotesAbierto || tamanoLote < 1) return []
+    const grupos: Fila[][] = []
+    for (let i = 0; i < visibles.length; i += tamanoLote) grupos.push(visibles.slice(i, i + tamanoLote))
+    return grupos
+  }, [visibles, lotesAbierto, tamanoLote])
+
+  function exportarLoteCSV(filasLote: Fila[], numero: number) {
+    descargarCSV(csvDeFilas(filasLote), `citas-venta-lote-${numero}-${hoyISO()}.csv`)
+  }
+
+  async function copiarLoteWhatsApp(filasLote: Fila[], numero: number) {
+    const texto = `*Lote ${numero} · ${filasLote.length} clientes*\n\n` + filasLote.map((f, i) => {
+      const partes = [f.cliente_nombre?.trim() || 'Sin nombre']
+      if (f.telefono) partes.push(f.telefono)
+      if (f.zona_interesada) partes.push(f.zona_interesada)
+      return `${i + 1}. ${partes.join(' · ')}`
+    }).join('\n')
+    try { await Clipboard.setStringAsync(texto) } catch { /* sin portapapeles */ }
+    if (Platform.OS === 'web') window.alert(`✓ Lote ${numero} copiado (listo para pegar en WhatsApp)`)
+    else Alert.alert('✓ Copiado', `Lote ${numero} copiado, listo para pegar en WhatsApp.`)
   }
 
   const valoresColumna = (key: ColKey): string[] => {
@@ -1281,6 +1329,14 @@ export default function CitasVenta() {
         <TouchableOpacity style={st.btnHoy} onPress={irAHoy}><Text style={st.btnHoyTxt}>📅 Ir a hoy</Text></TouchableOpacity>
         <TouchableOpacity style={st.btnAgregar} onPress={() => setAgregar(true)}><Text style={st.btnAgregarTxt}>＋ Añadir cita</Text></TouchableOpacity>
         <TouchableOpacity style={st.btnExport} onPress={exportarCSV}><Text style={st.btnExportTxt}>⬇ Exportar</Text></TouchableOpacity>
+        <TouchableOpacity
+          style={[st.btnGraficas, lotesAbierto && st.btnGraficasOn]}
+          onPress={() => setLotesAbierto(v => !v)}
+        >
+          <Text style={[st.btnGraficasTxt, lotesAbierto && { color: '#fff' }]}>
+            {lotesAbierto ? '✕ Cerrar lotes' : '📦 Armar lotes'}
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity style={[st.btnImport, importando && { opacity: 0.6 }]} onPress={importarCSV} disabled={importando}>
           {importando ? <ActivityIndicator size="small" color="#fff" /> : <Text style={st.btnImportTxt}>⬆ Importar CSV</Text>}
         </TouchableOpacity>
@@ -1368,6 +1424,43 @@ export default function CitasVenta() {
           )
         })}
       </View>
+
+      {/* Armar lotes: toma lo que esté visible (ya filtrado/ordenado arriba,
+          p. ej. "Últimos 6 meses" + ordenado por fecha) y lo corta en grupos
+          de N para repartir clientes viejos — exportar a Excel o copiar un
+          mensaje de WhatsApp por lote. No guarda nada, es un corte al vuelo. */}
+      {lotesAbierto && (
+        <View style={st.lotesCaja}>
+          <View style={st.fechaBar}>
+            <Text style={[st.fechaLabel, { color: c.textSub }]}>📦 Tamaño del lote:</Text>
+            {[10, 20, 30, 50].map(n => (
+              <TouchableOpacity key={n} style={[st.fechaChip, { borderColor: c.border }, tamanoLote === n && st.fechaChipOn]} onPress={() => setTamanoLote(n)}>
+                <Text style={[st.fechaChipTxt, { color: tamanoLote === n ? '#fff' : c.textSub }]}>{n}</Text>
+              </TouchableOpacity>
+            ))}
+            <Text style={{ color: c.textMute, fontSize: 12 }}>
+              · {visibles.length} visibles → {lotes.length} lote{lotes.length === 1 ? '' : 's'}
+            </Text>
+          </View>
+          <Text style={[st.lotesHint, { color: c.textMute }]}>
+            Ajusta los filtros de arriba (fecha, búsqueda, columnas) para elegir QUIÉNES entran a los lotes; esto solo los agrupa.
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
+            {lotes.map((grupo, i) => (
+              <View key={i} style={[st.loteCard, { borderColor: c.border, backgroundColor: c.bg }]}>
+                <Text style={[st.loteTitulo, { color: c.text }]}>Lote {i + 1}</Text>
+                <Text style={[st.loteSub, { color: c.textMute }]}>{grupo.length} cliente{grupo.length === 1 ? '' : 's'}</Text>
+                <TouchableOpacity style={st.loteBtn} onPress={() => exportarLoteCSV(grupo, i + 1)}>
+                  <Text style={st.loteBtnTxt}>⬇ Excel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[st.loteBtn, st.loteBtnWa]} onPress={() => copiarLoteWhatsApp(grupo, i + 1)}>
+                  <Text style={[st.loteBtnTxt, st.loteBtnWaTxt]}>📋 WhatsApp</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Gráficas. Reciben `visibles`, no `filas`: así siguen los filtros de
           arriba (fechas, "sin asignar" y los de cada columna) y no hay dos
@@ -1880,6 +1973,15 @@ const st = StyleSheet.create({
   btnGraficasOn: { backgroundColor: '#1a6470' },
   btnGraficasTxt: { color: '#1a6470', fontSize: 12.5, fontWeight: '700' },
   graficasCaja: { paddingHorizontal: 2, paddingBottom: 18 },
+  lotesCaja: { marginBottom: 6 },
+  lotesHint: { fontSize: 11.5, marginBottom: 6 },
+  loteCard: { width: 140, borderWidth: 1, borderRadius: 12, padding: 10, gap: 6 },
+  loteTitulo: { fontSize: 14, fontWeight: '800' },
+  loteSub: { fontSize: 12, marginBottom: 2 },
+  loteBtn: { backgroundColor: '#1a6470', borderRadius: 8, paddingVertical: 7, alignItems: 'center' },
+  loteBtnWa: { backgroundColor: '#e8f8ef' },
+  loteBtnTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  loteBtnWaTxt: { color: '#16a34a' },
   barraAbajo: { height: 16, flexGrow: 0, marginTop: 2 },
   barraDer: { width: 16, flexGrow: 0, marginLeft: 2 },
   editArea: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14, minHeight: 120 },
