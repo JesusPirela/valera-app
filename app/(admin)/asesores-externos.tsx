@@ -17,6 +17,8 @@ import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS_MEXICO, ESTADO_PRINCIPAL } from '../../lib/estados-mexico'
 import { ZONAS_INTERES } from '../../lib/zonas-interes'
 import FilaDirectorio, { MetaFila } from '../../components/FilaDirectorio'
+import HojaOrden, { type OpcionOrden } from '../../components/HojaOrden'
+import { legibleSobre } from '../../lib/color'
 
 type Tipo = 'alianza' | 'independiente'
 type Asesor = {
@@ -25,6 +27,12 @@ type Asesor = {
 }
 const TEAL = '#1a6470'
 const TODOS = '__todos__'
+/** Pastilla aparte en la fila de zonas: 23 de 41 no tienen una zona con la que
+ *  se les pueda mandar una cita. Son dos casos y por eso la pastilla NO dice
+ *  "sin zona": 11 traen el campo vacío y 12 traen un recado ahí metido ("por
+ *  verse", "Es para alianza"), que en la fila se ve como si fuera una zona. */
+const SIN_ZONA = '__sin_zona__'
+const DIAS_NUEVO = 7
 
 /**
  * Los dos tipos de asesor externo.
@@ -61,6 +69,37 @@ function zonaFiltrable(z: string | null | undefined): boolean {
   return t.length > 0 && t.length <= 24 && !NOTA_NO_ZONA.test(t)
 }
 
+/**
+ * Las formas de ordenar la lista.
+ *
+ * "Por zona" es el que hacía falta: la pantalla existe para repartir citas por
+ * zona, y agrupado se ve de un jalón a quién se le puede mandar Juriquilla.
+ * Deja al final a los 11 que no tienen zona escrita, que son los que no se le
+ * pueden mandar a nadie así.
+ */
+const ORDENES = [
+  { valor: 'recientes', etiqueta: 'Más recientes', desc: 'Lo último que se dio de alta, arriba',      icono: 'time-outline' as const },
+  { valor: 'zona',      etiqueta: 'Por zona',      desc: 'Agrupados por zona; sin zona, al final',    icono: 'location-outline' as const },
+  { valor: 'estado',    etiqueta: 'Por estado',    desc: `${ESTADO_PRINCIPAL} primero, luego los demás`, icono: 'map-outline' as const },
+  { valor: 'nombre',    etiqueta: 'Nombre (A–Z)',  desc: 'Alfabético, para buscar uno que ya sabes',  icono: 'text-outline' as const },
+] as const
+type Orden = typeof ORDENES[number]['valor']
+
+/** Clave de zona para ordenar. Lo que no es zona de verdad se va al final. */
+const claveZona = (a: Asesor) => zonaFiltrable(a.zona) ? normalizar(a.zona) : '￿'
+/** Igual con el estado: el principal primero, los nulos al final. */
+const claveEstado = (a: Asesor) =>
+  !a.estado_mx ? '￿' : a.estado_mx === ESTADO_PRINCIPAL ? '' : normalizar(a.estado_mx)
+
+const porNombre = (a: Asesor, b: Asesor) => a.nombre.localeCompare(b.nombre, 'es')
+
+const COMPARA: Record<Orden, (a: Asesor, b: Asesor) => number> = {
+  recientes: (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  nombre: porNombre,
+  zona: (a, b) => claveZona(a).localeCompare(claveZona(b), 'es') || porNombre(a, b),
+  estado: (a, b) => claveEstado(a).localeCompare(claveEstado(b), 'es') || claveZona(a).localeCompare(claveZona(b), 'es') || porNombre(a, b),
+}
+
 export default function AsesoresExternos() {
   const c = useColors()
   const [lista, setLista] = useState<Asesor[]>([])
@@ -69,13 +108,21 @@ export default function AsesoresExternos() {
   const [busca, setBusca] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<string>(TODOS)
   const [filtroZona, setFiltroZona] = useState<string>(TODOS)
-  const [filtroTipo, setFiltroTipo] = useState<Tipo | 'sin' | typeof TODOS>(TODOS)
+  // Los tipos se COMBINAN (alianza + sin clasificar a la vez): antes era uno a
+  // la vez y para ver dos había que mirar dos listas.
+  const [tiposSel, setTiposSel] = useState<(Tipo | 'sin')[]>([])
+  const [soloNuevos, setSoloNuevos] = useState(false)
   // Por fecha de registro de entrada: lo que se acaba de dar de alta es lo que
-  // se quiere ver. El alfabetico sigue estando a un toque.
-  const [orden, setOrden] = useState<'recientes' | 'nombre'>('recientes')
+  // se quiere ver. Las otras cuatro formas están en la hoja de orden.
+  const [orden, setOrden] = useState<Orden>('recientes')
+  const [hojaOrden, setHojaOrden] = useState(false)
   const [editando, setEditando] = useState<Partial<Asesor> | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [selectorEstadoAbierto, setSelectorEstadoAbierto] = useState(false)
+  // El teal está elegido para fondo claro: sobre la tarjeta oscura hay que
+  // subirle el brillo sin cambiarle el tono (4.5:1 texto, 3:1 iconos).
+  const tintaTeal = legibleSobre(TEAL, c.card, 4.5)
+  const iconoTeal = legibleSobre(TEAL, c.card, 3)
 
   const cargar = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -164,18 +211,26 @@ export default function AsesoresExternos() {
       (!q || normalizar(a.nombre).includes(q) || normalizar(a.zona).includes(q)
           || normalizar(a.estado_mx).includes(q)) &&
       (qDig.length === 0 || soloTel(a.telefono).includes(qDig)) &&
-      (filtroZona === TODOS || normalizar(a.zona) === filtroZona) &&
-      (filtroTipo === TODOS || (filtroTipo === 'sin' ? !a.tipo : a.tipo === filtroTipo))
-    ).sort((a, b) => orden === 'nombre'
-      ? a.nombre.localeCompare(b.nombre, 'es')
-      : new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-  }, [listaPorEstado, busca, filtroZona, filtroTipo, orden])
+      (filtroZona === TODOS
+        || (filtroZona === SIN_ZONA ? !zonaFiltrable(a.zona) : normalizar(a.zona) === filtroZona)) &&
+      // Varios tipos a la vez suman entre ellos, y se cruzan con la zona y el
+      // estado: "alianzas de Juriquilla" es una sola lista.
+      (tiposSel.length === 0 || tiposSel.some(t => t === 'sin' ? !a.tipo : a.tipo === t)) &&
+      (!soloNuevos || Date.now() - new Date(a.created_at).getTime() < DIAS_NUEVO * DIA)
+    ).sort(COMPARA[orden])
+  }, [listaPorEstado, busca, filtroZona, tiposSel, soloNuevos, orden])
+
+  const nuevos = useMemo(() =>
+    listaPorEstado.filter(a => Date.now() - new Date(a.created_at).getTime() < DIAS_NUEVO * DIA).length,
+    [listaPorEstado])
+  const sinZona = useMemo(() => listaPorEstado.filter(a => !zonaFiltrable(a.zona)).length, [listaPorEstado])
+  const hayFiltro = tiposSel.length > 0 || soloNuevos || filtroZona !== TODOS || filtroEstado !== TODOS || !!busca.trim()
+  const ordenActual = ORDENES.find(o => o.valor === orden)!
 
   if (loading) return <View style={[st.center, { backgroundColor: c.bg }]}><ActivityIndicator size="large" color={TEAL} /></View>
 
-  const conTipo = (v: Tipo | 'sin' | typeof TODOS) =>
-    v === TODOS ? listaPorEstado.length
-    : v === 'sin' ? listaPorEstado.filter(a => !a.tipo).length
+  const conTipo = (v: Tipo | 'sin') =>
+    v === 'sin' ? listaPorEstado.filter(a => !a.tipo).length
     : listaPorEstado.filter(a => a.tipo === v).length
 
   return (
@@ -184,7 +239,11 @@ export default function AsesoresExternos() {
         <View style={{ flex: 1 }}>
           <Text style={[st.h1, { color: c.text }]}>Asesores externos</Text>
           <Text style={[st.sub, { color: c.textSub }]}>
-            Nos atienden las citas por zona. {lista.length} registrado{lista.length !== 1 ? 's' : ''}.
+            {/* Con filtros puestos el subtítulo dice cuántos quedaron: si no,
+                una lista corta parece una lista sin registros. */}
+            {hayFiltro
+              ? `${filtrados.length} de ${lista.length} · ${ordenActual.etiqueta.toLowerCase()}`
+              : `Nos atienden las citas por zona. ${lista.length} registrados.`}
           </Text>
         </View>
         <TouchableOpacity
@@ -206,36 +265,72 @@ export default function AsesoresExternos() {
           en mayúsculas y el orden iba en otro renglón: tres renglones de
           controles antes de ver al primer asesor. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.chipsScroll} contentContainerStyle={st.chipsRow}>
-        {/* El chip de "Todos" va en TEAL como en Colaboradores. Cuando usaba
-            c.textSub, en oscuro quedaba texto blanco sobre azul grisáceo:
-            2.95:1, medido. */}
-        {([[TODOS, 'Todos', TEAL] as const,
-           ...TIPOS.map(t => [t.valor, t.etiqueta, t.color] as const),
+        <TouchableOpacity
+          style={[st.chip, st.chipOrden, { borderColor: tintaTeal, backgroundColor: c.card }]}
+          onPress={() => setHojaOrden(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Ordenar por. Ahora: ${ordenActual.etiqueta}`}
+        >
+          <Ionicons name="swap-vertical" size={13} color={iconoTeal} />
+          <Text style={[st.chipTxt, { color: tintaTeal }]}>{ordenActual.etiqueta}</Text>
+          <Ionicons name="chevron-down" size={12} color={iconoTeal} />
+        </TouchableOpacity>
+
+        <View style={[st.separador, { backgroundColor: c.border }]} />
+
+        {/* Los tipos se combinan. El color activo es el del propio tipo, que ya
+            se midió sobre blanco; "Sin clasificar" lleva su ámbar. */}
+        {([...TIPOS.map(t => [t.valor, t.etiqueta, t.color] as const),
            ['sin', 'Sin clasificar', '#b45309'] as const,
           ]).map(([valor, etiqueta, color]) => {
-          const on = filtroTipo === valor
-          const n = conTipo(valor as any)
-          if (n === 0 && !on && valor !== TODOS) return null
+          const on = tiposSel.includes(valor as Tipo | 'sin')
+          const n = conTipo(valor as Tipo | 'sin')
+          if (n === 0 && !on) return null
           return (
             <TouchableOpacity
               key={valor}
               style={[st.chip, { borderColor: on ? color : c.border, backgroundColor: on ? color : c.card }]}
-              onPress={() => setFiltroTipo(prev => prev === valor ? TODOS : valor as any)}
+              onPress={() => setTiposSel(prev => prev.includes(valor as Tipo | 'sin')
+                ? prev.filter(x => x !== valor)
+                : [...prev, valor as Tipo | 'sin'])}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
             >
               <Text style={[st.chipTxt, { color: on ? '#fff' : c.textSub }]}>{etiqueta} · {n}</Text>
             </TouchableOpacity>
           )
         })}
-        <TouchableOpacity
-          style={[st.chip, st.chipOrden, { borderColor: c.border, backgroundColor: c.card }]}
-          onPress={() => setOrden(o => o === 'recientes' ? 'nombre' : 'recientes')}
-        >
-          <Ionicons name={orden === 'recientes' ? 'time-outline' : 'text-outline'} size={12} color={c.textSub} />
-          <Text style={[st.chipTxt, { color: c.textSub }]}>
-            {orden === 'recientes' ? 'Más recientes' : 'Por nombre'}
-          </Text>
-        </TouchableOpacity>
+
+        {nuevos > 0 && (
+          <TouchableOpacity
+            style={[st.chip, st.chipOrden, { borderColor: c.border, backgroundColor: c.card }, soloNuevos && st.chipOn]}
+            onPress={() => setSoloNuevos(v => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: soloNuevos }}
+          >
+            <Ionicons name="sparkles-outline" size={12} color={soloNuevos ? '#fff' : c.textSub} />
+            <Text style={[st.chipTxt, { color: c.textSub }, soloNuevos && st.chipTxtOn]}>De esta semana · {nuevos}</Text>
+          </TouchableOpacity>
+        )}
+
+        {hayFiltro && !busca.trim() && (
+          <TouchableOpacity
+            style={[st.chip, st.chipOrden, { borderColor: c.border, backgroundColor: c.card }]}
+            onPress={() => { setTiposSel([]); setSoloNuevos(false); setFiltroZona(TODOS); setFiltroEstado(TODOS) }}
+          >
+            <Ionicons name="close" size={12} color={c.textSub} />
+            <Text style={[st.chipTxt, { color: c.textSub }]}>Quitar filtros</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
+
+      <HojaOrden
+        visible={hojaOrden}
+        opciones={ORDENES as unknown as OpcionOrden<Orden>[]}
+        valor={orden}
+        onElegir={setOrden}
+        onCerrar={() => setHojaOrden(false)}
+      />
 
       {/* La fila de estados solo sale cuando de verdad hay varios estados que
           separar. Hoy 39 de 41 son de Querétaro y los otros dos son uno de
@@ -262,7 +357,7 @@ export default function AsesoresExternos() {
         </ScrollView>
       )}
 
-      {zonasPresentes.length > 1 && (
+      {(zonasPresentes.length > 1 || sinZona > 0) && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.chipsScroll} contentContainerStyle={st.chipsRow}>
           <Ionicons name="location-outline" size={14} color={c.textSub} style={{ marginRight: 2 }} />
           <TouchableOpacity
@@ -282,6 +377,19 @@ export default function AsesoresExternos() {
               </Text>
             </TouchableOpacity>
           ))}
+          {/* Al final, los que no tienen una zona con la que repartirles una
+              cita, y hasta ahora no había forma de sacarlos de la lista para
+              irlos completando. */}
+          {sinZona > 0 && (
+            <TouchableOpacity
+              style={[st.chip, { borderColor: c.border, backgroundColor: c.card }, filtroZona === SIN_ZONA && st.chipOn]}
+              onPress={() => setFiltroZona(prev => prev === SIN_ZONA ? TODOS : SIN_ZONA)}
+            >
+              <Text style={[st.chipTxt, { color: c.textSub }, filtroZona === SIN_ZONA && st.chipTxtOn]}>
+                Zona por definir · {sinZona}
+              </Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       )}
 
@@ -485,6 +593,9 @@ const st = StyleSheet.create({
   chipsRow: { flexDirection: 'row', gap: 7, paddingHorizontal: 16, paddingRight: 24, alignItems: 'center' },
   chip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 7 },
   chipOrden: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  // Separa el control de orden de los filtros: pegados se leen como una sola
+  // tira de pastillas iguales, y no hacen lo mismo.
+  separador: { width: 1, height: 22, opacity: 0.8, marginHorizontal: 2 },
   chipOn: { backgroundColor: TEAL, borderColor: TEAL },
   chipTxt: { fontSize: 12, fontWeight: '700' },
   chipTxtOn: { color: '#fff' },

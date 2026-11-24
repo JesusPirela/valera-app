@@ -15,6 +15,7 @@ import { useColors } from '../../lib/ThemeContext'
 import { legibleSobre } from '../../lib/color'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import FilaDirectorio, { MetaFila } from '../../components/FilaDirectorio'
+import HojaOrden, { type OpcionOrden } from '../../components/HojaOrden'
 
 type Colaborador = {
   id: string
@@ -29,15 +30,19 @@ type Colaborador = {
   notas: string | null
   relevancia: number | null
   actualizado_at: string | null
+  created_at: string
 }
 
-type Form = Omit<Colaborador, 'id' | 'actualizado_at'>
+type Form = Omit<Colaborador, 'id' | 'actualizado_at' | 'created_at'>
 
 const EMPTY: Form = {
   nombre: '', contacto: null, link: null, estado_subida: null,
   fecha_actualizacion: null, ultima_casa_subida: null, en_app: null,
   marca: null, notas: null, relevancia: 0,
 }
+
+/** El color de la marca de la pantalla. Igual que en Asesores externos. */
+const TEAL = '#1a6470'
 
 const EN_APP_OPCIONES: { value: string | null; label: string }[] = [
   { value: null, label: 'Sin conectar' },
@@ -67,7 +72,90 @@ const RELEVANCIA_OPCIONES = [
   { valor: 0, etiqueta: 'Normal',     desc: 'Sin prioridad especial' },
 ]
 
-type Filtro = 'todos' | 'clave' | 'importantes' | 'sin_conectar' | 'sin_actualizar'
+/**
+ * Las formas de ordenar la lista.
+ *
+ * "Los más olvidados" es el que de verdad hacía falta: la lista existe para
+ * pedirles catálogo, y medido en la base hay 34 colaboradores a los que nunca
+ * se les marcó una actualización y 24 cuya última marca tiene más de tres
+ * meses. Como FILTRO eso no sirve —58 de 59 saldrían en la lista, no separa
+ * nada— pero como ORDEN pone arriba justo a quien le toca.
+ */
+const ORDENES = [
+  { valor: 'relevancia', etiqueta: 'Relevancia',          desc: 'Los clave primero, luego los importantes', icono: 'star' as const },
+  { valor: 'olvidados',  etiqueta: 'Los más olvidados',    desc: 'Arriba los que llevan más sin actualizar', icono: 'hourglass-outline' as const },
+  { valor: 'frescos',    etiqueta: 'Actualizados al último', desc: 'Arriba los que acabas de marcar',        icono: 'checkmark-done-outline' as const },
+  { valor: 'nuevos',     etiqueta: 'Recién agregados',     desc: 'Por fecha de alta, lo último arriba',      icono: 'time-outline' as const },
+  { valor: 'nombre',     etiqueta: 'Nombre (A–Z)',         desc: 'Alfabético, para buscar uno que ya sabes', icono: 'text-outline' as const },
+] as const
+type Orden = typeof ORDENES[number]['valor']
+
+/** Fecha de la última marca como número ordenable. Sin marca = lo más viejo. */
+const marcaDe = (x: Colaborador) =>
+  x.actualizado_at ? new Date(x.actualizado_at).getTime() : -Infinity
+
+const porNombre = (a: Colaborador, b: Colaborador) => a.nombre.localeCompare(b.nombre, 'es')
+
+const COMPARA: Record<Orden, (a: Colaborador, b: Colaborador) => number> = {
+  relevancia: (a, b) => (b.relevancia ?? 0) - (a.relevancia ?? 0) || porNombre(a, b),
+  // Sin marca va PRIMERO: es el caso más urgente, no el menos.
+  olvidados: (a, b) => marcaDe(a) - marcaDe(b) || porNombre(a, b),
+  frescos: (a, b) => marcaDe(b) - marcaDe(a) || porNombre(a, b),
+  nuevos: (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || porNombre(a, b),
+  nombre: porNombre,
+}
+
+/**
+ * Los filtros, y cómo se combinan.
+ *
+ * Se COMBINAN en lugar de ser uno a la vez, que es lo que había: así se puede
+ * pedir "los clave que todavía no están conectados" sin tener que mirar las dos
+ * listas por separado.
+ *
+ * Dentro de un grupo suman (clave O importantes) y entre grupos se cruzan
+ * (clave Y sin conectar). Si no fuera así, tocar dos pastillas del mismo grupo
+ * daría siempre cero resultados.
+ */
+const FILTROS: {
+  id: string
+  grupo: string
+  label: string
+  icono?: keyof typeof Ionicons.glyphMap
+  pred: (x: Colaborador) => boolean
+}[] = [
+  { id: 'clave',       grupo: 'rel', label: 'Clave',        icono: 'star', pred: x => x.relevancia === 2 },
+  { id: 'importantes', grupo: 'rel', label: 'Importantes',  icono: 'star-outline', pred: x => x.relevancia === 1 },
+  { id: 'en_app',      grupo: 'app', label: 'En la app',    pred: x => x.en_app === 'SI' },
+  { id: 'pendientes',  grupo: 'app', label: 'Pendientes',   pred: x => x.en_app === 'PENDIENTE' },
+  { id: 'sin_app',     grupo: 'app', label: 'Sin conectar', pred: x => !x.en_app },
+  // Cada uno en su propio grupo: son condiciones que se cruzan entre sí.
+  { id: 'sin_marca',   grupo: 'marca', label: 'Nunca actualizado', pred: x => !x.actualizado_at },
+  { id: 'sin_link',    grupo: 'link',  label: 'Sin catálogo',      icono: 'link-outline', pred: x => !esUrl(x.link) },
+  { id: 'con_tel',     grupo: 'tel',   label: 'Con WhatsApp',      icono: 'logo-whatsapp', pred: x => !!telefonoDe(x.contacto) },
+  { id: 'con_aviso',   grupo: 'aviso', label: 'Con aviso',         icono: 'alert-circle-outline', pred: x => !!x.estado_subida },
+]
+
+/**
+ * Aplica los filtros activos.
+ *
+ * `exceptoGrupo` sirve para contar: el número de una pastilla se calcula con
+ * los filtros de los OTROS grupos puestos y los de su propio grupo quitados.
+ * Así, el número de una pastilla de otro grupo dice cuántos van a quedar si la
+ * tocas, y el de una hermana del mismo grupo dice cuántos aporta ella (porque
+ * dentro del grupo las opciones suman, no se cruzan).
+ */
+function aplicarFiltros(l: Colaborador[], activos: string[], exceptoGrupo?: string) {
+  const grupos = new Map<string, ((x: Colaborador) => boolean)[]>()
+  for (const id of activos) {
+    const def = FILTROS.find(f => f.id === id)
+    if (!def || def.grupo === exceptoGrupo) continue
+    const arr = grupos.get(def.grupo) ?? []
+    arr.push(def.pred)
+    grupos.set(def.grupo, arr)
+  }
+  if (grupos.size === 0) return l
+  return l.filter(x => [...grupos.values()].every(preds => preds.some(p => p(x))))
+}
 
 function alerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
@@ -115,8 +203,9 @@ export default function AdminColaboradores() {
   const [lista, setLista] = useState<Colaborador[]>([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
-  const [filtro, setFiltro] = useState<Filtro>('todos')
-  const [orden, setOrden] = useState<'relevancia' | 'nombre'>('relevancia')
+  const [filtros, setFiltros] = useState<string[]>([])
+  const [orden, setOrden] = useState<Orden>('relevancia')
+  const [hojaOrden, setHojaOrden] = useState(false)
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<Colaborador | null>(null)
   const [form, setForm] = useState<Form>(EMPTY)
@@ -125,6 +214,8 @@ export default function AdminColaboradores() {
   /** Texto de color que va directo sobre la tarjeta: se ajusta para que se lea
    *  igual en claro y en oscuro sin cambiarle el tono. */
   const enCard = (col: string) => legibleSobre(col, c.card, 4.5)
+  /** Los iconos piden 3:1, no 4.5:1 (son formas, no texto). */
+  const iconoEnCard = (col: string) => legibleSobre(col, c.card, 3)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
   const { refreshControl } = usePullRefresh(cargar)
@@ -138,35 +229,37 @@ export default function AdminColaboradores() {
     setLoading(false)
   }
 
-  const conteos = useMemo(() => ({
-    todos: lista.length,
-    clave: lista.filter(x => x.relevancia === 2).length,
-    importantes: lista.filter(x => x.relevancia === 1).length,
-    sin_conectar: lista.filter(x => !x.en_app).length,
-    sin_actualizar: lista.filter(x => !x.actualizado_at).length,
-  }), [lista])
+  /** La búsqueda se aplica antes que los filtros para que los números de las
+   *  pastillas cuenten solo lo que de verdad podría salir en pantalla. */
+  const listaBuscada = useMemo(() => {
+    const q = busqueda.trim().toLowerCase()
+    if (!q) return lista
+    return lista.filter(x =>
+      x.nombre.toLowerCase().includes(q) ||
+      (x.contacto ?? '').toLowerCase().includes(q) ||
+      (x.notas ?? '').toLowerCase().includes(q) ||
+      (x.estado_subida ?? '').toLowerCase().includes(q)
+    )
+  }, [lista, busqueda])
 
   const listaFiltrada = useMemo(() => {
-    let l = lista
-    if (filtro === 'clave') l = l.filter(x => x.relevancia === 2)
-    else if (filtro === 'importantes') l = l.filter(x => x.relevancia === 1)
-    else if (filtro === 'sin_conectar') l = l.filter(x => !x.en_app)
-    else if (filtro === 'sin_actualizar') l = l.filter(x => !x.actualizado_at)
-    const q = busqueda.trim().toLowerCase()
-    if (q) {
-      l = l.filter(x =>
-        x.nombre.toLowerCase().includes(q) ||
-        (x.contacto ?? '').toLowerCase().includes(q) ||
-        (x.notas ?? '').toLowerCase().includes(q)
-      )
-    }
     // Por relevancia de entrada: la lista existe para saber a quién pedirle
-    // opciones primero, y con 58 registros el alfabético esconde a los 5 clave
+    // opciones primero, y con 59 registros el alfabético esconde a los 5 clave
     // entre los demás.
-    return [...l].sort((a, b) => orden === 'nombre'
-      ? a.nombre.localeCompare(b.nombre, 'es')
-      : (b.relevancia ?? 0) - (a.relevancia ?? 0) || a.nombre.localeCompare(b.nombre, 'es'))
-  }, [lista, filtro, busqueda, orden])
+    return [...aplicarFiltros(listaBuscada, filtros)].sort(COMPARA[orden])
+  }, [listaBuscada, filtros, orden])
+
+  /** Cuántos quedarían al tocar cada pastilla, con los demás filtros puestos. */
+  const conteos = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const f of FILTROS) {
+      m[f.id] = aplicarFiltros(listaBuscada, filtros, f.grupo).filter(f.pred).length
+    }
+    return m
+  }, [listaBuscada, filtros])
+
+  const toggleFiltro = (id: string) =>
+    setFiltros(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
 
   function abrirNueva() {
     setEditando(null)
@@ -256,13 +349,7 @@ export default function AdminColaboradores() {
     else alerta(link)
   }
 
-  const CHIPS: { value: Filtro; label: string; n: number }[] = [
-    { value: 'todos', label: 'Todos', n: conteos.todos },
-    { value: 'clave', label: '★ Clave', n: conteos.clave },
-    { value: 'importantes', label: '★ Importantes', n: conteos.importantes },
-    { value: 'sin_conectar', label: 'Sin conectar', n: conteos.sin_conectar },
-    { value: 'sin_actualizar', label: 'Sin actualizar', n: conteos.sin_actualizar },
-  ]
+  const ordenActual = ORDENES.find(o => o.valor === orden)!
 
   return (
     <View style={[s.container, { backgroundColor: c.bg }]}>
@@ -270,8 +357,11 @@ export default function AdminColaboradores() {
         <View style={{ flex: 1 }}>
           <Text style={[s.titulo, { color: c.text }]}>Colaboradores</Text>
           <Text style={[s.sub, { color: c.textSub }]}>
-            Sus opciones las podemos subir. {lista.length} registrado{lista.length !== 1 ? 's' : ''}
-            {conteos.clave > 0 ? `, ${conteos.clave} clave` : ''}.
+            {/* Cuando hay filtros puestos, el subtítulo dice cuántos quedaron:
+                si no, una lista corta parece una lista vacía de registros. */}
+            {filtros.length > 0 || busqueda.trim()
+              ? `${listaFiltrada.length} de ${lista.length} · ${ordenActual.etiqueta.toLowerCase()}`
+              : `Sus opciones las podemos subir. ${lista.length} registrados.`}
           </Text>
         </View>
         <TouchableOpacity style={s.btnNuevo} onPress={abrirNueva}>
@@ -291,35 +381,74 @@ export default function AdminColaboradores() {
         />
       </View>
 
+      {/* Una sola fila de controles: el orden abre su hoja y los filtros se
+          combinan. Antes el orden era un chip que alternaba entre dos textos y
+          los filtros eran uno a la vez. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipsScroll} contentContainerStyle={s.chipsRow}>
-        {CHIPS.map(op => {
-          const on = filtro === op.value
+        <TouchableOpacity
+          style={[s.chip, s.chipOrden, { borderColor: enCard(TEAL), backgroundColor: c.card }]}
+          onPress={() => setHojaOrden(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Ordenar por. Ahora: ${ordenActual.etiqueta}`}
+        >
+          <Ionicons name="swap-vertical" size={13} color={iconoEnCard(TEAL)} />
+          <Text style={[s.chipTxt, { color: enCard(TEAL) }]}>{ordenActual.etiqueta}</Text>
+          <Ionicons name="chevron-down" size={12} color={iconoEnCard(TEAL)} />
+        </TouchableOpacity>
+
+        <View style={[s.separador, { backgroundColor: c.border }]} />
+
+        {FILTROS.map(f => {
+          const on = filtros.includes(f.id)
+          // Una pastilla que dejaría la lista vacía no se enseña: con los
+          // filtros combinados aparecerían varias en cero al mismo tiempo.
+          if (conteos[f.id] === 0 && !on) return null
           return (
             <TouchableOpacity
-              key={op.value}
-              style={[s.chip, { borderColor: c.border, backgroundColor: c.card }, on && s.chipOn]}
-              onPress={() => setFiltro(on ? 'todos' : op.value)}
+              key={f.id}
+              style={[s.chip, f.icono ? s.chipOrden : null, { borderColor: c.border, backgroundColor: c.card }, on && s.chipOn]}
+              onPress={() => toggleFiltro(f.id)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
             >
-              <Text style={[s.chipTxt, { color: c.textSub }, on && s.chipTxtOn]}>{op.label} · {op.n}</Text>
+              {f.icono && <Ionicons name={f.icono} size={12} color={on ? '#fff' : c.textSub} />}
+              <Text style={[s.chipTxt, { color: c.textSub }, on && s.chipTxtOn]}>{f.label} · {conteos[f.id]}</Text>
             </TouchableOpacity>
           )
         })}
-        <TouchableOpacity
-          style={[s.chip, s.chipOrden, { borderColor: c.border, backgroundColor: c.card }]}
-          onPress={() => setOrden(o => o === 'relevancia' ? 'nombre' : 'relevancia')}
-        >
-          <Ionicons name={orden === 'relevancia' ? 'star' : 'text-outline'} size={12} color={c.textSub} />
-          <Text style={[s.chipTxt, { color: c.textSub }]}>
-            {orden === 'relevancia' ? 'Por relevancia' : 'Por nombre'}
-          </Text>
-        </TouchableOpacity>
+
+        {filtros.length > 0 && (
+          <TouchableOpacity
+            style={[s.chip, s.chipOrden, { borderColor: c.border, backgroundColor: c.card }]}
+            onPress={() => setFiltros([])}
+          >
+            <Ionicons name="close" size={12} color={c.textSub} />
+            <Text style={[s.chipTxt, { color: c.textSub }]}>Quitar filtros</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
+
+      <HojaOrden
+        visible={hojaOrden}
+        opciones={ORDENES as unknown as OpcionOrden<Orden>[]}
+        valor={orden}
+        onElegir={setOrden}
+        onCerrar={() => setHojaOrden(false)}
+      />
 
       {loading ? (
         <ActivityIndicator color="#c9a84c" size="large" style={{ marginTop: 40 }} />
       ) : listaFiltrada.length === 0 ? (
         <View style={s.empty}>
           <Text style={[s.emptyText, { color: c.textSub }]}>No hay colaboradores que coincidan.</Text>
+          {/* Con filtros que se cruzan es fácil llegar a cero sin darse
+              cuenta de cuál fue; la salida queda a un toque. */}
+          {filtros.length > 0 && (
+            <TouchableOpacity style={[s.chip, s.chipOrden, { borderColor: c.border, marginTop: 12 }]} onPress={() => setFiltros([])}>
+              <Ionicons name="close" size={13} color={c.textSub} />
+              <Text style={[s.chipTxt, { color: c.textSub }]}>Quitar los {filtros.length} filtros</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.lista} refreshControl={refreshControl}>
@@ -531,6 +660,9 @@ const s = StyleSheet.create({
   chipsRow: { flexDirection: 'row', gap: 7, paddingHorizontal: 16, paddingRight: 24, alignItems: 'center' },
   chip: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 11, paddingVertical: 7 },
   chipOrden: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  // Separa el control de orden de los filtros: son dos cosas distintas y
+  // pegados se leen como una sola tira de pastillas iguales.
+  separador: { width: 1, height: 22, opacity: 0.8, marginHorizontal: 2 },
   chipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
   chipTxt: { fontSize: 12, fontWeight: '700' },
   chipTxtOn: { color: '#fff' },
