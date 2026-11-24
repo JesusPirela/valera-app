@@ -1,6 +1,9 @@
-// Asesores externos: agenda de asesores que nos apoyan por zona. Guarda
-// nombre, teléfono y la zona por la que apoyan. CRUD simple (admin/gerencia).
-import { useState, useCallback } from 'react'
+// Asesores externos: quienes nos ATIENDEN LAS CITAS por zona. (A quién le
+// pedimos opciones para subir es la otra pantalla, "Colaboradores".)
+//
+// Las dos listas usan la misma fila (components/FilaDirectorio) para que se
+// lean como dos vistas de lo mismo y no como dos apps.
+import { useState, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator,
   Modal, Alert, Platform, Linking, RefreshControl,
@@ -13,6 +16,7 @@ import { normalizar } from '../../lib/texto'
 import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS_MEXICO, ESTADO_PRINCIPAL } from '../../lib/estados-mexico'
 import { ZONAS_INTERES } from '../../lib/zonas-interes'
+import FilaDirectorio, { MetaFila } from '../../components/FilaDirectorio'
 
 type Tipo = 'alianza' | 'independiente'
 type Asesor = {
@@ -27,25 +31,35 @@ const TODOS = '__todos__'
  *
  * No son lo mismo y hasta ahora vivian revueltos: una ALIANZA es un acuerdo
  * con otra inmobiliaria, y un INDEPENDIENTE es alguien que nos apoya por su
- * cuenta. Al repartir una propiedad por zona importa saber cual es cual.
+ * cuenta. Al mandarle una cita por zona importa saber cual es cual.
  */
 const TIPOS: { valor: Tipo; etiqueta: string; color: string; desc: string }[] = [
   { valor: 'alianza',       etiqueta: 'Alianza',       color: '#5e35b1', desc: 'Acuerdo con otra inmobiliaria' },
   { valor: 'independiente', etiqueta: 'Independiente', color: '#1a6470', desc: 'Asesor por su cuenta que nos apoya' },
 ]
 const tipoDe = (t: Tipo | null | undefined) => TIPOS.find(x => x.valor === t)
+const SIN_TIPO = '#64748b'
 
-/** "hace 3 días", "el 22 sep" — para saber de cuando es cada registro. */
-const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
-function cuandoSeRegistro(iso: string): string {
-  const d = new Date(iso)
-  const dias = Math.floor((Date.now() - d.getTime()) / 86400000)
-  if (dias <= 0) return 'hoy'
-  if (dias === 1) return 'ayer'
-  if (dias < 30) return `hace ${dias} días`
-  return `${d.getDate()} ${MESES[d.getMonth()]}`
-}
+const DIA = 86_400_000
 function soloTel(t: string | null | undefined) { return (t ?? '').replace(/[^\d+]/g, '') }
+
+/**
+ * ¿Este texto de "zona" sirve como filtro?
+ *
+ * El campo es libre y ahí acabó de todo: zonas de verdad ("Juriquilla"),
+ * recados ("Es para alianza", "NOS DIO SU CATALOGO") y hasta un mensaje de
+ * WhatsApp completo de 131 caracteres. Como pastilla de filtro se veían todas
+ * igual de válidas y la fila quedaba ilegible: 22 pastillas, una de ellas de
+ * un renglón entero.
+ *
+ * Medido sobre los 30 textos que hay: el largo tumba los 4 mensajes y la lista
+ * negra los 4 recados, y quedan 13 zonas reales.
+ */
+const NOTA_NO_ZONA = /alianza|catalogo|cat[aá]logo|por verse|pendiente|compartir|requerimient|^no\b|^si\b/i
+function zonaFiltrable(z: string | null | undefined): boolean {
+  const t = (z ?? '').trim()
+  return t.length > 0 && t.length <= 24 && !NOTA_NO_ZONA.test(t)
+}
 
 export default function AsesoresExternos() {
   const c = useColors()
@@ -95,193 +109,244 @@ export default function AsesoresExternos() {
     setEditando(null); cargar(true)
   }
 
-  function borrar(a: Asesor) {
-    const go = async () => { setLista(prev => prev.filter(x => x.id !== a.id)); await supabase.from('asesores_externos').delete().eq('id', a.id) }
+  function borrar(a: Partial<Asesor>) {
+    const go = async () => {
+      setLista(prev => prev.filter(x => x.id !== a.id))
+      setEditando(null)
+      await supabase.from('asesores_externos').delete().eq('id', a.id!)
+    }
     if (Platform.OS === 'web') { if (window.confirm(`¿Borrar a ${a.nombre}?`)) go() }
     else Alert.alert('Borrar asesor', `¿Borrar a ${a.nombre}?`, [{ text: 'Cancelar', style: 'cancel' }, { text: 'Borrar', style: 'destructive', onPress: go }])
   }
 
   // Estados/zonas presentes en los datos (no el catálogo completo de 32 estados),
   // para que el filtro solo muestre pastillas con resultados reales.
-  const estadosPresentes = [...new Set(lista.map(a => a.estado_mx).filter((e): e is string => !!e))]
-    .sort((a, b) => a === ESTADO_PRINCIPAL ? -1 : b === ESTADO_PRINCIPAL ? 1 : a.localeCompare(b, 'es'))
-  const listaPorEstado = filtroEstado === TODOS ? lista : lista.filter(a => a.estado_mx === filtroEstado)
-  const zonasPresentes = [...new Set(listaPorEstado.map(a => a.zona).filter((z): z is string => !!z))]
-    .sort((a, b) => a.localeCompare(b, 'es'))
+  const estadosPresentes = useMemo(() =>
+    [...new Set(lista.map(a => a.estado_mx).filter((e): e is string => !!e))]
+      .sort((a, b) => a === ESTADO_PRINCIPAL ? -1 : b === ESTADO_PRINCIPAL ? 1 : a.localeCompare(b, 'es')),
+    [lista])
 
-  const q = normalizar(busca)
-  const qDig = busca.replace(/\D/g, '')
-  const filtrados = listaPorEstado.filter(a =>
-    (!q || normalizar(a.nombre).includes(q) || normalizar(a.zona).includes(q)) &&
-    (qDig.length === 0 || soloTel(a.telefono).includes(qDig)) &&
-    (filtroZona === TODOS || a.zona === filtroZona) &&
-    (filtroTipo === TODOS || (filtroTipo === 'sin' ? !a.tipo : a.tipo === filtroTipo))
-  ).sort((a, b) => orden === 'nombre'
-    ? a.nombre.localeCompare(b.nombre, 'es')
-    : new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  /** Sale la fila de estados solo si el estado deja de ser un detalle: al
+   *  menos 3 registros fuera del estado principal, o un filtro ya puesto. */
+  const hayVariosEstados = useMemo(() => {
+    if (filtroEstado !== TODOS) return true
+    if (estadosPresentes.length < 2) return false
+    return lista.filter(a => a.estado_mx && a.estado_mx !== ESTADO_PRINCIPAL).length >= 3
+  }, [lista, estadosPresentes, filtroEstado])
+
+  const listaPorEstado = useMemo(() =>
+    filtroEstado === TODOS ? lista : lista.filter(a => a.estado_mx === filtroEstado),
+    [lista, filtroEstado])
+
+  // Las zonas se agrupan sin acentos ni mayúsculas, porque "Queretaro" y
+  // "queretaro" se escribieron las dos y salían como dos pastillas distintas.
+  // De cada grupo se enseña la versión mejor escrita (la que trae mayúscula).
+  const zonasPresentes = useMemo(() => {
+    const grupos = new Map<string, { etiqueta: string; n: number }>()
+    for (const a of listaPorEstado) {
+      if (!zonaFiltrable(a.zona)) continue
+      const t = a.zona!.trim()
+      const clave = normalizar(t)
+      const prev = grupos.get(clave)
+      const mejor = !prev || (/[A-ZÁÉÍÓÚÑ]/.test(t) && !/[A-ZÁÉÍÓÚÑ]/.test(prev.etiqueta))
+        ? t : prev.etiqueta
+      grupos.set(clave, { etiqueta: mejor, n: (prev?.n ?? 0) + 1 })
+    }
+    return [...grupos.entries()]
+      .map(([clave, v]) => ({ clave, ...v }))
+      .sort((a, b) => b.n - a.n || a.etiqueta.localeCompare(b.etiqueta, 'es'))
+  }, [listaPorEstado])
+
+  const filtrados = useMemo(() => {
+    const q = normalizar(busca)
+    const qDig = busca.replace(/\D/g, '')
+    return listaPorEstado.filter(a =>
+      (!q || normalizar(a.nombre).includes(q) || normalizar(a.zona).includes(q)
+          || normalizar(a.estado_mx).includes(q)) &&
+      (qDig.length === 0 || soloTel(a.telefono).includes(qDig)) &&
+      (filtroZona === TODOS || normalizar(a.zona) === filtroZona) &&
+      (filtroTipo === TODOS || (filtroTipo === 'sin' ? !a.tipo : a.tipo === filtroTipo))
+    ).sort((a, b) => orden === 'nombre'
+      ? a.nombre.localeCompare(b.nombre, 'es')
+      : new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  }, [listaPorEstado, busca, filtroZona, filtroTipo, orden])
 
   if (loading) return <View style={[st.center, { backgroundColor: c.bg }]}><ActivityIndicator size="large" color={TEAL} /></View>
 
+  const conTipo = (v: Tipo | 'sin' | typeof TODOS) =>
+    v === TODOS ? listaPorEstado.length
+    : v === 'sin' ? listaPorEstado.filter(a => !a.tipo).length
+    : listaPorEstado.filter(a => a.tipo === v).length
+
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); cargar(true) }} tintColor={TEAL} />}
-      >
-        <Text style={[st.h1, { color: c.text }]}>Asesores externos</Text>
-        <Text style={[st.sub, { color: c.textMute }]}>Asesores que nos apoyan por zona. {lista.length} registrado{lista.length !== 1 ? 's' : ''}.</Text>
-
-        <View style={[st.buscaRow, { borderColor: c.border, backgroundColor: c.card }]}>
-          <Ionicons name="search-outline" size={16} color={c.textMute} />
-          <TextInput style={[st.buscaInp, { color: c.text }]} value={busca} onChangeText={setBusca}
-            placeholder="Buscar por nombre, zona o teléfono…" placeholderTextColor={c.placeholder} />
-        </View>
-
-        {/* Orden y tipo. Van juntos porque son las dos preguntas que se hacen
-            al abrir esta pantalla: "¿a quién di de alta hace poco?" y "¿quién
-            es alianza y quién va por su cuenta?". */}
-        <View style={st.barraRow}>
-          <TouchableOpacity
-            style={[st.ordenBtn, { borderColor: c.border }]}
-            onPress={() => setOrden(o => o === 'recientes' ? 'nombre' : 'recientes')}
-          >
-            <Ionicons
-              name={orden === 'recientes' ? 'time-outline' : 'text-outline'}
-              size={14} color={TEAL}
-            />
-            <Text style={[st.ordenTxt, { color: c.textSub }]}>
-              {orden === 'recientes' ? 'Más recientes' : 'Por nombre'}
-            </Text>
-          </TouchableOpacity>
-
-          <Text style={[st.tipoFiltrosLbl, { color: c.textMute }]}>TIPO DE ASESOR</Text>
-          <View style={st.tipoFiltros}>
-            {([[TODOS, 'Todos', c.textSub] as const,
-               ...TIPOS.map(t => [t.valor, t.etiqueta, t.color] as const),
-               ['sin', 'Sin clasificar', '#b45309'] as const,
-              ]).map(([valor, etiqueta, color]) => {
-              const on = filtroTipo === valor
-              const n = valor === TODOS ? listaPorEstado.length
-                : valor === 'sin' ? listaPorEstado.filter(a => !a.tipo).length
-                : listaPorEstado.filter(a => a.tipo === valor).length
-              if (n === 0 && !on && valor !== TODOS) return null
-              return (
-                <TouchableOpacity
-                  key={valor}
-                  style={[st.tipoChip, { borderColor: on ? color : c.border, backgroundColor: on ? color : 'transparent' }]}
-                  onPress={() => setFiltroTipo(prev => prev === valor ? TODOS : valor as any)}
-                >
-                  <Text style={[st.tipoChipTxt, { color: on ? '#fff' : c.textSub }]}>{etiqueta} · {n}</Text>
-                </TouchableOpacity>
-              )
-            })}
-          </View>
-        </View>
-
-        {estadosPresentes.length > 1 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.filtroScroll} contentContainerStyle={st.filtroRow}>
-            <TouchableOpacity
-              style={[st.filtroChip, { borderColor: c.border }, filtroEstado === TODOS && st.filtroChipOn]}
-              onPress={() => { setFiltroEstado(TODOS); setFiltroZona(TODOS) }}
-            >
-              <Text style={[st.filtroChipTxt, { color: c.textSub }, filtroEstado === TODOS && st.filtroChipTxtOn]}>Todos los estados</Text>
-            </TouchableOpacity>
-            {estadosPresentes.map(e => (
-              <TouchableOpacity
-                key={e}
-                style={[st.filtroChip, { borderColor: c.border }, filtroEstado === e && st.filtroChipOn]}
-                onPress={() => { setFiltroEstado(prev => prev === e ? TODOS : e); setFiltroZona(TODOS) }}
-              >
-                <Text style={[st.filtroChipTxt, { color: c.textSub }, filtroEstado === e && st.filtroChipTxtOn]}>{e}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-
-        {zonasPresentes.length > 1 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.filtroScroll} contentContainerStyle={st.filtroRow}>
-            <TouchableOpacity
-              style={[st.filtroChip, { borderColor: c.border }, filtroZona === TODOS && st.filtroChipOn]}
-              onPress={() => setFiltroZona(TODOS)}
-            >
-              <Text style={[st.filtroChipTxt, { color: c.textSub }, filtroZona === TODOS && st.filtroChipTxtOn]}>Todas las zonas</Text>
-            </TouchableOpacity>
-            {zonasPresentes.map(z => (
-              <TouchableOpacity
-                key={z}
-                style={[st.filtroChip, { borderColor: c.border }, filtroZona === z && st.filtroChipOn]}
-                onPress={() => setFiltroZona(prev => prev === z ? TODOS : z)}
-              >
-                <Text style={[st.filtroChipTxt, { color: c.textSub }, filtroZona === z && st.filtroChipTxtOn]}>{z}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-
-        {filtrados.length === 0 ? (
-          <Text style={[st.vacio, { color: c.textMute }]}>
-            {lista.length === 0 ? 'Aún no hay asesores externos. Toca "＋ Agregar" para registrar el primero.' : 'Sin resultados.'}
+      <View style={st.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={[st.h1, { color: c.text }]}>Asesores externos</Text>
+          <Text style={[st.sub, { color: c.textSub }]}>
+            Nos atienden las citas por zona. {lista.length} registrado{lista.length !== 1 ? 's' : ''}.
           </Text>
-        ) : filtrados.map(a => (
-          <View key={a.id} style={[st.card, { backgroundColor: c.card, borderColor: c.border }]}>
-            <View style={[st.avatar, { backgroundColor: c.bg }]}>
-              <Text style={st.avatarTxt}>{a.nombre.trim().charAt(0).toUpperCase()}</Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <View style={st.nombreRow}>
-                <Text style={[st.nombre, { color: c.text }]} numberOfLines={1}>{a.nombre}</Text>
-                {(() => {
-                  const t = tipoDe(a.tipo)
-                  return (
-                    <View style={[st.tipoPill, { backgroundColor: (t?.color ?? '#b45309') + '1A' }]}>
-                      <Text style={[st.tipoPillTxt, { color: t?.color ?? '#b45309' }]}>
-                        {t?.etiqueta ?? 'Sin clasificar'}
-                      </Text>
-                    </View>
-                  )
-                })()}
-              </View>
-              {(a.zona || a.estado_mx) ? (
-                <View style={st.zonaRow}>
-                  <Ionicons name="location-outline" size={12} color={TEAL} />
-                  <Text style={[st.zona, { color: c.textSub }]} numberOfLines={1}>
-                    {[a.zona, a.estado_mx].filter(Boolean).join(' · ')}
-                  </Text>
-                </View>
-              ) : null}
-              {a.telefono ? <Text style={[st.tel, { color: c.textMute }]}>{a.telefono}</Text> : null}
-              <Text style={[st.registrado, { color: c.textMute }]}>Registrado {cuandoSeRegistro(a.created_at)}</Text>
-            </View>
-            <View style={st.acciones}>
-              {a.telefono ? (
-                <>
-                  <TouchableOpacity style={[st.accBtn, { backgroundColor: '#25D36622' }]} onPress={() => Linking.openURL(`https://wa.me/${soloTel(a.telefono).replace(/^\+/, '')}`)}>
-                    <Ionicons name="logo-whatsapp" size={16} color="#128C7E" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[st.accBtn, { backgroundColor: TEAL + '22' }]} onPress={() => Linking.openURL(`tel:${soloTel(a.telefono)}`)}>
-                    <Ionicons name="call" size={15} color={TEAL} />
-                  </TouchableOpacity>
-                </>
-              ) : null}
-              <TouchableOpacity style={[st.accBtn, { backgroundColor: c.bg }]} onPress={() => setEditando(a)}>
-                <Ionicons name="create-outline" size={16} color={c.textSub} />
-              </TouchableOpacity>
-              <TouchableOpacity style={[st.accBtn, { backgroundColor: '#fee2e2' }]} onPress={() => borrar(a)}>
-                <Ionicons name="trash-outline" size={15} color="#dc2626" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
+        </View>
+        <TouchableOpacity
+          style={st.btnNuevo}
+          onPress={() => setEditando({ nombre: '', telefono: '', zona: '', estado_mx: ESTADO_PRINCIPAL })}
+        >
+          <Ionicons name="add" size={16} color="#fff" />
+          <Text style={st.btnNuevoTxt}>Nuevo</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={[st.buscaRow, { borderColor: c.border, backgroundColor: c.card }]}>
+        <Ionicons name="search-outline" size={16} color={c.textSub} />
+        <TextInput style={[st.buscaInp, { color: c.text }]} value={busca} onChangeText={setBusca}
+          placeholder="Buscar por nombre, zona o teléfono…" placeholderTextColor={c.placeholder} />
+      </View>
+
+      {/* Tipo y orden en UNA sola fila. Antes el tipo llevaba su propio título
+          en mayúsculas y el orden iba en otro renglón: tres renglones de
+          controles antes de ver al primer asesor. */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.chipsScroll} contentContainerStyle={st.chipsRow}>
+        {/* El chip de "Todos" va en TEAL como en Colaboradores. Cuando usaba
+            c.textSub, en oscuro quedaba texto blanco sobre azul grisáceo:
+            2.95:1, medido. */}
+        {([[TODOS, 'Todos', TEAL] as const,
+           ...TIPOS.map(t => [t.valor, t.etiqueta, t.color] as const),
+           ['sin', 'Sin clasificar', '#b45309'] as const,
+          ]).map(([valor, etiqueta, color]) => {
+          const on = filtroTipo === valor
+          const n = conTipo(valor as any)
+          if (n === 0 && !on && valor !== TODOS) return null
+          return (
+            <TouchableOpacity
+              key={valor}
+              style={[st.chip, { borderColor: on ? color : c.border, backgroundColor: on ? color : c.card }]}
+              onPress={() => setFiltroTipo(prev => prev === valor ? TODOS : valor as any)}
+            >
+              <Text style={[st.chipTxt, { color: on ? '#fff' : c.textSub }]}>{etiqueta} · {n}</Text>
+            </TouchableOpacity>
+          )
+        })}
+        <TouchableOpacity
+          style={[st.chip, st.chipOrden, { borderColor: c.border, backgroundColor: c.card }]}
+          onPress={() => setOrden(o => o === 'recientes' ? 'nombre' : 'recientes')}
+        >
+          <Ionicons name={orden === 'recientes' ? 'time-outline' : 'text-outline'} size={12} color={c.textSub} />
+          <Text style={[st.chipTxt, { color: c.textSub }]}>
+            {orden === 'recientes' ? 'Más recientes' : 'Por nombre'}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
 
-      <TouchableOpacity style={st.fab} onPress={() => setEditando({ nombre: '', telefono: '', zona: '', estado_mx: ESTADO_PRINCIPAL })} activeOpacity={0.85}>
-        <Ionicons name="add" size={22} color="#fff" />
-        <Text style={st.fabTxt}>Agregar</Text>
-      </TouchableOpacity>
+      {/* La fila de estados solo sale cuando de verdad hay varios estados que
+          separar. Hoy 39 de 41 son de Querétaro y los otros dos son uno de
+          Nuevo León y uno de Quintana Roo: un renglón fijo de filtros para
+          dos registros. Esos dos se encuentran escribiendo el estado en el
+          buscador, que ahora también busca por estado. */}
+      {hayVariosEstados && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.chipsScroll} contentContainerStyle={st.chipsRow}>
+          <TouchableOpacity
+            style={[st.chip, { borderColor: c.border, backgroundColor: c.card }, filtroEstado === TODOS && st.chipOn]}
+            onPress={() => { setFiltroEstado(TODOS); setFiltroZona(TODOS) }}
+          >
+            <Text style={[st.chipTxt, { color: c.textSub }, filtroEstado === TODOS && st.chipTxtOn]}>Todos los estados</Text>
+          </TouchableOpacity>
+          {estadosPresentes.map(e => (
+            <TouchableOpacity
+              key={e}
+              style={[st.chip, { borderColor: c.border, backgroundColor: c.card }, filtroEstado === e && st.chipOn]}
+              onPress={() => { setFiltroEstado(prev => prev === e ? TODOS : e); setFiltroZona(TODOS) }}
+            >
+              <Text style={[st.chipTxt, { color: c.textSub }, filtroEstado === e && st.chipTxtOn]}>{e}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {zonasPresentes.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.chipsScroll} contentContainerStyle={st.chipsRow}>
+          <Ionicons name="location-outline" size={14} color={c.textSub} style={{ marginRight: 2 }} />
+          <TouchableOpacity
+            style={[st.chip, { borderColor: c.border, backgroundColor: c.card }, filtroZona === TODOS && st.chipOn]}
+            onPress={() => setFiltroZona(TODOS)}
+          >
+            <Text style={[st.chipTxt, { color: c.textSub }, filtroZona === TODOS && st.chipTxtOn]}>Todas las zonas</Text>
+          </TouchableOpacity>
+          {zonasPresentes.map(z => (
+            <TouchableOpacity
+              key={z.clave}
+              style={[st.chip, { borderColor: c.border, backgroundColor: c.card }, filtroZona === z.clave && st.chipOn]}
+              onPress={() => setFiltroZona(prev => prev === z.clave ? TODOS : z.clave)}
+            >
+              <Text style={[st.chipTxt, { color: c.textSub }, filtroZona === z.clave && st.chipTxtOn]}>
+                {z.etiqueta}{z.n > 1 ? ` · ${z.n}` : ''}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      <ScrollView
+        contentContainerStyle={st.lista}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); cargar(true) }} tintColor={TEAL} />}
+      >
+        {filtrados.length === 0 ? (
+          <Text style={[st.vacio, { color: c.textSub }]}>
+            {lista.length === 0 ? 'Aún no hay asesores externos. Toca "Nuevo" para registrar el primero.' : 'Sin resultados.'}
+          </Text>
+        ) : filtrados.map(a => {
+          const t = tipoDe(a.tipo)
+          const tel = soloTel(a.telefono)
+          const reciente = Date.now() - new Date(a.created_at).getTime() < 7 * DIA
+          return (
+            <FilaDirectorio
+              key={a.id}
+              acento={t?.color ?? SIN_TIPO}
+              inicial={a.nombre.trim().charAt(0).toUpperCase() || '?'}
+              titulo={a.nombre}
+              onPress={() => setEditando(a)}
+              // Junto al nombre va UNA sola pastilla, y solo cuando SÍ está
+              // clasificado: 23 de 41 no tienen tipo, y poner "Sin clasificar"
+              // en más de la mitad de las filas no informa, nomás llena. Esos
+              // se reconocen por el gris del borde y se buscan con su pastilla
+              // de filtro.
+              pastillas={[t && { texto: t.etiqueta, color: t.color }]}
+              meta={
+                <MetaFila partes={[
+                  a.zona || a.estado_mx
+                    ? <View key="z" style={st.zonaRow}>
+                        <Ionicons name="location-outline" size={12} color={c.textSub} />
+                        <Text style={[st.zonaTxt, { color: c.textSub }]} numberOfLines={1}>
+                          {[a.zona, a.estado_mx].filter(Boolean).join(' · ')}
+                        </Text>
+                      </View>
+                    : null,
+                  a.telefono,
+                  // "Nuevo" como texto y no como pastilla: con el orden por
+                  // más recientes ya salen arriba, no hace falta que además
+                  // le quiten ancho al nombre.
+                  reciente ? 'Nuevo' : null,
+                ]} />
+              }
+              acciones={[
+                !!tel && {
+                  icono: 'logo-whatsapp' as const, color: '#128C7E',
+                  onPress: () => Linking.openURL(`https://wa.me/${tel.replace(/^\+/, '')}`),
+                  etiqueta: 'WhatsApp',
+                },
+                !!tel && {
+                  icono: 'call' as const, color: TEAL,
+                  onPress: () => Linking.openURL(`tel:${tel}`),
+                  etiqueta: 'Llamar',
+                },
+              ]}
+            />
+          )
+        })}
+      </ScrollView>
 
       <Modal visible={!!editando} transparent animationType="slide" onRequestClose={() => setEditando(null)}>
         <View style={st.overlay}>
-          <View style={[st.sheet, { backgroundColor: c.card }]}>
+          <ScrollView style={[st.sheet, { backgroundColor: c.card }]} contentContainerStyle={{ paddingBottom: 10 }}>
             <View style={st.handle} />
             <Text style={[st.mTit, { color: c.text }]}>{editando?.id ? 'Editar asesor' : 'Nuevo asesor externo'}</Text>
 
@@ -310,7 +375,7 @@ export default function AsesoresExternos() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[st.tipoOpcionTit, { color: on ? t.color : c.text }]}>{t.etiqueta}</Text>
-                      <Text style={[st.tipoOpcionSub, { color: c.textMute }]}>{t.desc}</Text>
+                      <Text style={[st.tipoOpcionSub, { color: c.textSub }]}>{t.desc}</Text>
                     </View>
                   </TouchableOpacity>
                 )
@@ -325,10 +390,10 @@ export default function AsesoresExternos() {
               <Text style={{ color: editando?.estado_mx ? c.text : c.placeholder, fontSize: 15 }}>
                 {editando?.estado_mx ?? 'Selecciona un estado'}
               </Text>
-              <Ionicons name="chevron-down" size={16} color={c.textMute} />
+              <Ionicons name="chevron-down" size={16} color={c.textSub} />
             </TouchableOpacity>
 
-            <Text style={[st.lbl, { color: c.textSub }]}>Zona por la que nos apoya</Text>
+            <Text style={[st.lbl, { color: c.textSub }]}>Zona en la que atiende citas</Text>
             <TextInput style={[st.inp, { color: c.text, borderColor: c.inputBorder, backgroundColor: c.input }]}
               value={editando?.zona ?? ''} onChangeText={v => setEditando(e => ({ ...e, zona: v }))}
               placeholder="Ej. Juriquilla, El Refugio…" placeholderTextColor={c.placeholder} autoCapitalize="words" />
@@ -338,10 +403,10 @@ export default function AsesoresExternos() {
                 {ZONAS_INTERES.map(z => (
                   <TouchableOpacity
                     key={z}
-                    style={[st.zonaChip, { borderColor: c.border }, editando?.zona === z && st.filtroChipOn]}
+                    style={[st.chip, { borderColor: c.border, backgroundColor: c.input }, editando?.zona === z && st.chipOn]}
                     onPress={() => setEditando(e => ({ ...e, zona: z }))}
                   >
-                    <Text style={[st.filtroChipTxt, { color: c.textSub }, editando?.zona === z && st.filtroChipTxtOn]}>{z}</Text>
+                    <Text style={[st.chipTxt, { color: c.textSub }, editando?.zona === z && st.chipTxtOn]}>{z}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -350,8 +415,19 @@ export default function AsesoresExternos() {
             <TouchableOpacity style={[st.guardarBtn, guardando && { opacity: 0.6 }]} onPress={guardar} disabled={guardando}>
               {guardando ? <ActivityIndicator color="#fff" /> : <Text style={st.guardarTxt}>{editando?.id ? 'Guardar cambios' : 'Agregar asesor'}</Text>}
             </TouchableOpacity>
-            <TouchableOpacity style={st.cancelar} onPress={() => setEditando(null)}><Text style={[st.cancelarTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
-          </View>
+
+            {/* Borrar vive aquí y no en la fila: antes era un bote de basura de
+                32px pegado al de editar. */}
+            {editando?.id && (
+              <TouchableOpacity style={st.borrarBtn} onPress={() => borrar(editando)}>
+                <Ionicons name="trash-outline" size={15} color="#dc2626" />
+                <Text style={st.borrarTxt}>Borrar asesor</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={st.cancelar} onPress={() => setEditando(null)}>
+              <Text style={[st.cancelarTxt, { color: c.textSub }]}>Cancelar</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -387,22 +463,35 @@ export default function AsesoresExternos() {
 
 const st = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  h1: { fontSize: 22, fontWeight: '900' },
-  sub: { fontSize: 12.5, marginTop: 2, marginBottom: 14 },
-  barraRow: { marginTop: 12, gap: 11, marginBottom: 14 },
-  ordenBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
-    borderWidth: 1.5, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 7,
+  header: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+    paddingHorizontal: 16, paddingTop: 18, paddingBottom: 12,
   },
-  ordenTxt: { fontSize: 12.5, fontWeight: '800' },
-  tipoFiltrosLbl: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.6, marginBottom: -2 },
-  tipoFiltros: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tipoChip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
-  tipoChipTxt: { fontSize: 12, fontWeight: '800' },
-  nombreRow: { flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' },
-  tipoPill: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  tipoPillTxt: { fontSize: 10.5, fontWeight: '800' },
-  registrado: { fontSize: 11, marginTop: 3 },
+  h1: { fontSize: 22, fontWeight: '900' },
+  sub: { fontSize: 12.5, marginTop: 2 },
+  btnNuevo: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: TEAL, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  btnNuevoTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  buscaRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16,
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9,
+  },
+  buscaInp: { flex: 1, fontSize: 14, padding: 0 },
+  // flexGrow/flexShrink en 0: sin eso la lista de abajo (que sí crece) le
+  // robaba el alto a estas filas y las tres salían encimadas y cortadas.
+  chipsScroll: { marginTop: 9, height: 46, flexGrow: 0, flexShrink: 0 },
+  chipsRow: { flexDirection: 'row', gap: 7, paddingHorizontal: 16, paddingRight: 24, alignItems: 'center' },
+  chip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 7 },
+  chipOrden: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  chipOn: { backgroundColor: TEAL, borderColor: TEAL },
+  chipTxt: { fontSize: 12, fontWeight: '700' },
+  chipTxtOn: { color: '#fff' },
+  lista: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28 },
+  zonaRow: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1, minWidth: 0 },
+  zonaTxt: { fontSize: 12, fontWeight: '600', flexShrink: 1 },
+  vacio: { fontSize: 13.5, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24, marginTop: 30 },
   tipoOpciones: { gap: 8, marginBottom: 4 },
   tipoOpcion: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -415,38 +504,19 @@ const st = StyleSheet.create({
   tipoRadioDot: { width: 10, height: 10, borderRadius: 5 },
   tipoOpcionTit: { fontSize: 14.5, fontWeight: '800' },
   tipoOpcionSub: { fontSize: 11.5, marginTop: 1 },
-  buscaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9, marginBottom: 14 },
-  buscaInp: { flex: 1, fontSize: 14, padding: 0 },
-  filtroScroll: { marginBottom: 13 },
-  filtroRow: { flexDirection: 'row', gap: 7, paddingRight: 8 },
-  filtroChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
-  filtroChipOn: { backgroundColor: TEAL, borderColor: TEAL },
-  filtroChipTxt: { fontSize: 12.5, fontWeight: '700' },
-  filtroChipTxtOn: { color: '#fff' },
-  vacio: { fontSize: 13.5, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24, marginTop: 30 },
-  card: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 10 },
-  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  avatarTxt: { fontSize: 17, fontWeight: '800', color: TEAL },
-  nombre: { fontSize: 15, fontWeight: '800' },
-  zonaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-  zona: { fontSize: 12.5, fontWeight: '600', flex: 1 },
-  tel: { fontSize: 12, marginTop: 2 },
-  acciones: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  accBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  fab: { position: 'absolute', right: 18, bottom: 22, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: TEAL, borderRadius: 26, paddingHorizontal: 18, paddingVertical: 13, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 6 },
-  fabTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, paddingBottom: 28 },
+  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, paddingBottom: 28, maxHeight: '90%' },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#88888855', alignSelf: 'center', marginBottom: 12 },
   mTit: { fontSize: 19, fontWeight: '900', marginBottom: 4 },
   lbl: { fontSize: 12.5, fontWeight: '700', marginTop: 14, marginBottom: 5 },
   inp: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 15 },
   guardarBtn: { backgroundColor: TEAL, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 22 },
   guardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  cancelar: { alignItems: 'center', paddingVertical: 12 },
+  borrarBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, marginTop: 4 },
+  borrarTxt: { color: '#dc2626', fontWeight: '800', fontSize: 13.5 },
+  cancelar: { alignItems: 'center', paddingVertical: 10 },
   cancelarTxt: { fontSize: 14, fontWeight: '700' },
   selectorBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   zonaChipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 8 },
-  zonaChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6 },
   estadoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1 },
 })

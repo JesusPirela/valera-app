@@ -1,12 +1,20 @@
+// Colaboradores: inmobiliarias y asesores cuyas opciones SÍ podemos subir a la
+// app. (A quién le mandamos una cita es la otra pantalla, "Asesores externos".)
+//
+// Las dos listas usan la misma fila (components/FilaDirectorio) para que se
+// lean como dos vistas de lo mismo y no como dos apps.
 import { useState, useCallback, useMemo, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Platform, Alert, Modal, Linking,
 } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { legibleSobre } from '../../lib/color'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
+import FilaDirectorio, { MetaFila } from '../../components/FilaDirectorio'
 
 type Colaborador = {
   id: string
@@ -19,13 +27,16 @@ type Colaborador = {
   en_app: string | null
   marca: string | null
   notas: string | null
+  relevancia: number | null
   actualizado_at: string | null
 }
 
-const EMPTY: Omit<Colaborador, 'id' | 'actualizado_at'> = {
+type Form = Omit<Colaborador, 'id' | 'actualizado_at'>
+
+const EMPTY: Form = {
   nombre: '', contacto: null, link: null, estado_subida: null,
   fecha_actualizacion: null, ultima_casa_subida: null, en_app: null,
-  marca: null, notas: null,
+  marca: null, notas: null, relevancia: 0,
 }
 
 const EN_APP_OPCIONES: { value: string | null; label: string }[] = [
@@ -34,17 +45,40 @@ const EN_APP_OPCIONES: { value: string | null; label: string }[] = [
   { value: 'SI', label: 'Sí' },
 ]
 
-type Filtro = 'todos' | 'SI' | 'PENDIENTE' | 'sin'
+/**
+ * Qué tan relevante es un colaborador: a quién le pido opciones primero.
+ *
+ * Viene del sheet, donde se marcaba "AA" a los más relevantes y "A" a los que
+ * también importan pero menos. En la app no se enseñan esas letras —no
+ * significan nada para quien no hizo el sheet— sino la relevancia: una sola
+ * estrella, el mismo color, y la diferencia en el peso de la pastilla. Así se
+ * lee como una escala y no como dos categorías distintas.
+ */
+const RELEVANCIA = {
+  2: { etiqueta: 'Clave',      color: '#a16207', solida: true },
+  1: { etiqueta: 'Importante', color: '#a16207', solida: false },
+} as const
+const relevanciaDe = (n: number | null | undefined) =>
+  n === 2 ? RELEVANCIA[2] : n === 1 ? RELEVANCIA[1] : null
+
+const RELEVANCIA_OPCIONES = [
+  { valor: 2, etiqueta: 'Clave',      desc: 'De los primeros a los que les pido opciones' },
+  { valor: 1, etiqueta: 'Importante', desc: 'Cuenta, pero no es de los primeros' },
+  { valor: 0, etiqueta: 'Normal',     desc: 'Sin prioridad especial' },
+]
+
+type Filtro = 'todos' | 'clave' | 'importantes' | 'sin_conectar' | 'sin_actualizar'
 
 function alerta(msg: string) {
   if (Platform.OS === 'web') window.alert(msg)
   else Alert.alert('Aviso', msg)
 }
 
-function badgeEnApp(en_app: string | null) {
-  if (en_app === 'SI') return { texto: 'En app', bg: '#e6f4ea', color: '#1e7e34', dot: '#2e9e4c' }
-  if (en_app === 'PENDIENTE') return { texto: 'Pendiente', bg: '#fff4e0', color: '#b8860b', dot: '#e0a716' }
-  return { texto: 'Sin conectar', bg: '#f1f1f1', color: '#888', dot: '#aaa' }
+/** El color del estado de conexión con la app. Es el acento de la fila. */
+function colorEnApp(en_app: string | null) {
+  if (en_app === 'SI') return '#1e7e34'
+  if (en_app === 'PENDIENTE') return '#b8860b'
+  return '#64748b'
 }
 
 function iniciales(nombre: string) {
@@ -53,12 +87,6 @@ function iniciales(nombre: string) {
   if (palabras.length === 0) return '?'
   if (palabras.length === 1) return palabras[0].slice(0, 2).toUpperCase()
   return (palabras[0][0] + palabras[1][0]).toUpperCase()
-}
-
-function formatFecha(iso: string) {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return ''
-  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function haceTiempo(iso: string) {
@@ -72,17 +100,31 @@ function haceTiempo(iso: string) {
   return `hace ${anos} año${anos > 1 ? 's' : ''}`
 }
 
+/** 33 de 58 tienen contacto, pero algunos son un nombre ("MIREYA"), no un
+ *  teléfono. El botón de WhatsApp solo sale cuando de verdad hay a dónde
+ *  escribir. */
+function telefonoDe(contacto: string | null): string | null {
+  const dig = (contacto ?? '').replace(/\D/g, '')
+  return dig.length >= 10 ? dig : null
+}
+
+const esUrl = (l: string | null) => !!l && /^https?:\/\//.test(l)
+
 export default function AdminColaboradores() {
   const c = useColors()
   const [lista, setLista] = useState<Colaborador[]>([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todos')
+  const [orden, setOrden] = useState<'relevancia' | 'nombre'>('relevancia')
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<Colaborador | null>(null)
-  const [form, setForm] = useState<Omit<Colaborador, 'id' | 'actualizado_at'>>(EMPTY)
+  const [form, setForm] = useState<Form>(EMPTY)
   const [guardando, setGuardando] = useState(false)
   const [marcando, setMarcando] = useState<string | null>(null)
+  /** Texto de color que va directo sobre la tarjeta: se ajusta para que se lea
+   *  igual en claro y en oscuro sin cambiarle el tono. */
+  const enCard = (col: string) => legibleSobre(col, c.card, 4.5)
 
   useFocusEffect(useCallback(() => { cargar() }, []))
   const { refreshControl } = usePullRefresh(cargar)
@@ -91,18 +133,25 @@ export default function AdminColaboradores() {
   async function cargar() {
     if (!yaCargoRef.current) setLoading(true)
     yaCargoRef.current = true
-    const { data } = await supabase
-      .from('colaboradores')
-      .select('*')
-      .order('nombre')
+    const { data } = await supabase.from('colaboradores').select('*').order('nombre')
     setLista(data ?? [])
     setLoading(false)
   }
 
+  const conteos = useMemo(() => ({
+    todos: lista.length,
+    clave: lista.filter(x => x.relevancia === 2).length,
+    importantes: lista.filter(x => x.relevancia === 1).length,
+    sin_conectar: lista.filter(x => !x.en_app).length,
+    sin_actualizar: lista.filter(x => !x.actualizado_at).length,
+  }), [lista])
+
   const listaFiltrada = useMemo(() => {
     let l = lista
-    if (filtro === 'sin') l = l.filter(x => !x.en_app)
-    else if (filtro !== 'todos') l = l.filter(x => x.en_app === filtro)
+    if (filtro === 'clave') l = l.filter(x => x.relevancia === 2)
+    else if (filtro === 'importantes') l = l.filter(x => x.relevancia === 1)
+    else if (filtro === 'sin_conectar') l = l.filter(x => !x.en_app)
+    else if (filtro === 'sin_actualizar') l = l.filter(x => !x.actualizado_at)
     const q = busqueda.trim().toLowerCase()
     if (q) {
       l = l.filter(x =>
@@ -111,8 +160,13 @@ export default function AdminColaboradores() {
         (x.notas ?? '').toLowerCase().includes(q)
       )
     }
-    return l
-  }, [lista, filtro, busqueda])
+    // Por relevancia de entrada: la lista existe para saber a quién pedirle
+    // opciones primero, y con 58 registros el alfabético esconde a los 5 clave
+    // entre los demás.
+    return [...l].sort((a, b) => orden === 'nombre'
+      ? a.nombre.localeCompare(b.nombre, 'es')
+      : (b.relevancia ?? 0) - (a.relevancia ?? 0) || a.nombre.localeCompare(b.nombre, 'es'))
+  }, [lista, filtro, busqueda, orden])
 
   function abrirNueva() {
     setEditando(null)
@@ -126,7 +180,7 @@ export default function AdminColaboradores() {
       nombre: col.nombre, contacto: col.contacto, link: col.link,
       estado_subida: col.estado_subida, fecha_actualizacion: col.fecha_actualizacion,
       ultima_casa_subida: col.ultima_casa_subida, en_app: col.en_app,
-      marca: col.marca, notas: col.notas,
+      marca: col.marca, notas: col.notas, relevancia: col.relevancia ?? 0,
     })
     setModal(true)
   }
@@ -141,19 +195,15 @@ export default function AdminColaboradores() {
         link: form.link?.trim() || null,
         estado_subida: form.estado_subida?.trim() || null,
         fecha_actualizacion: form.fecha_actualizacion?.trim() || null,
-        ultima_casa_subida: form.ultima_casa_subida?.trim() || null,
         en_app: form.en_app,
-        marca: form.marca?.trim() || null,
+        relevancia: form.relevancia ?? 0,
         notas: form.notas?.trim() || null,
         updated_at: new Date().toISOString(),
       }
-      if (editando) {
-        const { error } = await supabase.from('colaboradores').update(payload).eq('id', editando.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from('colaboradores').insert(payload)
-        if (error) throw error
-      }
+      const { error } = editando
+        ? await supabase.from('colaboradores').update(payload).eq('id', editando.id)
+        : await supabase.from('colaboradores').insert(payload)
+      if (error) throw error
       setModal(false)
       cargar()
     } catch (e: any) {
@@ -167,7 +217,7 @@ export default function AdminColaboradores() {
     const confirmar = async () => {
       const { error } = await supabase.from('colaboradores').delete().eq('id', col.id)
       if (error) alerta('Error: ' + error.message)
-      else cargar()
+      else { setModal(false); cargar() }
     }
     if (Platform.OS === 'web') {
       if (window.confirm(`¿Eliminar "${col.nombre}"?`)) confirmar()
@@ -180,8 +230,9 @@ export default function AdminColaboradores() {
   }
 
   // Marca (o vuelve a marcar) el catálogo de este colaborador como actualizado
-  // HOY. Un segundo tap sobre un colaborador ya marcado refresca la fecha a
-  // ahora — refleja que se le volvió a subir catálogo.
+  // HOY. Un segundo tap sobre uno ya marcado refresca la fecha: refleja que se
+  // le volvió a subir catálogo. Quitar la marca vive en la hoja de edición,
+  // porque es lo que casi nunca se quiere.
   async function marcarActualizado(col: Colaborador) {
     setMarcando(col.id)
     const ahora = new Date().toISOString()
@@ -194,51 +245,75 @@ export default function AdminColaboradores() {
   async function quitarActualizado(col: Colaborador) {
     setMarcando(col.id)
     setLista(prev => prev.map(x => x.id === col.id ? { ...x, actualizado_at: null } : x))
+    setEditando(prev => prev && prev.id === col.id ? { ...prev, actualizado_at: null } : prev)
     const { error } = await supabase.from('colaboradores').update({ actualizado_at: null }).eq('id', col.id)
     if (error) { alerta('Error: ' + error.message); cargar() }
     setMarcando(null)
   }
 
   function abrirLink(link: string) {
-    if (link.startsWith('http://') || link.startsWith('https://')) Linking.openURL(link)
+    if (esUrl(link)) Linking.openURL(link)
     else alerta(link)
   }
 
+  const CHIPS: { value: Filtro; label: string; n: number }[] = [
+    { value: 'todos', label: 'Todos', n: conteos.todos },
+    { value: 'clave', label: '★ Clave', n: conteos.clave },
+    { value: 'importantes', label: '★ Importantes', n: conteos.importantes },
+    { value: 'sin_conectar', label: 'Sin conectar', n: conteos.sin_conectar },
+    { value: 'sin_actualizar', label: 'Sin actualizar', n: conteos.sin_actualizar },
+  ]
+
   return (
-    <View style={[s.container, { backgroundColor: c.bg2 }]}>
-      <View style={[s.header, { borderBottomColor: c.border }]}>
-        <Text style={[s.titulo, { color: c.text }]}>Colaboradores</Text>
+    <View style={[s.container, { backgroundColor: c.bg }]}>
+      <View style={s.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.titulo, { color: c.text }]}>Colaboradores</Text>
+          <Text style={[s.sub, { color: c.textSub }]}>
+            Sus opciones las podemos subir. {lista.length} registrado{lista.length !== 1 ? 's' : ''}
+            {conteos.clave > 0 ? `, ${conteos.clave} clave` : ''}.
+          </Text>
+        </View>
         <TouchableOpacity style={s.btnNuevo} onPress={abrirNueva}>
-          <Text style={s.btnNuevoText}>+ Nuevo</Text>
+          <Ionicons name="add" size={16} color="#000" />
+          <Text style={s.btnNuevoText}>Nuevo</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={s.buscadorRow}>
+      <View style={[s.buscaRow, { borderColor: c.border, backgroundColor: c.card }]}>
+        <Ionicons name="search-outline" size={16} color={c.textSub} />
         <TextInput
-          style={[s.buscador, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+          style={[s.buscaInp, { color: c.text }]}
           value={busqueda}
           onChangeText={setBusqueda}
-          placeholder="Buscar por nombre, contacto o notas..."
+          placeholder="Buscar por nombre, contacto o notas…"
           placeholderTextColor={c.placeholder}
         />
       </View>
 
-      <View style={s.chipsRow}>
-        {([
-          { value: 'todos', label: `Todos (${lista.length})` },
-          { value: 'SI', label: 'En app' },
-          { value: 'PENDIENTE', label: 'Pendiente' },
-          { value: 'sin', label: 'Sin conectar' },
-        ] as { value: Filtro; label: string }[]).map(op => (
-          <TouchableOpacity
-            key={op.value}
-            style={[s.chip, { borderColor: c.border, backgroundColor: c.card }, filtro === op.value && s.chipActivo]}
-            onPress={() => setFiltro(op.value)}
-          >
-            <Text style={[s.chipText, { color: c.textSub }, filtro === op.value && s.chipTextActivo]}>{op.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipsScroll} contentContainerStyle={s.chipsRow}>
+        {CHIPS.map(op => {
+          const on = filtro === op.value
+          return (
+            <TouchableOpacity
+              key={op.value}
+              style={[s.chip, { borderColor: c.border, backgroundColor: c.card }, on && s.chipOn]}
+              onPress={() => setFiltro(on ? 'todos' : op.value)}
+            >
+              <Text style={[s.chipTxt, { color: c.textSub }, on && s.chipTxtOn]}>{op.label} · {op.n}</Text>
+            </TouchableOpacity>
+          )
+        })}
+        <TouchableOpacity
+          style={[s.chip, s.chipOrden, { borderColor: c.border, backgroundColor: c.card }]}
+          onPress={() => setOrden(o => o === 'relevancia' ? 'nombre' : 'relevancia')}
+        >
+          <Ionicons name={orden === 'relevancia' ? 'star' : 'text-outline'} size={12} color={c.textSub} />
+          <Text style={[s.chipTxt, { color: c.textSub }]}>
+            {orden === 'relevancia' ? 'Por relevancia' : 'Por nombre'}
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
 
       {loading ? (
         <ActivityIndicator color="#c9a84c" size="large" style={{ marginTop: 40 }} />
@@ -249,77 +324,60 @@ export default function AdminColaboradores() {
       ) : (
         <ScrollView contentContainerStyle={s.lista} refreshControl={refreshControl}>
           {listaFiltrada.map(col => {
-            const badge = badgeEnApp(col.en_app)
-            const esLink = !!col.link && (col.link.startsWith('http://') || col.link.startsWith('https://'))
+            const rel = relevanciaDe(col.relevancia)
+            const tel = telefonoDe(col.contacto)
+            const marcado = !!col.actualizado_at
             return (
-              <View key={col.id} style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
-                <View style={[s.cardAccent, { backgroundColor: badge.dot }]} />
-                <View style={s.cardBody}>
-                  <View style={s.cardTop}>
-                    <View style={[s.avatar, { backgroundColor: badge.dot + '22' }]}>
-                      <Text style={[s.avatarText, { color: badge.color }]}>{iniciales(col.nombre)}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.cardNombre, { color: c.text }]} numberOfLines={1}>{col.nombre}</Text>
-                      {col.contacto && <Text style={[s.cardContacto, { color: c.textMute }]} numberOfLines={1}>📞 {col.contacto}</Text>}
-                    </View>
-                    <View style={[s.badge, { backgroundColor: badge.bg }]}>
-                      <View style={[s.badgeDot, { backgroundColor: badge.dot }]} />
-                      <Text style={[s.badgeText, { color: badge.color }]}>{badge.texto}</Text>
-                    </View>
-                  </View>
-
-                  <View style={s.cardMetaRow}>
-                    {esLink && (
-                      <TouchableOpacity style={[s.linkChip, { borderColor: c.border }]} onPress={() => abrirLink(col.link!)}>
-                        <Text style={s.linkChipText}>🔗 Ver catálogo</Text>
-                      </TouchableOpacity>
-                    )}
-                    {!esLink && col.link && <Text style={[s.cardMeta, { color: c.textMute }]} numberOfLines={1}>{col.link}</Text>}
-                    {col.fecha_actualizacion && <Text style={[s.cardMeta, { color: c.textMute }]}>🗓 Sheet: {col.fecha_actualizacion}</Text>}
-                  </View>
-
-                  {col.estado_subida && <Text style={s.estadoAviso}>⚠️ {col.estado_subida}</Text>}
-                  {col.notas && <Text style={[s.cardNotas, { color: c.textMute }]} numberOfLines={2}>📝 {col.notas}</Text>}
-
-                  <View style={[s.cardFooter, { borderTopColor: c.border }]}>
-                    {col.actualizado_at ? (
-                      <View style={s.actualizadoWrap}>
-                        <TouchableOpacity
-                          style={[s.actualizadoBtn, s.actualizadoBtnOn]}
-                          onPress={() => marcarActualizado(col)}
-                          disabled={marcando === col.id}
-                        >
-                          <Text style={s.actualizadoBtnOnText}>✓ Actualizado {haceTiempo(col.actualizado_at)}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={s.btnQuitarCheck} onPress={() => quitarActualizado(col)} disabled={marcando === col.id}>
-                          <Text style={[s.btnQuitarCheckText, { color: c.textMute }]}>✕</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={[s.actualizadoBtn, { borderColor: c.border }]}
-                        onPress={() => marcarActualizado(col)}
-                        disabled={marcando === col.id}
-                      >
-                        {marcando === col.id
-                          ? <ActivityIndicator size="small" color="#1a6470" />
-                          : <Text style={[s.actualizadoBtnText, { color: c.textSub }]}>○ Marcar actualizado hoy</Text>
-                        }
-                      </TouchableOpacity>
-                    )}
-                    <View style={{ flex: 1 }} />
-                    <TouchableOpacity style={s.btnEdit} onPress={() => abrirEditar(col)}>
-                      <Text style={s.btnEditText}>✏</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.btnDel} onPress={() => eliminar(col)}>
-                      <Text style={s.btnDelText}>🗑</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
+              <FilaDirectorio
+                key={col.id}
+                acento={colorEnApp(col.en_app)}
+                inicial={iniciales(col.nombre)}
+                titulo={col.nombre}
+                onPress={() => abrirEditar(col)}
+                // Junto al nombre va UNA sola cosa: la relevancia, que es lo
+                // que se vino a ver. El estado de conexión ya se lee en el
+                // color del borde, así que baja al segundo renglón: con dos
+                // pastillas arriba el nombre se cortaba en "MARIFER ...".
+                pastillas={[
+                  rel && { texto: rel.etiqueta, color: rel.color, solida: rel.solida, icono: 'star' as const },
+                ]}
+                meta={
+                  <MetaFila partes={[
+                    col.en_app !== 'SI'
+                      ? <Text key="app" style={[s.aviso, { color: enCard(colorEnApp(col.en_app)) }]}>
+                          {col.en_app === 'PENDIENTE' ? 'Pendiente' : 'Sin conectar'}
+                        </Text>
+                      : null,
+                    col.contacto,
+                    marcado ? `✓ ${haceTiempo(col.actualizado_at!)}` : null,
+                    col.estado_subida
+                      ? <Text key="est" style={[s.aviso, { color: enCard('#c0392b'), flexShrink: 1 }]} numberOfLines={1}>{col.estado_subida}</Text>
+                      : null,
+                    col.notas,
+                  ]} />
+                }
+                acciones={[
+                  {
+                    icono: marcado ? 'checkmark-circle' : 'ellipse-outline',
+                    color: marcado ? '#1e7e34' : '#64748b',
+                    onPress: () => marcarActualizado(col),
+                    etiqueta: marcado ? 'Volver a marcar actualizado hoy' : 'Marcar actualizado hoy',
+                  },
+                  !!tel && {
+                    icono: 'logo-whatsapp' as const, color: '#128C7E',
+                    onPress: () => Linking.openURL(`https://wa.me/${tel}`),
+                    etiqueta: 'WhatsApp',
+                  },
+                  !!col.link && {
+                    icono: 'link-outline' as const, color: '#1976D2',
+                    onPress: () => abrirLink(col.link!),
+                    etiqueta: 'Ver catálogo',
+                  },
+                ]}
+              />
             )
           })}
+          {marcando && <ActivityIndicator size="small" color="#1a6470" style={{ marginTop: 6 }} />}
         </ScrollView>
       )}
 
@@ -327,6 +385,7 @@ export default function AdminColaboradores() {
       <Modal visible={modal} transparent animationType="slide" onRequestClose={() => setModal(false)}>
         <View style={s.modalOverlay}>
           <ScrollView style={[s.modalBox, { backgroundColor: c.card }]} contentContainerStyle={{ gap: 4 }}>
+            <View style={s.handle} />
             <Text style={[s.modalTitulo, { color: c.text }]}>{editando ? 'Editar colaborador' : 'Nuevo colaborador'}</Text>
 
             <Text style={[s.fieldLabel, { color: c.textSub }]}>Nombre *</Text>
@@ -337,6 +396,29 @@ export default function AdminColaboradores() {
               placeholder="Ej. Spazio Vitale"
               placeholderTextColor={c.placeholder}
             />
+
+            <Text style={[s.fieldLabel, { color: c.textSub }]}>¿Qué tan relevante es?</Text>
+            <View style={s.relOpciones}>
+              {RELEVANCIA_OPCIONES.map(op => {
+                const on = (form.relevancia ?? 0) === op.valor
+                const col = op.valor === 0 ? c.textSub : RELEVANCIA[op.valor as 1 | 2].color
+                return (
+                  <TouchableOpacity
+                    key={op.valor}
+                    style={[s.relOpcion, { borderColor: on ? col : c.inputBorder, backgroundColor: on ? col + '14' : c.input }]}
+                    onPress={() => setForm(f => ({ ...f, relevancia: op.valor }))}
+                  >
+                    <View style={[s.relRadio, { borderColor: on ? col : c.border }]}>
+                      {on && <View style={[s.relRadioDot, { backgroundColor: col }]} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.relTit, { color: on ? col : c.text }]}>{op.etiqueta}</Text>
+                      <Text style={[s.relSub, { color: c.textSub }]}>{op.desc}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
 
             <Text style={[s.fieldLabel, { color: c.textSub }]}>Contacto</Text>
             <TextInput
@@ -379,23 +461,6 @@ export default function AdminColaboradores() {
               placeholderTextColor={c.placeholder}
             />
 
-            <Text style={[s.fieldLabel, { color: c.textSub }]}>Fecha de actualización (del sheet, texto libre)</Text>
-            <TextInput
-              style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-              value={form.fecha_actualizacion ?? ''}
-              onChangeText={v => setForm(f => ({ ...f, fecha_actualizacion: v }))}
-              placeholder="dd/mm/aaaa"
-              placeholderTextColor={c.placeholder}
-            />
-
-            <Text style={[s.fieldLabel, { color: c.textSub }]}>Última casa subida</Text>
-            <TextInput
-              style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-              value={form.ultima_casa_subida ?? ''}
-              onChangeText={v => setForm(f => ({ ...f, ultima_casa_subida: v }))}
-              placeholderTextColor={c.placeholder}
-            />
-
             <Text style={[s.fieldLabel, { color: c.textSub }]}>Notas</Text>
             <TextInput
               style={[s.input, s.textarea, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
@@ -406,6 +471,15 @@ export default function AdminColaboradores() {
               multiline
             />
 
+            {editando?.actualizado_at && (
+              <TouchableOpacity style={s.quitarMarca} onPress={() => quitarActualizado(editando)}>
+                <Ionicons name="close-circle-outline" size={15} color={c.textSub} />
+                <Text style={[s.quitarMarcaTxt, { color: c.textSub }]}>
+                  Quitar la marca de actualizado ({haceTiempo(editando.actualizado_at)})
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={[s.btnGuardar, guardando && { opacity: 0.5 }]}
               onPress={guardar}
@@ -413,9 +487,16 @@ export default function AdminColaboradores() {
             >
               {guardando
                 ? <ActivityIndicator color="#000" />
-                : <Text style={s.btnGuardarText}>💾 Guardar</Text>
+                : <Text style={s.btnGuardarText}>Guardar</Text>
               }
             </TouchableOpacity>
+
+            {editando && (
+              <TouchableOpacity style={s.btnEliminar} onPress={() => eliminar(editando)}>
+                <Ionicons name="trash-outline" size={15} color="#dc2626" />
+                <Text style={s.btnEliminarTxt}>Eliminar colaborador</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={s.btnCancelar} onPress={() => setModal(false)}>
               <Text style={[s.btnCancelarText, { color: c.textSub }]}>Cancelar</Text>
             </TouchableOpacity>
@@ -429,73 +510,61 @@ export default function AdminColaboradores() {
 const s = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16,
-    borderBottomWidth: 1,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+    paddingHorizontal: 16, paddingTop: 18, paddingBottom: 12,
   },
-  titulo: { fontSize: 20, fontWeight: '700', flex: 1 },
-  btnNuevo: { backgroundColor: '#c9a84c', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
-  btnNuevoText: { color: '#000', fontWeight: '700', fontSize: 13 },
-  buscadorRow: { paddingHorizontal: 16, paddingTop: 12 },
-  buscador: { borderRadius: 10, borderWidth: 1, padding: 12, fontSize: 14 },
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, marginTop: 10 },
-  chip: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6 },
-  chipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  chipText: { fontSize: 12, fontWeight: '600' },
-  chipTextActivo: { color: '#fff' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  titulo: { fontSize: 22, fontWeight: '900' },
+  sub: { fontSize: 12.5, marginTop: 2 },
+  btnNuevo: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#c9a84c', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  btnNuevoText: { color: '#000', fontWeight: '800', fontSize: 13 },
+  buscaRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16,
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9,
+  },
+  buscaInp: { flex: 1, fontSize: 14, padding: 0 },
+  // flexGrow/flexShrink en 0: sin eso la lista de abajo (que sí crece) le
+  // robaba el alto a esta fila y las pastillas salían cortadas a la mitad.
+  chipsScroll: { marginTop: 10, height: 46, flexGrow: 0, flexShrink: 0 },
+  chipsRow: { flexDirection: 'row', gap: 7, paddingHorizontal: 16, paddingRight: 24, alignItems: 'center' },
+  chip: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 11, paddingVertical: 7 },
+  chipOrden: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  chipOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  chipTxt: { fontSize: 12, fontWeight: '700' },
+  chipTxtOn: { color: '#fff' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontSize: 15 },
-  lista: { padding: 16, gap: 12 },
-  card: {
-    borderRadius: 14, borderWidth: 1, flexDirection: 'row', overflow: 'hidden',
+  lista: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28 },
+  aviso: { fontSize: 12, fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalBox: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: '90%' },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#88888855', alignSelf: 'center', marginBottom: 12 },
+  modalTitulo: { fontSize: 19, fontWeight: '900', marginBottom: 10 },
+  fieldLabel: { fontSize: 12.5, fontWeight: '700', marginBottom: 5, marginTop: 8 },
+  input: { borderRadius: 9, borderWidth: 1, padding: 12, fontSize: 14, marginBottom: 6 },
+  textarea: { minHeight: 70, textAlignVertical: 'top' },
+  relOpciones: { gap: 7, marginBottom: 6 },
+  relOpcion: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1.5, borderRadius: 11, paddingHorizontal: 12, paddingVertical: 10,
   },
-  cardAccent: { width: 4 },
-  cardBody: { flex: 1, padding: 14, gap: 8 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  avatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 13, fontWeight: '800' },
-  cardNombre: { fontSize: 15, fontWeight: '700' },
-  cardContacto: { fontSize: 11, marginTop: 1 },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4 },
-  badgeDot: { width: 6, height: 6, borderRadius: 3 },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-  cardMetaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 },
-  cardMeta: { fontSize: 12 },
-  linkChip: {
-    borderRadius: 14, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4,
-    backgroundColor: 'rgba(25,118,210,0.08)', borderColor: 'rgba(25,118,210,0.3)',
-  },
-  linkChipText: { fontSize: 11, fontWeight: '700', color: '#1976D2' },
-  estadoAviso: { fontSize: 12, color: '#c0392b' },
-  cardNotas: { fontSize: 12, fontStyle: 'italic' },
-  cardFooter: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderTopWidth: 1, paddingTop: 10, marginTop: 2,
-  },
-  actualizadoWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  actualizadoBtn: { borderRadius: 14, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6 },
-  actualizadoBtnText: { fontSize: 11, fontWeight: '600' },
-  actualizadoBtnOn: { backgroundColor: '#e6f4ea', borderColor: '#bfe3c9' },
-  actualizadoBtnOnText: { fontSize: 11, fontWeight: '700', color: '#1e7e34' },
-  btnQuitarCheck: { padding: 4 },
-  btnQuitarCheckText: { fontSize: 12, fontWeight: '700' },
-  btnEdit: { padding: 6 },
-  btnEditText: { fontSize: 16 },
-  btnDel: { padding: 6 },
-  btnDelText: { fontSize: 16 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  modalBox: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, maxHeight: '88%' },
-  modalTitulo: { fontSize: 18, fontWeight: '800', marginBottom: 12 },
-  fieldLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
-  input: { borderRadius: 8, borderWidth: 1, padding: 12, fontSize: 14, marginBottom: 10 },
-  textarea: { minHeight: 80, textAlignVertical: 'top' },
-  enAppRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  enAppChip: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6 },
+  relRadio: { width: 19, height: 19, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  relRadioDot: { width: 9, height: 9, borderRadius: 5 },
+  relTit: { fontSize: 14, fontWeight: '800' },
+  relSub: { fontSize: 11.5, marginTop: 1 },
+  enAppRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
+  enAppChip: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7 },
   enAppChipActivo: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
-  enAppChipText: { fontSize: 12, fontWeight: '600' },
+  enAppChipText: { fontSize: 12, fontWeight: '700' },
   enAppChipTextActivo: { color: '#fff' },
-  btnGuardar: { backgroundColor: '#c9a84c', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
+  quitarMarca: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, marginTop: 4 },
+  quitarMarcaTxt: { fontSize: 12.5, fontWeight: '700' },
+  btnGuardar: { backgroundColor: '#c9a84c', borderRadius: 11, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
   btnGuardarText: { color: '#000', fontWeight: '800', fontSize: 15 },
-  btnCancelar: { paddingVertical: 12, alignItems: 'center' },
-  btnCancelarText: { fontSize: 14 },
+  btnEliminar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, marginTop: 4 },
+  btnEliminarTxt: { color: '#dc2626', fontWeight: '800', fontSize: 13.5 },
+  btnCancelar: { paddingVertical: 10, alignItems: 'center' },
+  btnCancelarText: { fontSize: 14, fontWeight: '700' },
 })
