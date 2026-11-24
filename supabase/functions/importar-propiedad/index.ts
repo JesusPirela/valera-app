@@ -101,8 +101,18 @@ function parseNum(val: unknown): number | null {
   return isNaN(n) ? null : n
 }
 
-function cap(n: number | null, max: number): number | null {
-  return n !== null ? Math.min(Math.round(n), max) : null
+// Topes de credibilidad de un conteo. NO son topes de captura: si la ficha
+// dice 7 recamaras, se guardan 7. Lo que se descarta es un numero MAL LEIDO
+// (los m2 o un ano colandose como recamaras). Antes esto era Math.min, y por
+// eso el inventario entero no tenia NI UNA propiedad de 6 recamaras.
+// Mismos valores que lib/conteos.ts (las edge functions no pueden importar
+// de lib/, hay que cambiar los dos a la vez).
+const TOPE = { recamaras: 30, banos: 30, mediosBanos: 10, estacionamientos: 50 }
+
+function conteo(n: number | null, tope: number): number | null {
+  if (n === null || !isFinite(n)) return null
+  const r = Math.round(n)
+  return r < 0 || r > tope ? null : r
 }
 
 function mapTipo(s: string): 'casa' | 'departamento' | 'local' | 'terreno' | null {
@@ -370,8 +380,8 @@ function parseVinteModelos(html: string, url: string): VinteModelo[] {
       if (!nombre) continue
 
       const precio = parseNum(offer.price) ?? 0
-      const recamaras = cap(parseNum(seller.numberOfRooms), 5)
-      const banos = cap(parseNum(seller.numberOfBathroomsTotal), 4)
+      const recamaras = conteo(parseNum(seller.numberOfRooms), TOPE.recamaras)
+      const banos = conteo(parseNum(seller.numberOfBathroomsTotal), TOPE.banos)
 
       const desc = String(seller.description ?? '')
       const m2Match = desc.match(/([\d.]+)\s*m[²2]/i)
@@ -926,11 +936,11 @@ async function buscarRubaDesarrollo(url: string): Promise<{ modelos: VinteModelo
   // Specs: Ruba los guarda a nivel DESARROLLO (Extracto), no por modelo — todos
   // los modelos de un mismo desarrollo comparten recámaras/baños/cochera.
   const ext = a.Extracto ?? {}
-  const recamaras = ext.Recamaras != null ? cap(parseNum(ext.Recamaras), 6) : null
+  const recamaras = ext.Recamaras != null ? conteo(parseNum(ext.Recamaras), TOPE.recamaras) : null
   const banoF = ext.Banos != null ? parseFloat(String(ext.Banos)) : null
   const banos = banoF != null && !isNaN(banoF) ? Math.floor(banoF) : null
   const mediosBanos = banoF != null && !isNaN(banoF) && (banoF - Math.floor(banoF)) >= 0.5 ? 1 : null
-  const estacionamientos = ext.Cochera != null ? cap(parseNum(ext.Cochera), 6) : null
+  const estacionamientos = ext.Cochera != null ? conteo(parseNum(ext.Cochera), TOPE.estacionamientos) : null
 
   // Galería del desarrollo (amenidades/fachada) — Ruba no publica fotos por
   // modelo individual, todos los modelos de un desarrollo comparten galería.
@@ -1128,10 +1138,10 @@ function parseTokkoTfw(html: string, url: string): TokkoFicha | null {
     // cubierta ni la del terreno.
     m2: num(sup['total construido'] ?? det['total construido']),
     m2Terreno: num(sup['terreno'] ?? det['terreno']),
-    recamaras: cap(parseNum(basica['recamaras'] ?? det['recamaras']), 5),
-    banos: cap(parseNum(basica['banos'] ?? det['banos']), 4),
-    mediosBanos: cap(parseNum(basica['medios banos'] ?? det['medios banos']), 2),
-    estacionamientos: cap(parseNum(basica['estacionamientos']), 3),
+    recamaras: conteo(parseNum(basica['recamaras'] ?? det['recamaras']), TOPE.recamaras),
+    banos: conteo(parseNum(basica['banos'] ?? det['banos']), TOPE.banos),
+    mediosBanos: conteo(parseNum(basica['medios banos'] ?? det['medios banos']), TOPE.mediosBanos),
+    estacionamientos: conteo(parseNum(basica['estacionamientos']), TOPE.estacionamientos),
     operacion: elegida?.op ?? null,
     imagenes,
   }
@@ -1848,10 +1858,10 @@ serve(async (req) => {
         direccion: parts.length ? parts.join(', ') : '',
         zona: zonaTf,
         modelo: '',
-        recamaras: cap(parseNum(det.room_num ?? ico.number_rooms), 5),
-        banos: cap(parseNum(det.bath ?? ico.toilets), 4),
+        recamaras: conteo(parseNum(det.room_num ?? ico.number_rooms), TOPE.recamaras),
+        banos: conteo(parseNum(det.bath ?? ico.toilets), TOPE.banos),
         mediosBanos: null,
-        estacionamientos: cap(parseNum(det.garage ?? ico.garages), 3),
+        estacionamientos: conteo(parseNum(det.garage ?? ico.garages), TOPE.estacionamientos),
         m2: areaVal ? String(Math.round(areaVal)) : '',
         m2Terreno: '',
         tipo: mapTipo(String(det.property_type ?? '')),
@@ -2070,10 +2080,10 @@ serve(async (req) => {
 
         for (const b of ((np as any).basic_info ?? []) as any[]) {
           const v = parseNum(b.value)
-          if (b.key === 'suite_amount'       && recamaras       === null) recamaras       = cap(v, 5)
-          if (b.key === 'bathroom_amount'    && banos           === null) banos           = cap(v, 4)
-          if (b.key === 'toilet_amount'      && mediosBanos     === null) mediosBanos     = cap(v, 2)
-          if (b.key === 'parking_lot_amount' && estacionamientos=== null) estacionamientos= cap(v, 3)
+          if (b.key === 'suite_amount'       && recamaras       === null) recamaras       = conteo(v, TOPE.recamaras)
+          if (b.key === 'bathroom_amount'    && banos           === null) banos           = conteo(v, TOPE.banos)
+          if (b.key === 'toilet_amount'      && mediosBanos     === null) mediosBanos     = conteo(v, TOPE.mediosBanos)
+          if (b.key === 'parking_lot_amount' && estacionamientos=== null) estacionamientos= conteo(v, TOPE.estacionamientos)
         }
 
         if (!direccion) {
@@ -2165,10 +2175,10 @@ serve(async (req) => {
         if (sp) { precio = String(Math.round(sp)); operacion = 'venta' }
         else if (rp) { precio = String(Math.round(rp)); operacion = 'renta' }
         if (!operacion) operacion = np.isSale ? 'venta' : np.isRent ? 'renta' : null
-        recamaras = cap(parseNum(np.bedrooms), 5)
-        banos = cap(parseNum(np.fullBathrooms), 4)
-        mediosBanos = cap(parseNum(np.halfBathrooms), 2)
-        estacionamientos = cap(parseNum(np.parkingSpaces), 3)
+        recamaras = conteo(parseNum(np.bedrooms), TOPE.recamaras)
+        banos = conteo(parseNum(np.fullBathrooms), TOPE.banos)
+        mediosBanos = conteo(parseNum(np.halfBathrooms), TOPE.mediosBanos)
+        estacionamientos = conteo(parseNum(np.parkingSpaces), TOPE.estacionamientos)
         const cs = parseNum(np.constructionSize); if (cs) m2 = String(Math.round(cs))
         const ls = parseNum(np.lotSize); if (ls) m2Terreno = String(Math.round(ls))
         if (!tipo) tipo = mapTipo(String(np.type ?? '') + ' ' + String(np.subtype ?? ''))
@@ -2212,11 +2222,11 @@ serve(async (req) => {
           const sp = parseNum(pn.precio ?? pn.price ?? pn.precio_venta ?? pn.sale_price)
           if (sp && !precio) { precio = String(Math.round(sp)); operacion = operacion ?? 'venta' }
           const beds = parseNum(pn.recamaras ?? pn.bedrooms ?? pn.habitaciones)
-          if (beds != null && recamaras === null) recamaras = cap(beds, 5)
+          if (beds != null && recamaras === null) recamaras = conteo(beds, TOPE.recamaras)
           const bths = parseNum(pn.banos ?? pn.bathrooms ?? pn.banos_completos)
-          if (bths != null && banos === null) banos = cap(bths, 4)
+          if (bths != null && banos === null) banos = conteo(bths, TOPE.banos)
           const est = parseNum(pn.estacionamientos ?? pn.parking ?? pn.garage)
-          if (est != null && estacionamientos === null) estacionamientos = cap(est, 3)
+          if (est != null && estacionamientos === null) estacionamientos = conteo(est, TOPE.estacionamientos)
           const m2c = parseNum(pn.m2 ?? pn.area ?? pn.superficie_construida ?? pn.construccion)
           if (m2c && !m2) m2 = String(Math.round(m2c))
           const m2t = parseNum(pn.m2_terreno ?? pn.lot_size ?? pn.terreno)
@@ -2288,10 +2298,10 @@ serve(async (req) => {
       try {
         const eb = ebData
 
-        recamaras       = cap(parseNum(eb['Bedrooms']), 5)
-        banos           = cap(parseNum(eb['Bathrooms'] ?? eb['Full Bathrooms']), 4)
-        mediosBanos     = cap(parseNum(eb['Half Bathrooms'] ?? eb['Half Baths']), 2)
-        estacionamientos = cap(parseNum(eb['Parking Spaces'] ?? eb['Parking']), 3)
+        recamaras       = conteo(parseNum(eb['Bedrooms']), TOPE.recamaras)
+        banos           = conteo(parseNum(eb['Bathrooms'] ?? eb['Full Bathrooms']), TOPE.banos)
+        mediosBanos     = conteo(parseNum(eb['Half Bathrooms'] ?? eb['Half Baths']), TOPE.mediosBanos)
+        estacionamientos = conteo(parseNum(eb['Parking Spaces'] ?? eb['Parking']), TOPE.estacionamientos)
 
         const constArea = parseNum(eb['Area M2'] ?? eb['Construction M2'] ?? eb['Constructed Area'])
         if (constArea) m2 = String(constArea)
@@ -2336,9 +2346,9 @@ serve(async (req) => {
         if (propNode.description && !descripcion) descripcion = htmlText(String(propNode.description))
 
         const beds = parseNum(propNode.numberOfBedrooms ?? propNode.numberOfRooms)
-        if (beds != null && recamaras === null) recamaras = cap(beds, 5)
+        if (beds != null && recamaras === null) recamaras = conteo(beds, TOPE.recamaras)
         const baths = parseNum(propNode.numberOfBathroomsTotal ?? propNode.numberOfBathrooms)
-        if (baths != null && banos === null) banos = cap(baths, 4)
+        if (baths != null && banos === null) banos = conteo(baths, TOPE.banos)
 
         const floor = propNode.floorSize?.value ?? propNode.floorSize
         const floorN = parseNum(typeof floor === 'object' ? floor?.value : floor)
@@ -2420,30 +2430,30 @@ serve(async (req) => {
     // El spec map ya cubre reval (Tokko), Inmobay y gminmobiliaria (wpsight).
     // JSON-LD (Lamudi) tiene prioridad porque ya pobló estos campos arriba.
     if (recamaras === null) {
-      recamaras = cap(specInt('recamaras', 'dormitorios', 'habitaciones', 'recamara') ??
-        firstInt(dhtml.match(/(\d+)\s*rec[aá]maras?/i)?.[1]), 5)
+      recamaras = conteo(specInt('recamaras', 'dormitorios', 'habitaciones', 'recamara') ??
+        firstInt(dhtml.match(/(\d+)\s*rec[aá]maras?/i)?.[1]), TOPE.recamaras)
     }
     // Baños con medio en una sola cifra: "2½ Baños", "2 1/2 baños", "2.5 baños"
     // (común en constructoras como GP Vivienda) → 2 completos + 1 medio baño.
     {
       const mBanoMedio = dhtml.match(/(\d+)\s*(?:½|1\s*\/\s*2|[.,]5)\s*ba[ñn]os?/i)
       if (mBanoMedio) {
-        if (banos === null)       banos       = cap(parseInt(mBanoMedio[1], 10), 4)
+        if (banos === null)       banos       = conteo(parseInt(mBanoMedio[1], 10), TOPE.banos)
         if (mediosBanos === null) mediosBanos = 1
       }
     }
     if (banos === null) {
       const full = dhtml.match(/(\d+)\s*ba[ñn]os?\s*completos?/i)?.[1]
-      banos = cap(firstInt(full) ?? specInt('banos', 'banos completos', 'bano') ??
-        firstInt(dhtml.match(/(\d+)\s*ba[ñn]os?/i)?.[1]), 4)
+      banos = conteo(firstInt(full) ?? specInt('banos', 'banos completos', 'bano') ??
+        firstInt(dhtml.match(/(\d+)\s*ba[ñn]os?/i)?.[1]), TOPE.banos)
     }
     if (mediosBanos === null) {
-      mediosBanos = cap(specInt('medios banos', 'num medios banos', 'medio bano') ??
-        firstInt(dhtml.match(/(\d+)\s*medios?\s*ba[ñn]os?/i)?.[1]), 2)
+      mediosBanos = conteo(specInt('medios banos', 'num medios banos', 'medio bano') ??
+        firstInt(dhtml.match(/(\d+)\s*medios?\s*ba[ñn]os?/i)?.[1]), TOPE.mediosBanos)
     }
     if (estacionamientos === null) {
-      estacionamientos = cap(specInt('estacionamientos', 'estacionamiento', 'cocheras', 'cajones', 'parking', 'garage') ??
-        firstInt(dhtml.match(/(\d+)\s*(?:estacionamientos?|cajones?|parking)/i)?.[1]), 3)
+      estacionamientos = conteo(specInt('estacionamientos', 'estacionamiento', 'cocheras', 'cajones', 'parking', 'garage') ??
+        firstInt(dhtml.match(/(\d+)\s*(?:estacionamientos?|cajones?|parking)/i)?.[1]), TOPE.estacionamientos)
     }
 
     // ── 8. Superficies (construcción / terreno) ───────────────────────────────
@@ -2822,9 +2832,9 @@ serve(async (req) => {
         const carTxt = carM ? carM[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ') : ''
         if (carTxt) {
           const rec = carTxt.match(/(\d+)\s*(?:Habitacion|Rec[aá]mara|Dormitor)/i)
-          recamaras = rec ? cap(parseInt(rec[1], 10), 8) : null
+          recamaras = rec ? conteo(parseInt(rec[1], 10), TOPE.recamaras) : null
           const est = carTxt.match(/(\d+)\s*Lugares?\s+de\s+estacionamiento/i)
-          estacionamientos = est ? cap(parseInt(est[1], 10), 5) : estacionamientos
+          estacionamientos = est ? conteo(parseInt(est[1], 10), TOPE.estacionamientos) : estacionamientos
           // El sitio no siempre publica baños; si no está, no lo inventamos.
           const ba = carTxt.match(/(\d+(?:\.\d+)?)\s*Ba[nñ]os?/i)
           if (ba) { const bv = parseFloat(ba[1]); banos = Math.floor(bv); mediosBanos = (bv - Math.floor(bv) >= 0.5) ? 1 : null }

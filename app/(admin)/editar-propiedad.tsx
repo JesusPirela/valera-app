@@ -25,6 +25,8 @@ import { thumb } from '../../lib/img'
 import { useColors } from '../../lib/ThemeContext'
 import PillSelector from '../../components/ui/PillSelector'
 import DropdownModal from '../../components/ui/DropdownModal'
+import { opcionesConteo } from '../../lib/conteos'
+import { parsearFicha } from '../../lib/parsear-ficha'
 import AsesorPicker from '../../components/ui/AsesorPicker'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { COLONIAS } from '../../lib/colonias'
@@ -38,104 +40,12 @@ type ImagenExistente = { id: string; url: string; orden: number }
 // Lista unificada de imágenes (existentes + nuevas) en su orden final de visualización.
 type ImgItem = { key: string; uri: string; esExistente: boolean; id: string; ordenOriginal: number; modificada?: boolean }
 
-const RECAMARAS_OPTIONS = [
-  { value: null, label: '—' },
-  { value: 1, label: '1' },
-  { value: 2, label: '2' },
-  { value: 3, label: '3' },
-  { value: 4, label: '4' },
-  { value: 5, label: '5+' },
-]
-const BANOS_OPTIONS = [
-  { value: null, label: '—' },
-  { value: 1, label: '1' },
-  { value: 2, label: '2' },
-  { value: 3, label: '3' },
-  { value: 4, label: '4+' },
-]
-const ESTACIONAMIENTOS_OPTIONS = [
-  { value: null, label: '—' },
-  { value: 0, label: '0' },
-  { value: 1, label: '1' },
-  { value: 2, label: '2' },
-  { value: 3, label: '3+' },
-]
-const MEDIOS_BANOS_OPTIONS = [
-  { value: null, label: '—' },
-  { value: 0, label: '0' },
-  { value: 1, label: '1' },
-  { value: 2, label: '2' },
-]
-
-function parsearFicha(texto: string) {
-  const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean)
-
-  let titulo = ''
-  let direccion = ''
-  if (lineas.length > 0) {
-    const primera = lineas[0].replace(/^[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ0-9$]+/, '').trim()
-    if (primera.includes('|')) {
-      const partes = primera.split('|')
-      titulo = partes[0].trim()
-      direccion = partes[1].trim()
-    } else {
-      titulo = primera
-      const enIdx = primera.toLowerCase().lastIndexOf(' en ')
-      if (enIdx !== -1) {
-        const candidato = primera.slice(enIdx + 4).trim()
-        if (!/^(venta|renta)$/i.test(candidato)) direccion = candidato
-      }
-    }
-  }
-
-  let precio = ''
-  const mPrecio = texto.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:MXN)?/i)
-  if (mPrecio) precio = mPrecio[1].replace(/,/g, '')
-
-  // Acepta ambos órdenes: "construcción: 295 m²" y "295 m² de construcción".
-  let m2 = ''
-  let m2Terreno = ''
-  const mConst = texto.match(/construcci[oó]n\s*[:.]?\s*([\d,.]+)\s*m[²2]/i)
-    ?? texto.match(/([\d,.]+)\s*m[²2]\s*(?:de\s+)?(?:construcci[oó]n|const\.?)/i)
-  const mTerr = texto.match(/terreno\s*[:.]?\s*([\d,.]+)\s*m[²2]/i)
-    ?? texto.match(/([\d,.]+)\s*m[²2]\s*(?:de\s+)?terreno/i)
-  if (mConst) m2 = mConst[1].replace(/,/g, '')
-  if (mTerr) m2Terreno = mTerr[1].replace(/,/g, '')
-
-  let recamaras: number | null = null
-  const mRec = texto.match(/(\d+)\s*rec[aá]maras?/i)
-  if (mRec) recamaras = Math.min(parseInt(mRec[1]), 5)
-
-  let banos: number | null = null
-  const mBanos = texto.match(/(\d+)\s*ba[ñn]os?\s*(?:completos?)?(?!\s*\w*medio)/i)
-  if (mBanos) banos = Math.min(parseInt(mBanos[1]), 4)
-
-  let mediosBanos: number | null = null
-  const mMedios = texto.match(/(\d+)\s*medio\s*ba[ñn]o/i)
-  if (mMedios) mediosBanos = Math.min(parseInt(mMedios[1]), 2)
-
-  let estacionamientos: number | null = null
-  const mCochera = texto.match(/cochera\s+para\s+(\d+)/i)
-  if (mCochera) {
-    estacionamientos = Math.min(parseInt(mCochera[1]), 3)
-  } else {
-    const mEst = texto.match(/(\d+)\s*(?:autos?|estacionamientos?|lugares?)/i)
-    if (mEst) estacionamientos = Math.min(parseInt(mEst[1]), 3)
-  }
-
-  let tipo: 'casa' | 'departamento' | 'local' | 'terreno' | null = null
-  if (/departamento/i.test(titulo)) tipo = 'departamento'
-  else if (/\bcasa\b/i.test(titulo)) tipo = 'casa'
-  else if (/local/i.test(titulo)) tipo = 'local'
-  else if (/terreno/i.test(titulo)) tipo = 'terreno'
-
-  let operacion: 'venta' | 'renta' | null = null
-  const inicio = texto.slice(0, 120)
-  if (/\brenta\b/i.test(inicio)) operacion = 'renta'
-  else if (/\bventa\b/i.test(inicio)) operacion = 'venta'
-
-  return { titulo, direccion, precio, m2, m2Terreno, recamaras, banos, mediosBanos, estacionamientos, tipo, operacion }
-}
+// Las listas se arman con el valor guardado adentro (ver opcionesConteo): una
+// casa de 8 recamaras ensena 8, no se queda en blanco ni se recorta a "5+".
+const RECAMARAS_RANGO = [0, 10] as const
+const BANOS_RANGO = [0, 10] as const
+const MEDIOS_BANOS_RANGO = [0, 4] as const
+const ESTACIONAMIENTOS_RANGO = [0, 10] as const
 
 // A partir de un texto de ubicación/dirección, devuelve el valor de `zona`:
 // las 3 ciudades con opción propia usan su enum; cualquier otro estado se
@@ -1447,17 +1357,17 @@ export default function EditarPropiedad() {
         <View style={styles.dosColumnas}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Recámaras</Text>
-            <DropdownModal options={RECAMARAS_OPTIONS} value={recamaras} onChange={setRecamaras} />
+            <DropdownModal options={opcionesConteo(...RECAMARAS_RANGO, recamaras)} value={recamaras} onChange={setRecamaras} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Baños completos</Text>
-            <DropdownModal options={BANOS_OPTIONS} value={banos} onChange={setBanos} />
+            <DropdownModal options={opcionesConteo(...BANOS_RANGO, banos)} value={banos} onChange={setBanos} />
           </View>
         </View>
         <View style={styles.dosColumnas}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Medios baños</Text>
-            <DropdownModal options={MEDIOS_BANOS_OPTIONS} value={mediosBanos} onChange={setMediosBanos} />
+            <DropdownModal options={opcionesConteo(...MEDIOS_BANOS_RANGO, mediosBanos)} value={mediosBanos} onChange={setMediosBanos} />
           </View>
           <View style={{ flex: 1 }} />
         </View>
@@ -1489,7 +1399,7 @@ export default function EditarPropiedad() {
         <View style={styles.dosColumnas}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Estacionamientos</Text>
-            <DropdownModal options={ESTACIONAMIENTOS_OPTIONS} value={estacionamientos} onChange={setEstacionamientos} />
+            <DropdownModal options={opcionesConteo(...ESTACIONAMIENTOS_RANGO, estacionamientos)} value={estacionamientos} onChange={setEstacionamientos} />
           </View>
           <View style={{ flex: 1 }} />
         </View>

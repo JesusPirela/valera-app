@@ -10,6 +10,7 @@
     "lint": "eslint \"app/**/*.{ts,tsx}\" \"components/**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
     "test:importar": "node scripts/test-importar.mjs",
+    "test:ficha": "node scripts/test-ficha.mjs",
     "smoke": "node scripts/smoke-web.mjs"
   },
   "dependencies": {
