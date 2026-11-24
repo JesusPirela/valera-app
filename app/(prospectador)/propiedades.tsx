@@ -1293,8 +1293,13 @@ export default function ProspectadorPropiedades() {
   // (veces > 0), la destacada se revuelve con las demás: ya cumplió su función
   // de recordatorio. Siguen con su banner dorado y se ven todas con el filtro
   // "Destacadas".
+  //
+  // Si está "saturada" (tope de publicaciones del mes entre todo el equipo,
+  // sello "EN PAUSA" en la tarjeta) nadie la puede publicar ahora mismo, así
+  // que empujarla arriba no sirve de nada — se revuelve con las demás hasta
+  // que se libere sola.
   const destacadaPendiente = (p: Propiedad) =>
-    _estaDestacada(p) && (publicaciones[p.id] ?? 0) === 0
+    _estaDestacada(p) && (publicaciones[p.id] ?? 0) === 0 && !saturadasMap?.[p.id]
 
   if (esAdmin) {
     // Admin: destacadas pendientes primero, resto en orden del servidor (fecha desc).
@@ -1343,22 +1348,26 @@ export default function ProspectadorPropiedades() {
       }
     }
   } else if (filtroOrden === 'mas_publicadas') {
-    // Más publicadas primero (conteo global del equipo), destacadas siempre arriba.
-    const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
-    const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
+    // Más publicadas primero (conteo global del equipo), destacadas siempre
+    // arriba — salvo que estén saturadas: si nadie la puede publicar ahora
+    // mismo, no tiene caso forzarla al frente.
+    const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p) && !saturadasMap?.[p.id])
+    const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p) || saturadasMap?.[p.id])
     const ordenadas = [...noDestacadas].sort((a, b) => b.total_publicadores - a.total_publicadores)
     propiedadesFiltradas = [...destacadas, ...ordenadas]
   } else if (filtroOrden === 'menos_publicadas') {
-    // Menos publicadas primero (0 van al inicio), destacadas siempre arriba.
-    const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
-    const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
+    // Menos publicadas primero (0 van al inicio), destacadas siempre arriba
+    // salvo saturadas (ver comentario en 'mas_publicadas').
+    const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p) && !saturadasMap?.[p.id])
+    const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p) || saturadasMap?.[p.id])
     const ordenadas = [...noDestacadas].sort((a, b) => a.total_publicadores - b.total_publicadores)
     propiedadesFiltradas = [...destacadas, ...ordenadas]
   } else if (filtroOrden === 'mix' && userId) {
     // Mix inteligente: bloques de [2A, 2B, 1C] intercalados, con FNV-1 por usuario.
     // Grupo A: nunca publicadas (0), Grupo B: poco publicadas (1-3), Grupo C: muy publicadas (>3)
-    const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p))
-    const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p))
+    // Destacadas saturadas (ver arriba) se revuelven con el resto en vez de ir al frente.
+    const destacadas = propiedadesFiltradas.filter(p => _estaDestacada(p) && !saturadasMap?.[p.id])
+    const noDestacadas = propiedadesFiltradas.filter(p => !_estaDestacada(p) || saturadasMap?.[p.id])
     const grupoA = noDestacadas.filter(p => p.total_publicadores === 0)
     const grupoB = noDestacadas.filter(p => p.total_publicadores >= 1 && p.total_publicadores <= 3)
     const grupoC = noDestacadas.filter(p => p.total_publicadores > 3)
@@ -1393,7 +1402,7 @@ export default function ProspectadorPropiedades() {
     propiedades, busqueda, idsPorDescripcion, filtroPublicadas, publicaciones, pubData, filtroNueva,
     filtroExclusiva, filtroDestacada, filtroDirecta, filtroOperacion, filtroTipo, filtroRecamaras, filtroAmueblada, precioMinNum, precioMaxNum,
     filtroFechaPreset, fechaDesdeCustom, fechaHastaCustom, ordenPrecio, esAdmin, puedeVerDirectas,
-    viewsData, userId, filtroEstado, filtroOrden,
+    viewsData, userId, filtroEstado, filtroOrden, saturadasMap,
   ])
 
   // Al cambiar cualquier filtro/búsqueda, volver al primer bloque visible
