@@ -1318,11 +1318,6 @@ export default function ProspectadorPropiedades() {
     })
   }
 
-  // Vendidas siempre al fondo, por debajo de cualquier otro criterio de orden.
-  propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
-    (esCerrada(a.estado) ? 1 : 0) - (esCerrada(b.estado) ? 1 : 0)
-  )
-
   // Garantía final: ningún sort puede colarse sobre el filtro de operación.
   if (filtroOperacion) propiedadesFiltradas = propiedadesFiltradas.filter(p => p.operacion === filtroOperacion)
 
@@ -1382,6 +1377,15 @@ export default function ProspectadorPropiedades() {
     }
     propiedadesFiltradas = [...destacadas, ...mezclados]
   }
+
+  // Vendidas/rentadas siempre al fondo, por debajo de cualquier otro criterio
+  // de orden — va al final de todo (después de filtroOrden) porque ese bloque
+  // reconstruye el listado completo y antes se perdía este orden: una cerrada
+  // con 0 publicadores caía en el shuffle de "nunca publicadas" y aparecía
+  // primero, aunque ya no se pueda ofrecer.
+  propiedadesFiltradas = [...propiedadesFiltradas].sort((a, b) =>
+    (esCerrada(a.estado) ? 1 : 0) - (esCerrada(b.estado) ? 1 : 0)
+  )
 
   return propiedadesFiltradas
   // eslint-disable-next-line react-hooks/exhaustive-deps
