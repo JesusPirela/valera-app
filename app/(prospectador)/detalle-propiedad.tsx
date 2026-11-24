@@ -26,6 +26,7 @@ import { esPlusOMejor, esStaffSupervision, esAdmin, puedeVerPublicaciones } from
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb, proxyImagen, imagenParaGaleria } from '../../lib/img'
 import { rotarFotos, lotePublicacion, TOPE_LOTE, MINIMO_PARA_RECORTAR } from '../../lib/orden-fotos'
+import { variarDescripcion, mismoContenido } from '../../lib/variacion-descripcion'
 import {
   IdiomaFicha, tf, tipoOperacionLabel, formatPrecioLang, traducirFicha,
 } from '../../lib/ficha-i18n'
@@ -464,13 +465,6 @@ export default function DetallePropiedad() {
   const [generandoPDF, setGenerandoPDF] = useState(false)
   const [descripcionCopiada, setDescripcionCopiada] = useState(false)
   const [origenCopiado, setOrigenCopiado] = useState(false)
-  // La versión de la descripción que le toca a ESTA persona para ESTA propiedad.
-  // Se trae al abrir la ficha, no al tocar "Copiar": en web el portapapeles solo
-  // acepta escrituras dentro del gesto del usuario, y si el botón se pone a
-  // esperar una consulta primero, el navegador lo bloquea y la copia falla
-  // callada. Null = la propiedad todavía no tiene versiones generadas → se copia
-  // la descripción guardada, igual que antes.
-  const [varianteDesc, setVarianteDesc] = useState<string | null>(null)
   const [togglingPublicacion, setTogglingPublicacion] = useState(false)
   const [uid, setUid] = useState<string | null>(null)
   // El botón de publicar de DENTRO usa exactamente la misma fuente que el de FUERA
@@ -906,25 +900,6 @@ export default function DetallePropiedad() {
     }
   }
 
-  // Facebook Marketplace rechaza publicaciones duplicadas, y la misma propiedad
-  // la publican 8.3 personas en promedio (máximo medido: 58), casi siempre
-  // pegando este mismo texto. Por eso cada persona recibe una versión distinta
-  // del banco (propiedad_descripcion_variantes): misma información, otra
-  // redacción. La misma persona siempre recibe la suya, así que si vuelve a
-  // copiar le sale igual.
-  useEffect(() => {
-    let vigente = true
-    setVarianteDesc(null)
-    if (!propiedad?.id) return
-    supabase.rpc('variante_descripcion', { p_propiedad_id: propiedad.id })
-      .then(({ data, error }) => {
-        // supabase.rpc no lanza: devuelve { error }. Si falla, se queda en null
-        // y se copia la descripción guardada.
-        if (vigente && !error && typeof data === 'string' && data.trim()) setVarianteDesc(data)
-      })
-    return () => { vigente = false }
-  }, [propiedad?.id])
-
   // Abrir el anuncio original. En web se abre en pestaña nueva para no perder
   // la ficha; en el teléfono lo manda al navegador.
   function abrirUrlOrigen() {
@@ -948,7 +923,25 @@ export default function DetallePropiedad() {
 
   async function copiarDescripcion() {
     if (!propiedad?.descripcion) return
-    const texto = `ID: ${propiedad.codigo}\n\n${varianteDesc ?? propiedad.descripcion}`
+    // Facebook Marketplace rechaza publicaciones duplicadas, y la misma
+    // propiedad la publican 8.3 personas en promedio (maximo medido: 58),
+    // casi siempre pegando este mismo texto. Por eso cada persona recibe los
+    // bloques en otro orden.
+    //
+    // Se reacomoda AQUI, sin consultar nada: el portapapeles del navegador
+    // solo acepta escrituras dentro del gesto del usuario, y si el boton se
+    // pone a esperar una consulta primero, la copia falla callada.
+    //
+    // Antes esto venia de un banco de versiones reescritas por IA. Se retiro
+    // el 24/nov/2026: el 17% afirmaba amenidades que la propiedad no tiene y
+    // nadie las revisaba, porque se copiaban ya sustituidas. Ahora no hay
+    // texto nuevo que revisar: son los mismos renglones en otro orden.
+    const cuerpo = variarDescripcion(propiedad.descripcion, propiedad.id, uid)
+    // Guardarrail: si por lo que sea el reacomodo no dijera exactamente lo
+    // mismo, se copia la descripcion guardada. Nunca se publica algo que no
+    // sea lo que la propiedad dice.
+    const seguro = mismoContenido(propiedad.descripcion, cuerpo) ? cuerpo : propiedad.descripcion
+    const texto = `ID: ${propiedad.codigo}\n\n${seguro}`
     if (Platform.OS === 'web') {
       try { await navigator.clipboard.writeText(texto) } catch { /* ignorar */ }
     } else {
