@@ -1455,7 +1455,7 @@ export default function CitasVenta() {
           <Text style={[st.lotesHint, { color: c.textMute }]}>
             Ajusta los filtros de arriba (fecha, búsqueda, columnas) para elegir QUIÉNES entran a los lotes; esto solo los agrupa, de la cita más vieja a la más reciente.
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator style={{ width: '100%' }} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
             {lotes.map((grupo, i) => {
               const conFecha = grupo.filter(f => f.fecha_cita)
               const masVieja = conFecha[0]?.fecha_cita
