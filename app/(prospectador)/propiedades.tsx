@@ -179,7 +179,8 @@ const esExclusiva = (p: {
 const PropiedadCard = memo(function PropiedadCard({
   item, width, veces, isToggling, destacada, esAdmin, puedeVerBadgeDirecta, primaryColor, acento,
   cardBg, cardBorder, isOnline, imgOpts, empresaMatriz, totalPublicadores,
-  isNuevaParaTi, isUnlocked, saturada, miLibreDesde, onOpen, onShare, onPublish, onZoom,
+  isNuevaParaTi, isUnlocked, saturada, miLibreDesde, avisoLibre, onAvisarme,
+  onOpen, onShare, onPublish, onZoom,
 }: {
   item: Propiedad; width?: number; veces: number; isToggling: boolean
   destacada: boolean; esAdmin: boolean; puedeVerBadgeDirecta: boolean; primaryColor: string
@@ -206,6 +207,16 @@ const PropiedadCard = memo(function PropiedadCard({
    * un tercio de los toques caían ahí y se leía como "no me registra nada".
    */
   miLibreDesde?: string | null
+  /**
+   * Si ya pedí que me avisen cuando esta propiedad salga de pausa.
+   *
+   * Hasta ahora, al tocar "⏸ Muy publicada" salía la explicación con la
+   * fecha y ahí se acababa: había que acordarse solo de volver ese día.
+   * Nadie se acuerda, y la propiedad se libera sin que nadie la aproveche.
+   */
+  avisoLibre: boolean
+  /** Prende o apaga ese aviso. */
+  onAvisarme: (id: string, prender: boolean) => void
   onOpen: (id: string) => void; onShare: (codigo: string) => void
   onPublish: (id: string) => void; onZoom: (url: string | null) => void
 }) {
@@ -228,8 +239,34 @@ const PropiedadCard = memo(function PropiedadCard({
       'Cuando varios publicamos la misma propiedad en el mismo mes, Facebook lo toma como spam y empieza a rechazar los anuncios de TODOS, no solo el de esa propiedad.\n\n' +
       `Se vuelve a habilitar el ${fechaLibreSaturada}.\n\n` +
       'Mientras tanto sí puedes entrar a verla, copiar la ficha y descargar las fotos. Lo único que no se puede todavía es publicarla.'
-    if (Platform.OS === 'web') window.alert(msg)
-    else Alert.alert('Mejor no publiques esta todavía', msg, [{ text: 'Entendido' }])
+
+    // La fecha se dice, pero NO se promete: si alguien más la publica antes,
+    // el desbloqueo se corre 30 días. Por eso el aviso no se dispara en la
+    // fecha, se dispara cuando la propiedad de verdad sale de pausa.
+    const yaAvisando = '\n\n🔔 Ya te voy a avisar en cuanto se libere.'
+    const ofrecer = '\n\n¿Quieres que te avise en cuanto se libere?'
+
+    if (Platform.OS === 'web') {
+      // window.alert no tiene botones: para preguntar hace falta confirm.
+      if (avisoLibre) {
+        if (window.confirm(`${msg}${yaAvisando}\n\n¿Quitar el aviso?`)) onAvisarme(item.id, false)
+      } else if (window.confirm(`${msg}${ofrecer}`)) {
+        onAvisarme(item.id, true)
+      }
+      return
+    }
+
+    if (avisoLibre) {
+      Alert.alert('Mejor no publiques esta todavía', msg + yaAvisando, [
+        { text: 'Quitar el aviso', style: 'destructive', onPress: () => onAvisarme(item.id, false) },
+        { text: 'Dejarlo así', style: 'cancel' },
+      ])
+    } else {
+      Alert.alert('Mejor no publiques esta todavía', msg + ofrecer, [
+        { text: '🔔 Avísame', onPress: () => onAvisarme(item.id, true) },
+        { text: 'No, gracias', style: 'cancel' },
+      ])
+    }
   }
 
   return (
@@ -397,6 +434,13 @@ const PropiedadCard = memo(function PropiedadCard({
             </Text>
             <Text style={styles.saturadaAvisoLibre}>
               Se libera el {fechaLibreSaturada}. Mientras tanto puedes entrar, copiar la ficha y bajar las fotos.
+            </Text>
+            {/* Que el aviso puesto se VEA en la tarjeta, no solo dentro del
+                cuadro de diálogo: si no, no hay forma de saber si quedó. */}
+            <Text style={avisoLibre ? styles.saturadaAvisoTimbre : styles.saturadaAvisoOferta}>
+              {avisoLibre
+                ? '🔔 Te aviso en cuanto se libere.'
+                : 'Toca aquí si quieres que te avise cuando se libere.'}
             </Text>
           </TouchableOpacity>
         )}
@@ -703,6 +747,25 @@ export default function ProspectadorPropiedades() {
       return Object.fromEntries((data ?? []).map((r: any) => [r.propiedad_id, {
         veces: r.veces, personas: r.personas, libre_desde: r.libre_desde,
       }]))
+    },
+    staleTime: 5 * 60_000,
+  })
+
+  // Los avisos de "avísame cuando se libere" que tengo pendientes.
+  //
+  // Son poquísimos (uno por propiedad que alguien decidió esperar) y la
+  // tabla trae RLS de dueño, así que se lee directo sin RPC. Se refresca a
+  // la par de las saturadas: son la misma conversación.
+  const { data: avisosLibre } = useQuery<Set<string>>({
+    queryKey: ['avisos-propiedad-libre', queryData?.userId ?? null],
+    enabled: !!queryData?.userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('propiedad_aviso_libre')
+        .select('propiedad_id')
+        .is('avisado_at', null)
+      if (error) throw error
+      return new Set((data ?? []).map((r: any) => r.propiedad_id as string))
     },
     staleTime: 5 * 60_000,
   })
@@ -1491,6 +1554,44 @@ export default function ProspectadorPropiedades() {
   const onPublishCard = useCallback((id: string) => publicarRef.current(id), [])
   const onZoomCard = useCallback((url: string | null) => setImagenModal(url), [])
 
+  // Prende o apaga el aviso de "ya se liberó esta propiedad".
+  //
+  // La lista se actualiza ANTES de que conteste el servidor: el toque viene
+  // de un cuadro de diálogo que ya se cerró, así que sin esto la tarjeta se
+  // queda igual un segundo y parece que no se guardó.
+  const avisarmeRef = useRef<(id: string, prender: boolean) => void>(() => {})
+  avisarmeRef.current = async (id: string, prender: boolean) => {
+    const uid = queryData?.userId
+    if (!uid) return
+    const clave = ['avisos-propiedad-libre', uid]
+    const antes = queryClient.getQueryData<Set<string>>(clave) ?? new Set<string>()
+    const despues = new Set(antes)
+    if (prender) despues.add(id); else despues.delete(id)
+    queryClient.setQueryData(clave, despues)
+
+    const { error } = prender
+      ? await supabase.from('propiedad_aviso_libre')
+          .upsert({ propiedad_id: id, user_id: uid }, { onConflict: 'propiedad_id,user_id' })
+      : await supabase.from('propiedad_aviso_libre')
+          .delete().eq('propiedad_id', id).eq('user_id', uid)
+
+    if (error) {
+      // Se deshace lo pintado: mentir diciendo que el aviso quedó puesto es
+      // peor que no ofrecerlo, porque la propiedad se libera y nadie se
+      // enteró.
+      queryClient.setQueryData(clave, antes)
+      const msg = 'No se pudo guardar el aviso. Revisa tu conexión y vuelve a intentarlo.'
+      if (Platform.OS === 'web') window.alert(msg)
+      else Alert.alert('El aviso no quedó', msg, [{ text: 'Entendido' }])
+      return
+    }
+    if (prender && Platform.OS !== 'web') {
+      Alert.alert('🔔 Listo', 'Te aviso en cuanto esta propiedad salga de pausa.', [{ text: 'Va' }])
+    }
+  }
+  const onAvisarmeCard = useCallback(
+    (id: string, prender: boolean) => avisarmeRef.current(id, prender), [])
+
   const renderCard = (item: Propiedad, width?: number) => (
     <PropiedadCard
       key={item.id}
@@ -1513,6 +1614,8 @@ export default function ProspectadorPropiedades() {
       isUnlocked={esAdmin || desbloqueadas.has(item.id) || (publicaciones[item.id] ?? 0) > 0}
       saturada={saturadasMap?.[item.id] ?? null}
       miLibreDesde={bloqueosMios[item.id] ?? null}
+      avisoLibre={avisosLibre?.has(item.id) ?? false}
+      onAvisarme={onAvisarmeCard}
       onOpen={onOpenCard}
       onShare={onShareCard}
       onPublish={onPublishCard}
@@ -2405,6 +2508,12 @@ const styles = StyleSheet.create({
   // La fecha, en negritas y aparte: es el dato que la gente busca en ese
   // recuadro, y antes había que tocar para verlo.
   saturadaAvisoLibre: { fontSize: 10.5, fontWeight: '800', color: '#7c2d12', lineHeight: 14.5, marginTop: 3 },
+  // El recordatorio ya está puesto. Verde medido contra el ámbar del aviso
+  // (#15803d sobre #fff7ed = 4.63:1, AA de texto), no elegido a ojo.
+  saturadaAvisoTimbre: { fontSize: 10.5, fontWeight: '800', color: '#15803d', lineHeight: 14.5, marginTop: 3 },
+  // La invitación, en el mismo café del aviso y sin negritas para que no le
+  // compita a la fecha. #9a3412 sobre #fff7ed = 5.89:1.
+  saturadaAvisoOferta: { fontSize: 10.5, fontWeight: '600', color: '#9a3412', lineHeight: 14.5, marginTop: 3, textDecorationLine: 'underline' },
   // Ámbar sólido: se lee igual en claro y en oscuro, y dice "ojo" sin
   // parecer un botón roto.
   publicadaBtnSaturada: { backgroundColor: '#fef3c7', borderColor: '#d97706' },
