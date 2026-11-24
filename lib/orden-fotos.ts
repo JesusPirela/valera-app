@@ -55,6 +55,28 @@ export function rotarFotos<T>(fotos: T[], propiedadId: string, userId: string | 
 /** Cuántas fotos lleva el lote. Por debajo de esto no se recorta nada. */
 export const TOPE_LOTE = 20
 
+/**
+ * Desde cuántas fotos vale la pena recortar.
+ *
+ * Recortar solo sirve si los dos lotes salen DISTINTOS. Con la primera foto
+ * fija y 19 elegidas al azar de las N-1 restantes, dos personas comparten en
+ * promedio 1 + 19²/(N-1) fotos de las 20:
+ *
+ *   N = 21 →  19.1 de 20 (95% iguales)  ← recortar no separa nada
+ *   N = 24 →  16.7 de 20 (84%)
+ *   N = 26 →  15.4 de 20 (77%)
+ *   N = 30 →  13.4 de 20 (67%)
+ *   N = 50 →   8.4 de 20 (42%)
+ *
+ * O sea que en una propiedad de 21 fotos se le escondía una foto a la persona
+ * para que su anuncio quedara 95% igual al del compañero: todo el costo y
+ * ninguna protección. Medido en el catálogo: 218 propiedades están entre 21 y
+ * 24 fotos y entre todas ocultaban 479 fotos a cambio de eso.
+ *
+ * Se recorta desde 26, que es donde el lote baja del 80% de coincidencia.
+ */
+export const MINIMO_PARA_RECORTAR = 26
+
 /** Generador reproducible: la misma semilla da siempre la misma secuencia. */
 function generador(semilla: number): () => number {
   let s = semilla >>> 0
@@ -81,7 +103,7 @@ function generador(semilla: number): () => number {
  * mismas y el anuncio nuevo le queda igual que el anterior.
  */
 export function lotePublicacion<T>(fotos: T[], propiedadId: string, userId: string | null): T[] {
-  if (!userId || fotos.length <= TOPE_LOTE) return rotarFotos(fotos, propiedadId, userId)
+  if (!userId || fotos.length < MINIMO_PARA_RECORTAR) return rotarFotos(fotos, propiedadId, userId)
 
   const resto = fotos.slice(1)
   const azar = generador(hash(propiedadId + userId))

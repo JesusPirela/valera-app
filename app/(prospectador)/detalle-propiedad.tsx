@@ -25,7 +25,7 @@ import CompartirFormulario from '../../components/CompartirFormulario'
 import { esPlusOMejor, esStaffSupervision, esAdmin, puedeVerPublicaciones } from '../../lib/permisos'
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb, proxyImagen, imagenParaGaleria } from '../../lib/img'
-import { rotarFotos, lotePublicacion, TOPE_LOTE } from '../../lib/orden-fotos'
+import { rotarFotos, lotePublicacion, TOPE_LOTE, MINIMO_PARA_RECORTAR } from '../../lib/orden-fotos'
 import {
   IdiomaFicha, tf, tipoOperacionLabel, formatPrecioLang, traducirFicha,
 } from '../../lib/ficha-i18n'
@@ -337,6 +337,43 @@ export default function DetallePropiedad() {
       }
     } catch { /* sin red: usar el cache */ }
     return [...(propiedad?.propiedad_imagenes ?? [])].sort((a, b) => a.orden - b.orden)
+  }
+
+  /**
+   * ¿Esta persona ya publicó ESTA propiedad?
+   *
+   * El contador de la pantalla (vecesPublicada) sale de una consulta que se
+   * vuelve a pedir COMPLETA cada vez que se abre una propiedad: todas las
+   * publicaciones de la persona, paginadas de mil en mil (2,092 filas en el
+   * usuario más activo, 17 usuarios arriba de 500). Mientras no llega, el mapa
+   * viene vacío y `vecesPublicada` vale 0, que la app lee como "no la he
+   * publicado" y recorta el lote de fotos.
+   *
+   * O sea que quien ya había publicado y le tocaban TODAS las fotos recibía
+   * nomás 20 si tocaba "Guardar todas" antes de que esa consulta terminara.
+   * Eso es el "a veces no me bajan todas": no dependía de la propiedad, sino
+   * de si la consulta había alcanzado a llegar.
+   *
+   * Aquí se pregunta por esta propiedad y esta persona nada más —una fila— así
+   * que responde al instante incluso con mala señal. Si tampoco responde, se
+   * usa lo que haya en pantalla, que es lo que se hacía antes.
+   */
+  async function yaLaPubliqueYo(): Promise<boolean> {
+    if (vecesPublicada > 0) return true
+    if (!uid || !id) return false
+    try {
+      const { data } = await conTimeout(
+        supabase.from('propiedad_publicacion')
+          .select('veces_publicada')
+          .eq('propiedad_id', id)
+          .eq('user_id', uid)
+          .maybeSingle(),
+        8_000,
+      )
+      return (data?.veces_publicada ?? 0) > 0
+    } catch {
+      return false
+    }
   }
 
   // Admin/Supervisor: quiénes publicaron esta propiedad y cuántas veces
@@ -1910,7 +1947,7 @@ export default function DetallePropiedad() {
     //
     // Si la persona eligió a mano cuáles quiere (botón "Elegir"), se respeta su
     // elección y no se recorta nada.
-    const yaPublico = vecesPublicada > 0
+    const yaPublico = await yaLaPubliqueYo()
     const imagenes = (seleccion || yaPublico)
       ? rotarFotos(crudas, propiedad.id, uid)
       : lotePublicacion(crudas, propiedad.id, uid)
@@ -2584,11 +2621,14 @@ export default function DetallePropiedad() {
           fotos de las que se ven en pantalla, sin explicación, parece una falla
           de la app: lo natural sería volver a intentarlo varias veces.
 
-          Solo sale cuando de verdad va a recortar, o sea con más de TOPE_LOTE
-          fotos y sin haber publicado todavía. Con "Elegir" no aplica, porque
-          ahí manda la selección de la persona.
+          Solo sale cuando de verdad va a recortar, o sea desde
+          MINIMO_PARA_RECORTAR fotos y sin haber publicado todavía. El umbral
+          es el MISMO que usa lotePublicacion: cuando aquí decía
+          "> TOPE_LOTE", una propiedad de 22 fotos anunciaba un recorte que ya
+          no ocurre. Con "Elegir" no aplica, porque ahí manda la selección de
+          la persona.
         */}
-        {imagenes.length > TOPE_LOTE && (
+        {imagenes.length >= MINIMO_PARA_RECORTAR && (
           <View style={[styles.loteAviso, vecesPublicada > 0 && styles.loteAvisoListo]}>
             <Text style={[styles.loteAvisoTxt, vecesPublicada > 0 && styles.loteAvisoTxtListo]}>
               {vecesPublicada > 0
