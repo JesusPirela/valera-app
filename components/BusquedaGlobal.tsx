@@ -38,6 +38,7 @@ const PANTALLAS_ADMIN: { label: string; route: string; icon: string }[] = [
   { label: 'Anuncios', route: '/(admin)/anuncios', icon: 'megaphone-outline' },
   { label: '1 a 1', route: '/(admin)/uno-a-uno', icon: 'headset-outline' },
   { label: 'Usuarios', route: '/(admin)/prospectadores', icon: 'person-add-outline' },
+  { label: 'Publicaciones repetidas', route: '/(admin)/duplicados', icon: 'copy-outline' },
   { label: 'Colaboradores', route: '/(admin)/colaboradores', icon: 'people-circle-outline' },
   { label: 'Asesores externos', route: '/(admin)/asesores-externos', icon: 'id-card-outline' },
   { label: 'Bloques', route: '/(admin)/bloques', icon: 'apps-outline' },

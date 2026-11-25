@@ -84,6 +84,7 @@ const NAV_ITEMS = [
   { label: 'Proyectos', desc: 'Desarrollos y proyectos', ion: 'briefcase', color: '#CA8A04', route: '/(admin)/proyectos', grupo: 'Inventario' },
   { label: 'Tabla precios', desc: 'Precios por zona', ion: 'pricetags', color: '#0D9488', route: '/(admin)/inventario-tabla', grupo: 'Inventario' },
   { label: 'Publicaciones', desc: 'Veces publicada c/u', ion: 'bar-chart', color: '#4F46E5', route: '/(admin)/estadisticas-propiedades', grupo: 'Inventario' },
+  { label: 'Repetidas', desc: 'Propiedades metidas dos veces', ion: 'copy', color: '#B91C1C', route: '/(admin)/duplicados', grupo: 'Inventario' },
   { label: 'Colores ficha', desc: 'Personaliza fichas', ion: 'color-palette', color: '#DB2777', route: '/(admin)/colores-ficha', grupo: 'Inventario' },
 
   // Ventas — CRM, citas y cierres
