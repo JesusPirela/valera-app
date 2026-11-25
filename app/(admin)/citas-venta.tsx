@@ -68,6 +68,11 @@ type Fila = CitaRetro & {
 }
 type ColKey = keyof Fila
 type Tipo = 'texto' | 'usuario' | 'cliente' | 'fecha' | 'estado' | 'zona' | 'pago' | 'propiedad'
+type LoteGuardado = {
+  id: string; citas_hash: string; dado_at: string
+  asignado_a: string | null; asignado_texto: string | null
+  trabajado: boolean
+}
 const VACIO = '(Vacías)'
 const ROW_H = 54  // altura fija de fila (necesaria para virtualizar con getItemLayout)
 
@@ -815,6 +820,11 @@ export default function CitasVenta() {
   // es solo un corte de lo que ya se está viendo.
   const [lotesAbierto, setLotesAbierto] = useState(false)
   const [tamanoLote, setTamanoLote] = useState(20)
+  // Lotes ya dados (persistidos en lotes_citas) — se cruzan contra `lotes` por
+  // el set exacto de citas_ids para saber cuáles ya no se pueden volver a dar
+  // y a quién se le asignaron. `darLoteModal` abre el picker de a quién dárselo.
+  const [lotesGuardados, setLotesGuardados] = useState<LoteGuardado[]>([])
+  const [darLoteModal, setDarLoteModal] = useState<{ grupo: Fila[]; numero: number } | null>(null)
   const [busquedaTabla, setBusquedaTabla] = useState('')
   const [ordenFecha, setOrdenFecha] = useState<'desc' | 'asc' | null>(null)  // orden por fecha de la cita (clic en la columna)
   const [dropCol, setDropCol] = useState<ColKey | null>(null)
@@ -926,6 +936,11 @@ export default function CitasVenta() {
         .then(({ data }) => { if (data && data.role !== 'admin' && data.role !== 'gerente') router.replace('/(admin)/propiedades') })
     })
   }, [])
+  const cargarLotesGuardados = useCallback(() => {
+    supabase.from('lotes_citas').select('id, citas_hash, dado_at, asignado_a, asignado_texto, trabajado')
+      .then(({ data }) => setLotesGuardados((data ?? []) as LoteGuardado[]))
+  }, [])
+  useEffect(() => { cargarLotesGuardados() }, [cargarLotesGuardados])
   useEffect(() => {
     supabase.from('profiles').select('id, nombre').order('nombre').then(({ data }) => setProfiles((data ?? []).filter((p: any) => p.nombre)))
     // Paginar clientes: hay >1000 y Supabase limita cada consulta a 1000, así que
@@ -1170,6 +1185,30 @@ export default function CitasVenta() {
 
   function exportarLoteCSV(filasLote: Fila[], numero: number) {
     descargarCSV(csvDeFilas(filasLote), `citas-venta-lote-${numero}-${hoyISO()}.csv`)
+  }
+
+  // Mismo criterio que citas_hash en la base (orden ascendente de los ids,
+  // unidos con coma) para saber si ESTE grupo ya corresponde a un lote dado.
+  const hashDeIds = (ids: string[]) => [...ids].sort().join(',')
+  const lotesGuardadosPorHash = useMemo(
+    () => new Map(lotesGuardados.map(l => [l.citas_hash, l])),
+    [lotesGuardados]
+  )
+
+  async function confirmarDarLote(asignadoA: string | null, asignadoTexto: string) {
+    if (!darLoteModal) return
+    const { grupo, numero } = darLoteModal
+    const { error } = await supabase.from('lotes_citas').insert({
+      numero, tamano: grupo.length, citas_ids: grupo.map(f => f.id),
+      creado_por: miId, asignado_a: asignadoA, asignado_texto: asignadoTexto.trim() || null,
+    })
+    if (error) {
+      const msg = error.code === '23505' ? 'Este lote ya se le dio a alguien antes.' : (error.message || 'No se pudo dar el lote.')
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('Error', msg)
+      return
+    }
+    cargarLotesGuardados()
+    setDarLoteModal(null)
   }
 
   async function copiarLoteWhatsApp(filasLote: Fila[], numero: number) {
@@ -1460,6 +1499,8 @@ export default function CitasVenta() {
               const conFecha = grupo.filter(f => f.fecha_cita)
               const masVieja = conFecha[0]?.fecha_cita
               const masReciente = conFecha[conFecha.length - 1]?.fecha_cita
+              const dado = lotesGuardadosPorHash.get(hashDeIds(grupo.map(f => f.id)))
+              const nombreDado = dado && (dado.asignado_a ? (profiles.find(p => p.id === dado.asignado_a)?.nombre ?? 'Usuario') : dado.asignado_texto)
               return (
               <View key={i} style={[st.loteCard, { borderColor: c.border, backgroundColor: c.bg }]}>
                 <Text style={[st.loteTitulo, { color: c.text }]}>Lote {i + 1}</Text>
@@ -1475,6 +1516,15 @@ export default function CitasVenta() {
                 <TouchableOpacity style={[st.loteBtn, st.loteBtnWa]} onPress={() => copiarLoteWhatsApp(grupo, i + 1)}>
                   <Text style={[st.loteBtnTxt, st.loteBtnWaTxt]}>📋 WhatsApp</Text>
                 </TouchableOpacity>
+                {dado ? (
+                  <View style={st.loteDadoAviso}>
+                    <Text style={st.loteDadoTxt} numberOfLines={2}>✓ Dado a {nombreDado}{dado.trabajado ? ' · trabajado' : ''}</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={[st.loteBtn, st.loteBtnDar]} onPress={() => setDarLoteModal({ grupo, numero: i + 1 })}>
+                    <Text style={st.loteBtnTxt}>🎯 Dar lote</Text>
+                  </TouchableOpacity>
+                )}
               </View>
               )
             })}
@@ -1785,6 +1835,16 @@ export default function CitasVenta() {
       {copiadoId && (
         <View style={st.toast} pointerEvents="none"><Text style={st.toastTxt}>📋 Datos copiados al portapapeles</Text></View>
       )}
+
+      {darLoteModal && (
+        <DarLoteModal
+          numero={darLoteModal.numero}
+          cantidad={darLoteModal.grupo.length}
+          profiles={profiles}
+          onClose={() => setDarLoteModal(null)}
+          onConfirmar={confirmarDarLote}
+        />
+      )}
     </View>
   )
 }
@@ -1930,6 +1990,89 @@ function ChatbotCitaModal({ cita, profiles, clientes, onClose, onSent }: {
   )
 }
 
+// Dar un lote: o se elige un prospectador real de la app (le aparecerá en su
+// propia pantalla de lotes asignados) o se escribe a mano el nombre de quien
+// lo recibió fuera de la app. Una vez confirmado, el lote queda bloqueado —
+// no se puede volver a dar (ver índice único sobre citas_hash en la migración).
+function DarLoteModal({ numero, cantidad, profiles, onClose, onConfirmar }: {
+  numero: number
+  cantidad: number
+  profiles: { id: string; nombre: string }[]
+  onClose: () => void
+  onConfirmar: (asignadoA: string | null, asignadoTexto: string) => Promise<void>
+}) {
+  const c = useColors()
+  const [modo, setModo] = useState<'usuario' | 'texto'>('usuario')
+  const [prospectadorId, setProspectadorId] = useState<string | null>(null)
+  const [buscaProspectador, setBuscaProspectador] = useState('')
+  const [nombreTexto, setNombreTexto] = useState('')
+  const [enviando, setEnviando] = useState(false)
+
+  const listaProspectadores = profiles.filter(p => !buscaProspectador.trim() || p.nombre.toLowerCase().includes(buscaProspectador.toLowerCase()))
+  const puedeConfirmar = modo === 'usuario' ? !!prospectadorId : nombreTexto.trim().length > 0
+
+  async function confirmar() {
+    setEnviando(true)
+    await onConfirmar(modo === 'usuario' ? prospectadorId : null, modo === 'usuario' ? '' : nombreTexto)
+    setEnviando(false)
+  }
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={st.dropOverlay}>
+        <View style={[st.dropCard, { backgroundColor: c.card, maxWidth: 440 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#7c3aed' }}>DAR LOTE {numero}</Text>
+            <TouchableOpacity onPress={onClose} disabled={enviando}><Text style={{ fontSize: 20, color: c.textMute }}>✕</Text></TouchableOpacity>
+          </View>
+          <Text style={{ fontSize: 12.5, color: c.textMute, marginBottom: 10 }}>
+            {cantidad} cliente{cantidad === 1 ? '' : 's'}. Una vez dado, este lote queda bloqueado — no se puede volver a dar.
+          </Text>
+
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+            <TouchableOpacity style={[st.loteModoBtn, { borderColor: c.border }, modo === 'usuario' && st.loteModoBtnOn]} onPress={() => setModo('usuario')}>
+              <Text style={[st.loteModoTxt, { color: modo === 'usuario' ? '#fff' : c.textSub }]}>Usuario de la app</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[st.loteModoBtn, { borderColor: c.border }, modo === 'texto' && st.loteModoBtnOn]} onPress={() => setModo('texto')}>
+              <Text style={[st.loteModoTxt, { color: modo === 'texto' ? '#fff' : c.textSub }]}>Escribir nombre</Text>
+            </TouchableOpacity>
+          </View>
+
+          {modo === 'usuario' ? (
+            <>
+              <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={buscaProspectador} onChangeText={setBuscaProspectador} placeholder="Buscar…" placeholderTextColor={c.textMute} autoFocus />
+              <ScrollView style={{ maxHeight: 260, marginTop: 8 }} keyboardShouldPersistTaps="handled">
+                {listaProspectadores.map(p => (
+                  <TouchableOpacity key={p.id} style={[st.dropItem, p.id === prospectadorId && { backgroundColor: 'rgba(124,58,237,0.14)' }]} onPress={() => setProspectadorId(p.id)}>
+                    <Text style={[st.dropItemTxt, { color: c.text, fontWeight: p.id === prospectadorId ? '800' : '400' }]} numberOfLines={1}>{p.nombre}</Text>
+                  </TouchableOpacity>
+                ))}
+                {listaProspectadores.length === 0 && <Text style={{ color: c.textMute, padding: 12, fontSize: 12.5 }}>Sin resultados.</Text>}
+              </ScrollView>
+              <Text style={{ fontSize: 11, color: c.textMute, marginTop: 6 }}>Le aparecerá en su propia pantalla de lotes asignados dentro de la app.</Text>
+            </>
+          ) : (
+            <>
+              <Text style={st.chatbotFieldLabel}>Nombre de quien recibió el lote</Text>
+              <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={nombreTexto} onChangeText={setNombreTexto} placeholder="Ej. Juan Pérez (aliado externo)" placeholderTextColor={c.textMute} autoFocus />
+              <Text style={{ fontSize: 11, color: c.textMute, marginTop: 6 }}>Úsalo cuando el lote se entregó fuera de la app (de palabra, WhatsApp, etc.). No le aparecerá a nadie dentro de la app.</Text>
+            </>
+          )}
+
+          <TouchableOpacity
+            style={[st.chatbotEnviarBtn, (!puedeConfirmar || enviando) && { opacity: 0.5 }, { marginTop: 14 }]}
+            disabled={!puedeConfirmar || enviando}
+            onPress={confirmar}
+          >
+            {enviando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={st.chatbotEnviarTxt}>✓ Confirmar lote dado</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={[st.dropCancel, { marginTop: 10 }]} onPress={onClose} disabled={enviando}><Text style={[st.dropCancelTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  )
+}
+
 const st = StyleSheet.create({
   page: { flex: 1, paddingHorizontal: 12, paddingTop: 8 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -2003,6 +2146,12 @@ const st = StyleSheet.create({
   loteBtnWa: { backgroundColor: '#e8f8ef' },
   loteBtnTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
   loteBtnWaTxt: { color: '#16a34a' },
+  loteBtnDar: { backgroundColor: '#7c3aed' },
+  loteDadoAviso: { backgroundColor: 'rgba(22,163,74,0.14)', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 8 },
+  loteDadoTxt: { color: '#16a34a', fontSize: 11.5, fontWeight: '700', textAlign: 'center' },
+  loteModoBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
+  loteModoBtnOn: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+  loteModoTxt: { fontSize: 12.5, fontWeight: '700' },
   barraAbajo: { height: 16, flexGrow: 0, marginTop: 2 },
   barraDer: { width: 16, flexGrow: 0, marginLeft: 2 },
   editArea: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14, minHeight: 120 },

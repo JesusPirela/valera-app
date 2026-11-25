@@ -564,6 +564,11 @@ export default function AdminCRM() {
         <Text style={styles.btnCampanaTxt}>💬 Chats de WhatsApp</Text>
       </TouchableOpacity>
 
+      {/* Botón lotes de clientes viejos (armados en citas-venta) */}
+      <TouchableOpacity style={[styles.btnCampana, { backgroundColor: '#7c3aed' }]} onPress={() => router.push('/(admin)/lotes-citas')}>
+        <Text style={styles.btnCampanaTxt}>📦 Lotes de citas-venta</Text>
+      </TouchableOpacity>
+
       {/* Fila papelera + exportar */}
       <View style={styles.accionesRow}>
         <TouchableOpacity style={[styles.btnAccion, { borderColor: '#e74c3c20', backgroundColor: '#fef5f5' }]}

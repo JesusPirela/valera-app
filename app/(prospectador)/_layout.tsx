@@ -464,6 +464,7 @@ export default function ProspectadorLayout() {
       <Tabs.Screen name="cliente-form"       options={{ href: null, title: 'Cliente', headerLeft: () => <ClienteFormBack /> }} />
       <Tabs.Screen name="detalle-cliente"    options={{ href: null, title: 'Cliente', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
       <Tabs.Screen name="colecciones"        options={{ href: null, title: 'Colecciones', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
+      <Tabs.Screen name="mis-lotes"          options={{ href: null, title: 'Mis lotes', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
       <Tabs.Screen name="leads-campania"     options={{ href: null, title: 'Leads de campaña', headerLeft: () => <HeaderBack to="/(prospectador)/crm" /> }} />
       <Tabs.Screen name="coleccion-detalle"  options={{ href: null, title: 'Colección', headerLeft: () => <HeaderBack to="/(prospectador)/colecciones" /> }} />
       <Tabs.Screen name="university-curso"   options={{ href: null, title: 'Curso', headerLeft: () => <HeaderBack to="/(prospectador)/university" /> }} />

@@ -988,6 +988,18 @@ export default function CRM() {
     [clientes, uidCampania]
   )
 
+  // Lotes de clientes viejos que le asignaron para re-contactar (ver
+  // "Armar lotes" en citas-venta, admin). Solo cuenta los pendientes (sin
+  // trabajar) para la insignia del acceso directo.
+  const { data: lotesPendientes = 0 } = useQuery({
+    queryKey: ['mis-lotes-citas-pendientes'],
+    queryFn: async () => {
+      const { data } = await supabase.rpc('mis_lotes_citas')
+      return ((data ?? []) as { trabajado: boolean }[]).filter(l => !l.trabajado).length
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
   // ── KPIs ──────────────────────────────────────────────────────
   // Base filtrada por operación para que KPIs y chips sean consistentes con la lista
   const clientesBase = useMemo(
@@ -1775,6 +1787,12 @@ export default function CRM() {
         <TouchableOpacity style={[s.acceso, { backgroundColor: '#1a6470' }]} onPress={() => router.push('/(prospectador)/colecciones')}>
           <Text style={s.accesoTxt} numberOfLines={1}>📁 Colecciones</Text>
         </TouchableOpacity>
+        {lotesPendientes > 0 && (
+          <TouchableOpacity style={[s.acceso, { backgroundColor: '#7c3aed' }]} onPress={() => router.push('/(prospectador)/mis-lotes')}>
+            <Text style={s.accesoTxt} numberOfLines={1}>📦 Lotes</Text>
+            <View style={s.accesoBadge}><Text style={s.accesoBadgeTxt}>{lotesPendientes}</Text></View>
+          </TouchableOpacity>
+        )}
         {totalCampania > 0 && (
           <TouchableOpacity
             style={[s.acceso, { backgroundColor: '#7c3aed' }]}
