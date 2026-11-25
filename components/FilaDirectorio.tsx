@@ -18,6 +18,31 @@ import { Ionicons } from '@expo/vector-icons'
 import { useColors } from '../lib/ThemeContext'
 import { legibleSobre, mezclar } from '../lib/color'
 
+/**
+ * Cuánto se tiñe la fila con su color de estado.
+ *
+ * El color dejó de ser solo la barrita de 4px del borde: el rectángulo
+ * completo se tiñe, para que la lista se lea de un vistazo por colores sin
+ * tener que ir leyendo las etiquetas una por una.
+ *
+ * El 9% está MEDIDO, no elegido a ojo: con los cinco acentos de las dos
+ * listas (verde, ámbar, gris, morado, teal) y los dos temas, el nombre queda
+ * en 13:1 y el segundo renglón en 5.08:1 (oscuro) / 6.46:1 (claro). Al 12% el
+ * texto de color del segundo renglón se cae del 4.5:1 que pide la WCAG.
+ */
+export const TINTE_FILA = 0.09
+
+/**
+ * El fondo que DE VERDAD tiene la fila detrás.
+ *
+ * Lo necesitan las pantallas: los textos de color que meten en `meta` se
+ * ajustan con legibleSobre(), y medir contra c.card cuando la fila va teñida
+ * daba 4.19:1 creyendo que iba en 4.5:1.
+ */
+export function fondoFila(acento: string, card: string) {
+  return mezclar(acento, card, TINTE_FILA)
+}
+
 export type AccionFila = {
   icono: keyof typeof Ionicons.glyphMap
   color: string
@@ -72,14 +97,18 @@ export default function FilaDirectorio({
   // 4.02 y la pastilla "Importante" a 4.09 creyendo las dos que iban en 4.5.
   const tinta = (col: string, fondo: string) => legibleSobre(col, fondo, 4.5)
   const tintaIcono = (col: string, fondo: string) => legibleSobre(col, fondo, 3)
-  const fondoAvatar = mezclar(acento, c.card, 0.18)
+  const bg = fondoFila(acento, c.card)
+  // El borde también toma el color: sin eso, con el fondo teñido tan suave,
+  // dos filas de estados distintos se distinguían apenas.
+  const bordeFila = mezclar(acento, c.border, 0.5)
+  const fondoAvatar = mezclar(acento, bg, 0.18)
 
   const pills = (pastillas ?? []).filter(Boolean) as PastillaFila[]
   const btns = (acciones ?? []).filter(Boolean) as AccionFila[]
 
   return (
     <TouchableOpacity
-      style={[s.fila, { backgroundColor: c.card, borderColor: c.border }]}
+      style={[s.fila, { backgroundColor: bg, borderColor: bordeFila }]}
       onPress={onPress}
       disabled={!onPress}
       activeOpacity={0.7}
@@ -95,7 +124,7 @@ export default function FilaDirectorio({
         <View style={s.tituloRow}>
           <Text style={[s.titulo, { color: c.text }]} numberOfLines={1}>{titulo}</Text>
           {pills.map(p => {
-            const fondo = p.solida ? p.color : mezclar(p.color, c.card, 0.14)
+            const fondo = p.solida ? p.color : mezclar(p.color, bg, 0.14)
             const tintaPill = p.solida ? legibleSobre('#ffffff', fondo, 4.5) : tinta(p.color, fondo)
             return (
               <View key={p.texto} style={[s.pastilla, { backgroundColor: fondo }]}>
@@ -111,7 +140,7 @@ export default function FilaDirectorio({
       {btns.length > 0 && (
         <View style={s.acciones}>
           {btns.map(a => {
-            const fondo = a.fondo ?? mezclar(a.color, c.card, 0.14)
+            const fondo = a.fondo ?? mezclar(a.color, bg, 0.14)
             return (
               <TouchableOpacity
                 key={a.etiqueta}
@@ -159,7 +188,7 @@ const s = StyleSheet.create({
     borderWidth: 1, borderRadius: 12, overflow: 'hidden',
     paddingRight: 10, paddingVertical: 9, marginBottom: 8,
   },
-  acento: { width: 4, alignSelf: 'stretch', marginRight: 2 },
+  acento: { width: 5, alignSelf: 'stretch', marginRight: 2 },
   avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   inicial: { fontSize: 13, fontWeight: '800' },
   centro: { flex: 1, minWidth: 0, gap: 2 },

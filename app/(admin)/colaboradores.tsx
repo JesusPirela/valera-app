@@ -12,9 +12,9 @@ import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
-import { legibleSobre } from '../../lib/color'
+import { legibleSobre } from '../../lib/color'  // medir, no suponer: ver reference_contraste
 import { usePullRefresh } from '../../hooks/usePullRefresh'
-import FilaDirectorio, { MetaFila } from '../../components/FilaDirectorio'
+import FilaDirectorio, { MetaFila, fondoFila } from '../../components/FilaDirectorio'
 import HojaOrden, { type OpcionOrden } from '../../components/HojaOrden'
 
 type Colaborador = {
@@ -31,6 +31,9 @@ type Colaborador = {
   relevancia: number | null
   actualizado_at: string | null
   created_at: string
+  /** 'colaborador' = ya trabajamos con él. 'por_entrar' = alianza que todavía
+   *  no lo es. Ver la migración 20261124_colaboradores_por_entrar. */
+  etapa: string | null
 }
 
 type Form = Omit<Colaborador, 'id' | 'actualizado_at' | 'created_at'>
@@ -38,8 +41,40 @@ type Form = Omit<Colaborador, 'id' | 'actualizado_at' | 'created_at'>
 const EMPTY: Form = {
   nombre: '', contacto: null, link: null, estado_subida: null,
   fecha_actualizacion: null, ultima_casa_subida: null, en_app: null,
-  marca: null, notas: null, relevancia: 0,
+  marca: null, notas: null, relevancia: 0, etapa: 'colaborador',
 }
+
+/**
+ * Las dos etapas, y por qué son dos listas en una.
+ *
+ * Una ALIANZA con otra inmobiliaria no es todavía un colaborador: no le
+ * pedimos catálogo ni se le mide. Pero está a nada de serlo, y guardada en
+ * "Asesores externos" (que es a quién le MANDAMOS citas) no la veía nadie.
+ *
+ * Van juntas en esta pantalla pero en apartados separados, y los filtros de
+ * trabajo —"nunca actualizado", "sin catálogo", "sin conectar"— NO las
+ * cuentan: si las contaran, los números dirían que hay 14 colaboradores más
+ * que atender de los que hay.
+ *
+ * El morado es el mismo que tenía "Alianza" en Asesores externos, para que se
+ * reconozcan al cambiar de pantalla.
+ */
+const POR_ENTRAR = '#5e35b1'
+const esPorEntrar = (x: Colaborador) => x.etapa === 'por_entrar'
+
+const ETAPAS = [
+  { valor: 'colaborador', etiqueta: 'Ya colabora', color: '#1e7e34', desc: 'Le pedimos opciones y las podemos subir' },
+  { valor: 'por_entrar',  etiqueta: 'Por entrar',  color: POR_ENTRAR, desc: 'Alianza a punto de entrar; todavía no colabora' },
+] as const
+
+/** Los dos apartados de la lista, en orden. */
+const GRUPOS = [
+  { clave: 'colaborador', titulo: 'Ya colaboran', nota: null,
+    pred: (x: Colaborador) => !esPorEntrar(x) },
+  { clave: 'por_entrar',  titulo: 'Por entrar',
+    nota: 'Alianzas que todavía no son colaboradores. Al entrar, cámbiales la etapa a "Ya colabora".',
+    pred: esPorEntrar },
+] as const
 
 /** El color de la marca de la pantalla. Igual que en Asesores externos. */
 const TEAL = '#1a6470'
@@ -123,16 +158,21 @@ const FILTROS: {
   icono?: keyof typeof Ionicons.glyphMap
   pred: (x: Colaborador) => boolean
 }[] = [
-  { id: 'clave',       grupo: 'rel', label: 'Clave',        icono: 'star', pred: x => x.relevancia === 2 },
-  { id: 'importantes', grupo: 'rel', label: 'Importantes',  icono: 'star-outline', pred: x => x.relevancia === 1 },
+  // La etapa va primero: es lo que parte la lista en dos.
+  { id: 'por_entrar',  grupo: 'etapa', label: 'Por entrar',  icono: 'enter-outline', pred: esPorEntrar },
+  { id: 'clave',       grupo: 'rel', label: 'Clave',        icono: 'star', pred: x => x.relevancia === 2 && !esPorEntrar(x) },
+  { id: 'importantes', grupo: 'rel', label: 'Importantes',  icono: 'star-outline', pred: x => x.relevancia === 1 && !esPorEntrar(x) },
   { id: 'en_app',      grupo: 'app', label: 'En la app',    pred: x => x.en_app === 'SI' },
   { id: 'pendientes',  grupo: 'app', label: 'Pendientes',   pred: x => x.en_app === 'PENDIENTE' },
-  { id: 'sin_app',     grupo: 'app', label: 'Sin conectar', pred: x => !x.en_app },
+  // Los "por entrar" no están conectados por definición: contarlos aquí
+  // subiría este número de 17 a 31 sin que haya nada más que hacer.
+  { id: 'sin_app',     grupo: 'app', label: 'Sin conectar', pred: x => !x.en_app && !esPorEntrar(x) },
   // Cada uno en su propio grupo: son condiciones que se cruzan entre sí.
-  { id: 'sin_marca',   grupo: 'marca', label: 'Nunca actualizado', pred: x => !x.actualizado_at },
-  { id: 'sin_link',    grupo: 'link',  label: 'Sin catálogo',      icono: 'link-outline', pred: x => !esUrl(x.link) },
+  { id: 'sin_marca',   grupo: 'marca', label: 'Nunca actualizado', pred: x => !x.actualizado_at && !esPorEntrar(x) },
+  { id: 'sin_link',    grupo: 'link',  label: 'Sin catálogo',      icono: 'link-outline', pred: x => !esUrl(x.link) && !esPorEntrar(x) },
+  // Este sí los cuenta: a una alianza se le escribe igual que a cualquiera.
   { id: 'con_tel',     grupo: 'tel',   label: 'Con WhatsApp',      icono: 'logo-whatsapp', pred: x => !!telefonoDe(x.contacto) },
-  { id: 'con_aviso',   grupo: 'aviso', label: 'Con aviso',         icono: 'alert-circle-outline', pred: x => !!x.estado_subida },
+  { id: 'con_aviso',   grupo: 'aviso', label: 'Con aviso',         icono: 'alert-circle-outline', pred: x => !!x.estado_subida && !esPorEntrar(x) },
 ]
 
 /**
@@ -162,11 +202,18 @@ function alerta(msg: string) {
   else Alert.alert('Aviso', msg)
 }
 
-/** El color del estado de conexión con la app. Es el acento de la fila. */
+/** El color del estado de conexión con la app. */
 function colorEnApp(en_app: string | null) {
   if (en_app === 'SI') return '#1e7e34'
   if (en_app === 'PENDIENTE') return '#b8860b'
   return '#64748b'
+}
+
+/** El color del rectángulo: la etapa manda sobre el estado de conexión,
+ *  porque de un "por entrar" lo primero que hay que saber es que no es
+ *  colaborador todavía. */
+function colorFila(x: Colaborador) {
+  return esPorEntrar(x) ? POR_ENTRAR : colorEnApp(x.en_app)
 }
 
 function iniciales(nombre: string) {
@@ -274,6 +321,7 @@ export default function AdminColaboradores() {
       estado_subida: col.estado_subida, fecha_actualizacion: col.fecha_actualizacion,
       ultima_casa_subida: col.ultima_casa_subida, en_app: col.en_app,
       marca: col.marca, notas: col.notas, relevancia: col.relevancia ?? 0,
+      etapa: col.etapa ?? 'colaborador',
     })
     setModal(true)
   }
@@ -290,6 +338,7 @@ export default function AdminColaboradores() {
         fecha_actualizacion: form.fecha_actualizacion?.trim() || null,
         en_app: form.en_app,
         relevancia: form.relevancia ?? 0,
+        etapa: form.etapa ?? 'colaborador',
         notas: form.notas?.trim() || null,
         updated_at: new Date().toISOString(),
       }
@@ -322,27 +371,54 @@ export default function AdminColaboradores() {
     }
   }
 
-  // Marca (o vuelve a marcar) el catálogo de este colaborador como actualizado
-  // HOY. Un segundo tap sobre uno ya marcado refresca la fecha: refleja que se
-  // le volvió a subir catálogo. Quitar la marca vive en la hoja de edición,
-  // porque es lo que casi nunca se quiere.
-  async function marcarActualizado(col: Colaborador) {
+  // El ✓ de la fila PRENDE Y APAGA.
+  //
+  // Antes solo prendía: un segundo tap volvía a poner la fecha de hoy y para
+  // quitar la marca había que abrir la hoja de edición y buscar el enlace de
+  // abajo. Ahora el mismo botón la quita, que es lo que se pidió.
+  //
+  // Con una sola salvedad: si la marca NO es de hoy, pregunta antes. Quitar
+  // "hace 2 meses" por un toque mal dado pierde un dato que ya no se puede
+  // volver a escribir —el botón solo sabe poner HOY—, y volver a tocarlo
+  // dejaría una fecha que miente.
+  async function alternarActualizado(col: Colaborador) {
+    if (col.actualizado_at) {
+      const deHoy = new Date(col.actualizado_at).toDateString() === new Date().toDateString()
+      if (!deHoy) {
+        const msg = `¿Quitar la marca de actualizado de "${col.nombre}"? La tiene de ${haceTiempo(col.actualizado_at)} y esa fecha ya no se puede recuperar.`
+        const seguir = await new Promise<boolean>(res => {
+          if (Platform.OS === 'web') { res(window.confirm(msg)); return }
+          Alert.alert('Quitar la marca', msg, [
+            { text: 'Cancelar', style: 'cancel', onPress: () => res(false) },
+            { text: 'Quitarla', style: 'destructive', onPress: () => res(true) },
+          ])
+        })
+        if (!seguir) return
+      }
+      await fijarActualizado(col, null)
+      return
+    }
+    await fijarActualizado(col, new Date().toISOString())
+  }
+
+  /** Escribe la marca (o la quita) con el optimista y la vuelta atrás si falla. */
+  async function fijarActualizado(col: Colaborador, valor: string | null) {
     setMarcando(col.id)
-    const ahora = new Date().toISOString()
-    setLista(prev => prev.map(x => x.id === col.id ? { ...x, actualizado_at: ahora } : x))
-    const { error } = await supabase.from('colaboradores').update({ actualizado_at: ahora }).eq('id', col.id)
-    if (error) { alerta('Error: ' + error.message); cargar() }
+    const antes = col.actualizado_at
+    setLista(prev => prev.map(x => x.id === col.id ? { ...x, actualizado_at: valor } : x))
+    setEditando(prev => prev && prev.id === col.id ? { ...prev, actualizado_at: valor } : prev)
+    const { error } = await supabase.from('colaboradores').update({ actualizado_at: valor }).eq('id', col.id)
+    if (error) {
+      // Se deja como estaba: una fila que dice "✓ hoy" cuando la base dice que
+      // no es peor que no haber marcado nada.
+      setLista(prev => prev.map(x => x.id === col.id ? { ...x, actualizado_at: antes } : x))
+      alerta('Error: ' + error.message)
+      cargar()
+    }
     setMarcando(null)
   }
 
-  async function quitarActualizado(col: Colaborador) {
-    setMarcando(col.id)
-    setLista(prev => prev.map(x => x.id === col.id ? { ...x, actualizado_at: null } : x))
-    setEditando(prev => prev && prev.id === col.id ? { ...prev, actualizado_at: null } : prev)
-    const { error } = await supabase.from('colaboradores').update({ actualizado_at: null }).eq('id', col.id)
-    if (error) { alerta('Error: ' + error.message); cargar() }
-    setMarcando(null)
-  }
+  const quitarActualizado = (col: Colaborador) => fijarActualizado(col, null)
 
   function abrirLink(link: string) {
     if (esUrl(link)) Linking.openURL(link)
@@ -350,6 +426,12 @@ export default function AdminColaboradores() {
   }
 
   const ordenActual = ORDENES.find(o => o.valor === orden)!
+  const nColaboran = lista.filter(x => !esPorEntrar(x)).length
+  const nPorEntrar = lista.length - nColaboran
+  /** Los encabezados de apartado solo salen si de verdad hay dos apartados.
+   *  Con un solo grupo en pantalla, un título encima de la lista no separa
+   *  nada: nomás ocupa un renglón. */
+  const gruposVisibles = GRUPOS.filter(g => listaFiltrada.some(g.pred))
 
   return (
     <View style={[s.container, { backgroundColor: c.bg }]}>
@@ -361,7 +443,7 @@ export default function AdminColaboradores() {
                 si no, una lista corta parece una lista vacía de registros. */}
             {filtros.length > 0 || busqueda.trim()
               ? `${listaFiltrada.length} de ${lista.length} · ${ordenActual.etiqueta.toLowerCase()}`
-              : `Sus opciones las podemos subir. ${lista.length} registrados.`}
+              : `Sus opciones las podemos subir. ${nColaboran} colaboradores${nPorEntrar > 0 ? ` y ${nPorEntrar} por entrar` : ''}.`}
           </Text>
         </View>
         <TouchableOpacity style={s.btnNuevo} onPress={abrirNueva}>
@@ -452,58 +534,90 @@ export default function AdminColaboradores() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.lista} refreshControl={refreshControl}>
-          {listaFiltrada.map(col => {
-            const rel = relevanciaDe(col.relevancia)
-            const tel = telefonoDe(col.contacto)
-            const marcado = !!col.actualizado_at
+          {gruposVisibles.map(g => {
+            const filas = listaFiltrada.filter(g.pred)
             return (
-              <FilaDirectorio
-                key={col.id}
-                acento={colorEnApp(col.en_app)}
-                inicial={iniciales(col.nombre)}
-                titulo={col.nombre}
-                onPress={() => abrirEditar(col)}
-                // Junto al nombre va UNA sola cosa: la relevancia, que es lo
-                // que se vino a ver. El estado de conexión ya se lee en el
-                // color del borde, así que baja al segundo renglón: con dos
-                // pastillas arriba el nombre se cortaba en "MARIFER ...".
-                pastillas={[
-                  rel && { texto: rel.etiqueta, color: rel.color, solida: rel.solida, icono: 'star' as const },
-                ]}
-                meta={
-                  <MetaFila partes={[
-                    col.en_app !== 'SI'
-                      ? <Text key="app" style={[s.aviso, { color: enCard(colorEnApp(col.en_app)) }]}>
-                          {col.en_app === 'PENDIENTE' ? 'Pendiente' : 'Sin conectar'}
-                        </Text>
-                      : null,
-                    col.contacto,
-                    marcado ? `✓ ${haceTiempo(col.actualizado_at!)}` : null,
-                    col.estado_subida
-                      ? <Text key="est" style={[s.aviso, { color: enCard('#c0392b'), flexShrink: 1 }]} numberOfLines={1}>{col.estado_subida}</Text>
-                      : null,
-                    col.notas,
-                  ]} />
-                }
-                acciones={[
-                  {
-                    icono: marcado ? 'checkmark-circle' : 'ellipse-outline',
-                    color: marcado ? '#1e7e34' : '#64748b',
-                    onPress: () => marcarActualizado(col),
-                    etiqueta: marcado ? 'Volver a marcar actualizado hoy' : 'Marcar actualizado hoy',
-                  },
-                  !!tel && {
-                    icono: 'logo-whatsapp' as const, color: '#128C7E',
-                    onPress: () => Linking.openURL(`https://wa.me/${tel}`),
-                    etiqueta: 'WhatsApp',
-                  },
-                  !!col.link && {
-                    icono: 'link-outline' as const, color: '#1976D2',
-                    onPress: () => abrirLink(col.link!),
-                    etiqueta: 'Ver catálogo',
-                  },
-                ]}
-              />
+              <View key={g.clave}>
+                {gruposVisibles.length > 1 && (
+                  <View style={s.seccion}>
+                    {/* El título va sobre el fondo de la LISTA, no sobre una
+                        tarjeta: medirlo contra c.card daba un número de más. */}
+                    <Text style={[s.seccionTit, { color: g.clave === 'por_entrar' ? legibleSobre(POR_ENTRAR, c.bg, 4.5) : c.textSub }]}>
+                      {g.titulo} · {filas.length}
+                    </Text>
+                    {g.nota && <Text style={[s.seccionNota, { color: c.textSub }]}>{g.nota}</Text>}
+                  </View>
+                )}
+                {filas.map(col => {
+                  const rel = relevanciaDe(col.relevancia)
+                  const tel = telefonoDe(col.contacto)
+                  const marcado = !!col.actualizado_at
+                  const acento = colorFila(col)
+                  // El rectángulo va teñido con su color, así que los textos
+                  // de color de dentro se miden contra ESE fondo y no contra
+                  // la tarjeta: la diferencia era 4.19:1 creyendo ir en 4.5.
+                  const enFila = (x: string) => legibleSobre(x, fondoFila(acento, c.card), 4.5)
+                  return (
+                    <FilaDirectorio
+                      key={col.id}
+                      acento={acento}
+                      inicial={iniciales(col.nombre)}
+                      titulo={col.nombre}
+                      onPress={() => abrirEditar(col)}
+                      // Junto al nombre va UNA sola cosa: la relevancia, que es lo
+                      // que se vino a ver. El estado de conexión ya se lee en el
+                      // color del borde, así que baja al segundo renglón: con dos
+                      // pastillas arriba el nombre se cortaba en "MARIFER ...".
+                      pastillas={[
+                        // "Por entrar" gana el lugar: de una alianza lo
+                        // primero que hay que saber es que todavía no es
+                        // colaborador, no qué tan relevante sería.
+                        esPorEntrar(col)
+                          ? { texto: 'Por entrar', color: POR_ENTRAR, icono: 'enter-outline' as const }
+                          : rel && { texto: rel.etiqueta, color: rel.color, solida: rel.solida, icono: 'star' as const },
+                      ]}
+                      meta={
+                        <MetaFila partes={[
+                          // A un "por entrar" no se le pone "Sin conectar":
+                          // claro que no está conectado, no es colaborador
+                          // todavía. Sería un renglón que no dice nada.
+                          col.en_app !== 'SI' && !esPorEntrar(col)
+                            ? <Text key="app" style={[s.aviso, { color: enFila(colorEnApp(col.en_app)) }]}>
+                                {col.en_app === 'PENDIENTE' ? 'Pendiente' : 'Sin conectar'}
+                              </Text>
+                            : null,
+                          col.contacto,
+                          marcado ? `✓ ${haceTiempo(col.actualizado_at!)}` : null,
+                          col.estado_subida
+                            ? <Text key="est" style={[s.aviso, { color: enFila('#c0392b'), flexShrink: 1 }]} numberOfLines={1}>{col.estado_subida}</Text>
+                            : null,
+                          col.notas,
+                        ]} />
+                      }
+                      acciones={[
+                        {
+                          icono: marcado ? 'checkmark-circle' : 'ellipse-outline',
+                          color: marcado ? '#1e7e34' : '#64748b',
+                          onPress: () => alternarActualizado(col),
+                          etiqueta: marcado
+                            ? `Quitar la marca de actualizado (${haceTiempo(col.actualizado_at!)})`
+                            : 'Marcar actualizado hoy',
+                        },
+                        !!tel && {
+                          icono: 'logo-whatsapp' as const, color: '#128C7E',
+                          onPress: () => Linking.openURL(`https://wa.me/${tel}`),
+                          etiqueta: 'WhatsApp',
+                        },
+                        !!col.link && {
+                          icono: 'link-outline' as const, color: '#1976D2',
+                          onPress: () => abrirLink(col.link!),
+                          etiqueta: 'Ver catálogo',
+                        },
+                      ]}
+                    />
+                  )
+                })}
+              </View>
             )
           })}
           {marcando && <ActivityIndicator size="small" color="#1a6470" style={{ marginTop: 6 }} />}
@@ -525,6 +639,34 @@ export default function AdminColaboradores() {
               placeholder="Ej. Spazio Vitale"
               placeholderTextColor={c.placeholder}
             />
+
+            {/* La etapa va arriba de todo: es la que decide en qué apartado
+                cae y cambia lo que significan los demás campos. Y es el único
+                camino de "Por entrar" a "Ya colabora", que es lo que pasa el
+                día que la alianza entra. */}
+            <Text style={[s.fieldLabel, { color: c.textSub }]}>¿En qué etapa está?</Text>
+            <View style={s.relOpciones}>
+              {ETAPAS.map(et => {
+                const on = (form.etapa ?? 'colaborador') === et.valor
+                return (
+                  <TouchableOpacity
+                    key={et.valor}
+                    style={[s.relOpcion, { borderColor: on ? et.color : c.inputBorder, backgroundColor: on ? et.color + '14' : c.input }]}
+                    onPress={() => setForm(f => ({ ...f, etapa: et.valor }))}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: on }}
+                  >
+                    <View style={[s.relRadio, { borderColor: on ? et.color : c.border }]}>
+                      {on && <View style={[s.relRadioDot, { backgroundColor: et.color }]} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.relTit, { color: on ? enCard(et.color) : c.text }]}>{et.etiqueta}</Text>
+                      <Text style={[s.relSub, { color: c.textSub }]}>{et.desc}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
 
             <Text style={[s.fieldLabel, { color: c.textSub }]}>¿Qué tan relevante es?</Text>
             <View style={s.relOpciones}>
@@ -669,6 +811,9 @@ const s = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontSize: 15 },
   lista: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28 },
+  seccion: { marginTop: 4, marginBottom: 8 },
+  seccionTit: { fontSize: 11.5, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase' },
+  seccionNota: { fontSize: 11.5, marginTop: 2, lineHeight: 15 },
   aviso: { fontSize: 12, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalBox: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: '90%' },

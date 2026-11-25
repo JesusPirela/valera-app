@@ -26,6 +26,9 @@ type Asesor = {
   estado_mx: string | null; tipo: Tipo | null; created_at: string
 }
 const TEAL = '#1a6470'
+/** El morado de las alianzas. El mismo que marca "Por entrar" en
+ *  Colaboradores, para que se reconozcan al cambiar de pantalla. */
+const MORADO = '#5e35b1'
 const TODOS = '__todos__'
 /** Pastilla aparte en la fila de zonas: 23 de 41 no tienen una zona con la que
  *  se les pueda mandar una cita. Son dos casos y por eso la pastilla NO dice
@@ -40,9 +43,14 @@ const DIAS_NUEVO = 7
  * No son lo mismo y hasta ahora vivian revueltos: una ALIANZA es un acuerdo
  * con otra inmobiliaria, y un INDEPENDIENTE es alguien que nos apoya por su
  * cuenta. Al mandarle una cita por zona importa saber cual es cual.
+ *
+ * Las ALIANZAS ya no se quedan en esta lista: una alianza no nos atiende
+ * citas, esta a nada de ser COLABORADOR. El 24/nov/2026 las 14 que habia se
+ * pasaron a Colaboradores -> Por entrar, y al marcar una nueva como alianza
+ * la hoja de edicion ofrece pasarla tambien.
  */
 const TIPOS: { valor: Tipo; etiqueta: string; color: string; desc: string }[] = [
-  { valor: 'alianza',       etiqueta: 'Alianza',       color: '#5e35b1', desc: 'Acuerdo con otra inmobiliaria' },
+  { valor: 'alianza',       etiqueta: 'Alianza',       color: MORADO,    desc: 'Acuerdo con otra inmobiliaria; su lugar es Colaboradores → Por entrar' },
   { valor: 'independiente', etiqueta: 'Independiente', color: '#1a6470', desc: 'Asesor por su cuenta que nos apoya' },
 ]
 const tipoDe = (t: Tipo | null | undefined) => TIPOS.find(x => x.valor === t)
@@ -50,6 +58,12 @@ const SIN_TIPO = '#64748b'
 
 const DIA = 86_400_000
 function soloTel(t: string | null | undefined) { return (t ?? '').replace(/[^\d+]/g, '') }
+
+/** Alert.alert no pinta nada en web. */
+function avisar(titulo: string, msg: string) {
+  if (Platform.OS === 'web') window.alert(`${titulo}\n\n${msg}`)
+  else Alert.alert(titulo, msg)
+}
 
 /**
  * ¿Este texto de "zona" sirve como filtro?
@@ -118,9 +132,14 @@ export default function AsesoresExternos() {
   const [hojaOrden, setHojaOrden] = useState(false)
   const [editando, setEditando] = useState<Partial<Asesor> | null>(null)
   const [guardando, setGuardando] = useState(false)
+  const [pasando, setPasando] = useState(false)
   const [selectorEstadoAbierto, setSelectorEstadoAbierto] = useState(false)
   // El teal está elegido para fondo claro: sobre la tarjeta oscura hay que
   // subirle el brillo sin cambiarle el tono (4.5:1 texto, 3:1 iconos).
+  // El morado crudo sobre la hoja oscura queda en 2.08:1 —ilegible—, así que
+  // se ajusta como todo lo demás: en claro se queda igual (8.02:1) y en
+  // oscuro sube a #9676d6 (4.65:1). Medido, no a ojo.
+  const tintaMorado = legibleSobre(MORADO, c.card, 4.5)
   const tintaTeal = legibleSobre(TEAL, c.card, 4.5)
   const iconoTeal = legibleSobre(TEAL, c.card, 3)
 
@@ -154,6 +173,61 @@ export default function AsesoresExternos() {
     setGuardando(false)
     if (error) { Alert.alert('No se pudo guardar', error.message); return }
     setEditando(null); cargar(true)
+  }
+
+  /**
+   * Pasa una alianza a Colaboradores → Por entrar.
+   *
+   * El orden importa: primero se crea del otro lado y SOLO si eso sale bien se
+   * borra de aquí. Las dos tablas no dejan pasar a la misma gente —un gerente
+   * puede borrar en asesores_externos pero no escribir en colaboradores— y al
+   * revés el registro se perdería sin dejar rastro.
+   */
+  async function pasarAColaboradores(a: Partial<Asesor>) {
+    if (!a.id || !a.nombre) return
+    // Sin "venía de asesores externos": la etiqueta morada "Por entrar" ya lo
+    // dice, y repetido en cada fila solo tapa lo que sí importa. Lo que traía
+    // escrito en la zona sí se lleva: en varias no era una zona sino el recado
+    // del trato ("Quieren que le digamos cuáles nos interesan...").
+    const notas = [
+      a.zona?.trim() ? `Zona/nota: ${a.zona.trim()}` : null,
+      a.estado_mx && a.estado_mx !== ESTADO_PRINCIPAL ? `Estado: ${a.estado_mx}` : null,
+    ].filter(Boolean).join(' · ') || null
+
+    setPasando(true)
+    const { error } = await supabase.from('colaboradores').insert({
+      nombre: a.nombre.trim(),
+      contacto: a.telefono?.trim() || null,
+      en_app: null,
+      etapa: 'por_entrar',
+      relevancia: 0,
+      notas,
+    })
+    if (error) {
+      setPasando(false)
+      avisar('No se pudo pasar', error.message)
+      return
+    }
+    const { error: errBorrar } = await supabase.from('asesores_externos').delete().eq('id', a.id)
+    setPasando(false)
+    if (errBorrar) {
+      // Se dice la verdad: quedó en las dos listas y hay que quitarla a mano.
+      avisar('Quedó en las dos listas', `Ya está en Colaboradores, pero no se pudo borrar de aquí: ${errBorrar.message}`)
+      cargar(true)
+      return
+    }
+    setLista(prev => prev.filter(x => x.id !== a.id))
+    setEditando(null)
+    avisar('Listo', `"${a.nombre.trim()}" ya está en Colaboradores → Por entrar.`)
+  }
+
+  function confirmarPaso(a: Partial<Asesor>) {
+    const msg = `"${a.nombre}" sale de Asesores externos y entra en Colaboradores, en el apartado "Por entrar". Se lleva su teléfono y lo que tenga escrito en la zona.`
+    if (Platform.OS === 'web') { if (window.confirm(msg)) pasarAColaboradores(a) }
+    else Alert.alert('Pasar a Colaboradores', msg, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Pasarla', onPress: () => pasarAColaboradores(a) },
+    ])
   }
 
   function borrar(a: Partial<Asesor>) {
@@ -490,6 +564,29 @@ export default function AsesoresExternos() {
               })}
             </View>
 
+            {/* Solo con la alianza ya guardada: pasarla crea el registro del
+                otro lado, y hacerlo con una que todavía no existe aquí
+                dejaría dos formas de dar de alta lo mismo. */}
+            {editando?.id && editando?.tipo === 'alianza' && (
+              <TouchableOpacity
+                style={[st.pasarBtn, { borderColor: legibleSobre(MORADO, c.card, 3) }, pasando && { opacity: 0.6 }]}
+                onPress={() => confirmarPaso(editando)}
+                disabled={pasando}
+              >
+                {pasando ? <ActivityIndicator color={tintaMorado} /> : (
+                  <>
+                    <Ionicons name="arrow-forward-circle-outline" size={17} color={legibleSobre(MORADO, c.card, 3)} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[st.pasarTxt, { color: tintaMorado }]}>Pasar a Colaboradores</Text>
+                      <Text style={[st.pasarSub, { color: c.textSub }]}>
+                        Una alianza no nos atiende citas: su lugar es "Por entrar".
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
             <Text style={[st.lbl, { color: c.textSub }]}>Estado</Text>
             <TouchableOpacity
               style={[st.inp, st.selectorBtn, { borderColor: c.inputBorder, backgroundColor: c.input }]}
@@ -623,6 +720,12 @@ const st = StyleSheet.create({
   inp: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 15 },
   guardarBtn: { backgroundColor: TEAL, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 22 },
   guardarTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  pasarBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 12,
+    borderWidth: 1.5, borderRadius: 12, padding: 12,
+  },
+  pasarTxt: { fontWeight: '800', fontSize: 14 },
+  pasarSub: { fontSize: 11.5, marginTop: 1 },
   borrarBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, marginTop: 4 },
   borrarTxt: { color: '#dc2626', fontWeight: '800', fontSize: 13.5 },
   cancelar: { alignItems: 'center', paddingVertical: 10 },
