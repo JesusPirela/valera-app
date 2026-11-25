@@ -16,7 +16,7 @@ import { normalizar } from '../../lib/texto'
 import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS_MEXICO, ESTADO_PRINCIPAL } from '../../lib/estados-mexico'
 import { ZONAS_INTERES } from '../../lib/zonas-interes'
-import FilaDirectorio, { MetaFila } from '../../components/FilaDirectorio'
+import FilaDirectorio, { MetaFila, fondoFila } from '../../components/FilaDirectorio'
 import HojaOrden, { type OpcionOrden } from '../../components/HojaOrden'
 import { legibleSobre } from '../../lib/color'
 
@@ -479,10 +479,15 @@ export default function AsesoresExternos() {
           const t = tipoDe(a.tipo)
           const tel = soloTel(a.telefono)
           const reciente = Date.now() - new Date(a.created_at).getTime() < 7 * DIA
+          const acento = t?.color ?? SIN_TIPO
+          // El rectángulo va teñido con su color, así que el gris del segundo
+          // renglón se mide contra ESE fondo: sobre el ámbar en tema oscuro
+          // el c.textSub de siempre caía a 4.30:1.
+          const sub = legibleSobre(c.textSub, fondoFila(acento, c.card), 4.5)
           return (
             <FilaDirectorio
               key={a.id}
-              acento={t?.color ?? SIN_TIPO}
+              acento={acento}
               inicial={a.nombre.trim().charAt(0).toUpperCase() || '?'}
               titulo={a.nombre}
               onPress={() => setEditando(a)}
@@ -496,8 +501,8 @@ export default function AsesoresExternos() {
                 <MetaFila partes={[
                   a.zona || a.estado_mx
                     ? <View key="z" style={st.zonaRow}>
-                        <Ionicons name="location-outline" size={12} color={c.textSub} />
-                        <Text style={[st.zonaTxt, { color: c.textSub }]} numberOfLines={1}>
+                        <Ionicons name="location-outline" size={12} color={sub} />
+                        <Text style={[st.zonaTxt, { color: sub }]} numberOfLines={1}>
                           {[a.zona, a.estado_mx].filter(Boolean).join(' · ')}
                         </Text>
                       </View>

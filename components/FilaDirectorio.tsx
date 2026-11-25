@@ -12,25 +12,28 @@
 // Todo lo demás —editar, borrar, los campos largos— vive en la hoja de edición
 // que se abre al tocar la fila. Antes editar y borrar eran dos botones pegados
 // de 16px: el de borrar quedaba a cuatro milímetros del de editar.
-import type { ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useColors } from '../lib/ThemeContext'
-import { legibleSobre, mezclar } from '../lib/color'
+import { legibleSobre, luminancia, mezclar } from '../lib/color'
 
 /**
- * Cuánto se tiñe la fila con su color de estado.
+ * El rectángulo COMPLETO va del color de su estado.
  *
- * El color dejó de ser solo la barrita de 4px del borde: el rectángulo
- * completo se tiñe, para que la lista se lea de un vistazo por colores sin
- * tener que ir leyendo las etiquetas una por una.
+ * Mismos números que las tarjetas de Accountability de citas, que es de donde
+ * salió la idea y lo que hay que igualar:
  *
- * El 9% está MEDIDO, no elegido a ojo: con los cinco acentos de las dos
- * listas (verde, ámbar, gris, morado, teal) y los dos temas, el nombre queda
- * en 13:1 y el segundo renglón en 5.08:1 (oscuro) / 6.46:1 (claro). Al 12% el
- * texto de color del segundo renglón se cae del 4.5:1 que pide la WCAG.
+ *  - En oscuro hace falta MÁS color que en claro. Sobre un fondo casi negro
+ *    un 13% no se distingue y la lista vuelve a verse toda igual.
+ *  - El acento se aclara ANTES de mezclarlo. Sin esto, mezclar un morado
+ *    oscuro (#5e35b1, que sobre el fondo oscuro está en 2.08:1) contra un
+ *    fondo oscuro da otro oscuro: el color no aparece por ningún lado.
+ *
+ * Los textos siguen midiéndose contra este fondo, no contra la tarjeta.
  */
-export const TINTE_FILA = 0.09
+const TINTE_CLARO = 0.22
+const TINTE_OSCURO = 0.3
 
 /**
  * El fondo que DE VERDAD tiene la fila detrás.
@@ -40,8 +43,19 @@ export const TINTE_FILA = 0.09
  * daba 4.19:1 creyendo que iba en 4.5:1.
  */
 export function fondoFila(acento: string, card: string) {
-  return mezclar(acento, card, TINTE_FILA)
+  const visible = legibleSobre(acento, card, 3)
+  return mezclar(visible, card, luminancia(card) < 0.18 ? TINTE_OSCURO : TINTE_CLARO)
 }
+
+/**
+ * El fondo de la fila, para quien se pinte dentro de ella.
+ *
+ * Con el rectángulo teñido, el gris de los textos secundarios ya no va sobre
+ * la tarjeta: va sobre el color. Medido, el peor caso (ámbar en tema oscuro)
+ * caía a 4.30:1. Cada fila publica su fondo y lo que se pinta dentro se
+ * ajusta a él, así el tinte se puede subir sin romper la lectura.
+ */
+const FondoFila = createContext<string | null>(null)
 
 export type AccionFila = {
   icono: keyof typeof Ionicons.glyphMap
@@ -98,15 +112,17 @@ export default function FilaDirectorio({
   const tinta = (col: string, fondo: string) => legibleSobre(col, fondo, 4.5)
   const tintaIcono = (col: string, fondo: string) => legibleSobre(col, fondo, 3)
   const bg = fondoFila(acento, c.card)
-  // El borde también toma el color: sin eso, con el fondo teñido tan suave,
-  // dos filas de estados distintos se distinguían apenas.
-  const bordeFila = mezclar(acento, c.border, 0.5)
+  // El acento tal cual para la franja y el borde, aclarado lo justo para que
+  // se vea sobre la tarjeta (3:1, que es lo que pide una forma, no un texto).
+  const acentoVisible = legibleSobre(acento, c.card, 3)
+  const bordeFila = mezclar(acentoVisible, c.border, 0.5)
   const fondoAvatar = mezclar(acento, bg, 0.18)
 
   const pills = (pastillas ?? []).filter(Boolean) as PastillaFila[]
   const btns = (acciones ?? []).filter(Boolean) as AccionFila[]
 
   return (
+    <FondoFila.Provider value={bg}>
     <TouchableOpacity
       style={[s.fila, { backgroundColor: bg, borderColor: bordeFila }]}
       onPress={onPress}
@@ -115,7 +131,7 @@ export default function FilaDirectorio({
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityLabel={onPress ? `Editar ${titulo}` : titulo}
     >
-      <View style={[s.acento, { backgroundColor: acento }]} />
+      <View style={[s.acento, { backgroundColor: acentoVisible }]} />
       <View style={[s.avatar, { backgroundColor: fondoAvatar }]}>
         <Text style={[s.inicial, { color: tinta(acento, fondoAvatar) }]}>{inicial}</Text>
       </View>
@@ -160,21 +176,25 @@ export default function FilaDirectorio({
         </View>
       )}
     </TouchableOpacity>
+    </FondoFila.Provider>
   )
 }
 
 /** El segundo renglón, con sus puntos separadores. Los vacíos no dejan hueco. */
 export function MetaFila({ partes }: { partes: (ReactNode | null | false | undefined)[] }) {
   const c = useColors()
+  // Sobre el fondo teñido de la fila, no sobre la tarjeta: ver FondoFila.
+  const fondo = useContext(FondoFila)
+  const sub = fondo ? legibleSobre(c.textSub, fondo, 4.5) : c.textSub
   const vivas = partes.filter(p => p !== null && p !== false && p !== undefined && p !== '')
   if (vivas.length === 0) return null
   return (
     <View style={s.metaRow}>
       {vivas.map((p, i) => (
         <View key={i} style={s.metaItem}>
-          {i > 0 && <Text style={[s.metaSep, { color: c.textSub }]}>·</Text>}
+          {i > 0 && <Text style={[s.metaSep, { color: sub }]}>·</Text>}
           {typeof p === 'string'
-            ? <Text style={[s.metaTxt, { color: c.textSub, flexShrink: 1 }]} numberOfLines={1}>{p}</Text>
+            ? <Text style={[s.metaTxt, { color: sub, flexShrink: 1 }]} numberOfLines={1}>{p}</Text>
             : p}
         </View>
       ))}
