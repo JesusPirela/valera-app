@@ -9,6 +9,16 @@
 --       se entrega fuera de la app;
 --   (c) que si se asignó a un usuario real, ese lote le aparezca en su propia
 --       pantalla (mis_lotes_citas()) como una lista de clientes a contactar.
+-- Una columna GENERATED no admite subqueries en su expresión (unnest+agregar
+-- es justo eso), así que el orden-y-join vive en esta función aparte; la
+-- columna generada solo la llama, lo cual sí está permitido.
+CREATE OR REPLACE FUNCTION public._uuid_array_sort_text(arr uuid[])
+RETURNS text
+LANGUAGE sql IMMUTABLE
+AS $$
+  SELECT array_to_string((SELECT array_agg(x ORDER BY x) FROM unnest(arr) AS x), ',')
+$$;
+
 CREATE TABLE IF NOT EXISTS public.lotes_citas (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   numero         int NOT NULL,               -- posición dentro de la vista donde se armó (solo informativo)
@@ -16,9 +26,7 @@ CREATE TABLE IF NOT EXISTS public.lotes_citas (
   citas_ids      uuid[] NOT NULL,            -- snapshot fijo de citas_venta.id al momento de darlo
   -- Hash estable del set de citas_ids (orden no importa) — permite el índice
   -- único de abajo sin depender de que el arreglo llegue ya ordenado.
-  citas_hash     text GENERATED ALWAYS AS (
-    array_to_string((SELECT array_agg(x ORDER BY x) FROM unnest(citas_ids) AS x), ',')
-  ) STORED,
+  citas_hash     text GENERATED ALWAYS AS (public._uuid_array_sort_text(citas_ids)) STORED,
   filtro_desc    text,                       -- descripción legible de los filtros usados (informativo)
   creado_por     uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at     timestamptz NOT NULL DEFAULT now(),
