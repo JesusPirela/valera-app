@@ -1349,19 +1349,32 @@ export default function DetallePropiedad() {
         .hero-top { position: relative; width: 100%; overflow: hidden; background: #12304a; }
         /* Clase propia para la FOTO (no ".hero-top img", que también pegaba al logo
            y lo agrandaba al 100% por ser más específica → salía gigante). */
-        .hero-photo { width: 100%; height: auto; display: block; }
+        /* Alto fijo, no "auto".
+         *
+         * Con "auto" una foto vertical de celular se renderiza a 1,422 px
+         * sobre los 800 del documento: 1.7 páginas de A4 para UNA foto, y el
+         * cortador de páginas la parte por la mitad porque no encuentra
+         * ningún renglón blanco donde cortar. Medido con VR-2730.
+         *
+         * 520 px (≈387 pt) deja la primera página con el encabezado, la foto
+         * completa y las características. Recorta igual que la galería, que
+         * ya usa alto fijo con object-fit: cover. */
+        .hero-photo { width: 100%; height: 520px; object-fit: cover; object-position: center; display: block; }
         /* Logo PEQUEÑO en la esquina superior derecha de la foto. */
         .hero-logo-corner { position: absolute; top: 14px; right: 14px; width: 56px; height: auto; border-radius: 9px; }
-        .hero-price { position: absolute; left: 0; right: 0; bottom: 0; padding: 34px 30px 16px; text-align: left;
-          background-image: linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.40) 55%, rgba(0,0,0,0) 100%); }
-        .hero-price-val { display: block; font-size: 37px; font-weight: 800; color: #FFD700; letter-spacing: 0.5px; }
-        .hero-price-tipo { display: block; font-size: 13px; color: rgba(255,255,255,0.92); font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px; }
-        /* Info debajo de la foto (sobre el azul); el logo va aquí, más chico. */
-        .header-info { padding: 18px 28px 22px; }
+        /* La info va ARRIBA de la foto, no debajo.
+         *
+         * El precio vivía encima de la foto y el código, el título y la
+         * dirección debajo de ella. Con una foto vertical eso deja la primera
+         * pantalla entera en foto: la vista previa de WhatsApp (y la
+         * miniatura del PDF) enseñaban una fachada sin precio, sin título y
+         * sin a quién pertenece. Ahora lo primero que se ve, sin abrir nada,
+         * es qué es, dónde está y cuánto cuesta. */
+        .header-info { padding: 20px 28px 20px; }
         .header-logo { height: 58px; max-width: 150px; object-fit: contain; border-radius: 12px; margin: 6px auto 0; display: block; }
         .codigo { font-size: 11px; color: rgba(255,255,255,0.72); font-weight: 700; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }
         .titulo { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 5px; line-height: 1.15; }
-        .ciudad { font-size: 13px; color: rgba(255,255,255,0.72); margin-bottom: 10px; }
+        .ciudad { font-size: 13px; color: rgba(255,255,255,0.72); margin-bottom: 12px; }
         .precio { font-size: 33px; font-weight: 800; color: #FFD700; margin-bottom: 5px; letter-spacing: 0.5px; }
         .tipo-op { font-size: 11px; color: rgba(255,255,255,0.72); font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; }
         /* Cuerpo gris claro */
@@ -1400,21 +1413,19 @@ export default function DetallePropiedad() {
         .footer-eslogan { color: rgba(255,255,255,0.6); font-size: 11px; font-style: italic; margin-top: 9px; }
       </style></head><body>
       <div class="header">
-        ${imagenPrincipal ? `
-          <div class="hero-top">
-            <img src="${imagenPrincipal.src}" class="hero-photo" />
-            ${logoSrc ? `<img src="${logoSrc}" class="hero-logo-corner" />` : ''}
-            <div class="hero-price">
-              <span class="hero-price-val">${precio}</span>
-              <span class="hero-price-tipo">${esc(tipoOp)} • MXN</span>
-            </div>
-          </div>` : ''}
         <div class="header-info">
           <div class="codigo">${esc(propiedad.codigo)}</div>
           <div class="titulo">${esc(tituloTxt)}</div>
           <div class="ciudad">${esc(propiedad.direccion)}</div>
-          ${!imagenPrincipal ? `<div class="precio">${precio}</div><div class="tipo-op">${esc(tipoOp)} • MXN</div>${logoSrc ? `<img src="${logoSrc}" class="header-logo" />` : ''}` : ''}
+          <div class="precio">${precio}</div>
+          <div class="tipo-op">${esc(tipoOp)} • MXN</div>
+          ${!imagenPrincipal && logoSrc ? `<img src="${logoSrc}" class="header-logo" />` : ''}
         </div>
+        ${imagenPrincipal ? `
+          <div class="hero-top">
+            <img src="${imagenPrincipal.src}" class="hero-photo" />
+            ${logoSrc ? `<img src="${logoSrc}" class="hero-logo-corner" />` : ''}
+          </div>` : ''}
       </div>
       <div class="body">
         ${inmobiliariaLogoSrc ? `<div class="inmob-logo-wrap">
