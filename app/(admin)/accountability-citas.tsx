@@ -26,7 +26,9 @@ import {
   ESTADOS_SEGUIMIENTO, ORDEN_SEGUIMIENTO, infoSeguimiento, GRUPOS, DESDE,
   fechaEfectivaCita, mesDe, mesLegible, colorEstadoCita, PREGUNTAS_RETRO,
   mensajeAccountability, ESTADOS_CITA_VENTA, infoEstadoCita, type EstadoSeguimiento,
+  quienEs, type PersonaApp, type QuienEs,
 } from '../../lib/accountability-citas'
+import { rolLabel } from '../../lib/permisos'
 import * as Clipboard from 'expo-clipboard'
 import { LinearGradient } from 'expo-linear-gradient'
 
@@ -98,6 +100,10 @@ export default function AccountabilityCitas() {
   const c = useColors()
   const { darkMode } = useTheme()
   const [filas, setFilas] = useState<Fila[]>([])
+  // La gente de la app, para saber QUIÉN es el nombre que trae la cita.
+  // `atendio` y `prospecto` son texto libre y hay nombres repetidos: ver
+  // quienEs() en lib/accountability-citas.
+  const [gente, setGente] = useState<PersonaApp[]>([])
   const [cargando, setCargando] = useState(true)
   const [vista, setVista] = useState<'lista' | 'graficas'>('lista')
   const [abierta, setAbierta] = useState<string | null>(null)
@@ -150,6 +156,14 @@ export default function AccountabilityCitas() {
     if (montado.current) {
       setFilas((data ?? []) as unknown as Fila[])
       setCargando(false)
+    }
+    // Se pide aparte y después: la lista de citas es lo que se vino a ver y no
+    // tiene por qué esperar a esto. Si falla, las tarjetas siguen enseñando el
+    // nombre tal cual lo capturaron, que es lo que enseñaban antes.
+    const { data: perfiles } = await supabase
+      .from('profiles').select('id, nombre, role, telefono, activo')
+    if (montado.current) {
+      setGente(((perfiles ?? []) as any[]).filter(p => p?.nombre) as PersonaApp[])
     }
   }, [])
   useFocusEffect(useCallback(() => {
@@ -416,6 +430,7 @@ export default function AccountabilityCitas() {
               fondoPildora={fondoPildora} tintaPildora={tintaPildora}
               onEscribir={escribirA}
               copiado={copiado}
+              gente={gente}
             />
           )}
         />
@@ -584,10 +599,85 @@ function Filtros(p: any) {
   )
 }
 
+/**
+ * Quién es la persona que dice la cita, en un renglón.
+ *
+ * Los campos "atendió" y "prospectó" son texto libre, y el botón enseñaba solo
+ * el primer nombre: "Copiar para el asesor: Fatima". En la app hay DOS
+ * Fátimas activas, así que eso no identificaba a nadie. Aquí se dice el
+ * apellido, el rol y el teléfono, y —cuando el nombre no alcanza— se avisa en
+ * vez de elegir a una por nuestra cuenta.
+ *
+ * El gris es para lo que solo informa; el ámbar, para lo que hay que mirar
+ * antes de mandar el mensaje.
+ */
+function QuienLinea({ texto, c, gente }: { texto: string; c: any; gente: PersonaApp[] }) {
+  // Sin la lista de gente (todavía cargando, o falló) no se inventa nada: la
+  // tarjeta se queda como estaba.
+  if (!gente?.length) return null
+  const q: QuienEs = quienEs(texto, gente)
+  const AMBAR = '#b45309'
+  const ambar = legibleSobre(AMBAR, c.card, 4.5)
+  const gris = c.textMute
+
+  const tel = (t: string | null) => {
+    const d = (t ?? '').replace(/\D/g, '')
+    if (d.length === 10) return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`
+    return t ?? ''
+  }
+  const quienEsCual = (p: PersonaApp) =>
+    `${p.nombre} (${rolLabel(p.role)}${p.activo ? '' : ', ya no activo'})`
+
+  if (q.tipo === 'fuera') {
+    return (
+      <Text style={[s.quienTxt, { color: gris }]}>
+        No hay nadie en la app con ese nombre: ha de ser alguien de fuera.
+      </Text>
+    )
+  }
+
+  if (q.tipo === 'varias') {
+    return (
+      <Text style={[s.quienTxt, { color: ambar }]}>
+        ⚠ Hay {q.candidatas.length} personas que se llaman así: {q.candidatas.map(quienEsCual).join(' · ')}.
+        {' '}La cita no dice cuál, revísalo antes de mandar el mensaje.
+      </Text>
+    )
+  }
+
+  const { persona, exacta, homonimos } = q
+  const datos = [rolLabel(persona.role), persona.telefono ? tel(persona.telefono) : null]
+    .filter(Boolean).join(' · ')
+
+  if (!exacta) {
+    return (
+      <Text style={[s.quienTxt, { color: ambar }]}>
+        ⚠ Nadie está capturado exactamente así. El único con ese nombre es {persona.nombre} ({datos}).
+      </Text>
+    )
+  }
+
+  if (homonimos.length > 0) {
+    return (
+      <Text style={[s.quienTxt, { color: ambar }]}>
+        ⚠ También hay {homonimos.map(quienEsCual).join(' y ')}. Este mensaje es para{' '}
+        <Text style={{ fontWeight: '900' }}>{persona.nombre}</Text>{datos ? `, ${datos}` : ''}.
+      </Text>
+    )
+  }
+
+  return (
+    <Text style={[s.quienTxt, { color: gris }]}>
+      {datos || 'Sin rol ni teléfono en su perfil'}
+      {persona.activo ? '' : ' · ya no está activo'}
+    </Text>
+  )
+}
+
 // ── Una cita ────────────────────────────────────────────────────────────────
 // Cerrada enseña lo mínimo para reconocerla; abierta, todo lo demás y el
 // editor. Así caben muchas en pantalla sin perder el detalle.
-function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, onContactado, guardando, borrador, setBorrador, fondoPildora, tintaPildora, onEscribir, copiado }: any) {
+function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, onContactado, guardando, borrador, setBorrador, fondoPildora, tintaPildora, onEscribir, copiado, gente }: any) {
   const seg = seguimientoDe(f)
   const est = estadoDe(f)
   const info = infoSeguimiento(est)
@@ -712,22 +802,31 @@ function TarjetaCita({ f, c, abierta, onAbrir, onEstado, onNotas, onContactado, 
               abre esta cita.
               Cada botón trae el nombre para no mandarle el mensaje a quien no
               era: en muchas citas el asesor y el prospectador son distintos. */}
-          <View style={s.escribirFila}>
+          <View style={s.escribirBloque}>
             {(['asesor', 'prospectador'] as const).map(q => {
               const nombre = q === 'asesor' ? f.atendio : f.prospecto
               if (!nombre) return null
               return (
-                <TouchableOpacity key={q} style={s.btnEscribir} onPress={() => onEscribir(f, q)}>
-                  <Ionicons
-                    name={copiado === `${f.id}|${q}` ? 'checkmark-circle' : 'copy-outline'}
-                    size={14} color="#188741"
-                  />
-                  <Text style={s.btnEscribirTxt} numberOfLines={1}>
-                    {copiado === `${f.id}|${q}`
-                      ? '¡Copiado!'
-                      : `Copiar para ${q === 'asesor' ? 'el asesor' : 'quien prospectó'}: ${String(nombre).split(' ')[0]}`}
-                  </Text>
-                </TouchableOpacity>
+                <View key={q} style={s.escribirItem}>
+                  <TouchableOpacity style={s.btnEscribir} onPress={() => onEscribir(f, q)}>
+                    <Ionicons
+                      name={copiado === `${f.id}|${q}` ? 'checkmark-circle' : 'copy-outline'}
+                      size={14} color="#188741"
+                    />
+                    {/* El nombre va COMPLETO, no el primer nombre.
+                        Con "Fatima" a secas no hay forma de saber si es Fatima
+                        Ruiz o Fátima Gutiérrez Zarate, que están las dos en la
+                        app. Medido: 93 de las 389 citas del accountability
+                        traen un nombre que comparte primer nombre con otra
+                        persona. */}
+                    <Text style={s.btnEscribirTxt} numberOfLines={1}>
+                      {copiado === `${f.id}|${q}`
+                        ? '¡Copiado!'
+                        : `Copiar para ${q === 'asesor' ? 'el asesor' : 'quien prospectó'}: ${String(nombre).trim()}`}
+                    </Text>
+                  </TouchableOpacity>
+                  <QuienLinea texto={String(nombre)} c={c} gente={gente} />
+                </View>
               )
             })}
             {!f.atendio && !f.prospecto && (
@@ -984,6 +1083,12 @@ const s = StyleSheet.create({
   franja: { width: 7 },
   estadoCita: { fontSize: 11.5, fontWeight: '800', marginTop: 3 },
   escribirFila: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 12 },
+  // Ahora cada persona es un bloque: el botón de copiar y, debajo, quién es.
+  // En fila no cabía: "Copiar para quien prospectó: Shakti Nadezhda
+  // Bustamante Ampudia" ya ocupa el ancho entero.
+  escribirBloque: { gap: 10, marginBottom: 12 },
+  escribirItem: { gap: 3, alignItems: 'flex-start' },
+  quienTxt: { fontSize: 11.5, lineHeight: 15.5, fontWeight: '600', paddingLeft: 2 },
   check: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     borderWidth: 1.5, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9,

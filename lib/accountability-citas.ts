@@ -173,3 +173,95 @@ export function mensajeAccountability(args: {
   l.push('¿Qué pasó con el cliente después? ¿Sigue interesado, hay que mandarle más opciones, o ya se descartó?')
   return l.join(String.fromCharCode(10))
 }
+
+// ── ¿A QUIÉN le estamos escribiendo? ──────────────────────────────────────
+//
+// `citas_venta.atendio` y `.prospecto` son TEXTO LIBRE: lo que alguien tecleó
+// el día de la cita. La tarjeta decía "Copiar para el asesor: Fatima" —solo el
+// primer nombre— y eso no alcanza: en la app hay DOS Fátimas activas, Fatima
+// Ruiz (prospectador plus) y Fátima Gutiérrez Zarate (nuevo). Quien iba a
+// mandar el mensaje no tenía forma de saber a cuál.
+//
+// Medido sobre las 389 citas que entran al accountability (desde el
+// 1/sep/2026), tomando cada nombre distinto de "atendió" y "prospectó":
+//
+//   · 32 nombres (248 citas) salen de una sola persona y nadie más se llama
+//     así: no hay nada que aclarar.
+//   · 8 nombres (92 citas) SÍ identifican a una persona, pero hay OTRA con el
+//     mismo primer nombre. Aquí es donde enseñar solo el primer nombre se
+//     equivoca, y es una de cada cuatro citas.
+//   · 1 nombre (1 cita) corresponde a DOS perfiles con el nombre idéntico
+//     ("Andrés Valera", uno admin y otro supervisor): no se puede decidir y
+//     hay que decirlo en vez de elegir uno al azar.
+//   · 4 nombres (4 citas) no están capturados igual que en el perfil, pero hay
+//     una sola persona con ese primer nombre: probable, no seguro.
+//   · 23 nombres (44 citas) no corresponden a nadie de la app: son asesores de
+//     fuera ("Javier Venegas", "Connie Gardea") o recados ("atienden alla").
+//     Antes la tarjeta decía "Copiar para el asesor: Javier" como si supiera
+//     quién era.
+
+export type PersonaApp = {
+  id: string
+  nombre: string
+  role: string | null
+  telefono: string | null
+  activo: boolean
+}
+
+export type QuienEs =
+  /** Se sabe quién es. `exacta` false = se dedujo por el primer nombre. */
+  | { tipo: 'una'; persona: PersonaApp; exacta: boolean; homonimos: PersonaApp[] }
+  /** Hay varias personas que encajan y la cita no dice cuál. */
+  | { tipo: 'varias'; candidatas: PersonaApp[] }
+  /** Nadie en la app se llama así. */
+  | { tipo: 'fuera' }
+
+/** Minúsculas, sin acentos y con un solo espacio entre palabras. */
+function clave(s: string | null | undefined): string {
+  return (s ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+const primerNombre = (s: string | null | undefined) => clave(s).split(' ')[0] ?? ''
+
+/**
+ * Quién es la persona que dice un campo de texto libre.
+ *
+ * El orden importa: primero se busca el nombre COMPLETO entre quienes siguen
+ * activos (es lo que casi siempre acierta), luego entre quienes ya no lo
+ * están —una cita vieja puede ser de alguien que se fue— y solo al final se
+ * intenta por el primer nombre, que es una deducción y se marca como tal.
+ *
+ * Cuando encaja más de una persona NO se elige: se devuelven todas. Elegir
+ * una sería inventarse el dato, que es exactamente lo que hacía el primer
+ * nombre a secas.
+ */
+export function quienEs(texto: string | null | undefined, gente: PersonaApp[]): QuienEs {
+  const k = clave(texto)
+  if (!k) return { tipo: 'fuera' }
+
+  const activos = gente.filter(p => p.activo)
+  const exactas = (lista: PersonaApp[]) => lista.filter(p => clave(p.nombre) === k)
+
+  let candidatas = exactas(activos)
+  let exacta = true
+  if (candidatas.length === 0) candidatas = exactas(gente.filter(p => !p.activo))
+  if (candidatas.length === 0) {
+    candidatas = activos.filter(p => primerNombre(p.nombre) === primerNombre(k))
+    exacta = false
+  }
+
+  if (candidatas.length === 0) return { tipo: 'fuera' }
+  if (candidatas.length > 1) return { tipo: 'varias', candidatas }
+
+  const persona = candidatas[0]
+  // Los homónimos son los OTROS que comparten el primer nombre. No cambian a
+  // quién le escribes; cambian que tengas que leer el apellido antes de
+  // mandarlo.
+  const homonimos = activos.filter(p =>
+    p.id !== persona.id && primerNombre(p.nombre) === primerNombre(persona.nombre))
+  return { tipo: 'una', persona, exacta, homonimos }
+}

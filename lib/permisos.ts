@@ -27,3 +27,18 @@ export function puedeVerPublicaciones(role?: string | null): boolean {
 export function puedeEnviarClienteAChatbot(role?: string | null): boolean {
   return ['nuevo', 'prospectador', 'prospectador_plus', 'asesor', 'supervisor', 'admin'].includes(role ?? '')
 }
+
+/**
+ * El rol, escrito como se le dice a una persona.
+ *
+ * Vivía copiado dentro de BusquedaGlobal y de CambiarCuenta. Aquí queda uno
+ * solo; esas dos siguen con el suyo hasta que se toquen por otra razón, para
+ * no mover de paso pantallas que hoy funcionan.
+ */
+export function rolLabel(role?: string | null): string {
+  const m: Record<string, string> = {
+    admin: 'Admin', gerente: 'Gerente', supervisor: 'Supervisor', asesor: 'Asesor',
+    prospectador: 'Prospectador', prospectador_plus: 'Prospectador Plus', nuevo: 'Nuevo',
+  }
+  return m[role ?? ''] ?? (role ?? 'sin rol')
+}
