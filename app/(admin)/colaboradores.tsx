@@ -3,19 +3,27 @@
 //
 // Las dos listas usan la misma fila (components/FilaDirectorio) para que se
 // lean como dos vistas de lo mismo y no como dos apps.
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Platform, Alert, Modal, Linking,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from 'expo-router'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { legibleSobre } from '../../lib/color'  // medir, no suponer: ver reference_contraste
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 import FilaDirectorio, { MetaFila, fondoFila } from '../../components/FilaDirectorio'
+import TablaDirectorio, {
+  SelectorVista, CeldaTexto, CeldaPastilla, CeldaBoton,
+  type ColTabla, type CtxCelda, type RenglonTabla,
+} from '../../components/TablaDirectorio'
 import HojaOrden, { type OpcionOrden } from '../../components/HojaOrden'
+
+/** La vista elegida se recuerda hasta que el usuario la cambie. */
+const VISTA_KEY = '@valera_colaboradores_vista'
 
 type Colaborador = {
   id: string
@@ -141,6 +149,58 @@ const COMPARA: Record<Orden, (a: Colaborador, b: Colaborador) => number> = {
 }
 
 /**
+ * La vista de TABLA.
+ *
+ * La lista de tarjetas sirve para mirar a UNO: quién es, cómo le escribo. La
+ * tabla sirve para COMPARAR a todos en una columna —a quién le falta
+ * catálogo, quién lleva más sin actualizar, cuántos siguen sin conectar— que
+ * es lo que antes se hacía en el sheet.
+ *
+ * Las columnas que NO están y por qué: `ultima_casa_subida` lo traen 0 de 73
+ * registros, `marca` trae la letra "i" en 13 y nada en el resto, y
+ * `fecha_actualizacion` es el texto viejo del sheet (ahí hay "9 de marzo" y
+ * "No tiene propiedades xd" junto a las fechas) — la fecha de verdad es
+ * `actualizado_at`, que es la que sale en "Actualizado". Una columna vacía en
+ * una tabla no es neutral: ocupa ancho y hace dudar de si falta el dato.
+ */
+const COLS: ColTabla[] = [
+  { id: 'nombre',      label: 'Nombre',      ancho: 142, flex: 2.1, ordenable: true },
+  { id: 'etapa',       label: 'Etapa',       ancho: 104, flex: 1.0 },
+  { id: 'relevancia',  label: 'Relevancia',  ancho: 112, flex: 1.1, ordenable: true },
+  { id: 'en_app',      label: 'En la app',   ancho: 112, flex: 1.1 },
+  { id: 'contacto',    label: 'Contacto',    ancho: 138, flex: 1.4 },
+  { id: 'actualizado', label: 'Actualizado', ancho: 120, flex: 1.2, ordenable: true },
+  { id: 'catalogo',    label: 'Catálogo',    ancho: 74,  flex: 0.6, centrada: true },
+  { id: 'aviso',       label: 'Aviso',       ancho: 150, flex: 1.6 },
+  { id: 'notas',       label: 'Notas',       ancho: 190, flex: 2.0 },
+]
+
+/**
+ * Tocar una cabecera ordena por esa columna — y lo hace con los MISMOS cinco
+ * órdenes que la hoja de orden, no con unos aparte. Así la pastilla de arriba
+ * sigue diciendo la verdad y al volver a la vista de lista la lista está
+ * ordenada igual que la dejaste.
+ *
+ * "Actualizado" alterna entre los dos sentidos, que es lo que se espera de
+ * una cabecera de tabla: primero los olvidados, otro toque y los frescos.
+ */
+function ordenAlTocar(colId: string, actual: Orden): Orden {
+  if (colId === 'nombre') return 'nombre'
+  if (colId === 'relevancia') return 'relevancia'
+  if (colId === 'actualizado') return actual === 'olvidados' ? 'frescos' : 'olvidados'
+  return actual
+}
+
+/** Qué flecha pinta la cabecera, según el orden que esté puesto. */
+function flechaDe(orden: Orden): { col: string; dir: 'asc' | 'desc' } | null {
+  if (orden === 'nombre') return { col: 'nombre', dir: 'asc' }
+  if (orden === 'relevancia') return { col: 'relevancia', dir: 'desc' }
+  if (orden === 'olvidados') return { col: 'actualizado', dir: 'asc' }
+  if (orden === 'frescos') return { col: 'actualizado', dir: 'desc' }
+  return null  // "Recién agregados" no tiene columna: no se enseña la fecha de alta.
+}
+
+/**
  * Los filtros, y cómo se combinan.
  *
  * Se COMBINAN en lugar de ser uno a la vez, que es lo que había: así se puede
@@ -253,6 +313,7 @@ export default function AdminColaboradores() {
   const [filtros, setFiltros] = useState<string[]>([])
   const [orden, setOrden] = useState<Orden>('relevancia')
   const [hojaOrden, setHojaOrden] = useState(false)
+  const [vista, setVista] = useState<'lista' | 'tabla'>('lista')
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<Colaborador | null>(null)
   const [form, setForm] = useState<Form>(EMPTY)
@@ -266,6 +327,16 @@ export default function AdminColaboradores() {
 
   useFocusEffect(useCallback(() => { cargar() }, []))
   const { refreshControl } = usePullRefresh(cargar)
+
+  // La vista se recuerda. Si quien entra a esta pantalla trabaja en tabla, no
+  // tiene por qué volver a cambiarla cada vez que entra.
+  useEffect(() => {
+    AsyncStorage.getItem(VISTA_KEY).then(v => { if (v === 'tabla') setVista('tabla') }).catch(() => {})
+  }, [])
+  const cambiarVista = (v: 'lista' | 'tabla') => {
+    setVista(v)
+    AsyncStorage.setItem(VISTA_KEY, v).catch(() => {})
+  }
 
   const yaCargoRef = useRef(false)
   async function cargar() {
@@ -433,6 +504,134 @@ export default function AdminColaboradores() {
    *  nada: nomás ocupa un renglón. */
   const gruposVisibles = GRUPOS.filter(g => listaFiltrada.some(g.pred))
 
+  /**
+   * Una celda de la tabla.
+   *
+   * Todo lo de color se mide contra `ctx.fondo` —el renglón va teñido con el
+   * color de su estado, igual que la tarjeta— y no contra la tarjeta: medir
+   * contra la tarjeta es el error que daba 4.19:1 creyendo ir en 4.5.
+   */
+  function celda(col: Colaborador, colId: string, ctx: CtxCelda): ReactNode {
+    switch (colId) {
+      case 'nombre':
+        return <CeldaTexto ctx={ctx} color={c.text} negrita lineas={1}>{col.nombre}</CeldaTexto>
+
+      case 'etapa':
+        // "Ya colabora" va en texto llano y "Por entrar" en pastilla morada:
+        // 59 de 73 son colaboradores, y 59 pastillas iguales no separan nada.
+        return esPorEntrar(col)
+          ? <CeldaPastilla texto="Por entrar" color={POR_ENTRAR} ctx={ctx} icono="enter-outline" />
+          : <CeldaTexto ctx={ctx} lineas={1}>Ya colabora</CeldaTexto>
+
+      case 'relevancia': {
+        const rel = relevanciaDe(col.relevancia)
+        return rel
+          ? <CeldaPastilla texto={rel.etiqueta} color={rel.color} solida={rel.solida} ctx={ctx} icono="star" />
+          : <CeldaTexto ctx={ctx}>{null}</CeldaTexto>
+      }
+
+      case 'en_app':
+        // A un "por entrar" no se le pone "Sin conectar": claro que no está
+        // conectado, todavía no es colaborador.
+        if (esPorEntrar(col)) return <CeldaTexto ctx={ctx}>{null}</CeldaTexto>
+        return (
+          <CeldaPastilla
+            texto={col.en_app === 'SI' ? 'Sí' : col.en_app === 'PENDIENTE' ? 'Pendiente' : 'Sin conectar'}
+            color={colorEnApp(col.en_app)}
+            ctx={ctx}
+          />
+        )
+
+      case 'contacto': {
+        const tel = telefonoDe(col.contacto)
+        return (
+          <View style={s.celdaRow}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <CeldaTexto ctx={ctx} lineas={1}>{col.contacto}</CeldaTexto>
+            </View>
+            {!!tel && (
+              <CeldaBoton
+                icono="logo-whatsapp" color="#128C7E" ctx={ctx}
+                onPress={() => Linking.openURL(`https://wa.me/${tel}`)}
+                etiqueta={`WhatsApp a ${col.nombre}`}
+              />
+            )}
+          </View>
+        )
+      }
+
+      case 'actualizado': {
+        // La celda ES el botón: marcar quién ya mandó catálogo es lo que más
+        // se hace en esta pantalla, y en la tabla se van a ir marcando de
+        // corrido. El mismo botón quita la marca, con la misma pregunta de
+        // seguridad si la fecha no es de hoy.
+        const marcado = !!col.actualizado_at
+        return (
+          <TouchableOpacity
+            style={s.celdaRow}
+            onPress={(e: any) => { e?.stopPropagation?.(); alternarActualizado(col) }}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            accessibilityRole="button"
+            accessibilityLabel={marcado
+              ? `Quitar la marca de actualizado de ${col.nombre} (${haceTiempo(col.actualizado_at!)})`
+              : `Marcar ${col.nombre} como actualizado hoy`}
+          >
+            {/* El estado sin marcar NO va con el gris apagado de una celda
+                vacía: "Marcar" es un botón, y un botón se lee. El gris
+                apagado se queda solo para el "—" de lo que no tiene dato. */}
+            <Ionicons
+              name={marcado ? 'checkmark-circle' : 'ellipse-outline'}
+              size={15}
+              color={marcado ? ctx.tintaIcono('#1e7e34') : ctx.sub}
+            />
+            <Text
+              style={[s.celdaTxt, { color: marcado ? ctx.tinta('#1e7e34') : ctx.sub }]}
+              numberOfLines={1}
+            >
+              {marcado ? haceTiempo(col.actualizado_at!) : 'Marcar'}
+            </Text>
+          </TouchableOpacity>
+        )
+      }
+
+      case 'catalogo':
+        return col.link
+          ? <CeldaBoton
+              icono={esUrl(col.link) ? 'link-outline' : 'document-text-outline'}
+              color="#1976D2" ctx={ctx}
+              onPress={() => abrirLink(col.link!)}
+              etiqueta={`Ver catálogo de ${col.nombre}`}
+            />
+          : <CeldaTexto ctx={ctx}>{null}</CeldaTexto>
+
+      case 'aviso':
+        return <CeldaTexto ctx={ctx} color={col.estado_subida ? ctx.tinta('#c0392b') : undefined} lineas={2}>{col.estado_subida}</CeldaTexto>
+
+      case 'notas':
+        return <CeldaTexto ctx={ctx} lineas={2}>{col.notas}</CeldaTexto>
+
+      default:
+        return null
+    }
+  }
+
+  /** Los renglones de la tabla: los mismos apartados que la vista de lista. */
+  const renglones: RenglonTabla[] = gruposVisibles.flatMap(g => {
+    const filas = listaFiltrada.filter(g.pred)
+    const cuerpo: RenglonTabla[] = filas.map(col => ({
+      tipo: 'fila' as const,
+      clave: col.id,
+      acento: colorFila(col),
+      onPress: () => abrirEditar(col),
+      etiqueta: `Editar ${col.nombre}`,
+      celda: (colId: string, ctx: CtxCelda) => celda(col, colId, ctx),
+    }))
+    return gruposVisibles.length > 1
+      ? [{ tipo: 'seccion' as const, clave: `s-${g.clave}`, titulo: `${g.titulo} · ${filas.length}`,
+           color: g.clave === 'por_entrar' ? POR_ENTRAR : undefined }, ...cuerpo]
+      : cuerpo
+  })
+
   return (
     <View style={[s.container, { backgroundColor: c.bg }]}>
       <View style={s.header}>
@@ -446,6 +645,7 @@ export default function AdminColaboradores() {
               : `Sus opciones las podemos subir. ${nColaboran} colaboradores${nPorEntrar > 0 ? ` y ${nPorEntrar} por entrar` : ''}.`}
           </Text>
         </View>
+        <SelectorVista vista={vista} onCambiar={cambiarVista} acento={TEAL} />
         <TouchableOpacity style={s.btnNuevo} onPress={abrirNueva}>
           <Ionicons name="add" size={16} color="#000" />
           <Text style={s.btnNuevoText}>Nuevo</Text>
@@ -532,6 +732,16 @@ export default function AdminColaboradores() {
             </TouchableOpacity>
           )}
         </View>
+      ) : vista === 'tabla' ? (
+        <TablaDirectorio
+          columnas={COLS}
+          renglones={renglones}
+          orden={flechaDe(orden)}
+          onOrdenar={colId => setOrden(prev => ordenAlTocar(colId, prev))}
+          acentoCabeza="#14404a"
+          refreshControl={refreshControl}
+          pie={marcando ? <ActivityIndicator size="small" color={TEAL} style={{ marginTop: 10 }} /> : null}
+        />
       ) : (
         <ScrollView contentContainerStyle={s.lista} refreshControl={refreshControl}>
           {gruposVisibles.map(g => {
@@ -815,6 +1025,9 @@ const s = StyleSheet.create({
   seccionTit: { fontSize: 11.5, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase' },
   seccionNota: { fontSize: 11.5, marginTop: 2, lineHeight: 15 },
   aviso: { fontSize: 12, fontWeight: '700' },
+  // Celdas de la tabla que llevan icono + texto en el mismo renglón.
+  celdaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 },
+  celdaTxt: { fontSize: 12.5, fontWeight: '700', flexShrink: 1 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalBox: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: '90%' },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#88888855', alignSelf: 'center', marginBottom: 12 },

@@ -3,7 +3,7 @@
 //
 // Las dos listas usan la misma fila (components/FilaDirectorio) para que se
 // lean como dos vistas de lo mismo y no como dos apps.
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator,
   Modal, Alert, Platform, Linking, RefreshControl,
@@ -17,8 +17,16 @@ import { useColors } from '../../lib/ThemeContext'
 import { ESTADOS_MEXICO, ESTADO_PRINCIPAL } from '../../lib/estados-mexico'
 import { ZONAS_INTERES } from '../../lib/zonas-interes'
 import FilaDirectorio, { MetaFila, fondoFila } from '../../components/FilaDirectorio'
+import TablaDirectorio, {
+  SelectorVista, CeldaTexto, CeldaPastilla, CeldaBoton,
+  type ColTabla, type CtxCelda, type RenglonTabla,
+} from '../../components/TablaDirectorio'
 import HojaOrden, { type OpcionOrden } from '../../components/HojaOrden'
 import { legibleSobre } from '../../lib/color'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+/** La vista elegida se recuerda hasta que el usuario la cambie. */
+const VISTA_KEY = '@valera_asesores_externos_vista'
 
 type Tipo = 'alianza' | 'independiente'
 type Asesor = {
@@ -114,6 +122,42 @@ const COMPARA: Record<Orden, (a: Asesor, b: Asesor) => number> = {
   estado: (a, b) => claveEstado(a).localeCompare(claveEstado(b), 'es') || claveZona(a).localeCompare(claveZona(b), 'es') || porNombre(a, b),
 }
 
+/**
+ * La vista de TABLA. La misma que en Colaboradores, con sus columnas.
+ *
+ * La lista sirve para mirar a UNO —a quién le mando esta cita—; la tabla
+ * sirve para ver una columna entera: quiénes no tienen zona escrita, quiénes
+ * siguen sin clasificar, qué se dio de alta esta semana.
+ */
+const COLS: ColTabla[] = [
+  { id: 'nombre',   label: 'Nombre',   ancho: 142, flex: 2.0, ordenable: true },
+  { id: 'tipo',     label: 'Tipo',     ancho: 116, flex: 1.1 },
+  { id: 'zona',     label: 'Zona',     ancho: 164, flex: 1.9, ordenable: true },
+  { id: 'estado',   label: 'Estado',   ancho: 124, flex: 1.2, ordenable: true },
+  { id: 'telefono', label: 'Teléfono', ancho: 168, flex: 1.8 },
+  { id: 'alta',     label: 'Dado de alta', ancho: 118, flex: 1.2, ordenable: true },
+]
+
+/** Tocar una cabecera ordena con los MISMOS órdenes de la hoja de orden. */
+function ordenAlTocar(colId: string, actual: Orden): Orden {
+  if (colId === 'nombre') return 'nombre'
+  if (colId === 'zona') return 'zona'
+  if (colId === 'estado') return 'estado'
+  if (colId === 'alta') return 'recientes'
+  return actual
+}
+
+function flechaDe(orden: Orden): { col: string; dir: 'asc' | 'desc' } | null {
+  if (orden === 'nombre') return { col: 'nombre', dir: 'asc' }
+  if (orden === 'zona') return { col: 'zona', dir: 'asc' }
+  if (orden === 'estado') return { col: 'estado', dir: 'asc' }
+  return { col: 'alta', dir: 'desc' }
+}
+
+/** "17 nov 2026". Corta, porque la columna mide 118px. */
+const fechaCorta = (iso: string) =>
+  new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
+
 export default function AsesoresExternos() {
   const c = useColors()
   const [lista, setLista] = useState<Asesor[]>([])
@@ -130,6 +174,7 @@ export default function AsesoresExternos() {
   // se quiere ver. Las otras cuatro formas están en la hoja de orden.
   const [orden, setOrden] = useState<Orden>('recientes')
   const [hojaOrden, setHojaOrden] = useState(false)
+  const [vista, setVista] = useState<'lista' | 'tabla'>('lista')
   const [editando, setEditando] = useState<Partial<Asesor> | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [pasando, setPasando] = useState(false)
@@ -153,6 +198,15 @@ export default function AsesoresExternos() {
     } catch { /* red */ } finally { setLoading(false); setRefreshing(false) }
   }, [])
   useFocusEffect(useCallback(() => { cargar(true) }, [cargar]))
+
+  // La vista se recuerda, igual que en Colaboradores.
+  useEffect(() => {
+    AsyncStorage.getItem(VISTA_KEY).then(v => { if (v === 'tabla') setVista('tabla') }).catch(() => {})
+  }, [])
+  const cambiarVista = (v: 'lista' | 'tabla') => {
+    setVista(v)
+    AsyncStorage.setItem(VISTA_KEY, v).catch(() => {})
+  }
 
   async function guardar() {
     if (!editando || !editando.nombre?.trim()) { Alert.alert('Falta el nombre', 'Escribe al menos el nombre del asesor.'); return }
@@ -307,6 +361,97 @@ export default function AsesoresExternos() {
     v === 'sin' ? listaPorEstado.filter(a => !a.tipo).length
     : listaPorEstado.filter(a => a.tipo === v).length
 
+  /**
+   * Una celda de la tabla. Todo lo de color se mide contra `ctx.fondo` —el
+   * renglón va teñido con el color de su tipo— y no contra la tarjeta.
+   */
+  function celda(a: Asesor, colId: string, ctx: CtxCelda): ReactNode {
+    const t = tipoDe(a.tipo)
+    const tel = soloTel(a.telefono)
+    switch (colId) {
+      case 'nombre':
+        return <CeldaTexto ctx={ctx} color={c.text} negrita lineas={1}>{a.nombre}</CeldaTexto>
+
+      case 'tipo':
+        // Sin pastilla cuando no está clasificado: 23 de 41 no tienen tipo y
+        // una pastilla de "Sin clasificar" en más de la mitad de los renglones
+        // no informa. El "—" ya dice que falta.
+        return t ? <CeldaPastilla texto={t.etiqueta} color={t.color} ctx={ctx} /> : <CeldaTexto ctx={ctx}>{null}</CeldaTexto>
+
+      case 'zona': {
+        const z = a.zona?.trim()
+        if (!z) return <CeldaTexto ctx={ctx}>{null}</CeldaTexto>
+        // El campo es libre y ahí acabó de todo: zonas de verdad y recados
+        // ("Es para alianza", un mensaje de WhatsApp de 131 caracteres). En la
+        // tabla el recado lleva su icono de nota, para que no se lea como una
+        // zona a la que se le puede mandar una cita.
+        const esNota = !zonaFiltrable(z)
+        // El recado se distingue por el ICONO, no por ir más apagado: es
+        // texto que hay que poder leer (hay uno de 131 caracteres), y
+        // apagarlo lo dejaría en 2.4:1.
+        return (
+          <View style={st.celdaRow}>
+            <Ionicons
+              name={esNota ? 'chatbox-ellipses-outline' : 'location-outline'}
+              size={12}
+              color={esNota ? ctx.sub : ctx.tintaIcono(TEAL)}
+            />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <CeldaTexto ctx={ctx} lineas={2}>{z}</CeldaTexto>
+            </View>
+          </View>
+        )
+      }
+
+      case 'estado':
+        return <CeldaTexto ctx={ctx} lineas={1}>{a.estado_mx}</CeldaTexto>
+
+      case 'telefono':
+        return (
+          <View style={st.celdaRow}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <CeldaTexto ctx={ctx} lineas={1}>{a.telefono}</CeldaTexto>
+            </View>
+            {!!tel && (
+              <CeldaBoton
+                icono="logo-whatsapp" color="#128C7E" ctx={ctx}
+                onPress={() => Linking.openURL(`https://wa.me/${tel.replace(/^\+/, '')}`)}
+                etiqueta={`WhatsApp a ${a.nombre}`}
+              />
+            )}
+            {!!tel && (
+              <CeldaBoton
+                icono="call" color={TEAL} ctx={ctx}
+                onPress={() => Linking.openURL(`tel:${tel}`)}
+                etiqueta={`Llamar a ${a.nombre}`}
+              />
+            )}
+          </View>
+        )
+
+      case 'alta': {
+        const reciente = Date.now() - new Date(a.created_at).getTime() < DIAS_NUEVO * DIA
+        return (
+          <CeldaTexto ctx={ctx} color={reciente ? ctx.tinta(TEAL) : undefined} negrita={reciente} lineas={1}>
+            {fechaCorta(a.created_at)}
+          </CeldaTexto>
+        )
+      }
+
+      default:
+        return null
+    }
+  }
+
+  const renglones: RenglonTabla[] = filtrados.map(a => ({
+    tipo: 'fila' as const,
+    clave: a.id,
+    acento: tipoDe(a.tipo)?.color ?? SIN_TIPO,
+    onPress: () => setEditando(a),
+    etiqueta: `Editar ${a.nombre}`,
+    celda: (colId: string, ctx: CtxCelda) => celda(a, colId, ctx),
+  }))
+
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <View style={st.header}>
@@ -320,6 +465,7 @@ export default function AsesoresExternos() {
               : `Nos atienden las citas por zona. ${lista.length} registrados.`}
           </Text>
         </View>
+        <SelectorVista vista={vista} onCambiar={cambiarVista} acento={TEAL} />
         <TouchableOpacity
           style={st.btnNuevo}
           onPress={() => setEditando({ nombre: '', telefono: '', zona: '', estado_mx: ESTADO_PRINCIPAL })}
@@ -467,6 +613,18 @@ export default function AsesoresExternos() {
         </ScrollView>
       )}
 
+      {/* La tabla solo entra cuando hay a quién enseñar: una tabla con la
+          cabecera y ningún renglón se lee como que algo falló. */}
+      {vista === 'tabla' && filtrados.length > 0 ? (
+        <TablaDirectorio
+          columnas={COLS}
+          renglones={renglones}
+          orden={flechaDe(orden)}
+          onOrdenar={colId => setOrden(prev => ordenAlTocar(colId, prev))}
+          acentoCabeza="#14404a"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); cargar(true) }} tintColor={TEAL} />}
+        />
+      ) : (
       <ScrollView
         contentContainerStyle={st.lista}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); cargar(true) }} tintColor={TEAL} />}
@@ -530,6 +688,7 @@ export default function AsesoresExternos() {
           )
         })}
       </ScrollView>
+      )}
 
       <Modal visible={!!editando} transparent animationType="slide" onRequestClose={() => setEditando(null)}>
         <View style={st.overlay}>
@@ -703,6 +862,8 @@ const st = StyleSheet.create({
   chipTxtOn: { color: '#fff' },
   lista: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28 },
   zonaRow: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1, minWidth: 0 },
+  // Celdas de la tabla que llevan icono(s) + texto en el mismo renglón.
+  celdaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 },
   zonaTxt: { fontSize: 12, fontWeight: '600', flexShrink: 1 },
   vacio: { fontSize: 13.5, textAlign: 'center', lineHeight: 20, paddingHorizontal: 24, marginTop: 30 },
   tipoOpciones: { gap: 8, marginBottom: 4 },
