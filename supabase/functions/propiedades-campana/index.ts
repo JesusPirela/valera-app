@@ -82,6 +82,8 @@ serve(async (req) => {
     const presupuesto = body.presupuesto != null ? Number(body.presupuesto) : null
     const tipoOperacion = body.tipo_operacion ? String(body.tipo_operacion).trim().toLowerCase() : null
     const soloVideo = body.solo_video === true || String(body.solo_video).toLowerCase() === 'true'
+    const posicionNum = Number(body.posicion)
+    const posicion = Number.isFinite(posicionNum) && posicionNum >= 1 ? Math.trunc(posicionNum) : 1
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -95,6 +97,7 @@ serve(async (req) => {
       const { data: elegida, error: errorVideo } = await supabase.rpc('propiedades_campana_elegir_video', {
         p_zona: zona,
         p_presupuesto: Number.isFinite(presupuesto) ? presupuesto : null,
+        p_posicion: posicion,
       })
 
       if (errorVideo) {
