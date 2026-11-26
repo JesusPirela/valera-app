@@ -410,7 +410,11 @@ export default function NuevaPropiedad() {
       setImportMsg(partes.length > 0
         ? `✓ ${partes.join(' · ')}`
         : '⚠ No se detectaron campos. Verifica que el URL sea de una propiedad.')
-      setAvisoFotos(d.imagenes?.length ? '' : String(d.avisoFotos ?? ''))
+      // El aviso sale TAMBIEN cuando vinieron fotos pero faltan: EasyBroker
+      // publica 10 en el codigo de la pagina y carga el resto al abrir la
+      // galeria, asi que una ficha de 16 se importaba con 10 y nadie se
+      // enteraba. Antes solo se ensenaba si no venia ninguna.
+      setAvisoFotos(String(d.avisoFotos ?? ''))
 
       if (d.descripcion) {
         setImportMsg(prev => `${prev} · Mejorando con IA…`)
@@ -973,7 +977,7 @@ export default function NuevaPropiedad() {
               borderWidth: 1, borderColor: '#e5a50a55', backgroundColor: '#3a2d0033',
             }}>
               <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#e5a50a', marginBottom: 3 }}>
-                ⚠ No se importó ninguna foto
+                {imagenes.length === 0 ? '⚠ No se importó ninguna foto' : '⚠ Faltan fotos por importar'}
               </Text>
               <Text style={{ fontSize: 11.5, lineHeight: 17, color: '#ddc9a0' }}>{avisoFotos}</Text>
             </View>

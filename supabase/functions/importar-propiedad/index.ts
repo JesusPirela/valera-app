@@ -109,6 +109,23 @@ function parseNum(val: unknown): number | null {
 // de lib/, hay que cambiar los dos a la vez).
 const TOPE = { recamaras: 30, banos: 30, mediosBanos: 10, estacionamientos: 50 }
 
+/**
+ * Cuántas fotos se traen como máximo.
+ *
+ * Estaba en 30 para las listas de fotos que vienen de una fuente ESTRUCTURADA
+ * (la API de EasyBroker, el JSON de TuFicha/NocNok, la carpeta del aviso en
+ * inmuebles24) y en 40 para los barridos genéricos. Medido en la base: hay
+ * propiedades con 45, 49, 51 y 52 fotos, y un bulto de 11 clavadas en 30
+ * exacto — eso último es el tope recortando, no anuncios de 30 fotos.
+ *
+ * Cuando la lista viene de una fuente estructurada, son LAS fotos de la
+ * propiedad y no hay por qué tirar ninguna: el tope solo existe para que una
+ * página rara no meta mil. El barrido genérico sí se queda más corto: ahí
+ * entran logos e íconos que ningún filtro atrapa del todo.
+ */
+const TOPE_FOTOS = 100
+const TOPE_FOTOS_GENERICO = 60
+
 function conteo(n: number | null, tope: number): number | null {
   if (n === null || !isFinite(n)) return null
   const r = Math.round(n)
@@ -266,6 +283,46 @@ function detectarAmueblada(titulo: string, descripcion: string, operacion: strin
   // sin estorbar en lo demás.
   if ((descripcion ?? '').replace(/\s+/g, ' ').trim().length < 40) return null
   return false
+}
+
+/**
+ * Cuántas fotos DICE el anuncio que tiene.
+ *
+ * Hace falta porque una página puede traer menos fotos en su código de las que
+ * tiene de verdad: EasyBroker pinta las primeras 10 y carga el resto cuando
+ * abres el visor, así que el importador se llevaba 10 de 16 sin que nadie se
+ * enterara. Medido en la base: 391 propiedades tienen EXACTAMENTE 10 fotos,
+ * contra 65 con 9 y 42 con 11 — ese bulto es el recorte, no la realidad.
+ *
+ * La señal buena es el texto alternativo de la foto ("foto 1 de 16"), que lo
+ * escribe el propio portal y no se confunde con nada. El "16 fotos" suelto se
+ * usa solo como respaldo, y por eso se exige que vaya pegado a la palabra.
+ * Devuelve 0 cuando no hay forma de saberlo: no se inventa un número.
+ */
+function fotosQueDiceTener(html: string): number {
+  const alt = html.match(/\bfotos?\s+\d+\s+de\s+(\d+)\b/i) ?? html.match(/\bphotos?\s+\d+\s+of\s+(\d+)\b/i)
+  if (alt) { const n = parseInt(alt[1], 10); if (n > 0 && n < 400) return n }
+  const suelto = html.match(/>\s*(\d{1,3})\s*(?:fotos?|im[aá]genes|photos?)\s*</i)
+  if (suelto) { const n = parseInt(suelto[1], 10); if (n > 0 && n < 400) return n }
+  return 0
+}
+
+/**
+ * Cuántas fotos distintas trae DE VERDAD el código de una ficha de EasyBroker.
+ *
+ * Las barras se desescapan primero: dentro de un <script> la dirección viaja
+ * como `property_images\/5719711\/100018736\/`, y contra eso una expresión que
+ * espera barras normales no casa nada.
+ */
+function cuentaFotosEb(html: string): number {
+  const plano = html.replace(/\\\//g, '/')
+  return new Set([...plano.matchAll(/property_images\/(\d+)\/(\d+)\//g)].map(m => m[2])).size
+}
+
+/** La página dice tener más fotos de las que trae en el código. */
+function faltanFotos(html: string): boolean {
+  const dice = fotosQueDiceTener(html)
+  return dice > 0 && cuentaFotosEb(html) < dice
 }
 
 /**
@@ -1344,8 +1401,16 @@ try {
 // Portales como inmuebles24 devuelven un "Just a moment…" con un reto de JS que
 // los proxies simples no resuelven; hay que reconocerlo para no extraer basura.
 function esDesafioBot(html: string): boolean {
-  const h = html.slice(0, 4000).toLowerCase()
-  return /just a moment|attention required|cf-browser-verification|challenge-platform|_cf_chl|cf_chl_opt|verifying you are human|performing security verification|enable javascript and cookies|datadome|px-captcha|gokuprops|awswafcookie|awswaf|token\.awswaf/.test(h)
+  // Se mira más allá de los primeros 4 KB: el muro de EasyBroker trae su aviso
+  // DESPUÉS de la plantilla de la página (cabecera, menús), pasado el corte, y
+  // por eso se colaba como si fuera el anuncio.
+  const h = html.slice(0, 20000).toLowerCase()
+  return /just a moment|attention required|cf-browser-verification|challenge-platform|_cf_chl|cf_chl_opt|verifying you are human|performing security verification|enable javascript and cookies|datadome|px-captcha|gokuprops|awswafcookie|awswaf|token\.awswaf/.test(h) ||
+    // El muro de EasyBroker, en español. Sin esto, el desbloqueador devolvía
+    // 12 KB de "Desactiva tu VPN", la función los daba por buenos (pesaban más
+    // que el mínimo) y la propiedad se importaba con UNA foto (la de la vista
+    // previa) o con ninguna, en vez de reintentar por el otro camino.
+    /desactiva tu vpn|verificaci[oó]n de seguridad de este sitio|no complet[oó] la verificaci[oó]n/.test(h)
 }
 
 // Unblocker con renderizado (ScraperAPI). Solo se usa si está configurada la
@@ -1353,6 +1418,11 @@ function esDesafioBot(html: string): boolean {
 // el Cloudflare de inmuebles24 y similares desde el servidor. `render=true`
 // ejecuta el JS del reto; `premium`/`country_code=mx` usa IPs residenciales MX.
 async function fetchViaUnblocker(url: string): Promise<string | null> {
+  return (await fetchUnblockerRapido(url)) ?? (await fetchUnblockerLento(url))
+}
+
+/** El camino rapido (~10-35s). Puede devolver la pagina a medio pintar. */
+async function fetchUnblockerRapido(url: string): Promise<string | null> {
   const key = (globalThis as any).Deno?.env?.get?.('SCRAPER_API_KEY')
   if (!key) return null
 
@@ -1369,9 +1439,26 @@ async function fetchViaUnblocker(url: string): Promise<string | null> {
     const r = await fetch(directa, { signal: AbortSignal.timeout(35_000) })
     if (r.ok) {
       const html = await r.text()
-      if (html && html.length > 2000) return html
+      // Pesar más de 2 KB no significa que sea el anuncio: el muro de
+      // EasyBroker pesa 12 KB. Si lo que llegó es un muro se sigue al
+      // asíncrono, que rota de IP y suele pasar.
+      if (html && html.length > 2000 && !esDesafioBot(html)) return html
     }
   } catch { /* se intenta con el asíncrono */ }
+  return null
+}
+
+/**
+ * El camino LENTO (~55s), que ademas renderiza mas tiempo.
+ *
+ * Eso ultimo importa mas de lo que parece: la galeria de EasyBroker carga
+ * sus fotos en diferido, asi que lo que se captura depende de cuanto espere
+ * el navegador. Medido el 26/nov/2026 sobre la MISMA ficha: por el camino
+ * rapido salieron 10 fotos y por este 34.
+ */
+async function fetchUnblockerLento(url: string): Promise<string | null> {
+  const key = (globalThis as any).Deno?.env?.get?.('SCRAPER_API_KEY')
+  if (!key) return null
 
   // Se usa la API ASÍNCRONA de ScraperAPI: el endpoint síncrono con render en el
   // plan free es intermitente (Cloudflare bloquea la IP de datacenter y devuelve
@@ -1471,7 +1558,25 @@ async function fetchHtml(url: string): Promise<string> {
       /^(https?:\/\/[^/]*easybroker\.com)\/agent\/(?:mls_properties|properties)\/([^/?#]+).*$/i,
       '$1/listings/$2',
     )
-    const viaApi = await fetchViaUnblocker(publica)
+    // SE PIDE DOS VECES CUANDO FALTAN FOTOS, y no es capricho.
+    //
+    // La galeria de EasyBroker carga en diferido: el renderizado rapido
+    // alcanza a capturar las primeras y el resto todavia no existen en el
+    // codigo. Medido el 26/nov/2026 sobre fichas reales: por el camino
+    // rapido una ficha de 16 fotos daba 10, y la misma ficha por el camino
+    // lento daba 34 de 34 en otro anuncio.
+    //
+    // Como la pagina SI dice cuantas tiene (el texto de cada foto es
+    // "foto 1 de 16" y el boton dice "16 fotos"), se puede saber si falto
+    // alguna sin adivinar: si faltan, se repite por el camino lento y se
+    // conserva la version que traiga mas. El segundo intento solo ocurre
+    // cuando de verdad falta algo, asi que una ficha completa sigue
+    // tardando lo de siempre.
+    const rapida = await fetchUnblockerRapido(publica)
+    if (rapida && !faltanFotos(rapida)) return rapida
+    const lenta = await fetchUnblockerLento(publica)
+    if (rapida && lenta) return cuentaFotosEb(lenta) > cuentaFotosEb(rapida) ? lenta : rapida
+    const viaApi = lenta ?? rapida
     if (viaApi) return viaApi
     throw new Error('No se pudo acceder a este anuncio de EasyBroker (el servicio de desbloqueo no respondió a tiempo o no está configurado). Copia la ficha y pégala manualmente en el campo de descripción.')
   }
@@ -1618,7 +1723,7 @@ function buildEbApiResponse(p: any, corsH: Record<string, string>): Response {
     .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
     .map((i: any) => i.url ?? i.original_url ?? '')
     .filter(Boolean)
-    .slice(0, 30)
+    .slice(0, TOPE_FOTOS)
   return new Response(JSON.stringify({
     titulo: p.title ?? '', descripcion: p.description ?? '',
     precio, direccion, zona, modelo: '',
@@ -1848,7 +1953,7 @@ serve(async (req) => {
               return u.startsWith('http') ? u : (u ? CDN + u : '')
             })
             .filter((u: string) => u)
-            .slice(0, 30)
+            .slice(0, TOPE_FOTOS)
         : []
 
       return new Response(JSON.stringify({
@@ -2100,7 +2205,7 @@ serve(async (req) => {
 
         if (!imagenes.length) {
           const imgs = (np as any).pictures?.images
-          if (Array.isArray(imgs)) imagenes = imgs.filter(Boolean).slice(0, 30)
+          if (Array.isArray(imgs)) imagenes = imgs.filter(Boolean).slice(0, TOPE_FOTOS)
         }
       }
 
@@ -2193,7 +2298,7 @@ serve(async (req) => {
           else if (/puebla/.test(loc)) zona = 'puebla'
         }
         if (Array.isArray(np.pictureUrls)) {
-          imagenes = (np.pictureUrls as unknown[]).slice(0, 30).map(u => String(u))
+          imagenes = (np.pictureUrls as unknown[]).slice(0, TOPE_FOTOS).map(u => String(u))
         }
       }
     }
@@ -2240,7 +2345,7 @@ serve(async (req) => {
           const u = m[0].split('?')[0]
           if (!inm.includes(u)) inm.push(u)
         }
-        if (inm.length) imagenes = inm.slice(0, 30)
+        if (inm.length) imagenes = inm.slice(0, TOPE_FOTOS)
       }
     }
 
@@ -2636,7 +2741,7 @@ serve(async (req) => {
         if (ids.size > max) { max = ids.size; mejor = carpeta }
       }
       if (mejor && max >= 1) {
-        imagenes = [...porCarpeta.get(mejor)!].map(id => `${mejor}/1200x1200/${id}.jpg`).slice(0, 40)
+        imagenes = [...porCarpeta.get(mejor)!].map(id => `${mejor}/1200x1200/${id}.jpg`).slice(0, TOPE_FOTOS)
       }
     }
 
@@ -2663,7 +2768,7 @@ serve(async (req) => {
       const wix = [...info.entries()]
         .filter(([, v]) => v.w >= 200 || v.blur)
         .map(([id]) => `https://static.wixstatic.com/media/${id}`)
-      if (wix.length) imagenes = [...new Set([...imagenes, ...wix])].slice(0, 40)
+      if (wix.length) imagenes = [...new Set([...imagenes, ...wix])].slice(0, TOPE_FOTOS_GENERICO)
     }
 
     // ── 10b. Fallback genérico: cualquier <img>/<source>, resolviendo rutas
@@ -2698,7 +2803,7 @@ serve(async (req) => {
       const junkGen = /(logo|icon|favicon|avatar|sprite|placeholder|banner|header|footer|whatsapp|bg[-_]|background)/i
       const limpiadosGen = found.filter(u => !junkGen.test(u))
       if (limpiadosGen.length) {
-        imagenes = [...new Set([...imagenes, ...limpiadosGen])].slice(0, 40)
+        imagenes = [...new Set([...imagenes, ...limpiadosGen])].slice(0, TOPE_FOTOS_GENERICO)
       }
     }
 
@@ -2873,7 +2978,20 @@ serve(async (req) => {
       // codigo. Antes la importacion contestaba "titulo, precio, 3 rec." y
       // se quedaba callada sobre las fotos: quien importaba no se enteraba
       // hasta guardar la propiedad vacia.
-      avisoFotos: imagenes.length === 0 ? diagnosticoFotos(html, htmlPegado != null) : null,
+      // El aviso ya no es solo para "no salió ninguna": también para "salieron
+      // menos de las que el anuncio dice tener", que es el caso de EasyBroker
+      // (pinta 10 y carga el resto al abrir el visor). Antes esas 6 que
+      // faltaban no las echaba de menos nadie.
+      avisoFotos: imagenes.length === 0
+        ? diagnosticoFotos(html, htmlPegado != null)
+        : (() => {
+            const dice = fotosQueDiceTener(html)
+            if (dice <= imagenes.length) return null
+            return `El anuncio dice que tiene ${dice} fotos y solo se pudieron leer ${imagenes.length}. ` +
+              `El portal no publica el resto en el código de la página: se cargan al abrir la galería. ` +
+              `Las que falten hay que agregarlas a mano.`
+          })(),
+      fotosQueDiceTener: fotosQueDiceTener(html),
       // Para que la propiedad recuerde de dónde salió aunque se haya
       // importado pegando el código y no el link.
       urlOriginal: urlDelAnuncio(html),
