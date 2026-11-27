@@ -101,8 +101,16 @@ serve(async (req) => {
       })
 
       if (errorVideo) {
-        console.error('[propiedades-campana] solo_video query error:', errorVideo)
-        return json({ error: 'Error al consultar propiedades con video' }, 500)
+        // console.error con el objeto completo a veces sale como "[object
+        // Object]" en el visor de logs — se listan los campos del
+        // PostgrestError a mano para que el mensaje real sí quede legible.
+        console.error('[propiedades-campana] solo_video query error:', {
+          message: errorVideo.message,
+          details: errorVideo.details,
+          hint: errorVideo.hint,
+          code: errorVideo.code,
+        })
+        return json({ error: 'Error al consultar propiedades con video', detalle: errorVideo.message }, 500)
       }
 
       if (!elegida || elegida.length === 0) {
