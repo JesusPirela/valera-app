@@ -74,7 +74,10 @@ export default function AdminInmobiliarias() {
     if (!yaCargoRef.current) setLoading(true)
     yaCargoRef.current = true
     const [{ data }, { data: props }] = await Promise.all([
-      supabase.from('inmobiliarias').select('*').order('nombre'),
+      // Por RPC y no con select('*'): el telefono y el correo de cada
+      // agencia ya NO se pueden leer de la tabla (son el contacto del dueño y
+      // solo los ve un admin). La funcion los entrega comprobando el rol.
+      supabase.rpc('inmobiliarias_con_contacto'),
       supabase.from('propiedades').select('inmobiliaria_id').not('inmobiliaria_id', 'is', null),
     ])
     setLista(data ?? [])
