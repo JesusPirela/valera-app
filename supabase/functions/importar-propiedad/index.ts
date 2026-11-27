@@ -380,6 +380,58 @@ function decodeEntities(s: string): string {
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => { try { return String.fromCharCode(parseInt(n, 16)) } catch { return '' } })
 }
 
+// ── Coordenadas del mapa embebido en la ficha ───────────────────────────────
+// Varios portales (EasyBroker entre ellos) pintan un mapa de Google con la
+// ubicación EXACTA de la propiedad en la propia página. Es mucho más preciso
+// que geocodificar el texto de la dirección (que solo ubica la colonia, no la
+// casa). Se prueban varios formatos, del más propio de ficha inmobiliaria al
+// más genérico de un embed de Maps, y se valida que el par caiga dentro de
+// México: así un par de decimales sueltos que no sean coordenadas (ej. un
+// precio con centavos quedándose pegado a otro número) no se cuela como si lo
+// fuera.
+function dentroDeMexico(lat: number, lng: number): boolean {
+  return lat >= 14 && lat <= 33 && lng >= -118 && lng <= -86
+}
+function extraerLatLng(html: string): { lat: number; lng: number } | null {
+  const candidatos: [number, number][] = []
+
+  // 1) JSON-LD / JSON de ficha: "latitude": X, "longitude": Y (en cualquier orden
+  //    de aparición dentro del mismo objeto, con hasta 80 caracteres entre ambos).
+  for (const m of html.matchAll(/"latitude"\s*:\s*"?(-?\d{1,2}\.\d+)"?[^{}]{0,80}?"longitude"\s*:\s*"?(-?\d{1,3}\.\d+)"?/gi)) {
+    candidatos.push([parseFloat(m[1]), parseFloat(m[2])])
+  }
+  // 2) Centro de un mapa de Google Maps JS: {lat: X, lng: Y}
+  for (const m of html.matchAll(/\blat["']?\s*:\s*(-?\d{1,2}\.\d{3,})\s*,\s*["']?lng["']?\s*:\s*(-?\d{1,3}\.\d{3,})/gi)) {
+    candidatos.push([parseFloat(m[1]), parseFloat(m[2])])
+  }
+  // 3) new google.maps.LatLng(lat, lng)
+  for (const m of html.matchAll(/google\.maps\.LatLng\(\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*\)/gi)) {
+    candidatos.push([parseFloat(m[1]), parseFloat(m[2])])
+  }
+  // 4) Embed de Google Maps (iframe): el parámetro "pb" trae !2d{lng}!3d{lat} —
+  //    orden invertido respecto a todo lo demás, es el propio formato de Google.
+  for (const m of html.matchAll(/!2d(-?\d{1,3}\.\d+)!3d(-?\d{1,2}\.\d+)/gi)) {
+    candidatos.push([parseFloat(m[2]), parseFloat(m[1])])
+  }
+  // 5) Link suelto a Google Maps: .../maps?q=lat,lng o .../maps/@lat,lng,17z
+  for (const m of html.matchAll(/google\.com\/maps(?:\/@|\?q=|\/search\/)(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/gi)) {
+    candidatos.push([parseFloat(m[1]), parseFloat(m[2])])
+  }
+  // 6) Atributos data-lat(itude)/data-lng(itude) en el mismo elemento, en
+  //    cualquier orden.
+  for (const m of html.matchAll(/data-lat(?:itude)?=["'](-?\d{1,2}\.\d+)["'][^>]{0,150}?data-lng(?:itude)?=["'](-?\d{1,3}\.\d+)["']/gi)) {
+    candidatos.push([parseFloat(m[1]), parseFloat(m[2])])
+  }
+  for (const m of html.matchAll(/data-lng(?:itude)?=["'](-?\d{1,3}\.\d+)["'][^>]{0,150}?data-lat(?:itude)?=["'](-?\d{1,2}\.\d+)["']/gi)) {
+    candidatos.push([parseFloat(m[2]), parseFloat(m[1])])
+  }
+
+  for (const [lat, lng] of candidatos) {
+    if (!isNaN(lat) && !isNaN(lng) && dentroDeMexico(lat, lng)) return { lat, lng }
+  }
+  return null
+}
+
 // ── Vinte (vinte.com.mx) ─────────────────────────────────────────────────────
 // La URL tiene formato /{estado}/{desarrollo}. Algunos desarrollos embeben los
 // modelos en un JSON-LD RealEstateListing > offers (ej. Catania); otros solo
@@ -1724,6 +1776,13 @@ function buildEbApiResponse(p: any, corsH: Record<string, string>): Response {
     .map((i: any) => i.url ?? i.original_url ?? '')
     .filter(Boolean)
     .slice(0, TOPE_FOTOS)
+  // location.latitude/longitude vienen con la ubicación EXACTA del pin que el
+  // agente puso en EasyBroker — mucho más preciso que geocodificar `direccion`
+  // (que solo ubica la colonia). Se valida contra México por si acaso viniera
+  // vacío/cero en vez de null (0,0 pasaría la validación de "no es null").
+  const latApi = parseNum(loc.latitude)
+  const lngApi = parseNum(loc.longitude)
+  const coordsOk = latApi != null && lngApi != null && dentroDeMexico(latApi, lngApi)
   return new Response(JSON.stringify({
     titulo: p.title ?? '', descripcion: p.description ?? '',
     precio, direccion, zona, modelo: '',
@@ -1733,6 +1792,7 @@ function buildEbApiResponse(p: any, corsH: Record<string, string>): Response {
     m2Terreno: p.lot_size ? String(p.lot_size) : '',
     tipo, operacion: opType, imagenes,
     amueblada: detectarAmueblada(String(p.title ?? ''), String(p.description ?? ''), opType),
+    lat: coordsOk ? latApi : null, lng: coordsOk ? lngApi : null,
   }), { headers: corsH })
 }
 
@@ -2157,6 +2217,8 @@ serve(async (req) => {
     // guarda con su nombre, como ya hay en la base ("Jalisco", "Quintana Roo").
     let zona: string | null = null
     let imagenes: string[] = []
+    let lat: number | null = null
+    let lng: number | null = null
 
     // brokers.tuhabi.mx y tuficha.mx se resuelven ANTES de fetchHtml (ver arriba,
     // antes de "const html = …") — no usan el HTML de la página para nada.
@@ -2969,10 +3031,13 @@ serve(async (req) => {
       }
     } catch { /* URL inválida */ }
 
+    const coords = extraerLatLng(html)
+    if (coords) { lat = coords.lat; lng = coords.lng }
+
     return new Response(JSON.stringify({
       titulo, descripcion, precio, direccion, zona, modelo,
       recamaras, banos, mediosBanos, estacionamientos,
-      m2, m2Terreno, tipo, operacion, imagenes,
+      m2, m2Terreno, tipo, operacion, imagenes, lat, lng,
       amueblada: detectarAmueblada(titulo, descripcion, operacion),
       // Cuando no sale ni una foto, el aviso dice que se vio dentro del
       // codigo. Antes la importacion contestaba "titulo, precio, 3 rec." y

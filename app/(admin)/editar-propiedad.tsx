@@ -442,6 +442,10 @@ export default function EditarPropiedad() {
     if (d.descripcion)  setDescripcion(d.descripcion)
     if (d.precio)       setPrecio(d.precio)
     if (d.direccion && !d._soloEspecificaciones) { setDireccion(d.direccion); setGeoQuery(d.direccion) }
+    // Coordenadas del mapa que trae la propia ficha (EasyBroker y otros) — más
+    // precisas que geocodificar el texto de la dirección, que solo ubica la
+    // colonia. Si no vienen, se deja el flujo de siempre (buscar en el mapa).
+    if (d.lat != null && d.lng != null) { setLat(d.lat); setLng(d.lng) }
     if (d.recamaras  != null) setRecamaras(d.recamaras)
     if (d.banos      != null) setBanos(d.banos)
     if (d.mediosBanos != null) setMediosBanos(d.mediosBanos)
@@ -523,6 +527,7 @@ export default function EditarPropiedad() {
       if (d.recamaras) partes.push(`${d.recamaras} rec.`)
       if (d.banos)     partes.push(`${d.banos} baños`)
       if (d.m2)        partes.push(`${d.m2} m²`)
+      if (d.lat != null && d.lng != null) partes.push('📍 ubicación exacta')
       if (d.imagenes?.length) partes.push(`${d.imagenes.length} fotos`)
       setImportMsg(partes.length > 0
         ? `✓ ${partes.join(' · ')}`
