@@ -85,6 +85,13 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION propiedades_campana_elegir_video TO service_role;
+-- Firma explícita: agregar p_posicion crea un SEGUNDO overload en vez de
+-- reemplazar al de 2 parámetros (CREATE OR REPLACE empareja por tipos de
+-- parámetros exactos), así que GRANT sin firma queda ambiguo entre los dos.
+GRANT EXECUTE ON FUNCTION propiedades_campana_elegir_video(TEXT, NUMERIC, INT) TO service_role;
+
+-- La versión vieja de 2 parámetros ya no la llama nadie (la edge function
+-- siempre manda p_posicion) — se borra para que solo quede un overload.
+DROP FUNCTION IF EXISTS propiedades_campana_elegir_video(TEXT, NUMERIC);
 
 SELECT pg_notify('pgrst', 'reload schema');
