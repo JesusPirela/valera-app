@@ -30,6 +30,8 @@ import { parsearFicha } from '../../lib/parsear-ficha'
 import AsesorPicker from '../../components/ui/AsesorPicker'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { COLONIAS } from '../../lib/colonias'
+import { extraerLinkMaps } from '../../lib/maps-link'
+import { ubicacionDesdeLink } from '../../lib/maps-resolver'
 import { detectarEstadoMexico } from '../../lib/estados-mexico'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
 import CensorEditorModal from '../../components/CensorEditorModal'
@@ -84,6 +86,8 @@ export default function EditarPropiedad() {
   // "Otra…" en el picker: cualquier valor de zona que no sea una de las 3
   // ciudades conocidas se trata como zona libre (incluye '' recién elegida).
   const zonaEsOtra = zona !== null && zona !== 'queretaro' && zona !== 'monterrey' && zona !== 'puebla'
+  // Pegar un link de Google Maps fija el punto. Ver lib/maps-link.ts.
+  const [maps, setMaps] = useState<{ estado: 'no' | 'leyendo' | 'ok' | 'error'; msg: string }>({ estado: 'no', msg: '' })
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
   const [geoQuery, setGeoQuery] = useState('')
@@ -323,7 +327,41 @@ export default function EditarPropiedad() {
     ? COLONIAS.filter(col => col.label.toLowerCase().includes(geoQuery.toLowerCase()))
     : []
 
+  // Un link de Google Maps pegado en el campo de la direccion: se sacan
+  // SOLO las coordenadas y el nombre lo escribe la persona. Misma logica
+  // que en nueva-propiedad; el lector vive en lib/maps-link.ts.
   useEffect(() => {
+    const hallado = extraerLinkMaps(geoQuery)
+    if (!hallado) return
+    let vivo = true
+    setMaps({ estado: 'leyendo', msg: 'Leyendo el link de Maps…' })
+    ;(async () => {
+      const r = await ubicacionDesdeLink(hallado.link)
+      if (!vivo) return
+      if (!r.ok) { setMaps({ estado: 'error', msg: r.motivo }); return }
+      setLat(r.ubicacion.lat); setLng(r.ubicacion.lng)
+      const nombre = hallado.resto || r.ubicacion.nombre || ''
+      setGeoQuery(nombre); setDireccion(nombre)
+      const z = zonaDesdeTexto(nombre || (r.ubicacion.nombre ?? ''))
+      if (z) setZona(z)
+      setGeoResults([])
+      setMaps({
+        estado: 'ok',
+        msg: nombre
+          ? 'Ubicación fijada con el link. Puedes corregir el nombre.'
+          : 'Ubicación fijada con el link. Escribe el nombre que quieres que se vea.',
+      })
+    })()
+    return () => { vivo = false }
+  }, [geoQuery])
+
+  useEffect(() => {
+    if (extraerLinkMaps(geoQuery)) { setGeoResults([]); return }
+    // Con el punto ya fijado por un link, el buscador NO ofrece otras
+    // ubicaciones: acabamos de decir que la ubicacion esta fijada y una
+    // lista debajo invitando a cambiarla dice lo contrario. Para volver
+    // a buscar basta con vaciar el campo.
+    if (maps.estado === 'ok') { setGeoResults([]); return }
     if (!geoQuery.trim() || geoQuery.length < 3) { setGeoResults([]); return }
     const cityHint = zona === 'queretaro' ? 'Querétaro' : zona === 'monterrey' ? 'Monterrey' : zona === 'puebla' ? 'Puebla' : ''
     const q = `${geoQuery}${cityHint ? ' ' + cityHint : ''} Mexico`
@@ -339,7 +377,7 @@ export default function EditarPropiedad() {
       finally { setGeoLoading(false) }
     }, 400)
     return () => clearTimeout(t)
-  }, [geoQuery, zona])
+  }, [geoQuery, zona, maps.estado])
 
   function seleccionarColoniaPredefinida(col: typeof COLONIAS[0]) {
     const texto = `${col.label}, ${col.ciudad}, México`
@@ -1238,15 +1276,29 @@ export default function EditarPropiedad() {
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
           <TextInput
             style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: c.input, borderColor: lat ? '#22a35e' : c.inputBorder, color: c.inputText }]}
-            placeholder="Ej. Corregidora, Querétaro"
+            placeholder="Ej. Corregidora, Querétaro — o pega un link de Google Maps"
             value={geoQuery}
-            onChangeText={v => { setGeoQuery(v); setDireccion(v); setLat(null); setLng(null); const z = zonaDesdeTexto(v); if (z) setZona(z) }}
+            onChangeText={v => {
+              setGeoQuery(v); setDireccion(v)
+              // El punto que vino de un link no se pierde al escribirle el
+              // nombre (ver nueva-propiedad para el porque).
+              if (maps.estado !== 'ok' && !extraerLinkMaps(v)) { setLat(null); setLng(null) }
+              if (!v.trim()) { setLat(null); setLng(null); setMaps({ estado: 'no', msg: '' }) }
+              else if (maps.estado === 'error' && !extraerLinkMaps(v)) setMaps({ estado: 'no', msg: '' })
+              const z = zonaDesdeTexto(v); if (z) setZona(z)
+            }}
             maxLength={200}
           />
           {geoLoading && <ActivityIndicator size="small" color="#1976D2" style={{ marginLeft: 8 }} />}
         </View>
         {geoLoading && <Text style={{ fontSize: 11, color: '#1976D2', marginBottom: 4 }}>🔍 Buscando...</Text>}
-        {lat !== null && <Text style={{ fontSize: 11, color: '#22a35e', marginBottom: 8 }}>✓ Ubicación confirmada en el mapa</Text>}
+        {lat !== null && maps.estado !== 'ok' && <Text style={{ fontSize: 11, color: '#22a35e', marginBottom: 8 }}>✓ Ubicación confirmada en el mapa</Text>}
+        {maps.estado !== 'no' && (
+          <Text style={{ fontSize: 11.5, lineHeight: 16, marginBottom: 8, fontWeight: '700',
+                         color: maps.estado === 'ok' ? '#22a35e' : maps.estado === 'error' ? '#e5a50a' : c.textMute }}>
+            {maps.estado === 'leyendo' ? '📍 ' : maps.estado === 'ok' ? '✓ ' : '⚠ '}{maps.msg}
+          </Text>
+        )}
 
         {coloniasSugeridas.length > 0 && (
           <View style={{ borderRadius: 8, borderWidth: 1, borderColor: '#22a35e', marginBottom: 8, overflow: 'hidden' }}>

@@ -27,6 +27,8 @@ import { opcionesConteo } from '../../lib/conteos'
 import { parsearFicha } from '../../lib/parsear-ficha'
 import AsesorPicker from '../../components/ui/AsesorPicker'
 import { COLONIAS } from '../../lib/colonias'
+import { extraerLinkMaps } from '../../lib/maps-link'
+import { ubicacionDesdeLink } from '../../lib/maps-resolver'
 import { detectarEstadoMexico } from '../../lib/estados-mexico'
 import ToggleSwitch from '../../components/ToggleSwitch'
 import { useSupervisorBlock } from '../../hooks/useSupervisorBlock'
@@ -84,6 +86,9 @@ export default function NuevaPropiedad() {
   // "Otra…" en el picker: cualquier valor de zona que no sea una de las 3
   // ciudades conocidas se trata como zona libre (incluye '' recién elegida).
   const zonaEsOtra = zona !== null && zona !== 'queretaro' && zona !== 'monterrey' && zona !== 'puebla'
+  // Pegar un link de Google Maps fija el punto sin tener que encontrar la
+  // direccion en el buscador. Ver lib/maps-link.ts.
+  const [maps, setMaps] = useState<{ estado: 'no' | 'leyendo' | 'ok' | 'error'; msg: string }>({ estado: 'no', msg: '' })
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
   // Posibles propiedades duplicadas detectadas al intentar guardar.
@@ -165,7 +170,54 @@ export default function NuevaPropiedad() {
     ? COLONIAS.filter(c => c.label.toLowerCase().includes(geoQuery.toLowerCase()))
     : []
 
+  // UN LINK DE GOOGLE MAPS PEGADO EN EL CAMPO DE LA DIRECCION.
+  //
+  // Es el camino corto cuando el buscador no encuentra el lugar: un
+  // fraccionamiento nuevo, una calle sin nombre, un desarrollo que todavia
+  // no esta en el mapa. El punto SI lo tiene quien fue a verla, en el link
+  // que le da su telefono.
+  //
+  // Del link se sacan SOLO las coordenadas. El nombre lo escribe la
+  // persona: si el link traia uno se propone, y si no, el campo queda
+  // libre para que lo escriba. Nunca se guarda la direccion de internet
+  // como si fuera el nombre de la propiedad.
   useEffect(() => {
+    const hallado = extraerLinkMaps(geoQuery)
+    if (!hallado) return
+    let vivo = true
+    setMaps({ estado: 'leyendo', msg: 'Leyendo el link de Maps…' })
+    ;(async () => {
+      const r = await ubicacionDesdeLink(hallado.link)
+      if (!vivo) return
+      if (!r.ok) { setMaps({ estado: 'error', msg: r.motivo }); return }
+      setLat(r.ubicacion.lat); setLng(r.ubicacion.lng)
+      // El texto que quede: lo que la persona ya habia escrito, o el
+      // nombre que traia el link. El link se quita del campo: no es una
+      // direccion.
+      const nombre = hallado.resto || r.ubicacion.nombre || ''
+      setGeoQuery(nombre); setDireccion(nombre); setTituloEditado(false)
+      const z = zonaDesdeTexto(nombre || (r.ubicacion.nombre ?? ''))
+      if (z) setZona(z)
+      setGeoResults([])
+      setMaps({
+        estado: 'ok',
+        msg: nombre
+          ? 'Ubicación fijada con el link. Puedes corregir el nombre.'
+          : 'Ubicación fijada con el link. Escribe el nombre que quieres que se vea.',
+      })
+    })()
+    return () => { vivo = false }
+  }, [geoQuery])
+
+  useEffect(() => {
+    // Con un link pegado no se busca nada: no es una direccion que
+    // Nominatim pueda encontrar, y mandarsela gasta una consulta de balde.
+    if (extraerLinkMaps(geoQuery)) { setGeoResults([]); return }
+    // Con el punto ya fijado por un link, el buscador NO ofrece otras
+    // ubicaciones: acabamos de decir que la ubicacion esta fijada y una
+    // lista debajo invitando a cambiarla dice lo contrario. Para volver
+    // a buscar basta con vaciar el campo.
+    if (maps.estado === 'ok') { setGeoResults([]); return }
     if (!geoQuery.trim() || geoQuery.length < 3) { setGeoResults([]); return }
     const cityHint = zona === 'queretaro' ? 'Querétaro' : zona === 'monterrey' ? 'Monterrey' : zona === 'puebla' ? 'Puebla' : ''
     const q = `${geoQuery}${cityHint ? ' ' + cityHint : ''} Mexico`
@@ -181,7 +233,7 @@ export default function NuevaPropiedad() {
       finally { setGeoLoading(false) }
     }, 400)
     return () => clearTimeout(t)
-  }, [geoQuery, zona])
+  }, [geoQuery, zona, maps.estado])
 
   function seleccionarColoniaPredefinida(c: typeof COLONIAS[0]) {
     const texto = `${c.label}, ${c.ciudad}, México`
@@ -1224,15 +1276,33 @@ export default function NuevaPropiedad() {
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
           <TextInput
             style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: c.input, borderColor: lat ? '#22a35e' : c.inputBorder, color: c.inputText }]}
-            placeholder="Ej. Corregidora, Querétaro"
+            placeholder="Ej. Corregidora, Querétaro — o pega un link de Google Maps"
             value={geoQuery}
-            onChangeText={v => { setGeoQuery(v); setDireccion(v); setTituloEditado(false); setLat(null); setLng(null); const z = zonaDesdeTexto(v); if (z) setZona(z) }}
+            onChangeText={v => {
+              setGeoQuery(v); setDireccion(v); setTituloEditado(false)
+              // EL PUNTO QUE VINO DE UN LINK NO SE PIERDE al escribirle el
+              // nombre. Antes cada tecla borraba las coordenadas (tenia
+              // sentido cuando la unica forma de fijarlas era el buscador:
+              // si cambias la direccion, el punto ya no corresponde). Con un
+              // link es al reves: el punto es lo seguro y el nombre es lo que
+              // la persona escribe encima.
+              if (maps.estado !== 'ok' && !extraerLinkMaps(v)) { setLat(null); setLng(null) }
+              if (!v.trim()) { setLat(null); setLng(null); setMaps({ estado: 'no', msg: '' }) }
+              else if (maps.estado === 'error' && !extraerLinkMaps(v)) setMaps({ estado: 'no', msg: '' })
+              const z = zonaDesdeTexto(v); if (z) setZona(z)
+            }}
             maxLength={200}
           />
           {geoLoading && <ActivityIndicator size="small" color="#1976D2" style={{ marginLeft: 8 }} />}
         </View>
         {geoLoading && <Text style={{ fontSize: 11, color: '#1976D2', marginBottom: 4 }}>🔍 Buscando...</Text>}
-        {lat !== null && <Text style={{ fontSize: 11, color: '#22a35e', marginBottom: 8 }}>✓ Ubicación confirmada en el mapa</Text>}
+        {lat !== null && maps.estado !== 'ok' && <Text style={{ fontSize: 11, color: '#22a35e', marginBottom: 8 }}>✓ Ubicación confirmada en el mapa</Text>}
+        {maps.estado !== 'no' && (
+          <Text style={{ fontSize: 11.5, lineHeight: 16, marginBottom: 8, fontWeight: '700',
+                         color: maps.estado === 'ok' ? '#22a35e' : maps.estado === 'error' ? '#e5a50a' : c.textMute }}>
+            {maps.estado === 'leyendo' ? '📍 ' : maps.estado === 'ok' ? '✓ ' : '⚠ '}{maps.msg}
+          </Text>
+        )}
 
         {coloniasSugeridas.length > 0 && (
           <View style={{ borderRadius: 8, borderWidth: 1, borderColor: '#22a35e', marginBottom: 8, overflow: 'hidden' }}>

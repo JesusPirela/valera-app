@@ -26,7 +26,6 @@ import { esPlusOMejor, esStaffSupervision, esAdmin, puedeVerPublicaciones } from
 import { esAdminPrincipal, NOMBRE_MARCA } from '../../lib/adminsPrincipales'
 import { thumb, proxyImagen, imagenParaGaleria } from '../../lib/img'
 import { rotarFotos, lotePublicacion, TOPE_LOTE, MINIMO_PARA_RECORTAR } from '../../lib/orden-fotos'
-import { variarDescripcion, mismoContenido } from '../../lib/variacion-descripcion'
 import {
   IdiomaFicha, tf, tipoOperacionLabel, formatPrecioLang, traducirFicha,
 } from '../../lib/ficha-i18n'
@@ -923,25 +922,22 @@ export default function DetallePropiedad() {
 
   async function copiarDescripcion() {
     if (!propiedad?.descripcion) return
-    // Facebook Marketplace rechaza publicaciones duplicadas, y la misma
-    // propiedad la publican 8.3 personas en promedio (maximo medido: 58),
-    // casi siempre pegando este mismo texto. Por eso cada persona recibe los
-    // bloques en otro orden.
+    // SE COPIA TAL CUAL ESTA GUARDADA. Sin IA y sin reacomodos.
     //
-    // Se reacomoda AQUI, sin consultar nada: el portapapeles del navegador
-    // solo acepta escrituras dentro del gesto del usuario, y si el boton se
-    // pone a esperar una consulta primero, la copia falla callada.
+    // Aqui hubo dos cosas y las dos se retiraron:
+    //  1. Un banco de versiones reescritas por IA (24/nov/2026): el 17%
+    //     afirmaba amenidades que la propiedad no tiene y nadie las revisaba,
+    //     porque se copiaban ya sustituidas.
+    //  2. Un reacomodo de los parrafos que ya estaban escritos, para que
+    //     Facebook no marcara duplicado (27/nov/2026, a peticion del equipo:
+    //     "da mucho error").
     //
-    // Antes esto venia de un banco de versiones reescritas por IA. Se retiro
-    // el 24/nov/2026: el 17% afirmaba amenidades que la propiedad no tiene y
-    // nadie las revisaba, porque se copiaban ya sustituidas. Ahora no hay
-    // texto nuevo que revisar: son los mismos renglones en otro orden.
-    const cuerpo = variarDescripcion(propiedad.descripcion, propiedad.id, uid)
-    // Guardarrail: si por lo que sea el reacomodo no dijera exactamente lo
-    // mismo, se copia la descripcion guardada. Nunca se publica algo que no
-    // sea lo que la propiedad dice.
-    const seguro = mismoContenido(propiedad.descripcion, cuerpo) ? cuerpo : propiedad.descripcion
-    const texto = `ID: ${propiedad.codigo}\n\n${seguro}`
+    // Lo que se publica es, desde hoy, exactamente lo que dice la propiedad.
+    // El efecto conocido y aceptado: la misma propiedad la publican 8.3
+    // personas en promedio (maximo medido: 58) y Marketplace puede volver a
+    // marcarlas como duplicadas. Si eso estorba, la salida NO es reescribir el
+    // texto solo: es escribir descripciones distintas en la propiedad.
+    const texto = `ID: ${propiedad.codigo}\n\n${propiedad.descripcion}`
     if (Platform.OS === 'web') {
       try { await navigator.clipboard.writeText(texto) } catch { /* ignorar */ }
     } else {
