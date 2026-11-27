@@ -56,6 +56,8 @@ function etiquetaPropiedad(p: PropBuscada): string {
   return [p.codigo, p.titulo].filter(Boolean).join(' · ') || (p.direccion ?? 'Propiedad sin datos')
 }
 import GraficasCitas from '../../components/GraficasCitas'
+import DarLoteModal from '../../components/DarLoteModal'
+import VinteTabla from '../../components/VinteTabla'
 
 type Fila = CitaRetro & {
   orden: number | null; telefono: string | null; detalles_pago: string | null
@@ -812,6 +814,10 @@ export default function CitasVenta() {
   // las que faltan. Es la pregunta que más se hace sobre esta tabla.
   const [filtroRetro, setFiltroRetro] = useState<null | 'con' | 'sin'>(null)
   const [miId, setMiId] = useState<string | null>(null)
+  // Pestaña "Venta | Vinte": mismo botón de navegación de siempre, pero la
+  // tabla de Vinte es una tabla aparte (clientes_vinte) — VinteTabla.tsx vive
+  // sola y no toca nada de lo de arriba.
+  const [tabTabla, setTabTabla] = useState<'venta' | 'vinte'>('venta')
   const [copiadoId, setCopiadoId] = useState<string | null>(null)
   const [rango, setRango] = useState<{ desde: string; hasta: string } | null>(null)  // YYYY-MM-DD
   // Armar lotes: parte lo que esté visible (respeta filtros, fecha y orden de
@@ -1359,8 +1365,29 @@ export default function CitasVenta() {
         : profiles.filter(x => !pickBusca.trim() || x.nombre.toLowerCase().includes(pickBusca.toLowerCase())))
     : []
 
+  const tabsBar = (
+    <View style={st.tabsRow}>
+      <TouchableOpacity style={[st.tabBtn, tabTabla === 'venta' && st.tabBtnOn]} onPress={() => setTabTabla('venta')}>
+        <Text style={[st.tabBtnTxt, tabTabla === 'venta' && st.tabBtnTxtOn]}>Venta</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[st.tabBtn, tabTabla === 'vinte' && st.tabBtnOn]} onPress={() => setTabTabla('vinte')}>
+        <Text style={[st.tabBtnTxt, tabTabla === 'vinte' && st.tabBtnTxtOn]}>Vinte</Text>
+      </TouchableOpacity>
+    </View>
+  )
+
+  if (tabTabla === 'vinte') {
+    return (
+      <View style={[st.page, { backgroundColor: c.bg }]}>
+        {tabsBar}
+        <VinteTabla miId={miId} profiles={profiles} />
+      </View>
+    )
+  }
+
   return (
     <View style={[st.page, { backgroundColor: c.bg }]}>
+      {tabsBar}
       <View style={st.topRow}>
         <View style={{ flex: 1 }}>
           <Text style={[st.h1, { color: c.text }]}>📋 Citas de venta</Text>
@@ -1990,91 +2017,13 @@ function ChatbotCitaModal({ cita, profiles, clientes, onClose, onSent }: {
   )
 }
 
-// Dar un lote: o se elige un prospectador real de la app (le aparecerá en su
-// propia pantalla de lotes asignados) o se escribe a mano el nombre de quien
-// lo recibió fuera de la app. Una vez confirmado, el lote queda bloqueado —
-// no se puede volver a dar (ver índice único sobre citas_hash en la migración).
-function DarLoteModal({ numero, cantidad, profiles, onClose, onConfirmar }: {
-  numero: number
-  cantidad: number
-  profiles: { id: string; nombre: string }[]
-  onClose: () => void
-  onConfirmar: (asignadoA: string | null, asignadoTexto: string) => Promise<void>
-}) {
-  const c = useColors()
-  const [modo, setModo] = useState<'usuario' | 'texto'>('usuario')
-  const [prospectadorId, setProspectadorId] = useState<string | null>(null)
-  const [buscaProspectador, setBuscaProspectador] = useState('')
-  const [nombreTexto, setNombreTexto] = useState('')
-  const [enviando, setEnviando] = useState(false)
-
-  const listaProspectadores = profiles.filter(p => !buscaProspectador.trim() || p.nombre.toLowerCase().includes(buscaProspectador.toLowerCase()))
-  const puedeConfirmar = modo === 'usuario' ? !!prospectadorId : nombreTexto.trim().length > 0
-
-  async function confirmar() {
-    setEnviando(true)
-    await onConfirmar(modo === 'usuario' ? prospectadorId : null, modo === 'usuario' ? '' : nombreTexto)
-    setEnviando(false)
-  }
-
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={st.dropOverlay}>
-        <View style={[st.dropCard, { backgroundColor: c.card, maxWidth: 440 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-            <Text style={{ flex: 1, fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#7c3aed' }}>DAR LOTE {numero}</Text>
-            <TouchableOpacity onPress={onClose} disabled={enviando}><Text style={{ fontSize: 20, color: c.textMute }}>✕</Text></TouchableOpacity>
-          </View>
-          <Text style={{ fontSize: 12.5, color: c.textMute, marginBottom: 10 }}>
-            {cantidad} cliente{cantidad === 1 ? '' : 's'}. Una vez dado, este lote queda bloqueado — no se puede volver a dar.
-          </Text>
-
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-            <TouchableOpacity style={[st.loteModoBtn, { borderColor: c.border }, modo === 'usuario' && st.loteModoBtnOn]} onPress={() => setModo('usuario')}>
-              <Text style={[st.loteModoTxt, { color: modo === 'usuario' ? '#fff' : c.textSub }]}>Usuario de la app</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[st.loteModoBtn, { borderColor: c.border }, modo === 'texto' && st.loteModoBtnOn]} onPress={() => setModo('texto')}>
-              <Text style={[st.loteModoTxt, { color: modo === 'texto' ? '#fff' : c.textSub }]}>Escribir nombre</Text>
-            </TouchableOpacity>
-          </View>
-
-          {modo === 'usuario' ? (
-            <>
-              <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={buscaProspectador} onChangeText={setBuscaProspectador} placeholder="Buscar…" placeholderTextColor={c.textMute} autoFocus />
-              <ScrollView style={{ maxHeight: 260, marginTop: 8 }} keyboardShouldPersistTaps="handled">
-                {listaProspectadores.map(p => (
-                  <TouchableOpacity key={p.id} style={[st.dropItem, p.id === prospectadorId && { backgroundColor: 'rgba(124,58,237,0.14)' }]} onPress={() => setProspectadorId(p.id)}>
-                    <Text style={[st.dropItemTxt, { color: c.text, fontWeight: p.id === prospectadorId ? '800' : '400' }]} numberOfLines={1}>{p.nombre}</Text>
-                  </TouchableOpacity>
-                ))}
-                {listaProspectadores.length === 0 && <Text style={{ color: c.textMute, padding: 12, fontSize: 12.5 }}>Sin resultados.</Text>}
-              </ScrollView>
-              <Text style={{ fontSize: 11, color: c.textMute, marginTop: 6 }}>Le aparecerá en su propia pantalla de lotes asignados dentro de la app.</Text>
-            </>
-          ) : (
-            <>
-              <Text style={st.chatbotFieldLabel}>Nombre de quien recibió el lote</Text>
-              <TextInput style={[st.dropBusca, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]} value={nombreTexto} onChangeText={setNombreTexto} placeholder="Ej. Juan Pérez (aliado externo)" placeholderTextColor={c.textMute} autoFocus />
-              <Text style={{ fontSize: 11, color: c.textMute, marginTop: 6 }}>Úsalo cuando el lote se entregó fuera de la app (de palabra, WhatsApp, etc.). No le aparecerá a nadie dentro de la app.</Text>
-            </>
-          )}
-
-          <TouchableOpacity
-            style={[st.chatbotEnviarBtn, (!puedeConfirmar || enviando) && { opacity: 0.5 }, { marginTop: 14 }]}
-            disabled={!puedeConfirmar || enviando}
-            onPress={confirmar}
-          >
-            {enviando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={st.chatbotEnviarTxt}>✓ Confirmar lote dado</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity style={[st.dropCancel, { marginTop: 10 }]} onPress={onClose} disabled={enviando}><Text style={[st.dropCancelTxt, { color: c.textSub }]}>Cancelar</Text></TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  )
-}
-
 const st = StyleSheet.create({
   page: { flex: 1, paddingHorizontal: 12, paddingTop: 8 },
+  tabsRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  tabBtn: { borderWidth: 1, borderColor: '#1a6470', borderRadius: 9, paddingHorizontal: 16, paddingVertical: 7 },
+  tabBtnOn: { backgroundColor: '#1a6470' },
+  tabBtnTxt: { color: '#1a6470', fontSize: 13, fontWeight: '700' },
+  tabBtnTxtOn: { color: '#fff' },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   h1: { fontSize: 20, fontWeight: '800' },
   sub: { fontSize: 12, marginTop: 1 },
