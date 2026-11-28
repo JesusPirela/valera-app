@@ -22,6 +22,11 @@ type Prop = {
   propiedad_imagenes: { url: string; thumb_url: string | null; orden: number | null }[] | null
 }
 
+type Estadisticas = {
+  disponibles: number; vendidas: number; rentadas: number
+  publicaciones: number; vistas: number
+}
+
 const money = (n: number | null) =>
   n ? '$' + Math.round(n).toLocaleString('es-MX') : 'Sin precio'
 
@@ -30,6 +35,7 @@ export default function AliadoPropiedades() {
   const [lista, setLista] = useState<Prop[]>([])
   const [cargando, setCargando] = useState(true)
   const [agencia, setAgencia] = useState<string | null>(null)
+  const [stats, setStats] = useState<Estadisticas | null>(null)
 
   const cargar = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -37,15 +43,17 @@ export default function AliadoPropiedades() {
     const { data: perfil } = await supabase
       .from('profiles').select('inmobiliaria_id').eq('id', session.user.id).single()
     if (!perfil?.inmobiliaria_id) { setCargando(false); return }
-    const [{ data: inm }, { data }] = await Promise.all([
+    const [{ data: inm }, { data }, { data: est }] = await Promise.all([
       supabase.from('inmobiliarias').select('nombre').eq('id', perfil.inmobiliaria_id).single(),
       supabase.from('propiedades')
         .select('id, codigo, titulo, precio, direccion, operacion, estado, recamaras, banos, m2, propiedad_imagenes(url, thumb_url, orden)')
         .eq('inmobiliaria_id', perfil.inmobiliaria_id)
         .order('created_at', { ascending: false }),
+      supabase.rpc('estadisticas_aliado'),
     ])
     setAgencia(inm?.nombre ?? null)
     setLista((data ?? []) as unknown as Prop[])
+    setStats((est ?? null) as Estadisticas | null)
     setCargando(false)
   }, [])
 
@@ -67,6 +75,27 @@ export default function AliadoPropiedades() {
           </Text>
         </View>
       </View>
+
+      {stats && (
+        <View style={[s.statsRow, { borderColor: c.border }]}>
+          <View style={s.statBox}>
+            <Text style={[s.statNum, { color: c.text }]}>{stats.disponibles}</Text>
+            <Text style={[s.statLbl, { color: c.textSub }]}>Disponibles</Text>
+          </View>
+          <View style={s.statBox}>
+            <Text style={[s.statNum, { color: c.text }]}>{stats.vendidas + stats.rentadas}</Text>
+            <Text style={[s.statLbl, { color: c.textSub }]}>Vendidas/rentadas</Text>
+          </View>
+          <View style={s.statBox}>
+            <Text style={[s.statNum, { color: c.text }]}>{stats.vistas}</Text>
+            <Text style={[s.statLbl, { color: c.textSub }]}>Vistas de tu catálogo</Text>
+          </View>
+          <View style={s.statBox}>
+            <Text style={[s.statNum, { color: c.text }]}>{stats.publicaciones}</Text>
+            <Text style={[s.statLbl, { color: c.textSub }]}>Veces impulsadas</Text>
+          </View>
+        </View>
+      )}
 
       <FlatList
         data={lista}
@@ -115,6 +144,13 @@ const s = StyleSheet.create({
   cabecera: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
   titulo: { fontSize: 21, fontWeight: '900' },
   sub: { fontSize: 12.5, marginTop: 2 },
+  statsRow: {
+    flexDirection: 'row', marginHorizontal: 14, marginTop: 4,
+    borderWidth: 1, borderRadius: 13, overflow: 'hidden',
+  },
+  statBox: { flex: 1, alignItems: 'center', paddingVertical: 12, gap: 2 },
+  statNum: { fontSize: 18, fontWeight: '900' },
+  statLbl: { fontSize: 10.5, textAlign: 'center' },
   fila: { flexDirection: 'row', gap: 11, borderWidth: 1, borderRadius: 13, padding: 9, alignItems: 'center' },
   foto: { width: 76, height: 62, borderRadius: 9 },
   nombre: { fontSize: 14.5, fontWeight: '800' },
