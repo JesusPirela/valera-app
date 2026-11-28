@@ -6,7 +6,7 @@
 // tenía resueltas las esquinas (las horas dan la vuelta sin cambiar de día,
 // no deja elegir un momento que ya pasó, los minutos van de 5 en 5).
 import { useState } from 'react'
-import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, Modal, StyleSheet, ScrollView } from 'react-native'
 // ── DateTimePicker ───────────────────────────────────────
 export default function SelectorFechaHora({ value, onChange, label }: {
   value: Date | null; onChange: (d: Date | null) => void; label: string
@@ -54,10 +54,11 @@ export default function SelectorFechaHora({ value, onChange, label }: {
         <Text style={[dpStyles.triggerText, !value && dpStyles.placeholder]}>{displayStr}</Text>
         <Text style={dpStyles.icon}>▾</Text>
       </TouchableOpacity>
-      <Modal visible={open} transparent animationType="fade">
-        <View style={dpStyles.overlay}>
-          <View style={dpStyles.modal}>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <TouchableOpacity style={dpStyles.overlay} activeOpacity={1} onPress={() => setOpen(false)}>
+          <View style={dpStyles.modal} onStartShouldSetResponder={() => true}>
             <Text style={dpStyles.modalTitle}>Fecha y hora</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={dpStyles.secLabel}>Fecha</Text>
             {(() => {
               const y = mesVista.getFullYear(), m = mesVista.getMonth()
@@ -117,8 +118,9 @@ export default function SelectorFechaHora({ value, onChange, label }: {
                 <Text style={dpStyles.btnConfirmText}>Confirmar</Text>
               </TouchableOpacity>
             </View>
+            </ScrollView>
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
     </>
   )
@@ -146,9 +148,9 @@ const dpStyles = StyleSheet.create({
   triggerText: { flex: 1, fontSize: 14, color: '#1a1a2e' },
   placeholder: { color: '#aaa' },
   icon: { color: '#aaa', fontSize: 16 },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modal: {
-    backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '88%',
+    backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '88%', maxWidth: 380, maxHeight: '90%',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
   },
   modalTitle: { fontSize: 16, fontWeight: '700', color: '#1a6470', marginBottom: 16, textAlign: 'center' },
