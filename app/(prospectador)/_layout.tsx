@@ -73,6 +73,13 @@ export default function ProspectadorLayout() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.user?.id) return
       supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle().then(({ data }) => {
+        // Las cuentas de inmobiliaria aliada no viven aquí: esta app lleva
+        // nuestras misiones, nuestra racha y nuestra tienda. Su casa es
+        // (aliado), y se les devuelve ahí aunque escriban la URL a mano.
+        if (data?.role === 'aliado_admin' || data?.role === 'aliado_agente') {
+          router.replace('/(aliado)/mis-propiedades')
+          return
+        }
         if (mountedRef.current) setRole(data?.role ?? null)
       })
     })

@@ -87,7 +87,11 @@ export default function LoginScreen() {
       supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', uid).then(() => {}, () => {})
       actualizarNombreRole(uid, { nombre, role }).catch(() => {})
 
-      if (role === 'admin' || role === 'supervisor') {
+      // Las cuentas de inmobiliaria aliada tienen su propia app: su marca,
+      // sus propiedades y el catálogo compartido. Nada de lo nuestro.
+      if (role === 'aliado_admin' || role === 'aliado_agente') {
+        router.replace('/(aliado)/mis-propiedades')
+      } else if (role === 'admin' || role === 'supervisor') {
         router.replace('/(admin)/propiedades')
       } else {
         // Fire-and-forget: no debe bloquear la navegación.

@@ -35,7 +35,9 @@ export default function Index() {
         role = profile?.role ?? null
       }
 
-      if (role === 'admin') {
+      if (role === 'aliado_admin' || role === 'aliado_agente') {
+        router.replace('/(aliado)/mis-propiedades')
+      } else if (role === 'admin') {
         let vistaComo: string | null = null
         try { vistaComo = await AsyncStorage.getItem(VISTA_COMO_KEY) } catch {}
         router.replace(vistaComo ? '/(prospectador)/propiedades' : '/(admin)/propiedades')

@@ -71,6 +71,14 @@ export default function AdminLayout() {
       supabase.from('profiles').select('role').eq('id', session.user.id).single()
         .then(({ data }) => {
           if (!activo || !data || data.role === 'admin') return
+          // Una cuenta de inmobiliaria aliada no pinta NADA en (admin), y
+          // tampoco en nuestra app de prospectador: su casa es (aliado).
+          // Sin esto, escribir una URL nuestra los dejaba en nuestro feed,
+          // con nuestras misiones y nuestra tienda.
+          if (data.role === 'aliado_admin' || data.role === 'aliado_agente') {
+            router.replace('/(aliado)/mis-propiedades')
+            return
+          }
           const ruta = (pathname || '').replace(/^\/+/, '')
           const accesoAdminParcial = data.role === 'supervisor' || data.role === 'gerente'
           if (accesoAdminParcial) {

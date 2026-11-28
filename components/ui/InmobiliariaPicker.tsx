@@ -44,11 +44,22 @@ export default function InmobiliariaPicker({ value, onChange }: Props) {
 
   async function cargarInmobiliarias() {
     setCargando(true)
+    // El telefono y el asesor de referencia de una agencia son el CONTACTO
+    // DEL DUENO: solo los ve un admin, y por eso ya no se pueden leer de la
+    // tabla. Se piden por la funcion que comprueba el rol; a quien no sea
+    // admin le devuelve vacio, y entonces se cae a la lista con el nombre a
+    // secas, que es lo unico que el selector necesita para funcionar.
+    const { data: conContacto } = await supabase.rpc('inmobiliarias_con_contacto')
+    if (Array.isArray(conContacto) && conContacto.length > 0) {
+      setInmobiliarias(conContacto as InmobiliariaOpcion[])
+      setCargando(false)
+      return
+    }
     const { data } = await supabase
       .from('inmobiliarias')
-      .select('id, nombre, asesor_referencia, telefono')
+      .select('id, nombre')
       .order('nombre')
-    setInmobiliarias(data ?? [])
+    setInmobiliarias((data ?? []).map(i => ({ ...i, asesor_referencia: null, telefono: null })))
     setCargando(false)
   }
 
@@ -76,10 +87,17 @@ export default function InmobiliariaPicker({ value, onChange }: Props) {
           asesor_referencia: asesorReferencia.trim() || null,
           telefono: telefono.trim() || null,
         })
-        .select('id, nombre, asesor_referencia, telefono')
+        // Al crearla no se piden de vuelta las columnas protegidas: se arma
+        // la fila con lo que se acaba de escribir.
+        .select('id, nombre')
         .single()
       if (error) throw error
-      setInmobiliarias((prev) => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      const creada: InmobiliariaOpcion = {
+        id: data.id, nombre: data.nombre,
+        asesor_referencia: asesorReferencia.trim() || null,
+        telefono: telefono.trim() || null,
+      }
+      setInmobiliarias((prev) => [...prev, creada].sort((a, b) => a.nombre.localeCompare(b.nombre)))
       onChange(data.id)
       setOpen(false)
     } catch (err: any) {

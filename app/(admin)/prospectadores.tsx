@@ -21,7 +21,9 @@ import CrmMetricasPanel from '../../components/CrmMetricasPanel'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
-type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus' | 'supervisor' | 'asesor' | 'gerente'
+// Los dos ultimos NO son del equipo: son cuentas de una inmobiliaria aliada.
+// Siempre van con una inmobiliaria detras (la pide la pantalla al asignarlos).
+type RolUsuario = 'nuevo' | 'prospectador' | 'prospectador_plus' | 'supervisor' | 'asesor' | 'gerente' | 'aliado_admin' | 'aliado_agente'
 
 type Prospectador = {
   id: string
@@ -100,6 +102,8 @@ const ROL_BADGE: Record<string, object> = {
   supervisor:        { backgroundColor: '#e3e0fb' },
   asesor:            { backgroundColor: '#dcedf7' },
   gerente:           { backgroundColor: '#d7f0e6' },
+  aliado_admin:      { backgroundColor: '#ece6f8' },
+  aliado_agente:     { backgroundColor: '#f3eefb' },
 }
 
 const ROL_TEXT: Record<string, object> = {
@@ -109,6 +113,8 @@ const ROL_TEXT: Record<string, object> = {
   supervisor:        { color: '#5e35b1' },
   asesor:            { color: '#1565c0' },
   gerente:           { color: '#00695c' },
+  aliado_admin:      { color: '#5e35b1' },
+  aliado_agente:     { color: '#6b4ba8' },
 }
 
 const ROLES_SELECTOR: { value: RolUsuario; label: string }[] = [
@@ -122,6 +128,9 @@ const ROLES_SELECTOR_CAMBIO: { value: RolUsuario; label: string }[] = [
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'asesor', label: 'Asesor' },
   { value: 'gerente', label: 'Gerente' },
+  // Cuentas de fuera. Al tocarlas, la pantalla pregunta de que inmobiliaria.
+  { value: 'aliado_admin', label: 'Aliado · titular' },
+  { value: 'aliado_agente', label: 'Aliado · agente' },
 ]
 
 function tiempoConcreto(fechaISO: string): string {
@@ -201,6 +210,10 @@ export default function Prospectadores() {
   const [password, setPassword] = useState('')
   const [verPassword, setVerPassword] = useState(false)
   const [rolCreacion, setRolCreacion] = useState<RolUsuario>('prospectador')
+  // Al poner a alguien como aliado hay que decir DE QUE inmobiliaria: una
+  // cuenta de fuera sin agencia seria alguien suelto dentro de la app.
+  const [pidiendoInmob, setPidiendoInmob] = useState<{ userId: string; rol: RolUsuario } | null>(null)
+  const [inmobs, setInmobs] = useState<{ id: string; nombre: string }[]>([])
   const [creando, setCreando] = useState(false)
 
   // Panel de credenciales tras crear
@@ -278,10 +291,19 @@ export default function Prospectadores() {
     else Alert.alert('Error', msg)
   }
 
-  async function cambiarRol(userId: string, nuevoRol: RolUsuario) {
+  const esRolAliado = (r: RolUsuario) => r === 'aliado_admin' || r === 'aliado_agente'
+
+  async function cambiarRol(userId: string, nuevoRol: RolUsuario, inmobiliariaId?: string) {
+    // Primero se pregunta la inmobiliaria; con ella ya se puede guardar.
+    if (esRolAliado(nuevoRol) && !inmobiliariaId) {
+      const { data: conContacto } = await supabase.rpc('inmobiliarias_con_contacto')
+      setInmobs((conContacto ?? []).map((i: any) => ({ id: i.id, nombre: i.nombre })))
+      setPidiendoInmob({ userId, rol: nuevoRol })
+      return
+    }
     setCambiandoRol(true)
     const { data, error } = await supabase.functions.invoke('cambiar-rol', {
-      body: { userId, role: nuevoRol },
+      body: { userId, role: nuevoRol, inmobiliariaId },
     })
     setCambiandoRol(false)
 
@@ -294,6 +316,7 @@ export default function Prospectadores() {
       prev.map(p => p.id === userId ? { ...p, role: nuevoRol } : p)
     )
     setEditandoRolId(null)
+    setPidiendoInmob(null)
   }
 
   async function eliminarUsuarioConfirmado(item: Prospectador) {
@@ -1032,6 +1055,42 @@ export default function Prospectadores() {
               </>
             )}
 
+          </View>
+        </View>
+      </Modal>
+
+      {/* De que inmobiliaria es esta cuenta.
+          Sale al elegir un rol de aliado y no se puede saltar: sin agencia,
+          la cuenta no sabria que propiedades son suyas ni a quien puede ver. */}
+      <Modal visible={!!pidiendoInmob} transparent animationType="slide" onRequestClose={() => setPidiendoInmob(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: c.card }]}>
+            <Text style={[styles.modalTitulo, { color: c.text }]}>¿De qué inmobiliaria es?</Text>
+            <Text style={{ fontSize: 12.5, lineHeight: 18, color: c.textMute, marginBottom: 12 }}>
+              Esta cuenta deja de ser del equipo: solo verá a la gente de esa
+              inmobiliaria, administrará sus propiedades y no verá las nuestras
+              más que para consultarlas.
+            </Text>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {inmobs.map(i => (
+                <TouchableOpacity
+                  key={i.id}
+                  style={{ paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: c.divider }}
+                  onPress={() => pidiendoInmob && cambiarRol(pidiendoInmob.userId, pidiendoInmob.rol, i.id)}
+                  disabled={cambiandoRol}
+                >
+                  <Text style={{ fontSize: 14.5, fontWeight: '700', color: c.text }}>{i.nombre}</Text>
+                </TouchableOpacity>
+              ))}
+              {inmobs.length === 0 && (
+                <Text style={{ fontSize: 13, color: c.textMute, paddingVertical: 14 }}>
+                  No hay inmobiliarias dadas de alta. Créala primero en Equipo → Inmobiliarias.
+                </Text>
+              )}
+            </ScrollView>
+            <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center' }} onPress={() => setPidiendoInmob(null)}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: c.textMute }}>Cancelar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
