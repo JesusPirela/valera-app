@@ -208,7 +208,7 @@ export default function AliadoClientes() {
       <View style={[s.trow, { borderColor: c.border }]}>
         <Text style={[s.td, s.colNombre, { color: c.text, fontWeight: '700' }]} numberOfLines={1}>{item.nombre ?? 'Sin nombre'}</Text>
         <Text style={[s.td, s.colTel, { color: c.textSub }]} numberOfLines={1}>{item.telefono ?? '—'}</Text>
-        <View style={[s.td, s.colEstado]}>
+        <View style={[s.colEstado]}>
           <TouchableOpacity
             style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}
             disabled={soloLectura}
@@ -231,7 +231,7 @@ export default function AliadoClientes() {
           {item.proximo_contacto ? new Date(item.proximo_contacto).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—'}
         </Text>
         <Text style={[s.td, s.colNotas, { color: c.textSub }]} numberOfLines={1}>{item.notas ?? '—'}</Text>
-        <View style={[s.td, s.colAccion]}>
+        <View style={[s.colAccion]}>
           {!!tel(item.telefono) && (
             <TouchableOpacity onPress={() => Linking.openURL(`https://wa.me/${tel(item.telefono).length === 10 ? '52' : ''}${tel(item.telefono)}`)}>
               <Ionicons name="logo-whatsapp" size={16} color="#128C7E" />
