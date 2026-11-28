@@ -27,6 +27,7 @@ const TABS_BASE = [
   { ruta: 'mis-propiedades', icono: 'home' as const, texto: 'Propiedades' },
   { ruta: 'catalogo',    icono: 'albums' as const, texto: 'Catálogo' },
   { ruta: 'clientes',    icono: 'people' as const, texto: 'Clientes' },
+  { ruta: 'mis-citas',   icono: 'calendar' as const, texto: 'Citas' },
 ]
 // Solo el titular ve esta pestaña: es desde donde edita el logo/sitio de su
 // agencia e invita a su propia gente. Un agente no pinta nada ahí.

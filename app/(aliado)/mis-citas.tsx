@@ -1,0 +1,572 @@
+// "Mis citas" para una inmobiliaria aliada — agenda APARTE de la de nuestros
+// asesores (citas_coordinacion es el pool de leads NUESTROS que un
+// admin/gerente reparte; mezclar ahí a un aliado sería dejarlo tocar
+// información interna). Aquí cada aliado agenda y da seguimiento a SUS
+// propios clientes, con el mismo vocabulario de estados y las mismas tres
+// vistas (Lista/Tablero/Tabla) que ya usan nuestros asesores en
+// (prospectador)/asesor-citas.tsx — se reimportan tal cual (son constantes
+// exportadas, sin lógica de servidor detrás) para que se vea igual.
+import { useState, useCallback, useMemo, createElement } from 'react'
+import {
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput,
+  ActivityIndicator, Platform, Linking, Alert, useWindowDimensions,
+} from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import { useFocusEffect } from 'expo-router'
+import { supabase } from '../../lib/supabase'
+import { useColors, useTheme } from '../../lib/ThemeContext'
+import { ESTADOS, ORDEN } from '../(prospectador)/asesor-citas'
+
+type Estado = typeof ORDEN[number]
+
+const COL_W = 250
+const TABLE_COLS = [
+  { id: 'cliente', label: 'Cliente', w: 180 },
+  { id: 'tel', label: 'Teléfono', w: 130 },
+  { id: 'prop', label: 'Propiedad', w: 220 },
+  { id: 'fecha', label: 'Fecha', w: 175 },
+  { id: 'estado', label: 'Estado', w: 230 },
+]
+
+type Cita = {
+  id: string; cliente_id: string; estado: string; fecha_cita: string | null
+  notas: string | null; propiedad_externa: string | null; responsable_id: string
+  updated_at: string
+  clientes: { nombre: string; telefono: string | null } | null
+  propiedad: { titulo: string } | null
+}
+type ClienteOpcion = { id: string; nombre: string | null }
+type Miembro = { id: string; nombre: string | null; role: string }
+
+function colDe(e: string): Estado { return (ESTADOS as any)[e] ? (e as Estado) : 'coordinada' }
+
+const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+function fmtFecha(iso: string | null): string {
+  if (!iso) return 'Sin fecha'
+  const d = new Date(iso); if (isNaN(d.getTime())) return 'Sin fecha'
+  const h = d.getHours(); const ampm = h < 12 ? 'am' : 'pm'; const h12 = h % 12 || 12
+  return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${h12}:${String(d.getMinutes()).padStart(2, '0')} ${ampm}`
+}
+function iniciales(n: string | null | undefined): string {
+  const p = (n ?? '').trim().split(/\s+/).filter(Boolean)
+  return ((p[0]?.[0] ?? '') + (p[1]?.[0] ?? '')).toUpperCase() || '?'
+}
+function limpiarTel(t: string | null | undefined): string { return (t ?? '').replace(/[^\d+]/g, '') }
+
+const SELECT_CITA = `id, cliente_id, estado, fecha_cita, notas, propiedad_externa, responsable_id, updated_at,
+  clientes ( nombre, telefono ), propiedad:propiedades ( titulo )`
+
+export default function MisCitasAliado() {
+  const c = useColors()
+  const { darkMode } = useTheme()
+  const { width } = useWindowDimensions()
+  const [miId, setMiId] = useState<string | null>(null)
+  const [citas, setCitas] = useState<Cita[]>([])
+  const [loading, setLoading] = useState(true)
+  const [vista, setVista] = useState<'lista' | 'tablero' | 'tabla'>('lista')
+  const [busca, setBusca] = useState('')
+  const [detalle, setDetalle] = useState<Cita | null>(null)
+  const [dragCita, setDragCita] = useState<Cita | null>(null)
+  const [dragOver, setDragOver] = useState<Estado | null>(null)
+
+  const [esTitular, setEsTitular] = useState(false)
+  const [equipo, setEquipo] = useState<Miembro[]>([])
+  const [viendo, setViendo] = useState<{ id: string; nombre: string } | null>(null)
+  const [modalEquipo, setModalEquipo] = useState(false)
+
+  const [modalNueva, setModalNueva] = useState(false)
+  const [misClientes, setMisClientes] = useState<ClienteOpcion[]>([])
+  const [clienteElegido, setClienteElegido] = useState<ClienteOpcion | null>(null)
+  const [propExterna, setPropExterna] = useState('')
+  const [fechaTexto, setFechaTexto] = useState('')
+  const [notasNueva, setNotasNueva] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  function alerta(msg: string) {
+    if (Platform.OS === 'web') window.alert(msg)
+    else Alert.alert('Aviso', msg)
+  }
+
+  const cargarCitas = useCallback(async (responsableId: string) => {
+    const { data } = await supabase.from('citas_aliado').select(SELECT_CITA)
+      .eq('responsable_id', responsableId).order('fecha_cita', { ascending: false, nullsFirst: false })
+    setCitas((data ?? []) as unknown as Cita[])
+  }, [])
+
+  const cargar = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { setLoading(false); return }
+    setMiId(session.user.id)
+    const { data: perfil } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
+    const titular = perfil?.role === 'aliado_admin'
+    setEsTitular(titular)
+    if (titular) {
+      const { data: eq } = await supabase.rpc('mi_equipo_aliado')
+      setEquipo((eq?.equipo ?? []) as Miembro[])
+    }
+    await cargarCitas(viendo?.id ?? session.user.id)
+    setLoading(false)
+  }, [cargarCitas, viendo])
+
+  useFocusEffect(useCallback(() => { cargar() }, [cargar]))
+
+  function verAgente(m: Miembro) {
+    setModalEquipo(false)
+    setViendo({ id: m.id, nombre: m.nombre ?? 'este usuario' })
+    setLoading(true)
+    cargarCitas(m.id).finally(() => setLoading(false))
+  }
+  function volverAMiAgenda() {
+    if (!miId) return
+    setViendo(null)
+    setLoading(true)
+    cargarCitas(miId).finally(() => setLoading(false))
+  }
+  const soloLectura = !!viendo
+
+  const visibles = useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    if (!q) return citas
+    return citas.filter(ci => `${ci.clientes?.nombre ?? ''} ${ci.propiedad?.titulo ?? ''} ${ci.propiedad_externa ?? ''}`.toLowerCase().includes(q))
+  }, [citas, busca])
+
+  const porEstado = useMemo(() => {
+    const m = Object.fromEntries(ORDEN.map(e => [e, [] as Cita[]])) as Record<Estado, Cita[]>
+    for (const ci of visibles) m[colDe(ci.estado)].push(ci)
+    return m
+  }, [visibles])
+
+  async function mover(ci: Cita, e: Estado) {
+    if (soloLectura) return
+    setCitas(prev => prev.map(x => x.id === ci.id ? { ...x, estado: e } : x))
+    setDetalle(d => d && d.id === ci.id ? { ...d, estado: e } : d)
+    await supabase.from('citas_aliado').update({ estado: e }).eq('id', ci.id)
+  }
+  const propNombre = (ci: Cita) => ci.propiedad?.titulo || ci.propiedad_externa || null
+
+  async function abrirNueva() {
+    if (!miId) return
+    const { data } = await supabase.from('clientes').select('id, nombre').eq('responsable_id', miId).order('nombre')
+    setMisClientes((data ?? []) as ClienteOpcion[])
+    setClienteElegido(null)
+    setPropExterna(''); setFechaTexto(''); setNotasNueva('')
+    setModalNueva(true)
+  }
+
+  async function guardarNueva() {
+    if (!clienteElegido || !miId) { alerta('Elige a qué cliente es la cita.'); return }
+    setGuardando(true)
+    try {
+      let fechaIso: string | null = null
+      if (fechaTexto.trim()) {
+        const d = new Date(fechaTexto.trim())
+        if (!isNaN(d.getTime())) fechaIso = d.toISOString()
+      }
+      const { error } = await supabase.from('citas_aliado').insert({
+        cliente_id: clienteElegido.id,
+        propiedad_externa: propExterna.trim() || null,
+        fecha_cita: fechaIso,
+        notas: notasNueva.trim() || null,
+        responsable_id: miId,
+        estado: 'coordinada',
+      })
+      if (error) throw error
+      setModalNueva(false)
+      cargar()
+    } catch (e: any) {
+      alerta('Error: ' + (e?.message ?? 'No se pudo guardar.'))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  function TarjetaLista({ ci }: { ci: Cita }) {
+    const est = ESTADOS[colDe(ci.estado)]
+    return (
+      <TouchableOpacity style={[cl.card, { backgroundColor: c.card, borderColor: c.border }]} activeOpacity={0.8} onPress={() => setDetalle(ci)}>
+        <View style={[cl.cardBar, { backgroundColor: est.color }]} />
+        <View style={cl.cardBody}>
+          <View style={cl.cardHead}>
+            <View style={[cl.avatar, { backgroundColor: est.color + '22' }]}><Text style={[cl.avatarTxt, { color: est.color }]}>{iniciales(ci.clientes?.nombre)}</Text></View>
+            <View style={cl.cardHeadInfo}>
+              <Text style={[cl.cardNombre, { color: c.text }]} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text>
+              {propNombre(ci) ? <Text style={[cl.linea, { color: c.textSub }]} numberOfLines={1}>🏠 {propNombre(ci)}</Text> : null}
+            </View>
+            <View style={[cl.estadoBadge, { backgroundColor: est.color + '22' }]}>
+              <View style={[cl.estadoDot, { backgroundColor: est.color }]} />
+              <Text style={[cl.estadoTxt, { color: est.color }]} numberOfLines={1}>{est.label}</Text>
+            </View>
+          </View>
+          <Text style={[cl.linea, { color: c.textSub }]} numberOfLines={1}>📅 {fmtFecha(ci.fecha_cita)}</Text>
+          {ci.notas ? <Text style={[cl.linea, { color: c.textMute }]} numberOfLines={2}>📝 {ci.notas}</Text> : null}
+        </View>
+      </TouchableOpacity>
+    )
+  }
+
+  function TarjetaTablero({ ci }: { ci: Cita }) {
+    const est = ESTADOS[colDe(ci.estado)]
+    const tel = limpiarTel(ci.clientes?.telefono)
+    const card = (
+      <TouchableOpacity style={[kc.card, { backgroundColor: c.card, borderColor: c.border }]} activeOpacity={0.85} onPress={() => setDetalle(ci)}>
+        <View style={[kc.colorBar, { backgroundColor: est.color }]} />
+        <View style={kc.body}>
+          <View style={kc.headRow}>
+            <View style={[kc.avatar, { backgroundColor: est.color + '22' }]}><Text style={[kc.avatarTxt, { color: est.color }]}>{iniciales(ci.clientes?.nombre)}</Text></View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[kc.nombre, { color: c.text }]} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text>
+              {tel ? <Text style={[kc.tel, { color: c.textMute }]}>{tel}</Text> : null}
+            </View>
+          </View>
+          {ci.fecha_cita ? <View style={[kc.fechaRow, { backgroundColor: est.color + '1a' }]}><Ionicons name="calendar-outline" size={11} color={est.color} /><Text style={[kc.fechaTxt, { color: est.color }]}>{fmtFecha(ci.fecha_cita)}</Text></View> : null}
+          {propNombre(ci) ? <View style={kc.proyectoRow}><Ionicons name="business-outline" size={10} color="#0d9488" /><Text style={kc.proyectoTxt} numberOfLines={1}>{propNombre(ci)}</Text></View> : null}
+          {ci.notas ? <Text style={[kc.notas, { color: c.textMute }]} numberOfLines={2}>{ci.notas}</Text> : null}
+        </View>
+      </TouchableOpacity>
+    )
+    if (Platform.OS === 'web' && !soloLectura) {
+      return createElement('div', {
+        draggable: true,
+        onDragStart: () => setDragCita(ci),
+        onDragEnd: () => { setDragCita(null); setDragOver(null) },
+        style: { cursor: 'grab', opacity: dragCita?.id === ci.id ? 0.45 : 1 },
+      }, card)
+    }
+    return card
+  }
+
+  if (loading) {
+    return <View style={st.vacioCentro}><ActivityIndicator size="large" color={c.text} /></View>
+  }
+
+  return (
+    <View style={[st.page, { backgroundColor: c.bg }]}>
+      <View style={st.top}>
+        <View style={{ flex: 1 }}>
+          <Text style={[st.h1, { color: c.text }]}>{viendo ? `Citas de ${viendo.nombre}` : 'Mis citas'}</Text>
+          <Text style={[st.sub, { color: c.textMute }]}>{citas.length} cita{citas.length !== 1 ? 's' : ''}</Text>
+        </View>
+        {!soloLectura && (
+          <TouchableOpacity style={st.btnAgregar} onPress={abrirNueva}>
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={st.btnAgregarTxt}>Agendar</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {soloLectura ? (
+        <View style={st.roBanner}>
+          <Text style={st.roBannerTxt} numberOfLines={1}>👁 Viendo las citas de {viendo!.nombre} — solo lectura</Text>
+          <TouchableOpacity onPress={volverAMiAgenda}><Text style={st.roBannerLink}>Volver a las mías</Text></TouchableOpacity>
+        </View>
+      ) : esTitular && (
+        <TouchableOpacity style={[st.btnEquipo, { borderColor: c.border }]} onPress={() => setModalEquipo(true)}>
+          <Ionicons name="people-outline" size={15} color="#5e35b1" />
+          <Text style={st.btnEquipoTxt}>Ver citas de mi equipo</Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={st.toggleRow}>
+        {(['lista', 'tablero', 'tabla'] as const).map(v => (
+          <TouchableOpacity key={v} onPress={() => setVista(v)} style={[st.toggleBtn, { borderColor: c.border }, vista === v && st.toggleOn]}>
+            <Text style={[st.toggleTxt, { color: vista === v ? '#fff' : c.textSub }]}>{v === 'lista' ? '☰ Lista' : v === 'tablero' ? '▦ Tablero' : '▤ Tabla'}</Text>
+          </TouchableOpacity>
+        ))}
+        <TextInput style={[st.busca, { color: c.text, borderColor: c.border, backgroundColor: c.card }]} value={busca} onChangeText={setBusca} placeholder="Buscar…" placeholderTextColor={c.placeholder} />
+      </View>
+
+      {citas.length === 0 ? (
+        <View style={st.vacio}>
+          <Text style={{ fontSize: 46 }}>📭</Text>
+          <Text style={[st.vacioTxt, { color: c.textMute }]}>
+            {soloLectura ? 'Esta persona todavía no tiene citas agendadas.' : 'Aquí llevas tus citas con clientes. Toca "Agendar" para crear la primera.'}
+          </Text>
+        </View>
+      ) : vista === 'lista' ? (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+          {visibles.map(ci => <TarjetaLista key={ci.id} ci={ci} />)}
+          {visibles.length === 0 && <Text style={{ color: c.textMute, textAlign: 'center', marginTop: 20 }}>Sin resultados.</Text>}
+        </ScrollView>
+      ) : vista === 'tablero' ? (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 10 }} showsVerticalScrollIndicator={false}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+            {ORDEN.map(e => {
+              const colW = Math.min(COL_W, width - 40)
+              const resaltar = dragOver === e && dragCita && colDe(dragCita.estado) !== e
+              const inner = (
+                <View style={[tb.col, { width: colW, backgroundColor: darkMode ? '#0f1d2e' : '#eef2f6' }, resaltar && { borderWidth: 2, borderColor: ESTADOS[e].color }]}>
+                  <View style={[tb.colHead, { backgroundColor: ESTADOS[e].color + (darkMode ? '2e' : '22'), borderColor: ESTADOS[e].color }]}>
+                    <Text style={[tb.colHeadTxt, { color: ESTADOS[e].color }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
+                    <View style={[tb.colCount, { backgroundColor: ESTADOS[e].color }]}><Text style={tb.colCountTxt}>{porEstado[e].length}</Text></View>
+                  </View>
+                  <View style={{ paddingBottom: 12 }}>
+                    {porEstado[e].map(ci => <TarjetaTablero key={ci.id} ci={ci} />)}
+                    {porEstado[e].length === 0 && <Text style={[tb.colVacio, { color: c.textMute }]}>{Platform.OS === 'web' && !soloLectura ? 'Suelta aquí' : '—'}</Text>}
+                  </View>
+                </View>
+              )
+              if (Platform.OS !== 'web' || soloLectura) return <View key={e}>{inner}</View>
+              return createElement('div', {
+                key: e,
+                onDragEnter: (ev: any) => { ev.preventDefault(); setDragOver(e) },
+                onDragOver: (ev: any) => ev.preventDefault(),
+                onDrop: (ev: any) => { ev.preventDefault(); if (dragCita && colDe(dragCita.estado) !== e) mover(dragCita, e); setDragCita(null); setDragOver(null) },
+                style: { flexShrink: 0 },
+              }, inner)
+            })}
+          </ScrollView>
+        </ScrollView>
+      ) : (
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingBottom: 40 }}>
+            <View style={{ width: TABLE_COLS.reduce((s, cc) => s + cc.w, 0) }}>
+              <View style={tbl.trHead}>
+                {TABLE_COLS.map(cc => (
+                  <View key={cc.id} style={[tbl.th, { width: cc.w }]}><Text style={tbl.thTxt} numberOfLines={1}>{cc.label}</Text></View>
+                ))}
+              </View>
+              {visibles.map((ci, idx) => {
+                const est = ESTADOS[colDe(ci.estado)]
+                return (
+                  <TouchableOpacity key={ci.id} activeOpacity={0.7} onPress={() => setDetalle(ci)}
+                    style={[tbl.tr, { borderBottomColor: c.border, backgroundColor: idx % 2 ? (darkMode ? '#0a1827' : '#f8fafc') : c.card }]}>
+                    <View style={[tbl.td, { width: TABLE_COLS[0].w }]}><Text style={[tbl.tdBold, { color: c.text }]} numberOfLines={1}>{ci.clientes?.nombre || 'Cliente'}</Text></View>
+                    <View style={[tbl.td, { width: TABLE_COLS[1].w }]}><Text style={[tbl.tdTxt, { color: c.textSub }]} numberOfLines={1}>{limpiarTel(ci.clientes?.telefono) || '—'}</Text></View>
+                    <View style={[tbl.td, { width: TABLE_COLS[2].w }]}><Text style={[tbl.tdTxt, { color: c.textSub }]} numberOfLines={1}>{propNombre(ci) || '—'}</Text></View>
+                    <View style={[tbl.td, { width: TABLE_COLS[3].w }]}><Text style={[tbl.tdTxt, { color: c.textSub }]} numberOfLines={1}>{fmtFecha(ci.fecha_cita)}</Text></View>
+                    <View style={[tbl.td, { width: TABLE_COLS[4].w }]}>
+                      <View style={[tbl.chip, { backgroundColor: est.color + '22', maxWidth: TABLE_COLS[4].w - 24 }]}><Text style={[tbl.chipTxt, { color: est.color }]} numberOfLines={1}>{est.emoji} {est.label}</Text></View>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })}
+              {visibles.length === 0 && <Text style={{ color: c.textMute, textAlign: 'center', margin: 20 }}>Sin resultados.</Text>}
+            </View>
+          </ScrollView>
+        </ScrollView>
+      )}
+
+      {detalle && (
+        <DetalleModal cita={detalle} soloLectura={soloLectura} onClose={() => setDetalle(null)} onMover={mover} c={c} />
+      )}
+
+      {/* Agendar cita nueva */}
+      <Modal visible={modalNueva} transparent animationType="slide" onRequestClose={() => setModalNueva(false)}>
+        <View style={dm.overlay}>
+          <View style={[dm.sheet, { backgroundColor: c.card }]}>
+            <View style={dm.handle} />
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={[dm.titulo, { color: c.text }]}>Agendar cita</Text>
+              <Text style={[dm.sub, { color: c.textSub }]}>Cliente</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {misClientes.map(cl2 => (
+                  <TouchableOpacity
+                    key={cl2.id}
+                    style={[nv.pill, { borderColor: clienteElegido?.id === cl2.id ? '#5e35b1' : c.border }]}
+                    onPress={() => setClienteElegido(cl2)}
+                  >
+                    <Text style={[nv.pillTxt, { color: clienteElegido?.id === cl2.id ? '#5e35b1' : c.text }]}>{cl2.nombre ?? 'Sin nombre'}</Text>
+                  </TouchableOpacity>
+                ))}
+                {misClientes.length === 0 && (
+                  <Text style={{ color: c.textMute, fontSize: 12.5 }}>No tienes clientes todavía — agrégalos primero en "Clientes".</Text>
+                )}
+              </View>
+              <Text style={[dm.sub, { color: c.textSub }]}>Propiedad (opcional)</Text>
+              <TextInput style={[nv.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={propExterna} onChangeText={setPropExterna} placeholder="Ej. Casa en Milenio III" placeholderTextColor={c.placeholder} />
+              <Text style={[dm.sub, { color: c.textSub }]}>Fecha y hora (opcional)</Text>
+              <TextInput style={[nv.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={fechaTexto} onChangeText={setFechaTexto} placeholder="2026-12-05 17:00" placeholderTextColor={c.placeholder} />
+              <Text style={[dm.sub, { color: c.textSub }]}>Notas</Text>
+              <TextInput style={[nv.input, nv.textArea, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+                value={notasNueva} onChangeText={setNotasNueva} multiline placeholderTextColor={c.placeholder} />
+              <TouchableOpacity style={[nv.btnGuardar, guardando && { opacity: 0.6 }]} onPress={guardarNueva} disabled={guardando}>
+                {guardando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={nv.btnGuardarTxt}>Guardar</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity style={dm.cerrar} onPress={() => setModalNueva(false)}>
+                <Text style={[dm.cerrarTxt, { color: c.textSub }]}>Cancelar</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Elegir de quién ver las citas — solo titular */}
+      <Modal visible={modalEquipo} transparent animationType="fade" onRequestClose={() => setModalEquipo(false)}>
+        <View style={dm.overlay}>
+          <View style={[dm.sheet, { backgroundColor: c.card, maxHeight: '60%' }]}>
+            <Text style={[dm.titulo, { color: c.text }]}>Ver citas de</Text>
+            {equipo.filter(m => m.id !== miId).map(m => (
+              <TouchableOpacity key={m.id} style={nv.filaEquipo} onPress={() => verAgente(m)}>
+                <Ionicons name="person-outline" size={16} color={c.textSub} />
+                <Text style={[nv.filaEquipoTxt, { color: c.text }]}>{m.nombre ?? 'Sin nombre'}</Text>
+              </TouchableOpacity>
+            ))}
+            {equipo.filter(m => m.id !== miId).length === 0 && (
+              <Text style={{ color: c.textMute, fontSize: 13 }}>Todavía no tienes más gente en tu equipo.</Text>
+            )}
+            <TouchableOpacity style={dm.cerrar} onPress={() => setModalEquipo(false)}>
+              <Text style={[dm.cerrarTxt, { color: c.textSub }]}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  )
+}
+
+function DetalleModal({ cita, soloLectura, onClose, onMover, c }: {
+  cita: Cita; soloLectura: boolean; onClose: () => void; onMover: (ci: Cita, e: Estado) => void
+  c: ReturnType<typeof useColors>
+}) {
+  const tel = limpiarTel(cita.clientes?.telefono)
+  const prop = cita.propiedad?.titulo || cita.propiedad_externa || null
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={dm.overlay}>
+        <View style={[dm.sheet, { backgroundColor: c.card }]}>
+          <View style={dm.handle} />
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={[dm.titulo, { color: c.text }]}>{cita.clientes?.nombre || 'Cliente'}</Text>
+            {prop ? <Text style={[dm.linea, { color: c.textSub }]}>🏠 {prop}</Text> : null}
+            <Text style={[dm.linea, { color: c.textSub }]}>📅 {fmtFecha(cita.fecha_cita)}</Text>
+            {cita.notas ? <Text style={[dm.linea, { color: c.textMute }]}>📝 {cita.notas}</Text> : null}
+
+            {tel ? (
+              <View style={dm.accionRow}>
+                <TouchableOpacity style={[dm.accion, { backgroundColor: '#16a34a' }]} onPress={() => Linking.openURL(`https://wa.me/52${tel.replace(/^\+?52/, '')}`)}><Text style={dm.accionTxt}>💬 WhatsApp</Text></TouchableOpacity>
+                <TouchableOpacity style={[dm.accion, { backgroundColor: '#1a6470' }]} onPress={() => Linking.openURL(`tel:${tel}`)}><Text style={dm.accionTxt}>📞 Llamar</Text></TouchableOpacity>
+              </View>
+            ) : null}
+
+            {!soloLectura && (
+              <>
+                <Text style={[dm.sub, { color: c.textSub }]}>Mover a</Text>
+                <View style={{ gap: 8 }}>
+                  {ORDEN.map(e => {
+                    const on = colDe(cita.estado) === e
+                    return (
+                      <TouchableOpacity key={e} onPress={() => onMover(cita, e)} style={[dm.estadoOpt, { borderColor: on ? ESTADOS[e].color : c.border, backgroundColor: on ? ESTADOS[e].bg : 'transparent' }]}>
+                        <Text style={[dm.estadoOptTxt, { color: on ? ESTADOS[e].color : c.text }]}>{ESTADOS[e].emoji} {ESTADOS[e].label}</Text>
+                        {on && <Text style={{ color: ESTADOS[e].color, fontWeight: '900' }}>✓</Text>}
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              </>
+            )}
+            <TouchableOpacity style={dm.cerrar} onPress={onClose}><Text style={[dm.cerrarTxt, { color: c.textSub }]}>Cerrar</Text></TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+const st = StyleSheet.create({
+  page: { flex: 1 },
+  vacioCentro: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 10 },
+  h1: { fontSize: 21, fontWeight: '900' },
+  sub: { fontSize: 12.5, marginTop: 1 },
+  btnAgregar: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#5e35b1', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9,
+  },
+  btnAgregarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  btnEquipo: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginHorizontal: 14, alignSelf: 'flex-start',
+    borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12,
+  },
+  btnEquipoTxt: { color: '#5e35b1', fontWeight: '700', fontSize: 12.5 },
+  roBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginHorizontal: 14, marginTop: 10,
+  },
+  roBannerTxt: { color: '#fff', fontWeight: '700', fontSize: 12.5, flex: 1, marginRight: 8 },
+  roBannerLink: { color: '#fff', fontWeight: '800', fontSize: 12.5, textDecorationLine: 'underline' },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, marginTop: 10 },
+  toggleBtn: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 7 },
+  toggleOn: { backgroundColor: '#1a6470', borderColor: '#1a6470' },
+  toggleTxt: { fontSize: 12.5, fontWeight: '800' },
+  busca: { flex: 1, borderWidth: 1, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 7, fontSize: 13.5 },
+  vacio: { alignItems: 'center', marginTop: 60, gap: 12, paddingHorizontal: 36 },
+  vacioTxt: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+})
+
+const cl = StyleSheet.create({
+  card: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, marginBottom: 10, flexDirection: 'row', overflow: 'hidden' },
+  cardBar: { width: 4 },
+  cardBody: { flex: 1, padding: 14 },
+  cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
+  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatarTxt: { fontSize: 15, fontWeight: '800' },
+  cardHeadInfo: { flex: 1, minWidth: 0 },
+  cardNombre: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  estadoBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4, flexShrink: 0, maxWidth: 130 },
+  estadoDot: { width: 5, height: 5, borderRadius: 3 },
+  estadoTxt: { fontSize: 11, fontWeight: '700' },
+  linea: { fontSize: 12.5, marginTop: 2 },
+})
+
+const tb = StyleSheet.create({
+  col: { borderRadius: 12, padding: 8 },
+  colHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8 },
+  colHeadTxt: { fontSize: 13, fontWeight: '900' },
+  colCount: { minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  colCountTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  colVacio: { textAlign: 'center', color: '#cbd5e1', fontSize: 20, marginTop: 8 },
+})
+const kc = StyleSheet.create({
+  card: { borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, marginBottom: 8, flexDirection: 'row', overflow: 'hidden' },
+  colorBar: { width: 4 },
+  body: { flex: 1, padding: 10, gap: 5 },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatarTxt: { fontSize: 11, fontWeight: '800' },
+  nombre: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
+  tel: { fontSize: 11, color: '#64748b' },
+  fechaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, alignSelf: 'flex-start' },
+  fechaTxt: { fontSize: 11, fontWeight: '600' },
+  notas: { fontSize: 11, color: '#64748b', lineHeight: 15 },
+  proyectoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  proyectoTxt: { fontSize: 10, color: '#0d9488', fontWeight: '600', flexShrink: 1 },
+})
+const tbl = StyleSheet.create({
+  trHead: { flexDirection: 'row', backgroundColor: '#1a3547', minHeight: 44, alignItems: 'stretch' },
+  th: { justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.08)' },
+  thTxt: { color: '#fff', fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  tr: { flexDirection: 'row', minHeight: 50, alignItems: 'stretch', borderBottomWidth: 1 },
+  td: { justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 10, overflow: 'hidden' },
+  tdTxt: { fontSize: 13 },
+  tdBold: { fontSize: 13, fontWeight: '700' },
+  chip: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 3 },
+  chipTxt: { fontSize: 11.5, fontWeight: '800' },
+})
+const dm = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, paddingBottom: 28, maxHeight: '88%' },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#88888855', alignSelf: 'center', marginBottom: 12 },
+  titulo: { fontSize: 20, fontWeight: '900' },
+  linea: { fontSize: 14, marginTop: 5, lineHeight: 19 },
+  accionRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  accion: { flex: 1, borderRadius: 11, paddingVertical: 12, alignItems: 'center' },
+  accionTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  sub: { fontSize: 13, fontWeight: '800', marginTop: 18, marginBottom: 8 },
+  estadoOpt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1.5, borderRadius: 11, paddingHorizontal: 14, paddingVertical: 13 },
+  estadoOptTxt: { fontSize: 14.5, fontWeight: '700' },
+  cerrar: { alignItems: 'center', paddingVertical: 14, marginTop: 8 },
+  cerrarTxt: { fontSize: 14, fontWeight: '700' },
+})
+const nv = StyleSheet.create({
+  pill: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
+  pillTxt: { fontSize: 13, fontWeight: '700' },
+  input: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, marginTop: 2 },
+  textArea: { minHeight: 70, textAlignVertical: 'top' },
+  btnGuardar: { backgroundColor: '#5e35b1', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 16 },
+  btnGuardarTxt: { color: '#fff', fontWeight: '800', fontSize: 14.5 },
+  filaEquipo: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 11 },
+  filaEquipoTxt: { fontSize: 14, fontWeight: '700' },
+})
