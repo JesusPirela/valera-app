@@ -18,6 +18,7 @@ import { normalizar } from '../../lib/texto'
 import { adminAjustarMonedas, adminAjustarXP } from '../../lib/gamification'
 import { calcularCrmMetricas, type CrmMetricas } from '../../lib/crmMetricas'
 import CrmMetricasPanel from '../../components/CrmMetricasPanel'
+import InmobiliariaPicker from '../../components/ui/InmobiliariaPicker'
 import { useColors } from '../../lib/ThemeContext'
 import { usePullRefresh } from '../../hooks/usePullRefresh'
 
@@ -213,7 +214,7 @@ export default function Prospectadores() {
   // Al poner a alguien como aliado hay que decir DE QUE inmobiliaria: una
   // cuenta de fuera sin agencia seria alguien suelto dentro de la app.
   const [pidiendoInmob, setPidiendoInmob] = useState<{ userId: string; rol: RolUsuario } | null>(null)
-  const [inmobs, setInmobs] = useState<{ id: string; nombre: string }[]>([])
+  const [inmobSeleccionada, setInmobSeleccionada] = useState<string | null>(null)
   const [creando, setCreando] = useState(false)
 
   // Panel de credenciales tras crear
@@ -294,10 +295,13 @@ export default function Prospectadores() {
   const esRolAliado = (r: RolUsuario) => r === 'aliado_admin' || r === 'aliado_agente'
 
   async function cambiarRol(userId: string, nuevoRol: RolUsuario, inmobiliariaId?: string) {
-    // Primero se pregunta la inmobiliaria; con ella ya se puede guardar.
+    // Primero se pregunta la inmobiliaria; con ella ya se puede guardar. El
+    // picker (el mismo de nueva-propiedad) trae su propio "+ Nueva
+    // inmobiliaria": una agencia aliada que recién se suma no está dada de
+    // alta todavía, y antes aquí no había forma de crearla sin cancelar e ir
+    // a Equipo → Inmobiliarias primero.
     if (esRolAliado(nuevoRol) && !inmobiliariaId) {
-      const { data: conContacto } = await supabase.rpc('inmobiliarias_con_contacto')
-      setInmobs((conContacto ?? []).map((i: any) => ({ id: i.id, nombre: i.nombre })))
+      setInmobSeleccionada(null)
       setPidiendoInmob({ userId, rol: nuevoRol })
       return
     }
@@ -1071,23 +1075,19 @@ export default function Prospectadores() {
               inmobiliaria, administrará sus propiedades y no verá las nuestras
               más que para consultarlas.
             </Text>
-            <ScrollView style={{ maxHeight: 320 }}>
-              {inmobs.map(i => (
-                <TouchableOpacity
-                  key={i.id}
-                  style={{ paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: c.divider }}
-                  onPress={() => pidiendoInmob && cambiarRol(pidiendoInmob.userId, pidiendoInmob.rol, i.id)}
-                  disabled={cambiandoRol}
-                >
-                  <Text style={{ fontSize: 14.5, fontWeight: '700', color: c.text }}>{i.nombre}</Text>
-                </TouchableOpacity>
-              ))}
-              {inmobs.length === 0 && (
-                <Text style={{ fontSize: 13, color: c.textMute, paddingVertical: 14 }}>
-                  No hay inmobiliarias dadas de alta. Créala primero en Equipo → Inmobiliarias.
-                </Text>
-              )}
-            </ScrollView>
+            <InmobiliariaPicker value={inmobSeleccionada} onChange={setInmobSeleccionada} />
+            <TouchableOpacity
+              style={[
+                styles.btnGuardarRol,
+                (!inmobSeleccionada || cambiandoRol) && styles.rolPillDisabled,
+              ]}
+              onPress={() => pidiendoInmob && inmobSeleccionada && cambiarRol(pidiendoInmob.userId, pidiendoInmob.rol, inmobSeleccionada)}
+              disabled={!inmobSeleccionada || cambiandoRol}
+            >
+              {cambiandoRol
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.btnGuardarRolTexto}>Confirmar</Text>}
+            </TouchableOpacity>
             <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center' }} onPress={() => setPidiendoInmob(null)}>
               <Text style={{ fontSize: 14, fontWeight: '700', color: c.textMute }}>Cancelar</Text>
             </TouchableOpacity>
@@ -1198,6 +1198,12 @@ const styles = StyleSheet.create({
   },
   rolPillDisabled: { opacity: 0.5 },
   rolPillText: { fontSize: 12, fontWeight: '600' },
+
+  btnGuardarRol: {
+    backgroundColor: '#1a6470', borderRadius: 10, paddingVertical: 13,
+    alignItems: 'center', marginTop: 14,
+  },
+  btnGuardarRolTexto: { color: '#fff', fontWeight: '800', fontSize: 14.5 },
 
   // Rol en creación
   rolCreacionRow: {
