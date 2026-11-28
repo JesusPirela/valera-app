@@ -499,6 +499,13 @@ export default function Prospectadores() {
         <Text style={styles.btnNuevoText}>+ Nuevo prospectador</Text>
       </TouchableOpacity>
 
+      {/* Un aliado_admin/aliado_agente nunca aparece en esta lista
+          (get_prospectadores filtra los roles de casa): sin este botón no
+          habría dónde encontrarlo para reasignarlo o devolverlo al equipo. */}
+      <TouchableOpacity style={styles.btnAliados} onPress={() => router.push('/(admin)/usuarios-aliados')}>
+        <Text style={styles.btnAliadosText}>🏢 Usuarios aliados</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity
         style={[styles.btnDashboardGeneral, loadingCrm && { opacity: 0.6 }]}
         onPress={() => !loadingCrm && abrirCrmModal(null, 'Todos los usuarios')}
@@ -1120,6 +1127,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  btnAliados: {
+    backgroundColor: '#5e35b1',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  btnAliadosText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   btnNuevoText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
