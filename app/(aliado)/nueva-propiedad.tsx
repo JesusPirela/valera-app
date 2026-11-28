@@ -18,6 +18,7 @@ import DropdownModal from '../../components/ui/DropdownModal'
 import { opcionesConteo } from '../../lib/conteos'
 import { extraerLinkMaps } from '../../lib/maps-link'
 import { ubicacionDesdeLink } from '../../lib/maps-resolver'
+import { COLONIAS } from '../../lib/colonias'
 
 const RECAMARAS_RANGO = [0, 10] as const
 const BANOS_RANGO = [0, 10] as const
@@ -61,6 +62,15 @@ export default function AliadoNuevaPropiedad() {
   const [lng, setLng] = useState<number | null>(null)
   const [maps, setMaps] = useState<{ estado: 'no' | 'leyendo' | 'ok' | 'error'; msg: string }>({ estado: 'no', msg: '' })
 
+  // Colonias conocidas (lib/colonias.ts) y búsqueda en Nominatim — mismo
+  // mecanismo que nueva-propiedad.tsx de admin: escribir "Juriquilla" ofrece
+  // esa colonia y, debajo, lo que encuentre el buscador de verdad.
+  const [geoResults, setGeoResults] = useState<any[]>([])
+  const [geoLoading, setGeoLoading] = useState(false)
+  const coloniasSugeridas = direccion.trim().length >= 2
+    ? COLONIAS.filter(col => col.label.toLowerCase().includes(direccion.trim().toLowerCase()))
+    : []
+
   useEffect(() => {
     const hallado = extraerLinkMaps(direccion)
     if (!hallado) return
@@ -80,6 +90,43 @@ export default function AliadoNuevaPropiedad() {
     })()
     return () => { vivo = false }
   }, [direccion])
+
+  useEffect(() => {
+    // Con un link pegado no se busca nada: no es una dirección que Nominatim
+    // pueda encontrar. Con el punto ya fijado (por un link o por una
+    // sugerencia tocada) tampoco: ofrecer más opciones contradiría lo que ya
+    // se fijó — para buscar de nuevo basta con seguir editando el texto.
+    if (extraerLinkMaps(direccion)) { setGeoResults([]); return }
+    if (maps.estado === 'ok') { setGeoResults([]); return }
+    if (!direccion.trim() || direccion.trim().length < 3) { setGeoResults([]); return }
+    const t = setTimeout(async () => {
+      setGeoLoading(true)
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(direccion.trim() + ' Mexico')}&format=json&limit=5&countrycodes=mx`
+        )
+        const data = await res.json()
+        setGeoResults(Array.isArray(data) ? data : [])
+      } catch { setGeoResults([]) }
+      finally { setGeoLoading(false) }
+    }, 400)
+    return () => clearTimeout(t)
+  }, [direccion, maps.estado])
+
+  function seleccionarColoniaPredefinida(col: typeof COLONIAS[0]) {
+    const texto = `${col.label}, ${col.ciudad}, México`
+    setDireccion(texto)
+    setLat(col.lat); setLng(col.lng)
+    setZona(col.ciudad)
+    setGeoResults([])
+  }
+
+  function seleccionarUbicacion(r: any) {
+    const partes = r.display_name.split(',').slice(0, 4).join(', ').trim()
+    setDireccion(partes)
+    setLat(parseFloat(r.lat)); setLng(parseFloat(r.lon))
+    setGeoResults([])
+  }
 
   function alerta(msg: string) {
     if (Platform.OS === 'web') window.alert(msg)
@@ -201,32 +248,71 @@ export default function AliadoNuevaPropiedad() {
         multiline numberOfLines={4} textAlignVertical="top" />
 
       <Text style={[s.label, { color: c.textSub }]}>Dirección *</Text>
-      <TextInput
-        style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-        value={direccion}
-        onChangeText={v => {
-          setDireccion(v)
-          // Si se borró el link, el punto deja de ser confiable — se
-          // reinicia para no dejar un lat/lng de una dirección anterior.
-          if (maps.estado !== 'ok' && !extraerLinkMaps(v)) { setLat(null); setLng(null) }
-          if (!v.trim()) { setLat(null); setLng(null); setMaps({ estado: 'no', msg: '' }) }
-          else if (maps.estado === 'error' && !extraerLinkMaps(v)) setMaps({ estado: 'no', msg: '' })
-        }}
-        placeholder="Calle, colonia, ciudad — o pega un link de Google Maps"
-        placeholderTextColor={c.placeholder}
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <TextInput
+          style={[s.input, { flex: 1, backgroundColor: c.input, borderColor: lat ? '#22a35e' : c.inputBorder, color: c.inputText }]}
+          value={direccion}
+          onChangeText={v => {
+            setDireccion(v)
+            // Si se borró el link, el punto deja de ser confiable — se
+            // reinicia para no dejar un lat/lng de una dirección anterior.
+            if (maps.estado !== 'ok' && !extraerLinkMaps(v)) { setLat(null); setLng(null) }
+            if (!v.trim()) { setLat(null); setLng(null); setMaps({ estado: 'no', msg: '' }) }
+            else if (maps.estado === 'error' && !extraerLinkMaps(v)) setMaps({ estado: 'no', msg: '' })
+          }}
+          placeholder="Ej. Juriquilla — o pega un link de Google Maps"
+          placeholderTextColor={c.placeholder}
+        />
+        {geoLoading && <ActivityIndicator size="small" color={c.textSub} style={{ marginLeft: 8 }} />}
+      </View>
+      {geoLoading && <Text style={{ fontSize: 11, color: '#1976D2' }}>🔍 Buscando…</Text>}
+      {lat !== null && maps.estado !== 'ok' && <Text style={{ fontSize: 11, color: '#22a35e' }}>✓ Ubicación confirmada en el mapa</Text>}
       {maps.estado !== 'no' && (
         <Text style={{
-          fontSize: 11.5, lineHeight: 16, marginTop: -4, marginBottom: 2, fontWeight: '700',
+          fontSize: 11.5, lineHeight: 16, fontWeight: '700',
           color: maps.estado === 'ok' ? '#22a35e' : maps.estado === 'error' ? '#e5a50a' : c.textMute,
         }}>
           {maps.estado === 'leyendo' ? '📍 ' : maps.estado === 'ok' ? '✓ ' : '⚠ '}{maps.msg}
         </Text>
       )}
 
-      <Text style={[s.label, { color: c.textSub }]}>Zona</Text>
+      {coloniasSugeridas.length > 0 && (
+        <View style={{ borderRadius: 8, borderWidth: 1, borderColor: '#22a35e', overflow: 'hidden' }}>
+          <Text style={{ fontSize: 11, color: '#22a35e', fontWeight: '700', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 }}>
+            📌 Colonias conocidas:
+          </Text>
+          {coloniasSugeridas.slice(0, 5).map((col, i) => (
+            <TouchableOpacity
+              key={col.label}
+              style={{ padding: 10, backgroundColor: i % 2 === 0 ? c.input : c.bg, borderTopWidth: 1, borderTopColor: c.inputBorder }}
+              onPress={() => seleccionarColoniaPredefinida(col)}
+            >
+              <Text style={{ fontSize: 13, color: c.inputText }}>📌 {col.label} — {col.ciudad}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {geoResults.length > 0 && (
+        <View style={{ borderRadius: 8, borderWidth: 1, borderColor: '#1976D2', overflow: 'hidden' }}>
+          <Text style={{ fontSize: 11, color: '#1976D2', fontWeight: '700', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 }}>
+            🔍 Resultados de búsqueda:
+          </Text>
+          {geoResults.map((r: any, i: number) => (
+            <TouchableOpacity
+              key={i}
+              style={{ padding: 10, backgroundColor: i % 2 === 0 ? c.input : c.bg, borderTopWidth: 1, borderTopColor: c.inputBorder }}
+              onPress={() => seleccionarUbicacion(r)}
+            >
+              <Text style={{ fontSize: 13, color: c.inputText }} numberOfLines={2}>📍 {r.display_name}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      <Text style={[s.label, { color: c.textSub }]}>Ciudad</Text>
       <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-        value={zona} onChangeText={setZona} placeholder="Ej. Juriquilla" placeholderTextColor={c.placeholder} />
+        value={zona} onChangeText={setZona} placeholder="Ej. Querétaro" placeholderTextColor={c.placeholder} />
 
       <Text style={[s.label, { color: c.textSub }]}>Precio</Text>
       <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
