@@ -3,16 +3,25 @@
 // EasyBroker — solo lo que a ellos les toca llenar. La base ya exige que
 // quede con SU inmobiliaria_id (ver propiedades_insert_aliado en
 // 20261127_aliados_4_rol.sql); aquí solo se arma ese dato.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   Alert, ActivityIndicator, Platform, Image, FlatList,
 } from 'react-native'
 import { router } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import PillSelector from '../../components/ui/PillSelector'
+import DropdownModal from '../../components/ui/DropdownModal'
+import { opcionesConteo } from '../../lib/conteos'
+import { extraerLinkMaps } from '../../lib/maps-link'
+import { ubicacionDesdeLink } from '../../lib/maps-resolver'
+
+const RECAMARAS_RANGO = [0, 10] as const
+const BANOS_RANGO = [0, 10] as const
+const ESTACIONAMIENTOS_RANGO = [0, 10] as const
 
 function generarUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -37,13 +46,40 @@ export default function AliadoNuevaPropiedad() {
   const [zona, setZona] = useState('')
   const [operacion, setOperacion] = useState<'venta' | 'renta'>('venta')
   const [tipo, setTipo] = useState<typeof TIPOS[number]['value']>('casa')
-  const [recamaras, setRecamaras] = useState('')
-  const [banos, setBanos] = useState('')
+  const [recamaras, setRecamaras] = useState<number | null>(null)
+  const [banos, setBanos] = useState<number | null>(null)
   const [m2, setM2] = useState('')
   const [m2Terreno, setM2Terreno] = useState('')
-  const [estacionamientos, setEstacionamientos] = useState('')
+  const [estacionamientos, setEstacionamientos] = useState<number | null>(null)
   const [imagenes, setImagenes] = useState<string[]>([])
   const [guardando, setGuardando] = useState(false)
+
+  // Pegar un link de Google Maps en "Dirección" fija el punto exacto sin
+  // depender de que el buscador encuentre la calle — mismo mecanismo que ya
+  // usa nueva-propiedad.tsx de admin (lib/maps-link.ts).
+  const [lat, setLat] = useState<number | null>(null)
+  const [lng, setLng] = useState<number | null>(null)
+  const [maps, setMaps] = useState<{ estado: 'no' | 'leyendo' | 'ok' | 'error'; msg: string }>({ estado: 'no', msg: '' })
+
+  useEffect(() => {
+    const hallado = extraerLinkMaps(direccion)
+    if (!hallado) return
+    let vivo = true
+    setMaps({ estado: 'leyendo', msg: 'Leyendo el link de Maps…' })
+    ;(async () => {
+      const r = await ubicacionDesdeLink(hallado.link)
+      if (!vivo) return
+      if (!r.ok) { setMaps({ estado: 'error', msg: r.motivo }); return }
+      setLat(r.ubicacion.lat); setLng(r.ubicacion.lng)
+      const nombre = hallado.resto || r.ubicacion.nombre || ''
+      setDireccion(nombre)
+      setMaps({
+        estado: 'ok',
+        msg: nombre ? 'Ubicación fijada con el link. Puedes corregir el nombre.' : 'Ubicación fijada con el link. Escribe el nombre que quieres que se vea.',
+      })
+    })()
+    return () => { vivo = false }
+  }, [direccion])
 
   function alerta(msg: string) {
     if (Platform.OS === 'web') window.alert(msg)
@@ -105,11 +141,12 @@ export default function AliadoNuevaPropiedad() {
         operacion,
         tipo,
         estado: 'disponible',
-        recamaras: recamaras ? parseInt(recamaras, 10) : null,
-        banos: banos ? parseInt(banos, 10) : null,
+        recamaras,
+        banos,
         m2: m2 ? parseFloat(m2) : null,
         m2_terreno: m2Terreno ? parseFloat(m2Terreno) : null,
-        estacionamientos: estacionamientos ? parseInt(estacionamientos, 10) : null,
+        estacionamientos,
+        lat, lng,
         inmobiliaria_id: perfil.inmobiliaria_id,
         es_inventario: false,
         created_by: session.user.id,
@@ -145,8 +182,14 @@ export default function AliadoNuevaPropiedad() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 40 }}>
-      <Text style={[s.titulo, { color: c.text }]}>Nueva propiedad</Text>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <View style={[s.header, { borderBottomColor: c.border }]}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(aliado)/mis-propiedades')}>
+          <Ionicons name="arrow-back" size={22} color={c.text} />
+        </TouchableOpacity>
+        <Text style={[s.headerTitulo, { color: c.text }]}>Nueva propiedad</Text>
+      </View>
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 40 }}>
 
       <Text style={[s.label, { color: c.textSub }]}>Título *</Text>
       <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
@@ -158,8 +201,28 @@ export default function AliadoNuevaPropiedad() {
         multiline numberOfLines={4} textAlignVertical="top" />
 
       <Text style={[s.label, { color: c.textSub }]}>Dirección *</Text>
-      <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-        value={direccion} onChangeText={setDireccion} placeholder="Calle, colonia, ciudad" placeholderTextColor={c.placeholder} />
+      <TextInput
+        style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
+        value={direccion}
+        onChangeText={v => {
+          setDireccion(v)
+          // Si se borró el link, el punto deja de ser confiable — se
+          // reinicia para no dejar un lat/lng de una dirección anterior.
+          if (maps.estado !== 'ok' && !extraerLinkMaps(v)) { setLat(null); setLng(null) }
+          if (!v.trim()) { setLat(null); setLng(null); setMaps({ estado: 'no', msg: '' }) }
+          else if (maps.estado === 'error' && !extraerLinkMaps(v)) setMaps({ estado: 'no', msg: '' })
+        }}
+        placeholder="Calle, colonia, ciudad — o pega un link de Google Maps"
+        placeholderTextColor={c.placeholder}
+      />
+      {maps.estado !== 'no' && (
+        <Text style={{
+          fontSize: 11.5, lineHeight: 16, marginTop: -4, marginBottom: 2, fontWeight: '700',
+          color: maps.estado === 'ok' ? '#22a35e' : maps.estado === 'error' ? '#e5a50a' : c.textMute,
+        }}>
+          {maps.estado === 'leyendo' ? '📍 ' : maps.estado === 'ok' ? '✓ ' : '⚠ '}{maps.msg}
+        </Text>
+      )}
 
       <Text style={[s.label, { color: c.textSub }]}>Zona</Text>
       <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
@@ -178,18 +241,15 @@ export default function AliadoNuevaPropiedad() {
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <View style={{ flex: 1 }}>
           <Text style={[s.label, { color: c.textSub }]}>Recámaras</Text>
-          <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-            value={recamaras} onChangeText={setRecamaras} keyboardType="numeric" />
+          <DropdownModal options={opcionesConteo(RECAMARAS_RANGO[0], RECAMARAS_RANGO[1], recamaras)} value={recamaras} onChange={setRecamaras} placeholder="—" />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[s.label, { color: c.textSub }]}>Baños</Text>
-          <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-            value={banos} onChangeText={setBanos} keyboardType="numeric" />
+          <DropdownModal options={opcionesConteo(BANOS_RANGO[0], BANOS_RANGO[1], banos)} value={banos} onChange={setBanos} placeholder="—" />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[s.label, { color: c.textSub }]}>Estac.</Text>
-          <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-            value={estacionamientos} onChangeText={setEstacionamientos} keyboardType="numeric" />
+          <DropdownModal options={opcionesConteo(ESTACIONAMIENTOS_RANGO[0], ESTACIONAMIENTOS_RANGO[1], estacionamientos)} value={estacionamientos} onChange={setEstacionamientos} placeholder="—" />
         </View>
       </View>
 
@@ -228,12 +288,17 @@ export default function AliadoNuevaPropiedad() {
       <TouchableOpacity style={[s.btnGuardar, guardando && { opacity: 0.6 }]} onPress={guardar} disabled={guardando}>
         {guardando ? <ActivityIndicator color="#fff" /> : <Text style={s.btnGuardarTxt}>Publicar propiedad</Text>}
       </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </View>
   )
 }
 
 const s = StyleSheet.create({
-  titulo: { fontSize: 21, fontWeight: '900', marginBottom: 4 },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingTop: Platform.OS === 'web' ? 16 : 50, paddingBottom: 14, borderBottomWidth: 1,
+  },
+  headerTitulo: { fontSize: 17, fontWeight: '800' },
   label: { fontSize: 12, fontWeight: '600', marginTop: 2 },
   input: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
   textArea: { minHeight: 90 },
