@@ -45,6 +45,8 @@ export default function MiAgencia() {
 
   const [equipo, setEquipo] = useState<Miembro[]>([])
   const [limite, setLimite] = useState(3)
+  const [renombrando, setRenombrando] = useState<{ id: string; nombre: string } | null>(null)
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null)
 
   const [modalInvitar, setModalInvitar] = useState(false)
   const [nombre, setNombre] = useState('')
@@ -89,6 +91,28 @@ export default function MiAgencia() {
     } finally {
       setGuardando(false)
     }
+  }
+
+  async function confirmarRenombrar() {
+    if (!renombrando || !renombrando.nombre.trim()) return
+    const { id, nombre } = renombrando
+    setEquipo(prev => prev.map(m => m.id === id ? { ...m, nombre } : m))
+    setRenombrando(null)
+    const { error } = await supabase.rpc('renombrar_miembro_aliado', { p_id: id, p_nombre: nombre.trim() })
+    if (error) { alerta('Error: ' + error.message); cargar() }
+  }
+
+  function eliminarMiembro(m: Miembro) {
+    const confirmar = async () => {
+      setEliminandoId(m.id)
+      const { data, error } = await supabase.functions.invoke('eliminar-aliado-agente', { body: { userId: m.id } })
+      setEliminandoId(null)
+      if (error || data?.error) { alerta('Error: ' + (data?.error ?? error?.message ?? 'No se pudo eliminar.')); return }
+      setEquipo(prev => prev.filter(x => x.id !== m.id))
+    }
+    const msg = `¿Eliminar a ${m.nombre ?? 'este usuario'}? Esta acción no se puede deshacer.`
+    if (Platform.OS === 'web') { if (window.confirm(msg)) confirmar() }
+    else Alert.alert('Eliminar', msg, [{ text: 'Cancelar', style: 'cancel' }, { text: 'Eliminar', style: 'destructive', onPress: confirmar }])
   }
 
   function abrirInvitar() {
@@ -170,10 +194,36 @@ export default function MiAgencia() {
         )}
         {equipo.map(m => (
           <View key={m.id} style={[s.fila, { borderColor: c.border }]}>
-            <Text style={[s.filaNombre, { color: c.text }]}>{m.nombre ?? 'Sin nombre'}</Text>
+            {renombrando?.id === m.id ? (
+              <TextInput
+                style={[s.renombrarInput, { color: c.text, borderColor: c.border }]}
+                value={renombrando.nombre}
+                onChangeText={v => setRenombrando({ id: m.id, nombre: v })}
+                autoFocus
+                onSubmitEditing={confirmarRenombrar}
+              />
+            ) : (
+              <Text style={[s.filaNombre, { color: c.text }]}>{m.nombre ?? 'Sin nombre'}</Text>
+            )}
             <Text style={[s.filaRol, { color: c.textSub }]}>
               {m.role === 'aliado_admin' ? 'Titular' : 'Agente'}
             </Text>
+            {m.role !== 'aliado_admin' && (
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {renombrando?.id === m.id ? (
+                  <TouchableOpacity onPress={confirmarRenombrar} style={s.filaBtn}>
+                    <Ionicons name="checkmark" size={16} color="#2e7d32" />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity onPress={() => setRenombrando({ id: m.id, nombre: m.nombre ?? '' })} style={s.filaBtn}>
+                    <Ionicons name="pencil-outline" size={15} color={c.textSub} />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => eliminarMiembro(m)} style={s.filaBtn}>
+                  <Ionicons name="trash-outline" size={15} color="#c0392b" />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         ))}
       </View>
@@ -241,9 +291,14 @@ const s = StyleSheet.create({
     backgroundColor: '#5e35b1', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 7,
   },
   btnChicoTxt: { color: '#fff', fontWeight: '700', fontSize: 12.5 },
-  fila: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: 1 },
-  filaNombre: { fontSize: 13.5, fontWeight: '700' },
+  fila: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: 1 },
+  filaNombre: { fontSize: 13.5, fontWeight: '700', flex: 1 },
   filaRol: { fontSize: 12 },
+  filaBtn: { padding: 4 },
+  renombrarInput: {
+    flex: 1, fontSize: 13.5, fontWeight: '700', borderWidth: 1, borderRadius: 7,
+    paddingHorizontal: 8, paddingVertical: 4,
+  },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   modal: { width: '100%', maxWidth: 380, borderRadius: 16, padding: 20, gap: 8 },
   modalTitulo: { fontSize: 16, fontWeight: '800', marginBottom: 4 },

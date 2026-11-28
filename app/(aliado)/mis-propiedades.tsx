@@ -74,26 +74,28 @@ export default function AliadoPropiedades() {
               : `${lista.length} publicada${lista.length === 1 ? '' : 's'}${agencia ? ` · ${agencia}` : ''}`}
           </Text>
         </View>
+        <TouchableOpacity style={s.btnAgregar} onPress={() => router.push('/(aliado)/nueva-propiedad')}>
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={s.btnAgregarTxt}>Agregar</Text>
+        </TouchableOpacity>
       </View>
 
       {stats && (
-        <View style={[s.statsRow, { borderColor: c.border }]}>
-          <View style={s.statBox}>
-            <Text style={[s.statNum, { color: c.text }]}>{stats.disponibles}</Text>
-            <Text style={[s.statLbl, { color: c.textSub }]}>Disponibles</Text>
-          </View>
-          <View style={s.statBox}>
-            <Text style={[s.statNum, { color: c.text }]}>{stats.vendidas + stats.rentadas}</Text>
-            <Text style={[s.statLbl, { color: c.textSub }]}>Vendidas/rentadas</Text>
-          </View>
-          <View style={s.statBox}>
-            <Text style={[s.statNum, { color: c.text }]}>{stats.vistas}</Text>
-            <Text style={[s.statLbl, { color: c.textSub }]}>Vistas de tu catálogo</Text>
-          </View>
-          <View style={s.statBox}>
-            <Text style={[s.statNum, { color: c.text }]}>{stats.publicaciones}</Text>
-            <Text style={[s.statLbl, { color: c.textSub }]}>Veces impulsadas</Text>
-          </View>
+        <View style={s.statsGrid}>
+          {[
+            { icono: 'home' as const, color: '#1a6470', num: stats.disponibles, lbl: 'Disponibles' },
+            { icono: 'checkmark-done' as const, color: '#2e7d32', num: stats.vendidas + stats.rentadas, lbl: 'Vendidas/rentadas' },
+            { icono: 'eye' as const, color: '#5e35b1', num: stats.vistas, lbl: 'Vistas de tu catálogo' },
+            { icono: 'megaphone' as const, color: '#c9a84c', num: stats.publicaciones, lbl: 'Veces impulsadas' },
+          ].map((b, i) => (
+            <View key={i} style={[s.statCard, { backgroundColor: c.card, borderColor: c.border }]}>
+              <View style={[s.statIcono, { backgroundColor: b.color + '22' }]}>
+                <Ionicons name={b.icono} size={16} color={b.color} />
+              </View>
+              <Text style={[s.statNum, { color: c.text }]}>{b.num}</Text>
+              <Text style={[s.statLbl, { color: c.textSub }]}>{b.lbl}</Text>
+            </View>
+          ))}
         </View>
       )}
 
@@ -116,7 +118,7 @@ export default function AliadoPropiedades() {
           return (
             <TouchableOpacity
               style={[s.fila, { backgroundColor: c.card, borderColor: c.border }]}
-              onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.id}` as any)}
+              onPress={() => item.codigo && router.push(`/ficha/${item.codigo}` as any)}
               activeOpacity={0.75}
             >
               {img
@@ -144,13 +146,21 @@ const s = StyleSheet.create({
   cabecera: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
   titulo: { fontSize: 21, fontWeight: '900' },
   sub: { fontSize: 12.5, marginTop: 2 },
-  statsRow: {
-    flexDirection: 'row', marginHorizontal: 14, marginTop: 4,
-    borderWidth: 1, borderRadius: 13, overflow: 'hidden',
+  statsGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginHorizontal: 14, marginTop: 4,
   },
-  statBox: { flex: 1, alignItems: 'center', paddingVertical: 12, gap: 2 },
-  statNum: { fontSize: 18, fontWeight: '900' },
-  statLbl: { fontSize: 10.5, textAlign: 'center' },
+  statCard: {
+    flexBasis: '47%', flexGrow: 1, borderWidth: 1, borderRadius: 13,
+    padding: 12, gap: 4,
+  },
+  statIcono: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  statNum: { fontSize: 19, fontWeight: '900' },
+  statLbl: { fontSize: 11 },
+  btnAgregar: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#5e35b1', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9,
+  },
+  btnAgregarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   fila: { flexDirection: 'row', gap: 11, borderWidth: 1, borderRadius: 13, padding: 9, alignItems: 'center' },
   foto: { width: 76, height: 62, borderRadius: 9 },
   nombre: { fontSize: 14.5, fontWeight: '800' },

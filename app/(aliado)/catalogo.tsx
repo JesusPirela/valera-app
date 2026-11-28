@@ -92,7 +92,7 @@ export default function AliadoCatalogo() {
           return (
             <TouchableOpacity
               style={[s.fila, { backgroundColor: c.card, borderColor: c.border }]}
-              onPress={() => router.push(`/(prospectador)/detalle-propiedad?id=${item.id}` as any)}
+              onPress={() => item.codigo && router.push(`/ficha/${item.codigo}` as any)}
               activeOpacity={0.75}
             >
               {img
