@@ -1,9 +1,11 @@
-// Sus clientes. Lista personal al estilo del CRM de prospectador (sin la
-// parte de misiones/gamificación, que no aplica aquí), más —solo para el
-// titular— el mismo "CRM de equipo" que ya tiene un gerente sobre SU gente:
-// se arma con las mismas piezas (calcularCrmMetricas + CrmMetricasPanel),
-// solo que la RLS nueva (20261130_aliado_correcciones) acota lo que ve a los
-// clientes de responsables de SU inmobiliaria, nunca a los nuestros.
+// Sus clientes. En web, una tabla como la del CRM de prospectador (mismas
+// columnas, mismos colores de estado); en móvil, tarjetas — ahí una tabla de
+// 9 columnas no cabe ni en el CRM real. Solo para el titular: puede cambiar
+// a "viendo el CRM de X" (un agente de su propia agencia), de solo lectura,
+// igual que el banner que ya existe para cuando un admin ve el de alguien
+// más. La RLS nueva (20261130_aliado_correcciones) es la que de verdad
+// decide qué clientes puede leer: si algún día esto se saltara, seguiría sin
+// poder ver los de otra agencia.
 import { useCallback, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
@@ -24,9 +26,13 @@ import { ESTADOS } from '../(prospectador)/crm'
 type Cliente = {
   id: string; nombre: string | null; telefono: string | null
   estado: string; zona_busqueda: string | null; presupuesto: string | null
+  tipo_operacion: string | null; tipo_credito: string | null
+  proximo_contacto: string | null; notas: string | null
   created_at: string
 }
 type Miembro = { id: string; nombre: string | null; role: string }
+
+const OP_LABEL: Record<string, string> = { venta: '🏠 Venta', renta: '🔑 Renta', captacion: '📥 Captación' }
 
 function iniciales(nombre: string | null): string {
   return (nombre ?? '?').trim().split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '?'
@@ -45,12 +51,17 @@ function tiempoRelativo(iso: string): string {
   return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
 
+const SELECT_CLIENTE = 'id, nombre, telefono, estado, zona_busqueda, presupuesto, tipo_operacion, tipo_credito, proximo_contacto, notas, created_at'
+
 export default function AliadoClientes() {
   const c = useColors()
+  const isWeb = Platform.OS === 'web'
+  const [miId, setMiId] = useState<string | null>(null)
   const [lista, setLista] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
   const [esTitular, setEsTitular] = useState(false)
   const [equipo, setEquipo] = useState<Miembro[]>([])
+  const [viendo, setViendo] = useState<{ id: string; nombre: string } | null>(null)
 
   const [modalNuevo, setModalNuevo] = useState(false)
   const [nombre, setNombre] = useState('')
@@ -59,6 +70,7 @@ export default function AliadoClientes() {
   const [presupuesto, setPresupuesto] = useState('')
   const [guardando, setGuardando] = useState(false)
 
+  const [modalEquipo, setModalEquipo] = useState(false)
   const [modalCrm, setModalCrm] = useState(false)
   const [crmSeleccion, setCrmSeleccion] = useState<CrmMetricas | null>(null)
   const [loadingCrm, setLoadingCrm] = useState(false)
@@ -68,27 +80,42 @@ export default function AliadoClientes() {
     else Alert.alert('Aviso', msg)
   }
 
+  const cargarClientes = useCallback(async (responsableId: string) => {
+    const { data } = await supabase.from('clientes').select(SELECT_CLIENTE)
+      .eq('responsable_id', responsableId).order('created_at', { ascending: false })
+    setLista((data ?? []) as Cliente[])
+  }, [])
+
   const cargar = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
-    const [{ data }, { data: perfil }] = await Promise.all([
-      supabase.from('clientes')
-        .select('id, nombre, telefono, estado, zona_busqueda, presupuesto, created_at')
-        .eq('responsable_id', session.user.id)
-        .order('created_at', { ascending: false }),
-      supabase.from('profiles').select('role').eq('id', session.user.id).single(),
-    ])
-    setLista((data ?? []) as Cliente[])
+    setMiId(session.user.id)
+    const { data: perfil } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
     const titular = perfil?.role === 'aliado_admin'
     setEsTitular(titular)
     if (titular) {
       const { data: eq } = await supabase.rpc('mi_equipo_aliado')
       setEquipo((eq?.equipo ?? []) as Miembro[])
     }
+    await cargarClientes(viendo?.id ?? session.user.id)
     setCargando(false)
-  }, [])
+  }, [cargarClientes, viendo])
 
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
+
+  function verAgente(m: Miembro) {
+    setModalEquipo(false)
+    setViendo({ id: m.id, nombre: m.nombre ?? 'este usuario' })
+    setCargando(true)
+    cargarClientes(m.id).finally(() => setCargando(false))
+  }
+
+  function volverAMiCrm() {
+    if (!miId) return
+    setViendo(null)
+    setCargando(true)
+    cargarClientes(miId).finally(() => setCargando(false))
+  }
 
   async function agregarCliente() {
     if (!nombre.trim() || !telefono.trim()) { alerta('Falta el nombre o el teléfono.'); return }
@@ -114,106 +141,180 @@ export default function AliadoClientes() {
     }
   }
 
-  async function verCrm(userId: string | null, nombreCrm: string) {
+  async function verResumenAgencia() {
+    setModalEquipo(false)
     setModalCrm(true)
     setLoadingCrm(true)
     setCrmSeleccion(null)
     try {
-      const metricas = await calcularCrmMetricas(userId, nombreCrm)
-      setCrmSeleccion(metricas)
+      setCrmSeleccion(await calcularCrmMetricas(null, 'Toda la agencia'))
     } finally {
       setLoadingCrm(false)
     }
   }
 
   const tel = (t: string | null) => (t ?? '').replace(/\D/g, '')
+  const soloLectura = !!viendo
 
   if (cargando) {
     return <View style={s.centro}><ActivityIndicator size="large" color={c.text} /></View>
   }
 
-  return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
+  const encabezado = (
+    <>
       <View style={s.cabecera}>
         <View style={{ flex: 1 }}>
-          <Text style={[s.titulo, { color: c.text }]}>Mis clientes</Text>
+          <Text style={[s.titulo, { color: c.text }]}>{viendo ? `Clientes de ${viendo.nombre}` : 'Mis clientes'}</Text>
           <Text style={[s.sub, { color: c.textSub }]}>
             {lista.length === 0 ? 'Todavía no hay ninguno.' : `${lista.length} en total`}
           </Text>
         </View>
-        <TouchableOpacity style={s.btnAgregar} onPress={() => setModalNuevo(true)}>
-          <Ionicons name="add" size={18} color="#fff" />
-          <Text style={s.btnAgregarTxt}>Agregar</Text>
-        </TouchableOpacity>
+        {!soloLectura && (
+          <TouchableOpacity style={s.btnAgregar} onPress={() => setModalNuevo(true)}>
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={s.btnAgregarTxt}>Agregar</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {esTitular && (
-        <TouchableOpacity style={[s.btnCrm, { borderColor: c.border }]} onPress={() => verCrm(null, 'Toda la agencia')}>
+      {soloLectura ? (
+        <View style={s.roBanner}>
+          <Text style={s.roBannerTxt} numberOfLines={1}>👁 Viendo el CRM de {viendo!.nombre} — solo lectura</Text>
+          <TouchableOpacity onPress={volverAMiCrm}><Text style={s.roBannerLink}>Volver al mío</Text></TouchableOpacity>
+        </View>
+      ) : esTitular && (
+        <TouchableOpacity style={[s.btnCrm, { borderColor: c.border }]} onPress={() => setModalEquipo(true)}>
           <Ionicons name="bar-chart-outline" size={16} color="#5e35b1" />
-          <Text style={s.btnCrmTxt}>CRM de asesores — toda la agencia</Text>
+          <Text style={s.btnCrmTxt}>CRM de asesores</Text>
         </TouchableOpacity>
       )}
+    </>
+  )
 
-      <FlatList
-        data={lista}
-        keyExtractor={x => x.id}
-        contentContainerStyle={{ padding: 14, paddingBottom: 30, gap: 9 }}
-        ListEmptyComponent={
-          <View style={s.vacio}>
-            <Ionicons name="people-outline" size={30} color={c.textMute} />
-            <Text style={[s.vacioTxt, { color: c.textSub }]}>
-              Aquí llevas a tus clientes: a quién le estás buscando qué, y cómo
-              vas con cada uno.
-            </Text>
+  function Fila({ item }: { item: Cliente }) {
+    const info = ESTADOS[item.estado] ?? { label: item.estado, color: '#64748b', bg: '#f1f5f9' }
+    return (
+      <View style={[s.trow, { borderColor: c.border }]}>
+        <Text style={[s.td, s.colNombre, { color: c.text, fontWeight: '700' }]} numberOfLines={1}>{item.nombre ?? 'Sin nombre'}</Text>
+        <Text style={[s.td, s.colTel, { color: c.textSub }]} numberOfLines={1}>{item.telefono ?? '—'}</Text>
+        <View style={[s.td, s.colEstado]}>
+          <View style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}>
+            <View style={[s.estadoDot, { backgroundColor: info.color }]} />
+            <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
           </View>
-        }
-        renderItem={({ item }) => {
-          const info = ESTADOS[item.estado] ?? { label: item.estado, color: '#64748b', bg: '#f1f5f9' }
-          return (
-            <View style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
-              <View style={[s.cardBar, { backgroundColor: info.color }]} />
-              <View style={s.cardBody}>
-                <View style={s.cardHead}>
-                  <View style={[s.avatar, { backgroundColor: info.color + '22' }]}>
-                    <Text style={[s.avatarTxt, { color: info.color }]}>{iniciales(item.nombre)}</Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[s.cardNombre, { color: c.text }]} numberOfLines={1}>{item.nombre ?? 'Sin nombre'}</Text>
-                    {(item.zona_busqueda || item.presupuesto) && (
-                      <Text style={[s.cardSub, { color: c.textSub }]} numberOfLines={1}>
-                        {[item.zona_busqueda, item.presupuesto].filter(Boolean).join(' · ')}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}>
-                    <View style={[s.estadoDot, { backgroundColor: info.color }]} />
-                    <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
-                  </View>
-                </View>
-                <View style={s.metaRow}>
-                  <View style={s.metaItem}>
-                    <Ionicons name="call-outline" size={11} color={c.textMute} />
-                    <Text style={[s.metaTxt, { color: c.textSub }]}>{item.telefono}</Text>
-                  </View>
-                  <View style={s.metaItem}>
-                    <Ionicons name="time-outline" size={11} color={c.textMute} />
-                    <Text style={[s.metaTxt, { color: c.textMute }]}>{tiempoRelativo(item.created_at)}</Text>
-                  </View>
-                  {!!tel(item.telefono) && (
-                    <TouchableOpacity
-                      style={s.waMeta}
-                      onPress={() => Linking.openURL(`https://wa.me/${tel(item.telefono).length === 10 ? '52' : ''}${tel(item.telefono)}`)}
-                    >
-                      <Ionicons name="logo-whatsapp" size={13} color="#128C7E" />
-                      <Text style={[s.metaTxt, { color: '#128C7E', fontWeight: '700' }]}>WhatsApp</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
+        </View>
+        <Text style={[s.td, s.colOp, { color: c.textSub }]} numberOfLines={1}>{item.tipo_operacion ? OP_LABEL[item.tipo_operacion] ?? item.tipo_operacion : '—'}</Text>
+        <Text style={[s.td, s.colPago, { color: c.textSub }]} numberOfLines={1}>{item.tipo_credito ?? '—'}</Text>
+        <Text style={[s.td, s.colZona, { color: c.textSub }]} numberOfLines={1}>{item.zona_busqueda ?? '—'}</Text>
+        <Text style={[s.td, s.colPresup, { color: '#2e7d32', fontWeight: '700' }]} numberOfLines={1}>
+          {item.presupuesto
+            ? (Number.isFinite(Number(item.presupuesto)) ? `$${Number(item.presupuesto).toLocaleString('es-MX')}` : item.presupuesto)
+            : '—'}
+        </Text>
+        <Text style={[s.td, s.colSeguim, { color: c.textSub }]} numberOfLines={1}>
+          {item.proximo_contacto ? new Date(item.proximo_contacto).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—'}
+        </Text>
+        <Text style={[s.td, s.colNotas, { color: c.textSub }]} numberOfLines={1}>{item.notas ?? '—'}</Text>
+        <View style={[s.td, s.colAccion]}>
+          {!!tel(item.telefono) && (
+            <TouchableOpacity onPress={() => Linking.openURL(`https://wa.me/${tel(item.telefono).length === 10 ? '52' : ''}${tel(item.telefono)}`)}>
+              <Ionicons name="logo-whatsapp" size={16} color="#128C7E" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    )
+  }
+
+  function TarjetaMovil({ item }: { item: Cliente }) {
+    const info = ESTADOS[item.estado] ?? { label: item.estado, color: '#64748b', bg: '#f1f5f9' }
+    return (
+      <View style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={[s.cardBar, { backgroundColor: info.color }]} />
+        <View style={s.cardBody}>
+          <View style={s.cardHead}>
+            <View style={[s.avatar, { backgroundColor: info.color + '22' }]}>
+              <Text style={[s.avatarTxt, { color: info.color }]}>{iniciales(item.nombre)}</Text>
             </View>
-          )
-        }}
-      />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[s.cardNombre, { color: c.text }]} numberOfLines={1}>{item.nombre ?? 'Sin nombre'}</Text>
+              {(item.zona_busqueda || item.presupuesto) && (
+                <Text style={[s.cardSub, { color: c.textSub }]} numberOfLines={1}>
+                  {[item.zona_busqueda, item.presupuesto].filter(Boolean).join(' · ')}
+                </Text>
+              )}
+            </View>
+            <View style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}>
+              <View style={[s.estadoDot, { backgroundColor: info.color }]} />
+              <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
+            </View>
+          </View>
+          <View style={s.metaRow}>
+            <View style={s.metaItem}>
+              <Ionicons name="call-outline" size={11} color={c.textMute} />
+              <Text style={[s.metaTxt, { color: c.textSub }]}>{item.telefono}</Text>
+            </View>
+            <View style={s.metaItem}>
+              <Ionicons name="time-outline" size={11} color={c.textMute} />
+              <Text style={[s.metaTxt, { color: c.textMute }]}>{tiempoRelativo(item.created_at)}</Text>
+            </View>
+            {!!tel(item.telefono) && (
+              <TouchableOpacity
+                style={s.waMeta}
+                onPress={() => Linking.openURL(`https://wa.me/${tel(item.telefono).length === 10 ? '52' : ''}${tel(item.telefono)}`)}
+              >
+                <Ionicons name="logo-whatsapp" size={13} color="#128C7E" />
+                <Text style={[s.metaTxt, { color: '#128C7E', fontWeight: '700' }]}>WhatsApp</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </View>
+    )
+  }
+
+  const vacio = (
+    <View style={s.vacio}>
+      <Ionicons name="people-outline" size={30} color={c.textMute} />
+      <Text style={[s.vacioTxt, { color: c.textSub }]}>
+        {soloLectura ? 'Esta persona todavía no tiene clientes.' : 'Aquí llevas a tus clientes: a quién le estás buscando qué, y cómo vas con cada uno.'}
+      </Text>
+    </View>
+  )
+
+  return (
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      {isWeb ? (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          {encabezado}
+          {lista.length === 0 ? vacio : (
+            <View style={[s.table, { borderColor: c.border }]}>
+              <View style={[s.trow, s.thead, { borderColor: c.border, backgroundColor: c.card }]}>
+                <Text style={[s.th, s.colNombre, { color: c.textSub }]}>Nombre</Text>
+                <Text style={[s.th, s.colTel, { color: c.textSub }]}>Teléfono</Text>
+                <Text style={[s.th, s.colEstado, { color: c.textSub }]}>Estado</Text>
+                <Text style={[s.th, s.colOp, { color: c.textSub }]}>Op.</Text>
+                <Text style={[s.th, s.colPago, { color: c.textSub }]}>Método pago</Text>
+                <Text style={[s.th, s.colZona, { color: c.textSub }]}>Zona</Text>
+                <Text style={[s.th, s.colPresup, { color: c.textSub }]}>Presupuesto</Text>
+                <Text style={[s.th, s.colSeguim, { color: c.textSub }]}>Prox. seguim.</Text>
+                <Text style={[s.th, s.colNotas, { color: c.textSub }]}>Notas</Text>
+                <View style={[s.colAccion]} />
+              </View>
+              {lista.map(item => <Fila key={item.id} item={item} />)}
+            </View>
+          )}
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={lista}
+          keyExtractor={x => x.id}
+          contentContainerStyle={{ padding: 14, paddingBottom: 30, gap: 9 }}
+          ListHeaderComponent={<View style={{ marginBottom: 4 }}>{encabezado}</View>}
+          ListEmptyComponent={vacio}
+          renderItem={({ item }) => <TarjetaMovil item={item} />}
+        />
+      )}
 
       {/* Alta rápida de cliente */}
       <Modal visible={modalNuevo} transparent animationType="fade" onRequestClose={() => setModalNuevo(false)}>
@@ -238,22 +339,35 @@ export default function AliadoClientes() {
         </View>
       </Modal>
 
-      {/* CRM de asesores — solo titular */}
+      {/* Elegir qué CRM mirar — solo titular */}
+      <Modal visible={modalEquipo} transparent animationType="fade" onRequestClose={() => setModalEquipo(false)}>
+        <View style={s.overlay}>
+          <View style={[s.modal, { backgroundColor: c.card }]}>
+            <Text style={[s.modalTitulo, { color: c.text }]}>CRM de asesores</Text>
+            <TouchableOpacity style={[s.filaEquipo, { borderBottomColor: c.border }]} onPress={verResumenAgencia}>
+              <Ionicons name="bar-chart-outline" size={16} color="#5e35b1" />
+              <Text style={[s.filaEquipoTxt, { color: c.text }]}>Resumen de toda la agencia</Text>
+            </TouchableOpacity>
+            {equipo.filter(m => m.id !== miId).map(m => (
+              <TouchableOpacity key={m.id} style={[s.filaEquipo, { borderBottomColor: c.border }]} onPress={() => verAgente(m)}>
+                <Ionicons name="person-outline" size={16} color={c.textSub} />
+                <Text style={[s.filaEquipoTxt, { color: c.text }]}>{m.nombre ?? 'Sin nombre'}</Text>
+                <Text style={[s.filaEquipoRol, { color: c.textSub }]}>{m.role === 'aliado_admin' ? 'Titular' : 'Agente'}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity onPress={() => setModalEquipo(false)}>
+              <Text style={[s.cancelar, { color: c.textSub }]}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Resumen de toda la agencia */}
       <Modal visible={modalCrm} transparent animationType="slide" onRequestClose={() => setModalCrm(false)}>
         <View style={s.overlay}>
           <View style={[s.modal, { backgroundColor: c.card, maxHeight: '85%' }]}>
             <ScrollView>
-              <Text style={[s.modalTitulo, { color: c.text }]}>CRM de asesores</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                <TouchableOpacity style={s.pill} onPress={() => verCrm(null, 'Toda la agencia')}>
-                  <Text style={s.pillTxt}>Toda la agencia</Text>
-                </TouchableOpacity>
-                {equipo.map(m => (
-                  <TouchableOpacity key={m.id} style={s.pill} onPress={() => verCrm(m.id, m.nombre ?? 'Sin nombre')}>
-                    <Text style={s.pillTxt}>{m.nombre ?? 'Sin nombre'}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <Text style={[s.modalTitulo, { color: c.text }]}>Resumen de la agencia</Text>
               {loadingCrm ? (
                 <ActivityIndicator color={c.text} style={{ marginVertical: 20 }} />
               ) : crmSeleccion ? (
@@ -272,7 +386,7 @@ export default function AliadoClientes() {
 
 const s = StyleSheet.create({
   centro: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  cabecera: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14 },
+  cabecera: { flexDirection: 'row', alignItems: 'center' },
   titulo: { fontSize: 21, fontWeight: '900' },
   sub: { fontSize: 12.5, marginTop: 2 },
   btnAgregar: {
@@ -281,10 +395,35 @@ const s = StyleSheet.create({
   },
   btnAgregarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
   btnCrm: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 16, marginTop: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'flex-start',
     borderWidth: 1, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12,
   },
   btnCrmTxt: { color: '#5e35b1', fontWeight: '700', fontSize: 12.5 },
+  roBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginTop: 10,
+  },
+  roBannerTxt: { color: '#fff', fontWeight: '700', fontSize: 12.5, flex: 1, marginRight: 8 },
+  roBannerLink: { color: '#fff', fontWeight: '800', fontSize: 12.5, textDecorationLine: 'underline' },
+
+  // Tabla (web)
+  table: { marginTop: 14, borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
+  thead: { borderBottomWidth: 1, paddingVertical: 10 },
+  trow: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, paddingVertical: 10, paddingHorizontal: 10, gap: 6 },
+  th: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4 },
+  td: { fontSize: 12.5 },
+  colNombre: { flexBasis: 150, flexGrow: 1 },
+  colTel: { flexBasis: 100 },
+  colEstado: { flexBasis: 130 },
+  colOp: { flexBasis: 90 },
+  colPago: { flexBasis: 90 },
+  colZona: { flexBasis: 120 },
+  colPresup: { flexBasis: 100 },
+  colSeguim: { flexBasis: 90 },
+  colNotas: { flexBasis: 140, flexGrow: 1 },
+  colAccion: { flexBasis: 28, alignItems: 'center' },
+
+  // Tarjeta (móvil)
   card: { flexDirection: 'row', borderWidth: 1, borderRadius: 13, overflow: 'hidden' },
   cardBar: { width: 4 },
   cardBody: { flex: 1, minWidth: 0, padding: 12, gap: 8 },
@@ -295,7 +434,7 @@ const s = StyleSheet.create({
   cardSub: { fontSize: 11.5, marginTop: 1 },
   estadoBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4, maxWidth: 130,
+    borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4, maxWidth: 140,
   },
   estadoDot: { width: 6, height: 6, borderRadius: 3 },
   estadoTxt: { fontSize: 10.5, fontWeight: '700' },
@@ -303,6 +442,7 @@ const s = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaTxt: { fontSize: 11.5 },
   waMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
+
   vacio: { alignItems: 'center', gap: 10, paddingTop: 60, paddingHorizontal: 40 },
   vacioTxt: { fontSize: 13.5, lineHeight: 20, textAlign: 'center' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
@@ -312,6 +452,7 @@ const s = StyleSheet.create({
   btnGuardar: { backgroundColor: '#5e35b1', borderRadius: 9, paddingVertical: 11, alignItems: 'center', marginTop: 6 },
   btnGuardarTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
   cancelar: { textAlign: 'center', fontSize: 13, paddingVertical: 8 },
-  pill: { borderWidth: 1, borderColor: '#5e35b1', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
-  pillTxt: { color: '#5e35b1', fontSize: 12.5, fontWeight: '700' },
+  filaEquipo: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1 },
+  filaEquipoTxt: { fontSize: 13.5, fontWeight: '700', flex: 1 },
+  filaEquipoRol: { fontSize: 11 },
 })
