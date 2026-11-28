@@ -697,7 +697,7 @@ export default function ProspectadorPropiedades() {
         const size = i === 0 ? PRIMERA : PAGE
         const { data, error } = await supabase
           .from('propiedades')
-          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, amueblada, tipo, estado, estado_mx, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, directa, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, total_publicadores, inmobiliarias(nombre, logo_url, exclusiva), propiedad_imagenes(url, thumb_url, orden)')
+          .select('id, codigo, titulo, precio, precio_anterior, precio_actualizado_at, direccion, operacion, amueblada, tipo, estado, estado_mx, zona, lat, lng, destacada, destacada_mensaje, destacada_hasta, exclusiva, directa, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, descripcion_corta, created_at, inmobiliaria_id, total_publicadores, inmobiliarias(nombre, logo_url, exclusiva, es_aliada), propiedad_imagenes(url, thumb_url, orden)')
           .in('estado', ['disponible', 'vendida', 'rentada'])
           .eq('es_inventario', false)
           .order('created_at', { ascending: false })
@@ -705,7 +705,11 @@ export default function ProspectadorPropiedades() {
           .limit(1, { referencedTable: 'propiedad_imagenes' })
           .range(from, from + size - 1)
         if (error) throw error
-        propsData = propsData.concat(data ?? [])
+        // TEMPORAL mientras se prueban las cuentas aliadas: sus propiedades no
+        // deben salir en el feed del equipo de Valera. Quitar este filter
+        // cuando el catálogo compartido esté listo para activarse.
+        const pagina = (data ?? []).filter((p: any) => !(Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] : p.inmobiliarias)?.es_aliada)
+        propsData = propsData.concat(pagina)
         from += size
         // Publicar la primera tanda ya (solo si aún faltan más; si todo cupo en
         // la primera, la publicación final basta y evitamos un doble render).

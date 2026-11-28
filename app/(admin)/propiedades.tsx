@@ -257,7 +257,7 @@ export default function AdminPropiedades() {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from('propiedades')
-        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, destacada_hasta, directa, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva), asesores(nombre, inmobiliaria), propiedad_imagenes(url, thumb_url, orden)')
+        .select('id, codigo, titulo, precio, direccion, operacion, tipo, estado, destacada, destacada_mensaje, destacada_hasta, directa, es_constructora, nombre_constructora, recamaras, banos, medios_banos, m2, m2_terreno, estacionamientos, inmobiliaria_id, es_inventario, inmobiliarias(nombre, logo_url, exclusiva, es_aliada), asesores(nombre, inmobiliaria), propiedad_imagenes(url, thumb_url, orden)')
         .order('created_at', { ascending: false })
         .order('orden', { referencedTable: 'propiedad_imagenes', ascending: true })
         .limit(1, { referencedTable: 'propiedad_imagenes' })
@@ -268,11 +268,16 @@ export default function AdminPropiedades() {
     }
     if (huboError) Alert.alert('Error', 'No se pudieron cargar las propiedades.')
     else {
-      const normalizadas = todas.map((p: any) => ({
-        ...p,
-        inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
-        asesores: Array.isArray(p.asesores) ? p.asesores[0] ?? null : p.asesores,
-      }))
+      const normalizadas = todas
+        .map((p: any) => ({
+          ...p,
+          inmobiliarias: Array.isArray(p.inmobiliarias) ? p.inmobiliarias[0] ?? null : p.inmobiliarias,
+          asesores: Array.isArray(p.asesores) ? p.asesores[0] ?? null : p.asesores,
+        }))
+        // TEMPORAL mientras se prueban las cuentas aliadas: sus propiedades no
+        // deben salir en el catálogo que ve el equipo de Valera. Quitar este
+        // filter() cuando el catálogo compartido esté listo para activarse.
+        .filter((p: any) => !p.inmobiliarias?.es_aliada)
       setPropiedades(normalizadas)
       yaCargoRef.current = true
     }
