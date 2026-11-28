@@ -16,6 +16,7 @@ import { useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors, useTheme } from '../../lib/ThemeContext'
 import { ESTADOS, ORDEN } from '../(prospectador)/asesor-citas'
+import SelectorFechaHora from '../../components/SelectorFechaHora'
 
 type Estado = typeof ORDEN[number]
 
@@ -36,6 +37,7 @@ type Cita = {
   propiedad: { titulo: string } | null
 }
 type ClienteOpcion = { id: string; nombre: string | null }
+type PropiedadOpcion = { id: string; codigo: string | null; titulo: string | null }
 type Miembro = { id: string; nombre: string | null; role: string }
 
 function colDe(e: string): Estado { return (ESTADOS as any)[e] ? (e as Estado) : 'coordinada' }
@@ -78,8 +80,11 @@ export default function MisCitasAliado() {
   const [modalNueva, setModalNueva] = useState(false)
   const [misClientes, setMisClientes] = useState<ClienteOpcion[]>([])
   const [clienteElegido, setClienteElegido] = useState<ClienteOpcion | null>(null)
-  const [propExterna, setPropExterna] = useState('')
-  const [fechaTexto, setFechaTexto] = useState('')
+  const [propQuery, setPropQuery] = useState('')
+  const [propElegida, setPropElegida] = useState<PropiedadOpcion | null>(null)
+  const [propSugerencias, setPropSugerencias] = useState<PropiedadOpcion[]>([])
+  const [buscandoProp, setBuscandoProp] = useState(false)
+  const [fechaCita, setFechaCita] = useState<Date | null>(null)
   const [notasNueva, setNotasNueva] = useState('')
   const [guardando, setGuardando] = useState(false)
 
@@ -150,23 +155,45 @@ export default function MisCitasAliado() {
     const { data } = await supabase.from('clientes').select('id, nombre').eq('responsable_id', miId).order('nombre')
     setMisClientes((data ?? []) as ClienteOpcion[])
     setClienteElegido(null)
-    setPropExterna(''); setFechaTexto(''); setNotasNueva('')
+    setPropQuery(''); setPropElegida(null); setPropSugerencias([])
+    setFechaCita(null); setNotasNueva('')
     setModalNueva(true)
+  }
+
+  // Busca en el MISMO catálogo compartido que ya ve en "Catálogo" — por
+  // código o por título, así no hace falta acordarse del nombre exacto.
+  async function buscarPropiedades(q: string) {
+    setPropQuery(q)
+    setPropElegida(null)
+    if (q.trim().length < 2) { setPropSugerencias([]); return }
+    setBuscandoProp(true)
+    const { data } = await supabase.from('propiedades')
+      .select('id, codigo, titulo')
+      .eq('es_inventario', false)
+      .or(`titulo.ilike.%${q.trim()}%,codigo.ilike.%${q.trim()}%`)
+      .limit(8)
+    setPropSugerencias((data ?? []) as PropiedadOpcion[])
+    setBuscandoProp(false)
+  }
+
+  function elegirPropiedad(p: PropiedadOpcion) {
+    setPropElegida(p)
+    setPropQuery(`${p.codigo ?? ''} — ${p.titulo ?? ''}`.trim())
+    setPropSugerencias([])
   }
 
   async function guardarNueva() {
     if (!clienteElegido || !miId) { alerta('Elige a qué cliente es la cita.'); return }
     setGuardando(true)
     try {
-      let fechaIso: string | null = null
-      if (fechaTexto.trim()) {
-        const d = new Date(fechaTexto.trim())
-        if (!isNaN(d.getTime())) fechaIso = d.toISOString()
-      }
+      // Si escribió algo pero nunca tocó una sugerencia, se guarda como texto
+      // libre (una propiedad que todavía no está en nuestro catálogo).
+      const quedoLibre = !propElegida && propQuery.trim()
       const { error } = await supabase.from('citas_aliado').insert({
         cliente_id: clienteElegido.id,
-        propiedad_externa: propExterna.trim() || null,
-        fecha_cita: fechaIso,
+        propiedad_id: propElegida?.id ?? null,
+        propiedad_externa: quedoLibre ? propQuery.trim() : null,
+        fecha_cita: fechaCita ? fechaCita.toISOString() : null,
         notas: notasNueva.trim() || null,
         responsable_id: miId,
         estado: 'coordinada',
@@ -375,10 +402,25 @@ export default function MisCitasAliado() {
               </View>
               <Text style={[dm.sub, { color: c.textSub }]}>Propiedad (opcional)</Text>
               <TextInput style={[nv.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-                value={propExterna} onChangeText={setPropExterna} placeholder="Ej. Casa en Milenio III" placeholderTextColor={c.placeholder} />
-              <Text style={[dm.sub, { color: c.textSub }]}>Fecha y hora (opcional)</Text>
-              <TextInput style={[nv.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
-                value={fechaTexto} onChangeText={setFechaTexto} placeholder="2026-12-05 17:00" placeholderTextColor={c.placeholder} />
+                value={propQuery} onChangeText={buscarPropiedades}
+                placeholder="Busca por código o título — o escribe una externa" placeholderTextColor={c.placeholder} />
+              {buscandoProp && <ActivityIndicator size="small" color={c.textSub} style={{ marginTop: 6 }} />}
+              {propSugerencias.length > 0 && (
+                <View style={[nv.sugerencias, { borderColor: c.border, backgroundColor: c.card }]}>
+                  {propSugerencias.map(p => (
+                    <TouchableOpacity key={p.id} style={nv.sugerenciaFila} onPress={() => elegirPropiedad(p)}>
+                      <Text style={[nv.sugerenciaTxt, { color: c.text }]} numberOfLines={1}>
+                        <Text style={{ fontWeight: '800' }}>{p.codigo}</Text> — {p.titulo}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {propElegida && (
+                <Text style={[nv.propConfirmada, { color: '#2e7d32' }]}>✓ Ligada a {propElegida.codigo}</Text>
+              )}
+
+              <SelectorFechaHora label="Fecha y hora (opcional)" value={fechaCita} onChange={setFechaCita} />
               <Text style={[dm.sub, { color: c.textSub }]}>Notas</Text>
               <TextInput style={[nv.input, nv.textArea, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
                 value={notasNueva} onChangeText={setNotasNueva} multiline placeholderTextColor={c.placeholder} />
@@ -564,6 +606,10 @@ const nv = StyleSheet.create({
   pill: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
   pillTxt: { fontSize: 13, fontWeight: '700' },
   input: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, marginTop: 2 },
+  sugerencias: { borderWidth: 1, borderRadius: 9, marginTop: 6, overflow: 'hidden' },
+  sugerenciaFila: { paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#80808033' },
+  sugerenciaTxt: { fontSize: 13 },
+  propConfirmada: { fontSize: 12, fontWeight: '700', marginTop: 6 },
   textArea: { minHeight: 70, textAlignVertical: 'top' },
   btnGuardar: { backgroundColor: '#5e35b1', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 16 },
   btnGuardarTxt: { color: '#fff', fontWeight: '800', fontSize: 14.5 },
