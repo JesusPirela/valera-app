@@ -1,11 +1,9 @@
 // Sus clientes. En web, una tabla como la del CRM de prospectador (mismas
 // columnas, mismos colores de estado); en móvil, tarjetas — ahí una tabla de
-// 9 columnas no cabe ni en el CRM real. Solo para el titular: puede cambiar
-// a "viendo el CRM de X" (un agente de su propia agencia), de solo lectura,
-// igual que el banner que ya existe para cuando un admin ve el de alguien
-// más. La RLS nueva (20261130_aliado_correcciones) es la que de verdad
-// decide qué clientes puede leer: si algún día esto se saltara, seguiría sin
-// poder ver los de otra agencia.
+// 9 columnas no cabe ni en el CRM real.
+//
+// El "CRM de asesores" (ver el resumen de toda la agencia o el de un agente
+// en particular) se quitó de aquí: ahora vive en la pestaña "Mi agencia".
 import { useCallback, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
@@ -15,8 +13,6 @@ import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
-import { calcularCrmMetricas, type CrmMetricas } from '../../lib/crmMetricas'
-import CrmMetricasPanel from '../../components/CrmMetricasPanel'
 // Mismo mapa de etapas/colores que usa el CRM de prospectador — es una
 // constante exportada, sin nada de UI ni de lógica detrás, así que se puede
 // importar tal cual sin arrastrar el resto de esa pantalla (que sí rebotaría
@@ -31,7 +27,6 @@ type Cliente = {
   proximo_contacto: string | null; notas: string | null
   created_at: string
 }
-type Miembro = { id: string; nombre: string | null; role: string }
 
 const OP_LABEL: Record<string, string> = { venta: '🏠 Venta', renta: '🔑 Renta', captacion: '📥 Captación' }
 
@@ -60,9 +55,6 @@ export default function AliadoClientes() {
   const [miId, setMiId] = useState<string | null>(null)
   const [lista, setLista] = useState<Cliente[]>([])
   const [cargando, setCargando] = useState(true)
-  const [esTitular, setEsTitular] = useState(false)
-  const [equipo, setEquipo] = useState<Miembro[]>([])
-  const [viendo, setViendo] = useState<{ id: string; nombre: string } | null>(null)
 
   const [modalNuevo, setModalNuevo] = useState(false)
   const [nombre, setNombre] = useState('')
@@ -73,10 +65,6 @@ export default function AliadoClientes() {
   const [guardando, setGuardando] = useState(false)
 
   const [editandoEstado, setEditandoEstado] = useState<Cliente | null>(null)
-  const [modalEquipo, setModalEquipo] = useState(false)
-  const [modalCrm, setModalCrm] = useState(false)
-  const [crmSeleccion, setCrmSeleccion] = useState<CrmMetricas | null>(null)
-  const [loadingCrm, setLoadingCrm] = useState(false)
 
   function alerta(msg: string) {
     if (Platform.OS === 'web') window.alert(msg)
@@ -93,32 +81,11 @@ export default function AliadoClientes() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
     setMiId(session.user.id)
-    const { data: perfil } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
-    const titular = perfil?.role === 'aliado_admin'
-    setEsTitular(titular)
-    if (titular) {
-      const { data: eq } = await supabase.rpc('mi_equipo_aliado')
-      setEquipo((eq?.equipo ?? []) as Miembro[])
-    }
-    await cargarClientes(viendo?.id ?? session.user.id)
+    await cargarClientes(session.user.id)
     setCargando(false)
-  }, [cargarClientes, viendo])
+  }, [cargarClientes])
 
   useFocusEffect(useCallback(() => { cargar() }, [cargar]))
-
-  function verAgente(m: Miembro) {
-    setModalEquipo(false)
-    setViendo({ id: m.id, nombre: m.nombre ?? 'este usuario' })
-    setCargando(true)
-    cargarClientes(m.id).finally(() => setCargando(false))
-  }
-
-  function volverAMiCrm() {
-    if (!miId) return
-    setViendo(null)
-    setCargando(true)
-    cargarClientes(miId).finally(() => setCargando(false))
-  }
 
   async function agregarCliente() {
     if (!nombre.trim() || !telefono.trim()) { alerta('Falta el nombre o el teléfono.'); return }
@@ -152,54 +119,25 @@ export default function AliadoClientes() {
     if (error) { alerta('Error: ' + error.message); cargar() }
   }
 
-  async function verResumenAgencia() {
-    setModalEquipo(false)
-    setModalCrm(true)
-    setLoadingCrm(true)
-    setCrmSeleccion(null)
-    try {
-      setCrmSeleccion(await calcularCrmMetricas(null, 'Toda la agencia'))
-    } finally {
-      setLoadingCrm(false)
-    }
-  }
-
   const tel = (t: string | null) => (t ?? '').replace(/\D/g, '')
-  const soloLectura = !!viendo
 
   if (cargando) {
     return <View style={s.centro}><ActivityIndicator size="large" color={c.text} /></View>
   }
 
   const encabezado = (
-    <>
-      <View style={s.cabecera}>
-        <View style={{ flex: 1 }}>
-          <Text style={[s.titulo, { color: c.text }]}>{viendo ? `Clientes de ${viendo.nombre}` : 'Mis clientes'}</Text>
-          <Text style={[s.sub, { color: c.textSub }]}>
-            {lista.length === 0 ? 'Todavía no hay ninguno.' : `${lista.length} en total`}
-          </Text>
-        </View>
-        {!soloLectura && (
-          <TouchableOpacity style={s.btnAgregar} onPress={() => setModalNuevo(true)}>
-            <Ionicons name="add" size={18} color="#fff" />
-            <Text style={s.btnAgregarTxt}>Agregar</Text>
-          </TouchableOpacity>
-        )}
+    <View style={s.cabecera}>
+      <View style={{ flex: 1 }}>
+        <Text style={[s.titulo, { color: c.text }]}>Mis clientes</Text>
+        <Text style={[s.sub, { color: c.textSub }]}>
+          {lista.length === 0 ? 'Todavía no hay ninguno.' : `${lista.length} en total`}
+        </Text>
       </View>
-
-      {soloLectura ? (
-        <View style={s.roBanner}>
-          <Text style={s.roBannerTxt} numberOfLines={1}>👁 Viendo el CRM de {viendo!.nombre} — solo lectura</Text>
-          <TouchableOpacity onPress={volverAMiCrm}><Text style={s.roBannerLink}>Volver al mío</Text></TouchableOpacity>
-        </View>
-      ) : esTitular && (
-        <TouchableOpacity style={[s.btnCrm, { borderColor: c.border }]} onPress={() => setModalEquipo(true)}>
-          <Ionicons name="bar-chart-outline" size={16} color="#5e35b1" />
-          <Text style={s.btnCrmTxt}>CRM de asesores</Text>
-        </TouchableOpacity>
-      )}
-    </>
+      <TouchableOpacity style={s.btnAgregar} onPress={() => setModalNuevo(true)}>
+        <Ionicons name="add" size={18} color="#fff" />
+        <Text style={s.btnAgregarTxt}>Agregar</Text>
+      </TouchableOpacity>
+    </View>
   )
 
   function Fila({ item }: { item: Cliente }) {
@@ -211,12 +149,11 @@ export default function AliadoClientes() {
         <View style={[s.colEstado]}>
           <TouchableOpacity
             style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}
-            disabled={soloLectura}
             onPress={() => setEditandoEstado(item)}
           >
             <View style={[s.estadoDot, { backgroundColor: info.color }]} />
             <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
-            {!soloLectura && <Ionicons name="chevron-down" size={10} color={info.color} />}
+            <Ionicons name="chevron-down" size={10} color={info.color} />
           </TouchableOpacity>
         </View>
         <Text style={[s.td, s.colOp, { color: c.textSub }]} numberOfLines={1}>{item.tipo_operacion ? OP_LABEL[item.tipo_operacion] ?? item.tipo_operacion : '—'}</Text>
@@ -262,12 +199,11 @@ export default function AliadoClientes() {
             </View>
             <TouchableOpacity
               style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}
-              disabled={soloLectura}
               onPress={() => setEditandoEstado(item)}
             >
               <View style={[s.estadoDot, { backgroundColor: info.color }]} />
               <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
-              {!soloLectura && <Ionicons name="chevron-down" size={10} color={info.color} />}
+              <Ionicons name="chevron-down" size={10} color={info.color} />
             </TouchableOpacity>
           </View>
           <View style={s.metaRow}>
@@ -298,7 +234,7 @@ export default function AliadoClientes() {
     <View style={s.vacio}>
       <Ionicons name="people-outline" size={30} color={c.textMute} />
       <Text style={[s.vacioTxt, { color: c.textSub }]}>
-        {soloLectura ? 'Esta persona todavía no tiene clientes.' : 'Aquí llevas a tus clientes: a quién le estás buscando qué, y cómo vas con cada uno.'}
+        Aquí llevas a tus clientes: a quién le estás buscando qué, y cómo vas con cada uno.
       </Text>
     </View>
   )
@@ -394,47 +330,6 @@ export default function AliadoClientes() {
         </View>
       </Modal>
 
-      {/* Elegir qué CRM mirar — solo titular */}
-      <Modal visible={modalEquipo} transparent animationType="fade" onRequestClose={() => setModalEquipo(false)}>
-        <View style={s.overlay}>
-          <View style={[s.modal, { backgroundColor: c.card }]}>
-            <Text style={[s.modalTitulo, { color: c.text }]}>CRM de asesores</Text>
-            <TouchableOpacity style={[s.filaEquipo, { borderBottomColor: c.border }]} onPress={verResumenAgencia}>
-              <Ionicons name="bar-chart-outline" size={16} color="#5e35b1" />
-              <Text style={[s.filaEquipoTxt, { color: c.text }]}>Resumen de toda la agencia</Text>
-            </TouchableOpacity>
-            {equipo.filter(m => m.id !== miId).map(m => (
-              <TouchableOpacity key={m.id} style={[s.filaEquipo, { borderBottomColor: c.border }]} onPress={() => verAgente(m)}>
-                <Ionicons name="person-outline" size={16} color={c.textSub} />
-                <Text style={[s.filaEquipoTxt, { color: c.text }]}>{m.nombre ?? 'Sin nombre'}</Text>
-                <Text style={[s.filaEquipoRol, { color: c.textSub }]}>{m.role === 'aliado_admin' ? 'Titular' : 'Agente'}</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity onPress={() => setModalEquipo(false)}>
-              <Text style={[s.cancelar, { color: c.textSub }]}>Cerrar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Resumen de toda la agencia */}
-      <Modal visible={modalCrm} transparent animationType="slide" onRequestClose={() => setModalCrm(false)}>
-        <View style={s.overlay}>
-          <View style={[s.modal, { backgroundColor: c.card, maxHeight: '85%' }]}>
-            <ScrollView>
-              <Text style={[s.modalTitulo, { color: c.text }]}>Resumen de la agencia</Text>
-              {loadingCrm ? (
-                <ActivityIndicator color={c.text} style={{ marginVertical: 20 }} />
-              ) : crmSeleccion ? (
-                <CrmMetricasPanel metricas={crmSeleccion} c={c} />
-              ) : null}
-            </ScrollView>
-            <TouchableOpacity onPress={() => setModalCrm(false)}>
-              <Text style={[s.cancelar, { color: c.textSub }]}>Cerrar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   )
 }
@@ -449,17 +344,6 @@ const s = StyleSheet.create({
     backgroundColor: '#5e35b1', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9,
   },
   btnAgregarTxt: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  btnCrm: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'flex-start',
-    borderWidth: 1, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12,
-  },
-  btnCrmTxt: { color: '#5e35b1', fontWeight: '700', fontSize: 12.5 },
-  roBanner: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#1a6470', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginTop: 10,
-  },
-  roBannerTxt: { color: '#fff', fontWeight: '700', fontSize: 12.5, flex: 1, marginRight: 8 },
-  roBannerLink: { color: '#fff', fontWeight: '800', fontSize: 12.5, textDecorationLine: 'underline' },
 
   // Tabla (web)
   table: { marginTop: 14, borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
@@ -507,9 +391,6 @@ const s = StyleSheet.create({
   btnGuardar: { backgroundColor: '#5e35b1', borderRadius: 9, paddingVertical: 11, alignItems: 'center', marginTop: 6 },
   btnGuardarTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
   cancelar: { textAlign: 'center', fontSize: 13, paddingVertical: 8 },
-  filaEquipo: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1 },
   opcionEstado: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8 },
   opcionEstadoTxt: { fontSize: 14 },
-  filaEquipoTxt: { fontSize: 13.5, fontWeight: '700', flex: 1 },
-  filaEquipoRol: { fontSize: 11 },
 })
