@@ -12,6 +12,8 @@ import { useFocusEffect, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
+import { calcularCrmMetricas, type CrmMetricas } from '../../lib/crmMetricas'
+import CrmMetricasPanel from '../../components/CrmMetricasPanel'
 
 type Miembro = { id: string; nombre: string | null; role: string; created_at: string }
 type Estadisticas = { disponibles: number; vendidas: number; rentadas: number; publicaciones: number; vistas: number }
@@ -49,6 +51,7 @@ export default function MiAgencia() {
   const [renombrando, setRenombrando] = useState<{ id: string; nombre: string } | null>(null)
   const [eliminandoId, setEliminandoId] = useState<string | null>(null)
   const [stats, setStats] = useState<Estadisticas | null>(null)
+  const [crm, setCrm] = useState<CrmMetricas | null>(null)
 
   const [modalInvitar, setModalInvitar] = useState(false)
   const [nombre, setNombre] = useState('')
@@ -76,6 +79,9 @@ export default function MiAgencia() {
     setEquipo((eq?.equipo ?? []) as Miembro[])
     setLimite(eq?.limite ?? 3)
     setStats((est ?? null) as Estadisticas | null)
+    // RLS (clientes_select_aliado_titular) acota esto a los clientes de
+    // responsables de SU inmobiliaria — nunca a los nuestros.
+    calcularCrmMetricas(null, 'Toda la agencia').then(setCrm).catch(() => {})
     setCargando(false)
   }, [])
 
@@ -157,10 +163,10 @@ export default function MiAgencia() {
       {stats && (
         <View style={s.statsGrid}>
           {[
-            { icono: 'home' as const, color: '#1a6470', num: stats.disponibles, lbl: 'Disponibles' },
+            { icono: 'home' as const, color: '#1a6470', num: stats.disponibles + stats.vendidas + stats.rentadas, lbl: 'Han publicado' },
             { icono: 'checkmark-done' as const, color: '#2e7d32', num: stats.vendidas + stats.rentadas, lbl: 'Vendidas/rentadas' },
-            { icono: 'eye' as const, color: '#5e35b1', num: stats.vistas, lbl: 'Vistas de tu catálogo' },
-            { icono: 'megaphone' as const, color: '#c9a84c', num: stats.publicaciones, lbl: 'Veces impulsadas' },
+            { icono: 'people' as const, color: '#5e35b1', num: crm?.totalLeads ?? 0, lbl: 'Clientes agregados' },
+            { icono: 'eye' as const, color: '#c9a84c', num: stats.vistas, lbl: 'Vistas de tu catálogo' },
           ].map((b, i) => (
             <View key={i} style={[s.statCard, { backgroundColor: c.card, borderColor: c.border }]}>
               <View style={[s.statIcono, { backgroundColor: b.color + '22' }]}>
@@ -170,6 +176,16 @@ export default function MiAgencia() {
               <Text style={[s.statLbl, { color: c.textSub }]}>{b.lbl}</Text>
             </View>
           ))}
+        </View>
+      )}
+
+      {crm && (
+        <View style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
+          <Text style={[s.cardTitulo, { color: c.text }]}>Estado de seguimiento</Text>
+          <Text style={[s.cardSub, { color: c.textSub, marginBottom: 10 }]}>
+            En qué etapa va cada cliente, de toda tu agencia.
+          </Text>
+          <CrmMetricasPanel metricas={crm} c={c} />
         </View>
       )}
 

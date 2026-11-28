@@ -21,7 +21,7 @@ import CrmMetricasPanel from '../../components/CrmMetricasPanel'
 // constante exportada, sin nada de UI ni de lógica detrás, así que se puede
 // importar tal cual sin arrastrar el resto de esa pantalla (que sí rebotaría
 // a un aliado si se navegara a ella).
-import { ESTADOS } from '../(prospectador)/crm'
+import { ESTADOS, ORDEN_ESTADOS } from '../(prospectador)/crm'
 
 type Cliente = {
   id: string; nombre: string | null; telefono: string | null
@@ -70,6 +70,7 @@ export default function AliadoClientes() {
   const [presupuesto, setPresupuesto] = useState('')
   const [guardando, setGuardando] = useState(false)
 
+  const [editandoEstado, setEditandoEstado] = useState<Cliente | null>(null)
   const [modalEquipo, setModalEquipo] = useState(false)
   const [modalCrm, setModalCrm] = useState(false)
   const [crmSeleccion, setCrmSeleccion] = useState<CrmMetricas | null>(null)
@@ -141,6 +142,13 @@ export default function AliadoClientes() {
     }
   }
 
+  async function cambiarEstado(id: string, nuevoEstado: string) {
+    setEditandoEstado(null)
+    setLista(prev => prev.map(x => x.id === id ? { ...x, estado: nuevoEstado } : x))
+    const { error } = await supabase.from('clientes').update({ estado: nuevoEstado }).eq('id', id)
+    if (error) { alerta('Error: ' + error.message); cargar() }
+  }
+
   async function verResumenAgencia() {
     setModalEquipo(false)
     setModalCrm(true)
@@ -198,10 +206,15 @@ export default function AliadoClientes() {
         <Text style={[s.td, s.colNombre, { color: c.text, fontWeight: '700' }]} numberOfLines={1}>{item.nombre ?? 'Sin nombre'}</Text>
         <Text style={[s.td, s.colTel, { color: c.textSub }]} numberOfLines={1}>{item.telefono ?? '—'}</Text>
         <View style={[s.td, s.colEstado]}>
-          <View style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}>
+          <TouchableOpacity
+            style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}
+            disabled={soloLectura}
+            onPress={() => setEditandoEstado(item)}
+          >
             <View style={[s.estadoDot, { backgroundColor: info.color }]} />
             <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
-          </View>
+            {!soloLectura && <Ionicons name="chevron-down" size={10} color={info.color} />}
+          </TouchableOpacity>
         </View>
         <Text style={[s.td, s.colOp, { color: c.textSub }]} numberOfLines={1}>{item.tipo_operacion ? OP_LABEL[item.tipo_operacion] ?? item.tipo_operacion : '—'}</Text>
         <Text style={[s.td, s.colPago, { color: c.textSub }]} numberOfLines={1}>{item.tipo_credito ?? '—'}</Text>
@@ -244,10 +257,15 @@ export default function AliadoClientes() {
                 </Text>
               )}
             </View>
-            <View style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}>
+            <TouchableOpacity
+              style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}
+              disabled={soloLectura}
+              onPress={() => setEditandoEstado(item)}
+            >
               <View style={[s.estadoDot, { backgroundColor: info.color }]} />
               <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
-            </View>
+              {!soloLectura && <Ionicons name="chevron-down" size={10} color={info.color} />}
+            </TouchableOpacity>
           </View>
           <View style={s.metaRow}>
             <View style={s.metaItem}>
@@ -334,6 +352,34 @@ export default function AliadoClientes() {
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setModalNuevo(false)}>
               <Text style={[s.cancelar, { color: c.textSub }]}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cambiar la etapa de un cliente propio */}
+      <Modal visible={!!editandoEstado} transparent animationType="fade" onRequestClose={() => setEditandoEstado(null)}>
+        <View style={s.overlay}>
+          <View style={[s.modal, { backgroundColor: c.card }]}>
+            <Text style={[s.modalTitulo, { color: c.text }]}>
+              Etapa de {editandoEstado?.nombre ?? 'este cliente'}
+            </Text>
+            {ORDEN_ESTADOS.filter(e => e !== 'compro_externo').map(e => {
+              const info = ESTADOS[e]
+              const activo = editandoEstado?.estado === e
+              return (
+                <TouchableOpacity
+                  key={e}
+                  style={[s.opcionEstado, { backgroundColor: activo ? info.color + '22' : 'transparent' }]}
+                  onPress={() => editandoEstado && cambiarEstado(editandoEstado.id, e)}
+                >
+                  <View style={[s.estadoDot, { backgroundColor: info.color }]} />
+                  <Text style={[s.opcionEstadoTxt, { color: c.text, fontWeight: activo ? '800' : '600' }]}>{info.label}</Text>
+                </TouchableOpacity>
+              )
+            })}
+            <TouchableOpacity onPress={() => setEditandoEstado(null)}>
+              <Text style={[s.cancelar, { color: c.textSub }]}>Cerrar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -453,6 +499,8 @@ const s = StyleSheet.create({
   btnGuardarTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
   cancelar: { textAlign: 'center', fontSize: 13, paddingVertical: 8 },
   filaEquipo: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1 },
+  opcionEstado: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8 },
+  opcionEstadoTxt: { fontSize: 14 },
   filaEquipoTxt: { fontSize: 13.5, fontWeight: '700', flex: 1 },
   filaEquipoRol: { fontSize: 11 },
 })
