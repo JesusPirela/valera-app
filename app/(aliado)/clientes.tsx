@@ -22,6 +22,7 @@ import CrmMetricasPanel from '../../components/CrmMetricasPanel'
 // importar tal cual sin arrastrar el resto de esa pantalla (que sí rebotaría
 // a un aliado si se navegara a ella).
 import { ESTADOS, ORDEN_ESTADOS } from '../(prospectador)/crm'
+import PillSelector from '../../components/ui/PillSelector'
 
 type Cliente = {
   id: string; nombre: string | null; telefono: string | null
@@ -68,6 +69,7 @@ export default function AliadoClientes() {
   const [telefono, setTelefono] = useState('')
   const [zona, setZona] = useState('')
   const [presupuesto, setPresupuesto] = useState('')
+  const [tipoOp, setTipoOp] = useState<'venta' | 'renta' | 'captacion'>('venta')
   const [guardando, setGuardando] = useState(false)
 
   const [editandoEstado, setEditandoEstado] = useState<Cliente | null>(null)
@@ -128,12 +130,13 @@ export default function AliadoClientes() {
         nombre: nombre.trim(), telefono: telefono.trim(),
         zona_busqueda: zona.trim() || null,
         presupuesto: presupuesto.trim() || null,
+        tipo_operacion: tipoOp,
         estado: 'por_perfilar', fuente_lead: 'otro',
         responsable_id: session.user.id,
       })
       if (error) throw error
       setModalNuevo(false)
-      setNombre(''); setTelefono(''); setZona(''); setPresupuesto('')
+      setNombre(''); setTelefono(''); setZona(''); setPresupuesto(''); setTipoOp('venta')
       cargar()
     } catch (e: any) {
       alerta('Error: ' + (e?.message ?? 'No se pudo guardar.'))
@@ -343,6 +346,12 @@ export default function AliadoClientes() {
               value={nombre} onChangeText={setNombre} placeholder="Nombre *" placeholderTextColor={c.placeholder} />
             <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               value={telefono} onChangeText={setTelefono} placeholder="Teléfono *" placeholderTextColor={c.placeholder} keyboardType="phone-pad" />
+            <View style={{ marginTop: 2, marginBottom: 2 }}>
+              <PillSelector
+                options={[{ value: 'venta', label: '🏠 Venta' }, { value: 'renta', label: '🔑 Renta' }, { value: 'captacion', label: '📥 Captación' }]}
+                value={tipoOp} onChange={setTipoOp}
+              />
+            </View>
             <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}
               value={zona} onChangeText={setZona} placeholder="Zona de búsqueda" placeholderTextColor={c.placeholder} />
             <TextInput style={[s.input, { backgroundColor: c.input, borderColor: c.inputBorder, color: c.inputText }]}

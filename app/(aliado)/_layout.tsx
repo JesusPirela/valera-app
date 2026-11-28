@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { cerrarSesionUsuario } from '../../lib/cuentas'
 import { useColors, useTheme } from '../../lib/ThemeContext'
+import ToggleSwitch from '../../components/ToggleSwitch'
 
 type Agencia = { nombre: string; logo_url: string | null }
 
@@ -35,7 +36,7 @@ const TAB_TITULAR = { ruta: 'mi-agencia', icono: 'business' as const, texto: 'Mi
 
 export default function AliadoLayout() {
   const c = useColors()
-  const { darkMode } = useTheme()
+  const { darkMode, toggleDarkMode } = useTheme()
   const pathname = usePathname()
   const [agencia, setAgencia] = useState<Agencia | null>(null)
   const [esTitular, setEsTitular] = useState(false)
@@ -83,6 +84,12 @@ export default function AliadoLayout() {
         <Text style={[s.nombre, { color: c.text }]} numberOfLines={1}>
           {agencia?.nombre ?? 'Mi inmobiliaria'}
         </Text>
+        <ToggleSwitch
+          value={darkMode}
+          onValueChange={toggleDarkMode}
+          trackColor={{ false: '#ccc', true: '#5e35b1' }}
+          thumbColor="#fff"
+        />
         <TouchableOpacity
           onPress={() => cerrarSesionUsuario()}
           style={s.salir}
