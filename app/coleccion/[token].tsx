@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  StyleSheet, Platform, Linking, useWindowDimensions,
+  StyleSheet, Platform, Linking, useWindowDimensions, TextInput, Alert,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -10,6 +10,7 @@ import { thumb } from '../../lib/img'
 import { formatPrecioLang, tipoLabel } from '../../lib/ficha-i18n'
 
 const TEAL = '#1a6470'
+const MORADO = '#5e35b1'
 
 type Item = {
   propiedad_id: string
@@ -32,6 +33,7 @@ type Coleccion = {
   titulo: string | null
   mensaje: string | null
   cliente_nombre: string | null
+  es_invitacion: boolean
   agente: { nombre: string | null; telefono: string | null } | null
   items: Item[]
 }
@@ -44,6 +46,14 @@ export default function ColeccionPublica() {
   const [favs, setFavs] = useState<Record<string, boolean>>({})
   const { width } = useWindowDimensions()
   const cardW = Math.min(width - 32, 560)
+
+  // Formulario "Quiero probarlo" — solo para el link de invitación.
+  const [formAbierto, setFormAbierto] = useState(false)
+  const [fNombre, setFNombre] = useState('')
+  const [fInmobiliaria, setFInmobiliaria] = useState('')
+  const [fTelefono, setFTelefono] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [enviado, setEnviado] = useState(false)
 
   useEffect(() => { if (token) cargar() }, [token])
 
@@ -77,6 +87,29 @@ export default function ColeccionPublica() {
     router.push(`/ficha/${it.codigo}`)
   }
 
+  async function enviarSolicitud() {
+    if (!fNombre.trim() || !fInmobiliaria.trim()) {
+      const msg = 'Falta tu nombre o el de tu inmobiliaria.'
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('Falta algo', msg)
+      return
+    }
+    setEnviando(true)
+    try {
+      const { error } = await supabase.rpc('solicitar_prueba_aliado', {
+        p_token: token, p_nombre: fNombre.trim(), p_inmobiliaria: fInmobiliaria.trim(),
+        p_telefono: fTelefono.trim() || null,
+      })
+      if (error) throw error
+      setEnviado(true)
+      setFormAbierto(false)
+    } catch (e: any) {
+      const msg = e?.message || 'No se pudo enviar. Intenta de nuevo.'
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('Error', msg)
+    } finally {
+      setEnviando(false)
+    }
+  }
+
   function contactarAgente() {
     const tel = (col?.agente?.telefono ?? '').replace(/\D/g, '')
     if (!tel) return
@@ -107,9 +140,17 @@ export default function ColeccionPublica() {
     <ScrollView style={s.page} contentContainerStyle={{ alignItems: 'center', paddingBottom: 120 }}>
       <View style={[s.wrap, { width: cardW }]}>
         <Text style={s.marca}>VALERA REAL ESTATE</Text>
-        <Text style={s.titulo}>{col.titulo || 'Propiedades seleccionadas para ti'}</Text>
+        <Text style={s.titulo}>
+          {col.es_invitacion ? 'Nuestro catálogo, en una sola app' : (col.titulo || 'Propiedades seleccionadas para ti')}
+        </Text>
         {col.cliente_nombre ? <Text style={s.saludo}>Para {col.cliente_nombre}</Text> : null}
         {col.mensaje ? <Text style={s.mensaje}>{col.mensaje}</Text> : null}
+        {col.es_invitacion ? (
+          <Text style={s.mensaje}>
+            Una muestra de lo que publicamos todos los días. Si quieres que tu inmobiliaria
+            también publique y prospecte desde Valera App, pide tu cuenta de prueba.
+          </Text>
+        ) : null}
         <View style={s.hintBox}>
           <Text style={s.hintTxt}>♥  Toca el corazón para marcar tus favoritas</Text>
           <Text style={s.hintTxt}>👆  Toca una tarjeta para ver todos los detalles</Text>
@@ -159,7 +200,41 @@ export default function ColeccionPublica() {
         <Text style={s.footer}>Valera Real Estate</Text>
       </View>
 
-      {col.agente?.telefono ? (
+      {col.es_invitacion ? (
+        enviado ? (
+          <View style={[s.cta, { backgroundColor: TEAL }]}>
+            <Text style={s.ctaTxt}>✓ Listo, te contactamos pronto</Text>
+          </View>
+        ) : formAbierto ? (
+          <View style={[s.wrap, { width: cardW, marginTop: 0 }]}>
+            <View style={s.formBox}>
+              <Text style={s.formTitulo}>Cuéntanos de ti</Text>
+              <TextInput style={s.formInput} value={fNombre} onChangeText={setFNombre}
+                placeholder="Tu nombre *" placeholderTextColor="#9aa5ab" />
+              <TextInput style={s.formInput} value={fInmobiliaria} onChangeText={setFInmobiliaria}
+                placeholder="Tu inmobiliaria *" placeholderTextColor="#9aa5ab" />
+              <TextInput style={s.formInput} value={fTelefono} onChangeText={setFTelefono}
+                placeholder="Teléfono (opcional)" placeholderTextColor="#9aa5ab" keyboardType="phone-pad" />
+              <TouchableOpacity
+                style={[s.formBtn, enviando && { opacity: 0.6 }]}
+                onPress={enviarSolicitud}
+                disabled={enviando}
+              >
+                {enviando
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={s.formBtnTxt}>Enviar</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setFormAbierto(false)}>
+                <Text style={s.formCancelar}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity style={[s.cta, { backgroundColor: MORADO }]} onPress={() => setFormAbierto(true)} activeOpacity={0.9}>
+            <Text style={s.ctaTxt}>Quiero probarlo</Text>
+          </TouchableOpacity>
+        )
+      ) : col.agente?.telefono ? (
         <TouchableOpacity style={s.cta} onPress={contactarAgente} activeOpacity={0.9}>
           <Text style={s.ctaTxt}>
             {numFav > 0 ? `Contactar por mis ${numFav} favorita${numFav > 1 ? 's' : ''}` : 'Contactar al asesor'}
@@ -213,4 +288,16 @@ const s = StyleSheet.create({
   ctaTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
   nfTitulo: { fontSize: 18, fontWeight: '800', color: '#0f2b30' },
   nfSub: { fontSize: 14, color: '#6a797e', textAlign: 'center', marginTop: 8 },
+  formBox: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 20,
+    borderWidth: 1, borderColor: '#e6eaec', gap: 10,
+  },
+  formTitulo: { fontSize: 16, fontWeight: '800', color: '#0f2b30', marginBottom: 2 },
+  formInput: {
+    borderWidth: 1, borderColor: '#dfe5e7', borderRadius: 10,
+    paddingHorizontal: 13, paddingVertical: 11, fontSize: 14, color: '#17323a',
+  },
+  formBtn: { backgroundColor: MORADO, borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 4 },
+  formBtnTxt: { color: '#fff', fontWeight: '800', fontSize: 14.5 },
+  formCancelar: { textAlign: 'center', color: '#9aa5ab', fontSize: 13, paddingVertical: 4 },
 })

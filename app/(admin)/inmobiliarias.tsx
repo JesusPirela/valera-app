@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Platform, Alert, Modal,
 } from 'react-native'
-import { useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import ToggleSwitch from '../../components/ToggleSwitch'
@@ -43,8 +43,13 @@ export default function AdminInmobiliarias() {
   const [form, setForm] = useState<Omit<Inmobiliaria, 'id'>>(EMPTY)
   const [guardando, setGuardando] = useState(false)
   const [resaltadoId, setResaltadoId] = useState<string | null>(null)
+  const [solicitudesPendientes, setSolicitudesPendientes] = useState(0)
 
-  useFocusEffect(useCallback(() => { cargar() }, []))
+  useFocusEffect(useCallback(() => {
+    cargar()
+    supabase.from('solicitudes_aliado').select('id', { count: 'exact', head: true }).eq('atendida', false)
+      .then(({ count }) => setSolicitudesPendientes(count ?? 0))
+  }, []))
   const { refreshControl } = usePullRefresh(cargar)
 
   // Llegar desde "Propiedades" (click en el nombre de la inmobiliaria):
@@ -154,6 +159,12 @@ export default function AdminInmobiliarias() {
     <View style={[s.container, { backgroundColor: c.bg2 }]}>
       <View style={[s.header, { borderBottomColor: c.border }]}>
         <Text style={[s.titulo, { color: c.text }]}>Inmobiliarias</Text>
+        <TouchableOpacity style={s.btnSolicitudes} onPress={() => router.push('/(admin)/solicitudes-aliado')}>
+          <Text style={s.btnSolicitudesText}>📨 Solicitudes</Text>
+          {solicitudesPendientes > 0 && (
+            <View style={s.badge}><Text style={s.badgeText}>{solicitudesPendientes}</Text></View>
+          )}
+        </TouchableOpacity>
         <TouchableOpacity style={s.btnNuevo} onPress={abrirNueva}>
           <Text style={s.btnNuevoText}>+ Nueva</Text>
         </TouchableOpacity>
@@ -316,6 +327,16 @@ const s = StyleSheet.create({
   titulo: { fontSize: 20, fontWeight: '700', flex: 1 },
   btnNuevo: { backgroundColor: '#c9a84c', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
   btnNuevoText: { color: '#000', fontWeight: '700', fontSize: 13 },
+  btnSolicitudes: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#5e35b1', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  btnSolicitudesText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  badge: {
+    backgroundColor: '#fff', borderRadius: 9, minWidth: 18, height: 18,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+  },
+  badgeText: { color: '#5e35b1', fontSize: 11, fontWeight: '800' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   emptyText: { fontSize: 15 },
   btnAdd: { backgroundColor: '#c9a84c', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12 },

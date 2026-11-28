@@ -220,6 +220,7 @@ export default function AdminPropiedades() {
   const [ordenPublicaciones, setOrdenPublicaciones] = useState<OrdenPublicaciones>(null)
   const [filtroDirecta, setFiltroDirecta] = useState(false)
   const [generandoLinkDirectas, setGenerandoLinkDirectas] = useState(false)
+  const [generandoLinkInvitacion, setGenerandoLinkInvitacion] = useState(false)
   const [publicacionesMap, setPublicacionesMap] = useState<Record<string, number>>({})
   const [comprasPendientes, setComprasPendientes] = useState(0)
   const [campanasPendientes, setCampanasPendientes] = useState(0)
@@ -440,6 +441,28 @@ export default function AdminPropiedades() {
       else Alert.alert('✓ Link copiado', texto)
     } finally {
       setGenerandoLinkDirectas(false)
+    }
+  }
+
+  // Link evergreen para inmobiliarias que TODAVÍA NO son clientes: enseña
+  // directas + constructoras (lo que de verdad nos diferencia) y, en vez de
+  // un botón al asesor, trae "Quiero probarlo" para que pidan cuenta de
+  // prueba. Mismo patrón que generarLinkDirectas: un solo token reutilizado.
+  async function generarLinkInvitacion() {
+    setGenerandoLinkInvitacion(true)
+    try {
+      const { data, error } = await supabase.rpc('obtener_coleccion_invitacion')
+      if (error || !data?.token) {
+        Alert.alert('Error', error?.message ?? 'No se pudo generar el link.')
+        return
+      }
+      const link = `https://valeraapp.valerarealestate.com/coleccion/${data.token}`
+      await Clipboard.setStringAsync(link)
+      const texto = `✓ Link copiado (${data.n_props} propiedad${data.n_props === 1 ? '' : 'es'})\n${link}`
+      if (Platform.OS === 'web') window.alert(texto)
+      else Alert.alert('✓ Link copiado', texto)
+    } finally {
+      setGenerandoLinkInvitacion(false)
     }
   }
 
@@ -741,6 +764,19 @@ export default function AdminPropiedades() {
               : <>
                   <Ionicons name="link-outline" size={15} color="#fff" />
                   <Text style={styles.btnLinkDirectasTxt}>Link de directas para aliados</Text>
+                </>}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.btnLinkDirectas, { backgroundColor: '#5e35b1' }, generandoLinkInvitacion && { opacity: 0.6 }]}
+            onPress={generarLinkInvitacion}
+            disabled={generandoLinkInvitacion}
+            activeOpacity={0.85}
+          >
+            {generandoLinkInvitacion
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <>
+                  <Ionicons name="send-outline" size={15} color="#fff" />
+                  <Text style={styles.btnLinkDirectasTxt}>Link de invitación para inmobiliarias</Text>
                 </>}
           </TouchableOpacity>
           {(() => {
