@@ -23,17 +23,21 @@ type Agencia = { nombre: string; logo_url: string | null }
 // ya hay una pantalla 'propiedades' en (admin) y otra en (prospectador). Con
 // el mismo nombre, al recargar el router entra por la de admin y el aliado
 // pasaba un instante por NUESTRA app antes de que lo devolvieran a la suya.
-const TABS = [
+const TABS_BASE = [
   { ruta: 'mis-propiedades', icono: 'home' as const, texto: 'Propiedades' },
   { ruta: 'catalogo',    icono: 'albums' as const, texto: 'Catálogo' },
   { ruta: 'clientes',    icono: 'people' as const, texto: 'Clientes' },
 ]
+// Solo el titular ve esta pestaña: es desde donde edita el logo/sitio de su
+// agencia e invita a su propia gente. Un agente no pinta nada ahí.
+const TAB_TITULAR = { ruta: 'mi-agencia', icono: 'business' as const, texto: 'Mi agencia' }
 
 export default function AliadoLayout() {
   const c = useColors()
   const { darkMode } = useTheme()
   const pathname = usePathname()
   const [agencia, setAgencia] = useState<Agencia | null>(null)
+  const [esTitular, setEsTitular] = useState(false)
 
   useEffect(() => {
     let vivo = true
@@ -47,6 +51,7 @@ export default function AliadoLayout() {
         router.replace(perfil?.role === 'admin' ? '/(admin)/propiedades' : '/(prospectador)/propiedades')
         return
       }
+      if (vivo) setEsTitular(perfil.role === 'aliado_admin')
       if (!perfil.inmobiliaria_id) return
       const { data } = await supabase
         .from('inmobiliarias').select('nombre, logo_url').eq('id', perfil.inmobiliaria_id).single()
@@ -54,6 +59,8 @@ export default function AliadoLayout() {
     })()
     return () => { vivo = false }
   }, [])
+
+  const TABS = esTitular ? [...TABS_BASE, TAB_TITULAR] : TABS_BASE
 
   const actual = (pathname || '').replace(/^\/+/, '').split('?')[0]
 
