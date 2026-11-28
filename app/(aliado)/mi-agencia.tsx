@@ -14,6 +14,7 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 
 type Miembro = { id: string; nombre: string | null; role: string; created_at: string }
+type Estadisticas = { disponibles: number; vendidas: number; rentadas: number; publicaciones: number; vistas: number }
 
 function generarPassword(): string {
   const mayus = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
@@ -47,6 +48,7 @@ export default function MiAgencia() {
   const [limite, setLimite] = useState(3)
   const [renombrando, setRenombrando] = useState<{ id: string; nombre: string } | null>(null)
   const [eliminandoId, setEliminandoId] = useState<string | null>(null)
+  const [stats, setStats] = useState<Estadisticas | null>(null)
 
   const [modalInvitar, setModalInvitar] = useState(false)
   const [nombre, setNombre] = useState('')
@@ -64,14 +66,16 @@ export default function MiAgencia() {
     if (!perfil.inmobiliaria_id) { setCargando(false); return }
     setInmobiliariaId(perfil.inmobiliaria_id)
 
-    const [{ data: inm }, { data: eq }] = await Promise.all([
+    const [{ data: inm }, { data: eq }, { data: est }] = await Promise.all([
       supabase.from('inmobiliarias').select('logo_url, sitio_web').eq('id', perfil.inmobiliaria_id).single(),
       supabase.rpc('mi_equipo_aliado'),
+      supabase.rpc('estadisticas_aliado'),
     ])
     setLogoUrl(inm?.logo_url ?? '')
     setSitioWeb(inm?.sitio_web ?? '')
     setEquipo((eq?.equipo ?? []) as Miembro[])
     setLimite(eq?.limite ?? 3)
+    setStats((est ?? null) as Estadisticas | null)
     setCargando(false)
   }, [])
 
@@ -149,6 +153,25 @@ export default function MiAgencia() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: 16, gap: 10 }}>
       <Text style={[s.titulo, { color: c.text }]}>Mi agencia</Text>
+
+      {stats && (
+        <View style={s.statsGrid}>
+          {[
+            { icono: 'home' as const, color: '#1a6470', num: stats.disponibles, lbl: 'Disponibles' },
+            { icono: 'checkmark-done' as const, color: '#2e7d32', num: stats.vendidas + stats.rentadas, lbl: 'Vendidas/rentadas' },
+            { icono: 'eye' as const, color: '#5e35b1', num: stats.vistas, lbl: 'Vistas de tu catálogo' },
+            { icono: 'megaphone' as const, color: '#c9a84c', num: stats.publicaciones, lbl: 'Veces impulsadas' },
+          ].map((b, i) => (
+            <View key={i} style={[s.statCard, { backgroundColor: c.card, borderColor: c.border }]}>
+              <View style={[s.statIcono, { backgroundColor: b.color + '22' }]}>
+                <Ionicons name={b.icono} size={16} color={b.color} />
+              </View>
+              <Text style={[s.statNum, { color: c.text }]}>{b.num}</Text>
+              <Text style={[s.statLbl, { color: c.textSub }]}>{b.lbl}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
         <Text style={[s.cardTitulo, { color: c.text }]}>Marca</Text>
@@ -279,6 +302,11 @@ export default function MiAgencia() {
 const s = StyleSheet.create({
   centro: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   titulo: { fontSize: 21, fontWeight: '900' },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
+  statCard: { flexBasis: '47%', flexGrow: 1, borderWidth: 1, borderRadius: 13, padding: 12, gap: 4 },
+  statIcono: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  statNum: { fontSize: 19, fontWeight: '900' },
+  statLbl: { fontSize: 11 },
   card: { borderWidth: 1, borderRadius: 14, padding: 14, gap: 6 },
   cardTitulo: { fontSize: 15, fontWeight: '800' },
   cardSub: { fontSize: 12.5 },

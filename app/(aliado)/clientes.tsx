@@ -15,24 +15,34 @@ import { supabase } from '../../lib/supabase'
 import { useColors } from '../../lib/ThemeContext'
 import { calcularCrmMetricas, type CrmMetricas } from '../../lib/crmMetricas'
 import CrmMetricasPanel from '../../components/CrmMetricasPanel'
+// Mismo mapa de etapas/colores que usa el CRM de prospectador — es una
+// constante exportada, sin nada de UI ni de lógica detrás, así que se puede
+// importar tal cual sin arrastrar el resto de esa pantalla (que sí rebotaría
+// a un aliado si se navegara a ella).
+import { ESTADOS } from '../(prospectador)/crm'
 
 type Cliente = {
   id: string; nombre: string | null; telefono: string | null
-  estado: string | null; zona_busqueda: string | null; presupuesto: string | null
+  estado: string; zona_busqueda: string | null; presupuesto: string | null
   created_at: string
 }
 type Miembro = { id: string; nombre: string | null; role: string }
 
-const ESTADO_LABEL: Record<string, string> = {
-  por_perfilar: 'Por perfilar', primer_contacto: '1er contacto',
-  cita_por_agendar: 'Cita p/agendar', cita_agendada: 'Cita agendada',
-  cita_a_futuro: 'Cita a futuro', seguimiento_cierre: 'Seg. cierre',
-  compro: 'Compró', no_contesta: 'No contesta', descartado: 'Descartado',
+function iniciales(nombre: string | null): string {
+  return (nombre ?? '?').trim().split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '?'
 }
-const ESTADO_COLOR: Record<string, string> = {
-  por_perfilar: '#888', primer_contacto: '#2196F3', cita_por_agendar: '#FF9800',
-  cita_agendada: '#1a6470', cita_a_futuro: '#9C27B0', seguimiento_cierre: '#FFC107',
-  compro: '#4CAF50', no_contesta: '#F44336', descartado: '#ccc',
+
+function tiempoRelativo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 2) return 'Ahora'
+  if (m < 60) return `${m}m`
+  const h = Math.floor(diff / 3600000)
+  if (h < 24) return `${h}h`
+  const d = Math.floor(diff / 86400000)
+  if (d === 1) return 'Ayer'
+  if (d < 7) return `${d}d`
+  return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
 
 export default function AliadoClientes() {
@@ -157,31 +167,52 @@ export default function AliadoClientes() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={[s.fila, { backgroundColor: c.card, borderColor: c.border }]}>
-            <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-              <Text style={[s.nombre, { color: c.text }]} numberOfLines={1}>
-                {item.nombre ?? 'Sin nombre'}
-              </Text>
-              <Text style={[s.meta, { color: c.textSub }]} numberOfLines={1}>
-                {[item.telefono, item.zona_busqueda, item.presupuesto].filter(Boolean).join(' · ') || 'Sin datos'}
-              </Text>
-              <View style={[s.estadoChip, { backgroundColor: (ESTADO_COLOR[item.estado ?? ''] ?? '#888') + '22' }]}>
-                <Text style={[s.estadoTxt, { color: ESTADO_COLOR[item.estado ?? ''] ?? '#888' }]}>
-                  {ESTADO_LABEL[item.estado ?? ''] ?? item.estado ?? 'Sin estado'}
-                </Text>
+        renderItem={({ item }) => {
+          const info = ESTADOS[item.estado] ?? { label: item.estado, color: '#64748b', bg: '#f1f5f9' }
+          return (
+            <View style={[s.card, { backgroundColor: c.card, borderColor: c.border }]}>
+              <View style={[s.cardBar, { backgroundColor: info.color }]} />
+              <View style={s.cardBody}>
+                <View style={s.cardHead}>
+                  <View style={[s.avatar, { backgroundColor: info.color + '22' }]}>
+                    <Text style={[s.avatarTxt, { color: info.color }]}>{iniciales(item.nombre)}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[s.cardNombre, { color: c.text }]} numberOfLines={1}>{item.nombre ?? 'Sin nombre'}</Text>
+                    {(item.zona_busqueda || item.presupuesto) && (
+                      <Text style={[s.cardSub, { color: c.textSub }]} numberOfLines={1}>
+                        {[item.zona_busqueda, item.presupuesto].filter(Boolean).join(' · ')}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={[s.estadoBadge, { backgroundColor: info.color + '1c' }]}>
+                    <View style={[s.estadoDot, { backgroundColor: info.color }]} />
+                    <Text style={[s.estadoTxt, { color: info.color }]} numberOfLines={1}>{info.label}</Text>
+                  </View>
+                </View>
+                <View style={s.metaRow}>
+                  <View style={s.metaItem}>
+                    <Ionicons name="call-outline" size={11} color={c.textMute} />
+                    <Text style={[s.metaTxt, { color: c.textSub }]}>{item.telefono}</Text>
+                  </View>
+                  <View style={s.metaItem}>
+                    <Ionicons name="time-outline" size={11} color={c.textMute} />
+                    <Text style={[s.metaTxt, { color: c.textMute }]}>{tiempoRelativo(item.created_at)}</Text>
+                  </View>
+                  {!!tel(item.telefono) && (
+                    <TouchableOpacity
+                      style={s.waMeta}
+                      onPress={() => Linking.openURL(`https://wa.me/${tel(item.telefono).length === 10 ? '52' : ''}${tel(item.telefono)}`)}
+                    >
+                      <Ionicons name="logo-whatsapp" size={13} color="#128C7E" />
+                      <Text style={[s.metaTxt, { color: '#128C7E', fontWeight: '700' }]}>WhatsApp</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
             </View>
-            {!!tel(item.telefono) && (
-              <TouchableOpacity
-                onPress={() => Linking.openURL(`https://wa.me/${tel(item.telefono).length === 10 ? '52' : ''}${tel(item.telefono)}`)}
-                style={s.wa}
-              >
-                <Ionicons name="logo-whatsapp" size={17} color="#128C7E" />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+          )
+        }}
       />
 
       {/* Alta rápida de cliente */}
@@ -254,12 +285,24 @@ const s = StyleSheet.create({
     borderWidth: 1, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12,
   },
   btnCrmTxt: { color: '#5e35b1', fontWeight: '700', fontSize: 12.5 },
-  fila: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 11 },
-  nombre: { fontSize: 14.5, fontWeight: '800' },
-  meta: { fontSize: 12 },
-  estadoChip: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 2, marginTop: 2 },
+  card: { flexDirection: 'row', borderWidth: 1, borderRadius: 13, overflow: 'hidden' },
+  cardBar: { width: 4 },
+  cardBody: { flex: 1, minWidth: 0, padding: 12, gap: 8 },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  avatarTxt: { fontSize: 13, fontWeight: '800' },
+  cardNombre: { fontSize: 14.5, fontWeight: '800' },
+  cardSub: { fontSize: 11.5, marginTop: 1 },
+  estadoBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4, maxWidth: 130,
+  },
+  estadoDot: { width: 6, height: 6, borderRadius: 3 },
   estadoTxt: { fontSize: 10.5, fontWeight: '700' },
-  wa: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: '#128C7E22' },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center' },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaTxt: { fontSize: 11.5 },
+  waMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
   vacio: { alignItems: 'center', gap: 10, paddingTop: 60, paddingHorizontal: 40 },
   vacioTxt: { fontSize: 13.5, lineHeight: 20, textAlign: 'center' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
